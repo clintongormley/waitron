@@ -636,8 +636,35 @@ vs gated on an unbuilt foundation or an external dependency:
   integration** — local-secondary mint **LANDED (R1 #205)**, reserved-SIF-at-adopt **LANDED (R2 #208)**,
   split-identity-at-join **LANDED (R3a #210)**, cloud promotion **LANDED (R3b #211)** — Slice 5 COMPLETE
   (see the membership arc above; residuals: power-loss durability + till-reroute);
-  (6) **rejoin — drain-then-restore** [fiscal-adjacent → owner sign-off before land]; (7) **conflict
-  surface** (config down-only + ops conflict log). Slice 6 (rejoin) and Slice 7 (conflict surface) remain.
+  (6) **rejoin — drain-then-restore** — **R1 (fence-on-rejoin) LANDED** (2026-09-04, this branch),
+  R2/R3 remain [fiscal-adjacent → owner sign-off before land]; (7) **conflict
+  surface** (config down-only + ops conflict log). Slice 7 (conflict surface) remains.
+  **Slice 6 R1 (fence-on-rejoin) LANDED** (2026-09-04): a returned/superseded node that holds or
+  adopts a membership document marking it **sell-only/evicted** now boots **FENCED**. Two mechanisms
+  cooperate: a **demote-only** `singleton_role → secondary` reconciliation at boot (owner-pool write,
+  `deployment_role_valid_ck` permits `(primary, secondary)` per 0071) suppresses the singleton duties
+  (submitter/reconciler/config-writer go quiet once `isSingletonPrimary` is false), and the
+  **read-only gate — generalized from mirror-only to a boolean predicate** — blocks *all* write verbs
+  on a fenced node (a superset of the §7 config-write class). A superseding doc arriving via gossip
+  **while running** triggers **restart-into-fenced**. The decision is **membership-standing-driven,
+  not axis-driven** — deliberately, because `mode=mirror` hard-requires `mirror_config` and
+  `role=secondary` is an active-selling local secondary, so neither axis alone means "fenced". New
+  app helpers `isFenced` / `shouldFenceRestart` (`apps/server`); pure `standingOf` /
+  `isFencedStanding` in `@waitron/membership`. **No migration** (no schema change; `inmutabilidad` /
+  FORCE-RLS / `english-only` unaffected — all standings are already English). **Carry-forwards:**
+  - **R2 (drain-as-source + disposal guard)** — enrol the returned node as a peer the primary pulls
+    with `originId=<returned>`; build the producer-side **disposal guard** (own `origin_id=self` tail
+    drained onto the node that carries the partition forward — spec §5.1 note settles "the carrier",
+    not "any survivor"); surface on box-status. **Buildable now.**
+  - **R3 (wipe-and-restore, spec §6 step 4)** — **GATED on the backup regime** (`pg_restore` consumer
+    + `sync_log`-in-backup); unbuilt.
+  - **Slice 7 (conflict surface)** — ops conflict-log + primary-wins config; **not started**.
+  - **Bounded residual (accepted, spec §8.4):** on the first boot after returning, the node runs as
+    its **stale-held-doc primary** until the pull delivers the superseding doc and restarts it (≈ one
+    pull interval). Deliberately **not** boot-into-read-only-until-confirmed — that would black out a
+    genuinely isolated returning node with no reachable peer (§5.1).
+  - **`nextStandings` still never emits `evicted`** — R1 only reacts to `sell-only`; the eviction
+    producer lands with R2/R3.
   **Slice 3 (distribution) LANDED #202** (2026-09-03): `/sync-api/hello` now serves `{ nodeId, environment,
   membership }` (the held signed document or `null`); the pull worker threads that field out of the
   handshake it already makes each tick and hands it to an injected **best-effort** `adoptMembership`
