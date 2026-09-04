@@ -28,6 +28,11 @@ export type CaptureOp = "insert" | "update" | "delete";
  * enrolled table rides the ORDERED lane. The lane is the wire dimension both peers agree on (spec §4b).*/
 export type SyncLane = "ordered" | "fast";
 
+/** Every sync lane, for callers that must act ACROSS all lanes — e.g. the disposal guard, which reads
+ * an origin's whole tail: `seq` is a single global identity, but each lane's cursor advances only over
+ * its own tables, so "fully drained" is a per-lane question answered for every lane. */
+export const SYNC_LANES = ["ordered", "fast"] as const satisfies readonly SyncLane[];
+
 export interface EnrolledTable {
   /** The physical table name — an English, [a-z_]+ identifier (regime-neutral; spec §2). */
   table: string;
