@@ -1202,20 +1202,21 @@ genuinely-decision-bearing.
 
 **CI / test infra:**
 
-- **`test-heavy` and `test-server` are sharded THREE WAYS** (`feat/shard-db-server-ci`). They were the
-  two critical-path jobs — 374s (`packages/db`) and 341s (`apps/server`) on the unfiltered `main` run
+- **`test-heavy` and `test-server` are sharded THREE WAYS** (LANDED #216). They were the two
+  critical-path jobs — 374s (`packages/db`) and 341s (`apps/server`) on the unfiltered `main` run
   33890775789 — and, being single packages, could only be split by sharding their test FILES with
   vitest `--shard=i/N` (a matrix job), each shard emitting a partial-coverage `blob`, with a paired
   `test-heavy-merge` / `test-server-merge` job merging the blobs (`vitest --merge-reports`) and
   enforcing the 98/98/98/95 thresholds on the total. The `test:shard` / `test:merge` package scripts
   carry the mechanism; `scripts/ci-workflow.test.mjs` pins the matrix↔denominator↔merge wiring AND the
-  script shapes. NOTE the merge job is a fixed SERIAL tax run after the shards (the blobs already hold
-  each shard's source-mapped coverage, so it deserializes and aggregates them, renders and
-  threshold-checks — no tests, no container; ~80s for db measured locally), so the win is sub-linear and
-  more shards help only until shard-wall ≈ merge-wall — read the realized per-job durations off the
-  first unfiltered `main` run and bump the matrix (`shard: [1..N]` AND the `--shard=i/N` denominator,
-  together) if a single shard still dominates, but keep N at or below the package's test-file count, or
-  an empty shard exits 1 ("No test files found") even with thresholds suppressed.
+  script shapes. **Measured on PR #216's run 33908208779:** test-heavy 374s → shards 136/220/89s +
+  merge 24s ≈ **244s**; test-server 341s → shards 139/131/131s + merge 35s ≈ **174s**. The merge tax
+  is much cheaper on the CI runner (24s/35s) than the ~80s laptop figure. **The real limit is
+  IMBALANCE, not the merge:** vitest `--shard` splits by FILE COUNT, not duration, so test-heavy came
+  out 89/136/220s — one shard drew the slow files — and there is no duration-based split. Bumping the
+  matrix (`shard: [1..N]` AND the `--shard=i/N` denominator, together) can't fix imbalance and must keep
+  N at or below the package's test-file count, or an empty shard exits 1 ("No test files found") even
+  with thresholds suppressed.
 - **Job-sharding — remaining lever.** With db/server sharded, the next critical-path candidate is
   `mutation-verifactu` (~218s, one free 4-vCPU runner); split it if a run shows it dominating. Rebalance
   the `LIGHT_A/B_PACKAGES` bins (`scripts/changed-scope.mjs`) when a run shows one light shard dominating.
