@@ -1495,7 +1495,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       probeDb = await createPostgresDb(backupConfig.databaseUrl);
       await assertBackupCanReadFiscal(probeDb);
       backupWorker = runBackupSweep({
-        dir: backupConfig.dir,
+        // INTERIM (BR-1 Task 4): `runBackupSweep` still takes a single `dir`; the real fan-out to every
+        // configured `destinations` entry is Task 5/6's job (plan: "Wire boot", boot.ts:1437-1467).
+        // `destinations[0]` is always present here — `loadBackupConfig` returns `undefined`, and this
+        // block never runs, when `destinations` is empty — and is the `WAITRON_BACKUP_DIR` "primary"
+        // entry whenever that convenience is set, matching today's single-dir behaviour exactly.
+        dir: backupConfig.destinations[0].dir,
         databaseUrl: backupConfig.databaseUrl,
         intervalMs: backupConfig.intervalMs,
         retain: backupConfig.retain,
@@ -1623,7 +1628,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
           : undefined,
       readBackup:
         backupWorker !== undefined
-          ? () => readBackupStatus(backupConfig!.dir, backupConfig!.staleAfterMs, now())
+          ? // INTERIM (BR-1 Task 4): same single-dir shim as the sweep above, pending Task 6's
+            // per-destination freshness reader.
+            () =>
+              readBackupStatus(backupConfig!.destinations[0].dir, backupConfig!.staleAfterMs, now())
           : undefined,
       // Report the effective mode the box is actually serving as — the same holder the read-only gate
       // and mirror-session middlewares read — so the status matches what the box enforces and tracks a

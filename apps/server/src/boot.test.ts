@@ -2041,6 +2041,9 @@ describe("startServer, against a real container as the deployment role", () => {
         WAITRON_BACKUP_DIR: backupDir,
         // Port 1 → ECONNREFUSED, fast and deterministic (a refused port, never a hanging one).
         WAITRON_BACKUP_DATABASE_URL: "postgres://user:pw@127.0.0.1:1/db",
+        // Required since BR-1 Task 4 (fail-closed like the db url) — without it loadBackupConfig
+        // throws backup.recovery_key_missing before the probe this test exercises ever runs.
+        WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
       });
       // The probe's createPostgresDb/assert failure was caught and backup left OFF — proven by the log line,
       // whose arrival also means startServer got past the probe rather than throwing out of it.
