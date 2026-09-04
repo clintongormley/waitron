@@ -178,10 +178,12 @@ describe("assembleMirrorBundle (primary side, real Postgres)", () => {
       ),
     ).toBe(true);
 
-    // The minted token authenticates as a real peer, resolving to the designated node id — the identity
-    // the mirror pulls as. Round-trips through authenticatePeer on the same retention pool.
+    // The minted token authenticates as a real peer, resolving to the STANDBY's OWN node id — the
+    // identity the mirror pulls as from membership promotion R3a (NOT the designated/primary node).
+    // Round-trips through authenticatePeer on the same retention pool.
     const auth = await authenticatePeer(retentionDb, bundle.syncToken);
-    expect(auth.subscriberId).toBe(designated.nodeId);
+    expect(auth.subscriberId).toBe(standby.nodeId);
+    expect(auth.subscriberId).not.toBe(designated.nodeId);
   });
 
   it("isolates the rows to the designated tenant (RLS differential — a second venue's rows never leak)", async () => {

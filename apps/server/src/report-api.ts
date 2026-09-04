@@ -33,9 +33,12 @@ import { requirePeriod } from "./request-screens.js";
 import type { Logger } from "./logger.js";
 
 /** Deps for the reporting/export routes: `db` + this venue's `cfg.tenantId` scope every read via
- * `withTenant` (RLS confines it to this server's one tenant). `cfg.nodeId` is THIS server's own node —
- * the dashboard overview is node-scoped (today's takings/counts/open-tables/top-sellers for this node),
- * unlike the modelo 303 export, which aggregates ALL of the obligado's nodes and ignores it. */
+ * `withTenant` (RLS confines it to this server's one tenant). `cfg.nodeId` is the node whose data this
+ * server DISPLAYS, not necessarily its own identity: on a primary it is the node's own id, but on a
+ * MIRROR it is the ORIGIN (the primary whose replicated sales the mirror holds — those rows keep the
+ * primary's node_id, so `boot` passes `dataNodeId` here, membership promotion R3a). The per-till/fiscal
+ * reports (daily-close view, period, cash-up, VAT, overdue) resolve by it. The dashboard OVERVIEW
+ * ignores it and aggregates the WHOLE venue (all nodes), as the modelo 303 export does. */
 export interface ReportApiDeps {
   db: Database;
   cfg: { tenantId: string; nodeId: string };
@@ -164,9 +167,11 @@ async function countOpenTables(
  * - `/reports/modelo-303?year&period&declarationType` — gated on `report.export` (manager + admin).
  *   The AEAT DR303 fixed-layout file (ISO-8859-1) for the period; aggregates ALL of the obligado's
  *   nodes (ignores `cfg.nodeId`).
- * - `/reports/overview` — gated on `report.view` (supervisor, manager + admin). THIS node's
- *   sales/takings for TODAY (venue-clock business day): takings, record counts, open-tables tile,
- *   top sellers.
+ * - `/reports/overview` — gated on `report.view` (supervisor, manager + admin). The WHOLE VENUE's
+ *   sales/takings for TODAY (venue-clock business day): takings, record counts and top sellers
+ *   aggregate ALL of the tenant's nodes (no node predicate — correct for a multi-till venue, and on a
+ *   mirror it shows the replicated venue's data rather than the mirror's empty own node). Only the
+ *   open-tables tile is location-scoped (via `cfg.nodeId`'s location).
  * - `/reports/daily-close?businessDay` — gated on `report.view`. The full daily close (VAT summary,
  *   cash-up, counts) plus top sellers for ONE explicit business day, THIS node.
  * - `/reports/period?from&to` — gated on `report.view`. A VAT summary + top sellers over a closed
@@ -266,19 +271,25 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     }),
   );
 
-  // The dashboard's sales/takings overview for THIS node, TODAY: takings (tender + tip + gross), the
-  // record counts, the open-tables tile and the top sellers — the venue clock (node's location) decides
-  // "today". Node-scoped (unlike the tenant-wide modelo 303 export), gated on `report.view`. Money
-  // crosses the wire as decimal STRINGS (the branded `Decimal` JSON-stringifies as-is).
+  // The dashboard's sales/takings overview for the WHOLE VENUE, TODAY: takings (tender + tip + gross),
+  // the record counts and the top sellers aggregate ALL of the tenant's nodes (NO node predicate —
+  // `computeDailyClose`/`computeTopSellers` are called with no `nodeId`, so they scope by tenant + RLS
+  // only). This is correct for a multi-till venue, and on a MIRROR it means the overview shows the
+  // replicated venue's data (the primary's sales keep the primary's node_id) instead of the mirror's
+  // empty own node. Only the open-tables tile stays scoped to `cfg.nodeId`'s LOCATION (dining tables are
+  // location-, not node-, grain). Gated on `report.view`. The venue clock (`cfg.nodeId`'s location)
+  // decides "today". Money crosses the wire as decimal STRINGS (the branded `Decimal` JSON-stringifies
+  // as-is). The per-till/fiscal reports below stay node-scoped — a richer grouped close is a later slice.
   app.get("/management-api/reports/overview", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
         const { tenantId, nodeId, clock } = await buildReportContext(tx);
         const businessDay = await currentBusinessDay(tx, clock);
+        // No `nodeId` → venue-wide (all nodes). `nodeId` (from `buildReportContext`) still scopes the
+        // open-tables tile below by its LOCATION.
         const input = {
           tenantId,
-          nodeId,
           businessDay,
           timeZone: clock.timeZone,
           dayCutover: clock.dayCutover,
@@ -287,7 +298,6 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           computeDailyClose(tx, input),
           computeTopSellers(tx, {
             tenantId,
-            nodeId,
             fromBusinessDay: businessDay,
             toBusinessDay: businessDay,
             timeZone: clock.timeZone,

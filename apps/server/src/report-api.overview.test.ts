@@ -26,6 +26,7 @@ const noopLog: Logger = () => {};
 let tenantId: string;
 let tillId: string;
 let nodeId: string;
+let secondNodeId: string;
 let locationId: string;
 let seriesId: string;
 let managerCookie: string;
@@ -116,6 +117,13 @@ const suite = usePgliteDb({
       insert into nodes (tenant_id, location_id, name)
       values (${tenantId}, ${locationId}, 'Nodo 1') returning id`);
     nodeId = node.rows[0]!.id;
+    // A SECOND node at the SAME location — no sales of its own. The venue-wide vs node-scoped test
+    // below mounts report-api pointed at THIS node to prove the overview aggregates the other node's
+    // sale (venue-wide) while the per-till daily-close scoped to this node stays empty.
+    const node2 = await db.execute<{ id: string }>(sql`
+      insert into nodes (tenant_id, location_id, name)
+      values (${tenantId}, ${locationId}, 'Nodo 2') returning id`);
+    secondNodeId = node2.rows[0]!.id;
     const series = await db.execute<{ id: string }>(sql`
       insert into invoice_series (tenant_id, node_id, code)
       values (${tenantId}, ${nodeId}, 'A') returning id`);
@@ -203,6 +211,41 @@ describe("mountReportApi — /reports/overview", () => {
         total: SEED.lineTotal,
       },
     ]);
+  });
+
+  it("overview is VENUE-WIDE (aggregates all nodes) while the per-till daily-close stays node-scoped", async () => {
+    // Mount report-api pointed at `secondNodeId` — a node with NO sales — rather than the seeded sale's
+    // node. The overview must STILL return the sale: it ignores `cfg.nodeId` for its money/counts/
+    // top-sellers and aggregates the WHOLE venue (membership promotion R3a Part C). This is exactly the
+    // mirror case, where `cfg.nodeId` (the data node id) differs from the replicated sale's node.
+    const app = new Hono();
+    mountReportApi(app, { db: suite.db, cfg: { tenantId, nodeId: secondNodeId } }, noopLog);
+
+    const ov = await app.request("/management-api/reports/overview", {
+      method: "GET",
+      headers: { cookie: managerCookie },
+    });
+    expect(ov.status).toBe(200);
+    const ovBody = (await ov.json()) as OverviewBody;
+    // Venue-wide: the sale under the OTHER node is counted here, and its takings land.
+    expect(ovBody.counts).toEqual({ sales: 1, corrections: 0, voids: 0 });
+    expect(ovBody.takings).toEqual({
+      tenderTotal: SEED.tenderAmount,
+      tipTotal: SEED.tipAmount,
+      grossTotal: SEED.grossTotal,
+    });
+
+    // Contrast: the daily-close for that SAME `cfg.nodeId` (the "data node id", Part B) is NODE-scoped,
+    // so a node with no sales returns an empty close — proving the overview's inclusion above is
+    // venue-wide, not a coincidence of node scoping. Proven by deletion: make the overview pass
+    // `nodeId` again and this test's `counts.sales` drops to 0 (the sale is under the other node).
+    const dc = await app.request(
+      `/management-api/reports/daily-close?businessDay=${ovBody.businessDay}`,
+      { method: "GET", headers: { cookie: managerCookie } },
+    );
+    expect(dc.status).toBe(200);
+    const dcBody = (await dc.json()) as { counts: { sales: number; corrections: number } };
+    expect(dcBody.counts.sales).toBe(0);
   });
 
   it("401 with no session cookie", async () => {

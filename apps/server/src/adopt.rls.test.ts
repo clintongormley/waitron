@@ -196,24 +196,31 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
     expect(await readDeploymentMode(mirror.admin)).toBe("mirror");
 
     // Connection config persisted; the token sealed under the mirror's key and readable as app_user.
-    expect((await readMirrorConfig(mirror.admin))!.relayUrl).toBe(bundle.relayUrl);
+    // `origin_node_id` is the PRIMARY's node — the origin the mirror will pull, split from its own id
+    // (membership promotion R3a).
+    const persistedConfig = (await readMirrorConfig(mirror.admin))!;
+    expect(persistedConfig.relayUrl).toBe(bundle.relayUrl);
+    expect(persistedConfig.originNodeId).toBe(designated.nodeId);
     expect(await readMirrorToken(mirrorApp, RING, designated.tenantId)).toBe(bundle.syncToken);
 
-    // trading.env got the five designated ids + the environment + the DB URLs, including the mirror's
-    // OWN sync-pool URL — without WAITRON_SYNC_DATABASE_URL in trading.env the next (mirror) boot's
-    // `loadMirrorSyncConfig` throws `server.config_missing` and never enters mirror mode.
+    // trading.env got the shared venue's four designated ids (tenant/location/till/series) + the
+    // environment + the DB URLs, but `nodeId` is the mirror's OWN id (the standby minted in memory and
+    // threaded to the fetch), NOT `designated.nodeId` — R3a runs the mirror under its own identity.
+    // Without WAITRON_SYNC_DATABASE_URL in trading.env the next (mirror) boot's `loadMirrorSyncConfig`
+    // throws `server.config_missing` and never enters mirror mode.
     expect(persisted).toHaveLength(1);
     expect(persisted[0]).toMatchObject({
       tenantId: designated.tenantId,
       locationId: designated.locationId,
       tillId: designated.tillId,
-      nodeId: designated.nodeId,
+      nodeId: capturedStandby!.nodeId,
       seriesId: designated.seriesId,
       environment: "preproduction",
       databaseUrl: "postgres://app@mirror/db",
       migrationsDatabaseUrl: "postgres://owner@mirror/db",
       syncDatabaseUrl: "postgres://sync@mirror/db",
     });
+    expect(persisted[0]!.nodeId).not.toBe(designated.nodeId);
 
     // The parent rows landed on the mirror (adoptVenue ran).
     const t = await mirror.admin.execute(

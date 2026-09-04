@@ -86,6 +86,11 @@ const SYNC_PEERS = JSON.stringify([
 const MIRROR_RELAY_URL = "http://127.0.0.1:1/";
 const MIRROR_BOX_HOSTNAME = "mirror-box.local";
 const MIRROR_SYNC_TOKEN = "mirror-peer-token";
+// The sync ORIGIN — the PRIMARY's node id, DISTINCT from this mirror's own `WAITRON_TILL_NODE_ID`
+// (membership promotion R3a: the mirror runs under its own identity, and `mirror_config.origin_node_id`
+// is the separate primary node whose rows it pulls). The relay is unreachable here so no pull completes;
+// this only has to be a well-formed, distinct id to model the split faithfully.
+const MIRROR_ORIGIN_NODE = "77777777-7777-4777-8777-777777777777";
 // The vault key ring the boot's `loadKeyRing(env)` builds from KEY_ENV — used here to SEAL the sync
 // token the same way `adoptFromPrimary` would, so the boot's `readMirrorToken` (app_user) unseals it.
 const RING = loadKeyRing(KEY_ENV);
@@ -166,6 +171,7 @@ beforeAll(async () => {
     relayUrl: MIRROR_RELAY_URL,
     boxHostname: MIRROR_BOX_HOSTNAME,
     boxCaPem: BOX_CA_PEM,
+    originNodeId: MIRROR_ORIGIN_NODE,
   });
   await sealMirrorToken(mirror.admin, RING, TILL_ENV.WAITRON_TILL_TENANT_ID, MIRROR_SYNC_TOKEN);
 

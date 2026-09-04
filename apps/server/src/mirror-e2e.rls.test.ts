@@ -57,11 +57,11 @@ import { sealMirrorToken } from "./mirror-token.js";
 const log: Logger = () => {};
 
 // The primary's sync ORIGIN id — the marker sync_capture stamps on source.sync_log and the id the
-// mirror's peer pulls (`?originId=`). Under C2b's ADOPT model the mirror adopts the primary's
-// identity, so the mirror's OWN node id (WAITRON_TILL_NODE_ID) IS the origin it pulls: boot builds the
-// pull peer as `{ nodeId: config.till.nodeId }` (mirror-token.ts enrols the token under that same node
-// as subscriber). Subscriber and origin are therefore the same adopted node id here — the two roles
-// still live in two different databases (the source and the mirror), they just share the id.
+// mirror's peer pulls (`?originId=`). From membership promotion R3a the mirror runs under its OWN
+// identity, so the origin is DISTINCT from the mirror's own node id (WAITRON_TILL_NODE_ID): boot builds
+// the pull peer's `nodeId` from `mirror_config.origin_node_id` (this value, seeded below), while the
+// pull SUBSCRIBER (the local cursor key) is `config.till.nodeId` = the mirror's own id. The two roles
+// live in two different databases (the source and the mirror) AND now carry two different ids.
 const PRIMARY_SYNC_NODE = "33333333-3333-4333-8333-333333333333";
 
 // The peer's subscriber_id AT THE SOURCE — the identity the source resolves the Bearer token to. Its
@@ -75,11 +75,12 @@ const CATALOGUE_NAMES = ["Dinner menu", "Lunch menu"] as const;
 
 // The till's fiscal identity — the five WAITRON_TILL_*_ID that put boot into TRADING mode, seeded
 // identically on all three clones (boot.mirror.rls.test.ts's shape) so a booted mirror's reads resolve
-// and an applied catalogue's tenant FK lands. WAITRON_TILL_NODE_ID is the mirror's SUBSCRIBER id.
+// and an applied catalogue's tenant FK lands. WAITRON_TILL_NODE_ID is the mirror's OWN id (the pull
+// SUBSCRIBER) — DISTINCT from PRIMARY_SYNC_NODE (the origin) since R3a.
 const TILL_ENV = {
   WAITRON_TILL_TENANT_ID: "11111111-1111-4111-8111-111111111111",
   WAITRON_TILL_TILL_ID: "22222222-2222-4222-8222-222222222222",
-  WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
+  WAITRON_TILL_NODE_ID: "66666666-6666-4666-8666-666666666666",
   WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
   WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
 };
@@ -220,8 +221,9 @@ async function orderedCursor(admin: Database): Promise<string | null> {
  * (tunnelHttpClient authenticates it and the pull succeeds), any other value fails checkServerIdentity
  * on every pull so nothing is ever fetched or applied. C2b: the relay URL, box CA + hostname and the
  * per-peer token all come from the DB (`mirror_config`) + the vault (`sync.mirror_token`), NOT env —
- * only the local `sync_applier` pool stays in env. The origin the mirror pulls is its OWN adopted node
- * id (`config.till.nodeId` = WAITRON_TILL_NODE_ID = PRIMARY_SYNC_NODE), built by boot. */
+ * only the local `sync_applier` pool stays in env. The origin the mirror pulls is the PRIMARY's node id
+ * (`mirror_config.origin_node_id` = PRIMARY_SYNC_NODE), DISTINCT from the mirror's own subscriber id
+ * (`config.till.nodeId` = WAITRON_TILL_NODE_ID); boot builds the peer's `nodeId` from the former (R3a). */
 function bootMirror(clone: { pg: { uri: string } }, port: number): Promise<StartedServer> {
   return startServer({
     ...KEY_ENV,
@@ -331,12 +333,14 @@ beforeAll(async () => {
     relayUrl: relayClientUrl,
     boxHostname: "box.test",
     boxCaPem,
+    originNodeId: PRIMARY_SYNC_NODE,
   });
   await sealMirrorToken(mirror.admin, RING, TENANT, peerToken);
   await writeMirrorConfig(wrongMirror.admin, {
     relayUrl: relayClientUrl,
     boxHostname: "wrong.test",
     boxCaPem,
+    originNodeId: PRIMARY_SYNC_NODE,
   });
   await sealMirrorToken(wrongMirror.admin, RING, TENANT, peerToken);
 }, 180_000);

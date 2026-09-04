@@ -180,15 +180,16 @@ async function rowExists(admin: Database, table: string, id: string): Promise<bo
 
 /** Boot the mirror in MIRROR mode against the SHARED relay, its identity + connection config supplied by
  * the completed adopt (deployment.mode='mirror', `mirror_config`, the sealed `sync.mirror_token`). The
- * five WAITRON_TILL_*_ID are the ADOPTED ids, and the vault key is the same RING adopt sealed under. This
- * is mirror-e2e.rls.test.ts's `bootMirror`, its identity now sourced from `designated` rather than fixed
- * constants. */
-function bootMirror(port: number): Promise<StartedServer> {
+ * venue ids (tenant/till/series/location) are the ADOPTED `designated.*`, but `WAITRON_TILL_NODE_ID` is
+ * the mirror's OWN id — the value adopt persisted into trading.env (membership promotion R3a) — passed
+ * in as `ownNodeId`. The vault key is the same RING adopt sealed under. This is mirror-e2e.rls.test.ts's
+ * `bootMirror`, its identity now sourced from the completed adopt. */
+function bootMirror(port: number, ownNodeId: string): Promise<StartedServer> {
   return startServer({
     ...KEY_ENV,
     WAITRON_TILL_TENANT_ID: designated.tenantId,
     WAITRON_TILL_TILL_ID: designated.tillId,
-    WAITRON_TILL_NODE_ID: designated.nodeId,
+    WAITRON_TILL_NODE_ID: ownNodeId,
     WAITRON_TILL_SERIES_ID: designated.seriesId,
     WAITRON_TILL_LOCATION_ID: designated.locationId,
     DATABASE_URL: roleUrl(mirror.pg.uri, "app_login", "app_pw"),
@@ -557,32 +558,43 @@ describe("adopt headline e2e — setup-mode adopt, reboot into mirror mode, pull
     expect(endorsement?.endorsedBy).toBe(designated.nodeId);
 
     // The DB-stored connection config + sealed token adopt wrote — what the reboot reads INSTEAD of env.
+    // `origin_node_id` is the PRIMARY's node (`designated.nodeId`) — the origin the mirror pulls, split
+    // from its own identity (membership promotion R3a).
     const cfg = await readMirrorConfig(mirror.admin);
-    expect(cfg).toEqual({ relayUrl: relayClientUrl, boxHostname: "box.test", boxCaPem });
+    expect(cfg).toEqual({
+      relayUrl: relayClientUrl,
+      boxHostname: "box.test",
+      boxCaPem,
+      originNodeId: designated.nodeId,
+    });
     // The token round-trips under the mirror's OWN key: sealed by adopt, read back here as app_user.
     expect(await readMirrorToken(mirror.admin, RING, designated.tenantId)).toBe(
       capturedBundle!.syncToken,
     );
 
-    // The trading config adopt persisted for the reboot carries the adopted ids + the mirror's own
-    // connection strings + the primary's environment.
+    // The trading config adopt persisted for the reboot carries the shared venue's ids + the mirror's own
+    // connection strings + the primary's environment — but `nodeId` is the mirror's OWN id (== the
+    // standby's reserved-SIF node, read above), NOT `designated.nodeId`: from R3a the mirror runs under
+    // its own identity (`config.till.nodeId`).
     expect(persistedTrading).toHaveLength(1);
     expect(persistedTrading[0]).toEqual({
       tenantId: designated.tenantId,
       locationId: designated.locationId,
       tillId: designated.tillId,
-      nodeId: designated.nodeId,
+      nodeId: standbyNodeId,
       seriesId: designated.seriesId,
       databaseUrl: roleUrl(mirror.pg.uri, "app_login", "app_pw"),
       migrationsDatabaseUrl: mirror.pg.uri,
       syncDatabaseUrl: roleUrl(mirror.pg.uri, "sync_applier", "ap"),
       environment: "preproduction",
     });
+    expect(standbyNodeId).not.toBe(designated.nodeId);
 
     // 3. REBOOT INTO MIRROR MODE. boot reads mode='mirror' + `mirror_config` + the vault token, composes
     // tunnelHttpClient + runSyncPull, and drains the primary through the tunnel.
     const port = await freePort();
-    const server = await bootMirror(port);
+    // Boot under the mirror's OWN node id (what adopt persisted), NOT designated.nodeId (R3a).
+    const server = await bootMirror(port, standbyNodeId);
     const base = `http://127.0.0.1:${port}`;
     try {
       // THE PULL THROUGH THE TUNNEL + APPLY: the booted mirror's own runSyncPull drains the primary and
@@ -605,6 +617,57 @@ describe("adopt headline e2e — setup-mode adopt, reboot into mirror mode, pull
       expect(read.status).toBe(200);
       const rows = (await read.json()) as { name: string }[];
       expect(rows.map((r) => r.name).sort()).toEqual([...CATALOGUE_NAMES]);
+
+      // THE NODE-SCOPED REPORT READ-THROUGH (membership promotion R3a, Parts B + C). A replicated sale
+      // keeps the PRIMARY's node_id (`designated.nodeId`), while the rebooted mirror runs under its OWN
+      // id (`standbyNodeId`). Seed exactly such a row directly (superuser, the shape a pulled sale has)
+      // and prove the mirror's node-scoped reports still resolve the VENUE's data rather than the empty
+      // own node — the empty-reports regression the identity split would otherwise cause. The ambient
+      // mirror viewer (full admin, no login) satisfies the `report.view` gate with the primed cookie.
+      await mirror.admin.execute(sql`
+        insert into sales (
+          tenant_id, till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes,
+          total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state
+        ) values (
+          ${designated.tenantId}, ${designated.tillId}, ${designated.nodeId}, ${designated.seriesId},
+          9001, now(), 0, '121.00',
+          ${JSON.stringify([{ rate: "21.00", base: "100.00", tax: "21.00" }])}::jsonb,
+          'es-ES', array['es-ES'], 'fake', 'recorded'
+        )`);
+      const seededSaleId = (
+        await mirror.admin.execute<{ id: string }>(
+          sql`select id from sales where invoice_number = 9001 and node_id = ${designated.nodeId}`,
+        )
+      ).rows[0]!.id;
+      await mirror.admin.execute(sql`
+        insert into tenders (tenant_id, sale_id, method, amount, tip_amount, settled_at)
+        values (${designated.tenantId}, ${seededSaleId}, 'cash', '121.00', '0.00', now())`);
+
+      // Part C — the OVERVIEW is venue-wide: it aggregates ALL nodes, so the replicated sale lands
+      // (before the fix it filtered by the mirror's own node id and returned empty takings).
+      const overviewRes = await fetch(`${base}/management-api/reports/overview`, {
+        headers: { cookie },
+      });
+      expect(overviewRes.status).toBe(200);
+      const overview = (await overviewRes.json()) as {
+        businessDay: string;
+        takings: { tenderTotal: string; grossTotal: string };
+        counts: { sales: number };
+      };
+      expect(overview.counts.sales).toBe(1);
+      expect(overview.takings.tenderTotal).toBe("121.00");
+      expect(overview.takings.grossTotal).toBe("121.00");
+
+      // Part B — the per-till daily-close resolves by the DATA node id (the origin = `designated.nodeId`),
+      // NOT `config.till.nodeId` (the mirror's own id, which has zero sales); so it too returns the
+      // replicated sale rather than an empty close.
+      const dcRes = await fetch(
+        `${base}/management-api/reports/daily-close?businessDay=${overview.businessDay}`,
+        { headers: { cookie } },
+      );
+      expect(dcRes.status).toBe(200);
+      const dailyClose = (await dcRes.json()) as { counts: { sales: number } };
+      expect(dailyClose.counts.sales).toBe(1);
 
       // A WRITE IS REFUSED by the read-only gate (C2a's gate). This is the assertion the deletion control
       // below makes load-bearing: with `setDeploymentMode('mirror')` removed from adopt.ts, the reboot

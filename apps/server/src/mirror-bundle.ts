@@ -96,8 +96,11 @@ export interface AssembleDeps {
 /**
  * Assemble the mirror bundle: the venue's parent rows, the deployment environment, the box's CA + dial
  * details, and a freshly minted per-peer sync token. Throws `mirror.not_provisioned` if the database
- * carries no deployment stamp (there is nothing to mirror). The token's subscriber is the designated
- * node id: the mirror authenticates AS that node when it pulls.
+ * carries no deployment stamp (there is nothing to mirror). The token's subscriber is the STANDBY's
+ * OWN node id (`deps.standby.nodeId`), not the primary's: from membership promotion R3a the mirror
+ * runs under its own identity and authenticates AS itself when it pulls, while the ORIGIN it pulls
+ * (the primary's node) travels separately in `mirror_config.origin_node_id`. The local pull cursor is
+ * keyed (subscriber = own id, origin = primary, lane); the source ignores the request-body subscriber.
  */
 export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBundle> {
   const rows: AdoptVenueRows = await withTenant(
@@ -168,7 +171,7 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
   const boxCaPem = await readFile(caCertPath(deps.stateDir), "utf8");
 
   const { token } = await enrolPeer(deps.retentionDb, {
-    subscriberId: deps.designated.nodeId,
+    subscriberId: deps.standby.nodeId,
     name: "cloud mirror",
   });
 
