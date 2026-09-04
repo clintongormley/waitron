@@ -121,7 +121,7 @@ editor + rendering) is the sole remaining sub-project of this track.**
   superseding their original "mounted always" text. Design:
   [sp-c-dev-device-switcher](superpowers/specs/2026-09-03-sp-c-dev-device-switcher-design.md); plan:
   [sp-c plan](superpowers/plans/2026-09-03-sp-c-dev-device-switcher.md). No SP-C follow-ups deferred.
-- **SP-B — grid editor + rendering — B1 #204; B2 (#206+#207); B3 split into B3.1 (LANDED #209, 2026-09-04) + B3.2 (LANDED #213, 2026-09-04: Phase A profile→canvas rename + Phase B the canvas editor UI); B4 after.**
+- **SP-B — grid editor + rendering — B1 #204; B2 (#206+#207); B3 split into B3.1 (LANDED #209, 2026-09-04) + B3.2 (LANDED #213, 2026-09-04: Phase A profile→canvas rename + Phase B the canvas editor UI); B4 LANDED (this branch, 2026-09-04). SP-B B1–B4 build sequence complete (Follow-ons below remain).**
   The HA-Sections editor UI plus making screens render from grid profiles (wrap the bespoke
   floor/KDS/table-order screens as cards; phased). The schedule risk. Removes the old widget model
   (`WIDGET_TYPES`/`validateLayout`/`till_layouts`) once rendering swaps over. Design:
@@ -244,6 +244,22 @@ editor + rendering) is the sole remaining sub-project of this track.**
     - **Deferred follow-on — device profile.** A future slice: a first-class device profile bundling
       **capabilities + area + order-routing + printer target + a `canvasId` reference** (device → device
       profile → canvas), relocating capabilities off the canvas record once it exists. Not built here.
+  - **B4 LANDED (this branch, 2026-09-04):** dropped the old widget model and rehomed the non-fiscal
+    receipt trim. **Removed:** `WIDGET_TYPES`/`WidgetInstance`/`LayoutDef`/`Region`/`WIDGET_CONFIG`/
+    `validateLayout`/`store.ts`/`DEFAULT_LAYOUT` from `@waitron/layouts`; the till's region render
+    (`#renderScreen`/`#layoutFor` and the legacy `screen`-enum fallback); the old dashboard widget
+    editor; the `layout` field of `GET /api/till`; the `layout.invalid` error code; the
+    `till_layouts` table (0105 DROP); the old `@waitron/layouts` widget exports and the
+    `/management-api/layout` routes. **Rehomed:** the non-fiscal receipt trim into a new
+    `tenant_receipts` table — **0103** create + **0104** custom RLS (FORCE ROW LEVEL SECURITY +
+    `tenant_receipts_tenant_isolation` policy + SELECT/INSERT/UPDATE grants to `app_user`) — behind a
+    `receipt-store` (`getReceipt`/`putReceipt`) and `GET /management-api/receipt` (the dashboard
+    receipt editor repointed at it). **Counter render:** `GET /api/till` now always resolves a canvas
+    for every request — including cookieless, which falls back to the `till` form-factor default —
+    so the counter renders from a canvas only; the sale-path invariant is preserved by guaranteeing a
+    canvas is present *before* the region fallback was removed. **Not fiscal** — `nodeId`/chain/series
+    untouched. (The one behaviour change surfaced is recorded as the deferred follow-on immediately
+    below.)
   - **SP-B4 deferred follow-on — fresh-display KDS enrol flow.** The lock screen's *set up as kitchen
     display* affordance (`#onSetupDevice` → `deviceMode` + `screen="station"`) used to reach the station
     screen's on-mount-401 enrol view via the legacy `#renderScreen` `case "station"`. SP-B4 removed that
