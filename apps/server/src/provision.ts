@@ -45,8 +45,12 @@ export interface ProvisionDeps {
  * concurrent case. A future caller from another process would need its own external lock.
  *
  * The order is load-bearing and matches the plan's D-decisions:
- *  1. `planVenue` FIRST — pure validation (locales/series/territory), so a malformed request throws
- *     before any DB write and no admin connection is spent.
+ *  0. **SP-1b fiscal gate.** Before anything else, refuse if a `provision-only` module (fiscal today)
+ *     is disabled in `deps.moduleConfig` — `applyVenue` mints an unrecoverable SIF/hash chain
+ *     (CLAUDE.md §5), so a disabled provision-only module must never reach it. No DB write has
+ *     happened yet.
+ *  1. `planVenue` — pure validation (locales/series/territory), so a malformed request throws before
+ *     any DB write and no admin connection is spent.
  *  2. **Double-provision guard (the fiscal footgun, R6b).** `applyVenue`'s location/till/node/SIF have
  *     NO business key, so a second run ADDS a shop and mints a FRESH SIF/hash chain (venue-apply.ts's
  *     own header). Nothing in `applyVenue` stops a re-POST from starting a second chain, and a wrong
@@ -72,7 +76,7 @@ export async function provisionVenue(
     throw new AppError("module.provision_only_disabled", { module: blocked[0]! });
   }
 
-  // 1. Pure validation first — throws before touching the database.
+  // 1. Pure validation — throws before touching the database.
   const plan = planVenue(req.venue);
   const tenantId = obligadoTenantId(req.venue.country, req.venue.taxId);
 

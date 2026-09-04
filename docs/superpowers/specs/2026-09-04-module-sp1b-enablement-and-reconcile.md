@@ -181,7 +181,7 @@ an unrecoverable chain (architecture §1.2), so a box that does not run fiscal m
 change to the fiscal core and is exactly **SP-3** ("fiscal as a module + gated provisioning;
 swappable"). So SP-1b does **not** build it. Instead:
 
-- The venue-provisioning entry (`provisionVenue`, `apps/server/src/provision.ts:79`, the composition
+- The venue-provisioning entry (`provisionVenue`, `apps/server/src/provision.ts:62`, the composition
   root — it holds `ALL_MODULES` with their `tier`s and can compute the enabled set) refuses
   provisioning loudly with `module.provision_only_disabled` (param `{ module }`) **if any
   `provision-only` module is disabled**, before `planVenue`/`applyVenue` run. The guard is **generic

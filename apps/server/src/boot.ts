@@ -551,11 +551,13 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // The reads run over their OWN short-lived MIGRATOR connection (`config.migrationsDatabaseUrl`, the
   // same string `applyMigrations` and the stamp probe above use), NOT the app `db` pool: the drizzle
   // journal tables (`__drizzle_migrations_*`) are owned by the migrator role, and the least-privileged
-  // deployment role the pool authenticates as holds no SELECT on them — a `db`-pool read faults 42501
-  // (verified against a real container: every trading boot whose pool role lacks that grant broke
-  // here). They also run auto-commit — a plain per-statement `execute`, never inside a transaction —
-  // because `appliedSchemaVersion`'s 42P01 catch for a never-migrated table poisons an enclosing
-  // transaction (spec §3); a fresh connection used auto-commit satisfies that just as the pool would.
+  // deployment role the pool authenticates as holds no SELECT on them, so a `db`-pool read would fault
+  // 42501 — the same reason the stamp probe above also runs on the migrator connection rather than the
+  // pool. (No committed test exercises the least-privileged-pool path here; the committed drift test
+  // uses the migrator/superuser URL throughout.) They also run auto-commit — a plain per-statement
+  // `execute`, never inside a transaction — because `appliedSchemaVersion`'s 42P01 catch for a
+  // never-migrated table poisons an enclosing transaction (spec §3); a fresh connection used
+  // auto-commit satisfies that just as the pool would.
   if (moduleConfig !== undefined) {
     const driftProbe = await createPostgresDb(config.migrationsDatabaseUrl);
     try {
