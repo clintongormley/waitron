@@ -21,10 +21,11 @@ import {
 } from "@waitron/payments-stripe";
 import type { PaymentProvider } from "@waitron/payments";
 import { drain } from "@waitron/fiscal-verifactu";
-import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
-import { orderedMigrationSets } from "@waitron/module";
+import { appliedSchemaVersion, applyMigrations, migrationOptionsFor } from "@waitron/migrations";
+import { enabledModules, orderedMigrationSets, reconcile } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
+import { readModuleConfig } from "./module-config.js";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { parseEnvFile } from "./env-file.js";
 import {
@@ -527,11 +528,52 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // for nothing, and it means the pool is never asked to double as the migrator's connection: the
   // two connection strings can differ, and `applyMigrations` now opens its own connection from
   // whichever string it is given rather than migrating over a pool built from a different one.
+  // SP-1b: setup mode migrates the FULL schema (the wizard needs it — SP-1a §4 "setup-migrates-all");
+  // trading mode migrates only the modules the on-box modules.json enables (default: all). The enabled
+  // set is read from `<stateDir>/modules.json` BEFORE migrations, exactly when the decision is needed
+  // (spec §1.3). `enabledModules` never drops `core` (mandatory; `parseModuleConfig` refuses `core: false`).
+  const moduleConfig =
+    config.till === undefined ? undefined : await readModuleConfig(config.stateDir);
+  const setsToMigrate =
+    moduleConfig === undefined ? ALL_MODULES : enabledModules(ALL_MODULES, moduleConfig);
   await applyMigrations(
     config.migrationsDatabaseUrl,
-    migrationOptionsFor(orderedMigrationSets(ALL_MODULES), config.migrationsRoot),
+    migrationOptionsFor(orderedMigrationSets(setsToMigrate), config.migrationsRoot),
   );
   const db = await createPostgresDb(config.databaseUrl);
+
+  // SP-1b drift visibility (spec §3): compare the enabled set against what the DB has ACTUALLY
+  // migrated (derived from appliedSchemaVersion — there is no deployment column). softDisabled = a
+  // module the DB carries but modules.json no longer enables; its data is kept, it is simply not
+  // migrated. Logged at info so an operator sees the reconcile outcome; nothing acts on it here beyond
+  // the filter above.
+  //
+  // The reads run over their OWN short-lived MIGRATOR connection (`config.migrationsDatabaseUrl`, the
+  // same string `applyMigrations` and the stamp probe above use), NOT the app `db` pool: the drizzle
+  // journal tables (`__drizzle_migrations_*`) are owned by the migrator role, and the least-privileged
+  // deployment role the pool authenticates as holds no SELECT on them — a `db`-pool read faults 42501
+  // (verified against a real container: every trading boot whose pool role lacks that grant broke
+  // here). They also run auto-commit — a plain per-statement `execute`, never inside a transaction —
+  // because `appliedSchemaVersion`'s 42P01 catch for a never-migrated table poisons an enclosing
+  // transaction (spec §3); a fresh connection used auto-commit satisfies that just as the pool would.
+  if (moduleConfig !== undefined) {
+    const driftProbe = await createPostgresDb(config.migrationsDatabaseUrl);
+    try {
+      const migrated = new Set<string>();
+      for (const m of ALL_MODULES) {
+        if ((await appliedSchemaVersion(driftProbe, m.migrations)) > 0) migrated.add(m.name);
+      }
+      const r = reconcile(
+        enabledModules(ALL_MODULES, moduleConfig).map((m) => m.name),
+        migrated,
+      );
+      if (r.softDisabled.length > 0 || r.toMigrate.length > 0) {
+        log("info", "module.reconcile", { softDisabled: r.softDisabled, toMigrate: r.toMigrate });
+      }
+    } finally {
+      await driftProbe.close();
+    }
+  }
 
   // Health state + the one Hono app, shared by BOTH modes: `/health` answers in setup mode too, and
   // whichever surface the branch below mounts (setup or trading) attaches to this same app. Created
