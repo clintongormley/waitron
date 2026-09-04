@@ -99,6 +99,7 @@ export {
   insertReservedNodeTx,
   insertReservedSeriesTx,
   readNodeEndorsement,
+  readStandardSeriesId,
   type ReservedNodeInput,
   type ReservedSeriesInput,
 } from "./reserved-identity.js";

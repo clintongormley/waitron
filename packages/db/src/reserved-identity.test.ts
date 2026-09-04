@@ -1,6 +1,6 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locationId as brandLocationId } from "@waitron/shared";
+import { isAppError, locationId as brandLocationId } from "@waitron/shared";
 import type { LocationId, TenantId } from "@waitron/shared";
 import type { Endorsement } from "@waitron/membership";
 import type { Database } from "./client.js";
@@ -10,8 +10,11 @@ import {
   insertReservedSeriesTx,
   readMembershipTrustSet,
   readNodeEndorsement,
+  readStandardSeriesId,
   withTenant,
 } from "./index.js";
+import { invoiceSeries } from "./schema/series.js";
+import { captureError } from "./testing/errors.js";
 import { seedNode, seedTenant } from "./testing/seed.js";
 import { usePgliteDb } from "./testing/lifecycle.js";
 
@@ -92,5 +95,32 @@ describe("reserved-identity accessors", () => {
       ["FA-3", 1],
       ["RF-3", 1],
     ]);
+  });
+
+  it("readStandardSeriesId returns the node's standard series id, not the rectificative", async () => {
+    // A node with both purposes reserved (R2's real shape): the standard series is the one R3b's
+    // promote points config.till.seriesId at, never the rectificative sitting beside it.
+    const node = await seedNode(suite.db, tenantId, locationId);
+    await withTenant(suite.db, tenantId, (tx) =>
+      insertReservedSeriesTx(tx, [
+        { tenantId, nodeId: node, code: "F-42", purpose: "standard" },
+        { tenantId, nodeId: node, code: "R-42", purpose: "rectificative" },
+      ]),
+    );
+    const id = await readStandardSeriesId(suite.db, tenantId, node);
+    // it is a real series row, of purpose 'standard'
+    const [row] = await withTenant(suite.db, tenantId, (tx) =>
+      tx
+        .select({ code: invoiceSeries.code, purpose: invoiceSeries.purpose })
+        .from(invoiceSeries)
+        .where(eq(invoiceSeries.id, id)),
+    );
+    expect(row).toEqual({ code: "F-42", purpose: "standard" });
+  });
+
+  it("readStandardSeriesId throws series.no_standard_for_node when the node has none", async () => {
+    const bareNode = await seedNode(suite.db, tenantId, locationId);
+    const err = await captureError(() => readStandardSeriesId(suite.db, tenantId, bareNode));
+    expect(isAppError(err) && err.code).toBe("series.no_standard_for_node");
   });
 });
