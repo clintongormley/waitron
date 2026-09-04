@@ -121,7 +121,7 @@ editor + rendering) is the sole remaining sub-project of this track.**
   superseding their original "mounted always" text. Design:
   [sp-c-dev-device-switcher](superpowers/specs/2026-09-03-sp-c-dev-device-switcher-design.md); plan:
   [sp-c plan](superpowers/plans/2026-09-03-sp-c-dev-device-switcher.md). No SP-C follow-ups deferred.
-- **SP-B — grid editor + rendering — B1 #204; B2 (#206+#207); B3 split into B3.1 (LANDED #209, 2026-09-04) + B3.2 (LANDED #213, 2026-09-04: Phase A profile→canvas rename + Phase B the canvas editor UI); B4 LANDED (this branch, 2026-09-04). SP-B B1–B4 build sequence complete (Follow-ons below remain).**
+- **SP-B — grid editor + rendering — B1 #204; B2 (#206+#207); B3 split into B3.1 (LANDED #209, 2026-09-04) + B3.2 (LANDED #213, 2026-09-04: Phase A profile→canvas rename + Phase B the canvas editor UI); B4 LANDED #218 (2026-09-04). SP-B B1–B4 build sequence complete (Follow-ons below remain).**
   The HA-Sections editor UI plus making screens render from grid profiles (wrap the bespoke
   floor/KDS/table-order screens as cards; phased). The schedule risk. Removes the old widget model
   (`WIDGET_TYPES`/`validateLayout`/`till_layouts`) once rendering swaps over. Design:
@@ -244,7 +244,7 @@ editor + rendering) is the sole remaining sub-project of this track.**
     - **Deferred follow-on — device profile.** A future slice: a first-class device profile bundling
       **capabilities + area + order-routing + printer target + a `canvasId` reference** (device → device
       profile → canvas), relocating capabilities off the canvas record once it exists. Not built here.
-  - **B4 LANDED (this branch, 2026-09-04):** dropped the old widget model and rehomed the non-fiscal
+  - **B4 LANDED #218 (2026-09-04):** dropped the old widget model and rehomed the non-fiscal
     receipt trim. **Removed:** `WIDGET_TYPES`/`WidgetInstance`/`LayoutDef`/`Region`/`WIDGET_CONFIG`/
     `validateLayout`/`store.ts`/`DEFAULT_LAYOUT` from `@waitron/layouts`; the till's region render
     (`#renderScreen`/`#layoutFor` and the legacy `screen`-enum fallback); the old dashboard widget
