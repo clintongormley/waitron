@@ -660,6 +660,9 @@ importers:
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@electric-sql/pglite@0.5.4)(@types/pg@8.20.0)(pg@8.22.0)
       pg:
         specifier: ^8.22.0
         version: 8.22.0
@@ -700,9 +703,6 @@ importers:
       '@waitron/workforce-es':
         specifier: workspace:*
         version: link:../workforce-es
-      drizzle-orm:
-        specifier: ^0.45.2
-        version: 0.45.2(@electric-sql/pglite@0.5.4)(@types/pg@8.20.0)(pg@8.22.0)
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
