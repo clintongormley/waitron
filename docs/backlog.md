@@ -296,8 +296,29 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
   consistent with its primary's; (c) **each module will own its own testing** — add `testing` to the
   module contract at **SP-2** (owner steer 2026-09-04). Spec/plan:
   [sp-1b](superpowers/specs/2026-09-04-module-sp1b-enablement-and-reconcile.md).
-- **SP-1c — versioned migration ordering** (compatibility check + dependency graph/version gates replacing
-  the linear manifest).
+- **SP-1c — versioned migration ordering — LANDED #217 (2026-09-04).** `orderedMigrationSets` rewritten from
+  `modules.map(...)` into a pure resolve-validate-and-order: it validates every declared `requires` edge
+  (semver-range compatibility via the newly-pinned `semver` dep, dependency presence, malformed-range
+  rejection), detects cycles, and returns the sets in a **stable topological order** (Kahn's algorithm, input
+  order as the tie-break — reproduces the manifest order, so SP-1a's pin still holds and now also proves the
+  sort). `requires` populated on the nine descriptors from the **verified** cross-set graph. Four new
+  `module.*` codes (`dependency_missing`/`dependency_cycle`/`incompatible_version`/`requires_invalid`).
+  Behaviour-preserving; schema-version gate **deferred** (owner call — topo order already guarantees
+  core-before-dependents within one boot; the cross-node gate is SP-2). The **dependency-presence** check is
+  the one part tripping today: SP-1b's `modules.json` can disable `identity` with `workforce` still on, which
+  SP-1c now refuses at boot (`module.dependency_missing`) before migrating — proven by a real-PG boot test.
+  **Key review find:** the first-pass graph was FK-only and missed `sync → {identity, payments}` — `sync`
+  attaches to those modules' tables via `CREATE TRIGGER … ON`, not FKs; fixed, and recorded as a durable
+  CLAUDE.md §3 lesson (grep both FK `REFERENCES` and `CREATE TRIGGER … ON` when deriving a module graph).
+  Copilot approved (5 minor doc/comment nits, all applied). **Deferred, surfaced not built:** (a) a
+  graph-honesty guard that scans the drizzle SQL and asserts each descriptor's `requires` names every FK/
+  trigger dependency — deferred to **SP-2** where descriptor package-ownership begins and the guard has a
+  natural home; until then §3's table is the receipt; (b) provisioning's migrate path still runs the linear
+  full `manifestSets()` (already a valid order) — must route through the resolver once it gains per-module
+  enablement; (c) folding `requires.core` into `requires.modules` to drop the special-case + `core: "*"`
+  boilerplate — declined here (changes the SP-1a owner-reviewed contract shape; `core` is deliberately the
+  special mandatory root), a candidate if the contract is revisited later. Spec/plan:
+  [sp-1c](superpowers/specs/2026-09-04-module-sp1c-versioned-ordering.md).
 - **SP-1d — cross-node config replication** (adopt bootstrap + flow-down; coordinates with the R-series adopt).
 - **SP-2 — full sync inversion + schema-version gate** (sync consumes module-declared enrolments, imports no
   domain schema; every package declares its own; the node-skew gate). Descriptor package-ownership begins here.
@@ -306,9 +327,9 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
 - **SP-4 — module UI surface** (card-registry inversion + self-sourcing cards + fiscal's cards) — **after
   B3.2** (shares `@waitron/layouts` / `apps/till` card-grid).
 
-With SP-1a + SP-1b landed, **SP-1c / SP-1d / SP-2 remain** and are parallel-safe with the B3.2
+With SP-1a + SP-1b + SP-1c landed, **SP-1d / SP-2 remain** and are parallel-safe with the B3.2
 layout-editor session; **SP-2 is the one that unblocks SP-3** (H2's fiscal-record lane rides SP-2's sync
-inversion). SP-4 waits for B3.2.
+inversion) and also picks up SP-1c's deferred graph-honesty guard. SP-4 waits for B3.2.
 
 ### Product work still open (beneath the two tracks)
 
