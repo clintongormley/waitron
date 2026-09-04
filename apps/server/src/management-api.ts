@@ -40,6 +40,7 @@ import {
   createCanvas,
   deleteCanvas,
   getLayout,
+  getReceipt,
   getCanvas,
   getTenantTheme,
   listCanvases,
@@ -785,13 +786,15 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // ── Layout + receipt configuration (Task 7) ───────────────────────────────────────────────────
-  // The dashboard's till-layout / receipt-trim editor surface. All three routes are gated
+  // ── Layout + receipt configuration (Task 7; receipt rehomed in SP-B4) ─────────────────────────
+  // The dashboard's till-layout / receipt-trim editor surface. All four routes are gated
   // (`requireManagementSession` first, 401 before any DB work) and every DB touch runs under
-  // `withTenant` + `asAppUser`, so RLS scopes both the authorize gate and the `till_layouts` row to
-  // this dashboard's own tenant. The two PUTs delegate the authorize + validate + upsert to
-  // `@waitron/layouts`'s `putLayout`/`putReceipt`; the GET calls `getLayout`, which does NOT authorize
-  // (see below), so it carries its own gate.
+  // `withTenant` + `asAppUser`, so RLS scopes both the authorize gate and the store rows to this
+  // dashboard's own tenant. The layout routes read/write `till_layouts`; the receipt routes now
+  // read/write the tenant's own `tenant_receipts` row (SP-B4 — the trim moved out of `till_layouts`).
+  // The two PUTs delegate the authorize + validate + upsert to `@waitron/layouts`'s
+  // `putLayout`/`putReceipt`; the two GETs call `getLayout`/`getReceipt`, which do NOT authorize (they
+  // are shared with the unauthenticated till boot read), so each GET carries its own explicit gate.
 
   // Read the tenant's authored layout + receipt (or the built-in defaults). Gated on `till.configure`,
   // NOT merely on holding a session — least-privilege: only a manager/admin who may EDIT the layout may
@@ -850,10 +853,32 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Author (full replacement) the tenant's receipt trim. Same gating + body-screen shape as
-  // `PUT /management-api/layout`: `putReceipt` enforces `till.configure` and validates the receipt
-  // (400 `receipt.invalid`); the body-shape screen refuses a non-object body or an absent `receipt`
-  // key as `management.request_invalid` naming the FIELD.
+  // Read the tenant's authored receipt trim, or the built-in default (`getReceipt` returns
+  // DEFAULT_RECEIPT `{}` on absence — SP-B4, from its own `tenant_receipts` row). Gated on
+  // `till.configure` via the explicit `authorizeManager`, NOT merely on holding a session — like
+  // `GET /management-api/layout`, `getReceipt` itself does NOT authorize (it is shared with the
+  // unauthenticated till boot read), so this route carries its own gate. Proven by deletion in
+  // `management-api.rls.test.ts`: dropping this `authorizeManager` call flips the staff-role case from
+  // 403 to 200.
+  app.get("/management-api/receipt", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const receipt = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "till.configure",
+        });
+        return getReceipt(tx, deps.cfg.tenantId);
+      });
+      return c.json({ receipt });
+    }),
+  );
+
+  // Author (full replacement) the tenant's receipt trim, into its own `tenant_receipts` row (SP-B4).
+  // Same gating + body-screen shape as `PUT /management-api/layout`: `putReceipt` enforces
+  // `till.configure` and validates the receipt (400 `receipt.invalid`); the body-shape screen refuses a
+  // non-object body or an absent `receipt` key as `management.request_invalid` naming the FIELD.
   app.put("/management-api/receipt", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

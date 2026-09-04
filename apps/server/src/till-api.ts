@@ -14,7 +14,7 @@ import {
   setPersonLocale,
 } from "@waitron/identity";
 import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalogue";
-import { getLayout, getCanvas, getCanvasForFormFactor } from "@waitron/layouts";
+import { getLayout, getReceipt, getCanvas, getCanvasForFormFactor } from "@waitron/layouts";
 import type { CanvasDef } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
@@ -620,11 +620,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // else the built-in default for its form factor (SP-B1, generalising SP-A.2 §16.3).
       // ADDITIVE only — the counter still renders from `layout`/`receipt` until SP-B.
       const device = await tryReadDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
-      // ONE transaction reads both the issuer identity and the authored layout/receipt: `getLayout`
-      // runs inside the same `withTenant` + `asAppUser` block (RLS scopes both to this till's tenant),
-      // never a second connection. `getLayout` does not authorize — this boot read is deliberately
-      // unauthenticated (the browser fetches it before login), and the layout carries no secrets, only
-      // the widget arrangement + receipt trim, same as `venueName`/`orderFlow` already here.
+      // ONE transaction reads the issuer identity, the authored layout (`getLayout`, still `till_layouts`)
+      // and the authored receipt trim (`getReceipt`, now its own `tenant_receipts` row — SP-B4): all run
+      // inside the same `withTenant` + `asAppUser` block (RLS scopes each to this till's tenant), never a
+      // second connection. Neither `getLayout` nor `getReceipt` authorizes — this boot read is deliberately
+      // unauthenticated (the browser fetches it before login), and neither carries secrets, only the widget
+      // arrangement + receipt trim, same as `venueName`/`orderFlow` already here.
       const boot = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         const [row] = await tx
@@ -656,9 +657,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           name: course.name,
           displayOrder: course.displayOrder,
         }));
-        // Authored layout/receipt, or the built-in defaults when the tenant has never opened the
-        // editor (`getLayout` returns DEFAULT_LAYOUT/DEFAULT_RECEIPT on absence, no backfill).
-        const { definition, receipt } = await getLayout(tx, deps.cfg.tenantId);
+        // Authored layout + receipt, or the built-in defaults when the tenant has never opened the
+        // editor. `getLayout` returns DEFAULT_LAYOUT on absence (its `receipt` half is now unused here);
+        // `getReceipt` reads the trim from `tenant_receipts`, returning DEFAULT_RECEIPT on absence — no
+        // backfill in either case.
+        const { definition } = await getLayout(tx, deps.cfg.tenantId);
+        const receipt = await getReceipt(tx, deps.cfg.tenantId);
         // SP-B1: an enrolled device always resolves a CanvasDef — its explicitly assigned canvas if the
         // id resolves, else the built-in/default canvas for its form factor. A request with NO device
         // (cookieless) stays `undefined` so the payload is byte-for-byte unchanged (see the no-cookie test).

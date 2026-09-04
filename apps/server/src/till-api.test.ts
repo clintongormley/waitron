@@ -875,11 +875,15 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     }
   });
 
-  it("GET /api/till returns the AUTHORED layout + receipt when the tenant has one, not the defaults", async () => {
-    // Seed a `till_layouts` row for the till's tenant (as the PGlite superuser, RLS bypassed — pure
-    // setup, like the other seeds here). `GET /api/till` must return THIS authored definition/receipt
-    // rather than DEFAULT_LAYOUT/DEFAULT_RECEIPT, proving the route reads the store rather than a
-    // constant. Cleaned up in `finally` so the shared-tenant default case above stays order-independent
+  it("GET /api/till returns the AUTHORED layout (till_layouts) + receipt (tenant_receipts), not the defaults", async () => {
+    // Seed the till's tenant (as the PGlite superuser, RLS bypassed — pure setup, like the other seeds
+    // here): the authored LAYOUT in `till_layouts` and the authored RECEIPT in `tenant_receipts` — the
+    // two now live in DIFFERENT tables (SP-B4). `GET /api/till` must return the layout via `getLayout`
+    // and the receipt via `getReceipt`, proving each read hits its own store rather than a constant.
+    // The `till_layouts` row carries a DISTRACTOR receipt (its column still exists but no live reader
+    // uses it): a route still reading the receipt from `getLayout`/`till_layouts` would surface the
+    // distractor and fail the `authoredReceipt` assertion — the by-source proof for the repoint.
+    // Cleaned up in `finally` so the shared-tenant default case above stays order-independent
     // (CLAUDE.md §4). The authored layout differs from DEFAULT_LAYOUT (a product-grid columns config +
     // a trimmed widget set) so a route that hardcoded the default would fail this.
     const authored: LayoutDef = [
@@ -889,9 +893,13 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       { type: "tender-pay", region: "aside", config: {} },
     ];
     const authoredReceipt: ReceiptConfig = { footerMessage: "Hasta pronto" };
+    const distractorReceipt: ReceiptConfig = { footerMessage: "STALE — from till_layouts" };
     await suite.db.execute(sql`
       insert into till_layouts (tenant_id, definition, receipt)
-      values (${cfg.tenantId}, ${JSON.stringify(authored)}::jsonb, ${JSON.stringify(authoredReceipt)}::jsonb)`);
+      values (${cfg.tenantId}, ${JSON.stringify(authored)}::jsonb, ${JSON.stringify(distractorReceipt)}::jsonb)`);
+    await suite.db.execute(sql`
+      insert into tenant_receipts (tenant_id, receipt)
+      values (${cfg.tenantId}, ${JSON.stringify(authoredReceipt)}::jsonb)`);
     try {
       const app = new Hono();
       mountTillApi(app, deps(suite.db), collect([]));
@@ -900,9 +908,10 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       expect(res.status).toBe(200);
       const body = (await res.json()) as { layout: LayoutDef; receipt: ReceiptConfig };
       expect(body.layout).toEqual(authored);
-      expect(body.receipt).toEqual(authoredReceipt);
+      expect(body.receipt).toEqual(authoredReceipt); // from tenant_receipts, NOT the till_layouts distractor
     } finally {
       await suite.db.execute(sql`delete from till_layouts where tenant_id = ${cfg.tenantId}`);
+      await suite.db.execute(sql`delete from tenant_receipts where tenant_id = ${cfg.tenantId}`);
     }
   });
 

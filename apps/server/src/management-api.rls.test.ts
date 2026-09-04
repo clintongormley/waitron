@@ -847,8 +847,16 @@ async function getLayoutOverHttp(
   return (await res.json()) as { definition: LayoutDef; receipt: unknown };
 }
 
+/** GET the current receipt trim as `cookie` (its own `tenant_receipts`-backed route, SP-B4), asserting
+ * the 200 and returning the parsed `{ receipt }` a round-trip test reads back after a PUT. */
+async function getReceiptOverHttp(app: Hono, cookie: string): Promise<{ receipt: unknown }> {
+  const res = await app.request("/management-api/receipt", { headers: { cookie } });
+  expect(res.status).toBe(200);
+  return (await res.json()) as { receipt: unknown };
+}
+
 describe("Management API — layout + receipt routes (Task 7)", () => {
-  it("refuses all three routes unauthenticated with 401 management_session.required", async () => {
+  it("refuses all four routes unauthenticated with 401 management_session.required", async () => {
     const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
     const json = { "content-type": "application/json" };
@@ -857,6 +865,7 @@ describe("Management API — layout + receipt routes (Task 7)", () => {
     // before any DB work — the same 401 the gated staff routes give.
     const cases = [
       app.request("/management-api/layout"),
+      app.request("/management-api/receipt"),
       app.request("/management-api/layout", {
         method: "PUT",
         headers: json,
@@ -876,7 +885,7 @@ describe("Management API — layout + receipt routes (Task 7)", () => {
     }
   });
 
-  it("refuses all three routes for a STAFF-role session with 403 (the authorizeManager gate — differential)", async () => {
+  it("refuses all four routes for a STAFF-role session with 403 (the authorizeManager gate — differential)", async () => {
     const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
     // A staff person CAN log in (login checks the credential, not the role) but holds no
@@ -884,13 +893,14 @@ describe("Management API — layout + receipt routes (Task 7)", () => {
     const cookie = await login(app, STAFF_EMAIL);
     const json = { "content-type": "application/json" };
 
-    // GET is gated by the ROUTE's own explicit `authorizeManager` call (getLayout does not authorize,
-    // being shared with the unauthenticated till boot read) — deleting that call flips this GET from
-    // 403 to 200 (the by-deletion proof for the route-level gate, demonstrated in this task's report).
-    // The two PUTs are gated INSIDE putLayout/putReceipt (proven by deletion in store.rls.test.ts);
-    // here the same 403 is exercised end-to-end through the HTTP surface.
+    // Both GETs are gated by the ROUTE's own explicit `authorizeManager` call (getLayout/getReceipt do
+    // not authorize, being shared with the unauthenticated till boot read) — deleting that call flips
+    // the GET from 403 to 200 (the by-deletion proof for the route-level gate, demonstrated in this
+    // task's report). The two PUTs are gated INSIDE putLayout/putReceipt (proven by deletion in the
+    // store rls suites); here the same 403 is exercised end-to-end through the HTTP surface.
     const cases = [
       app.request("/management-api/layout", { headers: { cookie } }),
+      app.request("/management-api/receipt", { headers: { cookie } }),
       app.request("/management-api/layout", {
         method: "PUT",
         headers: { ...json, cookie },
@@ -940,7 +950,18 @@ describe("Management API — layout + receipt routes (Task 7)", () => {
     expect(body.receipt).toEqual(DEFAULT_RECEIPT);
   });
 
-  it("manager PUT /management-api/receipt → 204, then GET reads the receipt back (round-trip)", async () => {
+  it("GET /management-api/receipt returns DEFAULT_RECEIPT for a tenant that has never authored one", async () => {
+    const { tenantId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, MANAGER_EMAIL);
+
+    // A fresh tenant has no `tenant_receipts` row — getReceipt returns DEFAULT_RECEIPT (`{}`), the
+    // built-in trim the till boots against, rather than seeding one (no backfill, SP-B4).
+    const body = await getReceiptOverHttp(app, cookie);
+    expect(body).toEqual({ receipt: DEFAULT_RECEIPT });
+  });
+
+  it("manager PUT /management-api/receipt → 204, then GET /management-api/receipt reads it back (round-trip)", async () => {
     const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
     const cookie = await login(app, MANAGER_EMAIL);
@@ -954,11 +975,10 @@ describe("Management API — layout + receipt routes (Task 7)", () => {
     expect(put.status).toBe(204);
     expect(await put.text()).toBe("");
 
-    // The receipt reads back verbatim; the definition half stays at its default (putReceipt never
-    // touches it).
-    const body = await getLayoutOverHttp(app, cookie);
-    expect(body.receipt).toEqual(receipt);
-    expect(body.definition).toEqual(DEFAULT_LAYOUT);
+    // The receipt reads back verbatim from its own `tenant_receipts` route (SP-B4) — the two now live
+    // in separate tables, so the layout GET is unaffected and stays at its own default.
+    expect(await getReceiptOverHttp(app, cookie)).toEqual({ receipt });
+    expect((await getLayoutOverHttp(app, cookie)).definition).toEqual(DEFAULT_LAYOUT);
   });
 
   it("PUT /management-api/layout with an invalid definition → 400 layout.invalid", async () => {

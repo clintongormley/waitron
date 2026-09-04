@@ -49,7 +49,7 @@ import { drawerOpens, locations, printers, tenants, tills } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { enqueuePrintJob, esc } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
-import { getLayout } from "@waitron/layouts";
+import { getReceipt } from "@waitron/layouts";
 import { formatReceipt } from "./receipt-ticket.js";
 import type { TillConfig } from "./till-config.js";
 import type { TillSaleResult } from "./till-sale.js";
@@ -108,8 +108,8 @@ export async function resolveReceiptPrinter(
 /**
  * Build the customer-receipt bytes for a filed `ticket`: the issuer identity (`tenants` legal name + NIF,
  * art. 7.1.d — the SAME source `GET /api/till`'s boot handler prints, RLS-scoped to this tenant), the
- * owner-authored header/footer trim (`getLayout`'s `receipt`, or the built-in default when the tenant has
- * never opened the editor), rendered in the FISCAL invoice locale (`cfg.locale`, NOT the operator UI
+ * owner-authored header/footer trim (`getReceipt` from `tenant_receipts`, or the built-in default when
+ * the tenant has never opened the editor), rendered in the FISCAL invoice locale (`cfg.locale`, NOT the operator UI
  * language). Shared by the print-on-sale hook and the reprint, so the mandated-element rendering lives in
  * one place. Returns `undefined` ONLY on the structurally-unreachable missing-issuer path (see below), so
  * a caller inside the sale tx degrades to no-print rather than throwing (§5).
@@ -132,7 +132,7 @@ async function buildReceiptBytes(
     return undefined;
   }
   /* v8 ignore stop */
-  const { receipt } = await getLayout(tx, cfg.tenantId);
+  const receipt = await getReceipt(tx, cfg.tenantId);
   return formatReceipt({ result: ticket, issuer, receipt, invoiceLocale: cfg.locale });
 }
 
