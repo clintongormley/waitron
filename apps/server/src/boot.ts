@@ -870,7 +870,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   if (isMirror) {
     app.use(
       "*",
-      readOnlyGate(() => holders.mode.current),
+      readOnlyGate(() => holders.mode.current === "mirror"),
     );
     try {
       await ensureMirrorViewer(db, config.till.tenantId);
