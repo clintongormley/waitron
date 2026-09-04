@@ -608,7 +608,14 @@ describe("adopt headline e2e — setup-mode adopt, reboot into mirror mode, pull
     // Boot under the mirror's OWN node id (what adopt persisted), NOT designated.nodeId (R3a). The state
     // dir catches the promotion leg's corrected `trading.env` below (torn down in the finally).
     const mirrorStateDir = await mkdtemp(join(tmpdir(), "waitron-adopt-e2e-mirror-state-"));
-    const server = await bootMirror(port, standbyNodeId, mirrorStateDir);
+    const server = await bootMirror(port, standbyNodeId, mirrorStateDir).catch(
+      async (err: unknown) => {
+        // On a boot failure `server` is never assigned, so the finally below never runs — clean up the
+        // temp state dir here rather than leaking it.
+        await rm(mirrorStateDir, { recursive: true, force: true });
+        throw err;
+      },
+    );
     const base = `http://127.0.0.1:${port}`;
     try {
       // THE PULL THROUGH THE TUNNEL + APPLY: the booted mirror's own runSyncPull drains the primary and

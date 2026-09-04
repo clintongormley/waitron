@@ -481,6 +481,11 @@ describe("promote (real Postgres): mirror → primary, in-process, restart-into-
       // A mirror boots with its own sync pool (loadMirrorSyncConfig reads this) — a sync_applier role.
       WAITRON_SYNC_DATABASE_URL: roleUrl(mirrorSuite.pg.uri, "sync_applier", "ap"),
       WAITRON_STATE_DIR: stateDir,
+    }).catch(async (err: unknown) => {
+      // On a boot failure `server` is never assigned, so the finally below never runs — clean up the
+      // temp state dir here rather than leaking it.
+      await rm(stateDir, { recursive: true, force: true });
+      throw err;
     });
 
     // SAFETY (CLAUDE.md §4): the promote schedules `setTimeout(() => process.kill(pid, "SIGTERM"), 0)`.
