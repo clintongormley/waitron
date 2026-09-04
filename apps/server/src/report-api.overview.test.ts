@@ -216,8 +216,11 @@ describe("mountReportApi — /reports/overview", () => {
   it("overview is VENUE-WIDE (aggregates all nodes) while the per-till daily-close stays node-scoped", async () => {
     // Mount report-api pointed at `secondNodeId` — a node with NO sales — rather than the seeded sale's
     // node. The overview must STILL return the sale: it ignores `cfg.nodeId` for its money/counts/
-    // top-sellers and aggregates the WHOLE venue (membership promotion R3a Part C). This is exactly the
-    // mirror case, where `cfg.nodeId` (the data node id) differs from the replicated sale's node.
+    // top-sellers and aggregates the WHOLE venue (membership promotion R3a Part C). The mismatched node
+    // here isolates that venue-wide behaviour by construction — it is a STRONGER control than the real
+    // mirror case, where `cfg.nodeId` is the origin (the primary's node) and so MATCHES the replicated
+    // sales; if the overview still resolves the sale under a node it is NOT pointed at, it resolves it
+    // on a mirror too.
     const app = new Hono();
     mountReportApi(app, { db: suite.db, cfg: { tenantId, nodeId: secondNodeId } }, noopLog);
 
