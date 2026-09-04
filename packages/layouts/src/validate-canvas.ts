@@ -17,7 +17,7 @@ import type {
 export const MAX_TAB_TITLE_LENGTH = 60;
 
 /** Selling form factors must place every sale-critical card (§13). Till only for now; extend later. */
-const SELLING_FORM_FACTORS: readonly FormFactor[] = ["till"];
+export const SELLING_FORM_FACTORS: readonly FormFactor[] = ["till"];
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);

@@ -20,6 +20,7 @@ import {
   DEFAULT_CANVASES,
   FORM_FACTORS,
   GRID_MAX_COLUMNS,
+  PRODUCT_GRID_MAX_COLUMNS,
   type CanvasDef,
   type CapabilityFlag,
   type CardInstance,
@@ -30,17 +31,27 @@ import {
 import { validateCanvasDraft } from "./canvas-editor/validate-canvas.js";
 import type { Canvas, DashboardApi } from "../api/client.js";
 
-/**
- * The column count a freshly-added tab starts on, per form factor — the same figures the built-in
- * default canvases use for their primary tab (`DEFAULT_CANVASES`): a 12-column till/tablet, a 4-column
- * phone, a 24-column KDS. The tab-settings panel lets the operator change it afterwards.
- */
-const DEFAULT_COLUMNS_BY_FORM_FACTOR: Record<FormFactor, number> = {
-  till: 12,
-  "phone-portrait": 4,
-  "tablet-landscape": 12,
-  kds: 24,
-};
+/** The form factor a native `<select>` change event carries (its `value` is always one of the
+ * form-factor keys that populated the options). */
+function formFactorFromEvent(event: Event): FormFactor {
+  return (event.target as HTMLSelectElement).value as FormFactor;
+}
+
+/** Toggle `value`'s membership of `current`, returning a NEW array ordered by `all` (deterministic,
+ * not click order): add it when `checked`, drop it otherwise, then filter `all` to what remains. The
+ * shared core of the `visibleWhen` and `capabilities` toggles; each caller keeps its own write-back
+ * (`visibleWhen` OMITS the key when the result is empty; `capabilities` always stores the array). */
+function toggleMembership<T>(
+  current: readonly T[],
+  all: readonly T[],
+  value: T,
+  checked: boolean,
+): T[] {
+  const set = new Set(current);
+  if (checked) set.add(value);
+  else set.delete(value);
+  return all.filter((x) => set.has(x));
+}
 
 /**
  * The management dashboard's CANVAS EDITOR screen (SP-B3.2) — the venue's central surface for the
@@ -70,10 +81,10 @@ const DEFAULT_COLUMNS_BY_FORM_FACTOR: Record<FormFactor, number> = {
  *
  * ERROR HANDLING mirrors the sibling screens (printers/staff): every loader/mutation is fully
  * `try/catch`ed (invoked via `void`), so a rejection becomes `errorKey` (the raw `{ code }`, falling
- * back to `server.internal`) rendered in a `role="alert"` banner. The list banner maps its code with
- * `codeMessage`; the editor banner uses `#message`, which routes the client validator's
- * `canvas_editor.*` keys through `t` and the server's `canvas.*`/`server.*` codes through `codeMessage`
- * — so one banner shows both kinds localised.
+ * back to `server.internal`) rendered in a `role="alert"` banner. Both banners map their code with
+ * `codeMessage`: the client validator's `canvas_editor.err_*` pseudo-codes and the server's
+ * `canvas.*`/`server.*` codes all live in `CODE_MESSAGES`, so one banner shows both kinds localised
+ * with no per-key routing.
  */
 @customElement("dashboard-canvas-editor-screen")
 export class CanvasEditorScreen extends LitElement {
@@ -323,14 +334,19 @@ export class CanvasEditorScreen extends LitElement {
     this.createOpen = true;
   }
 
-  #onCreateName(event: CustomEvent<{ value: string }>): void {
-    event.stopPropagation();
-    this.createName = event.detail.value;
+  /** Build a `wt-change` handler that writes the event's value straight into one plain string state
+   * field — the shared shape of the create/canvas/duplicate NAME inputs. (Fields with a different
+   * write-back, like the active tab's title, keep their own handler.) */
+  #bindField(field: "createName" | "draftName" | "duplicateName") {
+    return (event: CustomEvent<{ value: string }>): void => {
+      event.stopPropagation();
+      this[field] = event.detail.value;
+    };
   }
 
   #onCreateFormFactor(event: Event): void {
     event.stopPropagation();
-    this.createFormFactor = (event.target as HTMLSelectElement).value as FormFactor;
+    this.createFormFactor = formFactorFromEvent(event);
   }
 
   /** Seed a fresh draft from the built-in default for the chosen form factor and enter editor mode.
@@ -397,14 +413,15 @@ export class CanvasEditorScreen extends LitElement {
   }
 
   /** Append a fresh, empty tab and make it active. Its column count comes from the form factor's
-   * default; the operator renames/resizes it in the tab-settings panel. */
+   * built-in default canvas primary tab (`DEFAULT_CANVASES`), the single source for those figures; the
+   * operator renames/resizes it in the tab-settings panel. */
   #addTab(): void {
     const draft = this.draft;
     if (draft === null) return;
     const tab: TabDef = {
       key: `tab-${crypto.randomUUID().slice(0, 8)}`,
       title: t("canvas_editor.new_tab"),
-      columns: DEFAULT_COLUMNS_BY_FORM_FACTOR[draft.formFactor],
+      columns: DEFAULT_CANVASES[draft.formFactor].tabs[0]?.columns ?? GRID_MAX_COLUMNS,
       cards: [],
     };
     const nextIndex = draft.tabs.length;
@@ -525,7 +542,13 @@ export class CanvasEditorScreen extends LitElement {
         }
         const value = Number.parseInt(trimmed, 10);
         if (Number.isNaN(value)) return card;
-        return { ...card, config: { ...card.config, columns: Math.min(Math.max(value, 1), 12) } };
+        return {
+          ...card,
+          config: {
+            ...card.config,
+            columns: Math.min(Math.max(value, 1), PRODUCT_GRID_MAX_COLUMNS),
+          },
+        };
       }),
     }));
   }
@@ -544,10 +567,7 @@ export class CanvasEditorScreen extends LitElement {
       cards: tab.cards.map((card, i) => {
         if (i !== index) return card;
         const allStates = CARD_CONTRACTS[card.type].visibilityStates;
-        const has = new Set(card.visibleWhen ?? []);
-        if (checked) has.add(state);
-        else has.delete(state);
-        const next = allStates.filter((s) => has.has(s));
+        const next = toggleMembership(card.visibleWhen ?? [], allStates, state, checked);
         if (next.length === 0) {
           const rest = { ...card };
           delete rest.visibleWhen;
@@ -596,19 +616,11 @@ export class CanvasEditorScreen extends LitElement {
     this.selection = { canvas: true };
   }
 
-  #onCanvasName(event: CustomEvent<{ value: string }>): void {
-    event.stopPropagation();
-    this.draftName = event.detail.value;
-  }
-
   #onCanvasFormFactor(event: Event): void {
     event.stopPropagation();
     const draft = this.draft;
     if (draft === null) return;
-    this.#updateDraft({
-      ...draft,
-      formFactor: (event.target as HTMLSelectElement).value as FormFactor,
-    });
+    this.#updateDraft({ ...draft, formFactor: formFactorFromEvent(event) });
   }
 
   /** Toggle a canvas capability flag, rebuilt in the declared flag order (deterministic). */
@@ -616,22 +628,16 @@ export class CanvasEditorScreen extends LitElement {
     event.stopPropagation();
     const draft = this.draft;
     if (draft === null) return;
-    const set = new Set(draft.capabilities);
-    if (event.detail.checked) set.add(flag);
-    else set.delete(flag);
-    const capabilities = CAPABILITY_FLAGS.filter((f) => set.has(f));
+    const capabilities = toggleMembership(
+      draft.capabilities,
+      CAPABILITY_FLAGS,
+      flag,
+      event.detail.checked,
+    );
     this.#updateDraft({ ...draft, capabilities });
   }
 
   // ── Save ─────────────────────────────────────────────────────────────────────────────────────────
-
-  /** Resolve a banner key to localised copy: the client validator + name guard return
-   * `canvas_editor.*` StringKeys (rendered with `t`), while the server rejects with `canvas.*` /
-   * `server.*` codes (rendered with `codeMessage`). Routing on the prefix lets the ONE banner show
-   * both without the caller having to know which kind it holds. */
-  #message(key: string): string {
-    return key.startsWith("canvas_editor.") ? t(key as StringKey) : codeMessage(key);
-  }
 
   /**
    * Persist the draft: refuse an empty NAME first (the server accepts `""`, so it is guarded here),
@@ -676,11 +682,6 @@ export class CanvasEditorScreen extends LitElement {
   #openDuplicate(canvas: Canvas): void {
     this.duplicateTarget = canvas;
     this.duplicateName = `${canvas.name} (copy)`;
-  }
-
-  #onDuplicateName(event: CustomEvent<{ value: string }>): void {
-    event.stopPropagation();
-    this.duplicateName = event.detail.value;
   }
 
   /** Create a copy of the armed canvas under the entered name, from the SAME definition, then reload.
@@ -776,6 +777,18 @@ export class CanvasEditorScreen extends LitElement {
     </li>`;
   }
 
+  /** The `<option>` list for a form-factor `<select>`. With `selected` given (canvas settings) the
+   * matching option carries `?selected`; without it (the Crear dialog, whose `<select>` binds no value)
+   * the browser's default first-option selection stands — matching `createFormFactor`'s default. */
+  #renderFormFactorOptions(selected?: FormFactor): TemplateResult {
+    return html`${FORM_FACTORS.map(
+      (ff) =>
+        html`<option value=${ff} ?selected=${selected !== undefined && ff === selected}>
+          ${t(`canvas_editor.form_factor.${ff}` as StringKey)}
+        </option>`,
+    )}`;
+  }
+
   #renderCreateDialog(): TemplateResult {
     return html`<wt-dialog
       heading=${t("canvas_editor.create_title")}
@@ -787,17 +800,12 @@ export class CanvasEditorScreen extends LitElement {
         data-test="create-name"
         label=${t("canvas_editor.create_name_label")}
         .value=${this.createName}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onCreateName(e)}
+        @wt-change=${this.#bindField("createName")}
       ></wt-input>
       <label class="field"
         >${t("canvas_editor.form_factor_label")}
         <select data-test="create-form-factor" @change=${(e: Event) => this.#onCreateFormFactor(e)}>
-          ${FORM_FACTORS.map(
-            (ff) =>
-              html`<option value=${ff}>
-                ${t(`canvas_editor.form_factor.${ff}` as StringKey)}
-              </option>`,
-          )}
+          ${this.#renderFormFactorOptions()}
         </select>
       </label>
       <wt-button
@@ -821,7 +829,7 @@ export class CanvasEditorScreen extends LitElement {
         data-test="duplicate-name"
         label=${t("canvas_editor.duplicate_name_label")}
         .value=${this.duplicateName}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onDuplicateName(e)}
+        @wt-change=${this.#bindField("duplicateName")}
       ></wt-input>
       <wt-button
         slot="footer"
@@ -1082,7 +1090,7 @@ export class CanvasEditorScreen extends LitElement {
         data-test="canvas-name"
         label=${t("canvas_editor.name")}
         .value=${this.draftName}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onCanvasName(e)}
+        @wt-change=${this.#bindField("draftName")}
       ></wt-input>
       <label class="field"
         >${t("canvas_editor.form_factor_label")}
@@ -1091,12 +1099,7 @@ export class CanvasEditorScreen extends LitElement {
           .value=${draft.formFactor}
           @change=${(e: Event) => this.#onCanvasFormFactor(e)}
         >
-          ${FORM_FACTORS.map(
-            (ff) =>
-              html`<option value=${ff} ?selected=${ff === draft.formFactor}>
-                ${t(`canvas_editor.form_factor.${ff}` as StringKey)}
-              </option>`,
-          )}
+          ${this.#renderFormFactorOptions(draft.formFactor)}
         </select>
       </label>
       <div class="field" data-test="capabilities">
@@ -1116,6 +1119,20 @@ export class CanvasEditorScreen extends LitElement {
     </div>`;
   }
 
+  /** Pick the property panel for the current selection: the card panel when a card is selected AND
+   * still present in the active tab, else the tab- or canvas-settings panel, else `nothing`. A guard
+   * clause per case (each doing its own TS narrowing) rather than a nested ternary. */
+  #renderPanel(draft: CanvasDef, activeTab: TabDef | null): TemplateResult | typeof nothing {
+    const cardIndex = this.#selectedCardIndex();
+    if (cardIndex !== null && activeTab !== null && activeTab.cards[cardIndex] !== undefined) {
+      return this.#renderCardPanel(activeTab, cardIndex);
+    }
+    const selection = this.selection;
+    if (selection !== null && "tab" in selection) return this.#renderTabSettings(draft);
+    if (selection !== null && "canvas" in selection) return this.#renderCanvasSettings(draft);
+    return nothing;
+  }
+
   /** Editor mode: tab bar, interactive canvas, palette and the property panel for the current
    * selection (card / tab-settings / canvas-settings). Guardar validates the draft and persists it via
    * `#save` (create or update on `editingId`); Cancelar discards. The editor root keeps the
@@ -1124,19 +1141,7 @@ export class CanvasEditorScreen extends LitElement {
     const draft = this.draft;
     const activeTab = draft?.tabs[this.activeTabIndex] ?? null;
     const selectedCardIndex = this.#selectedCardIndex();
-    const selectedCard =
-      selectedCardIndex !== null && activeTab?.cards[selectedCardIndex] !== undefined;
-    const selection = this.selection;
-    const panel =
-      draft === null
-        ? nothing
-        : selectedCard && activeTab !== null && selectedCardIndex !== null
-          ? this.#renderCardPanel(activeTab, selectedCardIndex)
-          : selection !== null && "tab" in selection
-            ? this.#renderTabSettings(draft)
-            : selection !== null && "canvas" in selection
-              ? this.#renderCanvasSettings(draft)
-              : nothing;
+    const panel = draft === null ? nothing : this.#renderPanel(draft, activeTab);
     return html`
       <div
         class="editor"
@@ -1185,7 +1190,7 @@ export class CanvasEditorScreen extends LitElement {
       </div>
       ${
         this.errorKey
-          ? html`<p class="error" role="alert">${this.#message(this.errorKey)}</p>`
+          ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
           : nothing
       }
     `;

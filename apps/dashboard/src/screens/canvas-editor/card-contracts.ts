@@ -29,8 +29,18 @@ export type CapabilityFlag = (typeof CAPABILITY_FLAGS)[number];
 export const FORM_FACTORS = ["till", "phone-portrait", "tablet-landscape", "kds"] as const;
 export type FormFactor = (typeof FORM_FACTORS)[number];
 
+/** Form factors that must place every sale-critical card (design §13) — a mirror of
+ * @waitron/layouts' `SELLING_FORM_FACTORS`, kept honest by card-contracts.parity.test.ts. Till only
+ * for now; extend when the source does. */
+export const SELLING_FORM_FACTORS: readonly FormFactor[] = ["till"];
+
 export const GRID_MAX_COLUMNS = 24;
 export const MAX_TAB_TITLE_LENGTH = 60;
+
+/** Upper bound on a product-grid card's own `config.columns` (design §4). A dashboard-local de-dup of
+ * the `1..12` the editor's clamp and the client validator both apply — NOT a parity constant (the
+ * source inlines the literal), so it carries no parity-test guard. */
+export const PRODUCT_GRID_MAX_COLUMNS = 12;
 
 /** The editor-facing slice of a card's contract (validators stay server-side; only field NAMES here). */
 export interface CardContractMirror {

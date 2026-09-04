@@ -12,7 +12,10 @@ import {
   CAPABILITY_FLAGS as SRC_CAPS,
   FORM_FACTORS as SRC_FF,
 } from "@waitron/layouts/src/canvas.js";
-import { MAX_TAB_TITLE_LENGTH as SRC_TITLE } from "@waitron/layouts/src/validate-canvas.js";
+import {
+  MAX_TAB_TITLE_LENGTH as SRC_TITLE,
+  SELLING_FORM_FACTORS as SRC_SELLING,
+} from "@waitron/layouts/src/validate-canvas.js";
 import { DEFAULT_CANVASES as SRC_DEF } from "@waitron/layouts/src/default-canvases.js";
 import {
   CARD_CONTRACTS,
@@ -23,6 +26,7 @@ import {
   GRID_MAX_COLUMNS,
   MAX_TAB_TITLE_LENGTH,
   SALE_CRITICAL_CARDS,
+  SELLING_FORM_FACTORS,
 } from "./card-contracts.js";
 
 describe("card-contracts mirror parity", () => {
@@ -33,6 +37,7 @@ describe("card-contracts mirror parity", () => {
     expect(GRID_MAX_COLUMNS).toBe(SRC_MAX);
     expect(MAX_TAB_TITLE_LENGTH).toBe(SRC_TITLE);
     expect([...SALE_CRITICAL_CARDS]).toEqual([...SRC_SALE]);
+    expect([...SELLING_FORM_FACTORS]).toEqual([...SRC_SELLING]);
   });
 
   it("mirrors each card's contract fields (spans, states, permission, capability, saleCritical, config keys)", () => {

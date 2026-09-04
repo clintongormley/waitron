@@ -590,16 +590,9 @@ export const en = {
   "canvas_editor.capabilities": "Capabilities",
   "canvas_editor.save": "Save",
   "canvas_editor.cancel": "Cancel",
-  // Client-side validation banners (B7) — the keys validate-canvas.ts returns, plus the empty-name guard
-  "canvas_editor.err_no_name": "Enter a name for this canvas",
-  "canvas_editor.err_no_tabs": "Add at least one tab",
-  "canvas_editor.err_duplicate_tab": "Two tabs share the same key",
-  "canvas_editor.err_bad_tab": "Give every tab a name of 60 characters or fewer",
-  "canvas_editor.err_bad_columns": "A tab's column count must be between 1 and 24",
-  "canvas_editor.err_bad_span": "A card's size must fit within its tab",
-  "canvas_editor.err_bad_visible_when": "A card has an unknown visibility state",
-  "canvas_editor.err_bad_config": "Check the card's settings",
-  "canvas_editor.err_missing_required": "A till canvas must include every sale card",
+  // NOTE: the canvas-editor client-side validation banner pseudo-codes (canvas_editor.err_*) live in
+  // i18n/codes.ts's CODE_MESSAGES, not here, so the editor's one banner resolves them and the server's
+  // canvas.* codes through the same codeMessage() call.
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -1125,16 +1118,7 @@ export const es: Record<StringKey, string> = {
   "canvas_editor.capabilities": "Capacidades",
   "canvas_editor.save": "Guardar",
   "canvas_editor.cancel": "Cancelar",
-  // Avisos de validación en cliente (B7)
-  "canvas_editor.err_no_name": "Introduce un nombre para este lienzo",
-  "canvas_editor.err_no_tabs": "Añade al menos una pestaña",
-  "canvas_editor.err_duplicate_tab": "Dos pestañas comparten la misma clave",
-  "canvas_editor.err_bad_tab": "Da a cada pestaña un nombre de 60 caracteres o menos",
-  "canvas_editor.err_bad_columns": "El número de columnas de una pestaña debe estar entre 1 y 24",
-  "canvas_editor.err_bad_span": "El tamaño de una tarjeta debe caber en su pestaña",
-  "canvas_editor.err_bad_visible_when": "Una tarjeta tiene un estado de visibilidad desconocido",
-  "canvas_editor.err_bad_config": "Revisa los ajustes de la tarjeta",
-  "canvas_editor.err_missing_required": "Un lienzo de TPV debe incluir todas las tarjetas de venta",
+  // (canvas_editor.err_* viven en i18n/codes.ts, no aquí — ver la nota en el mapa `en`.)
 };
 
 // Locale → catalogue. `en` is included as its own catalogue so an explicit

@@ -4,7 +4,6 @@ import "./canvas-editor-screen.js";
 import type { CanvasEditorScreen } from "./canvas-editor-screen.js";
 import type { Canvas, DashboardApi } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
 const canvases: Canvas[] = [
@@ -633,7 +632,7 @@ describe("canvas-editor-screen property panel + save (B7)", () => {
     expect(api.updateCanvas).not.toHaveBeenCalled();
     const alert = el.shadowRoot!.querySelector("[role=alert]")!;
     expect(alert).toBeTruthy();
-    expect(alert.textContent).toContain(t("canvas_editor.err_missing_required"));
+    expect(alert.textContent).toContain(codeMessage("canvas_editor.err_missing_required"));
     // Stayed in editor mode.
     expect(el.shadowRoot!.querySelector("[data-test=editor-placeholder]")).toBeTruthy();
   });
@@ -645,7 +644,7 @@ describe("canvas-editor-screen property panel + save (B7)", () => {
     expect(api.createCanvas).not.toHaveBeenCalled();
     const alert = el.shadowRoot!.querySelector("[role=alert]")!;
     expect(alert).toBeTruthy();
-    expect(alert.textContent).toContain(t("canvas_editor.err_no_name"));
+    expect(alert.textContent).toContain(codeMessage("canvas_editor.err_no_name"));
   });
 
   it("surfaces a server canvas.name_taken rejection in the banner", async () => {

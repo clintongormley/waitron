@@ -6,7 +6,9 @@ import {
   CARD_CONTRACTS,
   GRID_MAX_COLUMNS,
   MAX_TAB_TITLE_LENGTH,
+  PRODUCT_GRID_MAX_COLUMNS,
   SALE_CRITICAL_CARDS,
+  SELLING_FORM_FACTORS,
 } from "./card-contracts.js";
 import type { CanvasDef } from "./card-contracts.js";
 
@@ -30,12 +32,12 @@ export function validateCanvasDraft(draft: CanvasDef): string | null {
         return "canvas_editor.err_bad_visible_when";
       if (card.type === "product-grid" && card.config.columns !== undefined) {
         const n = card.config.columns;
-        if (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > 12)
+        if (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > PRODUCT_GRID_MAX_COLUMNS)
           return "canvas_editor.err_bad_config";
       }
     }
   }
-  if (draft.formFactor === "till") {
+  if (SELLING_FORM_FACTORS.includes(draft.formFactor)) {
     const placed = new Set(draft.tabs.flatMap((t) => t.cards.map((c) => c.type)));
     for (const req of SALE_CRITICAL_CARDS)
       if (!placed.has(req)) return "canvas_editor.err_missing_required";
