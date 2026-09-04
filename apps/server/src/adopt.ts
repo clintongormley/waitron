@@ -75,7 +75,9 @@ export interface AdoptDeps {
  * ids (never `registerSif` — `adoptVenue` guarantees that, so no second fiscal chain is forked,
  * CLAUDE.md §5), stamps the environment + `mirror` mode, establishes the standby's DORMANT identity from
  * the reserved bundle (design §6 R2), seals the sync token in the mirror's OWN vault, writes the
- * DB-stored connection config, and persists `trading.env` for the restart.
+ * DB-stored connection config, persists the primary's enabled-module set to the mirror's own
+ * `modules.json` (SP-1d, so the mirror's next boot sees the same set), and persists `trading.env` for
+ * the restart.
  *
  * The order is load-bearing: `stampDeployment` runs BEFORE `setDeploymentMode`, which throws
  * `deployment.not_stamped` on an unstamped database (the `mode` UPDATE needs the singleton row). The

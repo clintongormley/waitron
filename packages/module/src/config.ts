@@ -43,14 +43,17 @@ export function parseModuleOverrides(
 ): ModuleConfig {
   if (overrides === undefined) return { overrides: new Map() };
   if (overrides === null || typeof overrides !== "object" || Array.isArray(overrides)) {
-    throw new AppError("module.config_invalid", { reason: "`modules` is not an object" });
+    // Generic wording: this validates the bare override map, reached both from the file envelope
+    // (`parseModuleConfig`) and directly from a bundle's `moduleOverrides` (adopt) — so the reason
+    // must not name a `modules.` file path the bare-map caller's input does not have.
+    throw new AppError("module.config_invalid", { reason: "module overrides are not an object" });
   }
   const byName = new Map(modules.map((m) => [m.name, m]));
   const result = new Map<string, boolean>();
   for (const [name, value] of Object.entries(overrides as Record<string, unknown>)) {
     if (typeof value !== "boolean") {
       throw new AppError("module.config_invalid", {
-        reason: `\`modules.${name}\` is not a boolean`,
+        reason: `module override \`${name}\` is not a boolean`,
       });
     }
     const module = byName.get(name);
