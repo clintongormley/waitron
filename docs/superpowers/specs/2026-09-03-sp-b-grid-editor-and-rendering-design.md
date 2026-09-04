@@ -277,6 +277,8 @@ The three visibility axes (parent design §6), kept separate so the fiscal-sensi
 
 ## 8. Dashboard grid editor — B3
 
+> **2026-09-04 (SP-B3.2):** the "layout profile" authored here is renamed **canvas**; "profile" is reserved for a future device profile. See `2026-09-04-sp-b3-2-canvas-editor-design.md`.
+
 - **Screen.** A new `dashboard-*-screen` in the `configuration` nav group (`dashboard-app.ts:132-138`),
   succeeding the old `layout-screen.ts`. Lit + `wt-*` primitives, injected `api`, i18n via `t()`.
 - **Canvas.** Placeholder-tile grid (decision: placeholder tiles *for v1*): a labelled tile per card

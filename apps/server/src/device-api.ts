@@ -1,6 +1,6 @@
 // Side-effect only: loads this host's errors.ts augmentation for the codes THIS file throws directly —
 // `device.forbidden_station` and `device.not_found` (the route-owned faults), `device.binding_invalid`
-// (the assign-profile route's composite-FK translation for a bad `layoutProfileId`, the SAME code the
+// (the assign-canvas route's composite-FK translation for a bad `canvasId`, the SAME code the
 // enrol path raises), `management.request_invalid` (the body/id screens) and `ticket.invalid_transition`
 // (the malformed-item-id screen). The device
 // pairing/auth codes (`device.pairing_invalid`/`device.pairing_expired`/`device.unauthorized`) and
@@ -17,7 +17,7 @@ import { AppError } from "@waitron/shared";
 import { asAppUser, deviceKind, devices, ticketItems, tills, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
-import { listProfiles } from "@waitron/layouts";
+import { listCanvases } from "@waitron/layouts";
 import { createErrorBoundary } from "./error-boundary.js";
 import { readJsonBody } from "./read-json-body.js";
 import { requireManagementSession } from "./management-session.js";
@@ -92,7 +92,7 @@ const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
  *    500), `device.station_required` (minting a station-binding code with NO station, a validation
  *    failure, 400), `device.till_required` (a sale-capable `till`/`handheld` code minted with no
  *    `till_id`, or a `kds_station` code minted WITH one — the per-kind till gate, 400),
- *    `device.binding_invalid` (a code naming a till/printer/profile id that is not this tenant's — the
+ *    `device.binding_invalid` (a code naming a till/printer/canvas id that is not this tenant's — the
  *    composite-FK 23503 translated by constraint name, 400), `device.not_found` (the manager-facing
  *    revoke of an absent device id, 404) and
  *    `station.not_found` (minting a code against an unknown/foreign/retired station that WAS supplied,
@@ -149,7 +149,7 @@ const run = createErrorBoundary(STATUS, "device.failed");
  *     is `device.forbidden_station`, 403).
  *  3. `device.manage`-GATED management routes (`POST /management-api/device-codes`, `GET
  *     /management-api/devices`, `POST /management-api/devices/:id/revoke`, `POST
- *     /management-api/devices/:id/assign-profile`) — each calls `requireManagementSession` (401), then
+ *     /management-api/devices/:id/assign-canvas`) — each calls `requireManagementSession` (401), then
  *     funnels its DB work through the local `gated` helper, which `authorizeManager`s `device.manage`
  *     (403) before the op runs, in exactly one place.
  *  4. DEV-ONLY routes, mounted only under `devMode` (404 otherwise): the `?dev` switcher's device list
@@ -221,15 +221,15 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   app.get("/api/device/me", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
-      // Echo the binding verbatim, incl. the SP-A.2 §16 profile/till/hardware fields so the client can
-      // (SP-B) boot into its assigned profile + hardware. All non-secret config — the reader's
+      // Echo the binding verbatim, incl. the SP-A.2 §16 canvas/till/hardware fields so the client can
+      // (SP-B) boot into its assigned canvas + hardware. All non-secret config — the reader's
       // credentials stay in the vault and never ride this response.
       return c.json({
         deviceId: device.deviceId,
         kind: device.kind,
         stationId: device.stationId,
         tillId: device.tillId,
-        layoutProfileId: device.layoutProfileId,
+        canvasId: device.canvasId,
         receiptPrinterId: device.receiptPrinterId,
         hasCashDrawer: device.hasCashDrawer,
         cardProvider: device.cardProvider,
@@ -262,12 +262,12 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
 
   // ── Bump one of the bound station's items (DEVICE-GUARDED) ────────────────────────────────────────────
   // Capability note (SP-A.2 §16, Task 14): the `act-as-kds` capability flag is DECLARED on the kds
-  // default profile, but route-level enforcement here is deliberately DEFERRED. Existing `kds_station`
-  // devices carry `layoutProfileId = null`, so an `assertDeviceCapability(deps, c, "act-as-kds", …)`
-  // would refuse them (a device with no profile declares no capabilities) — a regression on the bump
+  // default canvas, but route-level enforcement here is deliberately DEFERRED. Existing `kds_station`
+  // devices carry `canvasId = null`, so an `assertDeviceCapability(deps, c, "act-as-kds", …)`
+  // would refuse them (a device with no canvas declares no capabilities) — a regression on the bump
   // path. This route is already `requireDevice` + station-ownership gated (only a `kds_station` device
   // bound to the station reaches it), so the flag adds no protection here today; wiring it awaits KDS
-  // devices being provisioned with a kds profile.
+  // devices being provisioned with a kds canvas.
   app.post("/api/device/ticket-items/:id/advance", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
@@ -310,7 +310,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         kind?: unknown;
         stationId?: unknown;
         tillId?: unknown;
-        layoutProfileId?: unknown;
+        canvasId?: unknown;
         receiptPrinterId?: unknown;
         hasCashDrawer?: unknown;
         cardProvider?: unknown;
@@ -329,7 +329,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const stationId = kindRequiresStation(kind)
         ? requireBodyUuid(body.stationId, "stationId")
         : null;
-      // The profile/till/hardware BINDINGS (SP-A.2 §16). Screened for SHAPE only when present, then
+      // The canvas/till/hardware BINDINGS (SP-A.2 §16). Screened for SHAPE only when present, then
       // passed through — the per-kind `till_id` gate (till/handheld require one, kds_station forbids it)
       // lives in `generatePairingCode` and throws `device.till_required`, so the route must NOT enforce
       // `tillId` presence here: an omitted binding is `null`, not a request error, and a `kds_station`
@@ -348,7 +348,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         fallback: F,
       ): string | F => (v === undefined || v === null ? fallback : requireString(v, field));
       const tillId = optionalBindingUuid(body.tillId, "tillId");
-      const layoutProfileId = optionalBindingUuid(body.layoutProfileId, "layoutProfileId");
+      const canvasId = optionalBindingUuid(body.canvasId, "canvasId");
       const receiptPrinterId = optionalBindingUuid(body.receiptPrinterId, "receiptPrinterId");
       const cardReaderId = optionalBindingString(body.cardReaderId, "cardReaderId", null);
       // `card_provider` defaults to `'none'` (no integrated card) and `has_cash_drawer` to false; a
@@ -368,7 +368,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           kind,
           stationId,
           tillId,
-          layoutProfileId,
+          canvasId,
           receiptPrinterId,
           hasCashDrawer,
           cardProvider,
@@ -392,7 +392,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
             id: devices.id,
             kind: devices.deviceKind,
             stationId: devices.stationId,
-            layoutProfileId: devices.layoutProfileId,
+            canvasId: devices.canvasId,
             label: devices.label,
             active: devices.active,
             lastSeenAt: devices.lastSeenAt,
@@ -428,8 +428,8 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     }),
   );
 
-  // ── Reassign a device's layout profile (device.manage) ────────────────────────────────────────────────
-  app.post("/management-api/devices/:id/assign-profile", (c) =>
+  // ── Reassign a device's canvas (device.manage) ────────────────────────────────────────────────
+  app.post("/management-api/devices/:id/assign-canvas", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = c.req.param("id");
@@ -440,27 +440,27 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // target: an explicit `null` clears the binding, a present value must be a UUID SHAPE (a non-uuid
       // would `22P02` at the bare-uuid column), else a clean `management.request_invalid` 400 naming the
       // field — the shared `requireNullableBodyUuid` screen.
-      const body = await readJsonBody<{ layoutProfileId?: unknown }>(c);
-      const layoutProfileId = requireNullableBodyUuid(body.layoutProfileId, "layoutProfileId");
-      // A non-null target must be one of THIS tenant's own profiles. Rather than a read-then-write
+      const body = await readJsonBody<{ canvasId?: unknown }>(c);
+      const canvasId = requireNullableBodyUuid(body.canvasId, "canvasId");
+      // A non-null target must be one of THIS tenant's own canvases. Rather than a read-then-write
       // pre-check (which leaves a delete-between-check-and-update race that would surface a raw FK 500),
-      // let the composite FK `devices_layout_profile_fk (tenant_id, layout_profile_id)` be the guard: it
+      // let the composite FK `devices_canvas_fk (tenant_id, canvas_id)` be the guard: it
       // is tenant-isolated (a cross-tenant id looks for `(this_tenant, id)` and misses — never binds,
       // never leaks) AND atomic with the UPDATE (no window). A 23503 on it → `device.binding_invalid`
       // naming the field, the SAME code+shape the enrol path raises via the same `bindingFkField` helper
-      // (NOT `profile.not_found`, the profile-CRUD concept — wrong here). Any other error rethrows raw.
+      // (NOT `canvas.not_found`, the canvas-CRUD concept — wrong here). Any other error rethrows raw.
       let updated: { id: string }[];
       try {
         updated = await gated(sessionId, (tx) =>
           tx
             .update(devices)
-            .set({ layoutProfileId })
+            .set({ canvasId })
             .where(eq(devices.id, id))
             .returning({ id: devices.id }),
         );
       } catch (error) {
-        if (bindingFkField(error) === "layoutProfileId") {
-          throw new AppError("device.binding_invalid", { field: "layoutProfileId" });
+        if (bindingFkField(error) === "canvasId") {
+          throw new AppError("device.binding_invalid", { field: "canvasId" });
         }
         throw error;
       }
@@ -489,7 +489,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
                 kind: devices.deviceKind,
                 label: devices.label,
                 tillId: devices.tillId,
-                layoutProfileId: devices.layoutProfileId,
+                canvasId: devices.canvasId,
                 stationId: devices.stationId,
                 active: devices.active,
               })
@@ -497,17 +497,17 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
               .where(eq(devices.active, true))
               .orderBy(desc(devices.enrolledAt));
             // The option-sources for minting a new device (Task 5's `POST /api/dev/devices`): the tenant's
-            // tills (RLS-scoped, no explicit tenant filter), its kitchen stations and its layout profiles.
+            // tills (RLS-scoped, no explicit tenant filter), its kitchen stations and its canvases.
             const tillRows = await tx
               .select({ id: tills.id, name: tills.name, locationId: tills.locationId })
               .from(tills);
             const stations = await listStations(tx, deps.cfg);
-            const profiles = await listProfiles(tx, deps.cfg.tenantId);
+            const canvases = await listCanvases(tx, deps.cfg.tenantId);
             return {
               devices: deviceRows,
               tills: tillRows,
               stations,
-              profiles: profiles.map((p) => ({ id: p.id, name: p.name })),
+              canvases: canvases.map((canvas) => ({ id: canvas.id, name: canvas.name })),
             };
           }),
         ),
@@ -523,7 +523,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           label?: unknown;
           stationId?: unknown;
           tillId?: unknown;
-          layoutProfileId?: unknown;
+          canvasId?: unknown;
         }>(c);
         // The SAME field screens `POST /management-api/device-codes` uses, so validation cannot drift.
         const kind = requireEnum(body.kind, "kind", deviceKind.enumValues);
@@ -534,7 +534,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           ? requireBodyUuid(body.stationId, "stationId")
           : null;
         const tillId = optionalUuid(body.tillId, "tillId");
-        const layoutProfileId = optionalUuid(body.layoutProfileId, "layoutProfileId");
+        const canvasId = optionalUuid(body.canvasId, "canvasId");
         // Mint a code then immediately redeem it, in ONE tenant tx, reusing every binding rule
         // (`device.till_required` / `device.station_required` / `device.binding_invalid`). No cookie is
         // set: the dev override authenticates by id, so the tab adopts the device via sessionStorage.
@@ -544,7 +544,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
             kind,
             stationId,
             tillId,
-            layoutProfileId,
+            canvasId,
             label,
           });
           return enrolDevice(tx, deps.cfg, { code });

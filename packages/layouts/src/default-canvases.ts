@@ -1,14 +1,14 @@
-// packages/layouts/src/default-profiles.ts
-import type { FormFactor, ProfileDef } from "./profile.js";
+// packages/layouts/src/default-canvases.ts
+import type { FormFactor, CanvasDef } from "./canvas.js";
 
 /**
- * Built-in default profiles (design §4.3) — the "return-a-default-when-unauthored" precedent from the
+ * Built-in default canvases (design §4.3) — the "return-a-default-when-unauthored" precedent from the
  * old getLayout, one per form factor. A venue starts from / copies one; the later store slice returns
- * these when a device's profile is unauthored. Spans are sized to each tab's own grid, not copied from
+ * these when a device's canvas is unauthored. Spans are sized to each tab's own grid, not copied from
  * CARD_CONTRACTS' defaults: a tab holding one big card (floor-plan, table-order) gives it the tab's
  * full width, while the till's counter tab splits its columns among several cards sharing the row.
  */
-const TILL: ProfileDef = {
+const TILL: CanvasDef = {
   formFactor: "till",
   capabilities: ["integrated-card-payment", "open-cash-drawer"],
   tabs: [
@@ -33,7 +33,7 @@ const TILL: ProfileDef = {
   ],
 };
 
-const PHONE: ProfileDef = {
+const PHONE: CanvasDef = {
   formFactor: "phone-portrait",
   capabilities: [],
   tabs: [
@@ -52,7 +52,7 @@ const PHONE: ProfileDef = {
   ],
 };
 
-const TABLET: ProfileDef = {
+const TABLET: CanvasDef = {
   formFactor: "tablet-landscape",
   capabilities: [],
   tabs: [
@@ -71,7 +71,7 @@ const TABLET: ProfileDef = {
   ],
 };
 
-const KDS: ProfileDef = {
+const KDS: CanvasDef = {
   formFactor: "kds",
   capabilities: ["act-as-kds"],
   tabs: [
@@ -84,7 +84,7 @@ const KDS: ProfileDef = {
   ],
 };
 
-export const DEFAULT_PROFILES: Record<FormFactor, ProfileDef> = {
+export const DEFAULT_CANVASES: Record<FormFactor, CanvasDef> = {
   till: TILL,
   "phone-portrait": PHONE,
   "tablet-landscape": TABLET,

@@ -7,7 +7,7 @@ import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, endSession, hashPin, loginWithPin } from "@waitron/identity";
-import { DEFAULT_LAYOUT, DEFAULT_PROFILES, DEFAULT_RECEIPT } from "@waitron/layouts";
+import { DEFAULT_LAYOUT, DEFAULT_CANVASES, DEFAULT_RECEIPT } from "@waitron/layouts";
 import type { LayoutDef, ReceiptConfig } from "@waitron/layouts";
 import {
   addCatalogueToLocation,
@@ -156,8 +156,8 @@ const suite = usePgliteDb({
 // SP-A.2 cutover: the sale routes (`/api/sales`, `/api/pay`, place, collect) resolve `till_id` from the
 // authenticated enrolled device. The describe blocks whose happy-path tests drive a sale route enrol a
 // fresh `till` device (bound to `cfg.tillId`) in a `beforeEach` — fresh EACH test because the
-// `GET /api/till` profile tests `delete from devices` for the shared tenant, so a once-only device would
-// not survive to a later describe. No profile needed: place/collect run `assertNotHandheld`, not the
+// `GET /api/till` canvas tests `delete from devices` for the shared tenant, so a once-only device would
+// not survive to a later describe. No canvas needed: place/collect run `assertNotHandheld`, not the
 // capability firewall (`/api/pay`'s integrated-card path is proven in `till-api.rls.test.ts`).
 async function enrolSaleTillDevice(): Promise<void> {
   tillDeviceCookie = await enrolTillDeviceCookie(suite.db, null);
@@ -271,20 +271,17 @@ async function closeSession(db: Database, id: string): Promise<void> {
 
 /** Enrol a REAL `till` device for the seeded tenant via the Task 3 mint→redeem path (the only way to
  * get a `${deviceId}.${token}` whose scrypt hash actually verifies), optionally bound to a
- * `layoutProfileId`. Runs the mint + redeem on the app role under the tenant — the production enrol
+ * `canvasId`. Runs the mint + redeem on the app role under the tenant — the production enrol
  * path — and returns the `${DEVICE_COOKIE}=…` header value a booting device would carry. A `till` is
  * sale-capable, so it always carries the seeded `till_id` (SP-A.2 §16.4). */
-async function enrolTillDeviceCookie(
-  db: Database,
-  layoutProfileId: string | null,
-): Promise<string> {
+async function enrolTillDeviceCookie(db: Database, canvasId: string | null): Promise<string> {
   const { code } = await withTenant(db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
     return generatePairingCode(tx, cfg, {
       kind: "till",
       stationId: null,
       tillId: cfg.tillId,
-      layoutProfileId,
+      canvasId,
       label: "Counter till",
     });
   });
@@ -909,42 +906,42 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     }
   });
 
-  it("GET /api/till surfaces the calling device's assigned profile when it carries a layoutProfileId (SP-A.2 §16.3)", async () => {
+  it("GET /api/till surfaces the calling device's assigned canvas when it carries a canvasId (SP-A.2 §16.3)", async () => {
     // Additive boot read: a booting device (device cookie present) whose device has an assigned layout
-    // profile gets the resolved ProfileDef under `profile`, ALONGSIDE the unchanged layout/receipt (the
-    // counter still renders from layout/receipt until SP-B). Seed a profile, enrol a `till` device bound
+    // canvas gets the resolved CanvasDef under `canvas`, ALONGSIDE the unchanged layout/receipt (the
+    // counter still renders from layout/receipt until SP-B). Seed a canvas, enrol a `till` device bound
     // to it, and prove `GET /api/till` resolves + returns it. Cleaned up in `finally` so the shared-tenant
     // no-cookie assertion above stays order-independent (CLAUDE.md §4).
     const prof = await suite.db.execute<{ id: string }>(sql`
-      insert into layout_profiles (tenant_id, name, definition)
-      values (${cfg.tenantId}, 'Front counter', ${JSON.stringify(DEFAULT_PROFILES.till)}::jsonb)
+      insert into canvases (tenant_id, name, definition)
+      values (${cfg.tenantId}, 'Front counter', ${JSON.stringify(DEFAULT_CANVASES.till)}::jsonb)
       returning id`);
-    const layoutProfileId = prof.rows[0]!.id;
+    const canvasId = prof.rows[0]!.id;
     try {
-      const cookie = await enrolTillDeviceCookie(suite.db, layoutProfileId);
+      const cookie = await enrolTillDeviceCookie(suite.db, canvasId);
       const app = new Hono();
       mountTillApi(app, deps(suite.db), collect([]));
 
       const res = await app.request("/api/till", { headers: { cookie } });
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
-        profile: unknown;
+        canvas: unknown;
         layout: LayoutDef;
         receipt: ReceiptConfig;
       };
-      // The resolved ProfileDef, verbatim (the `getProfile` definition).
-      expect(body.profile).toEqual(DEFAULT_PROFILES.till);
+      // The resolved CanvasDef, verbatim (the `getCanvas` definition).
+      expect(body.canvas).toEqual(DEFAULT_CANVASES.till);
       // The pre-existing boot fields are UNCHANGED — the tenant authored no widget layout, so both stay
-      // the built-in defaults. The profile is additive, NOT a replacement for layout/receipt (SP-B).
+      // the built-in defaults. The canvas is additive, NOT a replacement for layout/receipt (SP-B).
       expect(body.layout).toEqual(DEFAULT_LAYOUT);
       expect(body.receipt).toEqual(DEFAULT_RECEIPT);
     } finally {
       await suite.db.execute(sql`delete from devices where tenant_id = ${cfg.tenantId}`);
-      await suite.db.execute(sql`delete from layout_profiles where tenant_id = ${cfg.tenantId}`);
+      await suite.db.execute(sql`delete from canvases where tenant_id = ${cfg.tenantId}`);
     }
   });
 
-  it("falls back to the form-factor default profile for an enrolled device with no assigned profile", async () => {
+  it("falls back to the form-factor default canvas for an enrolled device with no assigned canvas", async () => {
     const cookie = await enrolTillDeviceCookie(suite.db, null);
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -952,12 +949,12 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       const res = await app.request("/api/till", { headers: { cookie } });
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
-        profile: unknown;
+        canvas: unknown;
         layout: LayoutDef;
         receipt: ReceiptConfig;
       };
-      // No stored profile of this form factor → the built-in default for a till device.
-      expect(body.profile).toEqual(DEFAULT_PROFILES.till);
+      // No stored canvas of this form factor → the built-in default for a till device.
+      expect(body.canvas).toEqual(DEFAULT_CANVASES.till);
       expect(body.layout).toEqual(DEFAULT_LAYOUT);
       expect(body.receipt).toEqual(DEFAULT_RECEIPT);
     } finally {
@@ -965,13 +962,13 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     }
   });
 
-  it("omits the profile entirely when the request carries no device cookie", async () => {
+  it("omits the canvas entirely when the request carries no device cookie", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const res = await app.request("/api/till"); // no cookie header
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).not.toHaveProperty("profile");
+    expect(body).not.toHaveProperty("canvas");
   });
 });
 

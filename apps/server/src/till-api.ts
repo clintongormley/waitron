@@ -14,8 +14,8 @@ import {
   setPersonLocale,
 } from "@waitron/identity";
 import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalogue";
-import { getLayout, getProfile, getProfileForFormFactor } from "@waitron/layouts";
-import type { ProfileDef } from "@waitron/layouts";
+import { getLayout, getCanvas, getCanvasForFormFactor } from "@waitron/layouts";
+import type { CanvasDef } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
 import { createErrorBoundary } from "./error-boundary.js";
@@ -615,8 +615,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       // Resolve the CALLING device (if any) BEFORE the boot transaction: `tryReadDevice` opens its OWN
       // `withTenant` tx (auth + `last_seen_at`), so it cannot nest inside the read below. An ordinary
-      // till carries no device cookie → `null` → no profile (the payload is byte-for-byte unchanged); an
-      // ENROLLED device always resolves a profile — its assigned `layoutProfileId` if set and resolvable,
+      // till carries no device cookie → `null` → no canvas (the payload is byte-for-byte unchanged); an
+      // ENROLLED device always resolves a canvas — its assigned `canvasId` if set and resolvable,
       // else the built-in default for its form factor (SP-B1, generalising SP-A.2 §16.3).
       // ADDITIVE only — the counter still renders from `layout`/`receipt` until SP-B.
       const device = await tryReadDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
@@ -659,23 +659,23 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // Authored layout/receipt, or the built-in defaults when the tenant has never opened the
         // editor (`getLayout` returns DEFAULT_LAYOUT/DEFAULT_RECEIPT on absence, no backfill).
         const { definition, receipt } = await getLayout(tx, deps.cfg.tenantId);
-        // SP-B1: an enrolled device always resolves a ProfileDef — its explicitly assigned profile if the
-        // id resolves, else the built-in/default profile for its form factor. A request with NO device
+        // SP-B1: an enrolled device always resolves a CanvasDef — its explicitly assigned canvas if the
+        // id resolves, else the built-in/default canvas for its form factor. A request with NO device
         // (cookieless) stays `undefined` so the payload is byte-for-byte unchanged (see the no-cookie test).
-        let profile: ProfileDef | undefined;
+        let canvas: CanvasDef | undefined;
         if (device != null) {
-          if (device.layoutProfileId != null) {
-            profile = (await getProfile(tx, deps.cfg.tenantId, device.layoutProfileId))?.definition;
+          if (device.canvasId != null) {
+            canvas = (await getCanvas(tx, deps.cfg.tenantId, device.canvasId))?.definition;
           }
-          // The `?.definition` (getProfile's return is optional) then `??=` is belt-and-braces: a
-          // NON-null `layoutProfileId` that resolves to NO profile is UNREACHABLE by construction, so it
-          // is intentionally untested. The composite FK `devices(tenant_id, layout_profile_id) →
-          // layout_profiles(tenant_id, id)` is ON DELETE RESTRICT
+          // The `?.definition` (getCanvas's return is optional) then `??=` is belt-and-braces: a
+          // NON-null `canvasId` that resolves to NO canvas is UNREACHABLE by construction, so it
+          // is intentionally untested. The composite FK `devices(tenant_id, canvas_id) →
+          // canvases(tenant_id, id)` is ON DELETE RESTRICT
           // (packages/db/drizzle/0095_parched_meteorite.sql:16), enforced even on PGlite: a device can
-          // neither be enrolled with a non-existent profile id (FK violation at insert) nor keep a
-          // reference to a profile deleted out from under it (RESTRICT blocks the delete). The `??=` still
+          // neither be enrolled with a non-existent canvas id (FK violation at insert) nor keep a
+          // reference to a canvas deleted out from under it (RESTRICT blocks the delete). The `??=` still
           // yields a valid form-factor default should that invariant ever be relaxed.
-          profile ??= await getProfileForFormFactor(
+          canvas ??= await getCanvasForFormFactor(
             tx,
             deps.cfg.tenantId,
             deviceFormFactor(device.kind),
@@ -688,7 +688,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           courses,
           layout: definition,
           receipt,
-          profile,
+          canvas,
         };
       });
       /* v8 ignore start */
@@ -743,12 +743,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // view; both ride this same unauthenticated boot fetch, so the till makes no second request.
         layout: boot.layout,
         receipt: boot.receipt,
-        // The calling device's resolved layout PROFILE (SP-B1), a bare `ProfileDef`. Present for ANY
-        // enrolled device — its assigned profile if the `layoutProfileId` resolves, else the built-in
+        // The calling device's resolved layout CANVAS (SP-B1), a bare `CanvasDef`. Present for ANY
+        // enrolled device — its assigned canvas if the `canvasId` resolves, else the built-in
         // default for its form factor — and ABSENT (never `null`) for a cookieless request, so a request
         // with no device cookie is byte-for-byte unchanged.
         // ADDITIVE — the counter still renders from `layout`/`receipt` above until SP-B.
-        ...(boot.profile !== undefined ? { profile: boot.profile } : {}),
+        ...(boot.canvas !== undefined ? { canvas: boot.canvas } : {}),
       });
     }),
   );
@@ -837,8 +837,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // off the redundant second pass. `null` (no cookie) still threads through fail-closed.
       const device = await tryReadDevice(deps, c);
       // Capability firewall (SP-A.2 §16): integrated card pay drives a real reader, so it requires the
-      // device's assigned profile to declare `integrated-card-payment`. This generalises the old
-      // hardcoded handheld check — a handheld carries a capability-less profile (or none), so it is
+      // device's assigned canvas to declare `integrated-card-payment`. This generalises the old
+      // hardcoded handheld check — a handheld carries a capability-less canvas (or none), so it is
       // still refused `device.forbidden_action` (403) here, before the provider guard and any fiscal
       // write, so the fence holds even if the client were bypassed. A cookie-less caller passes THIS
       // capability guard (there is no device to check) — but the route still nets to a rejection, because
@@ -1309,8 +1309,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const { personId, sessionId } = await requireSession(deps, c);
       // Capability firewall (SP-A.2 §16): opening the cash drawer requires the device's assigned
-      // profile to declare `open-cash-drawer`. This generalises the old hardcoded handheld check — a
-      // handheld carries a capability-less profile (or none) and so has no drawer to open, refused
+      // canvas to declare `open-cash-drawer`. This generalises the old hardcoded handheld check — a
+      // handheld carries a capability-less canvas (or none) and so has no drawer to open, refused
       // `device.forbidden_action` (403) before the policy/printer resolution. An ordinary till carries
       // no device cookie and passes.
       await assertDeviceCapability(deps, c, "open-cash-drawer", "drawer_open");

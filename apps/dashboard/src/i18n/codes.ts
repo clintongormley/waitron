@@ -87,6 +87,62 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The layout isn't valid",
     es: "La disposición no es válida",
   },
+  // Canvas editor (SP-B3.2) — the server's canvas create/update/get rejections the editor RENDERS
+  // (it defines no new codes, only maps these): a since-deleted canvas on edit/update, a name that
+  // collides with another canvas in the tenant, and a definition the server's validateCanvas refuses.
+  "canvas.not_found": {
+    en: "That canvas no longer exists",
+    es: "Ese lienzo ya no existe",
+  },
+  "canvas.name_taken": {
+    en: "A canvas with that name already exists",
+    es: "Ya existe un lienzo con ese nombre",
+  },
+  "canvas.invalid": {
+    en: "The canvas isn't valid",
+    es: "El lienzo no es válido",
+  },
+  // Canvas editor CLIENT-side validation banners (SP-B3.2) — the pseudo-codes the light client
+  // validator (validate-canvas.ts) and the empty-name guard return. They live here (rather than in the
+  // `t()` string table) so the ONE editor banner resolves both these and the server's `canvas.*` codes
+  // through `codeMessage`, with no per-key routing. Client-only — the server's validateCanvas stays
+  // authoritative and rejects with `canvas.invalid`.
+  "canvas_editor.err_no_name": {
+    en: "Enter a name for this canvas",
+    es: "Introduce un nombre para este lienzo",
+  },
+  "canvas_editor.err_no_tabs": {
+    en: "Add at least one tab",
+    es: "Añade al menos una pestaña",
+  },
+  "canvas_editor.err_duplicate_tab": {
+    en: "Two tabs share the same key",
+    es: "Dos pestañas comparten la misma clave",
+  },
+  "canvas_editor.err_bad_tab": {
+    en: "Give every tab a name of 60 characters or fewer",
+    es: "Da a cada pestaña un nombre de 60 caracteres o menos",
+  },
+  "canvas_editor.err_bad_columns": {
+    en: "A tab's column count must be between 1 and 24",
+    es: "El número de columnas de una pestaña debe estar entre 1 y 24",
+  },
+  "canvas_editor.err_bad_span": {
+    en: "A card's size must fit within its tab",
+    es: "El tamaño de una tarjeta debe caber en su pestaña",
+  },
+  "canvas_editor.err_bad_visible_when": {
+    en: "A card has an unknown visibility state",
+    es: "Una tarjeta tiene un estado de visibilidad desconocido",
+  },
+  "canvas_editor.err_bad_config": {
+    en: "Check the card's settings",
+    es: "Revisa los ajustes de la tarjeta",
+  },
+  "canvas_editor.err_missing_required": {
+    en: "A till canvas must include every sale card",
+    es: "Un lienzo de TPV debe incluir todas las tarjetas de venta",
+  },
   "receipt.invalid": {
     en: "The receipt settings aren't valid",
     es: "Los ajustes del recibo no son válidos",

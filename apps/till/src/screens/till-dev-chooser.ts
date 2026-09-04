@@ -136,7 +136,7 @@ export class TillDevChooser extends LitElement {
   @state() private label = "";
   @state() private tillId = "";
   @state() private stationId = "";
-  @state() private profileId = "";
+  @state() private canvasId = "";
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -162,7 +162,7 @@ export class TillDevChooser extends LitElement {
   }
 
   /** Mint a new device and adopt it. `tillId` rides only for a sale-capable kind (`till`/`handheld`),
-   * `stationId` only for a `kds_station`; `layoutProfileId` rides whenever a profile is picked. An
+   * `stationId` only for a `kds_station`; `canvasId` rides whenever a canvas is picked. An
    * empty selection omits its field (never sends `""`). A rejected `{ code }` shows inline. */
   async #mint(): Promise<void> {
     if (this.label === "" || this.minting) return;
@@ -174,7 +174,7 @@ export class TillDevChooser extends LitElement {
     } else if (this.tillId !== "") {
       req.tillId = this.tillId;
     }
-    if (this.profileId !== "") req.layoutProfileId = this.profileId;
+    if (this.canvasId !== "") req.canvasId = this.canvasId;
     try {
       const res = await this.api.mintDevDevice(req);
       setDevDeviceId(res.deviceId);
@@ -231,16 +231,14 @@ export class TillDevChooser extends LitElement {
           : html`<ul>
               ${list.devices.map((device) => {
                 const till = list.tills.find((candidate) => candidate.id === device.tillId);
-                const profile = list.profiles.find(
-                  (candidate) => candidate.id === device.layoutProfileId,
-                );
+                const canvas = list.canvases.find((candidate) => candidate.id === device.canvasId);
                 return html`<li data-device=${device.id}>
                   <span>
                     <strong>${device.label}</strong>
                     <span class="meta">
                       ·
                       ${device.kind}${till ? html` · ${till.name}` : nothing}${
-                        profile ? html` · ${profile.name}` : nothing
+                        canvas ? html` · ${canvas.name}` : nothing
                       }
                     </span>
                   </span>
@@ -286,7 +284,7 @@ export class TillDevChooser extends LitElement {
           }}
         ></wt-input>
         ${this.kind === "kds_station" ? this.#stationField(list) : this.#tillField(list)}
-        ${this.#profileField(list)}
+        ${this.#canvasField(list)}
         <wt-button
           data-mint-submit
           variant="primary"
@@ -331,19 +329,17 @@ export class TillDevChooser extends LitElement {
     </div>`;
   }
 
-  #profileField(list: DevDeviceList): TemplateResult {
+  #canvasField(list: DevDeviceList): TemplateResult {
     return html`<div class="field">
-      <label for="mint-profile">Layout profile (optional)</label>
+      <label for="mint-canvas">Layout canvas (optional)</label>
       <select
-        id="mint-profile"
-        data-mint-profile
-        .value=${this.profileId}
-        @change=${(e: Event) => (this.profileId = (e.target as HTMLSelectElement).value)}
+        id="mint-canvas"
+        data-mint-canvas
+        .value=${this.canvasId}
+        @change=${(e: Event) => (this.canvasId = (e.target as HTMLSelectElement).value)}
       >
         <option value="">—</option>
-        ${list.profiles.map(
-          (profile) => html`<option value=${profile.id}>${profile.name}</option>`,
-        )}
+        ${list.canvases.map((canvas) => html`<option value=${canvas.id}>${canvas.name}</option>`)}
       </select>
     </div>`;
   }

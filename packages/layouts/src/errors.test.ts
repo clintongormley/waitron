@@ -37,20 +37,20 @@ describe("the layout / receipt error codes carry their declared params", () => {
     expect(error.params).toEqual({ reason: "too_long", field: "footerMessage", maxLength: 200 });
   });
 
-  it("constructs profile.invalid with a reason and a numeric tabIndex", () => {
-    const error = new AppError("profile.invalid", { reason: "bad_tab", tabIndex: 2 });
-    expect(error.code).toBe("profile.invalid");
+  it("constructs canvas.invalid with a reason and a numeric tabIndex", () => {
+    const error = new AppError("canvas.invalid", { reason: "bad_tab", tabIndex: 2 });
+    expect(error.code).toBe("canvas.invalid");
     expect(error.params).toEqual({ reason: "bad_tab", tabIndex: 2 });
   });
 
-  it("constructs profile.invalid with the optional card (a CardType) + configKey context", () => {
-    const error = new AppError("profile.invalid", {
+  it("constructs canvas.invalid with the optional card (a CardType) + configKey context", () => {
+    const error = new AppError("canvas.invalid", {
       reason: "bad_config",
       tabIndex: 0,
       card: "product-grid",
       configKey: "columns",
     });
-    expect(error.code).toBe("profile.invalid");
+    expect(error.code).toBe("canvas.invalid");
     expect(error.params).toEqual({
       reason: "bad_config",
       tabIndex: 0,
@@ -59,15 +59,15 @@ describe("the layout / receipt error codes carry their declared params", () => {
     });
   });
 
-  it("constructs profile.not_found with no params", () => {
-    const error = new AppError("profile.not_found", {});
-    expect(error.code).toBe("profile.not_found");
+  it("constructs canvas.not_found with no params", () => {
+    const error = new AppError("canvas.not_found", {});
+    expect(error.code).toBe("canvas.not_found");
     expect(error.params).toEqual({});
   });
 
-  it("constructs profile.name_taken with no params", () => {
-    const error = new AppError("profile.name_taken", {});
-    expect(error.code).toBe("profile.name_taken");
+  it("constructs canvas.name_taken with no params", () => {
+    const error = new AppError("canvas.name_taken", {});
+    expect(error.code).toBe("canvas.name_taken");
     expect(error.params).toEqual({});
   });
 

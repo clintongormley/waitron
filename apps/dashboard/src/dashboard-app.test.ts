@@ -137,6 +137,9 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listAgents: vi.fn().mockResolvedValue([]),
     listPrinters: vi.fn().mockResolvedValue([]),
     listRecentJobs: vi.fn().mockResolvedValue([]),
+    // The canvas-editor screen the nav mounts loads this on connect; resolve it so navigating to it
+    // leaves no stray rejection.
+    listCanvases: vi.fn().mockResolvedValue([]),
     // The diagnostics screen (manager-gated nav) polls these on connect; resolve them so navigating to
     // it leaves no stray rejection.
     getRecentLogs: vi.fn().mockResolvedValue({ lines: [] }),
@@ -196,6 +199,8 @@ const kitchen = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-ki
 const devices = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-devices-screen");
 const screenPrinters = (el: DashboardApp) =>
   el.shadowRoot!.querySelector("dashboard-printers-screen");
+const screenCanvasEditor = (el: DashboardApp) =>
+  el.shadowRoot!.querySelector("dashboard-canvas-editor-screen");
 const logoutBtn = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=logout]");
 const navOverview = (el: DashboardApp) =>
@@ -226,13 +231,15 @@ const navDevices = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-devices]");
 const navPrinters = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-printers]");
+const navCanvasEditor = (el: DashboardApp) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-canvas-editor]");
 /** The sidebar's navigation landmark (present only for a non-staff logged-in session). */
 const sidebarNav = (el: DashboardApp) => el.shadowRoot!.querySelector("nav[aria-label]");
 /** A nav item by its stable `data-test="nav-<screen>"` id (the ids every downstream consumer pins). */
 const navItem = (el: DashboardApp, screen: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test="nav-${screen}"]`);
 
-/** The nineteen manager faces the grouped sidebar switches between (for a manager/admin session —
+/** The twenty manager faces the grouped sidebar switches between (for a manager/admin session —
  * `diagnostics` is manager-gated), every one keeping its `data-test` id. Order is the sidebar's render
  * order (pinned overview+sales, then Menu / Service / Team / Purchasing / Configuration). */
 const NAV_SCREENS = [
@@ -254,6 +261,7 @@ const NAV_SCREENS = [
   "receipt",
   "devices",
   "printers",
+  "canvas-editor",
   "diagnostics",
 ] as const;
 
@@ -290,6 +298,7 @@ const SCREEN_TAGS = [
   "dashboard-kitchen-screen",
   "dashboard-devices-screen",
   "dashboard-printers-screen",
+  "dashboard-canvas-editor-screen",
   "dashboard-diagnostics-screen",
 ] as const;
 
@@ -628,6 +637,18 @@ describe("dashboard-app", () => {
     expect(countH1(el)).toBe(1);
   });
 
+  it("navigates to the canvas-editor screen", async () => {
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(navCanvasEditor(el)).toBeTruthy();
+    navCanvasEditor(el)!.click();
+    await flush(el);
+    expect(screenCanvasEditor(el)).toBeTruthy();
+    expect(mountedScreens(el)).toEqual(["dashboard-canvas-editor-screen"]);
+    expect(countH1(el)).toBe(1);
+  });
+
   // Roster ("Turnos"), approvals ("Aprobaciones"), planned-actual ("Previsto vs real"), purchases
   // ("Compras") and service-status ("Estados de servicio") each have their own dedicated nav test
   // above, so this test walks the remaining four faces (staff / catalogue / layout / receipt).
@@ -699,7 +720,7 @@ describe("dashboard-app", () => {
     expect(nav?.fields.screen).toBe("sales");
   });
 
-  // The grouped static sidebar (Task 11): every group header renders, every one of the nineteen manager
+  // The grouped static sidebar (Task 11): every group header renders, every one of the twenty manager
   // faces (a manager session sees the gated `diagnostics` too) keeps its `data-test="nav-<screen>"` id,
   // and the active face is marked `aria-current="page"`.
   it("renders each nav group header and all nav items", async () => {
@@ -712,9 +733,9 @@ describe("dashboard-app", () => {
       h.textContent?.trim(),
     );
     for (const key of NAV_GROUP_KEYS) expect(headers).toContain(t(key));
-    // …and every one of the nineteen manager faces is present by its stable data-test id.
+    // …and every one of the twenty manager faces is present by its stable data-test id.
     for (const s of NAV_SCREENS) expect(navItem(el, s)).toBeTruthy();
-    expect(NAV_SCREENS).toHaveLength(19);
+    expect(NAV_SCREENS).toHaveLength(20);
   });
 
   // The diagnostics nav is manager-gated (`requiresManager: true`, Task 15): a `supervisor` session
@@ -803,7 +824,7 @@ describe("dashboard-app", () => {
   });
 
   // Task 12 (a11y): when the sidebar is off-canvas (narrow viewport) AND closed, it must be `inert` so
-  // its eighteen nav buttons leave the tab order + a11y tree rather than lurking off-screen ahead of
+  // its nineteen nav buttons leave the tab order + a11y tree rather than lurking off-screen ahead of
   // every visible control. It stays interactive at desktop width and whenever the drawer is open.
   // Proof-by-deletion: dropping the `?inert=${this.narrow && !this.drawerOpen}` binding leaves the
   // sidebar never-inert, so the narrow+closed assertion below goes red.
@@ -821,7 +842,7 @@ describe("dashboard-app", () => {
       // Desktop (matchMedia does not match): in-flow and fully interactive.
       expect(sidebar().hasAttribute("inert")).toBe(false);
 
-      // Narrow + closed → inert (the eighteen nav buttons leave the tab order + a11y tree).
+      // Narrow + closed → inert (the nineteen nav buttons leave the tab order + a11y tree).
       mq.set(true);
       await el.updateComplete;
       expect(sidebar().hasAttribute("inert")).toBe(true);

@@ -13,7 +13,7 @@ import type { TillStationScreen } from "./screens/till-station-screen.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillStationQueue } from "./widgets/station-queue.js";
 import type { TillProductGrid } from "./widgets/product-grid.js";
-import { LAYOUT_A, type LayoutDef, type ProfileDef } from "./layout.js";
+import { LAYOUT_A, type LayoutDef, type CanvasDef } from "./layout.js";
 import type {
   FloorZone,
   HeldOrderSummary,
@@ -3789,18 +3789,18 @@ describe("till-app", () => {
     });
   });
 
-  describe("layout profile (SP-B1)", () => {
-    // A `till` profile whose `counter` tab is what #boot reads and #counterTab() selects. Only the
-    // fields the assertion checks (key/columns) are load-bearing; the rest complete a valid ProfileDef.
-    const counterProfile: ProfileDef = {
+  describe("layout canvas (SP-B1)", () => {
+    // A `till` canvas whose `counter` tab is what #boot reads and #counterTab() selects. Only the
+    // fields the assertion checks (key/columns) are load-bearing; the rest complete a valid CanvasDef.
+    const counterCanvas: CanvasDef = {
       formFactor: "till",
       capabilities: [],
       tabs: [{ key: "counter", title: "Counter", columns: 12, cards: [] }],
     };
 
-    it("threads the profile's counter tab into the counter screen", async () => {
+    it("threads the canvas's counter tab into the counter screen", async () => {
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, profile: counterProfile }),
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: counterCanvas }),
       });
       await toCounter(el);
       const c = counter(el)!;
@@ -3808,11 +3808,11 @@ describe("till-app", () => {
     });
   });
 
-  describe("profile tab shell (SP-B2.1)", () => {
-    // A `till` profile with a `counter` tab and a `floor` tab (a `floor-plan` card, which needs no
+  describe("canvas tab shell (SP-B2.1)", () => {
+    // A `till` canvas with a `counter` tab and a `floor` tab (a `floor-plan` card, which needs no
     // capability, so it renders the card grid under the empty `capabilities` list). The shell renders
-    // in place of the legacy `screen`-enum switch once this profile is present.
-    const shellProfile: ProfileDef = {
+    // in place of the legacy `screen`-enum switch once this canvas is present.
+    const shellCanvas: CanvasDef = {
       formFactor: "till",
       capabilities: [],
       tabs: [
@@ -3828,9 +3828,9 @@ describe("till-app", () => {
     const shell = (el: TillApp) =>
       el.shadowRoot!.querySelector<HTMLElement & { activeTabKey?: string }>("till-tab-shell");
 
-    it("renders the tab shell with the counter tab active when a profile is present", async () => {
+    it("renders the tab shell with the counter tab active when a canvas is present", async () => {
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, profile: shellProfile }),
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
       });
       await toCounter(el);
       const s = shell(el)!;
@@ -3844,7 +3844,7 @@ describe("till-app", () => {
 
     it("switches the active tab body on tab-select", async () => {
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, profile: shellProfile }),
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
       });
       await toCounter(el);
       emit(shell(el)!, "tab-select", { key: "floor" });
@@ -3855,8 +3855,8 @@ describe("till-app", () => {
       expect(shell(el)!.activeTabKey).toBe("floor");
     });
 
-    it("keeps the legacy screen-enum (no shell) when the boot carries no profile", async () => {
-      // The default `till` fixture omits `profile`, so `#shellActive()` is never reached and
+    it("keeps the legacy screen-enum (no shell) when the boot carries no canvas", async () => {
+      // The default `till` fixture omits `canvas`, so `#shellActive()` is never reached and
       // `#renderScreen` renders the counter screen with its OWN header — the false direction of the
       // shell branch, checked so a shell that renders unconditionally would fail here.
       const { el } = await mountApp();
@@ -3866,13 +3866,13 @@ describe("till-app", () => {
       expect(counter(el)!.shadowRoot!.querySelector(".header")).not.toBeNull();
     });
 
-    it("a HANDHELD with a profile renders the shell landing on the floor tab (SP-B2.2 wraps table-order)", async () => {
-      // A `handheld` phone with a profile is a SHELL device since SP-B2.2 (its `order` tab's `table-order`
+    it("a HANDHELD with a canvas renders the shell landing on the floor tab (SP-B2.2 wraps table-order)", async () => {
+      // A `handheld` phone with a canvas is a SHELL device since SP-B2.2 (its `order` tab's `table-order`
       // card renders through the grid now, so no dead Order tab): the shell renders in place of the legacy
-      // screen-enum, and the waiter lands on the FLOOR tab (the phone profile's first tab, mirroring the
+      // screen-enum, and the waiter lands on the FLOOR tab (the phone canvas's first tab, mirroring the
       // legacy face-set's post-login floor landing). Was the B2.1 fence test asserting the legacy floor
       // screen; re-pointed to the shell + floor-tab intent when the fence was removed (Task 6).
-      const phoneProfile: ProfileDef = {
+      const phoneCanvas: CanvasDef = {
         formFactor: "phone-portrait",
         capabilities: [],
         tabs: [
@@ -3892,7 +3892,7 @@ describe("till-app", () => {
       };
       const status: TableServiceStatus = { id: "s1", label: "Reservada", color: "#f00" };
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, profile: phoneProfile }),
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
@@ -3917,16 +3917,16 @@ describe("till-app", () => {
     });
   });
 
-  describe("profile shell for handheld + kds (SP-B2.2)", () => {
+  describe("canvas shell for handheld + kds (SP-B2.2)", () => {
     const shell = (el: TillApp) =>
       el.shadowRoot!.querySelector<HTMLElement & { kiosk?: boolean; affordances?: unknown[] }>(
         "till-tab-shell",
       );
 
-    // A phone-portrait profile: a `floor` tab (a `floor-plan` card) + an `order` tab (a `table-order`
+    // A phone-portrait canvas: a `floor` tab (a `floor-plan` card) + an `order` tab (a `table-order`
     // card, now WRAPPED by B2.2 so it renders through the grid). A handheld renders the FULL shell (its
     // operator header) but NO Station/Expo/Schedule affordances — a phone reaches none of those.
-    const phoneProfile: ProfileDef = {
+    const phoneCanvas: CanvasDef = {
       formFactor: "phone-portrait",
       capabilities: [],
       tabs: [
@@ -3945,10 +3945,10 @@ describe("till-app", () => {
       ],
     };
 
-    // A KDS profile: one `kitchen` tab carrying the `kds-board` card, whose embedded station screen the
-    // grid gates on the `act-as-kds` capability the profile grants. A kds display runs the shell in KIOSK
+    // A KDS canvas: one `kitchen` tab carrying the `kds-board` card, whose embedded station screen the
+    // grid gates on the `act-as-kds` capability the canvas grants. A kds display runs the shell in KIOSK
     // mode (the operator header suppressed — a display has no logged-in operator).
-    const kdsProfile: ProfileDef = {
+    const kdsCanvas: CanvasDef = {
       formFactor: "kds",
       capabilities: ["act-as-kds"],
       tabs: [
@@ -3965,7 +3965,7 @@ describe("till-app", () => {
       // A handheld stays on `lock` until the waiter PIN-logs-in (its face-set post-lock face is `floor`);
       // the shell activates only on that authenticated surface, so boot THEN login before asserting.
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, profile: phoneProfile }),
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
@@ -3990,9 +3990,9 @@ describe("till-app", () => {
 
     it("renders the tab shell in kiosk mode for a kds display, mounting the kds-board card", async () => {
       // A kds_station boots STRAIGHT into device mode past the lock screen (no login); its `getTill`
-      // profile is the KDS profile the server resolves for the display, so `#shellActive()` sees it.
+      // canvas is the KDS canvas the server resolves for the display, so `#shellActive()` sees it.
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, profile: kdsProfile }),
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: kdsCanvas }),
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "dev-1", kind: "kds_station", stationId: "st-dev" }),
@@ -4004,7 +4004,7 @@ describe("till-app", () => {
       // KDS = kiosk: the operator header is suppressed (a display never logs in).
       expect(s.kiosk).toBe(true);
       // The kitchen tab's kds-board card mounts the embedded station screen through the grid — nested in
-      // the grid's OWN shadow root (gated on the `act-as-kds` capability the profile grants), so pierce it.
+      // the grid's OWN shadow root (gated on the `act-as-kds` capability the canvas grants), so pierce it.
       const grid = el.shadowRoot!.querySelector("till-card-grid")!;
       expect(grid).not.toBeNull();
       expect(grid.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
@@ -4012,12 +4012,12 @@ describe("till-app", () => {
   });
 
   describe("handheld table-order mount duality (SP-B2.2 Task 7)", () => {
-    // A phone-portrait profile: a `floor` tab (a `floor-plan` card) + an `order` tab (a `table-order`
-    // card). Because the profile AUTHORS a tab whose cards mount a `table-order` card, opening a table on
+    // A phone-portrait canvas: a `floor` tab (a `floor-plan` card) + an `order` tab (a `table-order`
+    // card). Because the canvas AUTHORS a tab whose cards mount a `table-order` card, opening a table on
     // a handheld SWITCHES to that Order tab (the card mount, SP-B §5) rather than pushing a drill-in — the
     // tab bar owns the navigation, so there is no drill and no second Back. A till (no `order` tab) keeps
     // the B2.1 drill push/pop, asserted by the sibling "drill-in stack" describe.
-    const phoneProfile: ProfileDef = {
+    const phoneCanvas: CanvasDef = {
       formFactor: "phone-portrait",
       capabilities: [],
       tabs: [
@@ -4039,11 +4039,11 @@ describe("till-app", () => {
     const shell = (el: TillApp) =>
       el.shadowRoot!.querySelector<HTMLElement & { activeTabKey?: string }>("till-tab-shell");
 
-    /** Boots a handheld with the phone profile and logs the waiter in — landing on the FLOOR tab (the
-     * phone profile's first tab, mirroring the legacy face-set's post-login floor landing). */
+    /** Boots a handheld with the phone canvas and logs the waiter in — landing on the FLOOR tab (the
+     * phone canvas's first tab, mirroring the legacy face-set's post-login floor landing). */
     async function toHandheldFloor(): Promise<TillApp> {
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, profile: phoneProfile }),
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
@@ -4094,7 +4094,7 @@ describe("till-app", () => {
       let occupied = false;
       const getTablesState = vi.fn(async () => (occupied ? [occupiedT1] : [freeTable]));
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, profile: phoneProfile }),
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
@@ -4124,7 +4124,7 @@ describe("till-app", () => {
     });
 
     it("lands a handheld on its home (floor) tab after a new sale, refreshing the stale floor — not a phantom counter tab", async () => {
-      // A handheld authors NO `counter` tab, so #onNewSale must land it on its HOME tab (the profile's
+      // A handheld authors NO `counter` tab, so #onNewSale must land it on its HOME tab (the canvas's
       // first tab, `floor`), never a phantom `"counter"`. It reaches #onNewSale after settling a TAB
       // (pay-tab → ticket → New sale); the just-closed table is then stale in the floor read-model, so the
       // return must re-read occupancy — a re-tap must resume nothing. (A hardcoded activeTabKey="counter"
@@ -4141,7 +4141,7 @@ describe("till-app", () => {
       let occupied = false;
       const getTablesState = vi.fn(async () => (occupied ? [occupiedT1] : [freeTable]));
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, profile: phoneProfile }),
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
@@ -4167,10 +4167,10 @@ describe("till-app", () => {
   });
 
   describe("drill-in stack (SP-B2.1)", () => {
-    // A `till` profile: a `counter` tab carrying the real sale cards (so the sale-path guard drives the
+    // A `till` canvas: a `counter` tab carrying the real sale cards (so the sale-path guard drives the
     // grid, not an empty tab) + a `floor` tab (a `floor-plan` card). Station/Expo/Schedule are NOT tabs,
     // so the shell offers them as affordance buttons; the shell's Allergens button is always present.
-    const shellProfile: ProfileDef = {
+    const shellCanvas: CanvasDef = {
       formFactor: "till",
       capabilities: [],
       tabs: [
@@ -4202,7 +4202,7 @@ describe("till-app", () => {
      * a table is opened from. `getTablesState` returns `freeTable` so the floor has a table to open. */
     async function toShellFloor(): Promise<TillApp> {
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, profile: shellProfile }),
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
         getTablesState: vi.fn().mockResolvedValue([freeTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
       });
@@ -4215,7 +4215,7 @@ describe("till-app", () => {
     /** Boots the shell and logs in — leaving the app on the counter tab (no drill open). */
     async function toShellCounter(): Promise<TillApp> {
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, profile: shellProfile }),
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
       });
       await toCounter(el);
       return el;
@@ -4261,7 +4261,7 @@ describe("till-app", () => {
         tabTotal: "3.00",
       };
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, profile: shellProfile }),
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
         // FIRST floor load (tab-select): table free. SECOND load (the back-to-floor refresh): now occupied.
         getTablesState: vi
           .fn()
@@ -4400,7 +4400,7 @@ describe("till-app", () => {
       // `#loadFloorData()` call from `#onTabSelect` and the tables/zones assertions go red.
       const status: TableServiceStatus = { id: "s1", label: "Reservada", color: "#f00" };
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, profile: shellProfile }),
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
         getTablesState: vi.fn().mockResolvedValue([freeTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
         listStatuses: vi.fn().mockResolvedValue([status]),

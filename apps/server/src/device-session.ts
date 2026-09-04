@@ -5,7 +5,7 @@ import { AppError, tillId } from "@waitron/shared";
 import type { TillId } from "@waitron/shared";
 import { asAppUser, devices, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { getProfile } from "@waitron/layouts";
+import { getCanvas } from "@waitron/layouts";
 import type { CapabilityFlag } from "@waitron/layouts";
 import { verifySecret } from "@waitron/identity";
 // Side-effect only: keeps this host's `device.unauthorized` code (errors.ts) reachable from the file
@@ -76,10 +76,10 @@ export function readDeviceCookie(c: Context): string | null {
  * the single station it is bound to (NULL only for a future non-station kind). The device-authenticated
  * KDS routes (Task 5) scope every read/bump to this `stationId` — a device cannot name another's.
  *
- * SP-A.2 §16 widened this with the device's assigned PROFILE + TILL + static HARDWARE bindings, all read
+ * SP-A.2 §16 widened this with the device's assigned CANVAS + TILL + static HARDWARE bindings, all read
  * straight off the row so the boot reads (`/api/device/me`, `/api/till`) can surface them and the client
- * can (SP-B) boot into its profile. `tillId` — the `tills` row a sale-capable device rings against
- * (§16.4; NULL for a `kds_station`). `layoutProfileId` — the assigned layout profile (§16.3; NULL when
+ * can (SP-B) boot into its canvas. `tillId` — the `tills` row a sale-capable device rings against
+ * (§16.4; NULL for a `kds_station`). `canvasId` — the assigned layout canvas (§16.3; NULL when
  * unassigned). The hardware trio — the per-device `receiptPrinterId` (NULL when none), `hasCashDrawer`,
  * `cardProvider` (config token, defaults `"none"`), and `cardReaderId` (NULL when none). None is a
  * credential; the reader's secrets stay in the vault, never on this row. */
@@ -88,7 +88,7 @@ export interface DeviceBinding {
   kind: DeviceKind;
   stationId: string | null;
   tillId: string | null;
-  layoutProfileId: string | null;
+  canvasId: string | null;
   receiptPrinterId: string | null;
   hasCashDrawer: boolean;
   cardProvider: string;
@@ -108,7 +108,7 @@ function toDeviceBinding(deviceId: string, row: Omit<DeviceBinding, "deviceId">)
     kind: row.kind,
     stationId: row.stationId,
     tillId: row.tillId,
-    layoutProfileId: row.layoutProfileId,
+    canvasId: row.canvasId,
     receiptPrinterId: row.receiptPrinterId,
     hasCashDrawer: row.hasCashDrawer,
     cardProvider: row.cardProvider,
@@ -163,7 +163,7 @@ export async function tryReadDevice(
             kind: devices.deviceKind,
             stationId: devices.stationId,
             tillId: devices.tillId,
-            layoutProfileId: devices.layoutProfileId,
+            canvasId: devices.canvasId,
             receiptPrinterId: devices.receiptPrinterId,
             hasCashDrawer: devices.hasCashDrawer,
             cardProvider: devices.cardProvider,
@@ -199,10 +199,10 @@ export async function tryReadDevice(
         tokenHash: devices.tokenHash,
         kind: devices.deviceKind,
         stationId: devices.stationId,
-        // The profile/till/hardware bindings (SP-A.2 §16) surfaced on the binding — read here so the
+        // The canvas/till/hardware bindings (SP-A.2 §16) surfaced on the binding — read here so the
         // boot reads echo them without a second query. All non-secret config, never credentials.
         tillId: devices.tillId,
-        layoutProfileId: devices.layoutProfileId,
+        canvasId: devices.canvasId,
         receiptPrinterId: devices.receiptPrinterId,
         hasCashDrawer: devices.hasCashDrawer,
         cardProvider: devices.cardProvider,
@@ -325,7 +325,7 @@ export async function assertNotHandheld(
 }
 
 /**
- * The profile-capability firewall (SP-A.2 §16 / design §5 layer 2) — the generalisation of
+ * The canvas-capability firewall (SP-A.2 §16 / design §5 layer 2) — the generalisation of
  * {@link assertNotHandheld} from a hardcoded KIND check to a DECLARED capability. A route that requires
  * a server-enforced device capability (the INTEGRATED card reader ⇒ `integrated-card-payment`; opening
  * the cash drawer ⇒ `open-cash-drawer`) runs this right after its `requireSession` guard, on the SAME
@@ -338,21 +338,21 @@ export async function assertNotHandheld(
  *  1. No device cookie (`tryReadDevice` → `null`) — an ordinary env-configured/legacy till, which
  *     authenticates by operator SESSION and carries no `waitron_device`. It PASSES, exactly as
  *     `assertNotHandheld`'s absent-cookie branch does: "nothing blocks a sale" on a cookie-less till.
- *  2. A device with NO assigned profile (`layoutProfileId === null`) declares no capabilities at all —
- *     refused. (This is the path the old handheld, which carried no profile, now falls down.)
- *  3. Resolve the assigned profile via `getProfile` under the SAME `withTenant` + `asAppUser` scope
- *     `tryReadDevice` uses, so RLS scopes the read to this tenant. A bound-but-missing profile is
- *     unreachable (the `(tenant_id, layout_profile_id)` FK is RESTRICT — see `devices.ts`); treated
+ *  2. A device with NO assigned canvas (`canvasId === null`) declares no capabilities at all —
+ *     refused. (This is the path the old handheld, which carried no canvas, now falls down.)
+ *  3. Resolve the assigned canvas via `getCanvas` under the SAME `withTenant` + `asAppUser` scope
+ *     `tryReadDevice` uses, so RLS scopes the read to this tenant. A bound-but-missing canvas is
+ *     unreachable (the `(tenant_id, canvas_id)` FK is RESTRICT — see `devices.ts`); treated
  *     defensively as no-capability.
- *  4. Whether the profile's declared `capabilities` include the required flag decides pass vs refuse.
+ *  4. Whether the canvas's declared `capabilities` include the required flag decides pass vs refuse.
  *
- * A handheld carrying a capability-less profile (e.g. the phone-portrait default, `capabilities: []`)
+ * A handheld carrying a capability-less canvas (e.g. the phone-portrait default, `capabilities: []`)
  * is therefore still refused pay + drawer — the handheld-firewall behaviour is PRESERVED, now enforced
  * by the capability rather than by the kind.
  *
  * `device` is an OPTIONAL pre-resolved binding (see {@link requireSaleTillId}): `/api/pay` reads the
  * binding ONCE and threads it here and to `requireSaleTillId`, so the device read + scrypt run once per
- * request (the profile `getProfile` read below is a separate query and always runs). `null` means
+ * request (the canvas `getCanvas` read below is a separate query and always runs). `null` means
  * "resolved, no device" (passes, branch 1); OMITTING it preserves the original behaviour — this reads
  * the binding itself, which is why the other capability call-site (`/api/drawer/open`) need not change.
  */
@@ -366,26 +366,26 @@ export async function assertDeviceCapability(
   const resolved = device === undefined ? await tryReadDevice(deps, c) : device;
   // (1) Absent cookie ⇒ the env-till / legacy caller — pass, matching `assertNotHandheld`.
   if (resolved === null) return;
-  // (2) No assigned profile ⇒ no declared capabilities ⇒ refuse.
-  if (resolved.layoutProfileId === null) {
+  // (2) No assigned canvas ⇒ no declared capabilities ⇒ refuse.
+  if (resolved.canvasId === null) {
     throw new AppError("device.forbidden_action", { action });
   }
-  const layoutProfileId = resolved.layoutProfileId;
-  // (3) Resolve the profile in the SAME tx shape `tryReadDevice` uses (RLS as `app_user`).
-  const profile = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+  const canvasId = resolved.canvasId;
+  // (3) Resolve the canvas in the SAME tx shape `tryReadDevice` uses (RLS as `app_user`).
+  const canvas = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-    return getProfile(tx, deps.cfg.tenantId, layoutProfileId);
+    return getCanvas(tx, deps.cfg.tenantId, canvasId);
   });
-  // Defensive only: the `(tenant_id, layout_profile_id)` composite FK on `devices` is RESTRICT
-  // (schema/devices.ts), so a bound profile always resolves — this branch is unreachable in practice,
+  // Defensive only: the `(tenant_id, canvas_id)` composite FK on `devices` is RESTRICT
+  // (schema/devices.ts), so a bound canvas always resolves — this branch is unreachable in practice,
   // hence the v8-ignore rather than a contrived test that would have to defeat the FK.
   /* v8 ignore start */
-  if (profile === undefined) {
+  if (canvas === undefined) {
     throw new AppError("device.forbidden_action", { action });
   }
   /* v8 ignore stop */
   // (4) The declared capability set is the source of truth.
-  if (!profile.definition.capabilities.includes(capability)) {
+  if (!canvas.definition.capabilities.includes(capability)) {
     throw new AppError("device.forbidden_action", { action });
   }
 }

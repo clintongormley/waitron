@@ -19,7 +19,7 @@
 // The till's LOCAL layout/receipt shapes (`../layout.ts`) — plain data, browser-safe, bundle-decoupled
 // exactly like every interface below. `GET /api/till` carries the authored-or-default arrangement +
 // receipt trim; importing these from `../layout.js` (never `@waitron/layouts`) keeps the decoupling.
-import type { LayoutDef, ProfileDef, ReceiptConfig } from "../layout.js";
+import type { CanvasDef, LayoutDef, ReceiptConfig } from "../layout.js";
 // `StationThresholds`/`TimingBand` are plain data shapes from the GENERIC `@waitron/shared` package
 // (not a server package), so importing their types here doesn't reintroduce the bundle-decoupling risk
 // the note above warns about — every till widget already depends on `@waitron/shared` for money/locale
@@ -89,14 +89,14 @@ export interface TillInfo {
   layout: LayoutDef;
   receipt: ReceiptConfig;
   /**
-   * The CALLING device's assigned layout PROFILE (SP-A.2 §16.3) — present for ANY enrolled device: the
-   * device's explicitly assigned profile, or the form-factor DEFAULT the server falls back to when the
+   * The CALLING device's assigned layout CANVAS (SP-A.2 §16.3) — present for ANY enrolled device: the
+   * device's explicitly assigned canvas, or the form-factor DEFAULT the server falls back to when the
    * device has none. ABSENT only when the boot request carried no device cookie at all (an
    * un-enrolled/pre-pairing request). ADDITIVE: the app still renders from {@link layout}/{@link receipt}
-   * above. A LOCAL mirror of the server's `ProfileDef`, never imported from `@waitron/layouts` — the
-   * bundle rule. Consumed by SP-B1: the counter renders from this profile's counter tab.
+   * above. A LOCAL mirror of the server's `CanvasDef`, never imported from `@waitron/layouts` — the
+   * bundle rule. Consumed by SP-B1: the counter renders from this canvas's counter tab.
    */
-  profile?: ProfileDef;
+  canvas?: CanvasDef;
 }
 
 /**
@@ -681,8 +681,8 @@ export interface DeviceEnrolment {
  * is a plain `string` (not a union): the client only branches on the values it knows and treats any other
  * as "not a special device", so a server that adds a new kind never breaks an older client.
  *
- * SP-A.2 §16 added the device's assigned PROFILE + TILL + static HARDWARE bindings to the response. They
- * are mirrored here as OPTIONAL — the client does not consume them yet (booting into the assigned profile
+ * SP-A.2 §16 added the device's assigned CANVAS + TILL + static HARDWARE bindings to the response. They
+ * are mirrored here as OPTIONAL — the client does not consume them yet (booting into the assigned canvas
  * is SP-B), so an older payload without them is still valid, exactly the graceful-widening rule the rest
  * of this file follows. All non-secret config; the reader's credentials never ride this response.
  */
@@ -692,8 +692,8 @@ export interface DeviceIdentity {
   stationId: string | null;
   /** The `tills` row a sale-capable device rings against (§16.4); `null` for a `kds_station`. */
   tillId?: string | null;
-  /** The assigned layout profile (§16.3); `null` when unassigned. Consumed in SP-B. */
-  layoutProfileId?: string | null;
+  /** The assigned layout canvas (§16.3); `null` when unassigned. Consumed in SP-B. */
+  canvasId?: string | null;
   /** The per-device receipt printer (§16.3); `null` when none. */
   receiptPrinterId?: string | null;
   /** Whether this device has a cash drawer (§16.3). */
@@ -718,7 +718,7 @@ export interface DeviceStation {
 /**
  * The SP-C dev per-tab device chooser's payloads (dev-only routes, honoured server-side ONLY in
  * devMode). {@link DevDeviceList} is what `GET /api/dev/devices` returns — this venue's enrolled
- * `devices` plus the option-sources the mint form binds against (`tills`, `stations`, `profiles`);
+ * `devices` plus the option-sources the mint form binds against (`tills`, `stations`, `canvases`);
  * {@link DevMintRequest}/{@link DevMintResult} are the mint-and-adopt round trip. All LOCAL mirrors
  * of the server's dev-route shapes, deliberately NOT imported — the same bundle-decoupling rationale
  * as every other type in this file (see the file header). `kind` stays a plain `string` (not a
@@ -729,7 +729,7 @@ export interface DevDevice {
   kind: string;
   label: string;
   tillId: string | null;
-  layoutProfileId: string | null;
+  canvasId: string | null;
   stationId: string | null;
   active: boolean;
 }
@@ -745,7 +745,7 @@ export interface DevStation {
   isDefault: boolean;
   active: boolean;
 }
-export interface DevProfile {
+export interface DevCanvas {
   id: string;
   name: string;
 }
@@ -753,14 +753,14 @@ export interface DevDeviceList {
   devices: DevDevice[];
   tills: DevTill[];
   stations: DevStation[];
-  profiles: DevProfile[];
+  canvases: DevCanvas[];
 }
 export interface DevMintRequest {
   kind: string;
   label: string;
   tillId?: string;
   stationId?: string;
-  layoutProfileId?: string;
+  canvasId?: string;
 }
 export interface DevMintResult {
   deviceId: string;

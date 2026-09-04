@@ -261,10 +261,10 @@ async function moveItemToStation(itemId: string, stationId: string): Promise<voi
   );
 }
 
-/** Seed a layout profile for the venue (owner SQL) — a real `(tenant_id, id)` a device binding can name. */
-async function seedProfile(cfg: TillConfig): Promise<string> {
+/** Seed a layout canvas for the venue (owner SQL) — a real `(tenant_id, id)` a device binding can name. */
+async function seedCanvas(cfg: TillConfig): Promise<string> {
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into layout_profiles (tenant_id, name, definition)
+    insert into canvases (tenant_id, name, definition)
     values (${cfg.tenantId}, 'Perfil A', ${JSON.stringify({ formFactor: "tablet" })}::jsonb)
     returning id`);
   return rows[0]!.id;
@@ -283,7 +283,7 @@ async function seedPrinter(cfg: TillConfig): Promise<string> {
 /** The enrolled device row's binding columns, read as the superuser (RLS bypassed). */
 async function deviceBindings(deviceId: string): Promise<Record<string, unknown>> {
   const { rows } = await suite.admin.execute<Record<string, unknown>>(sql`
-    select till_id, layout_profile_id, receipt_printer_id, has_cash_drawer, card_provider, card_reader_id
+    select till_id, canvas_id, receipt_printer_id, has_cash_drawer, card_provider, card_reader_id
     from devices where id = ${deviceId}`);
   return rows[0]!;
 }
@@ -339,7 +339,7 @@ async function enrolWithCode(
     kind: string;
     stationId?: string;
     tillId?: string;
-    layoutProfileId?: string;
+    canvasId?: string;
     label: string;
   },
 ): Promise<{ deviceId: string; jar: string }> {
@@ -801,14 +801,14 @@ describe("Device API over real Postgres", () => {
   });
 
   it("device-codes reads the binding fields and enrolment stamps them; the gate + FK map to 400", async () => {
-    // The route reads the profile/till/hardware body fields and passes them to generatePairingCode; the
+    // The route reads the canvas/till/hardware body fields and passes them to generatePairingCode; the
     // enrolled device carries them (SP-A.2 §16). Proven end to end through HTTP: mint a `till` code with
     // every binding, enrol, and read the device row back. Then the two failure mappings the route's
     // STATUS map owns: the till gate (device.till_required) and the binding-FK translation
     // (device.binding_invalid) both surface as 400.
     const venue = await setupVenue();
     const app = mountApp(venue.cfg);
-    const profileId = await seedProfile(venue.cfg);
+    const canvasId = await seedCanvas(venue.cfg);
     const printerId = await seedPrinter(venue.cfg);
 
     const codeRes = await send(app, "POST", "/management-api/device-codes", {
@@ -816,7 +816,7 @@ describe("Device API over real Postgres", () => {
       body: {
         kind: "till",
         tillId: venue.cfg.tillId,
-        layoutProfileId: profileId,
+        canvasId: canvasId,
         receiptPrinterId: printerId,
         hasCashDrawer: true,
         cardProvider: "sumup",
@@ -831,7 +831,7 @@ describe("Device API over real Postgres", () => {
     const deviceId = ((await enrol.json()) as { deviceId: string }).deviceId;
     expect(await deviceBindings(deviceId)).toMatchObject({
       till_id: venue.cfg.tillId,
-      layout_profile_id: profileId,
+      canvas_id: canvasId,
       receipt_printer_id: printerId,
       has_cash_drawer: true,
       card_provider: "sumup",
@@ -848,21 +848,21 @@ describe("Device API over real Postgres", () => {
       error: { code: "device.till_required" },
     });
 
-    // The binding-FK translation through the route: a nonexistent layout_profile_id → 400 binding_invalid.
-    const badProfile = await send(app, "POST", "/management-api/device-codes", {
+    // The binding-FK translation through the route: a nonexistent canvas_id → 400 binding_invalid.
+    const badCanvas = await send(app, "POST", "/management-api/device-codes", {
       cookie: venue.managerCookie,
       body: {
         kind: "till",
         tillId: venue.cfg.tillId,
-        layoutProfileId: randomUUID(),
+        canvasId: randomUUID(),
         label: "Caja 3",
       },
     });
-    expect(badProfile.status).toBe(400);
+    expect(badCanvas.status).toBe(400);
     expect(
-      (await badProfile.json()) as { error: { code: string; params: { field: string } } },
+      (await badCanvas.json()) as { error: { code: string; params: { field: string } } },
     ).toMatchObject({
-      error: { code: "device.binding_invalid", params: { field: "layoutProfileId" } },
+      error: { code: "device.binding_invalid", params: { field: "canvasId" } },
     });
   });
 
@@ -884,107 +884,107 @@ describe("Device API over real Postgres", () => {
     expect(malformed.status).toBe(404);
   });
 
-  // ── Reassign a device's layout profile (SP-B3.1) ─────────────────────────────────────────────────────
-  describe("layout-profile reassignment", () => {
-    it("GET /management-api/devices exposes each device's layoutProfileId (a set one and a null one)", async () => {
+  // ── Reassign a device's layout canvas (SP-B3.1) ─────────────────────────────────────────────────────
+  describe("layout-canvas reassignment", () => {
+    it("GET /management-api/devices exposes each device's canvasId (a set one and a null one)", async () => {
       const venue = await setupVenue();
       const app = mountApp(venue.cfg);
-      const profileId = await seedProfile(venue.cfg);
-      // A `till` device enrolled WITH a profile binding, and a plain `kds_station` with none.
-      const withProfile = await enrolWithCode(app, venue.managerCookie, {
+      const canvasId = await seedCanvas(venue.cfg);
+      // A `till` device enrolled WITH a canvas binding, and a plain `kds_station` with none.
+      const withCanvas = await enrolWithCode(app, venue.managerCookie, {
         kind: "till",
         tillId: venue.cfg.tillId,
-        layoutProfileId: profileId,
+        canvasId: canvasId,
         label: "Caja con perfil",
       });
-      const withoutProfile = await enrolAt(app, venue.managerCookie, venue.defaultStationId);
+      const withoutCanvas = await enrolAt(app, venue.managerCookie, venue.defaultStationId);
 
       const res = await send(app, "GET", "/management-api/devices", {
         cookie: venue.managerCookie,
       });
       expect(res.status).toBe(200);
-      const rows = (await res.json()) as { id: string; layoutProfileId: string | null }[];
-      expect(rows.find((r) => r.id === withProfile.deviceId)!.layoutProfileId).toBe(profileId);
-      expect(rows.find((r) => r.id === withoutProfile.deviceId)!.layoutProfileId).toBeNull();
+      const rows = (await res.json()) as { id: string; canvasId: string | null }[];
+      expect(rows.find((r) => r.id === withCanvas.deviceId)!.canvasId).toBe(canvasId);
+      expect(rows.find((r) => r.id === withoutCanvas.deviceId)!.canvasId).toBeNull();
     });
 
-    it("POST …/assign-profile sets, then clears (null), a device's layout profile", async () => {
+    it("POST …/assign-canvas sets, then clears (null), a device's layout canvas", async () => {
       const venue = await setupVenue();
       const app = mountApp(venue.cfg);
-      const profileId = await seedProfile(venue.cfg);
+      const canvasId = await seedCanvas(venue.cfg);
       const { deviceId } = await enrolAt(app, venue.managerCookie, venue.defaultStationId);
 
-      const assign = await send(app, "POST", `/management-api/devices/${deviceId}/assign-profile`, {
+      const assign = await send(app, "POST", `/management-api/devices/${deviceId}/assign-canvas`, {
         cookie: venue.managerCookie,
-        body: { layoutProfileId: profileId },
+        body: { canvasId: canvasId },
       });
       expect(assign.status).toBe(204);
-      expect((await deviceBindings(deviceId)).layout_profile_id).toBe(profileId);
+      expect((await deviceBindings(deviceId)).canvas_id).toBe(canvasId);
 
       // An explicit `null` clears the binding back to null.
-      const clear = await send(app, "POST", `/management-api/devices/${deviceId}/assign-profile`, {
+      const clear = await send(app, "POST", `/management-api/devices/${deviceId}/assign-canvas`, {
         cookie: venue.managerCookie,
-        body: { layoutProfileId: null },
+        body: { canvasId: null },
       });
       expect(clear.status).toBe(204);
-      expect((await deviceBindings(deviceId)).layout_profile_id).toBeNull();
+      expect((await deviceBindings(deviceId)).canvas_id).toBeNull();
     });
 
-    it("assign-profile rejects a nonexistent profile id → 400 device.binding_invalid, device untouched", async () => {
-      // The composite FK `devices_layout_profile_fk (tenant_id, layout_profile_id)` refuses a well-formed
-      // id that names no profile of THIS tenant, translated by `bindingFkField` to the SAME code+field the
+    it("assign-canvas rejects a nonexistent canvas id → 400 device.binding_invalid, device untouched", async () => {
+      // The composite FK `devices_canvas_fk (tenant_id, canvas_id)` refuses a well-formed
+      // id that names no canvas of THIS tenant, translated by `bindingFkField` to the SAME code+field the
       // enrol path raises. The FK aborts the UPDATE atomically, so the device stays untouched (asserted
       // below). Proof: `device.test.ts` pins the constraint-name → field mapping this route relies on.
       const venue = await setupVenue();
       const app = mountApp(venue.cfg);
       const { deviceId } = await enrolAt(app, venue.managerCookie, venue.defaultStationId);
 
-      const res = await send(app, "POST", `/management-api/devices/${deviceId}/assign-profile`, {
+      const res = await send(app, "POST", `/management-api/devices/${deviceId}/assign-canvas`, {
         cookie: venue.managerCookie,
-        body: { layoutProfileId: randomUUID() },
+        body: { canvasId: randomUUID() },
       });
       expect(res.status).toBe(400);
       expect(
         (await res.json()) as { error: { code: string; params: { field: string } } },
       ).toMatchObject({
-        error: { code: "device.binding_invalid", params: { field: "layoutProfileId" } },
+        error: { code: "device.binding_invalid", params: { field: "canvasId" } },
       });
-      expect((await deviceBindings(deviceId)).layout_profile_id).toBeNull();
+      expect((await deviceBindings(deviceId)).canvas_id).toBeNull();
     });
 
-    it("assign-profile rejects a CROSS-TENANT profile id → 400 device.binding_invalid (RLS hides it, never a leak)", async () => {
-      // The load-bearing isolation proof: a REAL profile owned by ANOTHER tenant can never bind, because
-      // the composite FK looks for `(tenantA, foreignId)` in layout_profiles and misses (B's row is
+    it("assign-canvas rejects a CROSS-TENANT canvas id → 400 device.binding_invalid (RLS hides it, never a leak)", async () => {
+      // The load-bearing isolation proof: a REAL canvas owned by ANOTHER tenant can never bind, because
+      // the composite FK looks for `(tenantA, foreignId)` in canvases and misses (B's row is
       // `(tenantB, foreignId)`) — so it takes the SAME binding_invalid path an unknown id does, never a
       // success, never a cross-tenant binding, never a leak of B's row. The FK's tenant_id column is the
       // structural isolation here, independent of RLS.
       const venueA = await setupVenue();
       const venueB = await setupVenue();
       const app = mountApp(venueA.cfg);
-      const foreignProfile = await seedProfile(venueB.cfg); // owned by tenant B
+      const foreignCanvas = await seedCanvas(venueB.cfg); // owned by tenant B
       const { deviceId } = await enrolAt(app, venueA.managerCookie, venueA.defaultStationId);
 
-      const res = await send(app, "POST", `/management-api/devices/${deviceId}/assign-profile`, {
+      const res = await send(app, "POST", `/management-api/devices/${deviceId}/assign-canvas`, {
         cookie: venueA.managerCookie,
-        body: { layoutProfileId: foreignProfile },
+        body: { canvasId: foreignCanvas },
       });
       expect(res.status).toBe(400);
       expect(
         (await res.json()) as { error: { code: string; params: { field: string } } },
       ).toMatchObject({
-        error: { code: "device.binding_invalid", params: { field: "layoutProfileId" } },
+        error: { code: "device.binding_invalid", params: { field: "canvasId" } },
       });
-      expect((await deviceBindings(deviceId)).layout_profile_id).toBeNull();
+      expect((await deviceBindings(deviceId)).canvas_id).toBeNull();
     });
 
-    it("assign-profile with an unknown or malformed device id → 404 device.not_found", async () => {
+    it("assign-canvas with an unknown or malformed device id → 404 device.not_found", async () => {
       const venue = await setupVenue();
       const app = mountApp(venue.cfg);
-      const profileId = await seedProfile(venue.cfg);
+      const canvasId = await seedCanvas(venue.cfg);
       const unknown = randomUUID();
-      const res = await send(app, "POST", `/management-api/devices/${unknown}/assign-profile`, {
+      const res = await send(app, "POST", `/management-api/devices/${unknown}/assign-canvas`, {
         cookie: venue.managerCookie,
-        body: { layoutProfileId: profileId },
+        body: { canvasId: canvasId },
       });
       expect(res.status).toBe(404);
       expect(
@@ -994,42 +994,42 @@ describe("Device API over real Postgres", () => {
       const malformed = await send(
         app,
         "POST",
-        "/management-api/devices/not-a-uuid/assign-profile",
-        { cookie: venue.managerCookie, body: { layoutProfileId: null } },
+        "/management-api/devices/not-a-uuid/assign-canvas",
+        { cookie: venue.managerCookie, body: { canvasId: null } },
       );
       expect(malformed.status).toBe(404);
     });
 
-    it("assign-profile is tenant-isolated: a manager of A cannot reassign B's device → 404, B untouched", async () => {
+    it("assign-canvas is tenant-isolated: a manager of A cannot reassign B's device → 404, B untouched", async () => {
       // The WRITE is RLS-scoped: tenant A's UPDATE never sees tenant B's device row → 0 rows → 404. The
-      // target is `null` (a clear) so no profile FK is involved — this isolates the DEVICE-write RLS,
-      // distinct from the profile-binding FK the cross-tenant-PROFILE test above exercises. B's device
-      // keeps its own profile — A's attempt changes nothing.
+      // target is `null` (a clear) so no canvas FK is involved — this isolates the DEVICE-write RLS,
+      // distinct from the canvas-binding FK the cross-tenant-CANVAS test above exercises. B's device
+      // keeps its own canvas — A's attempt changes nothing.
       const venueA = await setupVenue();
       const venueB = await setupVenue();
       const appA = mountApp(venueA.cfg);
       const appB = mountApp(venueB.cfg);
-      const bProfile = await seedProfile(venueB.cfg);
+      const bCanvas = await seedCanvas(venueB.cfg);
       const { deviceId: bDevice } = await enrolAt(
         appB,
         venueB.managerCookie,
         venueB.defaultStationId,
       );
-      const setB = await send(appB, "POST", `/management-api/devices/${bDevice}/assign-profile`, {
+      const setB = await send(appB, "POST", `/management-api/devices/${bDevice}/assign-canvas`, {
         cookie: venueB.managerCookie,
-        body: { layoutProfileId: bProfile },
+        body: { canvasId: bCanvas },
       });
       expect(setB.status).toBe(204);
 
-      const res = await send(appA, "POST", `/management-api/devices/${bDevice}/assign-profile`, {
+      const res = await send(appA, "POST", `/management-api/devices/${bDevice}/assign-canvas`, {
         cookie: venueA.managerCookie,
-        body: { layoutProfileId: null },
+        body: { canvasId: null },
       });
       expect(res.status).toBe(404);
       expect((await res.json()) as { error: { code: string } }).toMatchObject({
         error: { code: "device.not_found" },
       });
-      expect((await deviceBindings(bDevice)).layout_profile_id).toBe(bProfile);
+      expect((await deviceBindings(bDevice)).canvas_id).toBe(bCanvas);
     });
   });
 
@@ -1101,22 +1101,22 @@ describe("Device API over real Postgres", () => {
     expect(await res.json()).toMatchObject({ deviceId, kind: "handheld", stationId: null });
   });
 
-  it("GET /api/device/me echoes the device's assigned profile + till + hardware bindings (SP-A.2 §16)", async () => {
+  it("GET /api/device/me echoes the device's assigned canvas + till + hardware bindings (SP-A.2 §16)", async () => {
     // The boot probe echoes every binding the device carries so the client can (SP-B) boot into its
-    // profile + hardware. Enrol a `till` with a FULL binding and assert the WHOLE shape with `toEqual`:
+    // canvas + hardware. Enrol a `till` with a FULL binding and assert the WHOLE shape with `toEqual`:
     // a null default (a plain kds_station) would pass a partial match even if a field were dropped, so
     // this pins the populated case exactly. Additive — the pre-existing `deviceId`/`kind`/`stationId`
     // are unchanged, the SP-A.2 fields are added alongside.
     const venue = await setupVenue();
     const app = mountApp(venue.cfg);
-    const profileId = await seedProfile(venue.cfg);
+    const canvasId = await seedCanvas(venue.cfg);
     const printerId = await seedPrinter(venue.cfg);
     const codeRes = await send(app, "POST", "/management-api/device-codes", {
       cookie: venue.managerCookie,
       body: {
         kind: "till",
         tillId: venue.cfg.tillId,
-        layoutProfileId: profileId,
+        canvasId: canvasId,
         receiptPrinterId: printerId,
         hasCashDrawer: true,
         cardProvider: "sumup",
@@ -1138,7 +1138,7 @@ describe("Device API over real Postgres", () => {
       kind: "till",
       stationId: null,
       tillId: venue.cfg.tillId,
-      layoutProfileId: profileId,
+      canvasId: canvasId,
       receiptPrinterId: printerId,
       hasCashDrawer: true,
       cardProvider: "sumup",
@@ -1177,11 +1177,11 @@ describe("Device API over real Postgres", () => {
 
   // ── Dev-only per-tab device switcher: GET /api/dev/devices (SP-C, Task 4) ────────────────────────────
   describe("GET /api/dev/devices (dev-only)", () => {
-    it("returns devices + option-sources (tills, stations, profiles), tenant-scoped, no token field", async () => {
+    it("returns devices + option-sources (tills, stations, canvases), tenant-scoped, no token field", async () => {
       const venue = await setupVenue();
       const app = mountDevApp(venue.cfg, true);
-      // A profile the venue can bind (`listProfiles`), plus an enrolled device so `devices[]` is non-empty.
-      await seedProfile(venue.cfg);
+      // A canvas the venue can bind (`listCanvases`), plus an enrolled device so `devices[]` is non-empty.
+      await seedCanvas(venue.cfg);
       const { deviceId } = await enrolAt(app, venue.managerCookie, venue.defaultStationId);
 
       const res = await send(app, "GET", "/api/dev/devices");
@@ -1190,10 +1190,10 @@ describe("Device API over real Postgres", () => {
         devices: Record<string, unknown>[];
         tills: Record<string, unknown>[];
         stations: Record<string, unknown>[];
-        profiles: Record<string, unknown>[];
+        canvases: Record<string, unknown>[];
       };
 
-      // Devices: the active-only projection (id/kind/label/tillId/layoutProfileId/stationId/active). The
+      // Devices: the active-only projection (id/kind/label/tillId/canvasId/stationId/active). The
       // just-enrolled device is present, and NO secret (token / tokenHash) rides the projection.
       expect(body.devices.map((d) => d.id)).toContain(deviceId);
       const device = body.devices.find((d) => d.id === deviceId)!;
@@ -1206,7 +1206,7 @@ describe("Device API over real Postgres", () => {
       expect(device).not.toHaveProperty("token");
       expect(device).not.toHaveProperty("tokenHash");
 
-      // Option-sources for minting a new device (Task 5): the venue's till, its stations and its profiles.
+      // Option-sources for minting a new device (Task 5): the venue's till, its stations and its canvases.
       expect(body.tills.length).toBeGreaterThan(0);
       expect(body.tills[0]).toMatchObject({
         id: expect.any(String),
@@ -1215,8 +1215,8 @@ describe("Device API over real Postgres", () => {
       });
       expect(body.stations.length).toBeGreaterThan(0);
       expect(body.stations.map((s) => s.id)).toContain(venue.defaultStationId);
-      expect(body.profiles.length).toBeGreaterThan(0);
-      expect(body.profiles[0]).toMatchObject({ id: expect.any(String), name: expect.any(String) });
+      expect(body.canvases.length).toBeGreaterThan(0);
+      expect(body.canvases[0]).toMatchObject({ id: expect.any(String), name: expect.any(String) });
     });
 
     it("lists only ACTIVE devices — a revoked device is omitted", async () => {

@@ -1,7 +1,7 @@
-// packages/layouts/src/validate-profile.test.ts
+// packages/layouts/src/validate-canvas.test.ts
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import { MAX_TAB_TITLE_LENGTH, validateProfile } from "./validate-profile.js";
+import { MAX_TAB_TITLE_LENGTH, validateCanvas } from "./validate-canvas.js";
 
 const ok = {
   formFactor: "till",
@@ -31,108 +31,106 @@ function reason(fn: () => unknown): string {
   }
 }
 
-describe("validateProfile — structure", () => {
-  it("accepts a well-formed till profile", () => {
-    expect(validateProfile(ok).formFactor).toBe("till");
+describe("validateCanvas — structure", () => {
+  it("accepts a well-formed till canvas", () => {
+    expect(validateCanvas(ok).formFactor).toBe("till");
   });
   it("returns the tabs it validated", () => {
-    const p = validateProfile(ok);
+    const p = validateCanvas(ok);
     expect(p.tabs[0].key).toBe("counter");
     expect(p.tabs[0].cards).toHaveLength(4);
     expect(p.capabilities).toEqual([]);
   });
   it("rejects a non-object", () => {
-    expect(reason(() => validateProfile(null))).toBe("not_object");
+    expect(reason(() => validateCanvas(null))).toBe("not_object");
   });
   it("rejects an array (not a plain object)", () => {
-    expect(reason(() => validateProfile([]))).toBe("not_object");
+    expect(reason(() => validateCanvas([]))).toBe("not_object");
   });
   it("rejects an unknown form factor", () => {
-    expect(reason(() => validateProfile({ ...ok, formFactor: "watch" }))).toBe("bad_form_factor");
+    expect(reason(() => validateCanvas({ ...ok, formFactor: "watch" }))).toBe("bad_form_factor");
   });
   it("rejects a non-string form factor", () => {
-    expect(reason(() => validateProfile({ ...ok, formFactor: 3 }))).toBe("bad_form_factor");
+    expect(reason(() => validateCanvas({ ...ok, formFactor: 3 }))).toBe("bad_form_factor");
   });
   it("defaults capabilities to [] when omitted", () => {
     const { capabilities: _omit, ...noCaps } = ok;
     void _omit;
-    expect(validateProfile(noCaps).capabilities).toEqual([]);
+    expect(validateCanvas(noCaps).capabilities).toEqual([]);
   });
   it("rejects capabilities that are not an array", () => {
-    expect(reason(() => validateProfile({ ...ok, capabilities: "act-as-kds" }))).toBe(
+    expect(reason(() => validateCanvas({ ...ok, capabilities: "act-as-kds" }))).toBe(
       "bad_capabilities",
     );
   });
   it("rejects an unknown capability flag", () => {
-    expect(reason(() => validateProfile({ ...ok, capabilities: ["fly"] }))).toBe(
-      "bad_capabilities",
-    );
+    expect(reason(() => validateCanvas({ ...ok, capabilities: ["fly"] }))).toBe("bad_capabilities");
   });
   it("rejects a non-array capabilities with bad_capabilities", () => {
-    expect(() => validateProfile({ formFactor: "till", capabilities: "x", tabs: [] })).toThrowError(
-      expect.objectContaining({ code: "profile.invalid", params: { reason: "bad_capabilities" } }),
+    expect(() => validateCanvas({ formFactor: "till", capabilities: "x", tabs: [] })).toThrowError(
+      expect.objectContaining({ code: "canvas.invalid", params: { reason: "bad_capabilities" } }),
     );
   });
   it("rejects an unknown capability flag with bad_capabilities", () => {
     expect(() =>
-      validateProfile({ formFactor: "till", capabilities: ["nope"], tabs: [] }),
+      validateCanvas({ formFactor: "till", capabilities: ["nope"], tabs: [] }),
     ).toThrowError(
-      expect.objectContaining({ code: "profile.invalid", params: { reason: "bad_capabilities" } }),
+      expect.objectContaining({ code: "canvas.invalid", params: { reason: "bad_capabilities" } }),
     );
   });
   it("rejects empty tabs", () => {
-    expect(reason(() => validateProfile({ ...ok, tabs: [] }))).toBe("no_tabs");
+    expect(reason(() => validateCanvas({ ...ok, tabs: [] }))).toBe("no_tabs");
   });
   it("rejects tabs that are not an array", () => {
-    expect(reason(() => validateProfile({ ...ok, tabs: "counter" }))).toBe("no_tabs");
+    expect(reason(() => validateCanvas({ ...ok, tabs: "counter" }))).toBe("no_tabs");
   });
   it("rejects a tab that is not an object", () => {
-    expect(reason(() => validateProfile({ ...ok, tabs: [null] }))).toBe("bad_tab");
+    expect(reason(() => validateCanvas({ ...ok, tabs: [null] }))).toBe("bad_tab");
   });
   it("rejects a tab with a missing key", () => {
     const bad = { ...ok, tabs: [{ ...ok.tabs[0], key: 3 }] };
-    expect(reason(() => validateProfile(bad))).toBe("bad_tab");
+    expect(reason(() => validateCanvas(bad))).toBe("bad_tab");
   });
   it("rejects a tab with a blank key", () => {
     const bad = { ...ok, tabs: [{ ...ok.tabs[0], key: "" }] };
-    expect(reason(() => validateProfile(bad))).toBe("bad_tab");
+    expect(reason(() => validateCanvas(bad))).toBe("bad_tab");
   });
   it("rejects a blank tab title", () => {
     const bad = { ...ok, tabs: [{ ...ok.tabs[0], title: "" }] };
-    expect(reason(() => validateProfile(bad))).toBe("bad_tab");
+    expect(reason(() => validateCanvas(bad))).toBe("bad_tab");
   });
   it("rejects a non-string tab title", () => {
     const bad = { ...ok, tabs: [{ ...ok.tabs[0], title: 3 }] };
-    expect(reason(() => validateProfile(bad))).toBe("bad_tab");
+    expect(reason(() => validateCanvas(bad))).toBe("bad_tab");
   });
   it("rejects an over-long tab title", () => {
     const bad = { ...ok, tabs: [{ ...ok.tabs[0], title: "x".repeat(MAX_TAB_TITLE_LENGTH + 1) }] };
-    expect(reason(() => validateProfile(bad))).toBe("bad_tab");
+    expect(reason(() => validateCanvas(bad))).toBe("bad_tab");
   });
   it("rejects duplicate tab keys", () => {
     const bad = { ...ok, tabs: [ok.tabs[0], { ...ok.tabs[0] }] };
-    expect(reason(() => validateProfile(bad))).toBe("duplicate_tab");
+    expect(reason(() => validateCanvas(bad))).toBe("duplicate_tab");
   });
   it("rejects columns out of range", () => {
     const bad = { ...ok, tabs: [{ ...ok.tabs[0], columns: 99 }] };
-    expect(reason(() => validateProfile(bad))).toBe("bad_columns");
+    expect(reason(() => validateCanvas(bad))).toBe("bad_columns");
   });
   it("rejects columns below 1", () => {
     const bad = { ...ok, tabs: [{ ...ok.tabs[0], columns: 0 }] };
-    expect(reason(() => validateProfile(bad))).toBe("bad_columns");
+    expect(reason(() => validateCanvas(bad))).toBe("bad_columns");
   });
   it("rejects a non-integer column count", () => {
     const bad = { ...ok, tabs: [{ ...ok.tabs[0], columns: 4.5 }] };
-    expect(reason(() => validateProfile(bad))).toBe("bad_columns");
+    expect(reason(() => validateCanvas(bad))).toBe("bad_columns");
   });
   it("rejects a non-number column count", () => {
     const bad = { ...ok, tabs: [{ ...ok.tabs[0], columns: "12" }] };
-    expect(reason(() => validateProfile(bad))).toBe("bad_columns");
+    expect(reason(() => validateCanvas(bad))).toBe("bad_columns");
   });
   it("locates the offending tab by numeric index, never its key", () => {
     const bad = { ...ok, tabs: [ok.tabs[0], { ...ok.tabs[0], key: "second", title: "" }] };
     try {
-      validateProfile(bad);
+      validateCanvas(bad);
       throw new Error("did not throw");
     } catch (e) {
       if (!(e instanceof AppError)) throw e;
@@ -142,7 +140,7 @@ describe("validateProfile — structure", () => {
   });
 });
 
-describe("validateProfile — cards", () => {
+describe("validateCanvas — cards", () => {
   const withCards = (cards: unknown[]) => ({
     formFactor: "kds",
     capabilities: [],
@@ -154,78 +152,78 @@ describe("validateProfile — cards", () => {
       capabilities: [],
       tabs: [{ key: "t", title: "T", columns: 12, cards: "x" }],
     };
-    expect(reason(() => validateProfile(bad))).toBe("bad_tab");
+    expect(reason(() => validateCanvas(bad))).toBe("bad_tab");
   });
   it("rejects a card that is not an object", () => {
-    expect(reason(() => validateProfile(withCards([null])))).toBe("unknown_card");
+    expect(reason(() => validateCanvas(withCards([null])))).toBe("unknown_card");
   });
   it("rejects an unknown card type", () => {
     expect(
       reason(() =>
-        validateProfile(withCards([{ type: "nope", colSpan: 1, rowSpan: 1, config: {} }])),
+        validateCanvas(withCards([{ type: "nope", colSpan: 1, rowSpan: 1, config: {} }])),
       ),
     ).toBe("unknown_card");
   });
   it("rejects a colSpan wider than the tab", () => {
     expect(
       reason(() =>
-        validateProfile(withCards([{ type: "kds-board", colSpan: 13, rowSpan: 1, config: {} }])),
+        validateCanvas(withCards([{ type: "kds-board", colSpan: 13, rowSpan: 1, config: {} }])),
       ),
     ).toBe("bad_span");
   });
   it("rejects a colSpan below 1", () => {
     expect(
       reason(() =>
-        validateProfile(withCards([{ type: "kds-board", colSpan: 0, rowSpan: 1, config: {} }])),
+        validateCanvas(withCards([{ type: "kds-board", colSpan: 0, rowSpan: 1, config: {} }])),
       ),
     ).toBe("bad_span");
   });
   it("rejects a non-integer colSpan", () => {
     expect(
       reason(() =>
-        validateProfile(withCards([{ type: "kds-board", colSpan: 1.5, rowSpan: 1, config: {} }])),
+        validateCanvas(withCards([{ type: "kds-board", colSpan: 1.5, rowSpan: 1, config: {} }])),
       ),
     ).toBe("bad_span");
   });
   it("rejects a non-number colSpan", () => {
     expect(
       reason(() =>
-        validateProfile(withCards([{ type: "kds-board", colSpan: "1", rowSpan: 1, config: {} }])),
+        validateCanvas(withCards([{ type: "kds-board", colSpan: "1", rowSpan: 1, config: {} }])),
       ),
     ).toBe("bad_span");
   });
   it("rejects a rowSpan below 1", () => {
     expect(
       reason(() =>
-        validateProfile(withCards([{ type: "kds-board", colSpan: 1, rowSpan: 0, config: {} }])),
+        validateCanvas(withCards([{ type: "kds-board", colSpan: 1, rowSpan: 0, config: {} }])),
       ),
     ).toBe("bad_span");
   });
   it("rejects a non-integer rowSpan", () => {
     expect(
       reason(() =>
-        validateProfile(withCards([{ type: "kds-board", colSpan: 1, rowSpan: 2.5, config: {} }])),
+        validateCanvas(withCards([{ type: "kds-board", colSpan: 1, rowSpan: 2.5, config: {} }])),
       ),
     ).toBe("bad_span");
   });
   it("rejects a non-number rowSpan", () => {
     expect(
       reason(() =>
-        validateProfile(withCards([{ type: "kds-board", colSpan: 1, rowSpan: "1", config: {} }])),
+        validateCanvas(withCards([{ type: "kds-board", colSpan: 1, rowSpan: "1", config: {} }])),
       ),
     ).toBe("bad_span");
   });
   it("rejects a config that is not an object", () => {
     expect(
       reason(() =>
-        validateProfile(withCards([{ type: "kds-board", colSpan: 1, rowSpan: 1, config: 3 }])),
+        validateCanvas(withCards([{ type: "kds-board", colSpan: 1, rowSpan: 1, config: 3 }])),
       ),
     ).toBe("bad_config");
   });
   it("rejects a config key outside the contract", () => {
     expect(
       reason(() =>
-        validateProfile(
+        validateCanvas(
           withCards([{ type: "product-grid", colSpan: 1, rowSpan: 1, config: { nope: 1 } }]),
         ),
       ),
@@ -234,21 +232,21 @@ describe("validateProfile — cards", () => {
   it("rejects a bad config value", () => {
     expect(
       reason(() =>
-        validateProfile(
+        validateCanvas(
           withCards([{ type: "product-grid", colSpan: 1, rowSpan: 1, config: { columns: 99 } }]),
         ),
       ),
     ).toBe("bad_config");
   });
   it("accepts a valid config value", () => {
-    const p = validateProfile(
+    const p = validateCanvas(
       withCards([{ type: "product-grid", colSpan: 1, rowSpan: 1, config: { columns: 6 } }]),
     );
     expect(p.tabs[0].cards[0].config).toEqual({ columns: 6 });
   });
   it("names the offending config key, never its value", () => {
     try {
-      validateProfile(
+      validateCanvas(
         withCards([{ type: "product-grid", colSpan: 1, rowSpan: 1, config: { columns: 99 } }]),
       );
       throw new Error("did not throw");
@@ -262,7 +260,7 @@ describe("validateProfile — cards", () => {
   it("rejects visibleWhen outside the card's declared states", () => {
     expect(
       reason(() =>
-        validateProfile(
+        validateCanvas(
           withCards([
             { type: "notifications", colSpan: 1, rowSpan: 1, config: {}, visibleWhen: ["nope"] },
           ]),
@@ -273,7 +271,7 @@ describe("validateProfile — cards", () => {
   it("rejects a visibleWhen that is not an array", () => {
     expect(
       reason(() =>
-        validateProfile(
+        validateCanvas(
           withCards([
             { type: "notifications", colSpan: 1, rowSpan: 1, config: {}, visibleWhen: "unread" },
           ]),
@@ -284,7 +282,7 @@ describe("validateProfile — cards", () => {
   it("rejects a non-string visibleWhen entry", () => {
     expect(
       reason(() =>
-        validateProfile(
+        validateCanvas(
           withCards([
             { type: "notifications", colSpan: 1, rowSpan: 1, config: {}, visibleWhen: [3] },
           ]),
@@ -293,7 +291,7 @@ describe("validateProfile — cards", () => {
     ).toBe("bad_visible_when");
   });
   it("accepts a valid visibleWhen subset", () => {
-    const p = validateProfile(
+    const p = validateCanvas(
       withCards([
         { type: "notifications", colSpan: 1, rowSpan: 1, config: {}, visibleWhen: ["unread"] },
       ]),
@@ -301,13 +299,13 @@ describe("validateProfile — cards", () => {
     expect(p.tabs[0].cards[0].visibleWhen).toEqual(["unread"]);
   });
   it("omits visibleWhen on the result when absent", () => {
-    const p = validateProfile(
+    const p = validateCanvas(
       withCards([{ type: "kds-board", colSpan: 1, rowSpan: 1, config: {} }]),
     );
     expect(p.tabs[0].cards[0].visibleWhen).toBeUndefined();
   });
   it("normalises an empty visibleWhen to omitted (absent or empty ⇒ always render)", () => {
-    const p = validateProfile(
+    const p = validateCanvas(
       withCards([{ type: "notifications", colSpan: 1, rowSpan: 1, config: {}, visibleWhen: [] }]),
     );
     // Empty must NOT survive as `[]` — a renderer would misread it as "no state matches ⇒ never render".
@@ -315,7 +313,7 @@ describe("validateProfile — cards", () => {
   });
   it("copies a kept visibleWhen so the result does not alias the input", () => {
     const input = ["unread"];
-    const p = validateProfile(
+    const p = validateCanvas(
       withCards([
         { type: "notifications", colSpan: 1, rowSpan: 1, config: {}, visibleWhen: input },
       ]),
@@ -338,15 +336,15 @@ describe("validateProfile — cards", () => {
         },
       ],
     };
-    const out = validateProfile(input);
+    const out = validateCanvas(input);
     expect(out.tabs[0].cards[0].config).not.toBe(input.tabs[0].cards[0].config);
     (input.tabs[0].cards[0].config as Record<string, unknown>).columns = 999;
     expect(out.tabs[0].cards[0].config.columns).toBe(4);
   });
 });
 
-describe("validateProfile — sale-critical", () => {
-  it("rejects a till profile missing a sale-critical card", () => {
+describe("validateCanvas — sale-critical", () => {
+  it("rejects a till canvas missing a sale-critical card", () => {
     const bad = {
       formFactor: "till",
       capabilities: [],
@@ -364,7 +362,7 @@ describe("validateProfile — sale-critical", () => {
         },
       ],
     };
-    expect(reason(() => validateProfile(bad))).toBe("missing_required");
+    expect(reason(() => validateCanvas(bad))).toBe("missing_required");
   });
   it("names the missing sale-critical card", () => {
     const bad = {
@@ -384,15 +382,15 @@ describe("validateProfile — sale-critical", () => {
       ],
     };
     try {
-      validateProfile(bad);
+      validateCanvas(bad);
       throw new Error("did not throw");
     } catch (e) {
       if (!(e instanceof AppError)) throw e;
       expect(e.params.card).toBe("tender-pay");
     }
   });
-  it("allows a kds profile with none of the sale cards", () => {
-    const p = validateProfile({
+  it("allows a kds canvas with none of the sale cards", () => {
+    const p = validateCanvas({
       formFactor: "kds",
       capabilities: ["act-as-kds"],
       tabs: [
@@ -408,10 +406,10 @@ describe("validateProfile — sale-critical", () => {
   });
 });
 
-describe("validateProfile — theme", () => {
+describe("validateCanvas — theme", () => {
   it("round-trips a valid theme override", () => {
     const theme = { tokens: { "--wt-color-primary": "#123456" } };
-    const out = validateProfile({
+    const out = validateCanvas({
       formFactor: "phone-portrait",
       capabilities: [],
       tabs: [{ key: "t", title: "T", columns: 4, cards: [] }],
@@ -421,7 +419,7 @@ describe("validateProfile — theme", () => {
     expect(out.theme).not.toBe(theme); // validated copy, not the input alias
   });
   it("omits theme when absent", () => {
-    const out = validateProfile({
+    const out = validateCanvas({
       formFactor: "phone-portrait",
       capabilities: [],
       tabs: [{ key: "t", title: "T", columns: 4, cards: [] }],
@@ -430,7 +428,7 @@ describe("validateProfile — theme", () => {
   });
   it("surfaces an invalid theme as theme.invalid", () => {
     expect(() =>
-      validateProfile({
+      validateCanvas({
         formFactor: "phone-portrait",
         capabilities: [],
         tabs: [{ key: "t", title: "T", columns: 4, cards: [] }],

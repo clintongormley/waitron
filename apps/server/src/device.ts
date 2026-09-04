@@ -125,7 +125,7 @@ export function kindRequiresTill(kind: DeviceKind): boolean {
 }
 
 /**
- * Derive a layout FORM FACTOR from a device KIND for the profile fallback (SP-B1). A device row
+ * Derive a layout FORM FACTOR from a device KIND for the canvas fallback (SP-B1). A device row
  * carries only `kind` (`packages/db/src/schema/devices.ts`), never a form factor, so the mapping is
  * fixed here beside the other "what a device kind implies" predicates. `handheld` → `phone-portrait`:
  * the codebase treats a handheld as a phone (the phone shell in `till-app`, and `device-session.ts`'s
@@ -150,16 +150,16 @@ const FOREIGN_KEY_VIOLATION = "23503";
 /**
  * The device-binding composite FKs and the input FIELD each guards — a 23503 on one means a supplied
  * binding id names no row of THIS tenant. Three are on `device_pairing_codes` (mint time, migration
- * 0095); `devices_layout_profile_fk` is the twin on the `devices` table itself (also 0095), tripped when
- * an already-enrolled device is REASSIGNED to a layout profile that no row of this tenant matches — the
- * composite `(tenant_id, layout_profile_id)` makes that check both tenant-isolated and atomic with the
- * UPDATE (no read-then-write race), so `assign-profile` translates it here rather than pre-checking.
+ * 0095); `devices_canvas_fk` is the twin on the `devices` table itself (also 0095), tripped when
+ * an already-enrolled device is REASSIGNED to a canvas that no row of this tenant matches — the
+ * composite `(tenant_id, canvas_id)` makes that check both tenant-isolated and atomic with the
+ * UPDATE (no read-then-write race), so `assign-canvas` translates it here rather than pre-checking.
  */
-const BINDING_FK_FIELD: Record<string, "tillId" | "receiptPrinterId" | "layoutProfileId"> = {
+const BINDING_FK_FIELD: Record<string, "tillId" | "receiptPrinterId" | "canvasId"> = {
   device_pairing_codes_till_fk: "tillId",
   device_pairing_codes_receipt_printer_fk: "receiptPrinterId",
-  device_pairing_codes_layout_profile_fk: "layoutProfileId",
-  devices_layout_profile_fk: "layoutProfileId",
+  device_pairing_codes_canvas_fk: "canvasId",
+  devices_canvas_fk: "canvasId",
 };
 
 /**
@@ -176,7 +176,7 @@ const BINDING_FK_FIELD: Record<string, "tillId" | "receiptPrinterId" | "layoutPr
  */
 export function bindingFkField(
   error: unknown,
-): "tillId" | "receiptPrinterId" | "layoutProfileId" | undefined {
+): "tillId" | "receiptPrinterId" | "canvasId" | undefined {
   const constraint = pgErrorConstraint(error, FOREIGN_KEY_VIOLATION);
   return constraint === undefined ? undefined : BINDING_FK_FIELD[constraint];
 }
@@ -192,8 +192,8 @@ export function bindingFkField(
  *
  * A SALE-CAPABLE kind ({@link kindRequiresTill}: `till`/`handheld`) additionally REQUIRES a `till_id`
  * and a `kds_station` forbids one — `device.till_required` either way, also BEFORE any write (SP-A.2
- * §16.4). The optional profile/till/hardware bindings are stamped on the code (and thence the device);
- * a non-null `till_id`/`layout_profile_id`/`receipt_printer_id` naming no row of this tenant trips its
+ * §16.4). The optional canvas/till/hardware bindings are stamped on the code (and thence the device);
+ * a non-null `till_id`/`canvas_id`/`receipt_printer_id` naming no row of this tenant trips its
  * composite FK (0095), translated from 23503 to `device.binding_invalid` naming the field. Stores the
  * code's SHA-256 (never the plaintext) plus the kind/station/label/bindings to stamp on the enrolled
  * device, and returns the plaintext code ONCE for the operator to read into the pairing screen.
@@ -207,11 +207,11 @@ export async function generatePairingCode(
     label: string;
     // The device BINDINGS to stamp on the enrolled device (SP-A.2 §16). All optional: an existing caller
     // (a kds_station / handheld mint) omits them, so they default here. `tillId` — the `tills` row a
-    // sale-capable device rings against (§16.4), gated per-kind below. `layoutProfileId` — the assigned
-    // layout profile (§16.3). The hardware trio (`receiptPrinterId` / `hasCashDrawer` / `cardProvider` /
+    // sale-capable device rings against (§16.4), gated per-kind below. `canvasId` — the assigned
+    // canvas (§16.3). The hardware trio (`receiptPrinterId` / `hasCashDrawer` / `cardProvider` /
     // `cardReaderId`) — the static hardware binding (§16.3); credentials stay in the vault, never here.
     tillId?: string | null;
-    layoutProfileId?: string | null;
+    canvasId?: string | null;
     receiptPrinterId?: string | null;
     hasCashDrawer?: boolean;
     cardProvider?: string;
@@ -263,10 +263,10 @@ export async function generatePairingCode(
       // The bindings to stamp on the enrolled device (SP-A.2 §16). Each optional input defaults here so
       // an existing kds_station/handheld mint that omits them is unchanged (`has_cash_drawer` false,
       // `card_provider` 'none' — the column defaults, applied explicitly so the code row is deterministic
-      // rather than relying on the DB default). A NULL till/profile/printer trips no composite FK (MATCH
+      // rather than relying on the DB default). A NULL till/canvas/printer trips no composite FK (MATCH
       // SIMPLE); a non-null one that names no row of this tenant raises 23503, translated below.
       tillId,
-      layoutProfileId: input.layoutProfileId ?? null,
+      canvasId: input.canvasId ?? null,
       receiptPrinterId: input.receiptPrinterId ?? null,
       hasCashDrawer: input.hasCashDrawer ?? false,
       cardProvider: input.cardProvider ?? "none",
@@ -289,7 +289,7 @@ export async function generatePairingCode(
     if (isUniqueViolation(error)) {
       throw new AppError("device.pairing_code_unavailable", {});
     }
-    // A 23503 on a device-binding composite FK (migration 0095) means a supplied till/printer/profile id
+    // A 23503 on a device-binding composite FK (migration 0095) means a supplied till/printer/canvas id
     // names no row of THIS tenant — translated to `device.binding_invalid` naming the FIELD (never the
     // offending id), the `isZoneFkViolation` idiom (tables.ts). `bindingFkField` reads the CONSTRAINT
     // NAME, so a NULL binding (which trips no FK — MATCH SIMPLE) never reaches this and a 23503 on any
@@ -320,7 +320,7 @@ export async function generatePairingCode(
  *     its scrypt hash (`hashSecret`, @waitron/identity) — the plaintext lives ONLY in the returned value
  *     the route puts in the cookie, never at rest.
  *
- * Returns the enrolled device's id + the kind/station/label AND the profile/till/hardware bindings it
+ * Returns the enrolled device's id + the kind/station/label AND the canvas/till/hardware bindings it
  * was minted with (SP-A.2 §16, all copied verbatim onto the `devices` row) + the raw token.
  */
 export async function enrolDevice(
@@ -334,7 +334,7 @@ export async function enrolDevice(
   label: string;
   token: string;
   tillId: string | null;
-  layoutProfileId: string | null;
+  canvasId: string | null;
   receiptPrinterId: string | null;
   hasCashDrawer: boolean;
   cardProvider: string;
@@ -361,10 +361,10 @@ export async function enrolDevice(
       stationId: devicePairingCodes.stationId,
       label: devicePairingCodes.label,
       locationId: devicePairingCodes.locationId,
-      // The profile/till/hardware bindings to copy verbatim onto the enrolled `devices` row (SP-A.2
+      // The canvas/till/hardware bindings to copy verbatim onto the enrolled `devices` row (SP-A.2
       // §16) — fixed at mint time, so read back here rather than re-derived.
       tillId: devicePairingCodes.tillId,
-      layoutProfileId: devicePairingCodes.layoutProfileId,
+      canvasId: devicePairingCodes.canvasId,
       receiptPrinterId: devicePairingCodes.receiptPrinterId,
       hasCashDrawer: devicePairingCodes.hasCashDrawer,
       cardProvider: devicePairingCodes.cardProvider,
@@ -386,9 +386,9 @@ export async function enrolDevice(
       label: row.label,
       // Copy the code's bindings onto the device verbatim (SP-A.2 §16). The composite FKs already held
       // at the code INSERT, so re-stamping the same (tenant, id) pairs here cannot trip them; the
-      // `till`/`profile`/`printer` composite FKs on `devices` (0095) are the durable integrity backstop.
+      // `till`/`canvas`/`printer` composite FKs on `devices` (0095) are the durable integrity backstop.
       tillId: row.tillId,
-      layoutProfileId: row.layoutProfileId,
+      canvasId: row.canvasId,
       receiptPrinterId: row.receiptPrinterId,
       hasCashDrawer: row.hasCashDrawer,
       cardProvider: row.cardProvider,
@@ -404,7 +404,7 @@ export async function enrolDevice(
     label: row.label,
     token,
     tillId: row.tillId,
-    layoutProfileId: row.layoutProfileId,
+    canvasId: row.canvasId,
     receiptPrinterId: row.receiptPrinterId,
     hasCashDrawer: row.hasCashDrawer,
     cardProvider: row.cardProvider,

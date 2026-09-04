@@ -33,4 +33,10 @@
 
   --wt-focus-ring: 2px solid var(--wt-color-focus);
   --wt-focus-offset: 2px;
+
+  /* The SELECTED-state ring (distinct from focus): the marker on a chosen item, e.g. the canvas
+     editor's selected card tile. Composite ring + offset, mirroring --wt-focus-ring; inset (negative
+     offset) so it sits inside the tile's border rather than growing its footprint. */
+  --wt-selected-ring: 2px solid var(--wt-color-primary);
+  --wt-selected-ring-offset: -2px;
 }

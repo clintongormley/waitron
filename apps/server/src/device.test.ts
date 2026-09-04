@@ -269,10 +269,10 @@ describe("bindingFkField", () => {
   it("maps each device-binding composite FK's constraint name to its input field", () => {
     expect(bindingFkField(fk("device_pairing_codes_till_fk"))).toBe("tillId");
     expect(bindingFkField(fk("device_pairing_codes_receipt_printer_fk"))).toBe("receiptPrinterId");
-    expect(bindingFkField(fk("device_pairing_codes_layout_profile_fk"))).toBe("layoutProfileId");
+    expect(bindingFkField(fk("device_pairing_codes_canvas_fk"))).toBe("canvasId");
     // The twin FK on the `devices` table itself — tripped when an enrolled device is REASSIGNED to a
-    // layout profile that names no row of this tenant (SP-B3.1's assign-profile route).
-    expect(bindingFkField(fk("devices_layout_profile_fk"))).toBe("layoutProfileId");
+    // layout canvas that names no row of this tenant (SP-B3.1's assign-canvas route).
+    expect(bindingFkField(fk("devices_canvas_fk"))).toBe("canvasId");
   });
 
   it("finds the 23503 wrapped in a DrizzleQueryError-style cause chain", () => {

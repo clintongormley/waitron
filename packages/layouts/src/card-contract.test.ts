@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CARD_TYPES } from "./profile.js";
+import { CARD_TYPES } from "./canvas.js";
 import { CARD_CONTRACTS, SALE_CRITICAL_CARDS } from "./card-contract.js";
 
 describe("card-contract registry", () => {

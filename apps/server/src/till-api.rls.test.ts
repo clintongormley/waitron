@@ -25,7 +25,7 @@ import {
   tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
-import { DEFAULT_PROFILES } from "@waitron/layouts";
+import { DEFAULT_CANVASES } from "@waitron/layouts";
 import { MANUAL_PROVIDER } from "@waitron/payments";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
@@ -249,22 +249,19 @@ function apiDepsWithCardProvider(
  * return the `waitron_device=<id>.<token>` cookie a booting till device carries. SP-A.2 cutover: a sale
  * route now resolves `till_id` from THIS device (`requireSaleTillId`), so the device's till IS the venue
  * till and every sale's fiscal record is byte-identical to the pre-cutover env-till (the same `till_id`,
- * and `nodeId`/`seriesId` still come from cfg). An optional `layoutProfileId` binds a stored profile —
+ * and `nodeId`/`seriesId` still come from cfg). An optional `canvasId` binds a stored canvas —
  * the `/api/pay` tests need one declaring `integrated-card-payment` so `assertDeviceCapability` passes.
  * The mint→redeem runs on the app role under the tenant (the production enrol path), so the scrypt hash
  * actually verifies and `tryReadDevice` resolves a genuine binding rather than a miss.
  */
-async function enrolTillCookie(
-  cfg: TillConfig,
-  layoutProfileId: string | null = null,
-): Promise<string> {
+async function enrolTillCookie(cfg: TillConfig, canvasId: string | null = null): Promise<string> {
   const { code } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
     return generatePairingCode(tx, cfg, {
       kind: "till",
       stationId: null,
       tillId: cfg.tillId,
-      layoutProfileId,
+      canvasId,
       label: "Counter till",
     });
   });
@@ -275,13 +272,13 @@ async function enrolTillCookie(
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
 
-/** Insert a stored `till` layout profile (its capabilities include `integrated-card-payment` and
+/** Insert a stored `till` layout canvas (its capabilities include `integrated-card-payment` and
  *  `open-cash-drawer`) for the tenant and return its id, so a pay-capable till device can bind it — the
- *  same direct `layout_profiles` insert the capability-firewall test below uses. */
-async function createTillProfile(cfg: TillConfig): Promise<string> {
+ *  same direct `canvases` insert the capability-firewall test below uses. */
+async function createTillCanvas(cfg: TillConfig): Promise<string> {
   const prof = await suite.admin.execute<{ id: string }>(sql`
-    insert into layout_profiles (tenant_id, name, definition)
-    values (${cfg.tenantId}, 'Counter till', ${JSON.stringify(DEFAULT_PROFILES.till)}::jsonb)
+    insert into canvases (tenant_id, name, definition)
+    values (${cfg.tenantId}, 'Counter till', ${JSON.stringify(DEFAULT_CANVASES.till)}::jsonb)
     returning id`);
   return prof.rows[0]!.id;
 }
@@ -727,8 +724,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
 
       // SP-A.2 cutover: /api/pay resolves its till from the enrolled device AND runs the
       // integrated-card-payment capability firewall, so this device carries the venue's own till (so the
-      // filed record is unchanged) AND a stored `till` profile declaring that capability.
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      // filed record is unchanged) AND a stored `till` canvas declaring that capability.
+      const deviceCookie = await enrolTillCookie(cfg, await createTillCanvas(cfg));
 
       const workingOrderId = randomUUID();
       const payRes = await app.request("/api/pay", {
@@ -781,8 +778,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       });
       const cookie = login.headers.get("set-cookie")!;
 
-      // SP-A.2 cutover: an enrolled till device with a capability-bearing profile (see the capture test).
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      // SP-A.2 cutover: an enrolled till device with a capability-bearing canvas (see the capture test).
+      const deviceCookie = await enrolTillCookie(cfg, await createTillCanvas(cfg));
 
       const workingOrderId = randomUUID();
       const payRes = await app.request("/api/pay", {
@@ -831,8 +828,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const cookie = login.headers.get("set-cookie")!;
 
       // SP-A.2 cutover: the empty-basket fault is a genuine 400 AFTER the device gate + capability
-      // firewall pass, so this device carries the venue's till and a capability-bearing profile too.
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      // firewall pass, so this device carries the venue's till and a capability-bearing canvas too.
+      const deviceCookie = await enrolTillCookie(cfg, await createTillCanvas(cfg));
       const payRes = await app.request("/api/pay", {
         method: "POST",
         headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
@@ -1466,30 +1463,30 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
   );
 
   // SP-A.2 §16 (Task 14): the handheld firewall on `/api/pay` and `/api/drawer/open` is now the
-  // GENERALISED capability firewall — a device is refused unless its ASSIGNED profile declares the
+  // GENERALISED capability firewall — a device is refused unless its ASSIGNED canvas declares the
   // required flag, not merely because its kind is `handheld`. This drives the capability path directly:
-  // a device carrying the phone-portrait default profile (`capabilities: []`) is refused `/api/pay`
+  // a device carrying the phone-portrait default canvas (`capabilities: []`) is refused `/api/pay`
   // even though its kind is not consulted. Prove-by-deletion: remove
   // `assertDeviceCapability(deps, c, "integrated-card-payment", "pay")` from `/api/pay` and this request
   // proceeds past the fence (a `card.*`/id error, never the 403 the fence exists to raise).
-  it("refuses /api/pay from a device whose assigned profile LACKS integrated-card-payment (403 device.forbidden_action)", async () => {
+  it("refuses /api/pay from a device whose assigned canvas LACKS integrated-card-payment (403 device.forbidden_action)", async () => {
     const { cfg, operatorId } = await setupVenue();
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
 
-    // Author a capability-less profile (phone-portrait default) and enrol a device bound to it.
+    // Author a capability-less canvas (phone-portrait default) and enrol a device bound to it.
     const prof = await suite.admin.execute<{ id: string }>(sql`
-      insert into layout_profiles (tenant_id, name, definition)
-      values (${cfg.tenantId}, 'Waiter phone', ${JSON.stringify(DEFAULT_PROFILES["phone-portrait"])}::jsonb)
+      insert into canvases (tenant_id, name, definition)
+      values (${cfg.tenantId}, 'Waiter phone', ${JSON.stringify(DEFAULT_CANVASES["phone-portrait"])}::jsonb)
       returning id`);
-    const layoutProfileId = prof.rows[0]!.id;
+    const canvasId = prof.rows[0]!.id;
     const { code } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
       return generatePairingCode(tx, cfg, {
         kind: "handheld",
         stationId: null,
         tillId: cfg.tillId,
-        layoutProfileId,
+        canvasId,
         label: "Waiter phone",
       });
     });

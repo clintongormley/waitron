@@ -37,16 +37,16 @@ import {
   type PersonRoleValue,
 } from "@waitron/identity";
 import {
-  createProfile,
-  deleteProfile,
+  createCanvas,
+  deleteCanvas,
   getLayout,
-  getProfile,
+  getCanvas,
   getTenantTheme,
-  listProfiles,
+  listCanvases,
   putLayout,
   putReceipt,
   putTenantTheme,
-  updateProfile,
+  updateCanvas,
 } from "@waitron/layouts";
 import {
   clearPlacement,
@@ -210,16 +210,16 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // covers them, but they are listed explicitly as the house style requires (see this map's doc).
   "layout.invalid": 400,
   "receipt.invalid": 400,
-  // Layout-profile CRUD + tenant theme (Task 11). A GET-by-id (or a malformed id screened to it by
-  // `requireProfileId`) that names no profile the tenant owns → 404 (`profile.not_found`); a duplicate
-  // profile name collides on the `(tenant, name)` unique, translated from 23505 by `profile-store.ts`
-  // → 409 (`profile.name_taken`), the same conflict shape a taken station/zone name has. An invalid
-  // `definition`/`theme` payload is refused by the store's validator → 400 (`profile.invalid` /
+  // Canvas CRUD + tenant theme (Task 11). A GET-by-id (or a malformed id screened to it by
+  // `requireCanvasId`) that names no canvas the tenant owns → 404 (`canvas.not_found`); a duplicate
+  // canvas name collides on the `(tenant, name)` unique, translated from 23505 by `canvas-store.ts`
+  // → 409 (`canvas.name_taken`), the same conflict shape a taken station/zone name has. An invalid
+  // `definition`/`theme` payload is refused by the store's validator → 400 (`canvas.invalid` /
   // `theme.invalid`), the same family as the layout/receipt validation faults above. The `?? 400`
   // default already covers the two 400s, but they are listed explicitly as the house style requires.
-  "profile.not_found": 404,
-  "profile.name_taken": 409,
-  "profile.invalid": 400,
+  "canvas.not_found": 404,
+  "canvas.name_taken": 409,
+  "canvas.invalid": 400,
   "theme.invalid": 400,
   "shared.invalid_id": 400,
   // Service-status config CRUD (TS-2). An unknown status id (or a malformed one screened to it at the
@@ -349,15 +349,15 @@ function requireCourseId(id: string): string {
 }
 
 /**
- * Screen a `/management-api/profiles/:id` path param as a UUID, returning it. A malformed id passed
- * into a `uuid` column would `22P02` → an opaque 500, so refusing it here as `profile.not_found` turns
+ * Screen a `/management-api/canvases/:id` path param as a UUID, returning it. A malformed id passed
+ * into a `uuid` column would `22P02` → an opaque 500, so refusing it here as `canvas.not_found` turns
  * that 500 into a clean 404 — the same screen the sibling `require*Id` helpers apply. UNLIKE those
- * siblings it echoes NO id: `profile.not_found` carries no params by design (errors.ts), so a
+ * siblings it echoes NO id: `canvas.not_found` carries no params by design (errors.ts), so a
  * well-formed-but-absent id (the GET-by-id 404 below) and a malformed one give the identical 404 body.
- * Shared by the GET, PUT and DELETE `:id` profile routes.
+ * Shared by the GET, PUT and DELETE `:id` canvas routes.
  */
-function requireProfileId(id: string): string {
-  if (!isUuid(id)) throw new AppError("profile.not_found", {});
+function requireCanvasId(id: string): string {
+  if (!isUuid(id)) throw new AppError("canvas.not_found", {});
   return id;
 }
 
@@ -879,58 +879,58 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // ── Layout profiles + tenant theme (Task 11) ──────────────────────────────────────────────────────
-  // The dashboard's reusable-layout-profile CRUD and the tenant's base theme (design §4/§9, SP-A.2
+  // ── Canvases + tenant theme (Task 11) ──────────────────────────────────────────────────────
+  // The dashboard's reusable-canvas CRUD and the tenant's base theme (design §4/§9, SP-A.2
   // §16.3). All routes are gated (`requireManagementSession` first, 401 before any DB work) and every
-  // DB touch runs `withTenant` + `asAppUser`, so RLS scopes the profile/theme rows and the authorize
-  // gate to this dashboard's own tenant. The READS (`GET /profiles`, `/profiles/:id`, `/theme`) carry
-  // their own explicit `authorizeManager(..., "till.configure")` — `listProfiles`/`getProfile`/
+  // DB touch runs `withTenant` + `asAppUser`, so RLS scopes the canvas/theme rows and the authorize
+  // gate to this dashboard's own tenant. The READS (`GET /canvases`, `/canvases/:id`, `/theme`) carry
+  // their own explicit `authorizeManager(..., "till.configure")` — `listCanvases`/`getCanvas`/
   // `getTenantTheme` do NOT self-authorize (mirroring `GET /management-api/layout`) — while the WRITES
-  // delegate the gate to the store fns (`createProfile`/`updateProfile`/`deleteProfile`/`putTenantTheme`,
+  // delegate the gate to the store fns (`createCanvas`/`updateCanvas`/`deleteCanvas`/`putTenantTheme`,
   // proven by-deletion in the store rls suites). A malformed body field is refused as
   // `management.request_invalid` naming the FIELD before the store call, the layout/receipt shape.
 
-  // The tenant's profiles, for the editor list. Gated on `till.configure` via the explicit
-  // `authorizeManager` (the read fns do not gate). Returns `{ profiles: [{id,name,definition}] }`.
-  app.get("/management-api/profiles", (c) =>
+  // The tenant's canvases, for the editor list. Gated on `till.configure` via the explicit
+  // `authorizeManager` (the read fns do not gate). Returns `{ canvases: [{id,name,definition}] }`.
+  app.get("/management-api/canvases", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const profiles = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const canvases = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "till.configure",
         });
-        return listProfiles(tx, deps.cfg.tenantId);
+        return listCanvases(tx, deps.cfg.tenantId);
       });
-      return c.json({ profiles });
+      return c.json({ canvases });
     }),
   );
 
-  // One profile by id, or 404 `profile.not_found`. `:id` screened by `requireProfileId` (malformed →
+  // One canvas by id, or 404 `canvas.not_found`. `:id` screened by `requireCanvasId` (malformed →
   // the same 404). Gated on `till.configure` via the explicit `authorizeManager`.
-  app.get("/management-api/profiles/:id", (c) =>
+  app.get("/management-api/canvases/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const id = requireProfileId(c.req.param("id"));
-      const profile = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const id = requireCanvasId(c.req.param("id"));
+      const canvas = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "till.configure",
         });
-        return getProfile(tx, deps.cfg.tenantId, id);
+        return getCanvas(tx, deps.cfg.tenantId, id);
       });
-      if (profile === undefined) throw new AppError("profile.not_found", {});
-      return c.json(profile);
+      if (canvas === undefined) throw new AppError("canvas.not_found", {});
+      return c.json(canvas);
     }),
   );
 
-  // Create a profile. Body { name, definition }; a non-object body or a non-string `name` or an absent
-  // `definition` → `management.request_invalid` naming the FIELD; `createProfile` then enforces
-  // `till.configure`, validates the definition (400 `profile.invalid`) and translates a duplicate name
-  // to 409 `profile.name_taken`. Returns the new id at 201, matching every other create route.
-  app.post("/management-api/profiles", (c) =>
+  // Create a canvas. Body { name, definition }; a non-object body or a non-string `name` or an absent
+  // `definition` → `management.request_invalid` naming the FIELD; `createCanvas` then enforces
+  // `till.configure`, validates the definition (400 `canvas.invalid`) and translates a duplicate name
+  // to 409 `canvas.name_taken`. Returns the new id at 201, matching every other create route.
+  app.post("/management-api/canvases", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<{ name?: unknown; definition?: unknown }>(c);
@@ -949,7 +949,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const { name, definition } = body;
       const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
-        return createProfile(tx, {
+        return createCanvas(tx, {
           managementSessionId: sessionId,
           tenantId: deps.cfg.tenantId,
           name,
@@ -960,15 +960,15 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Replace a profile's name + definition. Same body-screen as POST; `updateProfile` enforces
-  // `till.configure`, validates (400 `profile.invalid`) and maps a duplicate name to 409. An absent id
-  // (matched zero rows via `.returning`) → 404 `profile.not_found`, the by-id config-CRUD idiom the
-  // sibling zone/table/status verbs use — so a PUT to a since-deleted profile is a 404, not a masked
+  // Replace a canvas's name + definition. Same body-screen as POST; `updateCanvas` enforces
+  // `till.configure`, validates (400 `canvas.invalid`) and maps a duplicate name to 409. An absent id
+  // (matched zero rows via `.returning`) → 404 `canvas.not_found`, the by-id config-CRUD idiom the
+  // sibling zone/table/status verbs use — so a PUT to a since-deleted canvas is a 404, not a masked
   // "saved" 204. → 204 on success.
-  app.put("/management-api/profiles/:id", (c) =>
+  app.put("/management-api/canvases/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const id = requireProfileId(c.req.param("id"));
+      const id = requireCanvasId(c.req.param("id"));
       const body = await readJsonBody<{ name?: unknown; definition?: unknown }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
@@ -982,7 +982,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const { name, definition } = body;
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
-        await updateProfile(tx, {
+        await updateCanvas(tx, {
           managementSessionId: sessionId,
           tenantId: deps.cfg.tenantId,
           id,
@@ -994,16 +994,16 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Delete a profile. `:id` screened by `requireProfileId`; `deleteProfile` enforces `till.configure`.
-  // An absent id (matched zero rows via `.returning`) → 404 `profile.not_found`, mirroring the
+  // Delete a canvas. `:id` screened by `requireCanvasId`; `deleteCanvas` enforces `till.configure`.
+  // An absent id (matched zero rows via `.returning`) → 404 `canvas.not_found`, mirroring the
   // deactivate* sibling verbs. → 204 on success.
-  app.delete("/management-api/profiles/:id", (c) =>
+  app.delete("/management-api/canvases/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const id = requireProfileId(c.req.param("id"));
+      const id = requireCanvasId(c.req.param("id"));
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
-        await deleteProfile(tx, {
+        await deleteCanvas(tx, {
           managementSessionId: sessionId,
           tenantId: deps.cfg.tenantId,
           id,
