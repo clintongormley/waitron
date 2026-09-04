@@ -13,10 +13,12 @@ import {
   FORM_FACTORS as SRC_FF,
 } from "@waitron/layouts/src/canvas.js";
 import { MAX_TAB_TITLE_LENGTH as SRC_TITLE } from "@waitron/layouts/src/validate-canvas.js";
+import { DEFAULT_CANVASES as SRC_DEF } from "@waitron/layouts/src/default-canvases.js";
 import {
   CARD_CONTRACTS,
   CARD_TYPES,
   CAPABILITY_FLAGS,
+  DEFAULT_CANVASES,
   FORM_FACTORS,
   GRID_MAX_COLUMNS,
   MAX_TAB_TITLE_LENGTH,
@@ -45,5 +47,9 @@ describe("card-contracts mirror parity", () => {
       expect(mirror.saleCritical).toBe(src.saleCritical);
       expect([...mirror.configFields].sort()).toEqual(Object.keys(src.configSchema).sort());
     }
+  });
+
+  it("mirrors the built-in default canvases (one profile per form factor)", () => {
+    expect(DEFAULT_CANVASES).toEqual(SRC_DEF);
   });
 });

@@ -159,3 +159,92 @@ export interface CanvasDef {
   capabilities: CapabilityFlag[];
   theme?: { tokens: Record<string, string> };
 }
+
+// The built-in default canvases (design §4.3) — a dashboard-LOCAL copy of
+// `packages/layouts/src/default-canvases.ts`, one profile per form factor, that a NEW canvas seeds
+// from (`structuredClone(DEFAULT_CANVASES[ff])`) when the operator picks a form factor in the Crear
+// dialog. It lives here rather than being runtime-imported for the same reason the rest of this file
+// does — `@waitron/layouts`' barrel drags `@waitron/db` into the browser bundle — and is kept honest
+// by card-contracts.parity.test.ts, which deep-imports the pure source and asserts deep equality.
+const TILL: CanvasDef = {
+  formFactor: "till",
+  capabilities: ["integrated-card-payment", "open-cash-drawer"],
+  tabs: [
+    {
+      key: "counter",
+      title: "Counter",
+      columns: 12,
+      cards: [
+        { type: "product-grid", colSpan: 8, rowSpan: 6, config: {} },
+        { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
+        { type: "total", colSpan: 4, rowSpan: 1, config: {} },
+        { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
+        { type: "held-orders", colSpan: 8, rowSpan: 2, config: {}, visibleWhen: ["has-parked"] },
+      ],
+    },
+    {
+      key: "floor",
+      title: "Floor",
+      columns: 24,
+      cards: [{ type: "floor-plan", colSpan: 24, rowSpan: 12, config: {} }],
+    },
+  ],
+};
+
+const PHONE: CanvasDef = {
+  formFactor: "phone-portrait",
+  capabilities: [],
+  tabs: [
+    {
+      key: "floor",
+      title: "Floor",
+      columns: 4,
+      cards: [{ type: "floor-plan", colSpan: 4, rowSpan: 12, config: {} }],
+    },
+    {
+      key: "order",
+      title: "Order",
+      columns: 4,
+      cards: [{ type: "table-order", colSpan: 4, rowSpan: 12, config: {} }],
+    },
+  ],
+};
+
+const TABLET: CanvasDef = {
+  formFactor: "tablet-landscape",
+  capabilities: [],
+  tabs: [
+    {
+      key: "floor",
+      title: "Floor",
+      columns: 12,
+      cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 12, config: {} }],
+    },
+    {
+      key: "order",
+      title: "Order",
+      columns: 12,
+      cards: [{ type: "table-order", colSpan: 12, rowSpan: 12, config: {} }],
+    },
+  ],
+};
+
+const KDS: CanvasDef = {
+  formFactor: "kds",
+  capabilities: ["act-as-kds"],
+  tabs: [
+    {
+      key: "kitchen",
+      title: "Kitchen",
+      columns: 24,
+      cards: [{ type: "kds-board", colSpan: 24, rowSpan: 12, config: {} }],
+    },
+  ],
+};
+
+export const DEFAULT_CANVASES: Record<FormFactor, CanvasDef> = {
+  till: TILL,
+  "phone-portrait": PHONE,
+  "tablet-landscape": TABLET,
+  kds: KDS,
+};
