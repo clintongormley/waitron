@@ -20,8 +20,9 @@ export function standingOf(
  * singletons). An `undefined` standing — a node ABSENT from the chart — is NOT fenced: promotion's
  * `nextStandings` preserves every node and demotes the outgoing primary to `sell-only` rather than
  * dropping it (standings.ts), so a node that was ever in the chart stays in it; fencing an unnamed
- * node on an incomplete chart would be the wrong direction. R1 recognises `evicted` defensively
- * though nothing produces it yet — eviction is a later round.
+ * node on an incomplete chart would be the wrong direction. `evicted` is produced by `evictNode`
+ * (standings.ts), the retire/evict decommission path, once a fenced `sell-only` node has fully
+ * drained its replication tail.
  */
 export function isFencedStanding(standing: NodeStanding | undefined): boolean {
   return standing === "sell-only" || standing === "evicted";

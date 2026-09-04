@@ -21,3 +21,18 @@ export function nextStandings(
   }
   return next;
 }
+
+/**
+ * The new org chart after a node is decommissioned (design §3, §6): the node whose nodeId is named is
+ * marked `evicted`, and every other node is left exactly as it was (contactUrl preserved) — the same
+ * "preserve everyone else" discipline `nextStandings` follows. This is the eviction producer for the
+ * retire/evict decommission path, minting the `sell-only → evicted` transition once a fenced node has
+ * fully drained its replication tail. Unlike `nextStandings` it NEVER appends a missing node: you
+ * cannot evict a node that is not already a member, so a nodeId not in the list yields an unchanged
+ * copy. Returns a new array and never mutates the input.
+ */
+export function evictNode(current: readonly MembershipNode[], nodeId: string): MembershipNode[] {
+  return current.map((n): MembershipNode =>
+    n.nodeId === nodeId ? { ...n, standing: "evicted" } : n,
+  );
+}

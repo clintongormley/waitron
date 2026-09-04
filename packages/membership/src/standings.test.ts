@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextStandings } from "./standings.js";
+import { evictNode, nextStandings } from "./standings.js";
 import type { MembershipNode } from "./types.js";
 
 const self = "11111111-1111-1111-1111-111111111111";
@@ -54,5 +54,54 @@ describe("nextStandings", () => {
     expect(nextStandings([], self)).toEqual([
       { nodeId: self, contactUrl: "", standing: "serving-primary" },
     ]);
+  });
+});
+
+const third = "33333333-3333-3333-3333-333333333333";
+
+describe("evictNode", () => {
+  it("marks the named node evicted and leaves the primary and secondary exactly as they were", () => {
+    const current: MembershipNode[] = [
+      { nodeId: self, contactUrl: "https://primary", standing: "serving-primary" },
+      { nodeId: other, contactUrl: "https://secondary", standing: "serving-secondary" },
+      { nodeId: third, contactUrl: "https://drained", standing: "sell-only" },
+    ];
+    expect(evictNode(current, third)).toEqual([
+      { nodeId: self, contactUrl: "https://primary", standing: "serving-primary" },
+      { nodeId: other, contactUrl: "https://secondary", standing: "serving-secondary" },
+      { nodeId: third, contactUrl: "https://drained", standing: "evicted" },
+    ]);
+  });
+
+  it("leaves a node that is already evicted evicted (idempotent)", () => {
+    const current: MembershipNode[] = [
+      { nodeId: self, contactUrl: "https://primary", standing: "serving-primary" },
+      { nodeId: other, contactUrl: "https://gone", standing: "evicted" },
+    ];
+    expect(evictNode(current, other)).toEqual([
+      { nodeId: self, contactUrl: "https://primary", standing: "serving-primary" },
+      { nodeId: other, contactUrl: "https://gone", standing: "evicted" },
+    ]);
+  });
+
+  it("returns the list unchanged when the nodeId is not present (never appends)", () => {
+    const current: MembershipNode[] = [
+      { nodeId: self, contactUrl: "https://primary", standing: "serving-primary" },
+      { nodeId: other, contactUrl: "https://secondary", standing: "serving-secondary" },
+    ];
+    expect(evictNode(current, third)).toEqual(current);
+  });
+
+  it("does not mutate the input array or its node objects", () => {
+    const current: MembershipNode[] = [
+      { nodeId: self, contactUrl: "https://primary", standing: "serving-primary" },
+      { nodeId: other, contactUrl: "https://drained", standing: "sell-only" },
+    ];
+    const snapshot: MembershipNode[] = [
+      { nodeId: self, contactUrl: "https://primary", standing: "serving-primary" },
+      { nodeId: other, contactUrl: "https://drained", standing: "sell-only" },
+    ];
+    evictNode(current, other);
+    expect(current).toEqual(snapshot);
   });
 });
