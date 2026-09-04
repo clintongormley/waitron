@@ -863,9 +863,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       await db.close();
       throw error;
     }
-    // The write touched only singleton_role (mode is untouched) and fail-throws on a 0-row update, so on
-    // the success path the reconciled axes are already known — synthesize them rather than re-read.
-    axes = { ...axes, singletonRole: "secondary" };
+    // Re-read rather than synthesize `{ ...axes, singletonRole: "secondary" }`: the demote wrote only
+    // singleton_role, but re-reading takes BOTH axes from one fresh MVCC snapshot of the current row, so
+    // `mode` cannot be stale if another owner action flipped `deployment.mode` in the window since the
+    // initial read (the torn-pair / concurrent-promotion risk readDeploymentAxes's own contract describes).
+    // One extra query on the rare fenced path, bought for that freshness (Copilot #214 re-review).
+    axes = await readDeploymentAxes(db);
   }
   const holders = createDeploymentHolders(axes.mode, axes.singletonRole);
   const isMirror = holders.mode.current === "mirror";
