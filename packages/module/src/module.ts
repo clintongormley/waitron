@@ -8,7 +8,9 @@ import type { MigrationSet } from "@waitron/migrations";
  * slices) by mapping over that list.
  */
 export interface WaitronModule {
-  /** Stable id; equals the migration-set name and the drizzle table suffix. */
+  /** Stable id; equals the migration-set name (`migrations.name`). NOT the drizzle table suffix —
+   * that is `migrations.table`, usually `__drizzle_migrations_<name>` but not always (e.g. the `core`
+   * set's table is `__drizzle_migrations_db`). */
   readonly name: string;
   /** Module version. Every package is 0.0.0 today (workspace-locked); real once modules distribute. */
   readonly version: string;

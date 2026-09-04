@@ -71,7 +71,8 @@ collects descriptors and derives each surface by mapping (§4).
 
 ```ts
 export interface WaitronModule {
-  /** Stable id; equals the migration-set name and the drizzle table suffix. */
+  /** Stable id; equals the migration-set name (`migrations.name`). NOT the table suffix — that is
+   * `migrations.table` (usually `__drizzle_migrations_<name>` but not always; `core` → `_db`). */
   readonly name: string;
   /** Module version. Every package is 0.0.0 today (workspace-locked); real once modules distribute. */
   readonly version: string;

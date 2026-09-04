@@ -7,8 +7,10 @@ import { type MigrationSet, resolveExistingMigrationsFolder } from "./manifest.j
 import "./errors.js";
 
 /**
- * A drizzle journal table is `__drizzle_migrations_<name>` where `<name>` is the set's lowercase
- * identifier. `set.table` reaches a `count(*) from "<table>"` as TEXT — Postgres binds no
+ * A drizzle journal table is named by the set's own `table` field — usually `__drizzle_migrations_<name>`
+ * but not always (the `core` set's table is `__drizzle_migrations_db`, not `_core`), which is exactly why
+ * we read `set.table` rather than deriving it from the name. `set.table` reaches a `count(*) from
+ * "<table>"` as TEXT — Postgres binds no
  * placeholder for a relation name (§3) — so it is validated here rather than trusted, and the
  * character class is deliberately tight (`[a-z_]`) so nothing that could need quoting slips through.
  */
