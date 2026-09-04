@@ -547,6 +547,9 @@ export const en = {
   "canvas_editor.form_factor_label": "Form factor",
   "canvas_editor.duplicate_title": "Duplicate canvas",
   "canvas_editor.duplicate_name_label": "Name",
+  // Appended to the source canvas's name to prefill the duplicate-name field (leading space is
+  // deliberate — it joins directly onto the name with no separator added at the call site).
+  "canvas_editor.copy_suffix": " (copy)",
   "canvas_editor.delete_title": "Delete canvas",
   "canvas_editor.delete_message": "Delete this canvas? This cannot be undone.",
   "canvas_editor.form_factor.till": "Till",
@@ -1075,6 +1078,7 @@ export const es: Record<StringKey, string> = {
   "canvas_editor.form_factor_label": "Formato",
   "canvas_editor.duplicate_title": "Duplicar lienzo",
   "canvas_editor.duplicate_name_label": "Nombre",
+  "canvas_editor.copy_suffix": " (copia)",
   "canvas_editor.delete_title": "Eliminar lienzo",
   "canvas_editor.delete_message": "¿Eliminar este lienzo? Esta acción no se puede deshacer.",
   "canvas_editor.form_factor.till": "TPV",

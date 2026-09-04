@@ -4,6 +4,7 @@ import "./canvas-editor-screen.js";
 import type { CanvasEditorScreen } from "./canvas-editor-screen.js";
 import type { Canvas, DashboardApi } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
+import { t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
 const canvases: Canvas[] = [
@@ -140,7 +141,7 @@ describe("canvas-editor-screen list mode", () => {
     const input = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
       "[data-test=duplicate-name]",
     )!;
-    expect(input.value).toBe("Counter till (copy)");
+    expect(input.value).toBe(`Counter till${t("canvas_editor.copy_suffix", "es-ES")}`);
   });
 
   it("Crear seeds a draft from the default canvas and enters editor mode", async () => {

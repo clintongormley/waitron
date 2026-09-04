@@ -681,7 +681,7 @@ export class CanvasEditorScreen extends LitElement {
 
   #openDuplicate(canvas: Canvas): void {
     this.duplicateTarget = canvas;
-    this.duplicateName = `${canvas.name} (copy)`;
+    this.duplicateName = `${canvas.name}${t("canvas_editor.copy_suffix")}`;
   }
 
   /** Create a copy of the armed canvas under the entered name, from the SAME definition, then reload.

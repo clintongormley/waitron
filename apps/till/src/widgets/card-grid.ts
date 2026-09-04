@@ -1,7 +1,7 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 // Side-effect imports: registering each widget element so the switch below can render its tag. This
-// host names them only as tags, never as classes — the profile is the wiring, exactly as the counter
+// host names them only as tags, never as classes — the canvas is the wiring, exactly as the counter
 // screen's layout is (till-counter-screen.ts).
 import "./product-grid.js";
 import "./basket.js";
@@ -36,7 +36,7 @@ import type { WorkingOrderStore } from "../state/working-order.js";
 import type { CardOutcome, CardProvider } from "./tender-pay.js";
 
 /**
- * SP-B1 renderer: lays a layout-profile TAB's cards on a fluid grid (`repeat(columns, 1fr)`), each
+ * SP-B1 renderer: lays a canvas TAB's cards on a fluid grid (`repeat(columns, 1fr)`), each
  * card spanning colSpan×rowSpan. Every card is handed the SAME `store` (or an app-owned list), exactly
  * as the counter screen threads them today (`till-counter-screen.ts:267-307`); card events bubble past
  * this host to `till-app` unchanged — this host installs no listeners on them.
@@ -67,7 +67,7 @@ export class TillCardGrid extends LitElement {
     }
   `;
 
-  /** The tab to render. Undefined until the app resolves a profile — renders nothing meanwhile. */
+  /** The tab to render. Undefined until the app resolves a canvas — renders nothing meanwhile. */
   @property({ attribute: false }) tab?: TabDef;
   /** The shared working order every store-backed card reads and mutates. Set before connect. */
   @property({ attribute: false }) store!: WorkingOrderStore;
@@ -145,7 +145,7 @@ export class TillCardGrid extends LitElement {
    * (`apps/server/src/device-session.ts:359`): the integrated-card payment for the "pay" action
    * (`apps/server/src/till-api.ts:849`) and the cash-drawer open for "drawer_open"
    * (`apps/server/src/till-api.ts:1294`). So a card that leads to ONE OF THOSE TWO operations, if shown
-   * through a bug or a stale profile, still cannot perform it — those two endpoints fail CLOSED
+   * through a bug or a stale canvas, still cannot perform it — those two endpoints fail CLOSED
    * regardless of what the grid rendered. The third capability, `act-as-kds` (the only one this gate
    * actually consults, since tender-pay short-circuits above), has no live server enforcement in B2.1
    * (comment-only at `apps/server/src/device-api.ts:256`); its one card, `kds-board`, now renders here
