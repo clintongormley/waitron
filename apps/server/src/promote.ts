@@ -1,12 +1,18 @@
 import "./errors.js"; // register promotion.* on the shared registry (reachability convention)
+import { sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import {
+  persistNodeMembershipIfNewerTx,
+  readNodeEndorsement,
   readNodeMembership,
+  readStandardSeriesId,
+  setDeploymentModeTx,
   setSingletonRoleTx,
   writeNodeMembershipTx,
   type Database,
+  type Transaction,
 } from "@waitron/db";
-import { nextStandings } from "@waitron/membership";
+import { nextStandings, type SignedMembershipDocument } from "@waitron/membership";
 import type { KeyRing } from "@waitron/credentials";
 import { refreshDeploymentHolders, type DeploymentHolders } from "./deployment-holders.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
@@ -132,4 +138,102 @@ export async function promoteLocalSecondaryToPrimary(
 
   deps.log("info", "promotion.completed", { target: "local_secondary" });
   return { alreadyPrimary: false };
+}
+
+export interface MirrorPromotionResult {
+  readonly alreadyPrimary: boolean;
+  /** The cloud's OWN reserved standard series id — the caller persists it into trading.env so the
+   * promoted primary numbers under its disjoint series, not the primary's (spec §4.3). */
+  readonly seriesId: string;
+}
+
+/**
+ * The point-of-no-return body of a mirror→primary promote, extracted so the term-guard can be proven
+ * as a unit (parent spec §8 "R3 sharp edge"; CLAUDE.md §4). Runs in ONE owner transaction, in an order
+ * that respects `deployment_role_valid_ck`: flip `mode → primary` FIRST (leaving `singleton_role`, so
+ * the transient pair is the valid `(primary, secondary)`, never the forbidden `(mirror, primary)`), then
+ * `singleton_role → primary`, then the TERM-GUARDED document write. A `false` from the guard means a
+ * concurrent gossip-adopt already landed a >= term, so writing would REGRESS the org chart — the whole
+ * transaction is aborted (`promotion.membership_superseded`) and the mode/singleton flip does not commit
+ * against a superseded chart.
+ *
+ * The diagnostic held-term read runs on `tx`, NOT a separate app handle: under READ COMMITTED the row
+ * holds the raced-in committed term either way (our no-op upsert already saw it), but on PGlite the app
+ * handle and this transaction SHARE one connection, so reading through it here would deadlock behind the
+ * open transaction. Reading via `tx` is deadlock-free on PGlite and identical on real Postgres, and the
+ * `node_membership` table exists by construction on any promote path, so no `to_regclass` probe is
+ * needed (the throw is what rolls the transaction back regardless).
+ */
+export async function commitMirrorPromotionTx(
+  tx: Transaction,
+  document: SignedMembershipDocument,
+): Promise<void> {
+  await setDeploymentModeTx(tx, "primary"); // (primary, secondary) — valid transient pair
+  await setSingletonRoleTx(tx, "primary"); // (primary, primary)
+  const accepted = await persistNodeMembershipIfNewerTx(tx, document);
+  if (!accepted) {
+    const current = await tx.execute<{ document: SignedMembershipDocument }>(
+      sql`select document from node_membership where id = 1`,
+    );
+    throw new AppError("promotion.membership_superseded", {
+      heldTerm: current.rows[0]?.document.body.term ?? -1,
+      mintedTerm: document.body.term,
+    });
+  }
+}
+
+/**
+ * Mirror → primary (parent SIF spec §5b; R3 design §4). A read-only mirror becomes the venue's primary
+ * on the identity it already holds (R3a gave it its own nodeId; R2 reserved its SIF + disjoint series +
+ * sealed key + the primary's endorsement). No identity ceremony, no SIF re-mint: `currentSif` returns
+ * the reserved SIF once the box reboots `mode=primary`.
+ *
+ * ABORT-BEFORE-PONR (parent spec §7): the fence check, the held/endorsement/series reads, and the
+ * in-memory mint all run BEFORE the one owner transaction, so any failure there leaves the mirror
+ * exactly as it was. The PONR is ONE owner transaction (`commitMirrorPromotionTx`) — `mode → primary`,
+ * `singleton_role → primary`, then the TERM-GUARDED document write; if that write is refused (a
+ * concurrent gossip-adopt landed a >= term), the whole transaction aborts with
+ * `promotion.membership_superseded` and the flip does not commit against a superseded chart (spec §8
+ * "R3 sharp edge"). Idempotent: an already-primary node returns `{ alreadyPrimary: true }` before any
+ * mint. The caller persists the returned `seriesId` into trading.env and restarts — the mirror is not
+ * selling, so a restart costs nothing (contrast the LIVE local-secondary promote).
+ */
+export async function promoteMirrorToPrimary(
+  deps: PromoteDeps,
+  attestation: FenceAttestation,
+): Promise<MirrorPromotionResult> {
+  assertFenced(attestation); // before PONR: abortable, zero lasting effect
+
+  await refreshDeploymentHolders(deps.appDb, deps.holders);
+  // Read the corrected series id up front — it is also the value an already-primary re-run returns.
+  const seriesId = await readStandardSeriesId(deps.appDb, deps.tenantId, deps.nodeId);
+
+  if (deps.holders.mode.current === "primary") {
+    return { alreadyPrimary: true, seriesId }; // already promoted — idempotent no-op
+  }
+
+  // Build the endorsed document BEFORE the PONR: read the held org chart, flip standings (this node →
+  // serving-primary, outgoing primary → sell-only), read the primary's endorsement of this node's key,
+  // and sign with this node's OWN key. R3b attaches the endorsement so a peer trusting only the primary
+  // transitively trusts this document (parent wire-protocol §4) — the first production doc signed by a
+  // non-setup key.
+  const held = await readNodeMembership(deps.appDb);
+  const endorsement = await readNodeEndorsement(deps.appDb, deps.tenantId, deps.nodeId);
+  const document = await mintNextMembershipDocument(
+    { db: deps.appDb, ring: deps.ring },
+    {
+      tenantId: deps.tenantId,
+      heldDocument: held,
+      nodes: nextStandings(held?.body.nodes ?? [], deps.nodeId),
+      signerNodeId: deps.nodeId,
+      endorsements: endorsement === null ? [] : [endorsement],
+    },
+  );
+
+  // PONR: mode + singleton + term-guarded doc in ONE owner transaction (CLAUDE.md §3).
+  await deps.ownerDb.transaction((tx) => commitMirrorPromotionTx(tx, document));
+
+  await refreshDeploymentHolders(deps.appDb, deps.holders);
+  deps.log("info", "promotion.completed", { target: "mirror" });
+  return { alreadyPrimary: false, seriesId };
 }
