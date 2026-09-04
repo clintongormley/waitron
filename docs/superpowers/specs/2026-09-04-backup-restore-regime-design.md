@@ -136,19 +136,39 @@ are later backends behind the same interface — no core change. Backends are co
 configured backends (decision 4). Artifact keys are stable paths, e.g.
 `<tenant>/<timestamp>/db.dump.enc`, `<tenant>/<timestamp>/manifest.json`, `<tenant>/blobs/<sha256>`.
 
-### `BackupContribution` — the new module registry kind
+### `backup` — the new module contribution kind
+
+Grouped as a **single contribution key** on the descriptor — `backup?: BackupContribution` — so the
+descriptor's top level stays a list of contribution kinds (matching how the module-system architecture
+§3 frames sync / UI / vocabulary / theme, each as one declared contribution). Shape coordinated with the
+module-system session, 2026-09-05.
 
 ```ts
+interface WaitronModule {
+  // ...existing contribution kinds (schema, sync, ui, vocabulary, theme, privileges, cronjobs, ...)
+  backup?: BackupContribution;
+}
+
 interface BackupContribution {
-  nonDbState?(): Promise<BackupSource[]>;        // extra state this module owns (catalogue -> media dir)
-  restore?(ctx: RestoreContext): Promise<void>;  // reintegrate after restore (fiscal -> fresh chain)
+  // Declaration-only DATA: the extra state this module owns, as path/handle descriptors the
+  // orchestrator resolves — NOT a closure the generic core invokes. Assembled by the composition
+  // root (which holds config) at registration, e.g. catalogue -> { kind: "blob-dir", path: mediaDir }.
+  nonDbState?: BackupSource[];
+  // A callable RESTORE hook the module's OWN package exports and the composition root wires when the
+  // module is enabled (the same pattern as the provisioning-seed / runtime-wiring contributions) —
+  // never behaviour the generic core reaches into. fiscal -> fresh chain (body deferred, BR-4).
+  restore?: (ctx: RestoreContext) => Promise<void>;
 }
 ```
 
-Added to the `WaitronModule` descriptor as one optional field (open contribution set, §3 decision 6).
-`core` declares the media dir as `nonDbState` (catalogue is still `core`-resident, so it is declared in
-the composition root the same way `core` declares its own sync enrolment). `fiscal` declares a `restore`
-hook. **In v1 the hook interface ships but fiscal's body does not** — that is the deferred fiscal slice.
+`core` declares the media store as `nonDbState` **data** (catalogue is still `core`-resident, so it is
+registered in the composition root the same way `core` declares its own sync enrolment; the root supplies
+the config-resolved `mediaDir`). `fiscal`'s package **exports** the `restore` hook the root wires. **In v1
+the hook interface ships but fiscal's body does not** — that is the deferred fiscal slice.
+
+Two shape choices, both to keep the descriptor guard-friendly: `nonDbState` is **pure data** (paths /
+handles) rather than a closure, so the descriptor stays declarative; `restore` is a **module-exported,
+root-wired hook**, so the generic core reaches into no module and stays domain-free.
 
 ### The manifest
 
@@ -254,9 +274,15 @@ Each is its own spec → plan → build → PR. Build order BR-1 → BR-2 → BR
 
 ## 9. Interactions
 
-- **Module system** — SP-1a's `WaitronModule` contract exists (landed #212); BR-2 adds a `backup`
-  contribution kind to it (an open-set extension). The other session is evolving that contract
-  (SP-1d/SP-2); adding one optional field is low-conflict but must be **coordinated** with that session.
+- **Module system** (coordinated with that session, 2026-09-05) — SP-1a's `WaitronModule` contract exists
+  (landed #212); BR-2 adds a `backup` contribution kind, **additive** to SP-2's sync-enrolment kind with
+  no collision by the §3 open-set rule. **SP-1d never touches the descriptor** (config parsing + adopt
+  bootstrap only). **The one thing to sequence around is package-ownership, not the field:** SP-2 moves
+  descriptors out of the centralized `ALL_MODULES` (`apps/server/src/modules.ts`) into each package. If
+  BR-2 lands **before** SP-2, the `backup` fields sit on the centralized descriptors and SP-2 carries them
+  into the packages as part of the move; if **after**, BR-2 adds them per-package. Whoever lands second
+  carries the other's fields across — flag it in the PR. BR-2 is gated behind BR-1 and SP-2 is unstarted,
+  so there is runway either way.
 - **Membership rejoin R3 (wipe-and-restore)** — BR-3 is its `pg_restore` consumer + `sync_log`-in-backup
   dependency; R3 restores then drains, returning fenced-secondary (R1 #214 already landed).
 - **Promote-action Slice 4 (cold restore)** — unblocked by BR-4 (the fiscal fresh-chain hook), not BR-3.
