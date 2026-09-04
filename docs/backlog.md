@@ -346,8 +346,8 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
   boilerplate — declined here (changes the SP-1a owner-reviewed contract shape; `core` is deliberately the
   special mandatory root), a candidate if the contract is revisited later. Spec/plan:
   [sp-1c](superpowers/specs/2026-09-04-module-sp1c-versioned-ordering.md).
-- **SP-1d — cross-node config replication.** Adopt-bootstrap half **built on
-  `feat/module-sp1d-adopt-bootstrap`** (not yet merged): a mirror inherits the primary's
+- **SP-1d — cross-node config replication.** Adopt-bootstrap half **built (#220):** a mirror
+  inherits the primary's
   enabled-module set at adopt — the primary's `modules.json` overrides ride the existing
   mirror-bundle handshake (`MirrorBundle.moduleOverrides`, minted fresh at assemble time), and
   `adoptFromPrimary` re-validates them against the mirror's own `ALL_MODULES` (fail-closed) and
@@ -371,8 +371,8 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
 - **SP-4 — module UI surface** (card-registry inversion + self-sourcing cards + fiscal's cards) — **after
   B3.2** (shares `@waitron/layouts` / `apps/till` card-grid).
 
-With SP-1a + SP-1b + SP-1c landed and SP-1d's adopt-bootstrap half built (pending merge on
-`feat/module-sp1d-adopt-bootstrap`), **SP-2 remains** — it is parallel-safe with the B3.2
+With SP-1a + SP-1b + SP-1c landed and SP-1d's adopt-bootstrap half built (#220), **SP-2 remains**
+— it is parallel-safe with the B3.2
 layout-editor session, is the one that unblocks SP-3 (H2's fiscal-record lane rides SP-2's sync
 inversion), and now picks up both SP-1c's deferred graph-honesty guard and SP-1d's deferred
 ongoing flow-down. SP-4 waits for B3.2.

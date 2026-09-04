@@ -121,7 +121,15 @@ const moduleConfig = parseModuleConfig({ modules: bundle.moduleOverrides }, ALL_
 await deps.persistModuleConfig(moduleConfig);
 ```
 
-`parseModuleConfig` + `ALL_MODULES` are imported directly into `adopt.ts` (both are static/pure — no
+> **Refined in implementation (2026-09-05, finish-branch review — the code is the source of truth;
+> this block records the design as written).** Adopt uses a bare-map entry point,
+> `parseModuleOverrides(bundle.moduleOverrides, ALL_MODULES)` — added during the simplify pass so a
+> non-file caller validates the override map without fabricating a `{ modules: … }` envelope (and it
+> makes `serializeModuleConfig`'s inverse literal). It also runs **immediately after `fetchBundle`,
+> before any DB write** (fail fast, so a bad bundle never half-adopts the mirror — Copilot + whole-branch
+> review), holding the validated `ModuleConfig` to persist just before `persistTrading`.
+
+`parseModuleOverrides` + `ALL_MODULES` are imported directly into `adopt.ts` (both are static/pure — no
 new injected dep, and adopt already imports app-local statics). The **fs write** is injected as
 `persistModuleConfig`, mirroring `persistTrading`, so the orchestration stays testable against a
 hand-built bundle.

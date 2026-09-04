@@ -443,6 +443,13 @@ import { parseModuleConfig, type ModuleConfig } from "@waitron/module";
 import { ALL_MODULES } from "./modules.js";
 ```
 
+> **Refined in implementation (2026-09-05, finish-branch — code is the source of truth).** The import
+> is `parseModuleOverrides` (not `parseModuleConfig`), a bare-map entry point added during the simplify
+> pass so adopt validates the bundle's `moduleOverrides` directly — `parseModuleOverrides(bundle.moduleOverrides, ALL_MODULES)`
+> — with no fabricated `{ modules: … }` envelope, and the validation runs immediately after `fetchBundle`
+> (before any DB write) rather than just before `persistTrading`. The steps below record the design as
+> planned.
+
 Add the dep to `AdoptDeps` (after `persistTrading`):
 
 ```ts
