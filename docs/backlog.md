@@ -401,10 +401,23 @@ vs gated on an unbuilt foundation or an external dependency:
   `writeNodeMembershipTx`/`setSingletonRoleTx` (`@waitron/db`), `seedTermZeroMembership` +
   `mintNextMembershipDocument` (`apps/server`), and `promoteLocalSecondaryToPrimary` minting the next
   document with the singleton flip + document write in ONE owner transaction. **R2 (reserve the cloud's
-  dormant identity at adopt) NEXT** (needs its own plan), then **R3 (cloud promotion)**; **H2
-  (fiscal-record sync to mirrors)** is independent. R1 review recorded an **R3 sharp edge** in spec §8:
-  promote's unguarded upsert can regress `term` under a concurrent newer gossip — R3's promote write must
-  term-guard. Slice 6 (rejoin) and Slice 7 (conflict surface) follow the arc. **Owner directive
+  dormant identity at adopt) LANDED #208** (plan:
+  [membership-promotion-r2-reserved-identity](superpowers/plans/2026-09-04-membership-promotion-r2-reserved-identity.md)):
+  the adopt handshake now round-trips the standby's generated nodeId + Ed25519 public key to the primary,
+  which (sole allocator) mints a reserved installation número, derives disjoint series
+  (`deriveReservedSeriesCodes` = `<primaryCode>-<número>`), and endorses the key; the cloud persists a
+  **dormant** identity in one owner tx — own `nodes` row (new nullable `nodes.endorsement jsonb`, migration
+  0099), reserved `registro_sif` with the primary's number + fresh empty `cadenas` head, reserved
+  `invoice_series`, sealed private key — all inert (`config.till.nodeId` unchanged, mirror still read-only).
+  New fiscal primitives `reserveInstallationNumber`/`writeReservedSif` (single-writer preserved);
+  idempotent establish (spec §8, `membership.node_key` sentinel). **Two owner-review decisions:** disjoint
+  series code scheme (AEAT error 3000 is the sole cross-node backstop); endorsement on `nodes.endorsement`
+  not the vault. **R3 (cloud promotion) NEXT** (needs its own plan); **H2 (fiscal-record sync to mirrors)**
+  is independent. R1/R2 reviews recorded the **R3 sharp edge** (spec §8): promote's unguarded upsert can
+  regress `term` under concurrent newer gossip — R3's promote write must term-guard. **R2 carry-ins for R3:**
+  the primary burns an installation número per bundle-**fetch** (not just per successful adopt — spec §7
+  gaps-permitted, admin-authed); the idempotency guard assumes provision/adopt are mutually exclusive per
+  box (true today; R3 reads the same `membership.node_key`). Slice 6 (rejoin) and Slice 7 (conflict surface) follow the arc. **Owner directive
   (2026-09-03): stop deferring work because it touches fiscal code** — H2 / reserved-SIF / promotion are
   in the build sequence now, no longer "owner-gated / never land unattended" (correctness rigor on the
   §5 unrecoverable invariants + owner review-at-land are unchanged; only the scheduling gate is lifted).
@@ -428,7 +441,8 @@ vs gated on an unbuilt foundation or an external dependency:
   (3) **distribution** over `/sync-api/hello` + local adoption **LANDED #202** (plan:
   [membership-slice-3-distribution](superpowers/plans/2026-09-03-membership-slice-3-distribution.md));
   (4) **setup/adopt** trust establishment **LANDED #203**; (5) **promotion
-  integration** (`promote` mints the next document) **[NEXT — composes with reserved-SIF staging]**;
+  integration** — local-secondary mint **LANDED (R1 #205)**, reserved-SIF-at-adopt **LANDED (R2 #208)**;
+  cloud promotion (**R3**) is the remaining piece (see the membership arc above);
   (6) **rejoin — drain-then-restore** [fiscal-adjacent → owner sign-off before land]; (7) **conflict
   surface** (config down-only + ops conflict log). Unblocks promote Slice 5 + the conflict watcher.
   **Slice 3 (distribution) LANDED #202** (2026-09-03): `/sync-api/hello` now serves `{ nodeId, environment,
@@ -482,9 +496,10 @@ vs gated on an unbuilt foundation or an external dependency:
   `resolveSignerKey` (re-verify-across-passes; same-endorser key re-parse) — constant-bounded by
   `MAX_ENDORSEMENTS`, revisit only if the cap grows; the break-glass-rooted (option B)
   signing hardening stays deferred with break-glass.
-- **Foundation-first, then its dependents (fiscal-adjacent, owner-gated):** **reserved-SIF staging**
-  mints the installation number + disjoint series → unblocks promote **Slice 3**, the C2a promote
-  action, and starting the primary-only workers on promotion.
+- **Reserved-SIF staging — DONE via R2 (#208).** The reservation of the standby's installation number +
+  disjoint series now happens at cloud **adopt** (not a separate staging step), keyed to the standby's own
+  dormant nodeId. What remains is **R3** activating it (switch the runtime node id, activate the SIF, start
+  the primary-only workers on promotion) + the C2a promote action — see the membership arc above.
 - **Hard-gated (leave until the gate clears):** break-glass secret mint (→ Slice 2); backup regime
   (→ Slice 4); real cloud hosting/relay (cloud-mirror follow-ups, the T1 relay); the go-native decision
   (on-device agent); and the **owner-gated fiscal H2** hash-chain sync lane — never landed without
