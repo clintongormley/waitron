@@ -500,18 +500,48 @@ jobs:
 
       - run: pnpm typecheck
 
-  # packages/db alone. It is 189s of the old 387s `pnpm test:coverage` step AND a topological
-  # barrier: `pnpm -r` orders by dependency, so seven packages could not start until it finished.
-  # On its own runner it stops blocking anything.
+  # packages/db, SHARDED THREE WAYS across parallel runners. It was the workspace's critical-path job
+  # — 374s on the unfiltered `main` run 33890775789 (`gh run view 33890775789 --json jobs`), of which
+  # 348s was the test step — and unlike `test-light`, which bin-packs MANY packages across two runners,
+  # packages/db is ONE package, so the only way to spread it is to shard its test FILES with vitest's
+  # `--shard=i/N` (the matrix below). Three-way was chosen over two on 2026-09-04 on the expectation the
+  # suite keeps growing; rebalance the shard count if a run shows the merge job or a single shard
+  # dominating.
+  #
+  # Sharding one package collides with the per-package coverage gate: each shard runs ~1/3 of the files
+  # and so sees only PARTIAL coverage, which would fail the 98/98/98/95 thresholds on every shard. So
+  # the shards COLLECT coverage without ENFORCING it — `test:shard` (packages/db/package.json) is
+  # `test:coverage` plus `--reporter=blob` and the four thresholds overridden to 0 — and emit a `blob`
+  # report; `test-heavy-merge` below downloads all three blobs, merges them with
+  # `vitest --merge-reports`, and applies the REAL thresholds to the merged total. Verified on
+  # vitest 3.2.7 (2026-09-04): a blob captures coverage ONLY when `--coverage` is on (a blob written
+  # without it merges to 0/0/0/0), the shard's own threshold check fires on its partial coverage unless
+  # overridden, and `--merge-reports` re-runs NOTHING — no globalSetup, no container — so the merge job
+  # below needs no Docker.
+  #
+  # Each shard boots its OWN shared container (globalSetup runs once per process), so the
+  # install+container overhead is re-paid per shard and the speed-up is sub-linear. maxForks:4 and the
+  # REQUIRE_DOCKER / TESTCONTAINERS_RYUK_DISABLED pair are exactly as the un-sharded job had them; the
+  # `heavy` gate is unchanged and now feeds three jobs (these shards plus the merge) rather than one.
+  #
+  # `ci` needs BOTH this matrix job AND test-heavy-merge: if a shard fails, the merge job's `needs` is
+  # unsatisfied so it SKIPS, and `ci` counts a skip as a pass — so a shard failure is caught only
+  # because `ci` names test-heavy directly. `fail-fast: false` lets every shard report rather than one
+  # failure cancelling its siblings. scripts/ci-workflow.test.mjs pins the matrix size against the
+  # `--shard=i/N` denominator and the merge job against its shards, so the two cannot drift.
   test-heavy:
     needs: changes
     # Gated on `heavy`, not on the scope filter. Two inclusion filters are OR-ed rather than
-    # intersected, so adding `--filter "@waitron/db"` to the scope's own filters would run this 189s
-    # suite on every code change; and `@waitron/db[<base>]` — pnpm's changed-since form, which this
-    # workflow no longer uses at all — misses db when one of db's own dependencies changed. The
-    # `changes` job resolves membership properly and answers here with a boolean.
+    # intersected, so adding `--filter "@waitron/db"` to the scope's own filters would run this suite on
+    # every code change; and `@waitron/db[<base>]` — pnpm's changed-since form, which this workflow no
+    # longer uses at all — misses db when one of db's own dependencies changed. The `changes` job
+    # resolves membership properly and answers here with a boolean.
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     env:
       # packages/db's harness skips its real-Postgres target when Docker is absent. That is right on
       # a laptop and wrong here: the skipped target is the only one that can observe lock contention
@@ -533,44 +563,90 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # No scope filter here: the `changes` job already decided this shard has work to do, so the
-      # only question left is which package, and that is always packages/db.
-      #
-      # The guard first, for the reason in its own doc comment: pnpm answers "nothing to do" with
-      # exit 0 and a line on stdout, so a shard whose filter selects nothing — or selects something
-      # with no `test:coverage` script — reports success having run no tests. That is what happened
-      # to test-light on a root-config pull request before this branch, and it costs nothing to
-      # refuse it here too.
+      # No scope filter here: the `changes` job already decided this shard has work to do, so the only
+      # question left is which package, and that is always packages/db. `test:shard` emits a blob rather
+      # than enforcing thresholds; the merge job below is where the coverage gate lives. `--`
+      # forwards the per-shard `--shard`/`--outputFile` to vitest, past pnpm.
       - name: Run the db shard
         env:
           TESTCONTAINERS_RYUK_DISABLED: "true"
         run: |
           set -euo pipefail
-          pnpm --filter "@waitron/db" ls --depth -1 --json \
-            | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/db" test:coverage
+          pnpm --filter "@waitron/db" test:shard -- \
+            --shard=${{ matrix.shard }}/3 \
+            --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json
 
-  # apps/server alone: the workspace's LARGEST suite, split out of test-light on a measurement.
+      # `if-no-files-found: error` is the guard that replaced the old `runnable test:coverage` check:
+      # a `test:shard` that silently ran nothing (a missing script, a filter that matched nothing)
+      # writes no blob, so the upload FAILS the shard rather than reporting a green that tested nothing.
+      - name: Upload the db coverage blob
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-blob-${{ matrix.shard }}
+          path: packages/db/.vitest-reports/blob-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 1
+
+  # The coverage GATE for packages/db. The three test-heavy shards each emit a PARTIAL-coverage blob;
+  # this job merges them and enforces the real 98/98/98/95 thresholds on the TOTAL. It runs no tests and
+  # boots no container — `vitest --merge-reports` (in `test:merge`) replays results and coverage from
+  # the blobs — so it carries neither REQUIRE_DOCKER nor a Docker env, only an install, the artifact
+  # download and the merge. It gates on the SAME `heavy` output as its shards, so it skips exactly when
+  # they do. See test-heavy above for why `ci` must name both this job and the matrix it depends on.
+  test-heavy-merge:
+    needs: [changes, test-heavy]
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # `merge-multiple` flattens db-blob-1/2/3 (each one file) into packages/db/.vitest-reports, where
+      # `test:merge`'s `vitest --merge-reports .vitest-reports` reads them.
+      - name: Download the db coverage blobs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: db-blob-*
+          path: packages/db/.vitest-reports
+          merge-multiple: true
+
+      - name: Merge the db coverage blobs and enforce thresholds
+        run: pnpm --filter "@waitron/db" test:merge
+
+  # apps/server, SHARDED THREE WAYS — the same mechanism as test-heavy above (see it for the full
+  # rationale: why one package can only be split by test file, why the shards suppress thresholds and
+  # emit blobs, and why the merge job needs no Docker). apps/server was the workspace's SECOND
+  # critical-path job — 341s on the unfiltered `main` run 33890775789 — and, like packages/db, it is a
+  # single package, so `--shard=i/N` over its 161 test files is the only way to spread it. It was itself
+  # split out of test-light on a measurement (341.7s of test-light's 358s wall-clock on run
+  # 32417600304); sharding it is the next step down. See SERVER_PACKAGE in scripts/changed-scope.mjs.
   #
-  # On the unfiltered `main` run 32417600304 (`gh run view 32417600304 --json jobs`) apps/server was
-  # 341.7s of test-light's 358s wall-clock — 63 files, 277s of it test execution — so it alone set
-  # that shard's floor, and re-sharding the other twenty packages could not drop test-light below it.
-  # A runner of its own stops it being that floor. Unlike test-ui/till/dashboard this is a PERFORMANCE
-  # split, not a browser-hang mitigation — apps/server touches no browser. See SERVER_PACKAGE in
-  # scripts/changed-scope.mjs.
-  #
-  # The dedicated runner also lets apps/server run MULTI-FORK (apps/server/vitest.config.ts's
+  # The dedicated runners also let apps/server run MULTI-FORK (apps/server/vitest.config.ts's
   # poolOptions): the @vitest/coverage-v8 branch under-merge that held it to singleFork is a `pnpm -r`
-  # contention artifact a runner it has to itself does not have.
+  # contention artifact a runner it has to itself does not have — and each shard has a runner to itself.
   #
-  # REQUIRE_DOCKER + TESTCONTAINERS_RYUK_DISABLED exactly as test-heavy, and as test-light before it:
-  # apps/server's global-setup (src/testing/global-setup.ts) boots a shared Postgres container its
-  # real-PG suites clone from via useTemplateDb, so REQUIRE_DOCKER makes a runner without Docker fail
-  # loudly instead of skipping those suites.
+  # REQUIRE_DOCKER + TESTCONTAINERS_RYUK_DISABLED exactly as test-heavy: apps/server's global-setup
+  # (src/testing/global-setup.ts) boots a shared Postgres container its real-PG suites clone from via
+  # useTemplateDb, so REQUIRE_DOCKER makes a runner without Docker fail loudly instead of skipping those
+  # suites. `test-server-merge` below is the coverage gate.
   test-server:
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     env:
       REQUIRE_DOCKER: "1"
     steps:
@@ -589,17 +665,58 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # The guard first, same reason as the other shards: pnpm answers "nothing to do" with exit 0
-      # and a line on stdout, so a shard whose filter selects nothing reports success having run no
-      # tests.
+      # `test:shard` emits a blob rather than enforcing thresholds; test-server-merge is where the
+      # coverage gate lives. `--` forwards the per-shard `--shard`/`--outputFile` to vitest, past pnpm.
       - name: Run the server shard
         env:
           TESTCONTAINERS_RYUK_DISABLED: "true"
         run: |
           set -euo pipefail
-          pnpm --filter "@waitron/server" ls --depth -1 --json \
-            | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/server" test:coverage
+          pnpm --filter "@waitron/server" test:shard -- \
+            --shard=${{ matrix.shard }}/3 \
+            --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json
+
+      # `if-no-files-found: error` guards a shard that silently ran nothing: no blob → the upload fails
+      # the shard, rather than a green that tested nothing (see test-heavy's upload step).
+      - name: Upload the server coverage blob
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-blob-${{ matrix.shard }}
+          path: apps/server/.vitest-reports/blob-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 1
+
+  # The coverage GATE for apps/server — the mirror of test-heavy-merge. The three test-server shards
+  # each emit a PARTIAL-coverage blob; this job merges them and enforces the real 98/98/98/95 thresholds
+  # on the TOTAL. No tests, no container — `vitest --merge-reports` replays from the blobs. It gates on
+  # the SAME `server` output as its shards. `ci` names both this job and the test-server matrix.
+  test-server-merge:
+    needs: [changes, test-server]
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Download the server coverage blobs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: server-blob-*
+          path: apps/server/.vitest-reports
+          merge-multiple: true
+
+      - name: Merge the server coverage blobs and enforce thresholds
+        run: pnpm --filter "@waitron/server" test:merge
 
   # packages/fiscal-verifactu alone. It is a maxForks:4 suite — thousands of real AEAT fixtures across
   # 33 files — so, like the other two (packages/db → test-heavy, apps/server → test-server), it wants
@@ -1161,7 +1278,9 @@ jobs:
       - bundle-smoke
       - typecheck
       - test-heavy
+      - test-heavy-merge
       - test-server
+      - test-server-merge
       - test-fiscal-verifactu
       - test-ui
       - test-till

@@ -1185,10 +1185,20 @@ genuinely-decision-bearing.
 
 **CI / test infra:**
 
-- **Job-sharding next lever.** Critical-path jobs are `test-heavy` (`packages/db`, ~275s) and
-  `mutation-verifactu` (~218s), both CPU-bound on one free 4-vCPU runner. To go below ~250s: shard db's
-  suite or split `mutation-verifactu`. Rebalance the `LIGHT_A/B_PACKAGES` bins
-  (`scripts/changed-scope.mjs`) when a run shows one shard dominating.
+- **`test-heavy` and `test-server` are sharded THREE WAYS** (`feat/shard-db-server-ci`). They were the
+  two critical-path jobs — 374s (`packages/db`) and 341s (`apps/server`) on the unfiltered `main` run
+  33890775789 — and, being single packages, could only be split by sharding their test FILES with
+  vitest `--shard=i/N` (a matrix job), each shard emitting a partial-coverage `blob`, with a paired
+  `test-heavy-merge` / `test-server-merge` job merging the blobs (`vitest --merge-reports`) and
+  enforcing the 98/98/98/95 thresholds on the total. The `test:shard` / `test:merge` package scripts
+  carry the mechanism; `scripts/ci-workflow.test.mjs` pins the matrix↔denominator↔merge wiring. NOTE
+  the merge job is a fixed SERIAL tax (v8 coverage source-map remap over the merged total, run after the
+  shards), so the win is sub-linear and more shards help only until shard-wall ≈ merge-wall — read the
+  realized per-job durations off the first unfiltered `main` run and bump the matrix (`shard: [1..N]`
+  AND the `--shard=i/N` denominator, together) if a single shard still dominates.
+- **Job-sharding — remaining lever.** With db/server sharded, the next critical-path candidate is
+  `mutation-verifactu` (~218s, one free 4-vCPU runner); split it if a run shows it dominating. Rebalance
+  the `LIGHT_A/B_PACKAGES` bins (`scripts/changed-scope.mjs`) when a run shows one light shard dominating.
 - **The pre-push hook's shell is largely untested** (the deletion guard + range computation are backed
   only by running the real hook); **`test-light` reports `success` without naming what it ran** (make the
   job name its selected packages); **`packages/ui` can hang the `test-ui` shard** (unconfirmed cause — if

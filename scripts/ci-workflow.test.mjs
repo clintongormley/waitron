@@ -182,6 +182,87 @@ const shards = jobs
   .filter(({ step }) => step !== undefined)
   .map(({ id, step }) => ({ id, filters: literalFilters(step) }));
 
+// ---- Sharded jobs (test-heavy / test-server) ----
+//
+// A single package too big for one runner is split across parallel runners by sharding its test
+// FILES with vitest's `--shard=i/N` (a matrix job), each shard emitting a PARTIAL-coverage `blob`; a
+// paired merge job then merges the blobs and enforces the coverage thresholds on the TOTAL. None of
+// that is visible to the partition checks above — a sharded job still selects its one package, once —
+// so the helpers and cases below cover the properties that keep the split from breaking SILENTLY:
+//
+//   * the matrix's shard list is exactly 1..N and the `--shard=i/N` denominator equals N, or a bucket
+//     of files runs twice or never — a coverage HOLE the merge then gates on without noticing;
+//   * the numerator is the matrix variable, not a constant, or every leg runs the same shard;
+//   * each sharded package has exactly one merge job, for the SAME package, that `needs` the shard job
+//     and gates on the SAME output — otherwise the gate runs on missing blobs, skips while the shards
+//     ran, or is absent;
+//   * the upload artifact name and the download pattern share a prefix, or the merge downloads nothing.
+//
+// Extraction, never transcription, exactly as the rest of this file: everything is read back out of
+// ci.yml so a real edit there is what these assert against.
+
+/** A job's `needs:` in EITHER inline (`needs: [a, b]`) or block (`needs:\n  - a`) form. */
+function allNeedsOf(body) {
+  const inline = body.find((line) => /^ {4}needs:\s*\[/.test(line));
+  if (inline !== undefined) {
+    return [...inline.matchAll(/[[,]\s*([A-Za-z0-9_-]+)/g)].map(([, id]) => id);
+  }
+  return needsOf(body);
+}
+
+/** The package a non-comment line runs `pnpm --filter "<pkg>" <script>` for, or undefined. */
+function packageRunning(body, script) {
+  for (const line of body) {
+    if (line.trim().startsWith("#")) continue;
+    const found = new RegExp(`pnpm --filter "([^"]+)" ${script}\\b`).exec(line);
+    if (found !== null) return found[1];
+  }
+  return undefined;
+}
+
+/** The inline `strategy.matrix.shard` list as strings, e.g. ["1","2","3"], or undefined. */
+function matrixShards(body) {
+  const line = body.find((candidate) => /^ {8}shard:\s*\[/.test(candidate));
+  if (line === undefined) return undefined;
+  const inner = /\[([^\]]*)\]/.exec(line)?.[1] ?? "";
+  return inner
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
+/**
+ * The N in `--shard=${{ matrix.shard }}/N`, or undefined when absent. The regex requires the
+ * numerator to be the matrix variable, so a constant numerator (every leg running one shard) makes
+ * this undefined and fails the case rather than passing on a hidden bug.
+ */
+function shardDenominator(body) {
+  for (const line of body) {
+    if (line.trim().startsWith("#")) continue;
+    const found = /--shard=\$\{\{\s*matrix\.shard\s*\}\}\/(\d+)/.exec(line);
+    if (found !== null) return Number(found[1]);
+  }
+  return undefined;
+}
+
+/** The blob artifact's base name from an `upload-artifact` `name: <base>-${{ matrix.shard }}`. */
+function artifactUploadBase(body) {
+  const line = body.find((candidate) =>
+    /^ {10}name: \S+-\$\{\{\s*matrix\.shard\s*\}\}\s*$/.test(candidate),
+  );
+  return line === undefined ? undefined : /name: (\S+?)-\$\{\{/.exec(line)?.[1];
+}
+
+/** The blob artifact's base name from a `download-artifact` `pattern: <base>-*`. */
+function artifactDownloadBase(body) {
+  const line = body.find((candidate) => /^ {10}pattern: \S+-\*\s*$/.test(candidate));
+  return line === undefined ? undefined : /pattern: (\S+?)-\*/.exec(line)?.[1];
+}
+
+/** Jobs that shard a package (`test:shard`) and jobs that merge the shards' coverage (`test:merge`). */
+const shardedJobs = jobs.filter(({ body }) => packageRunning(body, "test:shard") !== undefined);
+const mergeJobs = jobs.filter(({ body }) => packageRunning(body, "test:merge") !== undefined);
+
 /**
  * The default runner behind `pnpmLs`: `pnpm <args>` under the per-call kill timeout.
  *
@@ -443,6 +524,77 @@ describe("the scope gates", () => {
     const names = SCOPE_GATES.map((gate) => gate.output);
     for (const shard of shards) {
       const read = gatesRead(job(shard.id).body);
+      expect(read).toContain("code");
+      const own = read.filter((name) => name !== "code");
+      expect(own).toHaveLength(1);
+      expect(names).toContain(own[0]);
+    }
+  });
+});
+
+describe("the sharded jobs", () => {
+  it("were found, and each has a matching merge job", () => {
+    // Extraction guard: an empty `shardedJobs` would make every case below vacuous. There are two
+    // sharded packages today (packages/db → test-heavy, apps/server → test-server), each with one
+    // merge job, so the two lists are non-empty and equal in length.
+    expect(shardedJobs.length).toBeGreaterThan(0);
+    expect(mergeJobs.length).toBe(shardedJobs.length);
+  });
+
+  // THE property a sharded coverage gate turns on. If the matrix legs and the `--shard=i/N`
+  // denominator disagree, a bucket of files runs twice or never — and because the merge job gates on
+  // whatever the blobs happen to contain, a missing bucket is a coverage HOLE that still reports
+  // green. `matrixShards` must be exactly the strings "1".."N" (so no leg is skipped or doubled) and
+  // `shardDenominator` — which only matches when the numerator is `${{ matrix.shard }}` — must equal N.
+  it("run a matrix of exactly 1..N shards whose N equals the --shard denominator", () => {
+    for (const { id, body } of shardedJobs) {
+      const matrix = matrixShards(body);
+      expect(matrix, `${id} has no strategy.matrix.shard list`).toBeDefined();
+      const denom = shardDenominator(body);
+      expect(denom, `${id} has no --shard=\${{ matrix.shard }}/N`).toBeDefined();
+      expect(matrix).toEqual(Array.from({ length: denom }, (_, i) => String(i + 1)));
+    }
+  });
+
+  // Each sharded package's coverage gate: exactly one merge job, for the SAME package, that `needs`
+  // the shard job (so it waits for the blobs and skips if a shard failed) and reads the SAME gate (so
+  // it runs and skips in lockstep with its shards). Any of these wrong runs the gate on missing or
+  // stale blobs, or skips it while the shards ran.
+  it("each pair to one merge job for the same package that needs it and shares its gate", () => {
+    for (const shard of shardedJobs) {
+      const pkg = packageRunning(shard.body, "test:shard");
+      const shardGate = gatesRead(shard.body).filter((name) => name !== "code");
+      const paired = mergeJobs.filter((merge) => packageRunning(merge.body, "test:merge") === pkg);
+      expect(paired, `${pkg} has ${paired.length} merge jobs, expected 1`).toHaveLength(1);
+      expect(allNeedsOf(paired[0].body)).toContain(shard.id);
+      expect(gatesRead(paired[0].body).filter((name) => name !== "code")).toEqual(shardGate);
+    }
+  });
+
+  // The blob has to actually travel from the shards to the merge job. A typo in either the upload
+  // `name:` or the download `pattern:` leaves the merge job with no blobs — so their base names, read
+  // out of the two `actions/*-artifact` steps, must match per package.
+  it("upload a blob artifact the merge job downloads by matching prefix", () => {
+    for (const shard of shardedJobs) {
+      const pkg = packageRunning(shard.body, "test:shard");
+      const merge = mergeJobs.find(
+        (candidate) => packageRunning(candidate.body, "test:merge") === pkg,
+      );
+      const upload = artifactUploadBase(shard.body);
+      const download = artifactDownloadBase(merge.body);
+      expect(upload, `${shard.id} uploads no matrix-named blob artifact`).toBeDefined();
+      expect(download, `${merge.id} downloads no *-pattern blob artifact`).toBeDefined();
+      expect(upload).toBe(download);
+    }
+  });
+
+  // Every merge job is gated, like every shard, on `code` plus exactly one scope gate — a merge job
+  // gated on `code` alone would run its (no-test, but real install + download) job on every code
+  // change, the same waste the mutation jobs were scoped to avoid.
+  it("gate every merge job on `code` plus exactly one scope gate", () => {
+    const names = SCOPE_GATES.map((gate) => gate.output);
+    for (const merge of mergeJobs) {
+      const read = gatesRead(merge.body);
       expect(read).toContain("code");
       const own = read.filter((name) => name !== "code");
       expect(own).toHaveLength(1);
