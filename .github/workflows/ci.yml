@@ -569,14 +569,18 @@ jobs:
 
       # No scope filter here: the `changes` job already decided this shard has work to do, so the only
       # question left is which package, and that is always packages/db. `test:shard` emits a blob rather
-      # than enforcing thresholds; the merge job below is where the coverage gate lives. `--`
-      # forwards the per-shard `--shard`/`--outputFile` to vitest, past pnpm.
+      # than enforcing thresholds; the merge job below is where the coverage gate lives. The per-shard
+      # `--shard`/`--outputFile` are appended to the `test:shard` invocation directly, with NO `--`
+      # separator: `pnpm --filter X test:shard -- <args>` forwards the `--` LITERALLY into the vitest
+      # command, and vitest (cac) treats everything after a bare `--` as positional and ignores it — so
+      # both flags were silently dropped, each shard ran the FULL suite and wrote the default `blob.json`,
+      # and `if-no-files-found: error` on the upload is what caught it (run 33906337559, all six shards).
       - name: Run the db shard
         env:
           TESTCONTAINERS_RYUK_DISABLED: "true"
         run: |
           set -euo pipefail
-          pnpm --filter "@waitron/db" test:shard -- \
+          pnpm --filter "@waitron/db" test:shard \
             --shard=${{ matrix.shard }}/3 \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json
 
@@ -670,13 +674,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # `test:shard` emits a blob rather than enforcing thresholds; test-server-merge is where the
-      # coverage gate lives. `--` forwards the per-shard `--shard`/`--outputFile` to vitest, past pnpm.
+      # coverage gate lives. The per-shard `--shard`/`--outputFile` are appended with NO `--` separator
+      # (see test-heavy's shard step for why a bare `--` silently drops both flags).
       - name: Run the server shard
         env:
           TESTCONTAINERS_RYUK_DISABLED: "true"
         run: |
           set -euo pipefail
-          pnpm --filter "@waitron/server" test:shard -- \
+          pnpm --filter "@waitron/server" test:shard \
             --shard=${{ matrix.shard }}/3 \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json
 

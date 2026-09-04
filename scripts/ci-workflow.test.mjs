@@ -580,6 +580,28 @@ describe("the sharded jobs", () => {
     }
   });
 
+  // How the per-shard flags reach vitest, and the trap that cost run 33906337559 (all six shards). The
+  // shard step must append `--shard=${{ matrix.shard }}/N` and `--outputFile=…` to the `test:shard`
+  // invocation with NO `--` separator: `pnpm --filter X test:shard -- <args>` forwards the `--`
+  // LITERALLY into the vitest command, and vitest (cac) treats every option after a bare `--` as
+  // positional — so both flags were silently dropped, each shard ran the full suite and wrote the
+  // default `blob.json`, and only `if-no-files-found: error` on the upload caught it. The regex fails
+  // on `test:shard --` followed by a space/backslash/end (a bare separator) but not on `--shard`/
+  // `--outputFile` (letters follow the `--`).
+  it("forward --shard and --outputFile to test:shard without a bare `--` separator", () => {
+    for (const shard of shardedJobs) {
+      const step = shardStep(shard.body);
+      expect(step, `${shard.id} has no "Run the … shard" step`).toBeDefined();
+      const text = step.join("\n");
+      expect(text).toMatch(/--shard=\$\{\{\s*matrix\.shard\s*\}\}\//);
+      expect(text).toContain("--outputFile=");
+      expect(
+        text,
+        `${shard.id}: a bare \`--\` after test:shard is forwarded into vitest and drops the flags`,
+      ).not.toMatch(/test:shard\s+--(\s|\\|$)/);
+    }
+  });
+
   // Each sharded package's coverage gate: exactly one merge job, for the SAME package, that `needs`
   // the shard job (so it waits for the blobs and skips if a shard failed) and reads the SAME gate (so
   // it runs and skips in lockstep with its shards). Any of these wrong runs the gate on missing or
