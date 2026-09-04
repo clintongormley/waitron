@@ -425,12 +425,14 @@ describe("boot fence gossip (real Postgres): a superseding document adopted at r
   }, 60_000);
 });
 
-/** Polls `predicate` up to ~10s for its first defined value — boot.promote.test.ts's shape. */
-async function poll<T>(predicate: () => Promise<T | undefined>): Promise<T | undefined> {
+/** Polls `predicate` up to ~10s for its first defined value, THROWING on timeout so a call site can
+ * never silently proceed on an unmet condition (a `poll` that returned `undefined` let a test continue
+ * as if the background loop had recorded a pass — Copilot #214). boot.promote.test.ts's shape, hardened. */
+async function poll<T>(predicate: () => Promise<T | undefined>): Promise<T> {
   for (let i = 0; i < 200; i += 1) {
     const value = await predicate();
     if (value !== undefined) return value;
     await delay(50);
   }
-  return undefined;
+  throw new Error("poll: predicate did not become defined within ~10s");
 }

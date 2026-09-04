@@ -37,6 +37,19 @@ describe("readOnlyGate", () => {
     expect((await appWith(() => false).request("/thing", { method: "POST" })).status).toBe(200);
   });
 
+  it("pins the SAFE_METHODS set when read-only — HEAD/OPTIONS pass the gate, other write verbs are refused", async () => {
+    const app = appWith(() => true);
+    // The two safe non-GET verbs the gate must let THROUGH (HEAD is a bodyless GET, OPTIONS a CORS
+    // preflight): the gate does not 403 them. (Downstream routing may still 404 an unhandled OPTIONS —
+    // that is not the gate's decision, so assert only that the gate did not block.)
+    expect((await app.request("/thing", { method: "HEAD" })).status).not.toBe(403);
+    expect((await app.request("/thing", { method: "OPTIONS" })).status).not.toBe(403);
+    // Every other write verb is refused with node.read_only.
+    for (const method of ["PUT", "PATCH", "DELETE"]) {
+      expect((await app.request("/thing", { method })).status).toBe(403);
+    }
+  });
+
   it("reads the predicate per request (the promotion seam)", async () => {
     const holder = { readOnly: true };
     const app = appWith(() => holder.readOnly);
