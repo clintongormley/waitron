@@ -526,18 +526,34 @@ vs gated on an unbuilt foundation or an external dependency:
   was already `(subscriber,origin,lane)`-split). Mirror stays read-only. Owner-steered report fix: reports resolve a
   `dataNodeId` (origin on a mirror), and the **overview is now venue-wide** (loosened the READ type
   `DailyCloseInput.nodeId` to optional; the fiscal WRITE `recordDailyClose` keeps a required node — verified a
-  per-SIF close can't go venue-wide). **R3b (cloud promotion) NEXT** — with R3a done it's a restart-into-primary
-  mode/role flip + the endorsed **term-guarded** promotion document + activating the reserved SIF + starting the
-  primary-only workers; correct `persistTrading.seriesId` to the cloud's own reserved series (R3a left it the
-  primary's, inert). **H2 (fiscal-record sync to mirrors)** independent. R1/R2 reviews recorded the **R3 sharp edge**
-  (spec §8): promote's unguarded upsert can regress `term` under concurrent newer gossip — R3b's promote write must
-  term-guard. **Carry-ins for R3b:** the primary burns an installation número per bundle-**fetch** (spec §7
-  gaps-permitted, admin-authed); the idempotency guard assumes provision/adopt are mutually exclusive per box
-  (true today). **Two new deferrals from R3a:** (i) **till-side read routing** — the till/KDS node-scoped reads
+  per-SIF close can't go venue-wide). **R3b (cloud promotion) LANDED #211** (2026-09-04; plan:
+  [membership-promotion-r3b-cloud-promotion](superpowers/plans/2026-09-04-membership-promotion-r3b-cloud-promotion.md)):
+  a read-only mirror promotes to primary IN-PROCESS on the identity it already holds (restart-into-primary) —
+  a mode/role flip (`mode→primary` BEFORE `singleton→primary`, respecting `deployment_role_valid_ck`) + the
+  endorsed **term-guarded** promotion document + the corrected `config.till.seriesId` (the cloud's OWN reserved
+  standard series via `readStandardSeriesId`, was the primary's inert one). **The R3 sharp edge is closed:** the
+  document write goes through `persistNodeMembershipIfNewerTx` INSIDE the PONR owner transaction, and a
+  non-strictly-newer term aborts the whole transaction (`promotion.membership_superseded`), so the flip never
+  commits against a superseded chart. **No SIF activation / re-mint** — the reserved `registro_sif` is already
+  live (`revocado_en IS NULL`), so `currentSif` returns it as the live selling chain and the primary-only workers
+  start once the box reboots `mode=primary`. New db primitives `persistNodeMembershipIfNewerTx` /
+  `setDeploymentModeTx` / `readStandardSeriesId` (fail-loud on >1 standard series); new codes
+  `promotion.membership_superseded`, `series.no_standard_for_node`. **Owner decision (2026-09-04): the corrected
+  `trading.env` is persisted BEFORE the PONR** (inert on a still-read-only mirror), closing the PROCESS-crash
+  window a persist-after-PONR left. **New carry-in — power-loss durability:** `writeFileAtomic` does NOT fsync
+  (atomic visibility only, `fs-atomic.ts`) while the PONR is a durable pg commit, so a power cut between the
+  pre-PONR env write and the commit could reboot the box `mode=primary` still carrying the primary's series;
+  benign in R3b (nothing sells against a promoted cloud until till-reroute), close it by fsync-ing the env write
+  (cross-cutting — adopt/provision share `writeFileAtomic`, cross-platform fsync care needed) or resolving the
+  series at boot. **H2 (fiscal-record sync to mirrors)** independent. **Carry-ins (unchanged):** the primary
+  burns an installation número per bundle-**fetch** (spec §7 gaps-permitted, admin-authed); the idempotency
+  guard assumes provision/adopt are mutually exclusive per box (true today). **Two new deferrals from R3a:** (i) **till-side read routing** — the till/KDS node-scoped reads
   (`listHeldOrders`/`listStationQueue`/`listExpoQueue`) still filter `working_orders`/`ticket_items` by the OWN id, so
   they'd return empty on a mirror; unreachable today (the read-only gate 403s till login, guarded by a test), but the
   till-reroute slice that gives tills access to a promoted mirror MUST route these through the display-data node
-  first. (ii) **richer daily close** — a single close run by the primary across all tills, grouped by till + a venue
+  first — and MUST gate selling on REBOOT COMPLETION (the corrected series in effect), not on the PONR commit,
+  since a promoted-not-yet-rebooted box briefly opens writes in-process under the stale series (see R3b's
+  power-loss carry-in above). (ii) **richer daily close** — a single close run by the primary across all tills, grouped by till + a venue
   total (its own slice; fiscal nuance: cash-up is per-till drawer, VAT is per-NIF). Slice 6 (rejoin) and Slice 7 (conflict surface) follow the arc. **Owner directive
   (2026-09-03): stop deferring work because it touches fiscal code** — H2 / reserved-SIF / promotion are
   in the build sequence now, no longer "owner-gated / never land unattended" (correctness rigor on the
@@ -562,10 +578,11 @@ vs gated on an unbuilt foundation or an external dependency:
   (3) **distribution** over `/sync-api/hello` + local adoption **LANDED #202** (plan:
   [membership-slice-3-distribution](superpowers/plans/2026-09-03-membership-slice-3-distribution.md));
   (4) **setup/adopt** trust establishment **LANDED #203**; (5) **promotion
-  integration** — local-secondary mint **LANDED (R1 #205)**, reserved-SIF-at-adopt **LANDED (R2 #208)**;
-  cloud promotion (**R3**) is the remaining piece (see the membership arc above);
+  integration** — local-secondary mint **LANDED (R1 #205)**, reserved-SIF-at-adopt **LANDED (R2 #208)**,
+  split-identity-at-join **LANDED (R3a #210)**, cloud promotion **LANDED (R3b #211)** — Slice 5 COMPLETE
+  (see the membership arc above; residuals: power-loss durability + till-reroute);
   (6) **rejoin — drain-then-restore** [fiscal-adjacent → owner sign-off before land]; (7) **conflict
-  surface** (config down-only + ops conflict log). Unblocks promote Slice 5 + the conflict watcher.
+  surface** (config down-only + ops conflict log). Slice 6 (rejoin) and Slice 7 (conflict surface) remain.
   **Slice 3 (distribution) LANDED #202** (2026-09-03): `/sync-api/hello` now serves `{ nodeId, environment,
   membership }` (the held signed document or `null`); the pull worker threads that field out of the
   handshake it already makes each tick and hands it to an injected **best-effort** `adoptMembership`
