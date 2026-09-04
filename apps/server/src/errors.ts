@@ -1340,8 +1340,9 @@ declare module "@waitron/shared" {
     /**
      * A mirror→primary promote (R3b) minted a membership document at term N+1 over the held term N, but a
      * concurrent gossip-adopt had already landed a document at term ≥ N+1 by the time the point-of-no-return
-     * transaction ran. The term-guarded write (`persistNodeMembershipIfNewer`) refused it — writing would
-     * regress the org chart (parent spec §8 "R3 sharp edge") — so the WHOLE promote transaction aborts and
+     * transaction ran. The term-guarded write (`persistNodeMembershipIfNewerTx`, inside the promote's own
+     * PONR transaction) refused it — writing would regress the org chart (parent spec §8 "R3 sharp edge") —
+     * so the WHOLE promote transaction aborts and
      * the mode/singleton flip does not commit: the node stays a mirror. Idempotent re-run recovers (it reads
      * the now-newer held term and mints over it). `heldTerm`/`mintedTerm` are org-chart generation counters,
      * not secrets. `promotion.*` names the domain concept; never renamed once shipped.

@@ -156,11 +156,12 @@ export interface MirrorPromotionResult extends PromotionResult {
  * against a superseded chart.
  *
  * The diagnostic held-term read runs `readNodeMembership` on `tx`, NOT a separate app handle: under
- * READ COMMITTED the row holds the raced-in committed term either way (our no-op upsert already saw it),
- * but on PGlite the app handle and this transaction SHARE one connection, so reading through it here
- * would deadlock behind the open transaction. Reading via `tx` is deadlock-free on PGlite and identical
- * on real Postgres. (`readNodeMembership` accepts a `Database | Transaction` for exactly this — the
- * value is only for the error message; the throw is what rolls the transaction back regardless.)
+ * READ COMMITTED the row holds the raced-in committed term either way (our no-op upsert already saw it).
+ * Reading it on the app handle instead was measured to hang the suite to the vitest timeout, because on
+ * PGlite the app handle and this owner transaction share ONE backend connection, so the app read blocks
+ * behind this still-open transaction; on `tx` it does not, and the value read is identical on real
+ * Postgres. (`readNodeMembership` accepts a `Database | Transaction` for exactly this — the value is only
+ * for the error message; the throw is what rolls the transaction back regardless.)
  */
 export async function commitMirrorPromotionTx(
   tx: Transaction,
