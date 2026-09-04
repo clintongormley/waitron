@@ -465,12 +465,30 @@ vs gated on an unbuilt foundation or an external dependency:
   New fiscal primitives `reserveInstallationNumber`/`writeReservedSif` (single-writer preserved);
   idempotent establish (spec §8, `membership.node_key` sentinel). **Two owner-review decisions:** disjoint
   series code scheme (AEAT error 3000 is the sole cross-node backstop); endorsement on `nodes.endorsement`
-  not the vault. **R3 (cloud promotion) NEXT** (needs its own plan); **H2 (fiscal-record sync to mirrors)**
-  is independent. R1/R2 reviews recorded the **R3 sharp edge** (spec §8): promote's unguarded upsert can
-  regress `term` under concurrent newer gossip — R3's promote write must term-guard. **R2 carry-ins for R3:**
-  the primary burns an installation número per bundle-**fetch** (not just per successful adopt — spec §7
-  gaps-permitted, admin-authed); the idempotency guard assumes provision/adopt are mutually exclusive per
-  box (true today; R3 reads the same `membership.node_key`). Slice 6 (rejoin) and Slice 7 (conflict surface) follow the arc. **Owner directive
+  not the vault. **R3 reframed on the owner's call (2026-09-04): the cloud takes its OWN id from JOIN, not at
+  promotion** — split into **R3a → R3b** (design refined:
+  [membership-promotion-r3-cloud-promotion](superpowers/specs/2026-09-04-membership-promotion-r3-cloud-promotion-design.md)).
+  **R3a (split identity at join) LANDED #210** (plan:
+  [membership-promotion-r3a-split-identity](superpowers/plans/2026-09-04-membership-promotion-r3a-split-identity.md)):
+  a cloud mirror now runs under its OWN nodeId from adopt (never impersonating the primary's) — `config.till.nodeId`
+  = own id, peer token enrolled for it, the primary's id persisted as new `mirror_config.origin_node_id` (custom
+  migration 0100) and used as the pull origin, the boot "subscriber==origin" assumption retired (the sync protocol
+  was already `(subscriber,origin,lane)`-split). Mirror stays read-only. Owner-steered report fix: reports resolve a
+  `dataNodeId` (origin on a mirror), and the **overview is now venue-wide** (loosened the READ type
+  `DailyCloseInput.nodeId` to optional; the fiscal WRITE `recordDailyClose` keeps a required node — verified a
+  per-SIF close can't go venue-wide). **R3b (cloud promotion) NEXT** — with R3a done it's a restart-into-primary
+  mode/role flip + the endorsed **term-guarded** promotion document + activating the reserved SIF + starting the
+  primary-only workers; correct `persistTrading.seriesId` to the cloud's own reserved series (R3a left it the
+  primary's, inert). **H2 (fiscal-record sync to mirrors)** independent. R1/R2 reviews recorded the **R3 sharp edge**
+  (spec §8): promote's unguarded upsert can regress `term` under concurrent newer gossip — R3b's promote write must
+  term-guard. **Carry-ins for R3b:** the primary burns an installation número per bundle-**fetch** (spec §7
+  gaps-permitted, admin-authed); the idempotency guard assumes provision/adopt are mutually exclusive per box
+  (true today). **Two new deferrals from R3a:** (i) **till-side read routing** — the till/KDS node-scoped reads
+  (`listHeldOrders`/`listStationQueue`/`listExpoQueue`) still filter `working_orders`/`ticket_items` by the OWN id, so
+  they'd return empty on a mirror; unreachable today (the read-only gate 403s till login, guarded by a test), but the
+  till-reroute slice that gives tills access to a promoted mirror MUST route these through the display-data node
+  first. (ii) **richer daily close** — a single close run by the primary across all tills, grouped by till + a venue
+  total (its own slice; fiscal nuance: cash-up is per-till drawer, VAT is per-NIF). Slice 6 (rejoin) and Slice 7 (conflict surface) follow the arc. **Owner directive
   (2026-09-03): stop deferring work because it touches fiscal code** — H2 / reserved-SIF / promotion are
   in the build sequence now, no longer "owner-gated / never land unattended" (correctness rigor on the
   §5 unrecoverable invariants + owner review-at-land are unchanged; only the scheduling gate is lifted).
