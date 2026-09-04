@@ -254,11 +254,15 @@ export class CanvasEditorScreen extends LitElement {
     this.duplicateName = event.detail.value;
   }
 
-  /** Create a copy of the armed canvas under the entered name, from the SAME definition, then reload. */
+  /** Create a copy of the armed canvas under the entered name, from the SAME definition, then reload.
+   * Duplicar is an IMMEDIATE server write (unlike Crear, which only enters editor mode), and the server
+   * accepts `""` as a name, so a blank/whitespace name is refused HERE — the dialog stays open (target
+   * kept) so the operator can correct it rather than silently persisting an empty-named canvas. */
   #confirmDuplicate(): void {
     const target = this.duplicateTarget;
     if (target === null) return;
-    const name = this.duplicateName;
+    const name = this.duplicateName.trim();
+    if (name === "") return;
     this.duplicateTarget = null;
     void this.#mutate(() => this.api.createCanvas(name, target.definition));
   }
@@ -394,6 +398,7 @@ export class CanvasEditorScreen extends LitElement {
         slot="footer"
         variant="primary"
         data-test="confirm-duplicate"
+        ?disabled=${this.duplicateName.trim() === ""}
         @click=${() => this.#confirmDuplicate()}
         >${t("canvas_editor.duplicate")}</wt-button
       >

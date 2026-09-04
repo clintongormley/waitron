@@ -100,6 +100,36 @@ describe("canvas-editor-screen list mode", () => {
     expect(api.createCanvas).toHaveBeenCalledWith("Counter till (copy)", canvases[0]!.definition);
   });
 
+  it("Duplicar does not create a canvas when the name is cleared to whitespace", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", { api });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-c1]")!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector("[data-test=duplicate-name]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "   " },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-duplicate]")!.click();
+    await flush(el);
+    expect(api.createCanvas).not.toHaveBeenCalled();
+    // The dialog stayed open (target retained), so correcting the name and confirming still works.
+    el.shadowRoot!.querySelector("[data-test=duplicate-name]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "Counter till (copy)" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-duplicate]")!.click();
+    await flush(el);
+    expect(api.createCanvas).toHaveBeenCalledWith("Counter till (copy)", canvases[0]!.definition);
+  });
+
   it("Duplicar prefills the name field with '<name> (copy)'", async () => {
     const api = stubApi();
     const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", { api });
