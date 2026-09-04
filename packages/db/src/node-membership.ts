@@ -15,8 +15,14 @@ import { nodeMembership } from "./schema/node-membership.js";
  * Uses `to_regclass` rather than catching an undefined-table error, exactly as `readMirrorConfig`/
  * `readDeploymentMode` do: a failed statement aborts the enclosing transaction in PostgreSQL, so
  * probing by failure would poison a transaction the caller may still need.
+ *
+ * Accepts a `Database` OR a `Transaction` (the explicit union `client.ts` blesses for a reader that
+ * must work on whatever handle it is given): R3b's promote reads the held term through its OWN owner
+ * transaction for the supersede diagnostic, so the read must be able to run on that `tx`.
  */
-export async function readNodeMembership(db: Database): Promise<SignedMembershipDocument | null> {
+export async function readNodeMembership(
+  db: Database | Transaction,
+): Promise<SignedMembershipDocument | null> {
   const present = await db.execute<{ exists: boolean }>(
     sql`select to_regclass('public.node_membership') is not null as exists`,
   );

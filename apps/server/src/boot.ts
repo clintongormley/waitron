@@ -37,7 +37,12 @@ import {
 import { assertDeploymentMatches } from "./deployment-guard.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { promoteLocalSecondaryToPrimary, promoteMirrorToPrimary } from "./promote.js";
-import type { FenceAttestation, MirrorPromotionResult, PromotionResult } from "./promote.js";
+import type {
+  FenceAttestation,
+  MirrorPromotionResult,
+  PromoteDeps,
+  PromotionResult,
+} from "./promote.js";
 import { codeOf } from "./error-code.js";
 import { createLogger, type Logger } from "./logger.js";
 import { createRotatingFileSink, createLogReader, tee } from "./log-file.js";
@@ -1614,6 +1619,30 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // `startListening` has bound the socket — so no boot-failure path can leak the UDP :5353 socket (an
   // earlier throw never started it). Both modes advertise; stopped in makeStartedServer's close() below.
   const mdns = startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: listBoxIpv4, log });
+  // Both in-process promotes open a short-lived owner pool from the migrations URL (the same open/close
+  // pattern the boot-time `stampProbe` above uses) rather than holding one open — a trading box keeps only
+  // the app pool — and hand the promote the same `PromoteDeps`. This factors that shell so each branch
+  // supplies only its promote call + any post-processing. If `WAITRON_MIGRATIONS_DATABASE_URL` is unset
+  // this URL defaults to the app URL, so the write hits `app_user` (no UPDATE on `deployment`) and throws
+  // 42501 — fails CLOSED, never a silent no-op. (Plan "Known limitations" #2: the REAL runtime admin
+  // connection is deferred with instance provisioning, boot.ts:529; this URL is the superuser in dev/CI
+  // where the promote is exercised.)
+  const withOwnerDb = async <T>(run: (deps: PromoteDeps) => Promise<T>): Promise<T> => {
+    const ownerDb = await createPostgresDb(config.migrationsDatabaseUrl);
+    try {
+      return await run({
+        appDb: db,
+        ownerDb,
+        holders,
+        log,
+        ring,
+        tenantId: till.tenantId,
+        nodeId: till.nodeId,
+      });
+    } finally {
+      await ownerDb.close();
+    }
+  };
   return makeStartedServer(
     server,
     health,
@@ -1668,27 +1697,15 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     mdns,
     // Which in-process promote this box exposes is decided ONCE at boot by the deployment mode (captured
     // in `isMirror`), so a mirror surfaces `promoteMirrorToPrimary` and a local secondary
-    // `promoteLocalSecondaryToPrimary` — never both. Both closures open the short-lived owner pool the
-    // same way (see the `local-secondary` note below); only the mirror path corrects `trading.env` and
-    // restarts, because only a mirror changes its selling series + `deployment.mode` on promotion.
+    // `promoteLocalSecondaryToPrimary` — never both. Both open the owner pool + build `PromoteDeps` via
+    // the shared `withOwnerDb` above; only the mirror path corrects `trading.env` and restarts, because
+    // only a mirror changes its selling series + `deployment.mode` on promotion.
     isMirror
       ? {
           kind: "mirror" as const,
-          run: async (attestation: FenceAttestation) => {
-            const ownerDb = await createPostgresDb(config.migrationsDatabaseUrl);
-            try {
-              const result = await promoteMirrorToPrimary(
-                {
-                  appDb: db,
-                  ownerDb,
-                  holders,
-                  log,
-                  ring,
-                  tenantId: till.tenantId,
-                  nodeId: till.nodeId,
-                },
-                attestation,
-              );
+          run: (attestation: FenceAttestation) =>
+            withOwnerDb(async (deps) => {
+              const result = await promoteMirrorToPrimary(deps, attestation);
               if (!result.alreadyPrimary) {
                 // Correct `trading.env`: the promoted primary numbers under its OWN reserved standard
                 // series (`result.seriesId`), not the primary's inert `till.seriesId` that adopt wrote
@@ -1714,39 +1731,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
                 setTimeout(() => process.kill(process.pid, "SIGTERM"), 0);
               }
               return result;
-            } finally {
-              await ownerDb.close();
-            }
-          },
+            }),
         }
       : {
           kind: "local-secondary" as const,
-          run: async (attestation: FenceAttestation) => {
-            // Owner-role write: open a short-lived owner pool from the migrations URL (the same open/close
-            // pattern the boot-time `stampProbe` above uses) rather than holding one open — a trading box
-            // keeps only the app pool. If `WAITRON_MIGRATIONS_DATABASE_URL` is unset this URL defaults to
-            // the app URL, so the write hits `app_user` (no UPDATE on `deployment`) and throws 42501 —
-            // fails CLOSED, never a silent no-op. See the plan's "Known limitations" #2: the REAL runtime
-            // admin connection is deferred with instance provisioning (boot.ts:529); this URL is the
-            // superuser in dev/CI where the promote is exercised.
-            const ownerDb = await createPostgresDb(config.migrationsDatabaseUrl);
-            try {
-              return await promoteLocalSecondaryToPrimary(
-                {
-                  appDb: db,
-                  ownerDb,
-                  holders,
-                  log,
-                  ring,
-                  tenantId: till.tenantId,
-                  nodeId: till.nodeId,
-                },
-                attestation,
-              );
-            } finally {
-              await ownerDb.close();
-            }
-          },
+          run: (attestation: FenceAttestation) =>
+            withOwnerDb((deps) => promoteLocalSecondaryToPrimary(deps, attestation)),
         },
   );
 }

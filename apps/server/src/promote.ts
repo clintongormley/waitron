@@ -1,5 +1,4 @@
 import "./errors.js"; // register promotion.* on the shared registry (reachability convention)
-import { sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import {
   persistNodeMembershipIfNewerTx,
@@ -140,8 +139,7 @@ export async function promoteLocalSecondaryToPrimary(
   return { alreadyPrimary: false };
 }
 
-export interface MirrorPromotionResult {
-  readonly alreadyPrimary: boolean;
+export interface MirrorPromotionResult extends PromotionResult {
   /** The cloud's OWN reserved standard series id — the caller persists it into trading.env so the
    * promoted primary numbers under its disjoint series, not the primary's (spec §4.3). */
   readonly seriesId: string;
@@ -157,12 +155,12 @@ export interface MirrorPromotionResult {
  * transaction is aborted (`promotion.membership_superseded`) and the mode/singleton flip does not commit
  * against a superseded chart.
  *
- * The diagnostic held-term read runs on `tx`, NOT a separate app handle: under READ COMMITTED the row
- * holds the raced-in committed term either way (our no-op upsert already saw it), but on PGlite the app
- * handle and this transaction SHARE one connection, so reading through it here would deadlock behind the
- * open transaction. Reading via `tx` is deadlock-free on PGlite and identical on real Postgres, and the
- * `node_membership` table exists by construction on any promote path, so no `to_regclass` probe is
- * needed (the throw is what rolls the transaction back regardless).
+ * The diagnostic held-term read runs `readNodeMembership` on `tx`, NOT a separate app handle: under
+ * READ COMMITTED the row holds the raced-in committed term either way (our no-op upsert already saw it),
+ * but on PGlite the app handle and this transaction SHARE one connection, so reading through it here
+ * would deadlock behind the open transaction. Reading via `tx` is deadlock-free on PGlite and identical
+ * on real Postgres. (`readNodeMembership` accepts a `Database | Transaction` for exactly this — the
+ * value is only for the error message; the throw is what rolls the transaction back regardless.)
  */
 export async function commitMirrorPromotionTx(
   tx: Transaction,
@@ -172,11 +170,9 @@ export async function commitMirrorPromotionTx(
   await setSingletonRoleTx(tx, "primary"); // (primary, primary)
   const accepted = await persistNodeMembershipIfNewerTx(tx, document);
   if (!accepted) {
-    const current = await tx.execute<{ document: SignedMembershipDocument }>(
-      sql`select document from node_membership where id = 1`,
-    );
+    const current = await readNodeMembership(tx);
     throw new AppError("promotion.membership_superseded", {
-      heldTerm: current.rows[0]?.document.body.term ?? -1,
+      heldTerm: current?.body.term ?? -1,
       mintedTerm: document.body.term,
     });
   }
