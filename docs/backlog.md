@@ -663,6 +663,12 @@ vs gated on an unbuilt foundation or an external dependency:
     its **stale-held-doc primary** until the pull delivers the superseding doc and restarts it (≈ one
     pull interval). Deliberately **not** boot-into-read-only-until-confirmed — that would black out a
     genuinely isolated returning node with no reachable peer (§5.1).
+  - **Bounded one-tick restart window (accepted, honesty note — not a defect):** the runtime
+    adopt→restart path leaves a bounded **one-tick** window — the node persists the fencing document,
+    then a next-tick `SIGTERM` reboots it into the fenced posture, so one more fiscal pass could file on
+    the now-known-superseded chain before the reboot lands. This is inherent to restart-based fencing —
+    the same mechanism R3b promotion uses — and is consistent with spec §8.4; the node is **fully fenced
+    on reboot**.
   - **`nextStandings` still never emits `evicted`** — R1 only reacts to `sell-only`; the eviction
     producer lands with R2/R3.
   **Slice 3 (distribution) LANDED #202** (2026-09-03): `/sync-api/hello` now serves `{ nodeId, environment,
