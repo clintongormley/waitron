@@ -930,14 +930,13 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // fence only by the wipe-and-restore of a later round, which is a fresh boot anyway.
       readOnlyGate(
         () => holders.mode.current === "mirror" || fenced,
-        // Let the peer-authenticated sync source through the fence: a fenced node serves its own-origin
-        // drain source (R2), and the carrier's cursor report (POST /sync-api/cursor) is how the disposal
-        // guard learns its progress. A mirror mounts no /sync-api, so this is a no-op there.
-        // WARNING: the exemption is by the `/sync-api/` PREFIX, so any future mutating route added under
-        // it would inherit this fence bypass automatically. Keep `/sync-api/` writes limited to
-        // operational sync state (today only POST /sync-api/cursor, which writes `sync_cursor` — no
-        // tenant_id, no RLS); a tenant/fiscal-touching route must NEVER live under this prefix.
-        (c) => c.req.path.startsWith("/sync-api/"),
+        // Let exactly the carrier's cursor report through the fence: POST /sync-api/cursor is the
+        // disposal guard's only input (it writes `sync_cursor` — no tenant_id, no RLS). The exemption
+        // names that ONE route, not the `/sync-api/` prefix, so a future mutating route added under the
+        // prefix is NOT auto-exempted — it hits the fence and fails loud (403), the safe default. The GET
+        // source routes (`/sync-api/hello`, `/sync-api/log`) need no exemption: they pass as SAFE_METHODS.
+        // A mirror mounts no /sync-api, so this is a no-op there.
+        (c) => c.req.method === "POST" && c.req.path === "/sync-api/cursor",
       ),
     );
   }
@@ -1281,8 +1280,8 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // one exception is a FENCED node (membership rejoin R2): the `else if (fenced)` branch below serves a
     // narrow OWN-ORIGIN-ONLY drain source (`ownOriginOnly` forces originId=self, no worker mounted), which
     // is NOT a duplicate of this authoritative/all-origin source and re-enables no singleton duty —
-    // `isSingletonPrimary` stays false. The
-    // pull worker below still runs whenever sync is configured — pulling is NOT a singleton duty (a mirror
+    // `isSingletonPrimary` stays false.
+    // The pull worker below still runs whenever sync is configured — pulling is NOT a singleton duty (a mirror
     // pulls through the tunnel HTTP client, a secondary pulls too), so it stays outside this gate.
     if (isSingletonPrimary) {
       mountSyncApi(
@@ -1533,6 +1532,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // `SET ROLE app_user`s and would drop the sync_tailer membership's SELECT on `sync_log`; `withTenant`
   // only sets the GUC (packages/db/src/tenancy.ts), leaving the login's inherited grants intact.
   const lagPool = syncDb;
+  // Hoisted to a plain `const` so TS keeps the `carrierNodeId !== undefined` narrowing inside the
+  // `readDisposal` arrow below (a captured `const`, unlike a `let`, does not widen — same rule the
+  // `localSyncDb` comment above states).
+  const carrierNodeId = heldMembership === null ? undefined : servingPrimaryNodeId(heldMembership);
   mountBoxStatusApi(
     app,
     {
@@ -1558,18 +1561,13 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // carrier's reported cursor on the SAME sync_tailer pool under withTenant the lag reader uses.
       // Absent (undefined) on a serving node → box-status reports disposal.applicable:false.
       readDisposal:
-        lagPool !== undefined && fenced
-          ? (() => {
-              const carrierNodeId =
-                heldMembership === null ? undefined : servingPrimaryNodeId(heldMembership);
-              if (carrierNodeId === undefined) return undefined;
-              return async () => ({
-                carrierNodeId,
-                ...(await withTenant(lagPool, till.tenantId, (tx) =>
-                  readDrainProgress(tx, { selfNodeId: till.nodeId, carrierNodeId }),
-                )),
-              });
-            })()
+        lagPool !== undefined && fenced && carrierNodeId !== undefined
+          ? async () => ({
+              carrierNodeId,
+              ...(await withTenant(lagPool, till.tenantId, (tx) =>
+                readDrainProgress(tx, { selfNodeId: till.nodeId, carrierNodeId }),
+              )),
+            })
           : undefined,
       readBackup:
         backupWorker !== undefined

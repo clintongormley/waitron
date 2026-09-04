@@ -108,8 +108,8 @@ export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxSt
       applicable: true,
       carrierNodeId: d.carrierNodeId,
       drained: d.drained,
-      ownTailSeq: d.ownTailSeq === null ? null : d.ownTailSeq.toString(),
-      carrierAppliedSeq: d.carrierAppliedSeq === null ? null : d.carrierAppliedSeq.toString(),
+      ownTailSeq: d.ownTailSeq?.toString() ?? null,
+      carrierAppliedSeq: d.carrierAppliedSeq?.toString() ?? null,
     };
   }
 

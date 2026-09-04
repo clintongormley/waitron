@@ -40,29 +40,29 @@ export async function readDrainProgress(
   let drained = true;
   for (const lane of SYNC_LANES) {
     const tables = tablesForLane(lane);
-    // This lane's own-origin high-water. `select max(seq)` always returns one row (max_seq null when
-    // there are no matching rows). `tablesForLane` is total and non-empty for every SYNC_LANES entry,
-    // so `in ${tables}` is emitted unconditionally — no `length === 0` arm to guard (unlike
-    // readSyncLogSince, whose `tables` is a caller-supplied allowlist that may legitimately be empty).
-    const ownRes = await db.execute<{ max_seq: string | null }>(sql`
-      select max(seq)::text as max_seq
-      from sync_log
-      where origin_id = ${args.selfNodeId}::uuid
-        and table_name in ${tables}
+    // This lane's own-origin high-water AND the carrier's reported cursor for it, as two scalar
+    // subqueries in ONE round-trip per lane. `max(seq)` always yields one row (max_seq null when there
+    // are no matching rows); the cursor subquery is null when the carrier has drained nothing on this
+    // lane. `tablesForLane` is total and non-empty for every SYNC_LANES entry, so `in ${tables}` is
+    // emitted unconditionally — no `length === 0` arm to guard (unlike readSyncLogSince, whose `tables`
+    // is a caller-supplied allowlist that may legitimately be empty).
+    const laneRes = await db.execute<{
+      max_seq: string | null;
+      last_applied_seq: string | null;
+    }>(sql`
+      select
+        (select max(seq)::text from sync_log
+           where origin_id = ${args.selfNodeId}::uuid and table_name in ${tables}) as max_seq,
+        (select last_applied_seq::text from sync_cursor
+           where subscriber_id = ${args.carrierNodeId} and origin_id = ${args.selfNodeId}::uuid
+             and lane = ${lane}) as last_applied_seq
     `);
-    const ownMaxRaw = ownRes.rows[0]?.max_seq ?? null;
+    const ownMaxRaw = laneRes.rows[0]?.max_seq ?? null;
     if (ownMaxRaw === null) continue; // no own rows on this lane — nothing to drain here
     const laneOwnMax = BigInt(ownMaxRaw);
     // The carrier's reported cursor for (subscriber=carrier, origin=self, lane); absent → 0 (the
     // carrier has drained nothing on this lane), which fails the drained test below.
-    const curRes = await db.execute<{ last_applied_seq: string }>(sql`
-      select last_applied_seq::text as last_applied_seq
-      from sync_cursor
-      where subscriber_id = ${args.carrierNodeId}
-        and origin_id = ${args.selfNodeId}::uuid
-        and lane = ${lane}
-    `);
-    const curRaw = curRes.rows[0]?.last_applied_seq;
+    const curRaw = laneRes.rows[0]?.last_applied_seq ?? undefined;
     const laneCarrier = curRaw === undefined ? 0n : BigInt(curRaw);
     if (laneCarrier < laneOwnMax) drained = false;
     ownTailSeq = ownTailSeq === null || laneOwnMax > ownTailSeq ? laneOwnMax : ownTailSeq;

@@ -25,6 +25,7 @@ import {
   generateNodeKeyPair,
   signDocumentBody,
   type MembershipDocumentBody,
+  type MembershipNode,
   type SignedMembershipDocument,
 } from "@waitron/membership";
 import { enrolPeer } from "@waitron/sync";
@@ -193,15 +194,7 @@ async function seedTillIdentity(admin: Database): Promise<void> {
  * write it directly through the plain-upsert setter, exactly as an owner/promote path would persist an
  * already-verified document. */
 function selfDoc(standing: "sell-only" | "serving-primary"): SignedMembershipDocument {
-  return {
-    body: {
-      term: 5,
-      nodes: [{ nodeId: TILL_ENV.WAITRON_TILL_NODE_ID, contactUrl: "", standing }],
-    },
-    signerNodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
-    signature: "self-placeholder-sig",
-    endorsements: [],
-  };
+  return membershipDoc([{ nodeId: TILL_ENV.WAITRON_TILL_NODE_ID, contactUrl: "", standing }]);
 }
 
 /** A held document (design §3/§5) marking THIS node `sell-only` (the fence) AND the CARRIER
@@ -209,14 +202,18 @@ function selfDoc(standing: "sell-only" | "serving-primary"): SignedMembershipDoc
  * carrier the disposal reader drains onto (membership rejoin R2). Written directly through the
  * plain-upsert setter, as an owner/promote path persists an already-verified document. */
 function fencedWithCarrierDoc(): SignedMembershipDocument {
+  return membershipDoc([
+    { nodeId: TILL_ENV.WAITRON_TILL_NODE_ID, contactUrl: "", standing: "sell-only" },
+    { nodeId: CARRIER_NODE_ID, contactUrl: "", standing: "serving-primary" },
+  ]);
+}
+
+/** The shared term-5 self-signed envelope both `selfDoc` and `fencedWithCarrierDoc` build — they
+ * differ only in `nodes`. Signature is the placeholder the plain-upsert setter accepts (the fence read
+ * is UNVERIFIED). */
+function membershipDoc(nodes: readonly MembershipNode[]): SignedMembershipDocument {
   return {
-    body: {
-      term: 5,
-      nodes: [
-        { nodeId: TILL_ENV.WAITRON_TILL_NODE_ID, contactUrl: "", standing: "sell-only" },
-        { nodeId: CARRIER_NODE_ID, contactUrl: "", standing: "serving-primary" },
-      ],
-    },
+    body: { term: 5, nodes },
     signerNodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
     signature: "self-placeholder-sig",
     endorsements: [],
