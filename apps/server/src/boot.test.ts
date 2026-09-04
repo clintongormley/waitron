@@ -818,6 +818,128 @@ describe("startServer, against a real container as the deployment role", () => {
     }
   }, 60_000);
 
+  it("trading mode migrates ONLY the modules.json-enabled sets, skipping a disabled toggleable module (SP-1b)", async () => {
+    // SP-1b's trading-mode filter (architecture §1.3): on a trading boot the migration seam migrates only the
+    // sets the on-box `<stateDir>/modules.json` enables, not every module. A pristine `template0` clone
+    // is the ONLY harness that can PROVE a skip — the pre-migrated `manifest` template already carries
+    // every `__drizzle_migrations_<name>` journal, so a filtered run there could never make one ABSENT
+    // (a measurement where both answers look alike measures nothing, CLAUDE.md §1). Here `scheduler` is
+    // disabled, so its journal exists after boot ONLY if the filter failed to skip it — which is exactly
+    // the prove-by-deletion target (revert `setsToMigrate` to an unconditional `ALL_MODULES` and this
+    // goes RED, the scheduler table reappears).
+    //
+    // A disabled statically-wired module can break a FULL trading boot (SP-1b does not claim a module
+    // can be turned off and still boot-and-trade), and this pristine clone carries no seeded venue for
+    // `readOrderFlow` either — both throw AFTER the shared migration seam and the drift log have already
+    // run. So the boot is wrapped in try/catch and the assertion is on the RESULTING migration-table
+    // state, not on boot success (assert what actually happened, CLAUDE.md §1).
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-modules-filter-state-"));
+    // Disable one toggleable module. `core` is never disableable (`parseModuleConfig` refuses it);
+    // `scheduler` is `tier: "toggleable"` in ALL_MODULES and owns `__drizzle_migrations_scheduler`, so
+    // its absence/presence is an unambiguous witness of whether the filter ran.
+    await writeFile(
+      join(stateDir, "modules.json"),
+      JSON.stringify({ modules: { scheduler: false } }),
+    );
+    // Pristine clone: `template0` carries no app objects, so a journal below exists only because boot's
+    // (now filtered) migration run created it. Superuser URL doubles as migrator + pool, as the
+    // setup-from-empty test above; the deployment probe reads `null` on the unstamped DB and passes.
+    const pg = await cloneTemplate(suite.pg.uri, "template0", nextCloneName());
+    let server: StartedServer | undefined;
+    let probe: Awaited<ReturnType<typeof createPostgresDb>> | undefined;
+    try {
+      try {
+        server = await startServer({
+          ...KEY_ENV,
+          DATABASE_URL: pg.uri,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_ENV: "preproduction",
+        });
+      } catch {
+        // Expected: this pristine clone seeds no venue, so the trading branch's `readOrderFlow` (and a
+        // disabled statically-wired module's own wiring) throws AFTER the migration seam this test
+        // asserts. The throw is swallowed deliberately — the seam's effect is already committed.
+      }
+      probe = await pg.connect();
+      // The disabled module's journal is ABSENT — the filter skipped its set entirely (only its own
+      // migration run would create the table). `to_regclass` returns NULL for a missing relation,
+      // matching the style already used in the tree.
+      const schedulerReg = await probe.execute<{ reg: string | null }>(
+        sql.raw(`select to_regclass('public.__drizzle_migrations_scheduler') as reg`),
+      );
+      expect(schedulerReg.rows[0]!.reg).toBeNull();
+      // A DIFFERENT toggleable module's journal IS present and populated to its shipped head — the
+      // filter kept every ENABLED set. `payments` is enabled (absent from the override map = default-on)
+      // and owns its own journal; `expected > 0` is the control (an empty journal would let `0 === 0`
+      // pass without the set having been migrated at all, CLAUDE.md §1).
+      const payments = ALL_MODULES.find((m) => m.name === "payments")!;
+      const paymentsExpected = expectedSchemaVersion(payments.migrations, migrationsRoot);
+      expect(paymentsExpected).toBeGreaterThan(0);
+      expect(await appliedSchemaVersion(probe, payments.migrations)).toBe(paymentsExpected);
+      // `core` (mandatory, never disableable — its table is `__drizzle_migrations_db`) migrated too:
+      // `enabledModules` never drops it whatever modules.json says.
+      const core = ALL_MODULES.find((m) => m.name === "core")!;
+      const coreExpected = expectedSchemaVersion(core.migrations, migrationsRoot);
+      expect(coreExpected).toBeGreaterThan(0);
+      expect(await appliedSchemaVersion(probe, core.migrations)).toBe(coreExpected);
+    } finally {
+      if (probe !== undefined) await probe.close();
+      if (server !== undefined) await server.close();
+      await rm(stateDir, { recursive: true, force: true });
+      await pg.stop();
+    }
+  }, 60_000);
+
+  it("trading mode logs module.reconcile drift naming a soft-disabled module (SP-1b spec §3)", async () => {
+    // The drift-log half of SP-1b (spec §3): a module the DATABASE has migrated but modules.json no
+    // longer enables is `softDisabled` — its data is kept, it is simply not migrated — and boot logs
+    // the reconcile outcome at `info` so an operator sees it. The shared suite DB (`databaseUrl`) is
+    // already migrated for every module AND carries the seeded venue, so a trading boot with
+    // `scheduler` disabled BOOTS SUCCESSFULLY (no throw): the filtered migration is a no-op for the 8
+    // enabled sets (already applied, idempotent) and never touches scheduler's still-present table
+    // (migrations never drop — its data is kept), so the drift read finds scheduler `migrated ∧
+    // ¬enabled` = softDisabled and logs it. Captured on stdout below.
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-drift-state-"));
+    await writeFile(
+      join(stateDir, "modules.json"),
+      JSON.stringify({ modules: { scheduler: false } }),
+    );
+    let server: StartedServer | undefined;
+    try {
+      const [started, reconcileLine] = await withCapturedStdout(async (lines) => {
+        const s = await startServer({
+          ...KEY_ENV,
+          DATABASE_URL: databaseUrl,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_ENV: "production",
+          WAITRON_MIN_TICK_MS: "50",
+          WAITRON_MAX_TICK_MS: "200",
+          WAITRON_SKIP_RETRY_MS: "100",
+        });
+        // The reconcile line is logged in the shared prefix, before the listener — so it is already
+        // captured by the time `startServer` resolves. Reuse the file's `waitForEvent` helper rather
+        // than re-implementing the find-a-JSON-log-line-by-event loop.
+        const found = await waitForEvent(lines, "module.reconcile");
+        return [s, found] as const;
+      });
+      server = started;
+      // Names the soft-disabled module — the operator-visible signal that scheduler's schema is in the
+      // DB but no longer enabled. `toMigrate` is empty: every ENABLED set was already migrated in the
+      // shared DB, so nothing is pending.
+      expect(reconcileLine.softDisabled).toEqual(["scheduler"]);
+      expect(reconcileLine.toMigrate).toEqual([]);
+    } finally {
+      if (server !== undefined) await server.close();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("setup mode serves the built setup wizard at / end-to-end when WAITRON_SETUP_APP_DIR is configured", async () => {
     // The end-to-end proof that `config.setupAppDir` threads config → boot's SETUP branch → `mountSetup`
     // → `mountSpa`: a real `startServer` boot in setup mode (all five WAITRON_TILL_*_ID omitted) with
@@ -1313,8 +1435,8 @@ describe("startServer, against a real container as the deployment role", () => {
     //
     // The box boots with `WAITRON_ENV: "preproduction"` (as the demo tests above) even though this
     // provision stamps PRODUCTION: `provisionVenue` stamps `req.environment` — the endpoint's
-    // mode-derived value (live → production, provision.ts:76) — NOT `config.environment`, which
-    // `boot.ts` (line 528) never threads into `provisionVenue`. So this isolates the SEAL without
+    // mode-derived value (live → production, provision.ts:94) — NOT `config.environment`, which
+    // `boot.ts` (line 695) never threads into `provisionVenue`. So this isolates the SEAL without
     // dragging in the production `loadConfig` surface (RP id/origin, credentials key). The production
     // stamp is asserted below, which proves the live fork end-to-end from the preproduction-booted box.
     const port = await freePort();

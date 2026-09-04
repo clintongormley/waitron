@@ -13,8 +13,14 @@ import { getCredential, loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { hashPassword, hashPin } from "@waitron/identity";
 import type { VenueRequest } from "@waitron/provisioning";
 import { hasCode, isAppError, tenantId as brandTenantId } from "@waitron/shared";
+import { parseModuleConfig } from "@waitron/module";
 import { provisionVenue } from "./provision.js";
+import { ALL_MODULES } from "./modules.js";
 import { sealAeatCredential, type AeatCert } from "./aeat-credential.js";
+
+// All modules enabled — the seal fixture provisions a real venue, so its provision must not be
+// refused by the SP-1b fiscal gate (that gate is exercised in provision.test.ts).
+const ALL_ENABLED = parseModuleConfig({}, ALL_MODULES);
 
 // Real Postgres, not PGlite: `tenant_credentials` is FORCE-RLS, so `putCredential` must run under
 // `withTenant`, and the seal FKs to a `tenants` row `provisionVenue` mints under the OWNER
@@ -112,7 +118,7 @@ function ownerDb(): Database {
 /** Provision a fresh venue and return its tenant id — the FK/RLS target the seal needs. */
 async function provisionTenant(target: Database): Promise<string> {
   const result = await provisionVenue(
-    { ownerDb: target },
+    { ownerDb: target, moduleConfig: ALL_ENABLED },
     { environment: "preproduction", venue: venueRequest(nextNif()) },
   );
   return result.tenantId;

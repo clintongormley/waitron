@@ -12,7 +12,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@waitron/migrations": "workspace:*"
+    "@waitron/migrations": "workspace:*",
+    "@waitron/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

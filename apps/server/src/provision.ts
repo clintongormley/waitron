@@ -8,6 +8,8 @@ import {
   type VenueResult,
 } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
+import { disabledProvisionOnly, type ModuleConfig } from "@waitron/module";
+import { ALL_MODULES } from "./modules.js";
 import "./errors.js";
 
 export interface ProvisionRequest {
@@ -21,6 +23,9 @@ export interface ProvisionDeps {
   /** The OWNER connection to the target database (`config.migrationsDatabaseUrl`) — the admin that
    * owns the tables, which `applyVenue` needs and which `stampDeployment` writes the singleton with. */
   ownerDb: Database;
+  /** The desired module set (from `<stateDir>/modules.json`). A `provision-only` module disabled here
+   * refuses provisioning (spec §4) — never mint an unrecoverable chain for a module that is off. */
+  readonly moduleConfig: ModuleConfig;
 }
 
 /**
@@ -40,8 +45,12 @@ export interface ProvisionDeps {
  * concurrent case. A future caller from another process would need its own external lock.
  *
  * The order is load-bearing and matches the plan's D-decisions:
- *  1. `planVenue` FIRST — pure validation (locales/series/territory), so a malformed request throws
- *     before any DB write and no admin connection is spent.
+ *  0. **SP-1b fiscal gate.** Before anything else, refuse if a `provision-only` module (fiscal today)
+ *     is disabled in `deps.moduleConfig` — `applyVenue` mints an unrecoverable SIF/hash chain
+ *     (CLAUDE.md §5), so a disabled provision-only module must never reach it. No DB write has
+ *     happened yet.
+ *  1. `planVenue` — pure validation (locales/series/territory), so a malformed request throws before
+ *     any DB write and no admin connection is spent.
  *  2. **Double-provision guard (the fiscal footgun, R6b).** `applyVenue`'s location/till/node/SIF have
  *     NO business key, so a second run ADDS a shop and mints a FRESH SIF/hash chain (venue-apply.ts's
  *     own header). Nothing in `applyVenue` stops a re-POST from starting a second chain, and a wrong
@@ -58,7 +67,16 @@ export async function provisionVenue(
   deps: ProvisionDeps,
   req: ProvisionRequest,
 ): Promise<VenueResult> {
-  // 1. Pure validation first — throws before touching the database.
+  // 0. SP-1b fiscal gate. A `provision-only` module (fiscal today) that modules.json disables must
+  // never be seeded — registerSif mints an unrecoverable chain (CLAUDE.md §5). SP-1b REFUSES rather
+  // than building a fiscal-less venue (that path touches the fiscal core and is SP-3). Generic: it
+  // names no module, it iterates the provision-only tier.
+  const blocked = disabledProvisionOnly(ALL_MODULES, deps.moduleConfig);
+  if (blocked.length > 0) {
+    throw new AppError("module.provision_only_disabled", { module: blocked[0]! });
+  }
+
+  // 1. Pure validation — throws before touching the database.
   const plan = planVenue(req.venue);
   const tenantId = obligadoTenantId(req.venue.country, req.venue.taxId);
 

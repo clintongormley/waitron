@@ -21,10 +21,11 @@ import {
 } from "@waitron/payments-stripe";
 import type { PaymentProvider } from "@waitron/payments";
 import { drain } from "@waitron/fiscal-verifactu";
-import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
-import { orderedMigrationSets } from "@waitron/module";
+import { appliedSchemaVersion, applyMigrations, migrationOptionsFor } from "@waitron/migrations";
+import { enabledModules, orderedMigrationSets, reconcile } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
+import { readModuleConfig } from "./module-config.js";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { parseEnvFile } from "./env-file.js";
 import {
@@ -527,11 +528,57 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // for nothing, and it means the pool is never asked to double as the migrator's connection: the
   // two connection strings can differ, and `applyMigrations` now opens its own connection from
   // whichever string it is given rather than migrating over a pool built from a different one.
+  // SP-1b: the on-box `modules.json` desired set, read BEFORE the migration run — exactly when the
+  // decision is needed (architecture §1.3). Read UNCONDITIONALLY (both modes need it: trading for the
+  // migration filter + drift log, setup for the provisioning gate below), so a malformed file fails
+  // fast, once, before the migration run (only the short-lived stamp probe above has opened yet).
+  // Setup mode still migrates the FULL schema (the wizard needs it — SP-1a §4 "setup-migrates-all");
+  // trading mode migrates only the enabled set (default: all). `enabledModules` never drops `core` —
+  // it is `mandatory`, and `parseModuleConfig` refuses disabling a mandatory module.
+  const moduleConfig = await readModuleConfig(config.stateDir);
+  const setsToMigrate =
+    config.till === undefined ? ALL_MODULES : enabledModules(ALL_MODULES, moduleConfig);
   await applyMigrations(
     config.migrationsDatabaseUrl,
-    migrationOptionsFor(orderedMigrationSets(ALL_MODULES), config.migrationsRoot),
+    migrationOptionsFor(orderedMigrationSets(setsToMigrate), config.migrationsRoot),
   );
   const db = await createPostgresDb(config.databaseUrl);
+
+  // SP-1b drift visibility (spec §3): compare the enabled set against what the DB has ACTUALLY
+  // migrated (derived from appliedSchemaVersion — there is no deployment column). softDisabled = a
+  // module the DB carries but modules.json no longer enables; its data is kept, it is simply not
+  // migrated. Logged at info so an operator sees the reconcile outcome; nothing acts on it here beyond
+  // the filter above.
+  //
+  // The reads run over their OWN short-lived MIGRATOR connection (`config.migrationsDatabaseUrl`, the
+  // same string `applyMigrations` and the stamp probe above use), NOT the app `db` pool. The migrator
+  // created and owns the drizzle journal tables (`__drizzle_migrations_*`), so it is the connection
+  // that reliably reads them; keep this probe on it rather than coupling the read to the app pool's
+  // role — the same reason the stamp probe above runs on the migrator connection, not the pool. They
+  // also run auto-commit — a plain per-statement
+  // `execute`, never inside a transaction — because `appliedSchemaVersion`'s 42P01 catch for a
+  // never-migrated table poisons an enclosing transaction (spec §3); a fresh connection used
+  // auto-commit satisfies that just as the pool would.
+  if (config.till !== undefined) {
+    const driftProbe = await createPostgresDb(config.migrationsDatabaseUrl);
+    try {
+      const migrated = new Set<string>();
+      for (const m of ALL_MODULES) {
+        if ((await appliedSchemaVersion(driftProbe, m.migrations)) > 0) migrated.add(m.name);
+      }
+      // `setsToMigrate` already holds `enabledModules(ALL_MODULES, moduleConfig)` in trading mode
+      // (the branch above), so reuse it rather than recompute the same filter.
+      const r = reconcile(
+        setsToMigrate.map((m) => m.name),
+        migrated,
+      );
+      if (r.softDisabled.length > 0 || r.toMigrate.length > 0) {
+        log("info", "module.reconcile", { softDisabled: r.softDisabled, toMigrate: r.toMigrate });
+      }
+    } finally {
+      await driftProbe.close();
+    }
+  }
 
   // Health state + the one Hono app, shared by BOTH modes: `/health` answers in setup mode too, and
   // whichever surface the branch below mounts (setup or trading) attaches to this same app. Created
@@ -645,7 +692,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
           app,
           {
             environment: config.environment,
-            provision: (req) => provisionVenue({ ownerDb }, req),
+            provision: (req) => provisionVenue({ ownerDb, moduleConfig }, req),
             adopt: (req) => {
               // Ruling 1 (fail loud at adopt, not at reboot): an adopted mirror MUST end up with
               // WAITRON_SYNC_DATABASE_URL in `trading.env`, because the next (mirror) boot's

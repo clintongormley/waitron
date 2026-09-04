@@ -31,7 +31,7 @@ export interface SetupDeps {
   /** The deployment environment (`production` / `preproduction`) this box booted under, echoed by
    * `/setup-api/status` so slice 2's wizard can warn before it provisions a real production venue. */
   environment: DeploymentEnvironment;
-  /** `provisionVenue({ ownerDb })` bound in boot: stamps the environment then mints the venue,
+  /** `provisionVenue({ ownerDb, moduleConfig })` bound in boot: stamps the environment then mints the venue,
    * returning the five ids the trading boot needs. Plaintext admin secrets never reach it — the
    * provision route hashes them at the boundary. */
   provision?: (req: ProvisionRequest) => Promise<VenueResult>;
@@ -111,10 +111,14 @@ const REVALIDATE_CACHE_CONTROL = "no-cache";
  * Every AppError code the provision route can THROW inside its error boundary, and its HTTP status.
  * Request-shape faults (`setup.request_invalid`, `setup.aeat_cert_required`) default to 400 but are
  * enumerated anyway so this map is the surface's whole 4xx contract (the house style `me-api.ts`'s
- * `STATUS` follows). The two 409s are the fiscal double-provision refusals: `setup.already_provisioned`
- * (the box already holds this tenant) and `deployment.already_stamped` (a preproduction box cannot
- * become production), both raised by `provisionVenue`. `setup.not_ready`/`setup.already_provisioning`
- * are NOT here — they are returned directly, before or outside the boundary, never thrown into it.
+ * `STATUS` follows). The 409s are provisioning refusals raised by `provisionVenue`:
+ * `setup.already_provisioned` (the box already holds this tenant) and `deployment.already_stamped`
+ * (a preproduction box cannot become production) — the fiscal double-provision pair — plus
+ * `module.provision_only_disabled` (a `provision-only` module, fiscal, is disabled in `modules.json`,
+ * so the box must not mint a fiscal chain — SP-1b's fiscal gate, step 0 of `provisionVenue`). All
+ * three are a request that conflicts with the box's current state/config, hence 409.
+ * `setup.not_ready`/`setup.already_provisioning` are NOT here — they are returned directly, before or
+ * outside the boundary, never thrown into it.
  *
  * An UNEXPECTED fault (anything thrown inside the boundary that is NOT an `AppError`) is not in this
  * map and is NOT re-emitted: `createErrorBoundary` (error-boundary.ts) answers it with an opaque
@@ -133,6 +137,12 @@ const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   "person.email_invalid": 400,
   "setup.already_provisioned": 409,
   "deployment.already_stamped": 409,
+  // SP-1b fiscal gate: provisioning refused because a `provision-only` module (fiscal) is disabled in
+  // `modules.json`. A conflict with the box's config, like the two refusals above — 409, not 400.
+  // Under default-on this never fires (no UI disables fiscal); enumerated so the map stays the whole
+  // 4xx contract. The setup wizard has no bespoke banner for it (its `default` case handles it) — a
+  // fiscal-less venue is not reachable through the wizard until SP-3.
+  "module.provision_only_disabled": 409,
 };
 
 // The `"setup.provision_failed"` here is the LOG TAG for the unexpected-crash branch, not a wire code
