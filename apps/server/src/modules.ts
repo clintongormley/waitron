@@ -12,10 +12,15 @@ import type { WaitronModule } from "@waitron/module";
  * `apps/server` is the composition root and is exempt from the english-only guard (spec §4).
  *
  * `name`/`version`/`tier`/`migrations` and now `requires` are populated. `requires` carries the
- * verified cross-set dependency graph (spec §3): every non-core module depends on `core`, and the
- * one inter-module edge is `workforce → identity` (workforce FKs `persons`, which identity owns).
- * All ranges are `"*"` because every module is workspace-locked at version `0.0.0`. `sync`, `cards`
- * and the other seats are declared on the contract but stay empty until their own slices land.
+ * verified cross-set dependency graph (spec §3): every non-core module depends on `core`. Cross-set
+ * dependencies arrive via BOTH foreign-key references AND `CREATE TRIGGER … ON <table>` targets — a
+ * module that installs a capture trigger on another module's table needs that table migrated first.
+ * There are three inter-module edges: `workforce → identity` (workforce FKs `persons`, which
+ * identity owns), and `sync → identity` + `sync → payments` (sync's capture triggers attach to
+ * identity's `persons`/`webauthn_credentials` and payments' `payments`/`payment_refunds`/
+ * `payment_policy`). All ranges are `"*"` because every module is workspace-locked at version
+ * `0.0.0`. `sync` (as a domain seat), `cards` and the other seats are declared on the contract but
+ * stay empty until their own slices land.
  */
 export const ALL_MODULES: readonly WaitronModule[] = [
   {
@@ -105,7 +110,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     name: "sync",
     version: "0.0.0",
     tier: "toggleable",
-    requires: { core: "*" },
+    requires: { core: "*", modules: { identity: "*", payments: "*" } },
     migrations: { name: "sync", table: "__drizzle_migrations_sync", from: "../sync/drizzle" },
   },
 ];

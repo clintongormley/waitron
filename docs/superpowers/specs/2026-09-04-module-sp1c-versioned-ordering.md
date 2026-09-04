@@ -63,7 +63,8 @@ refusal.
 
 ## 3. The dependency graph (verified, not invented)
 
-Read off the drizzle SQL on 2026-09-04 — each non-core set's `REFERENCES "public"."<table>"` targets and
+Read off the drizzle SQL on 2026-09-04 — each non-core set's `REFERENCES "public"."<table>"` targets,
+its `CREATE TRIGGER … ON "<table>"` targets (capture triggers attached to another set's tables), and
 its use of core functions (`current_tenant_id()`), mapped to the set that `CREATE TABLE`s each target:
 
 | module | requires | receipt |
@@ -76,13 +77,16 @@ its use of core functions (`current_tenant_id()`), mapped to the set that `CREAT
 | payments | core | FKs `nodes`, `sales`, `working_orders` (all core) + own tables |
 | scheduler | core | FK `tenants` |
 | credentials | core | FK `tenants` |
-| sync | core | no FKs, but uses `current_tenant_id()` (a core function) in `0000_sync_outbox.sql` etc. |
+| sync | core, **identity**, **payments** | no FKs, but its `CREATE TRIGGER … ON <table>` capture triggers attach to **identity**'s `persons`/`webauthn_credentials` and **payments**' `payments`/`payment_refunds`/`payment_policy` (plus core's own tables), so both sets must be migrated first; also uses `current_tenant_id()` (a core function) |
 
-The single inter-module edge is **workforce → identity**. Every other non-core module depends only on
-`core`. Absence of a declared inter-module edge means "no hard ordering constraint beyond core" — the
-stable tie-break (§5) then reproduces today's sequence. **The graph is read from the tree; it is not a
-convenience.** If a future FK adds a cross-set edge, its `requires` entry is added in the same change (a
-guard for this is discussed in §8).
+There are three inter-module edges: **workforce → identity**, **sync → identity**, and **sync →
+payments**. Every other non-core module depends only on `core`. Cross-set dependencies arrive via BOTH
+FK `REFERENCES` **and** `CREATE TRIGGER … ON <table>` targets — grep both when deriving the graph: a
+first pass here read FKs only and missed `sync → {identity, payments}`, whose edges are triggers, not
+FKs (caught in review). Absence of a declared inter-module edge means "no hard ordering constraint
+beyond core" — the stable tie-break (§5) then reproduces today's sequence. **The graph is read from the
+tree; it is not a convenience.** If a future FK or capture trigger adds a cross-set edge, its `requires`
+entry is added in the same change (a guard for this is discussed in §8).
 
 **Version ranges are `"*"`.** Every module is workspace-locked at `version: "0.0.0"` (SP-1a §3). The
 *true* current constraint is "any version" — there is no independent distribution yet, so no real bound
@@ -135,10 +139,13 @@ MigrationSet[]`, so boot and the pin are unchanged at the call site. New behavio
 4. **Return** `orderedModules.map((m) => m.migrations)` — the same projection as today, over the
    topologically-sorted list.
 
-**Why Kahn-with-input-order reproduces the manifest (the pin holds).** Traced over the §3 graph with
+**Why Kahn-with-input-order reproduces the manifest (the pin holds).** Traced over the §3 graph
+(edges: workforce → identity, sync → identity, sync → payments, and every non-core → core) with
 `ALL_MODULES` input order: `core` drains first (only in-degree-0 node); then among the newly-ready set
 the input order picks `identity` before the others; emitting `identity` makes `workforce` ready, and the
-input order then yields `workforce, workforce-es, fiscal, payments, scheduler, credentials, sync` — i.e.
+input order then yields `workforce, workforce-es, fiscal, payments, scheduler, credentials` — and `sync`
+last, since it waits on **both** `identity` and `payments` (its two inter-module deps) to be emitted
+first, which they are (both precede it in input order). The full sequence is
 `core, identity, workforce, workforce-es, fiscal, payments, scheduler, credentials, sync`, byte-for-byte
 today's manifest. So `orderedMigrationSets(ALL_MODULES)` still deep-equals `manifestSets()` (SP-1a §4
 pin), and that assertion now **also** proves the sort reproduces the manifest — it gains meaning rather

@@ -418,6 +418,18 @@ suite; the gap surfaced only when a later task ran the fiscal suite (`nodes: rel
 Run `pnpm --filter @waitron/fiscal-verifactu test inmutabilidad` after adding any tenant-scoped table,
 in any package.
 
+**A module/migration dependency graph has TWO kinds of cross-set edge, not one — grep for both.** A
+set depends on another not only when it FK-`REFERENCES` the other's table, but also when it
+`CREATE TRIGGER … ON <table>` against it (the trigger's target must be migrated first, or the
+`CREATE TRIGGER` fails with `relation does not exist`). `sync` enrols other packages' tables by
+installing capture triggers on them — `persons`/`webauthn_credentials` from `identity` and
+`payments`/`payment_refunds`/`payment_policy` from `payments` — so `sync` requires both, with no FK
+between them. Cost: SP-1c's first-pass `requires` graph (`apps/server/src/modules.ts`) was derived
+from FK `REFERENCES` alone and declared `sync` as depending on `core` only; review caught the two
+missing edges. When you derive or review such a graph, grep `REFERENCES` **and**
+`CREATE TRIGGER .* ON` across the set's `drizzle/*.sql`, and map every target to its owning `CREATE
+TABLE`.
+
 **An object-privilege `GRANT` PostgreSQL accepted is not a `GRANT` that did anything.** Whether an
 ineffective `GRANT` is loud or silent turns on what the GRANTOR holds, and the quiet cases are the
 common ones. Run on `postgres:18-alpine` (PostgreSQL 18.4), granting on a database owned by
