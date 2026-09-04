@@ -8,6 +8,8 @@ import {
   type VenueResult,
 } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
+import { disabledProvisionOnly, type ModuleConfig } from "@waitron/module";
+import { ALL_MODULES } from "./modules.js";
 import "./errors.js";
 
 export interface ProvisionRequest {
@@ -21,6 +23,9 @@ export interface ProvisionDeps {
   /** The OWNER connection to the target database (`config.migrationsDatabaseUrl`) — the admin that
    * owns the tables, which `applyVenue` needs and which `stampDeployment` writes the singleton with. */
   ownerDb: Database;
+  /** The desired module set (from `<stateDir>/modules.json`). A `provision-only` module disabled here
+   * refuses provisioning (spec §4) — never mint an unrecoverable chain for a module that is off. */
+  readonly moduleConfig: ModuleConfig;
 }
 
 /**
@@ -58,6 +63,15 @@ export async function provisionVenue(
   deps: ProvisionDeps,
   req: ProvisionRequest,
 ): Promise<VenueResult> {
+  // 0. SP-1b fiscal gate. A `provision-only` module (fiscal today) that modules.json disables must
+  // never be seeded — registerSif mints an unrecoverable chain (CLAUDE.md §5). SP-1b REFUSES rather
+  // than building a fiscal-less venue (that path touches the fiscal core and is SP-3). Generic: it
+  // names no module, it iterates the provision-only tier.
+  const blocked = disabledProvisionOnly(ALL_MODULES, deps.moduleConfig);
+  if (blocked.length > 0) {
+    throw new AppError("module.provision_only_disabled", { module: blocked[0]! });
+  }
+
   // 1. Pure validation first — throws before touching the database.
   const plan = planVenue(req.venue);
   const tenantId = obligadoTenantId(req.venue.country, req.venue.taxId);

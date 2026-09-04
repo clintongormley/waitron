@@ -12,7 +12,15 @@ import type { SharedContainerHandle } from "@waitron/db/testing/shared-container
 import { hashPassword, hashPin } from "@waitron/identity";
 import type { VenueRequest } from "@waitron/provisioning";
 import { isAppError } from "@waitron/shared";
+import { parseModuleConfig } from "@waitron/module";
 import { provisionVenue } from "./provision.js";
+import { ALL_MODULES } from "./modules.js";
+
+/** Every known module name — the second argument `parseModuleConfig` validates the config against. */
+const KNOWN = ALL_MODULES.map((m) => m.name);
+
+/** All modules enabled (an absent/empty modules.json) — the default the happy-path deps pass. */
+const ALL_ENABLED = parseModuleConfig({}, KNOWN);
 
 // Real Postgres, not PGlite: provisionVenue stamps `deployment` and runs `applyVenue` under RLS as
 // the OWNER connection, which PGlite (every connection a superuser) cannot faithfully represent
@@ -118,7 +126,7 @@ describe("provisionVenue", () => {
     expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 0, nodes: 0, registros: 0 });
 
     const result = await provisionVenue(
-      { ownerDb: db },
+      { ownerDb: db, moduleConfig: ALL_ENABLED },
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     );
 
@@ -143,16 +151,42 @@ describe("provisionVenue", () => {
     expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 2, nodes: 1, registros: 0 });
   });
 
+  it("refuses venue provisioning when a provision-only module is disabled — before minting anything", async () => {
+    // The SP-1b fiscal gate (spec §4): disabling the `fiscal` (provision-only) module must REFUSE
+    // provisioning outright — never mint an unrecoverable SIF/hash chain for a module that is off
+    // (CLAUDE.md §5). The guard is step 0, before planVenue/stampDeployment/applyVenue, so nothing is
+    // validated, stamped or minted. Proven by an `ownerDb` Proxy that THROWS on ANY property access:
+    // if the guard short-circuits first, the DB is never touched, so a `module.provision_only_disabled`
+    // throw (rather than "ownerDb must not be touched") is the proof.
+    const moduleConfig = parseModuleConfig({ modules: { fiscal: false } }, KNOWN);
+    const ownerDb = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error("ownerDb must not be touched");
+        },
+      },
+    ) as never;
+    const err = await provisionVenue(
+      { ownerDb, moduleConfig },
+      { environment: "preproduction", venue: venueRequest(nextNif()) },
+    ).catch((e: unknown) => e);
+    expect(isAppError(err)).toBe(true);
+    expect(isAppError(err) && err.code).toBe("module.provision_only_disabled");
+  });
+
   it("refuses a second provision of the same NIF and mints no second SIF/chain (the fiscal footgun)", async () => {
     const db = ownerDb();
     const request = { environment: "preproduction" as const, venue: venueRequest(nextNif()) };
 
-    await provisionVenue({ ownerDb: db }, request);
+    await provisionVenue({ ownerDb: db, moduleConfig: ALL_ENABLED }, request);
     const afterFirst = await fiscalCounts(db);
     expect(afterFirst).toEqual({ sif: 1, series: 2, nodes: 1, registros: 0 });
 
     // A second provision with the SAME NIF is refused BEFORE any fiscal write.
-    const error = await provisionVenue({ ownerDb: db }, request).catch((e: unknown) => e);
+    const error = await provisionVenue({ ownerDb: db, moduleConfig: ALL_ENABLED }, request).catch(
+      (e: unknown) => e,
+    );
     expect(isAppError(error)).toBe(true);
     expect(isAppError(error) && error.code).toBe("setup.already_provisioned");
 
@@ -182,14 +216,17 @@ describe("provisionVenue", () => {
     const env = "preproduction" as const;
 
     // First: provision in the CANONICAL casing.
-    await provisionVenue({ ownerDb: db }, { environment: env, venue: venueRequest(nif) });
+    await provisionVenue(
+      { ownerDb: db, moduleConfig: ALL_ENABLED },
+      { environment: env, venue: venueRequest(nif) },
+    );
     const afterFirst = await fiscalCounts(db);
     expect(afterFirst).toEqual({ sif: 1, series: 2, nodes: 1, registros: 0 });
 
     // Second: re-provision the SAME business in a NON-canonical casing (lowercase country + NIF).
     const nonCanonical = { ...venueRequest(nif), country: "es", taxId: nif.toLowerCase() };
     const error = await provisionVenue(
-      { ownerDb: db },
+      { ownerDb: db, moduleConfig: ALL_ENABLED },
       { environment: env, venue: nonCanonical },
     ).catch((e: unknown) => e);
     expect(isAppError(error)).toBe(true);
@@ -209,7 +246,7 @@ describe("provisionVenue", () => {
 
     // ... so provisioning it for preproduction is refused at the stamp step, before any venue mint.
     const error = await provisionVenue(
-      { ownerDb: db },
+      { ownerDb: db, moduleConfig: ALL_ENABLED },
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     ).catch((e: unknown) => e);
     expect(isAppError(error)).toBe(true);

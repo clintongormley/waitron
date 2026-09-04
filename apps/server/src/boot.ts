@@ -668,6 +668,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // `mountSetup` or `startListening` — never leaks it.
       const ownerDb = await createPostgresDb(config.migrationsDatabaseUrl);
       try {
+        // The desired module set for the provisioning gate (spec §4). Setup mode migrated the full
+        // schema regardless, but provisioning must refuse a disabled provision-only module — so read the
+        // same on-box modules.json the trading boot reads. Absent file = all enabled. (The shared-prefix
+        // `moduleConfig` above is `undefined` in setup mode, so it cannot be reused here.)
+        const setupModuleConfig = await readModuleConfig(config.stateDir);
         // `writeTradingEnv` returns the path it wrote; both setup verbs only need `Promise<void>`, so
         // discard it explicitly rather than widen the dep's type. Extracted to a const so `provision`
         // and `adopt` (C2b) persist `trading.env` through the SAME writer.
@@ -687,7 +692,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
           app,
           {
             environment: config.environment,
-            provision: (req) => provisionVenue({ ownerDb }, req),
+            provision: (req) => provisionVenue({ ownerDb, moduleConfig: setupModuleConfig }, req),
             adopt: (req) => {
               // Ruling 1 (fail loud at adopt, not at reboot): an adopted mirror MUST end up with
               // WAITRON_SYNC_DATABASE_URL in `trading.env`, because the next (mirror) boot's
