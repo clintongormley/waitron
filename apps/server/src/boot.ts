@@ -1562,6 +1562,26 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // a junking of a node that hasn't drained), but R3's retire action — which consumes `drained` — must
   // rely on this same convention or enforce it (enrol the carrier under its nodeId, or key on the node id).
   const carrierNodeId = heldMembership === null ? undefined : servingPrimaryNodeId(heldMembership);
+  // The fenced node's own drain-progress reader, computed ONCE and shared by both consumers: the
+  // box-status `disposal` surface (which wraps it with `carrierNodeId` for the wire shape) and the
+  // retire/evict endpoint (`mountBoxRetireApi`, which gates the self-eviction on its `drained`). Present
+  // only on a FENCED node whose held document names a carrier — reads the own-origin tail vs the
+  // carrier's reported cursor on the SAME sync_tailer pool under `withTenant` the lag reader uses;
+  // absent (undefined) otherwise, which box-status reports as `disposal.applicable:false` and retire
+  // refuses as `node.retire_no_carrier`. Factored to one reader so the fragile carrier-keying coupling
+  // documented above has a single copy — a future change to how the drain read is scoped cannot desync
+  // the two consumers. Boot-captured staleness (both consumers): `fenced`/`carrierNodeId` are bound here
+  // at boot and neither re-derives the carrier, so a runtime carrier change is not reflected until the
+  // next boot — and a fenced node does not restart on a carrier change (`shouldFenceRestart` is false
+  // once `bootFenced`). Fail-safe: the coupling can only yield a false `drained:false`, never a false
+  // `drained:true`, so retire never green-lights junking a node that has not drained.
+  const readFenceDrainProgress =
+    lagPool !== undefined && fenced && carrierNodeId !== undefined
+      ? () =>
+          withTenant(lagPool, till.tenantId, (tx) =>
+            readDrainProgress(tx, { selfNodeId: till.nodeId, carrierNodeId }),
+          )
+      : undefined;
   mountBoxStatusApi(
     app,
     {
@@ -1582,18 +1602,14 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // live wall-clock factory (`() => new Date()`) established at boot, CALLED per box-status request so
       // `ageSeconds` is measured against request time. `backupConfig!` is safe: `backupWorker` is only ever assigned when `backupConfig`
       // was defined (the probe block above runs under `backupConfig !== undefined`).
-      // The producer-side disposal guard (membership rejoin R2, design §5.1): present only on a FENCED
-      // node whose held document names a carrier (the serving-primary). Reads own-origin tail vs the
-      // carrier's reported cursor on the SAME sync_tailer pool under withTenant the lag reader uses.
-      // Absent (undefined) on a serving node → box-status reports disposal.applicable:false.
+      // The producer-side disposal guard (membership rejoin R2, design §5.1): wraps the shared
+      // `readFenceDrainProgress` (above) with the carrier id for the wire shape. Absent (undefined) on a
+      // serving node → box-status reports disposal.applicable:false. The `carrierNodeId !== undefined`
+      // arm is what narrows it to a string for the spread (a captured `const`, so the narrowing holds
+      // inside the arrow); it is redundant with `readFenceDrainProgress`'s own guard but free.
       readDisposal:
-        lagPool !== undefined && fenced && carrierNodeId !== undefined
-          ? async () => ({
-              carrierNodeId,
-              ...(await withTenant(lagPool, till.tenantId, (tx) =>
-                readDrainProgress(tx, { selfNodeId: till.nodeId, carrierNodeId }),
-              )),
-            })
+        readFenceDrainProgress !== undefined && carrierNodeId !== undefined
+          ? async () => ({ carrierNodeId, ...(await readFenceDrainProgress()) })
           : undefined,
       readBackup:
         backupWorker !== undefined
@@ -1613,24 +1629,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // The self-eviction endpoint (retire/evict R3): a fully-drained fenced node retires itself. Mounted
   // UNCONDITIONALLY (a real management endpoint) — `retireSelf`'s ordered guards make it safe on any
   // node: a serving node refuses `node.retire_not_fenced`, and a fenced node with no carrier refuses
-  // `node.retire_no_carrier`. `readRetireDrain` is defined ONLY when fenced with a carrier — the same
-  // `lagPool !== undefined && fenced && carrierNodeId !== undefined` condition box-status's `readDisposal`
-  // uses, returning the plain `DrainProgress` retire consumes (no `carrierNodeId` wrapper); absent, a
-  // fenced node reads as `no_carrier`. `readDrainProgress` is the imported @waitron/sync function
-  // box-status's disposal surface already uses; `readRetireDrain` is the local closure.
-  // Boot-captured staleness: `fenced`/`carrierNodeId` are bound here at boot and `retireSelf` trusts
-  // the injected reader rather than re-deriving the carrier, so a runtime carrier change is not
-  // reflected until the next boot — and a fenced node does not restart on a carrier change
-  // (`shouldFenceRestart` is false once `bootFenced`). This is the SAME boot-captured behaviour
-  // box-status's `readDisposal` has (both landed in #219), and it is fail-safe: it never yields a
-  // false `drained:true`.
-  const readRetireDrain =
-    lagPool !== undefined && fenced && carrierNodeId !== undefined
-      ? () =>
-          withTenant(lagPool, till.tenantId, (tx) =>
-            readDrainProgress(tx, { selfNodeId: till.nodeId, carrierNodeId }),
-          )
-      : undefined;
+  // `node.retire_no_carrier` (signalled by `readFenceDrainProgress === undefined`). It consumes the
+  // SAME shared `readFenceDrainProgress` box-status's `disposal` surface uses (see its definition above
+  // for the drain-read scoping and the boot-captured staleness), so the two views cannot desync.
   mountBoxRetireApi(
     app,
     {
@@ -1638,7 +1639,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       ring,
       tenantId: till.tenantId,
       nodeId: till.nodeId,
-      readDrainProgress: readRetireDrain,
+      readDrainProgress: readFenceDrainProgress,
     },
     log,
   );
