@@ -113,8 +113,14 @@ import { isFenced, shouldFenceRestart } from "./membership-fence.js";
 import { ensureMirrorViewer, mirrorSession } from "./mirror-session.js";
 import { assertMirrorBindSafe } from "./mirror-bind-guard.js";
 import { readMirrorToken } from "./mirror-token.js";
-import { lagFor, runRetentionSweep, runSyncPull, type SyncLane } from "@waitron/sync";
-import type { TrustSet } from "@waitron/membership";
+import {
+  lagFor,
+  readDrainProgress,
+  runRetentionSweep,
+  runSyncPull,
+  type SyncLane,
+} from "@waitron/sync";
+import { servingPrimaryNodeId, type TrustSet } from "@waitron/membership";
 import { adoptMembership as adoptMembershipDocument } from "./membership-adopt.js";
 import { runTunnelClient } from "@waitron/tunnel";
 import { readOrderFlow } from "./till-config.js";
@@ -1281,6 +1287,24 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         },
         log,
       );
+    } else if (fenced) {
+      // Membership rejoin R2 (design §6 step 3): a fenced (sell-only) node serves its OWN-ORIGIN tail so
+      // the carrier can drain it, then wipe-and-restore in R3. `ownOriginOnly` forces originId=self, so a
+      // fenced node can never relay another origin or act as a general source — the narrow reversal of
+      // "a sell-only secondary must not source" above. It stays fully fenced otherwise: isSingletonPrimary
+      // is false (submitter/reconciler/config-writer + retention stay off), and the read-only gate still
+      // blocks tenant/fiscal writes (its /sync-api/ exemption lets only the peer cursor report through).
+      mountSyncApi(
+        app,
+        {
+          db: syncDb,
+          tenantId: till.tenantId,
+          nodeId: till.nodeId,
+          environment: config.environment,
+          ownOriginOnly: true,
+        },
+        log,
+      );
     }
     // Hoisted to a `const` so `runLane`'s closure keeps the non-`undefined` narrowing: `syncDb` is a
     // `let` declared outside this block, and TS widens a captured `let` back to `Database | undefined`
@@ -1521,10 +1545,24 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // live wall-clock factory (`() => new Date()`) established at boot, CALLED per box-status request so
       // `ageSeconds` is measured against request time. `backupConfig!` is safe: `backupWorker` is only ever assigned when `backupConfig`
       // was defined (the probe block above runs under `backupConfig !== undefined`).
-      // The disposal drain reader (membership rejoin R2) is wired only for a fenced node draining onto a
-      // known carrier; at boot no carrier is established, so it stays absent and box-status reports
-      // `disposal.applicable:false`.
-      readDisposal: undefined,
+      // The producer-side disposal guard (membership rejoin R2, design §5.1): present only on a FENCED
+      // node whose held document names a carrier (the serving-primary). Reads own-origin tail vs the
+      // carrier's reported cursor on the SAME sync_tailer pool under withTenant the lag reader uses.
+      // Absent (undefined) on a serving node → box-status reports disposal.applicable:false.
+      readDisposal:
+        lagPool !== undefined && fenced
+          ? (() => {
+              const carrierNodeId =
+                heldMembership === null ? undefined : servingPrimaryNodeId(heldMembership);
+              if (carrierNodeId === undefined) return undefined;
+              return async () => ({
+                carrierNodeId,
+                ...(await withTenant(lagPool, till.tenantId, (tx) =>
+                  readDrainProgress(tx, { selfNodeId: till.nodeId, carrierNodeId }),
+                )),
+              });
+            })()
+          : undefined,
       readBackup:
         backupWorker !== undefined
           ? () => readBackupStatus(backupConfig!.dir, backupConfig!.staleAfterMs, now())
