@@ -1,10 +1,10 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { AppError } from "@waitron/shared";
 import type { VerifactuClient } from "@waitron/verifactu";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations } from "@waitron/db";
+import { createPgliteDb, runMigrations } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 
@@ -26,7 +26,7 @@ const unreachableClient: VerifactuClient = {
   consultar: () => Promise.reject(new Error("this test's gated tenant must never consult")),
 };
 
-const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
+const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
 /**
  * `drain.tenancy.test.ts`'s own "THE FOLD" test moved here (see that file's comment on why):
@@ -90,8 +90,7 @@ describe("drain — folds the skip-retry interval as a minimum against a healthy
     // enumerated by `tenantsWithWork` here (it shares the same fixed `NOW`) and silently win the
     // fold, passing for the wrong reason.
     const soloDb = await createPgliteDb();
-    await runMigrations(soloDb, CORE_MIGRATIONS);
-    await runMigrations(soloDb, FISCAL_MIGRATIONS);
+    for (const migrations of TEST_MIGRATIONS) await runMigrations(soloDb, migrations);
     try {
       // The skipping tenant: due work, but its resolver rejects — contributes only the skip-retry
       // interval below, exactly as in the "earlier gate" test above.

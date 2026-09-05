@@ -1,7 +1,8 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
+import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale } from "@waitron/core";
-import { CORE_MIGRATIONS, asAppUser, sales, withTenant } from "@waitron/db";
+import { asAppUser, sales, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
 import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
@@ -14,7 +15,6 @@ import {
   saleId as brandSaleId,
 } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
-import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
@@ -36,7 +36,7 @@ let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 
-const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
+const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
   ({ tenantId, tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));

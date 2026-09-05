@@ -1,8 +1,7 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { FISCAL_MIGRATIONS } from "@waitron/fiscal-verifactu";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   nodeId as brandNodeId,
   tenantId as brandTenantId,
@@ -33,7 +32,12 @@ const ID_SIF = "WT";
 // never survives `tenantId()`'s brand.
 const ABSENT = "00000000-0000-0000-0000-000000000000";
 
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS], timeoutMs: 60_000 });
+// The full manifest, not just [core, fiscal]: fiscal's SP-3a capture migration (0014) needs sync's
+// `sync_capture()`, so the whole manifest is applied (sync before fiscal) — the production order.
+const suite = usePgliteDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
 interface Bootstrapped {
   tenantId: TenantId;

@@ -17,7 +17,7 @@ import {
   writeNodeMembership,
   type Database,
 } from "@waitron/db";
-import { FISCAL_MIGRATIONS } from "@waitron/fiscal-verifactu";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, type KeyRing } from "@waitron/credentials";
 import {
@@ -323,8 +323,10 @@ function docAtTerm(term: number, nodeId: string): SignedMembershipDocument {
 // `establishReservedStandbyIdentity`. Stamped `mirror` (co-sets singleton_role='secondary'). PGlite is
 // sufficient for the promote LOGIC (the mode/singleton flip, the endorsed term-bumped mint, and the
 // term-guard): none has an RLS/privilege/concurrency dependency here — the reserved SIF's `currentSif`
-// behaviour on reboot is Task 5's real-PG e2e. Runs FISCAL_MIGRATIONS too because
-// `establishReservedStandbyIdentity` writes the reserved SIF (`registro_sif`).
+// behaviour on reboot is Task 5's real-PG e2e. Migrates the FULL manifest because
+// `establishReservedStandbyIdentity` writes the reserved SIF (`registro_sif`), and fiscal's SP-3a
+// capture migration (0014) needs sync's `sync_capture()` — so the whole manifest is applied (sync
+// before fiscal), the production order.
 async function mirror(): Promise<{
   db: Database;
   tenantId: string;
@@ -337,9 +339,9 @@ async function mirror(): Promise<{
   ) => MirrorPromoteDeps;
 }> {
   const db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, CREDENTIALS_MIGRATIONS);
-  await runMigrations(db, FISCAL_MIGRATIONS);
+  for (const migrations of migrationOptionsFor(manifestSets(), null)) {
+    await runMigrations(db, migrations);
+  }
   await stampDeployment(db, "preproduction");
   await setDeploymentMode(db, "mirror"); // (mirror, secondary)
   const tenantId = await seedTenant(db);

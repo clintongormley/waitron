@@ -32,8 +32,8 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
  * double-counting: `TipoFactura=F3` + `FacturasSustituidas`, not negation), and it advances the same
  * chain the tickets sit on with its own `pendiente` sidecar.
  */
-// A clone of the shared container's `core_fiscal` template (CORE + FISCAL).
-const suite = useTemplateDb({ template: "core_fiscal" });
+// A clone of the shared container's `manifest` template (the full migration manifest).
+const suite = useTemplateDb({ template: "manifest" });
 
 let backend: VerifactuBackend;
 let till: SeededTill;

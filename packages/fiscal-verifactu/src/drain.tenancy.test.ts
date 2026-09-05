@@ -1,12 +1,12 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { AppError } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
 import type { VerifactuClient } from "@waitron/verifactu";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations, withTenant } from "@waitron/db";
+import { createPgliteDb, runMigrations, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
@@ -44,7 +44,7 @@ function recordingResolver(): {
   };
 }
 
-const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
+const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
 describe("drain resolves one client per tenant", () => {
   it("never asks the resolver for a tenant with no due work", async () => {
@@ -206,8 +206,7 @@ describe("drain resolves one client per tenant", () => {
     // A dedicated, single-tenant PGlite instance, not the suite's own `pg.db`: this test closes
     // its database, which the rest of this suite cannot survive sharing.
     const soloDb = await createPgliteDb();
-    await runMigrations(soloDb, CORE_MIGRATIONS);
-    await runMigrations(soloDb, FISCAL_MIGRATIONS);
+    for (const migrations of TEST_MIGRATIONS) await runMigrations(soloDb, migrations);
     const failing = (await seedPendingEnvios(soloDb, { count: 1 })).tenantId;
 
     const result = await drain(

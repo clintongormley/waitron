@@ -14,10 +14,10 @@ import { staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 const PROBE_ROLE = "reconcile_rls_probe";
 const PROBE_PASSWORD = "probe";
 
-// A clone of the `core_fiscal` template (CORE + FISCAL); the probe connections below authenticate as
+// A clone of the `manifest` template (the full migration manifest); the probe connections below authenticate as
 // `reconcile_rls_probe`, a cluster-wide role the package globalSetup creates in place of the
 // per-file `probeRole` this suite passed before the shared container.
-const suite = useTemplateDb({ template: "core_fiscal" });
+const suite = useTemplateDb({ template: "manifest" });
 
 /**
  * `reconcile` under real row-level security. PGlite's default connection is a superuser and

@@ -1,15 +1,8 @@
-import {
-  CORE_MIGRATIONS,
-  captureError,
-  createPgliteDb,
-  pgErrorCode,
-  runMigrations,
-  withTenant,
-} from "@waitron/db";
+import { captureError, createPgliteDb, pgErrorCode, runMigrations, withTenant } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { FISCAL_MIGRATIONS } from "./migrations.js";
+import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { currentSif, esPrimerRegistro, registerSif } from "./registro-sif.js";
 import { TENANT_A, TENANT_B, seedSoldRegistro, seedTenants } from "../test/fixtures.js";
 
@@ -26,8 +19,7 @@ beforeEach(async () => {
   // and the first reordering would produce a failure that looks like a real defect. That
   // requirement is why this suite cannot use `usePgliteDb`, which owns ONE database for the suite.
   db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, FISCAL_MIGRATIONS);
+  for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
   await seedTenants(db);
 });
 

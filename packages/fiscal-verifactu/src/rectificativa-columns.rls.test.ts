@@ -18,11 +18,11 @@ const PROBE_ROLE = "rls_probe";
 const PROBE_PASSWORD = "probe";
 const OTHER_TENANT = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
-// A clone of the `core_fiscal` template (CORE + FISCAL); the probe connection below authenticates as
+// A clone of the `manifest` template (the full migration manifest); the probe connection below authenticates as
 // `rls_probe`, a cluster-wide role the package globalSetup creates once and shares with
 // pending-count.rls / canje-columns.rls, in place of the per-file `probeRole` this suite passed
 // before the shared container.
-const suite = useTemplateDb({ template: "core_fiscal" });
+const suite = useTemplateDb({ template: "manifest" });
 
 /** Inserts one rectificativa alta registro (R5 / I, with the new columns populated) as the
  * superuser admin, which bypasses RLS — the row exists regardless of tenant scoping. */

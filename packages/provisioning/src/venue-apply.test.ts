@@ -1,8 +1,6 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS } from "@waitron/db";
-import { FISCAL_MIGRATIONS } from "@waitron/fiscal-verifactu";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { CapabilityFlag } from "@waitron/layouts";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { planVenue, type VenueAction, type VenueRequest } from "./venue-plan.js";
@@ -15,10 +13,11 @@ import { applyVenue } from "./venue-apply.js";
 // container test (`venue-apply.node-privilege.rls.test.ts`) and by the container end-to-end that
 // runs the real `applyVenue` over the owner connection.
 //
-// IDENTITY_MIGRATIONS between core and fiscal (manifest order core → identity → fiscal): applyVenue
+// The full manifest is migrated (identity before fiscal; sync before fiscal, which fiscal's SP-3a
+// 0014 capture migration needs): applyVenue
 // now seeds an admin `persons` row, and persons carries a foreign key onto `tenants`.
 const suite = usePgliteDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, FISCAL_MIGRATIONS],
+  migrations: migrationOptionsFor(manifestSets(), null),
 });
 
 function request(taxId = "B12345678"): VenueRequest {

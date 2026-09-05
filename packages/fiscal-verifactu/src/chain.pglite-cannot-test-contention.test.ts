@@ -1,9 +1,8 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS } from "@waitron/db";
+import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { appendToChain } from "./chain.js";
-import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { altaFor, seedSale, seedTill, type SeededTill } from "./testing/seed.js";
 
 const WRITERS = 20;
@@ -11,7 +10,7 @@ const WRITERS = 20;
 // One instance for both tests, reseeded per test — chain.test.ts's convention. Sharing it does not
 // weaken the pid assertion below: one PGlite instance is exactly the single backend this file
 // exists to demonstrate.
-const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
+const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
 let till: SeededTill;
 

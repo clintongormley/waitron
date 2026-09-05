@@ -30,7 +30,7 @@ const WRITERS = 20;
  * globalSetup (`src/testing/global-setup.ts`'s `dockerRequired`), which precedes every worker — so a
  * vanished suite fails loudly instead of reporting a green that proves nothing.
  */
-const suite = useTemplateDb({ template: "core_fiscal" });
+const suite = useTemplateDb({ template: "manifest" });
 
 // No truncate-and-reseed: registros_facturacion's append-only trigger blocks even a CASCADEd
 // TRUNCATE from `tenants`. `seedTill` mints a FRESH tenant (and nif, and node) per call, so each

@@ -1,9 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS } from "@waitron/db";
-import { FISCAL_MIGRATIONS } from "@waitron/fiscal-verifactu";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { adoptVenue, type AdoptResult, type AdoptVenueRows } from "./venue-adopt.js";
 
@@ -11,7 +9,7 @@ import { adoptVenue, type AdoptResult, type AdoptVenueRows } from "./venue-adopt
 // this suite is about WHICH tables `adoptVenue` writes, not about the role that writes them. CORE →
 // IDENTITY → FISCAL so `registro_sif`/`cadenas`/`contadores_instalacion` exist to be counted.
 const suite = usePgliteDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, FISCAL_MIGRATIONS],
+  migrations: migrationOptionsFor(manifestSets(), null),
 });
 
 function makeRows(): { rows: AdoptVenueRows; designated: AdoptResult } {

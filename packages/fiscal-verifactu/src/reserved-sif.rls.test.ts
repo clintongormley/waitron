@@ -10,13 +10,13 @@ import {
 import { seedNodesForSifContention, type SifContentionFixture } from "./testing/seed.js";
 
 /**
- * Real PostgreSQL via a clone of the shared container's `core_fiscal` template, like every other
+ * Real PostgreSQL via a clone of the shared container's `manifest` template, like every other
  * real-Postgres suite in this package (see chain.concurrency.test.ts's own note on why Docker
  * absence throws rather than skips). `reserveInstallationNumber`'s whole point is the atomic
  * `contadores_instalacion` bump, which PGlite serialises onto one backend and so cannot exercise
  * (registro-sif.ts:50-57).
  */
-const suite = useTemplateDb({ template: "core_fiscal" });
+const suite = useTemplateDb({ template: "manifest" });
 
 const SISTEMA = "W1";
 

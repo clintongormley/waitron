@@ -5,7 +5,7 @@ import { ALL_SYNC_ENROLMENTS } from "./modules.js";
 
 // The behaviour-preserving oracle for the SP-2a inversion. Before the flip, this pinned the assembled
 // module set against `@waitron/sync`'s central `ENROLLED`; that constant is now deleted, so the frozen
-// snapshot below IS the oracle — a 22-table copy of the shared metadata the deleted
+// snapshot below IS the oracle — a 28-table copy of the shared metadata the deleted
 // `packages/sync/src/registry.test.ts` SPEC pinned (mode / conflictKey / watermarkColumn / captureOps /
 // fkRank / lane). The assembled `ALL_SYNC_ENROLMENTS` (`ALL_MODULES.flatMap(m => m.sync ?? [])`) must reproduce it exactly, so a
 // per-package enrolment array that drifts fails HERE, in the composition root where the whole set is
@@ -26,8 +26,9 @@ const shared = (e: EnrolledTable): Shared => ({
   lane: e.lane,
 });
 
-// The frozen 22-table snapshot (the former central ENROLLED shared fields). fkRank values match the
-// FK graph pinned by the topological-order test below.
+// The frozen 28-table snapshot (the former central ENROLLED shared fields, plus the six fiscal-record
+// lane tables from FISCAL_ENROLMENT, SP-3a). fkRank values match the FK graph pinned by the
+// topological-order test below.
 const SPEC: Record<string, Shared> = {
   // Group A — append-only → insert-only (AFTER INSERT only).
   sales: { mode: "insert-only", conflictKey: ["id"], watermarkColumn: null, captureOps: ["insert"], fkRank: 3, lane: "ordered" }, // prettier-ignore
@@ -57,15 +58,24 @@ const SPEC: Record<string, Shared> = {
   kitchen_stations: { mode: "watermark-upsert", conflictKey: ["id"], watermarkColumn: null, captureOps: ["insert", "update"], fkRank: 0, lane: "ordered" }, // prettier-ignore
   kitchen_courses: { mode: "watermark-upsert", conflictKey: ["id"], watermarkColumn: null, captureOps: ["insert", "update"], fkRank: 0, lane: "ordered" }, // prettier-ignore
   ticket_items: { mode: "watermark-upsert", conflictKey: ["id"], watermarkColumn: null, captureOps: ["insert", "update"], fkRank: 4, lane: "ordered" }, // prettier-ignore
+  // Group G — fiscal-record lane (SP-3a, FISCAL_ENROLMENT). All ordered: the fiscal chain is
+  // indifferent to replication lag, and none is fast-lane-eligible. registros_facturacion is the
+  // INSERT-ONLY immutable ledger; acks is the one fiscal table that DELETES.
+  registros_facturacion: { mode: "insert-only", conflictKey: ["id"], watermarkColumn: null, captureOps: ["insert"], fkRank: 5, lane: "ordered" }, // prettier-ignore
+  registro_sif: { mode: "watermark-upsert", conflictKey: ["id"], watermarkColumn: null, captureOps: ["insert", "update"], fkRank: 4, lane: "ordered" }, // prettier-ignore
+  cadenas: { mode: "watermark-upsert", conflictKey: ["tenant_id", "node_id"], watermarkColumn: "actualizado_en", captureOps: ["insert", "update"], fkRank: 6, lane: "ordered" }, // prettier-ignore
+  envios: { mode: "watermark-upsert", conflictKey: ["registro_id"], watermarkColumn: null, captureOps: ["insert", "update"], fkRank: 6, lane: "ordered" }, // prettier-ignore
+  envio_flujo: { mode: "watermark-upsert", conflictKey: ["tenant_id"], watermarkColumn: null, captureOps: ["insert", "update"], fkRank: 2, lane: "ordered" }, // prettier-ignore
+  acks: { mode: "watermark-upsert", conflictKey: ["registro_id"], watermarkColumn: null, captureOps: ["insert", "update", "delete"], fkRank: 6, lane: "ordered" }, // prettier-ignore
 };
 
 const assembled = ALL_SYNC_ENROLMENTS;
 const byName = new Map(assembled.map((e) => [e.table, e]));
 
-describe("the assembled module enrolment set reproduces the frozen 22-table snapshot (behaviour-preserving)", () => {
-  it("covers exactly the 22 snapshot tables, no duplicates", () => {
-    expect(assembled).toHaveLength(22);
-    expect(byName.size).toBe(22);
+describe("the assembled module enrolment set reproduces the frozen 28-table snapshot (behaviour-preserving)", () => {
+  it("covers exactly the 28 snapshot tables, no duplicates", () => {
+    expect(assembled).toHaveLength(28);
+    expect(byName.size).toBe(28);
     expect([...byName.keys()].sort()).toEqual(Object.keys(SPEC).sort());
   });
 
@@ -83,8 +93,8 @@ describe("the fast lane carries exactly payments and payment_refunds; the lanes 
   it("fast lane is exactly {payments, payment_refunds}", () => {
     expect(new Set(laneTables("fast"))).toEqual(new Set(["payments", "payment_refunds"]));
   });
-  it("ordered lane is the remaining twenty tables", () => {
-    expect(laneTables("ordered")).toHaveLength(20);
+  it("ordered lane is the remaining twenty-six tables", () => {
+    expect(laneTables("ordered")).toHaveLength(26);
   });
   it("every table carries a lane, and the two lanes partition the set", () => {
     expect(laneTables("fast").length + laneTables("ordered").length).toBe(assembled.length);
@@ -146,6 +156,14 @@ describe("fkRank is a topological order — every parent ranks strictly before i
     ["kitchen_stations", "ticket_items"],
     ["kitchen_courses", "ticket_items"],
     ["working_order_lines", "ticket_items"],
+    // Fiscal-record lane (SP-3a). Intra-fiscal FK edges among enrolled tables:
+    // registros_facturacion.sif_id → registro_sif.id; cadenas.ultimo_registro_id / envios.registro_id /
+    // acks.registro_id → registros_facturacion.id. So registro_sif (4) < registros_facturacion (5) <
+    // cadenas/envios/acks (6). envio_flujo (2) references only tenants — no enrolled fiscal parent/child.
+    ["registro_sif", "registros_facturacion"],
+    ["registros_facturacion", "cadenas"],
+    ["registros_facturacion", "envios"],
+    ["registros_facturacion", "acks"],
   ];
   for (const [parent, child] of PARENT_CHILD) {
     it(`${parent}.fkRank < ${child}.fkRank`, () => {

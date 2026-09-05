@@ -1,16 +1,12 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { FISCAL_MIGRATIONS, VerifactuBackend } from "@waitron/fiscal-verifactu";
-import {
-  IDENTITY_MIGRATIONS,
-  hashPassword,
-  loginManager,
-  loginManagerById,
-} from "@waitron/identity";
+import { VerifactuBackend } from "@waitron/fiscal-verifactu";
+import { hashPassword, loginManager, loginManagerById } from "@waitron/identity";
 import type { TrustedClock } from "@waitron/fiscal";
 import {
   nodeId as brandNodeId,
@@ -37,11 +33,12 @@ import { applyVenue } from "./venue-apply.js";
  * PGlite's default connection is a SUPERUSER, so it bypasses RLS; that is fine here for the same
  * reason as `venue-apply.test.ts` — the FORCE-RLS privilege path is proven by the container suite.
  *
- * IDENTITY_MIGRATIONS between core and fiscal (manifest order core → identity → fiscal): the real
+ * The full manifest is migrated (identity before fiscal; sync before fiscal, which fiscal's SP-3a
+ * 0014 capture migration needs): the real
  * `applyVenue` now seeds an admin `persons` row, which carries a foreign key onto `tenants`.
  */
 const suite = usePgliteDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, FISCAL_MIGRATIONS],
+  migrations: migrationOptionsFor(manifestSets(), null),
 });
 
 const steadyClock: TrustedClock = {

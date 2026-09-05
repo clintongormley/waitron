@@ -1,4 +1,5 @@
 import { CORE_ENROLMENT } from "@waitron/db";
+import { FISCAL_ENROLMENT } from "@waitron/fiscal-verifactu";
 import { IDENTITY_ENROLMENT } from "@waitron/identity";
 import type { WaitronModule } from "@waitron/module";
 import { PAYMENTS_ENROLMENT } from "@waitron/payments";
@@ -128,6 +129,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       table: "__drizzle_migrations_fiscal",
       from: "../fiscal-verifactu/drizzle",
     },
+    sync: FISCAL_ENROLMENT,
   },
 ];
 

@@ -1,13 +1,13 @@
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale, recordVoid } from "@waitron/core";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
 import type { TenantId } from "@waitron/shared";
 import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
-import { FISCAL_MIGRATIONS } from "./migrations.js";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import { VerifactuBackend } from "./backend.js";
 import { DEFAULT_SKIP_RETRY_MS, backoffMs, drain, type DrainDeps } from "./drain.js";
 import { ackStateOf } from "./acks.js";
@@ -21,9 +21,10 @@ import {
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
-// IDENTITY_MIGRATIONS between core and fiscal (manifest order core → identity → fiscal): recordVoid
-// now calls `authorize`, which reads identity's persons/sessions.
-const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, FISCAL_MIGRATIONS] });
+// TEST_MIGRATIONS is the full manifest (identity migrates before fiscal): recordVoid now calls
+// `authorize`, which reads identity's persons/sessions, and fiscal's SP-3a capture migration needs
+// sync_capture() from the sync set. See ../test/migrations.ts.
+const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
 describe("drain — happy path", () => {
   let seeded: SeededDrain;

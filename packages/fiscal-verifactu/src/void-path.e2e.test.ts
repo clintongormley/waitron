@@ -1,13 +1,13 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
+import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale, recordVoid } from "@waitron/core";
 import { computeHuella } from "@waitron/verifactu";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
-import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { fromRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
 import { cadenas } from "./schema/cadenas.js";
@@ -37,9 +37,10 @@ let voidSessionId: string;
  * own huella recomputable from its own stored columns, its own pending sidecar row, and it advances
  * the REAL chain head — none of which a fake backend's own bookkeeping tables can demonstrate.
  */
-// IDENTITY_MIGRATIONS between core and fiscal (manifest order core → identity → fiscal): recordVoid
-// now calls `authorize`, which reads identity's persons/sessions.
-const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, FISCAL_MIGRATIONS] });
+// TEST_MIGRATIONS is the full manifest (identity migrates before fiscal): recordVoid now calls
+// `authorize`, which reads identity's persons/sessions, and fiscal's SP-3a capture migration needs
+// sync_capture() from the sync set. See ../test/migrations.ts.
+const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
   ({ tenantId, tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));

@@ -1,10 +1,10 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
+import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { AckState } from "@waitron/fiscal";
-import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { VerifactuBackend } from "./backend.js";
 import {
   ackStateOf,
@@ -30,7 +30,7 @@ const PERIOD = { year: "2026", month: "07" };
 // falls back to when a lost-ack row carries no `enviado_en`.
 const CLOCK_INSTANT = new Date("2026-03-01T13:05:00+01:00");
 
-const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
+const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
 // Real per-test isolation (deliberately NOT drain.test.ts's shared-and-accumulating convention):
 // acks/envios/incidents carry no append-only trigger, so truncating them before each test leaves

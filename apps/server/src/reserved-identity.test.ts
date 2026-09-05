@@ -1,13 +1,9 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  CREDENTIALS_MIGRATIONS,
-  loadKeyRing,
-  tryGetCredential,
-  type KeyRing,
-} from "@waitron/credentials";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
-import { FISCAL_MIGRATIONS, currentSif } from "@waitron/fiscal-verifactu";
+import { loadKeyRing, tryGetCredential, type KeyRing } from "@waitron/credentials";
+import { withTenant } from "@waitron/db";
+import { currentSif } from "@waitron/fiscal-verifactu";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { tenantId as brandTenantId, nodeId as brandNodeId } from "@waitron/shared";
@@ -27,8 +23,11 @@ const RING: KeyRing = loadKeyRing({
 const ENDORSEMENT: Endorsement = { nodeId: "n", publicKey: "p", endorsedBy: "e", signature: "s" };
 
 describe("establishReservedStandbyIdentity", () => {
+  // The full manifest, not just [core, credentials, fiscal]: fiscal's SP-3a capture migration (0014)
+  // needs sync's `sync_capture()`, so the whole manifest is applied (sync before fiscal) — the
+  // production order.
   const suite = usePgliteDb({
-    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, FISCAL_MIGRATIONS],
+    migrations: migrationOptionsFor(manifestSets(), null),
     timeoutMs: 60_000,
   });
 
