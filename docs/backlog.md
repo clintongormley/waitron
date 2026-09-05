@@ -260,17 +260,15 @@ editor + rendering) is the sole remaining sub-project of this track.**
     canvas is present *before* the region fallback was removed. **Not fiscal** — `nodeId`/chain/series
     untouched. (The one behaviour change surfaced is recorded as the deferred follow-on immediately
     below.)
-  - **SP-B4 deferred follow-on — fresh-display KDS enrol flow.** The lock screen's *set up as kitchen
-    display* affordance (`#onSetupDevice` → `deviceMode` + `screen="station"`) used to reach the station
-    screen's on-mount-401 enrol view via the legacy `#renderScreen` `case "station"`. SP-B4 removed that
-    arm, and (Task 3) a fresh cookieless display now resolves the `till` form-factor canvas, so `#inShell()`
-    is true and the shell renders the till counter tab instead of the KDS enrol view. Not the sale path,
-    not a blank screen (pre-production, no live KDS). Rework the fresh-KDS enrol path — an enrol overlay
-    like the till/handheld `setup` paths, or reconcile with SP-A.2 pairing-code enrolment + B2.2's kiosk
-    shell. A fresh display and an already-enrolled KDS both end at `deviceMode`+`screen="station"`, so there
-    is no clean render split without this rework. (Recorded by SP-B4; the test asserting the current
-    deferred behaviour is `till-app.test.ts` "the lock screen's set-up affordance routes a fresh display
-    into device mode".)
+  - **SP-B4 deferred follow-on — fresh-display KDS enrol flow — LANDED #221 (2026-09-05).** Fixed with the
+    enrol-overlay approach: the lock screen's *set up as kitchen display* affordance now opens a standalone
+    pairing-code enrol overlay (an `enrolling` state), symmetric with the till/handheld `setup` paths, and a
+    redeemed code re-boots so the `kds_station` cookie boots the display into the kiosk shell — post-enrol
+    routing stays in `#boot`, not the screen. The rule-of-three that this surfaced was collapsed too: the
+    two standalone enrol screens (`till-enrol-screen`, `till-handheld-enrol-screen`) became one
+    `till-device-enrol-screen` parameterised by `kind`, and `till-app`'s two `…Enrolling` booleans became one
+    `enrolling` enum (net −139 lines). The station screen's own device-mode enrol sub-view is now unreachable
+    via the app but left in place — a possible later cleanup.
 - **Follow-ons:** visual theme editor · NFC pairing runtime + payment routing (payments-gated on the
   SumUp questions) · community profile sharing.
 
