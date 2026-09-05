@@ -360,6 +360,26 @@ async function poll<T>(predicate: () => T | undefined): Promise<T | undefined> {
   return undefined;
 }
 
+/**
+ * GETs `url` (a /health endpoint) until it answers 200, reusing the same POLL_TRIES x
+ * POLL_INTERVAL_MS budget as `poll`. /health returns 503 until each duty's first clean pass
+ * refreshes its wall-clock `lastOkAt` (health.ts), so an assert-before-condition fetch can land in
+ * a transient-503 window on a slow runner — the documented boot.test.ts 503-not-200 flake. This
+ * waits for the readiness condition instead; the budget-exhausted throw still fails a real
+ * regression where /health never reaches 200 (and names /health rather than a generic undefined).
+ * `poll`'s predicate is synchronous, so the async fetch loop lives here rather than inside it.
+ */
+async function fetchHealthOk(url: string, init?: RequestInit): Promise<Response> {
+  for (let i = 0; i < POLL_TRIES; i += 1) {
+    const r = await fetch(url, init);
+    if (r.status === 200) return r;
+    await delay(POLL_INTERVAL_MS);
+  }
+  throw new Error(
+    `/health did not return 200 within the poll budget (${POLL_TRIES} x ${POLL_INTERVAL_MS}ms): ${url}`,
+  );
+}
+
 async function waitForPass(state: { lastPassAt: Date | null }): Promise<void> {
   await poll(() => state.lastPassAt ?? undefined);
   expect(state.lastPassAt).not.toBeNull();
@@ -586,8 +606,7 @@ describe("startServer, against a real container as the deployment role", () => {
         Object.values(server.health.duties).every((duty) => duty.consecutiveFailures === 0),
       ).toBe(true);
 
-      const response = await fetch(`http://127.0.0.1:${port}/health`);
-      expect(response.status).toBe(200);
+      const response = await fetchHealthOk(`http://127.0.0.1:${port}/health`);
       const body = (await response.json()) as { ok: boolean };
       expect(body.ok).toBe(true);
 
@@ -1617,8 +1636,7 @@ describe("startServer, against a real container as the deployment role", () => {
       expect(staff.status).toBe(200);
       expect(await staff.json()).toEqual([]);
 
-      const health = await fetch(`http://127.0.0.1:${port}/health`);
-      expect(health.status).toBe(200);
+      const health = await fetchHealthOk(`http://127.0.0.1:${port}/health`);
       expect((await health.json()) as { ok: boolean }).toMatchObject({ ok: true });
     } finally {
       await server.close();
@@ -1666,8 +1684,7 @@ describe("startServer, against a real container as the deployment role", () => {
 
       // The catch-all did NOT shadow the APIs or /health: /health still answers its JSON, and the
       // unauthenticated roster route still returns its empty array (200, not the SPA's index.html).
-      const health = await fetch(`http://127.0.0.1:${port}/health`);
-      expect(health.status).toBe(200);
+      const health = await fetchHealthOk(`http://127.0.0.1:${port}/health`);
       expect((await health.json()) as { ok: boolean }).toMatchObject({ ok: true });
 
       const staff = await fetch(`http://127.0.0.1:${port}/api/staff`);
@@ -2113,8 +2130,7 @@ describe("startServer, against a real container as the deployment role", () => {
     try {
       // startServer RESOLVED (we hold a StartedServer) and the till TRADES: /health answers 200.
       expect(disabled.event).toBe("backup.disabled_probe_failed");
-      const health = await fetch(`http://127.0.0.1:${port}/health`);
-      expect(health.status).toBe(200);
+      await fetchHealthOk(`http://127.0.0.1:${port}/health`);
       // The captured backup.disabled_probe_failed line means backupWorker stayed undefined, so mountBoxStatusApi
       // received readBackup: undefined — and box-status's `backup: { configured: false }` for that exact
       // undefined-reader case is asserted directly (over the management gate) in box-status.route.test.ts, so
