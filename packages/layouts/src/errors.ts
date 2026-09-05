@@ -50,7 +50,10 @@ declare module "@waitron/shared" {
     };
     // A CanvasDef failed validateCanvas. `reason` says which rule:
     //   not_object       — input (or a tab/card) was not a plain object;
-    //   bad_capabilities — `capabilities` was not an array of known capability flags;
+    //   bad_capabilities — RETIRED (Task 9): capabilities left the canvas for the device profile, so
+    //                      validateCanvas no longer throws this. The union member is kept (a shipped
+    //                      code shape is never removed, CLAUDE.md §3) but is now unreachable from here;
+    //                      a bad capability set surfaces as `device_profile.invalid` instead;
     //   bad_form_factor  — `formFactor` was not a FormFactor;
     //   no_tabs          — `tabs` was not a non-empty array;
     //   bad_tab          — a tab was malformed (missing/blank key or title, over-long title);
@@ -89,6 +92,28 @@ declare module "@waitron/shared" {
     // duplicate name. `canvas-store.ts` translates the driver's 23505 into this so a duplicate returns
     // a clean 409, never a raw 500. No params: the offending name is never echoed (§1).
     "canvas.name_taken": Record<string, never>;
+    // A device-profile create/update was rejected on a field the store validates. `reason`:
+    //   bad_capabilities — the capability set failed validateCapabilities (device-profile.ts, design
+    //                      §7): input was not an array, or an element was not a known CAPABILITY_FLAG
+    //                      (fail-closed — an unknown flag must never reach the /api/pay + /api/drawer
+    //                      firewall);
+    //   bad_canvas_ref   — `canvas_id` violated the tenant-consistent composite FK
+    //                      `device_profiles_canvas_fk` (a canvas that is absent, or belongs to another
+    //                      tenant): `device-profile-store.ts` translates the driver's 23503 so a bad
+    //                      reference returns a clean 4xx, never a raw 500.
+    // A `reason` enum PARALLEL to `canvas.invalid`'s discriminator; NEVER echoes the offending value
+    // (§1) — the enum names WHICH field went wrong, not what the caller supplied.
+    "device_profile.invalid": {
+      reason: "bad_capabilities" | "bad_canvas_ref";
+    };
+    // A GET-by-id on the management device-profile surface named no profile the tenant owns (an absent
+    // id, or another tenant's row RLS hides). No params: the caller-supplied id is not echoed (§1) —
+    // the management API answers 404 on the code alone. Mirrors `canvas.not_found`.
+    "device_profile.not_found": Record<string, never>;
+    // A device-profile create/update collided on the per-tenant unique — a duplicate name. Translated
+    // from the driver's 23505 so a duplicate returns a clean 409, never a raw 500. No params: the
+    // offending name is never echoed (§1). Mirrors `canvas.name_taken`.
+    "device_profile.name_taken": Record<string, never>;
     // A ThemeOverride failed validateThemeOverride. `reason`:
     //   not_object    — input was not a plain object;
     //   bad_tokens    — `tokens` was missing or not a plain object;

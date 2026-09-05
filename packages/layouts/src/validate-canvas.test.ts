@@ -39,7 +39,6 @@ describe("validateCanvas — structure", () => {
     const p = validateCanvas(ok);
     expect(p.tabs[0].key).toBe("counter");
     expect(p.tabs[0].cards).toHaveLength(4);
-    expect(p.capabilities).toEqual([]);
   });
   it("rejects a non-object", () => {
     expect(reason(() => validateCanvas(null))).toBe("not_object");
@@ -53,30 +52,11 @@ describe("validateCanvas — structure", () => {
   it("rejects a non-string form factor", () => {
     expect(reason(() => validateCanvas({ ...ok, formFactor: 3 }))).toBe("bad_form_factor");
   });
-  it("defaults capabilities to [] when omitted", () => {
-    const { capabilities: _omit, ...noCaps } = ok;
-    void _omit;
-    expect(validateCanvas(noCaps).capabilities).toEqual([]);
-  });
-  it("rejects capabilities that are not an array", () => {
-    expect(reason(() => validateCanvas({ ...ok, capabilities: "act-as-kds" }))).toBe(
-      "bad_capabilities",
-    );
-  });
-  it("rejects an unknown capability flag", () => {
-    expect(reason(() => validateCanvas({ ...ok, capabilities: ["fly"] }))).toBe("bad_capabilities");
-  });
-  it("rejects a non-array capabilities with bad_capabilities", () => {
-    expect(() => validateCanvas({ formFactor: "till", capabilities: "x", tabs: [] })).toThrowError(
-      expect.objectContaining({ code: "canvas.invalid", params: { reason: "bad_capabilities" } }),
-    );
-  });
-  it("rejects an unknown capability flag with bad_capabilities", () => {
-    expect(() =>
-      validateCanvas({ formFactor: "till", capabilities: ["nope"], tabs: [] }),
-    ).toThrowError(
-      expect.objectContaining({ code: "canvas.invalid", params: { reason: "bad_capabilities" } }),
-    );
+  it("ignores a `capabilities` key on the input (relocated to the device profile, Task 9)", () => {
+    // Capabilities no longer live on the canvas; validateCanvas neither reads nor emits them, and a
+    // stray `capabilities` key (from a pre-cutover payload) is silently dropped rather than validated.
+    const out = validateCanvas({ ...ok, capabilities: ["definitely-not-a-flag"] });
+    expect("capabilities" in out).toBe(false);
   });
   it("rejects empty tabs", () => {
     expect(reason(() => validateCanvas({ ...ok, tabs: [] }))).toBe("no_tabs");

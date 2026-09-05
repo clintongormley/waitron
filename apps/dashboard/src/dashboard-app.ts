@@ -32,6 +32,7 @@ import "./screens/recipe-screen.js";
 import "./screens/devices-screen.js";
 import "./screens/printers-screen.js";
 import "./screens/canvas-editor-screen.js";
+import "./screens/device-profiles-screen.js";
 import "./screens/diagnostics-screen.js";
 import type { DashboardApi, PersonRole } from "./api/client.js";
 
@@ -72,6 +73,7 @@ type Screen =
   | "devices"
   | "printers"
   | "canvas-editor"
+  | "device-profiles"
   | "diagnostics";
 
 /** The viewport width at/below which the sidebar becomes the off-canvas drawer (Task 12). Kept as a
@@ -136,6 +138,7 @@ const NAV_GROUPS: NavGroup[] = [
       { screen: "devices", labelKey: "nav.devices" },
       { screen: "printers", labelKey: "nav.printers" },
       { screen: "canvas-editor", labelKey: "nav.canvases" },
+      { screen: "device-profiles", labelKey: "nav.device_profiles" },
       { screen: "diagnostics", labelKey: "nav.diagnostics", requiresManager: true },
     ],
   },
@@ -729,6 +732,10 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-canvas-editor-screen
           .api=${this.api}
         ></dashboard-canvas-editor-screen>`;
+      case "device-profiles":
+        return html`<dashboard-device-profiles-screen
+          .api=${this.api}
+        ></dashboard-device-profiles-screen>`;
       case "diagnostics":
         return html`<dashboard-diagnostics-screen .api=${this.api}></dashboard-diagnostics-screen>`;
       default:

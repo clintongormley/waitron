@@ -12,9 +12,9 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "./canvas-editor/canvas-grid-preview.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
+import { toggleMembership } from "../array-utils.js";
 import type { StringKey } from "../i18n/strings.js";
 import {
-  CAPABILITY_FLAGS,
   CARD_CONTRACTS,
   CARD_TYPES,
   DEFAULT_CANVASES,
@@ -22,7 +22,6 @@ import {
   GRID_MAX_COLUMNS,
   PRODUCT_GRID_MAX_COLUMNS,
   type CanvasDef,
-  type CapabilityFlag,
   type CardInstance,
   type CardType,
   type FormFactor,
@@ -35,22 +34,6 @@ import type { Canvas, DashboardApi } from "../api/client.js";
  * form-factor keys that populated the options). */
 function formFactorFromEvent(event: Event): FormFactor {
   return (event.target as HTMLSelectElement).value as FormFactor;
-}
-
-/** Toggle `value`'s membership of `current`, returning a NEW array ordered by `all` (deterministic,
- * not click order): add it when `checked`, drop it otherwise, then filter `all` to what remains. The
- * shared core of the `visibleWhen` and `capabilities` toggles; each caller keeps its own write-back
- * (`visibleWhen` OMITS the key when the result is empty; `capabilities` always stores the array). */
-function toggleMembership<T>(
-  current: readonly T[],
-  all: readonly T[],
-  value: T,
-  checked: boolean,
-): T[] {
-  const set = new Set(current);
-  if (checked) set.add(value);
-  else set.delete(value);
-  return all.filter((x) => set.has(x));
 }
 
 /** Clamp a card span: colSpan to `1..columns`, rowSpan to `≥1`. The single source of the span clamp —
@@ -71,9 +54,10 @@ function clampSpan(field: "colSpan" | "rowSpan", value: number, columns: number)
  * EDITOR mode is the draft editor: a tab bar (select/add tab), the interactive
  * `<canvas-grid-preview>` as the canvas, a palette that appends a card at its default spans, and —
  * when a card tile is selected — a property panel with colSpan/rowSpan steppers, remove, and ↑/↓
- * reorder, plus the rest of the property panel (per-card CONFIG + `visibleWhen` toggles +
- * permission/capability notes), TAB settings (title/columns/delete, with a last-tab guard), CANVAS
- * settings (name/form-factor/capabilities), and the real SAVE (`#save`): it refuses an empty
+ * reorder, plus the rest of the property panel (per-card CONFIG + `visibleWhen` toggles + a
+ * permission note), TAB settings (title/columns/delete, with a last-tab guard), CANVAS
+ * settings (name/form-factor — capabilities moved to the device-profile editor, Task 9), and the real
+ * SAVE (`#save`): it refuses an empty
  * name, runs the light client validator (`validateCanvasDraft`) — a broken draft shows the banner and
  * does not write — then `createCanvas`/`updateCanvas` on `editingId` and returns to the reloaded list.
  * Every draft edit goes through `#updateDraft`, which assigns a FRESH `CanvasDef` (never mutates in
@@ -685,20 +669,6 @@ export class CanvasEditorScreen extends LitElement {
     this.#updateDraft({ ...draft, formFactor: formFactorFromEvent(event) });
   }
 
-  /** Toggle a canvas capability flag, rebuilt in the declared flag order (deterministic). */
-  #onCapToggle(event: CustomEvent<{ checked: boolean }>, flag: CapabilityFlag): void {
-    event.stopPropagation();
-    const draft = this.draft;
-    if (draft === null) return;
-    const capabilities = toggleMembership(
-      draft.capabilities,
-      CAPABILITY_FLAGS,
-      flag,
-      event.detail.checked,
-    );
-    this.#updateDraft({ ...draft, capabilities });
-  }
-
   // ── Save ─────────────────────────────────────────────────────────────────────────────────────────
 
   /**
@@ -1040,14 +1010,12 @@ export class CanvasEditorScreen extends LitElement {
     </div>`;
   }
 
-  /** The card property panel: colSpan/rowSpan steppers, per-card config + visibility, permission /
-   * capability notes, then remove and ↑/↓ reorder. */
+  /** The card property panel: colSpan/rowSpan steppers, per-card config + visibility, a permission
+   * note, then remove and ↑/↓ reorder. (No capability note any more — capabilities relocated onto the
+   * device profile, Task 9, so the canvas editor no longer knows a device's capability set.) */
   #renderCardPanel(tab: TabDef, index: number): TemplateResult {
     const card = tab.cards[index]!;
     const contract = CARD_CONTRACTS[card.type];
-    const capabilityUnmet =
-      contract.requiredCapability !== undefined &&
-      !(this.draft?.capabilities ?? []).includes(contract.requiredCapability);
     return html`<div class="panel" data-test="card-panel">
       <h2 class="panel-title">${t(`canvas_editor.card.${card.type}` as StringKey)}</h2>
       <wt-input
@@ -1071,13 +1039,6 @@ export class CanvasEditorScreen extends LitElement {
         contract.requiredPermission !== undefined
           ? html`<p class="field" data-test="permission-note">
               ${t("canvas_editor.permission_note")}
-            </p>`
-          : nothing
-      }
-      ${
-        capabilityUnmet
-          ? html`<p class="field warning" data-test="capability-warning">
-              ${t("canvas_editor.capability_warning")}
             </p>`
           : nothing
       }
@@ -1142,8 +1103,9 @@ export class CanvasEditorScreen extends LitElement {
     </div>`;
   }
 
-  /** The canvas-settings panel (selection = canvas): the canvas NAME (edits `draftName`), its form
-   * factor, and a switch per capability flag. */
+  /** The canvas-settings panel (selection = canvas): the canvas NAME (edits `draftName`) and its form
+   * factor. Capabilities are NO LONGER edited here — they relocated onto the device profile (Task 9),
+   * edited in the device-profile editor. */
   #renderCanvasSettings(draft: CanvasDef): TemplateResult {
     return html`<div class="panel" data-test="canvas-settings-panel">
       <h2 class="panel-title">${t("canvas_editor.canvas_settings")}</h2>
@@ -1164,20 +1126,6 @@ export class CanvasEditorScreen extends LitElement {
           ${this.#renderFormFactorOptions(draft.formFactor)}
         </select>
       </label>
-      <div class="field" data-test="capabilities">
-        <span class="panel-subtitle">${t("canvas_editor.capabilities")}</span>
-        <div class="toggles">
-          ${CAPABILITY_FLAGS.map(
-            (flag) =>
-              html`<wt-switch
-                data-test="cap-${flag}"
-                label=${flag}
-                .checked=${draft.capabilities.includes(flag)}
-                @wt-change=${(e: CustomEvent<{ checked: boolean }>) => this.#onCapToggle(e, flag)}
-              ></wt-switch>`,
-          )}
-        </div>
-      </div>
     </div>`;
   }
 

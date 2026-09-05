@@ -55,6 +55,7 @@ export const en = {
   "nav.devices": "Devices",
   "nav.printers": "Printers",
   "nav.canvases": "Canvases",
+  "nav.device_profiles": "Device profiles",
   "nav.diagnostics": "Diagnostics",
   // Login screen
   "login.email": "Email",
@@ -163,7 +164,7 @@ export const en = {
   "devices.last_seen_never": "Never",
   "devices.revoke": "Revoke",
   "devices.revoke_confirm": "Confirm revoke?",
-  "devices.reassign": "Assigned layout for",
+  "devices.reassign": "Assigned device profile for",
   "devices.generate_title": "Enrol a new device",
   "devices.kind": "Kind",
   "devices.kind_kds_station": "Kitchen display",
@@ -171,8 +172,8 @@ export const en = {
   "devices.kind_handheld": "Waiter handheld",
   "devices.station": "Station",
   "devices.till": "Till",
-  "devices.canvas": "Assigned layout",
-  "devices.canvas_none": "— no layout —",
+  "devices.device_profile": "Device profile",
+  "devices.device_profile_none": "— no profile —",
   "devices.receipt_printer": "Receipt printer",
   "devices.receipt_printer_none": "— no printer —",
   "devices.has_cash_drawer": "Cash drawer",
@@ -563,8 +564,6 @@ export const en = {
   "canvas_editor.config_columns": "Product columns",
   "canvas_editor.visible_when": "Show only when",
   "canvas_editor.permission_note": "Only shown to staff with the required permission",
-  "canvas_editor.capability_warning":
-    "This card needs a capability that this canvas doesn't have — enable it in canvas settings",
   // Tab settings (B7)
   "canvas_editor.tab_settings": "Tab settings",
   "canvas_editor.tab_title": "Tab name",
@@ -573,12 +572,33 @@ export const en = {
   // Canvas settings (B7)
   "canvas_editor.canvas_settings": "Canvas settings",
   "canvas_editor.name": "Name",
-  "canvas_editor.capabilities": "Capabilities",
   "canvas_editor.save": "Save",
   "canvas_editor.cancel": "Cancel",
   // NOTE: the canvas-editor client-side validation banner pseudo-codes (canvas_editor.err_*) live in
   // i18n/codes.ts's CODE_MESSAGES, not here, so the editor's one banner resolves them and the server's
   // canvas.* codes through the same codeMessage() call.
+  // Device-profiles screen — LIST (name + referenced canvas + capability summary) and the editor FORM.
+  "device_profiles.title": "Device profiles",
+  "device_profiles.create": "New profile",
+  "device_profiles.empty": "No device profiles yet",
+  "device_profiles.duplicate": "Duplicate",
+  "device_profiles.copy_suffix": " (copy)",
+  "device_profiles.delete_title": "Delete profile",
+  "device_profiles.delete_message": "Delete this device profile? This cannot be undone.",
+  "device_profiles.delete_confirm": "Delete",
+  "device_profiles.name": "Name",
+  "device_profiles.canvas_label": "Canvas",
+  "device_profiles.canvas_default": "Form-factor default",
+  "device_profiles.canvas_unknown": "Unknown canvas",
+  "device_profiles.capabilities": "Capabilities",
+  "device_profiles.no_capabilities": "No capabilities",
+  "device_profiles.save": "Save",
+  "device_profiles.cancel": "Cancel",
+  "device_profiles.capability.integrated-card-payment": "Integrated card payment",
+  "device_profiles.capability.open-cash-drawer": "Open cash drawer",
+  "device_profiles.capability.act-as-kds": "Act as kitchen display",
+  // NOTE: the empty-name banner pseudo-code (device_profiles.err_no_name) and the server's
+  // device_profile.* rejections live in i18n/codes.ts's CODE_MESSAGES, resolved via codeMessage().
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -622,6 +642,7 @@ export const es: Record<StringKey, string> = {
   "nav.devices": "Dispositivos",
   "nav.printers": "Impresoras",
   "nav.canvases": "Lienzos",
+  "nav.device_profiles": "Perfiles de dispositivo",
   "nav.diagnostics": "Diagnóstico",
   "login.email": "Correo electrónico",
   "login.password": "Contraseña",
@@ -715,7 +736,7 @@ export const es: Record<StringKey, string> = {
   "devices.last_seen_never": "Nunca",
   "devices.revoke": "Revocar",
   "devices.revoke_confirm": "¿Confirmar revocación?",
-  "devices.reassign": "Distribución asignada para",
+  "devices.reassign": "Perfil de dispositivo asignado para",
   "devices.generate_title": "Dar de alta un dispositivo",
   "devices.kind": "Tipo",
   "devices.kind_kds_station": "Pantalla cocina",
@@ -723,8 +744,8 @@ export const es: Record<StringKey, string> = {
   "devices.kind_handheld": "Móvil camarero",
   "devices.station": "Estación",
   "devices.till": "Caja",
-  "devices.canvas": "Distribución asignada",
-  "devices.canvas_none": "— sin distribución —",
+  "devices.device_profile": "Perfil de dispositivo",
+  "devices.device_profile_none": "— sin perfil —",
   "devices.receipt_printer": "Impresora de tickets",
   "devices.receipt_printer_none": "— sin impresora —",
   "devices.has_cash_drawer": "Cajón portamonedas",
@@ -1077,8 +1098,6 @@ export const es: Record<StringKey, string> = {
   "canvas_editor.config_columns": "Columnas de productos",
   "canvas_editor.visible_when": "Mostrar solo cuando",
   "canvas_editor.permission_note": "Solo se muestra al personal con el permiso necesario",
-  "canvas_editor.capability_warning":
-    "Esta tarjeta necesita una capacidad que este lienzo no tiene: actívala en los ajustes del lienzo",
   // Ajustes de pestaña (B7)
   "canvas_editor.tab_settings": "Ajustes de pestaña",
   "canvas_editor.tab_title": "Nombre de la pestaña",
@@ -1087,10 +1106,31 @@ export const es: Record<StringKey, string> = {
   // Ajustes del lienzo (B7)
   "canvas_editor.canvas_settings": "Ajustes del lienzo",
   "canvas_editor.name": "Nombre",
-  "canvas_editor.capabilities": "Capacidades",
   "canvas_editor.save": "Guardar",
   "canvas_editor.cancel": "Cancelar",
   // (canvas_editor.err_* viven en i18n/codes.ts, no aquí — ver la nota en el mapa `en`.)
+  // Pantalla de perfiles de dispositivo — lista y formulario de edición
+  "device_profiles.title": "Perfiles de dispositivo",
+  "device_profiles.create": "Nuevo perfil",
+  "device_profiles.empty": "Aún no hay perfiles de dispositivo",
+  "device_profiles.duplicate": "Duplicar",
+  "device_profiles.copy_suffix": " (copia)",
+  "device_profiles.delete_title": "Eliminar perfil",
+  "device_profiles.delete_message":
+    "¿Eliminar este perfil de dispositivo? Esta acción no se puede deshacer.",
+  "device_profiles.delete_confirm": "Eliminar",
+  "device_profiles.name": "Nombre",
+  "device_profiles.canvas_label": "Lienzo",
+  "device_profiles.canvas_default": "Predeterminado del formato",
+  "device_profiles.canvas_unknown": "Lienzo desconocido",
+  "device_profiles.capabilities": "Capacidades",
+  "device_profiles.no_capabilities": "Sin capacidades",
+  "device_profiles.save": "Guardar",
+  "device_profiles.cancel": "Cancelar",
+  "device_profiles.capability.integrated-card-payment": "Pago con tarjeta integrado",
+  "device_profiles.capability.open-cash-drawer": "Abrir cajón portamonedas",
+  "device_profiles.capability.act-as-kds": "Actuar como pantalla de cocina",
+  // (device_profiles.err_no_name y device_profile.* viven en i18n/codes.ts — ver la nota en `en`.)
 };
 
 // Locale → catalogue. `en` is included as its own catalogue so an explicit

@@ -2,16 +2,9 @@
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 import { CARD_CONTRACTS, GRID_MAX_COLUMNS, SALE_CRITICAL_CARDS } from "./card-contract.js";
-import { CARD_TYPES, CAPABILITY_FLAGS, FORM_FACTORS } from "./canvas.js";
+import { CARD_TYPES, FORM_FACTORS } from "./canvas.js";
 import { validateThemeOverride } from "./theme.js";
-import type {
-  CapabilityFlag,
-  CardInstance,
-  CardType,
-  FormFactor,
-  CanvasDef,
-  TabDef,
-} from "./canvas.js";
+import type { CardInstance, CardType, FormFactor, CanvasDef, TabDef } from "./canvas.js";
 
 /** Tab-title cap (design §4). Carried nowhere in an error param — a blank/over-long title is `bad_tab`. */
 export const MAX_TAB_TITLE_LENGTH = 60;
@@ -28,38 +21,31 @@ function isFormFactor(v: unknown): v is FormFactor {
 function isCardType(v: unknown): v is CardType {
   return typeof v === "string" && (CARD_TYPES as readonly string[]).includes(v);
 }
-function isCapabilityFlag(v: unknown): v is CapabilityFlag {
-  return typeof v === "string" && (CAPABILITY_FLAGS as readonly string[]).includes(v);
-}
-
 /**
  * Validate an untrusted canvas (design §4/§6). Returns it on success; throws `canvas.invalid` naming
  * the first rule broken, never echoing an author value (a tab is identified by its numeric index). A
  * present `theme` is validated via `validateThemeOverride` (so a bad theme surfaces as `theme.invalid`,
  * delegated not re-wrapped) and round-trips on the returned canvas.
+ *
+ * Capabilities are NOT validated here any more — they relocated onto the device profile
+ * (`validateCapabilities` in `device-profile.ts`, device-profile design 2026-09-05 §7, Task 9). Any
+ * `capabilities` key on the input is ignored: the canvas record no longer carries the field.
  */
 export function validateCanvas(input: unknown): CanvasDef {
   if (!isPlainObject(input)) throw new AppError("canvas.invalid", { reason: "not_object" });
   if (!isFormFactor(input.formFactor))
     throw new AppError("canvas.invalid", { reason: "bad_form_factor" });
-  const capabilities = validateCapabilities(input.capabilities);
   if (!Array.isArray(input.tabs) || input.tabs.length === 0) {
     throw new AppError("canvas.invalid", { reason: "no_tabs" });
   }
   const seenKeys = new Set<string>();
   const tabs: TabDef[] = input.tabs.map((raw, tabIndex) => validateTab(raw, tabIndex, seenKeys));
-  const canvas: CanvasDef = { formFactor: input.formFactor, capabilities, tabs };
+  // `capabilities` intentionally NOT read here — it moved to the device profile (2026-09-05); a stray
+  // key on input is silently ignored, not a validation gap.
+  const canvas: CanvasDef = { formFactor: input.formFactor, tabs };
   assertSaleCritical(canvas, SELLING_FORM_FACTORS);
   if (input.theme !== undefined) canvas.theme = validateThemeOverride(input.theme);
   return canvas;
-}
-
-function validateCapabilities(input: unknown): CapabilityFlag[] {
-  if (input === undefined) return [];
-  if (!Array.isArray(input) || !input.every(isCapabilityFlag)) {
-    throw new AppError("canvas.invalid", { reason: "bad_capabilities" });
-  }
-  return input as CapabilityFlag[];
 }
 
 function validateTab(raw: unknown, tabIndex: number, seenKeys: Set<string>): TabDef {

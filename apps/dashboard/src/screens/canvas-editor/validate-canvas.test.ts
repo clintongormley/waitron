@@ -4,7 +4,6 @@ import type { CanvasDef } from "./card-contracts.js";
 
 const tillDraft = (): CanvasDef => ({
   formFactor: "till",
-  capabilities: [],
   tabs: [
     {
       key: "counter",

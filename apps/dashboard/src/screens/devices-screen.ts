@@ -8,7 +8,14 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-card.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import type { Canvas, DashboardApi, DeviceRow, Printer, Station, Till } from "../api/client.js";
+import type {
+  DashboardApi,
+  DeviceProfile,
+  DeviceRow,
+  Printer,
+  Station,
+  Till,
+} from "../api/client.js";
 
 /** The card-payment providers the till-hardware picker offers, in render order — mirrors the
  * `devices.card_provider` text column's accepted values. `none` leads (a till with no integrated card
@@ -35,8 +42,8 @@ const CARD_PROVIDERS: readonly string[] = ["none", "stripe_terminal", "stripe_on
  *    `kds_station` binds to a picked station (`stationId` sent); a sale-capable `till`/`handheld` binds to
  *    a picked till (`tillId` sent — the server rejects a missing one `device.till_required`), so a station
  *    picker shows only for `kds_station` and a till picker for `till`/`handheld`. The OPTIONAL bindings are
- *    an assigned canvas (`canvasId`, offered for every kind from `api.listCanvases()`) and,
- *    for a `till`, the static hardware — a receipt printer (`api.listPrinters()`), a has-cash-drawer flag,
+ *    an assigned device profile (`deviceProfileId`, offered for every kind from `api.listDeviceProfiles()`)
+ *    and, for a `till`, the static hardware — a receipt printer (`api.listPrinters()`), a has-cash-drawer flag,
  *    a card provider (`none`/`stripe_terminal`/`stripe_on_device`) and, for `stripe_terminal`, a
  *    card-reader id — each sent only when set, else the server applies its column default. The returned
  *    code is shown ONCE in a prominent, copyable panel and lives ONLY in component state — it is NOT
@@ -163,11 +170,11 @@ export class DevicesScreen extends LitElement {
   // The venue's ACTIVE kitchen stations — both the generate-code picker's options and the source that
   // resolves a device row's stationId to a display name.
   @state() private stations: Station[] = [];
-  // The venue's tills (the sale-capable till picker's options), canvases (the assigned-canvas
+  // The venue's tills (the sale-capable till picker's options), device profiles (the assigned-profile
   // picker's options, any kind) and printers (the till's receipt-printer picker's options), all
   // (re)loaded alongside the stations. Feeds for the generate-code form's bindings (SP-A.2 §16).
   @state() private tills: Till[] = [];
-  @state() private canvases: Canvas[] = [];
+  @state() private deviceProfiles: DeviceProfile[] = [];
   @state() private printers: Printer[] = [];
   // The generate-code form's fields. `kind` gates which bindings show: a "kds_station" binds to a
   // station; a sale-capable "till"/"handheld" binds to a till (REQUIRED); a "till" also carries the
@@ -176,7 +183,7 @@ export class DevicesScreen extends LitElement {
   @state() private kind = "kds_station";
   @state() private selectedStation = "";
   @state() private selectedTill = "";
-  @state() private selectedCanvas = "";
+  @state() private selectedDeviceProfile = "";
   @state() private selectedPrinter = "";
   @state() private hasCashDrawer = false;
   @state() private cardProvider = "none";
@@ -198,7 +205,7 @@ export class DevicesScreen extends LitElement {
   // select is not in the DOM).
   #stationSelect = createRef<HTMLSelectElement>();
   #tillSelect = createRef<HTMLSelectElement>();
-  #canvasSelect = createRef<HTMLSelectElement>();
+  #deviceProfileSelect = createRef<HTMLSelectElement>();
   #printerSelect = createRef<HTMLSelectElement>();
   #cardProviderSelect = createRef<HTMLSelectElement>();
 
@@ -216,18 +223,19 @@ export class DevicesScreen extends LitElement {
   override updated(): void {
     if (this.#stationSelect.value) this.#stationSelect.value.value = this.selectedStation;
     if (this.#tillSelect.value) this.#tillSelect.value.value = this.selectedTill;
-    if (this.#canvasSelect.value) this.#canvasSelect.value.value = this.selectedCanvas;
+    if (this.#deviceProfileSelect.value)
+      this.#deviceProfileSelect.value.value = this.selectedDeviceProfile;
     if (this.#printerSelect.value) this.#printerSelect.value.value = this.selectedPrinter;
     if (this.#cardProviderSelect.value) this.#cardProviderSelect.value.value = this.cardProvider;
     // Reconcile every per-row reassign <select> to its device's ACTUAL binding (server truth). These are
     // dynamic (one per device), so they carry no ref — query them and map each back by its `data-test` id.
     // This both preselects (options now exist) and, after a FAILED reassign that re-renders without a
-    // reload, snaps the control off the operator's rejected pick back to `device.canvasId`.
+    // reload, snaps the control off the operator's rejected pick back to `device.deviceProfileId`.
     for (const select of this.renderRoot.querySelectorAll<HTMLSelectElement>(
       '[data-test^="reassign-"]',
     )) {
       const device = this.devices.find((d) => `reassign-${d.id}` === select.dataset.test);
-      if (device !== undefined) select.value = device.canvasId ?? "";
+      if (device !== undefined) select.value = device.deviceProfileId ?? "";
     }
   }
 
@@ -239,23 +247,23 @@ export class DevicesScreen extends LitElement {
     this.errorKey = null;
     this.armedRevokeId = null;
     try {
-      const [devices, stations, tills, canvases, printers] = await Promise.all([
+      const [devices, stations, tills, deviceProfiles, printers] = await Promise.all([
         this.api.listDevices(),
         this.api.listStations(),
         // The generate form's binding feeds. `listTills`/`listPrinters` are `printer.manage`-gated and
-        // `listCanvases` is `till.configure`-gated, whereas this screen is `device.manage`-gated — but
-        // that mismatch is unreachable: all three permissions sit in the {manager, admin} set
+        // `listDeviceProfiles` is `till.configure`-gated, whereas this screen is `device.manage`-gated —
+        // but that mismatch is unreachable: all three permissions sit in the {manager, admin} set
         // (packages/identity/src/permissions.ts; admin holds ALL), so every user who reaches this screen
         // holds them (the printers-screen documents the same reuse). A custom-role split is a documented
         // follow-on — no device.manage-gated list variants (YAGNI).
         this.api.listTills(),
-        this.api.listCanvases(),
+        this.api.listDeviceProfiles(),
         this.api.listPrinters(),
       ]);
       this.devices = devices;
       this.stations = stations;
       this.tills = tills;
-      this.canvases = canvases;
+      this.deviceProfiles = deviceProfiles;
       this.printers = printers;
       // Seed the station + till pickers to their first option when still unset, so an operator's own
       // pick survives a reload (mirrors the station seed; the till is REQUIRED for sale-capable kinds).
@@ -305,10 +313,10 @@ export class DevicesScreen extends LitElement {
     this.selectedTill = (event.target as HTMLSelectElement).value;
   }
 
-  /** Capture the picked assigned canvas (`""` = none). */
-  #onCanvasChange(event: Event): void {
+  /** Capture the picked assigned device profile (`""` = none). */
+  #onDeviceProfileChange(event: Event): void {
     event.stopPropagation();
-    this.selectedCanvas = (event.target as HTMLSelectElement).value;
+    this.selectedDeviceProfile = (event.target as HTMLSelectElement).value;
   }
 
   /** Capture the picked receipt printer for a till (`""` = none). */
@@ -346,7 +354,7 @@ export class DevicesScreen extends LitElement {
    * A blank label is a no-op (the kitchen screen's blank-name guard). The kind gates the required
    * binding: a `kds_station` needs a picked station (no-op when none configured); a sale-capable
    * `till`/`handheld` needs a picked till (no-op when none configured — the server rejects a missing one
-   * `device.till_required`). The optional bindings are sent ONLY when set — an assigned canvas
+   * `device.till_required`). The optional bindings are sent ONLY when set — an assigned device profile
    * (any kind), and for a `till` the static hardware (receipt printer, cash-drawer flag, card provider,
    * and the card-reader id when the provider is `stripe_terminal`); an unset binding is omitted, which
    * `JSON.stringify` drops, so the server applies its column default. On success the code goes into
@@ -366,7 +374,7 @@ export class DevicesScreen extends LitElement {
       kind: string;
       stationId?: string;
       tillId?: string;
-      canvasId?: string;
+      deviceProfileId?: string;
       receiptPrinterId?: string;
       hasCashDrawer?: boolean;
       cardProvider?: string;
@@ -375,8 +383,8 @@ export class DevicesScreen extends LitElement {
     } = { kind: this.kind, label };
     if (needsStation) input.stationId = this.selectedStation;
     if (needsTill) input.tillId = this.selectedTill;
-    // The assigned canvas is a device-wide binding, offered for every kind; sent only when picked.
-    if (this.selectedCanvas !== "") input.canvasId = this.selectedCanvas;
+    // The assigned device profile is a device-wide binding, offered for every kind; sent only when picked.
+    if (this.selectedDeviceProfile !== "") input.deviceProfileId = this.selectedDeviceProfile;
     // The static hardware bindings belong to a `till`; each is sent only when set (else the server
     // default applies: no printer, `has_cash_drawer` false, `card_provider` 'none').
     if (this.kind === "till") {
@@ -442,15 +450,15 @@ export class DevicesScreen extends LitElement {
     }
   }
 
-  /** Reassign device `id`'s canvas to `canvasId` (null = the form-factor default), then
+  /** Reassign device `id`'s device profile to `deviceProfileId` (null = the form-factor default), then
    * reload the device list (the station set is unchanged) so the row reflects the new binding. A rejection
    * becomes the `errorKey` banner (the `#revoke` idiom); the caller void-invokes this off the select's
    * `change`, so a rejection surfaces as the banner rather than an unhandled rejection. Unlike revoke this
-   * is a single-click action — reassigning a canvas is reversible (pick another), so no confirm gate. */
-  async #onReassign(id: string, canvasId: string | null): Promise<void> {
+   * is a single-click action — reassigning a profile is reversible (pick another), so no confirm gate. */
+  async #onReassign(id: string, deviceProfileId: string | null): Promise<void> {
     this.errorKey = null;
     try {
-      await this.api.reassignDevice(id, canvasId);
+      await this.api.reassignDeviceProfile(id, deviceProfileId);
       await this.#reloadDevices();
     } catch (error) {
       this.errorKey = codeOf(error);
@@ -549,10 +557,10 @@ export class DevicesScreen extends LitElement {
           </div>
           ${
             device.active
-              ? // The select's live value is reconciled to `device.canvasId` in `updated()` (after
+              ? // The select's live value is reconciled to `device.deviceProfileId` in `updated()` (after
                 // its <option> children exist), NOT by a per-option `?selected` attribute — the same
                 // post-render pattern the enrol-form selects use. This is what makes a FAILED reassign snap
-                // the control back to the device's actual canvas (the re-render runs `updated()` again)
+                // the control back to the device's actual profile (the re-render runs `updated()` again)
                 // rather than stranding on the operator's rejected pick; `?selected` never resets the live
                 // `.selected` property once the operator has interacted.
                 html`<select
@@ -566,8 +574,10 @@ export class DevicesScreen extends LitElement {
                         : (e.target as HTMLSelectElement).value,
                     )}
                 >
-                  <option value="">${t("devices.canvas_none")}</option>
-                  ${this.canvases.map((canvas) => html`<option value=${canvas.id}>${canvas.name}</option>`)}
+                  <option value="">${t("devices.device_profile_none")}</option>
+                  ${this.deviceProfiles.map(
+                    (profile) => html`<option value=${profile.id}>${profile.name}</option>`,
+                  )}
                 </select>`
               : nothing
           }
@@ -672,14 +682,16 @@ export class DevicesScreen extends LitElement {
               : nothing
           }
           <label class="field"
-            >${t("devices.canvas")}
+            >${t("devices.device_profile")}
             <select
-              ${ref(this.#canvasSelect)}
-              data-test="canvas-select"
-              @change=${(e: Event) => this.#onCanvasChange(e)}
+              ${ref(this.#deviceProfileSelect)}
+              data-test="device-profile-select"
+              @change=${(e: Event) => this.#onDeviceProfileChange(e)}
             >
-              <option value="">${t("devices.canvas_none")}</option>
-              ${this.canvases.map((canvas) => html`<option value=${canvas.id}>${canvas.name}</option>`)}
+              <option value="">${t("devices.device_profile_none")}</option>
+              ${this.deviceProfiles.map(
+                (profile) => html`<option value=${profile.id}>${profile.name}</option>`,
+              )}
             </select>
           </label>
           ${this.kind === "till" ? this.#renderTillHardware() : nothing}

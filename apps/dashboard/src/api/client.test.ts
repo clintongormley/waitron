@@ -1725,7 +1725,7 @@ describe("DashboardApi — devices (device-identity-1)", () => {
       active: true,
       lastSeenAt: "2026-08-25T14:30:00.000Z",
       enrolledAt: "2026-08-20T09:00:00.000Z",
-      canvasId: "p1",
+      deviceProfileId: "dp1",
     },
     {
       id: "d2",
@@ -1735,7 +1735,7 @@ describe("DashboardApi — devices (device-identity-1)", () => {
       active: false,
       lastSeenAt: null,
       enrolledAt: "2026-08-19T09:00:00.000Z",
-      canvasId: null,
+      deviceProfileId: null,
     },
   ];
 
@@ -1791,40 +1791,37 @@ describe("DashboardApi — devices (device-identity-1)", () => {
     await expect(api.revokeDevice("nope")).rejects.toMatchObject({ code: "device.not_found" });
   });
 
-  it("reassignDevice POSTs { canvasId } to the device's assign-canvas route (204)", async () => {
+  it("reassignDeviceProfile POSTs { deviceProfileId } to the device's assign-device-profile route (204)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    await expect(api.reassignDevice("d1", "p1")).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/devices/d1/assign-canvas", {
+    await expect(api.reassignDeviceProfile("d1", "dp1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/devices/d1/assign-device-profile", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ canvasId: "p1" }),
+      body: JSON.stringify({ deviceProfileId: "dp1" }),
     });
   });
 
-  it("reassignDevice sends { canvasId: null } to clear the assignment", async () => {
+  it("reassignDeviceProfile sends { deviceProfileId: null } to clear the assignment", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    await expect(api.reassignDevice("d1", null)).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/devices/d1/assign-canvas", {
+    await expect(api.reassignDeviceProfile("d1", null)).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/devices/d1/assign-device-profile", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ canvasId: null }),
+      body: JSON.stringify({ deviceProfileId: null }),
     });
   });
 
-  it("reassignDevice rejects with { code } on a UUID-shaped unknown/foreign canvas (binding invalid)", async () => {
+  it("reassignDeviceProfile rejects with { code } on a UUID-shaped unknown/foreign profile (binding invalid)", async () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValue(jsonResponse({ error: { code: "device.binding_invalid" } }, false, 400));
     const api = new DashboardApi("", fetchImpl);
-    // A UUID-shaped id that names no canvas of this tenant is what actually reaches the FK and yields
-    // `device.binding_invalid` — a MALFORMED (non-UUID) id would be screened to `management.request_invalid`
-    // before it, so use a well-formed uuid here to match the real route contract.
     await expect(
-      api.reassignDevice("d1", "11111111-1111-4111-8111-111111111111"),
+      api.reassignDeviceProfile("d1", "11111111-1111-4111-8111-111111111111"),
     ).rejects.toMatchObject({
       code: "device.binding_invalid",
     });
@@ -1881,7 +1878,7 @@ describe("DashboardApi — canvas editor CRUD (SP-B3.2)", () => {
       jsonResponse({
         id: "c1",
         name: "Till",
-        definition: { formFactor: "till", tabs: [], capabilities: [] },
+        definition: { formFactor: "till", tabs: [] },
       }),
     );
     const api = new DashboardApi("", fetchImpl);
@@ -1895,7 +1892,7 @@ describe("DashboardApi — canvas editor CRUD (SP-B3.2)", () => {
   it("createCanvas POSTs name+definition and returns the id", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "c9" }, true, 201));
     const api = new DashboardApi("", fetchImpl);
-    const def = { formFactor: "till", tabs: [], capabilities: [] };
+    const def = { formFactor: "till", tabs: [] };
     const r = await api.createCanvas("New", def);
     expect(fetchImpl).toHaveBeenCalledWith(
       "/management-api/canvases",
@@ -1910,7 +1907,7 @@ describe("DashboardApi — canvas editor CRUD (SP-B3.2)", () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
     await expect(
-      api.updateCanvas("c1", "N", { formFactor: "till", tabs: [], capabilities: [] }),
+      api.updateCanvas("c1", "N", { formFactor: "till", tabs: [] }),
     ).resolves.toBeUndefined();
     expect(fetchImpl).toHaveBeenCalledWith(
       "/management-api/canvases/c1",

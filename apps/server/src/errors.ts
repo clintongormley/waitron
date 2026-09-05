@@ -1144,23 +1144,28 @@ declare module "@waitron/shared" {
      */
     "device.till_required": Record<string, never>;
     /**
-     * A pairing code named a binding id — a `till_id`, `receipt_printer_id` or `canvas_id` —
+     * A pairing code named a binding id — a `till_id`, `receipt_printer_id` or `device_profile_id` —
      * that matches no row of THIS tenant (absent, or another tenant's, which the tenant-consistent
      * composite FK rejects too). Surfaced by translating the `23503` the composite FK raises at the
-     * `device_pairing_codes` INSERT, keyed on the CONSTRAINT NAME (`device_pairing_codes_till_fk` /
-     * `device_pairing_codes_receipt_printer_fk` / `device_pairing_codes_canvas_fk`, migration
-     * 0095) — the `isZoneFkViolation` idiom (`tables.ts`). A NULL binding (MATCH SIMPLE skips its FK)
+     * `device_pairing_codes` INSERT (or the `devices` UPDATE the assign-device-profile route runs),
+     * keyed on the CONSTRAINT NAME (`device_pairing_codes_till_fk` /
+     * `device_pairing_codes_receipt_printer_fk` / `device_pairing_codes_device_profile_fk`, migrations
+     * 0095/0109) — the `isZoneFkViolation` idiom (`tables.ts`). A NULL binding (MATCH SIMPLE skips its FK)
      * never reaches this, and a 23503 on any OTHER constraint is rethrown raw rather than mislabelled.
+     * (The direct device→canvas binding was dropped in the Task 10 cutover, so `canvasId` is no longer a
+     * `field` here — a bad profile canvas reference is `device_profile.invalid`, in the profile store.)
      *
      * `field` carries the offending binding's FIELD NAME only — one of the string literals `"tillId"`,
-     * `"receiptPrinterId"`, `"canvasId"` — and NEVER the offending id value: a request-shape
+     * `"receiptPrinterId"`, `"deviceProfileId"` — and NEVER the offending id value: a request-shape
      * fault names the field, not the value, the same no-leak, echo-the-name discipline
      * `management.request_invalid` and `setup.request_invalid` follow (grep `{ field: string }` in this
      * file for that family). `device.*` names the DOMAIN CONCEPT (device pairing), never the throwing
      * package (`tenant.not_found`'s note gives the rule). Mapped to HTTP 400 by `device-api.ts`'s local
      * STATUS map (a request naming a binding that does not exist), not here. Never renamed once shipped.
      */
-    "device.binding_invalid": { field: "tillId" | "receiptPrinterId" | "canvasId" };
+    "device.binding_invalid": {
+      field: "tillId" | "receiptPrinterId" | "deviceProfileId";
+    };
     /**
      * A self-signed server certificate was asked for with no hostname to put on the leaf — the
      * `hostnames` list was empty. The box mints its own CA + server cert on first boot to serve

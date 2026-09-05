@@ -572,7 +572,7 @@ export interface Course {
  * device (device-identity-1): `kind` is the `device_kind` enum (only `kds_station` today), `stationId`
  * the bound kitchen station (null for a future non-station kind), `active` false once revoked,
  * `lastSeenAt` the last time the device authenticated (null before its first call), `enrolledAt` when it
- * redeemed its pairing code. `canvasId` is the device's currently-assigned canvas (null =
+ * redeemed its pairing code. `deviceProfileId` is the device's currently-assigned device profile (null =
  * the form-factor default). The two timestamps are ISO-8601 strings (never `Date`s over the wire). The
  * server orders NEWEST-enrolled first; the screen renders that order as-is. NOT imported from `apps/server`
  * (the #70 bundle rule the shapes above follow); a mismatch surfaces as a runtime shape error a view test
@@ -586,7 +586,7 @@ export interface DeviceRow {
   active: boolean;
   lastSeenAt: string | null;
   enrolledAt: string;
-  canvasId: string | null;
+  deviceProfileId: string | null;
 }
 
 /** One `GET /management-api/canvases` row — a tenant canvas as the canvas picker needs it. The
@@ -600,6 +600,21 @@ export interface Canvas {
   id: string;
   name: string;
   definition: unknown;
+}
+
+/** One `GET /management-api/device-profiles` row — a reusable device profile (SP device-profile
+ * feature): a named bundle of an assigned canvas (`canvasId`, `null` = fall back to the form-factor
+ * default) and a capability set (`integrated-card-payment`/`open-cash-drawer`/`act-as-kds`). The
+ * server answers `{ deviceProfiles: [...] }` for the list and the bare row elsewhere. `capabilities`
+ * crosses the boundary as `string[]` DELIBERATELY — the dashboard renders it against a LOCAL flag
+ * mirror rather than importing `@waitron/layouts`' `CapabilityFlag` (the #70 bundle rule the canvas /
+ * printing shapes follow); an unknown flag is a runtime shape error a view test catches, not a compile
+ * break. */
+export interface DeviceProfile {
+  id: string;
+  name: string;
+  canvasId: string | null;
+  capabilities: string[];
 }
 
 /** The venue's KDS fire-control mode (`locations.fire_control`) — `waiter` = the tab surfaces the
@@ -1794,7 +1809,7 @@ export class DashboardApi {
    * `{ code: "station.not_found" }`); a sale-capable `"till"`/`"handheld"` binds to a till (`tillId`
    * required — the server rejects a missing one `{ code: "device.till_required" }`), while a
    * `"kds_station"` sends none. The remaining bindings are optional (SP-A.2 §16): an assigned
-   * canvas (`canvasId`, any kind) and the till's static hardware (`receiptPrinterId`,
+   * device profile (`deviceProfileId`, any kind) and the till's static hardware (`receiptPrinterId`,
    * `hasCashDrawer`, `cardProvider` (`none`/`stripe_terminal`/`stripe_on_device`), `cardReaderId`). An
    * omitted optional binding is left at the server default (`card_provider='none'`, `has_cash_drawer=false`,
    * others NULL). A well-formed id naming no tenant row rejects `{ code: "device.binding_invalid" }`. */
@@ -1802,7 +1817,7 @@ export class DashboardApi {
     kind: string;
     stationId?: string;
     tillId?: string;
-    canvasId?: string;
+    deviceProfileId?: string;
     receiptPrinterId?: string;
     hasCashDrawer?: boolean;
     cardProvider?: string;
@@ -1843,6 +1858,61 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/canvases/${id}`, "DELETE");
   }
 
+  // ── Device profiles ──────────────────────────────────────────────────────────────────────────────
+  // The five verbs the Device-profiles screen drives, all `till.configure`-gated server-side (the
+  // management-api.ts device-profile routes). Mirrors the canvas CRUD above; the list unwraps
+  // `{ deviceProfiles: [...] }`, create/update return the stored row, delete answers 204.
+
+  /** `GET /management-api/device-profiles` — this tenant's device profiles. The server answers
+   * `{ deviceProfiles: [...] }`; this unwraps to the array. */
+  listDeviceProfiles(): Promise<DeviceProfile[]> {
+    return this.#request<{ deviceProfiles: DeviceProfile[] }>(
+      "/management-api/device-profiles",
+      "GET",
+    ).then((r) => r.deviceProfiles);
+  }
+
+  /** `GET /management-api/device-profiles/:id` — one profile, or `device_profile.not_found` (404). */
+  getDeviceProfile(id: string): Promise<DeviceProfile> {
+    return this.#request<DeviceProfile>(`/management-api/device-profiles/${id}`, "GET");
+  }
+
+  /** `POST /management-api/device-profiles` — create; returns the stored row at 201. A duplicate name
+   * rejects `device_profile.name_taken` (409); a bad capability set or canvas reference rejects
+   * `device_profile.invalid` (400). `canvasId` `null` = the form-factor default. */
+  createDeviceProfile(
+    name: string,
+    canvasId: string | null,
+    capabilities: string[],
+  ): Promise<DeviceProfile> {
+    return this.#request<DeviceProfile>("/management-api/device-profiles", "POST", {
+      name,
+      canvasId,
+      capabilities,
+    });
+  }
+
+  /** `PUT /management-api/device-profiles/:id` — full replace; returns the stored row (200). A
+   * since-deleted id rejects `device_profile.not_found` (404). */
+  updateDeviceProfile(
+    id: string,
+    name: string,
+    canvasId: string | null,
+    capabilities: string[],
+  ): Promise<DeviceProfile> {
+    return this.#request<DeviceProfile>(`/management-api/device-profiles/${id}`, "PUT", {
+      name,
+      canvasId,
+      capabilities,
+    });
+  }
+
+  /** `DELETE /management-api/device-profiles/:id` — 204; a since-deleted id rejects
+   * `device_profile.not_found`. */
+  deleteDeviceProfile(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/device-profiles/${id}`, "DELETE");
+  }
+
   /** `POST /management-api/devices/:id/revoke` — revoke a device (flip `active = false`, instant): the
    * device's cookie stops validating at once. Answers an empty 204; an unknown id rejects
    * `{ code: "device.not_found" }`. Never a hard delete — a device is a durable identity. */
@@ -1850,16 +1920,16 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/devices/${id}/revoke`, "POST");
   }
 
-  /** `POST /management-api/devices/:id/assign-canvas` — reassign (or clear) a device's canvas
-   * (device.manage-gated): `canvasId` a tenant canvas's id, or `null` to fall back to the
-   * form-factor default. Answers an empty 204; an unknown device rejects `{ code: "device.not_found" }`.
-   * A UUID-shaped id that names no canvas of this tenant (unknown or foreign) reaches the composite FK
-   * and rejects `{ code: "device.binding_invalid" }`; a MALFORMED (non-UUID) id is screened earlier and
-   * rejects `{ code: "management.request_invalid" }`. The dashboard only ever sends a real canvas id or
-   * `null`, so those two rejects are defense-in-depth. */
-  reassignDevice(id: string, canvasId: string | null): Promise<void> {
-    return this.#request<void>(`/management-api/devices/${id}/assign-canvas`, "POST", {
-      canvasId,
+  /** `POST /management-api/devices/:id/assign-device-profile` — reassign (or clear) a device's device
+   * profile (device.manage-gated): `deviceProfileId` a tenant device profile's id, or `null` to fall back
+   * to the form-factor default. Answers an empty 204; an unknown device rejects
+   * `{ code: "device.not_found" }`. A UUID-shaped id that names no device profile of this tenant (unknown
+   * or foreign) reaches the composite FK and rejects `{ code: "device.binding_invalid" }`; a MALFORMED
+   * (non-UUID) id is screened earlier and rejects `{ code: "management.request_invalid" }`. The dashboard
+   * only ever sends a real device-profile id or `null`, so those two rejects are defense-in-depth. */
+  reassignDeviceProfile(id: string, deviceProfileId: string | null): Promise<void> {
+    return this.#request<void>(`/management-api/devices/${id}/assign-device-profile`, "POST", {
+      deviceProfileId,
     });
   }
 

@@ -12,7 +12,7 @@ import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js"
 import type { TillStationScreen } from "./screens/till-station-screen.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillStationQueue } from "./widgets/station-queue.js";
-import type { CanvasDef } from "./layout.js";
+import type { CanvasDef, CapabilityFlag } from "./layout.js";
 import type {
   FloorZone,
   HeldOrderSummary,
@@ -153,7 +153,6 @@ const till = {
   // the `receipt` suite supplies it explicitly.
   canvas: {
     formFactor: "till",
-    capabilities: [],
     tabs: [
       {
         key: "counter",
@@ -176,13 +175,16 @@ const till = {
       },
     ],
   } satisfies CanvasDef,
+  // The device's CAPABILITY set (device-profile §5.3, Task 9) — relocated OFF the canvas onto the device
+  // profile, now an explicit `/api/till` payload sibling. `[]` by default (nothing capability-gated
+  // shows); a KDS boot below supplies `["act-as-kds"]` so its kds-board card renders.
+  capabilities: [] as CapabilityFlag[],
 };
 
 /** The form-factor canvas a `handheld` device boots (SP-B): a `floor` tab + an `order` tab (a
  * `table-order` card). The server resolves this for a phone-portrait device. */
 const phoneCanvasDef: CanvasDef = {
   formFactor: "phone-portrait",
-  capabilities: [],
   tabs: [
     {
       key: "floor",
@@ -203,7 +205,6 @@ const phoneCanvasDef: CanvasDef = {
  * `kds-board` card (its embedded station screen renders through the grid, gated on `act-as-kds`). */
 const kdsCanvasDef: CanvasDef = {
   formFactor: "kds",
-  capabilities: ["act-as-kds"],
   tabs: [
     {
       key: "kitchen",
@@ -608,7 +609,12 @@ describe("till-app", () => {
       // A kds_station device boots the KDS canvas (its `kitchen` tab's `kds-board` card mounts the
       // station screen through the grid). Venue default en-GB (≠ es-ES) makes the device-path
       // venue-default `setLocale` observable.
-      getTill: vi.fn().mockResolvedValue({ ...till, locale: "en-GB", canvas: kdsCanvasDef }),
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        locale: "en-GB",
+        canvas: kdsCanvasDef,
+        capabilities: ["act-as-kds"],
+      }),
       // The kind-aware probe (Task 7): a `kds_station` identity keeps the existing behaviour — the boot
       // then PREFETCHES the bound station's queue (`getDeviceStation`), a DELIBERATE second authenticated
       // read that preserves the `initialDeviceStation` optimisation. Only the mock plumbing changes here;
@@ -751,7 +757,9 @@ describe("till-app", () => {
     // First boot resolves `kds_station` → deviceMode=true, kiosk shell (a REAL prior device-mode state);
     // the re-boot's identity probe then resolves `handheld`.
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: kdsCanvasDef }),
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, canvas: kdsCanvasDef, capabilities: ["act-as-kds"] }),
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValueOnce({ deviceId: "dev-1", kind: "kds_station", stationId: "st-dev" })
@@ -823,7 +831,9 @@ describe("till-app", () => {
       // re-boot's SECOND identity probe resolves `kds_station`, and the boot PREFETCHES the bound station's
       // queue (`getDeviceStation`). `getTill` resolves the KDS canvas the server hands a kds display, so
       // `#shellActive()` sees it and the shell runs in kiosk mode.
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: kdsCanvasDef }),
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, canvas: kdsCanvasDef, capabilities: ["act-as-kds"] }),
       getDeviceIdentity: vi
         .fn()
         .mockRejectedValueOnce({ code: "device.unauthorized" })
@@ -2378,7 +2388,6 @@ describe("till-app", () => {
         // Opening a table SWITCHES to the order tab, mounting the table-order screen as that tab's card.
         const phoneCanvas: CanvasDef = {
           formFactor: "phone-portrait",
-          capabilities: [],
           tabs: [
             {
               key: "floor",
@@ -3927,7 +3936,6 @@ describe("till-app", () => {
     // Only the fields the assertion checks (key/columns) matter; the rest complete a valid CanvasDef.
     const counterCanvas: CanvasDef = {
       formFactor: "till",
-      capabilities: [],
       tabs: [{ key: "counter", title: "Counter", columns: 12, cards: [] }],
     };
 
@@ -3947,7 +3955,6 @@ describe("till-app", () => {
     // in place of the legacy `screen`-enum switch once this canvas is present.
     const shellCanvas: CanvasDef = {
       formFactor: "till",
-      capabilities: [],
       tabs: [
         { key: "counter", title: "Counter", columns: 12, cards: [] },
         {
@@ -3996,7 +4003,6 @@ describe("till-app", () => {
       // screen; re-pointed to the shell + floor-tab intent when the fence was removed (Task 6).
       const phoneCanvas: CanvasDef = {
         formFactor: "phone-portrait",
-        capabilities: [],
         tabs: [
           {
             key: "floor",
@@ -4050,7 +4056,6 @@ describe("till-app", () => {
     // operator header) but NO Station/Expo/Schedule affordances — a phone reaches none of those.
     const phoneCanvas: CanvasDef = {
       formFactor: "phone-portrait",
-      capabilities: [],
       tabs: [
         {
           key: "floor",
@@ -4072,7 +4077,6 @@ describe("till-app", () => {
     // mode (the operator header suppressed — a display has no logged-in operator).
     const kdsCanvas: CanvasDef = {
       formFactor: "kds",
-      capabilities: ["act-as-kds"],
       tabs: [
         {
           key: "kitchen",
@@ -4114,7 +4118,9 @@ describe("till-app", () => {
       // A kds_station boots STRAIGHT into device mode past the lock screen (no login); its `getTill`
       // canvas is the KDS canvas the server resolves for the display, so `#shellActive()` sees it.
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: kdsCanvas }),
+        getTill: vi
+          .fn()
+          .mockResolvedValue({ ...till, canvas: kdsCanvas, capabilities: ["act-as-kds"] }),
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "dev-1", kind: "kds_station", stationId: "st-dev" }),
@@ -4131,6 +4137,45 @@ describe("till-app", () => {
       expect(grid).not.toBeNull();
       expect(grid.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
     });
+
+    // The ONE behaviour change of the capability relocation (device-profile design 2026-09-05 §5.3,
+    // Task 9): capabilities at the RENDER axis now come from the device PROFILE (the `/api/till`
+    // `capabilities` sibling, threaded through `this.capabilities`), NOT from the canvas. Same KDS canvas
+    // both times — only the profile's capability set differs:
+    //  - a device with NO profile boots the form-factor default canvas with `capabilities: []`, so the
+    //    `kds-board` card (which needs `act-as-kds`) is HIDDEN — its embedded station screen never mounts;
+    //  - a device whose profile grants `act-as-kds` renders it.
+    // Prove-by-deletion of the profile-read: revert `this.capabilities = till.capabilities` in `#boot`
+    // (leaving the `[]` default) and the "shows" case below fails — the station screen no longer mounts.
+    it("HIDES the kds-board card for a no-profile device (capabilities []) and SHOWS it when the profile grants act-as-kds (§5.3)", async () => {
+      // No-profile device: same KDS canvas, but `capabilities: []` (a device with no device profile).
+      const hidden = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: kdsCanvas, capabilities: [] }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "dev-1", kind: "kds_station", stationId: "st-dev" }),
+        getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+      });
+      await flush(hidden.el);
+      const hiddenGrid = hidden.el.shadowRoot!.querySelector("till-card-grid")!;
+      expect(hiddenGrid).not.toBeNull();
+      // The kds-board card is hidden (its required `act-as-kds` is absent), so no station screen mounts.
+      expect(hiddenGrid.shadowRoot!.querySelector("till-station-screen")).toBeNull();
+
+      // Profile grants `act-as-kds` → the same card renders its embedded station screen.
+      const shown = await mountApp({
+        getTill: vi
+          .fn()
+          .mockResolvedValue({ ...till, canvas: kdsCanvas, capabilities: ["act-as-kds"] }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "dev-1", kind: "kds_station", stationId: "st-dev" }),
+        getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+      });
+      await flush(shown.el);
+      const shownGrid = shown.el.shadowRoot!.querySelector("till-card-grid")!;
+      expect(shownGrid.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
+    });
   });
 
   describe("handheld table-order mount duality (SP-B2.2 Task 7)", () => {
@@ -4141,7 +4186,6 @@ describe("till-app", () => {
     // the B2.1 drill push/pop, asserted by the sibling "drill-in stack" describe.
     const phoneCanvas: CanvasDef = {
       formFactor: "phone-portrait",
-      capabilities: [],
       tabs: [
         {
           key: "floor",
@@ -4294,7 +4338,6 @@ describe("till-app", () => {
     // so the shell offers them as affordance buttons; the shell's Allergens button is always present.
     const shellCanvas: CanvasDef = {
       formFactor: "till",
-      capabilities: [],
       tabs: [
         {
           key: "counter",

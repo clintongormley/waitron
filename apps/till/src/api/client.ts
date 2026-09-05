@@ -19,7 +19,7 @@
 // The till's LOCAL canvas/receipt shapes (`../layout.ts`) — plain data, browser-safe, bundle-decoupled
 // exactly like every interface below. `GET /api/till` carries the device's layout canvas + the receipt
 // trim; importing these from `../layout.js` (never `@waitron/layouts`) keeps the decoupling.
-import type { CanvasDef, ReceiptConfig } from "../layout.js";
+import type { CanvasDef, CapabilityFlag, ReceiptConfig } from "../layout.js";
 // `StationThresholds`/`TimingBand` are plain data shapes from the GENERIC `@waitron/shared` package
 // (not a server package), so importing their types here doesn't reintroduce the bundle-decoupling risk
 // the note above warns about — every till widget already depends on `@waitron/shared` for money/locale
@@ -95,6 +95,14 @@ export interface TillInfo {
    * counter tab.
    */
   canvas: CanvasDef;
+  /**
+   * The CALLING device's CAPABILITY set (device-profile design 2026-09-05 §5.3, Task 9). Relocated OFF
+   * the canvas onto the device profile, so it rides the payload as an explicit sibling rather than inside
+   * `canvas`. `profile.capabilities` for a device with a profile; `[]` for a no-profile or cookieless
+   * request. The render axis (`card-grid.ts`) hides `tender-pay`/`kds-board` when the required flag is
+   * absent. REQUIRED — the server resolves one for every boot.
+   */
+  capabilities: CapabilityFlag[];
 }
 
 /**
@@ -679,10 +687,11 @@ export interface DeviceEnrolment {
  * is a plain `string` (not a union): the client only branches on the values it knows and treats any other
  * as "not a special device", so a server that adds a new kind never breaks an older client.
  *
- * SP-A.2 §16 added the device's assigned CANVAS + TILL + static HARDWARE bindings to the response. They
- * are mirrored here as OPTIONAL — the client does not consume them yet (booting into the assigned canvas
- * is SP-B), so an older payload without them is still valid, exactly the graceful-widening rule the rest
- * of this file follows. All non-secret config; the reader's credentials never ride this response.
+ * SP-A.2 §16 added the device's assigned TILL + static HARDWARE bindings to the response. They
+ * are mirrored here as OPTIONAL — so an older payload without them is still valid, exactly the
+ * graceful-widening rule the rest of this file follows. All non-secret config; the reader's credentials
+ * never ride this response. (The canvas is no longer a device field — it resolves through the device
+ * profile at `GET /api/till` since the Task 10 cutover — so it is not mirrored here.)
  */
 export interface DeviceIdentity {
   deviceId: string;
@@ -690,8 +699,6 @@ export interface DeviceIdentity {
   stationId: string | null;
   /** The `tills` row a sale-capable device rings against (§16.4); `null` for a `kds_station`. */
   tillId?: string | null;
-  /** The assigned layout canvas (§16.3); `null` when unassigned. Consumed in SP-B. */
-  canvasId?: string | null;
   /** The per-device receipt printer (§16.3); `null` when none. */
   receiptPrinterId?: string | null;
   /** Whether this device has a cash drawer (§16.3). */
@@ -716,18 +723,19 @@ export interface DeviceStation {
 /**
  * The SP-C dev per-tab device chooser's payloads (dev-only routes, honoured server-side ONLY in
  * devMode). {@link DevDeviceList} is what `GET /api/dev/devices` returns — this venue's enrolled
- * `devices` plus the option-sources the mint form binds against (`tills`, `stations`, `canvases`);
+ * `devices` plus the option-sources the mint form binds against (`tills`, `stations`);
  * {@link DevMintRequest}/{@link DevMintResult} are the mint-and-adopt round trip. All LOCAL mirrors
  * of the server's dev-route shapes, deliberately NOT imported — the same bundle-decoupling rationale
  * as every other type in this file (see the file header). `kind` stays a plain `string` (not a
  * union): the chooser only surfaces the values the server sends, so a new device kind never breaks it.
+ * (The dev mint no longer offers a canvas picker — the canvas resolves through the device profile since
+ * the Task 10 cutover; a device profile is assigned on the dashboard devices screen.)
  */
 export interface DevDevice {
   id: string;
   kind: string;
   label: string;
   tillId: string | null;
-  canvasId: string | null;
   stationId: string | null;
   active: boolean;
 }
@@ -743,22 +751,16 @@ export interface DevStation {
   isDefault: boolean;
   active: boolean;
 }
-export interface DevCanvas {
-  id: string;
-  name: string;
-}
 export interface DevDeviceList {
   devices: DevDevice[];
   tills: DevTill[];
   stations: DevStation[];
-  canvases: DevCanvas[];
 }
 export interface DevMintRequest {
   kind: string;
   label: string;
   tillId?: string;
   stationId?: string;
-  canvasId?: string;
 }
 export interface DevMintResult {
   deviceId: string;

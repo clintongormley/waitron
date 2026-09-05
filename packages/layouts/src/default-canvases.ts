@@ -10,7 +10,6 @@ import type { FormFactor, CanvasDef } from "./canvas.js";
  */
 const TILL: CanvasDef = {
   formFactor: "till",
-  capabilities: ["integrated-card-payment", "open-cash-drawer"],
   tabs: [
     {
       key: "counter",
@@ -35,7 +34,6 @@ const TILL: CanvasDef = {
 
 const PHONE: CanvasDef = {
   formFactor: "phone-portrait",
-  capabilities: [],
   tabs: [
     {
       key: "floor",
@@ -54,7 +52,6 @@ const PHONE: CanvasDef = {
 
 const TABLET: CanvasDef = {
   formFactor: "tablet-landscape",
-  capabilities: [],
   tabs: [
     {
       key: "floor",
@@ -73,7 +70,6 @@ const TABLET: CanvasDef = {
 
 const KDS: CanvasDef = {
   formFactor: "kds",
-  capabilities: ["act-as-kds"],
   tabs: [
     {
       key: "kitchen",

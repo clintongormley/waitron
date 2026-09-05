@@ -160,7 +160,7 @@ const suite = usePgliteDb({
 // not survive to a later describe. No canvas needed: place/collect run `assertNotHandheld`, not the
 // capability firewall (`/api/pay`'s integrated-card path is proven in `till-api.rls.test.ts`).
 async function enrolSaleTillDevice(): Promise<void> {
-  tillDeviceCookie = await enrolTillDeviceCookie(suite.db, null);
+  tillDeviceCookie = await enrolTillDeviceCookie(suite.db);
 }
 
 /** A collecting logger for asserting the structured lines the routes emit. */
@@ -271,17 +271,22 @@ async function closeSession(db: Database, id: string): Promise<void> {
 
 /** Enrol a REAL `till` device for the seeded tenant via the Task 3 mint→redeem path (the only way to
  * get a `${deviceId}.${token}` whose scrypt hash actually verifies), optionally bound to a
- * `canvasId`. Runs the mint + redeem on the app role under the tenant — the production enrol
- * path — and returns the `${DEVICE_COOKIE}=…` header value a booting device would carry. A `till` is
- * sale-capable, so it always carries the seeded `till_id` (SP-A.2 §16.4). */
-async function enrolTillDeviceCookie(db: Database, canvasId: string | null): Promise<string> {
+ * `deviceProfileId`. Runs the mint + redeem on the app role under the tenant — the production
+ * enrol path — and returns the `${DEVICE_COOKIE}=…` header value a booting device would carry. A `till`
+ * is sale-capable, so it always carries the seeded `till_id` (SP-A.2 §16.4). After the Task 9/10 cutover,
+ * `GET /api/till` resolves the canvas + capabilities THROUGH the device profile — the profile is the
+ * SOLE canvas binding (the direct device→canvas link was dropped in Task 10). */
+async function enrolTillDeviceCookie(
+  db: Database,
+  deviceProfileId: string | null = null,
+): Promise<string> {
   const { code } = await withTenant(db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
     return generatePairingCode(tx, cfg, {
       kind: "till",
       stationId: null,
       tillId: cfg.tillId,
-      canvasId,
+      deviceProfileId,
       label: "Counter till",
     });
   });
@@ -290,6 +295,24 @@ async function enrolTillDeviceCookie(db: Database, canvasId: string | null): Pro
     return enrolDevice(tx, cfg, { code });
   });
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
+}
+
+/** Seed a `device_profiles` row for the seeded tenant on the app role (RLS-scoped), returning its id —
+ * the reusable bundle a device resolves its canvas + capabilities through (device-profile §5, Task 9). */
+async function seedDeviceProfile(
+  db: Database,
+  name: string,
+  capabilities: string[],
+  canvasId: string | null,
+): Promise<string> {
+  const { rows } = await withTenant(db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return tx.execute<{ id: string }>(sql`
+      insert into device_profiles (tenant_id, name, canvas_id, capabilities)
+      values (${cfg.tenantId}, ${name}, ${canvasId}::uuid, ${JSON.stringify(capabilities)}::jsonb)
+      returning id`);
+  });
+  return rows[0]!.id;
 }
 
 describe("deviceFormFactor", () => {
@@ -743,6 +766,9 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       // Cookieless: no device, so the boot read resolves the `till` form-factor default canvas
       // (`getCanvasForFormFactor` → DEFAULT_CANVASES.till) rather than leaving it absent (SP-B4).
       canvas: DEFAULT_CANVASES.till,
+      // Capabilities relocated onto the device profile (Task 9): a cookieless request has no profile, so
+      // the explicit sibling is the empty set (the render axis then hides the capability cards).
+      capabilities: [],
     });
     // Nothing sensitive: no pin, certificate, connection string or verification url reaches the wire.
     expect(JSON.stringify(body)).not.toMatch(/pin|secret|password|url|cert/i);
@@ -903,19 +929,26 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     }
   });
 
-  it("GET /api/till surfaces the calling device's assigned canvas when it carries a canvasId (SP-A.2 §16.3)", async () => {
-    // A booting device (device cookie present) whose device has an assigned layout canvas gets the
-    // resolved CanvasDef under `canvas` (the counter renders from `canvas` — there is no `layout` field
-    // any more, SP-B4). Seed a canvas, enrol a `till` device bound to it, and prove `GET /api/till`
-    // resolves + returns it. Cleaned up in `finally` so the shared-tenant no-cookie assertion above
-    // stays order-independent (CLAUDE.md §4).
+  it("GET /api/till surfaces the calling device's PROFILE canvas + capabilities (device-profile §5.3)", async () => {
+    // A booting device (device cookie present) whose PROFILE references a layout canvas gets the resolved
+    // CanvasDef under `canvas` (the counter renders from `canvas` — there is no `layout` field any more,
+    // SP-B4) plus the profile's capability set under the explicit `capabilities` sibling (Task 9 relocated
+    // it off the canvas). Seed a canvas + a profile referencing it, enrol a `till` device bound to that
+    // profile, and prove `GET /api/till` resolves + returns both. Cleaned up in `finally` so the
+    // shared-tenant no-cookie assertion above stays order-independent (CLAUDE.md §4).
     const prof = await suite.db.execute<{ id: string }>(sql`
       insert into canvases (tenant_id, name, definition)
       values (${cfg.tenantId}, 'Front counter', ${JSON.stringify(DEFAULT_CANVASES.till)}::jsonb)
       returning id`);
     const canvasId = prof.rows[0]!.id;
+    const deviceProfileId = await seedDeviceProfile(
+      suite.db,
+      "Counter",
+      ["integrated-card-payment", "open-cash-drawer"],
+      canvasId,
+    );
     try {
-      const cookie = await enrolTillDeviceCookie(suite.db, canvasId);
+      const cookie = await enrolTillDeviceCookie(suite.db, deviceProfileId);
       const app = new Hono();
       mountTillApi(app, deps(suite.db), collect([]));
 
@@ -923,20 +956,52 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
         canvas: unknown;
+        capabilities: unknown;
         receipt: ReceiptConfig;
       };
-      // The resolved CanvasDef, verbatim (the `getCanvas` definition).
+      // The resolved CanvasDef, verbatim (the `getCanvas` definition) — through the profile.
       expect(body.canvas).toEqual(DEFAULT_CANVASES.till);
+      // The profile's capabilities, as the explicit sibling (no longer inside `canvas`).
+      expect(body.capabilities).toEqual(["integrated-card-payment", "open-cash-drawer"]);
       // The tenant authored no receipt, so it stays the built-in default. No `layout` field (SP-B4).
       expect(body.receipt).toEqual(DEFAULT_RECEIPT);
       expect(body).not.toHaveProperty("layout");
     } finally {
       await suite.db.execute(sql`delete from devices where tenant_id = ${cfg.tenantId}`);
+      await suite.db.execute(sql`delete from device_profiles where tenant_id = ${cfg.tenantId}`);
       await suite.db.execute(sql`delete from canvases where tenant_id = ${cfg.tenantId}`);
     }
   });
 
-  it("falls back to the form-factor default canvas for an enrolled device with no assigned canvas", async () => {
+  it("resolves the form-factor default canvas + the profile's capabilities when the profile's canvasId is NULL", async () => {
+    // A "default canvas + these capabilities" profile (§5.2): canvas_id NULL, so the canvas falls back to
+    // the form-factor default while the capabilities STILL come from the profile. Proves the two axes are
+    // independent — a null canvas reference does not empty the capability set.
+    const deviceProfileId = await seedDeviceProfile(
+      suite.db,
+      "Default+caps",
+      ["open-cash-drawer"],
+      null,
+    );
+    try {
+      const cookie = await enrolTillDeviceCookie(suite.db, deviceProfileId);
+      const app = new Hono();
+      mountTillApi(app, deps(suite.db), collect([]));
+      const res = await app.request("/api/till", { headers: { cookie } });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { canvas: unknown; capabilities: unknown };
+      expect(body.canvas).toEqual(DEFAULT_CANVASES.till);
+      expect(body.capabilities).toEqual(["open-cash-drawer"]);
+    } finally {
+      await suite.db.execute(sql`delete from devices where tenant_id = ${cfg.tenantId}`);
+      await suite.db.execute(sql`delete from device_profiles where tenant_id = ${cfg.tenantId}`);
+    }
+  });
+
+  it("falls back to the form-factor default canvas + `capabilities: []` for an enrolled device with NO profile (§5.3)", async () => {
+    // The one behaviour change (§5.3): a no-profile device renders the form-factor default canvas with an
+    // EMPTY capability set — the render axis then HIDES the capability cards, making render and firewall
+    // agree. Enrol a `till` device with neither a canvas nor a profile.
     const cookie = await enrolTillDeviceCookie(suite.db, null);
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -945,10 +1010,12 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
         canvas: unknown;
+        capabilities: unknown;
         receipt: ReceiptConfig;
       };
-      // No stored canvas of this form factor → the built-in default for a till device.
+      // No profile → the built-in default canvas for a till device, and an empty capability set.
       expect(body.canvas).toEqual(DEFAULT_CANVASES.till);
+      expect(body.capabilities).toEqual([]);
       expect(body.receipt).toEqual(DEFAULT_RECEIPT);
       expect(body).not.toHaveProperty("layout");
     } finally {
@@ -956,11 +1023,11 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     }
   });
 
-  it("resolves the `till` form-factor default canvas when the request carries no device cookie", async () => {
-    // Cookieless (no device): the boot read now resolves the `till` form-factor default canvas
-    // (`getCanvasForFormFactor` → DEFAULT_CANVASES.till when the tenant has authored none) rather than
-    // leaving `canvas` absent — this is the SP-B4 enabling change that guarantees the counter always has
-    // a canvas to render. No `layout` field either.
+  it("resolves the `till` form-factor default canvas + `capabilities: []` when the request carries no device cookie", async () => {
+    // Cookieless (no device): the boot read resolves the `till` form-factor default canvas
+    // (`getCanvasForFormFactor` → DEFAULT_CANVASES.till when the tenant has authored none) and an empty
+    // capability set — the SP-B4 enabling change that guarantees the counter always has a canvas to
+    // render. No `layout` field either.
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const res = await app.request("/api/till"); // no cookie header
@@ -968,6 +1035,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     const body = await res.json();
     expect(body).toHaveProperty("canvas");
     expect((body as { canvas: unknown }).canvas).toEqual(DEFAULT_CANVASES.till);
+    expect((body as { capabilities: unknown }).capabilities).toEqual([]);
     expect(body).not.toHaveProperty("layout");
   });
 });

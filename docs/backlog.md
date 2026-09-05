@@ -249,9 +249,32 @@ editor + rendering) is the sole remaining sub-project of this track.**
         larger initiative, not started.
       - **Visual theme editor** (also listed under Follow-ons below).
       - (Clone/duplicate already shipped in Phase B — no longer a follow-on.)
-    - **Deferred follow-on — device profile.** A future slice: a first-class device profile bundling
-      **capabilities + area + order-routing + printer target + a `canvasId` reference** (device → device
-      profile → canvas), relocating capabilities off the canvas record once it exists. Not built here.
+    - **Deferred follow-on — device profile — LANDED (2026-09-05, `feat/device-profile`).** The
+      **skeleton + capabilities** slice of the future bundle. A first-class **`device_profiles`** table
+      (`name` + a nullable `canvasId` FK + a validated `capabilities` jsonb array) with FORCE RLS +
+      tenant-isolation + the composite `(tenant_id, canvas_id) → canvases` FK; the device now carries a
+      **`device_profile_id`** and its old `canvas_id` was **dropped** (0110), so the binding is a single
+      chain **device → device profile → canvas** — a device with no profile falls back to the form-factor
+      default canvas and empty capabilities (fail-closed firewall). **Capabilities relocated off the
+      canvas onto the profile** (`CanvasDef` no longer carries a `capabilities` field; the `/api/till`
+      payload returns `capabilities` as a sibling of `canvas`). CRUD `/management-api/device-profiles`
+      routes + a dashboard device-profile editor screen + the devices screen assigning a profile;
+      enrolment/reassign thread `device_profile_id`; `dev:setup` seeds a default "Counter" profile and
+      stamps it on the till pairing code. Spec
+      [device-profile-design](superpowers/specs/2026-09-05-device-profile-design.md). **Still
+      per-device (NOT relocated):** till / station / hardware. **Still deferred:** area / order-routing /
+      printer-target aggregation. **Deferred follow-ons this slice leaves open:**
+      - **(a) The aggregated bundle** — relocating till / station / hardware onto the profile and adding
+        area / order-routing / printer-target, the larger "profile" the SP-B rename reserved the word for.
+      - **(b) Tenant-facing built-in default profiles** beyond the single dev seed — a tenant onboarding
+        with a small set of ready-made profiles (a real UI/seed, not just `dev:setup`).
+      - **(c) The SP-C dev-switcher device-profile picker** — letting the dev role switch which profile
+        the current device carries from the in-app switcher (dev ergonomics only).
+      - **(d) A clean 4xx on an in-use delete** — deleting a `device_profile` still referenced by a
+        device (or a `canvas` still referenced by a profile) hits the FK `ON DELETE RESTRICT` and both
+        stores currently propagate the raw pg foreign-key/RESTRICT error (`device-profile-store.ts:231`
+        says so explicitly, matching `deleteCanvas`); map it to a `device_profile.in_use` / `canvas.in_use`
+        error code returning a clean 4xx instead.
   - **B4 LANDED #218 (2026-09-04):** dropped the old widget model and rehomed the non-fiscal
     receipt trim. **Removed:** `WIDGET_TYPES`/`WidgetInstance`/`LayoutDef`/`Region`/`WIDGET_CONFIG`/
     `validateLayout`/`store.ts`/`DEFAULT_LAYOUT` from `@waitron/layouts`; the till's region render

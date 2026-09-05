@@ -192,7 +192,6 @@ async function enrolTillCookie(cfg: TillConfig, boundTillId: string): Promise<st
       kind: "till",
       stationId: null,
       tillId: boundTillId,
-      canvasId: null,
       label: "Counter till",
     });
   });
@@ -213,7 +212,6 @@ async function enrolTillDeviceId(cfg: TillConfig, boundTillId: string): Promise<
       kind: "till",
       stationId: null,
       tillId: boundTillId,
-      canvasId: null,
       label: "Dev-override till",
     });
   });
