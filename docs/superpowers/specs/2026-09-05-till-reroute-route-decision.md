@@ -117,9 +117,12 @@ is not on the Public Suffix List (it is ours to keep off it).
 
 ## 5. What the build (Track B item 1's spec) must carry
 
-- Replicate `devices`, `tills`, `device_profiles`, `canvases` in the ordered lane as config-class
-  (primary-written). `packages/db/src/enrolment.ts` is shared ground with Track A — whoever lands
-  second rebases.
+- Replicate `devices`, `tills`, `device_profiles`, `canvases` to the standby. _Pointer, same day:
+  Track A's swap spec ([`2026-09-05-outbox-to-native-replication-swap-design.md`](2026-09-05-outbox-to-native-replication-swap-design.md)
+  §2.1) copies every table unless a module marks it local and names `tills`, `devices` and
+  `device_profiles` in its `state` publication over the WireGuard link — so this requirement is met by
+  that swap, not by an outbox enrolment; the reroute build sequences after the swap slice that ships
+  the state publication, and checks `canvases` is in it._
 - The device cookie takes a `Domain` attribute only when the host is under the configured tenant
   domain; host-only otherwise (`waitron.local`, loopback dev). The operator session cookie stays
   host-only — a switch re-prompts the PIN (v1; the portable signed token of distribution §4(ii)
