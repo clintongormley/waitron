@@ -46,9 +46,12 @@ export async function readDrainProgress(
     // This lane's own-origin high-water AND the carrier's reported cursor for it, as two scalar
     // subqueries in ONE round-trip per lane. `max(seq)` always yields one row (max_seq null when there
     // are no matching rows); the cursor subquery is null when the carrier has drained nothing on this
-    // lane. `tablesForLane` is total and non-empty for every SYNC_LANES entry, so `in ${tables}` is
-    // emitted unconditionally — no `length === 0` arm to guard (unlike readSyncLogSince, whose `tables`
-    // is a caller-supplied allowlist that may legitimately be empty).
+    // lane. `tablesForLane` is total and non-empty for every SYNC_LANES entry GIVEN the enrolment set
+    // boot actually injects (the full 22-table set assembled from ALL_MODULES) — a property of that
+    // caller, not of `tablesForLane` itself, which returns `[]` for a lane a partial enrolment set
+    // omits. So `in ${tables}` is emitted unconditionally here — no `length === 0` arm to guard
+    // (unlike readSyncLogSince, whose `tables` is a caller-supplied allowlist that may legitimately be
+    // empty).
     const laneRes = await db.execute<{
       max_seq: string | null;
       last_applied_seq: string | null;

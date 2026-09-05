@@ -430,6 +430,13 @@ missing edges. When you derive or review such a graph, grep `REFERENCES` **and**
 `CREATE TRIGGER .* ON` across the set's `drizzle/*.sql`, and map every target to its owning `CREATE
 TABLE`.
 
+**Now also guarded automatically** (`scripts/module-graph-honesty.test.ts`, 2026-09-05): it scans
+every package's `drizzle/*.sql` for both edge kinds — `REFERENCES` and `CREATE [CONSTRAINT] TRIGGER
+… ON` — and asserts each descriptor's `requires` names every cross-module edge the scan finds, so a
+missing edge fails a test instead of shipping. The guard reads text and states its own limits (a
+`CREATE TRIGGER` spelled unusually could be missed), so the manual grep discipline above still
+matters when deriving or reviewing a graph by eye.
+
 **An object-privilege `GRANT` PostgreSQL accepted is not a `GRANT` that did anything.** Whether an
 ineffective `GRANT` is loud or silent turns on what the GRANTOR holds, and the quiet cases are the
 common ones. Run on `postgres:18-alpine` (PostgreSQL 18.4), granting on a database owned by

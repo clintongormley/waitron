@@ -1,7 +1,9 @@
 // The entire public surface of @waitron/sync. Re-exports only — no logic here.
 //
-// Task 2 adds the outbox migration descriptor; Task 3 adds the enrolment registry and the static
-// per-table apply SQL. The apply loop and retention helpers land in later tasks
+// Task 2 adds the outbox migration descriptor; Task 3 adds the static per-table apply SQL (built
+// from an injected enrolment set since the SP-2a inversion — the enrolment registry itself now lives
+// in each owning package, re-exported here from @waitron/sync-enrolment). The apply loop and
+// retention helpers land in later tasks
 // (docs/superpowers/plans/2026-08-08-sync-slice1-commercial-outbox-plan.md, Tasks 4/6).
 
 // The commercial-lane sync outbox migration set, consumed by @waitron/migrations' manifest (and its
@@ -22,7 +24,8 @@ export type { CaptureOp, EnrolledTable, SyncLane, SyncMode } from "@waitron/sync
 export { readDrainProgress } from "./disposal.js";
 export type { DrainProgress, DrainProgressArgs } from "./disposal.js";
 
-// The static per-table apply SQL, built once from the registry + live schema (never from row data).
+// The static per-table apply SQL, built once per injected enrolment set from each entry's columns
+// (never from row data).
 export { applyStatementFor, deleteStatementFor } from "./apply-sql.js";
 
 // The apply loop — take a peer's captured sync_log rows and write each into the local mirror as the

@@ -32,8 +32,8 @@ export interface WaitronModule {
   readonly migrations: MigrationSet;
 
   // --- Seats for later slices; declared now, unpopulated here. ---
-  // Typed `unknown` on purpose: keeping @waitron/module from depending on sync/layouts/scheduler/
-  // identity yet. Each slice tightens its own field's type when it lands. NOT sloppiness — the spec
+  // Typed `unknown` on purpose: keeping @waitron/module from depending on layouts/scheduler/identity
+  // yet. Each slice tightens its own field's type when it lands. NOT sloppiness — the spec
   // (§3) records these as the deferred slices' seats.
   /** SP-2a: the tables this module enrols into @waitron/sync, declared BY the owning package. The
    * first deferred seat to gain its real type; the composition root assembles every module's enrolment
