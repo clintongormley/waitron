@@ -1,0 +1,32 @@
+{
+  "name": "@waitron/composition",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@waitron/db": "workspace:*",
+    "@waitron/fiscal-verifactu": "workspace:*",
+    "@waitron/identity": "workspace:*",
+    "@waitron/module": "workspace:*",
+    "@waitron/payments": "workspace:*",
+    "@waitron/workforce-es": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@vitest/coverage-v8": "^3.0.0",
+    "@waitron/migrations": "workspace:*",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

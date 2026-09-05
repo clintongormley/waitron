@@ -5,7 +5,7 @@
  *
  * The forbidden set is ASSEMBLED here, not listed in one place (SP-3b): `packages/db/src/english-only.ts`
  * holds only the base list of generic Spanish no module owns, and every Spanish-by-design module
- * declares its own terms on its descriptor's `vocabulary` seat (`apps/server/src/modules.ts`). This
+ * declares its own terms on its descriptor's `vocabulary` seat (`@waitron/composition`). This
  * suite derives each owner's package dir from `migrations.from` (`@waitron/module`'s
  * `packageDirOf`, which `module-graph-honesty.test.ts` reads through as well), asserts no owner is
  * generic, and proves each declaration fires on its owner's real source. `ALL_MODULES` is imported
@@ -18,7 +18,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { ALL_MODULES } from "../apps/server/src/modules.js";
+import { ALL_MODULES } from "../packages/composition/src/index.js";
 import {
   GENERIC_PACKAGES,
   PACKAGES_ROOT,
