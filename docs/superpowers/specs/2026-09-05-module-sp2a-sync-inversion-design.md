@@ -40,7 +40,10 @@ enrolment, and `@waitron/sync` reads no domain schema at all.**
   (`0000_sync_outbox.sql:158-217`, `0006_enrol_table_service.sql`, `0007_sync_identity_capture.sql`,
   `0008_enrol_kitchen.sql`). **Migration order forces these to stay in `@waitron/sync`'s migrations:** a
   trigger cannot reference `sync_capture()` before the sync set has run, and sync's set is last (it
-  `requires` identity + payments, `apps/server/src/modules.ts:112-114`). So the trigger DDL — and
+  `requires` identity + payments, `apps/server/src/modules.ts:112-114`).
+  (2026-09-05: SP-3a moved fiscal after sync, so fiscal — not sync — is now the last set; see
+  `2026-09-05-module-sp3a-fiscal-record-lane-design.md` §5. sync still runs after identity + payments,
+  so the migration-order argument here is unchanged.) So the trigger DDL — and
   therefore sync's migration-level `CREATE TRIGGER … ON persons`/`payments` — **does not move**. The
   inversion removes sync's *TypeScript import* of domain schema, not its migration-level trigger
   attachment. Anyone reading "full inversion" as "triggers move into each module" is reading it wrong;

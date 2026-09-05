@@ -223,9 +223,10 @@ describe("fiscal FK-order apply gate — 23503 defer, resolved only by the paren
     await seedFiscalParents(target.admin, { ids }); // full closure on the mirror EXCEPT the registro
     const peer = { nodeId: ids.nodeId, url: "", token: sourcePeerToken };
 
-    // The head must point at a real registro on the SOURCE (its own FK), inserted DIRECTLY so it is NOT
-    // captured — only the cadenas head enters sync_log, so the head is delivered while the mirror lacks
-    // the registro it names.
+    // The head must point at a real registro on the SOURCE (its own FK), inserted DIRECTLY (no
+    // app.node_id set) so its capture row lands under the all-zeros origin, which this origin-filtered
+    // pull (originId=nodeId) never fetches — only the cadenas head (captured under nodeId) is
+    // delivered, so the head arrives while the mirror lacks the registro it names.
     const registroId = randomUUID();
     const huella = "C".repeat(64);
     await insertFiscalRegistro(source.admin, ids, { id: registroId, huella, secuencia: 1 });

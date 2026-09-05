@@ -218,9 +218,10 @@ export async function captureFiscalRegistro(
 export interface SeedFiscalRegistroOptions extends SeedParentsOptions, RegistroOptions {
   /**
    * When set, insert the registro AS THIS WRITER (via {@link captureFiscalRegistro}) so the capture
-   * trigger fires; parents are still seeded through `db`. When absent, the registro is inserted
-   * directly through `db` (no capture) — the shape Tasks 7-9 use to plant a full chain for a drain
-   * or reconcile test.
+   * trigger fires under this node's origin; parents are still seeded through `db`. When absent, the
+   * registro is inserted directly through `db` — the capture trigger still fires, but with no
+   * app.node_id set it lands under the all-zeros origin, which no origin-filtered pull targets. This
+   * is the shape Tasks 7-9 use to plant a full chain for a drain or reconcile test.
    */
   captureThrough?: Database;
   /** Also seed a `cadenas` chain-head row pointing at this registro (Tasks 7-9). */
