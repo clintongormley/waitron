@@ -296,6 +296,7 @@ function mountTill(venue: Venue, nodeId: string): Hono {
       cfg,
       secureCookies: false,
       venueLocale: LOCALE,
+      readMembership: () => Promise.resolve(null),
     },
     noopLog,
   );

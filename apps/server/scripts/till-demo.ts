@@ -233,7 +233,17 @@ async function main(): Promise<void> {
       app,
       // `venueLocale` is the display default the boot derivation (`readVenueLocale`) would compute;
       // this demo mirrors the cfg's own locale rather than reading geography.
-      { db, backend, clock, cfg, secureCookies: false, venueLocale: cfg.locale },
+      // The demo is a single node holding no membership document, so `GET /api/till` carries an
+      // empty server list.
+      {
+        db,
+        backend,
+        clock,
+        cfg,
+        secureCookies: false,
+        venueLocale: cfg.locale,
+        readMembership: () => Promise.resolve(null),
+      },
       noopLog,
     );
 

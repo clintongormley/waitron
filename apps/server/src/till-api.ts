@@ -18,6 +18,7 @@ import { getReceipt, getCanvas, getCanvasForFormFactor, getDeviceProfile } from 
 import type { CanvasDef, CapabilityFlag } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
+import type { NodeStanding, SignedMembershipDocument } from "@waitron/membership";
 import { createErrorBoundary } from "./error-boundary.js";
 import { readJsonBody } from "./read-json-body.js";
 import type { Logger } from "./logger.js";
@@ -141,6 +142,35 @@ export interface TillApiDeps {
    * as `venueDefault`. DISTINCT from the fiscal `cfg.locale`/`cfg.invoiceLocales`, which are unchanged.
    */
   venueLocale: string;
+  /**
+   * The held membership document — the source of the venue's server list `GET /api/till` hands the
+   * till to route on (till-reroute design §3.2). `null` when this node holds none. A whole-DB
+   * singleton row with no tenant scope, so the read runs OUTSIDE the boot `withTenant` block.
+   */
+  readMembership: () => Promise<SignedMembershipDocument | null>;
+}
+
+const STANDING_ORDER: Record<NodeStanding, number> = {
+  "serving-primary": 0,
+  "serving-secondary": 1,
+  "sell-only": 2,
+  evicted: 3,
+};
+
+/**
+ * The servers a till may route to, best first (till-reroute design §3.2): an `evicted` node is no
+ * longer part of the venue and a node with no `contactUrl` has no address to dial, so neither is
+ * routable. Ordered by standing so the till tries the primary before a secondary, and a sell-only
+ * node last.
+ */
+export function routableServers(
+  held: SignedMembershipDocument | null,
+): Array<{ nodeId: string; url: string; standing: NodeStanding }> {
+  if (held === null) return [];
+  return held.body.nodes
+    .filter((n) => n.contactUrl !== "" && n.standing !== "evicted")
+    .sort((a, b) => STANDING_ORDER[a.standing] - STANDING_ORDER[b.standing])
+    .map((n) => ({ nodeId: n.nodeId, url: n.contactUrl, standing: n.standing }));
 }
 
 /**
@@ -621,6 +651,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // the sole canvas binding since the Task 10 cutover). The counter therefore always has a canvas
       // to render from.
       const device = await tryReadDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
+      // The venue's server list (till-reroute §3.2). Read HERE, outside the boot transaction below:
+      // `node_membership` is a whole-DB singleton row with no `tenant_id`, so it has no place under
+      // `withTenant`'s tenant scope.
+      const held = await deps.readMembership();
       // ONE transaction reads the issuer identity and the authored receipt trim (`getReceipt`, its own
       // `tenant_receipts` row — SP-B4), plus the resolved canvas below: all run inside the same
       // `withTenant` + `asAppUser` block (RLS scopes each to this till's tenant), never a second
@@ -768,6 +802,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // `profile.capabilities` for an enrolled device with a profile; `[]` for a no-profile or cookieless
         // request — the render axis hides `tender-pay`/`kds-board` when the flag is absent (`card-grid.ts`).
         capabilities: boot.capabilities,
+        // The node answering this request, and the venue's routable servers (till-reroute §3.2) — the
+        // till polls `GET /api/node` on each of them to follow the primary across a failover, and needs
+        // `nodeId` to tell which one it is currently talking to. `[]` while no document is held.
+        nodeId: deps.cfg.nodeId,
+        servers: routableServers(held),
       });
     }),
   );

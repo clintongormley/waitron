@@ -1128,6 +1128,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       cardProvider,
       venueLocale,
       devMode: config.devMode,
+      readMembership: () => readNodeMembership(db),
     },
     log,
   );

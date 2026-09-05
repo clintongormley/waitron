@@ -242,6 +242,10 @@ function deps(db: Database): TillApiDeps {
     // No integrated card terminal here (the `cardProvider` PaymentProvider is left undefined). `GET
     // /api/till` echoes `deps.cfg.tipsEnabled` (this suite's `cfg` has it `false`); a separate test
     // below drives `cfg.tipsEnabled` to `true` to prove the route reads it rather than hardcoding.
+
+    // No membership document held, so `GET /api/till` answers `servers: []`; the server-list test
+    // below overrides this with a document.
+    readMembership: () => Promise.resolve(null),
   };
 }
 
@@ -769,9 +773,52 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       // Capabilities relocated onto the device profile (Task 9): a cookieless request has no profile, so
       // the explicit sibling is the empty set (the render axis then hides the capability cards).
       capabilities: [],
+      // The node this till is talking to, and the venue's routable server list — empty here because
+      // this suite's deps hold no membership document (the two tests below drive both).
+      nodeId: cfg.nodeId,
+      servers: [],
     });
     // Nothing sensitive: no pin, certificate, connection string or verification url reaches the wire.
     expect(JSON.stringify(body)).not.toMatch(/pin|secret|password|url|cert/i);
+  });
+
+  it("GET /api/till lists the venue's servers from the membership document, primary first, evicted and address-less nodes excluded", async () => {
+    const app = new Hono();
+    const document = {
+      body: {
+        term: 5,
+        nodes: [
+          { nodeId: "b", contactUrl: "https://cloud.deli.test", standing: "serving-secondary" },
+          { nodeId: "c", contactUrl: "https://old.deli.test", standing: "evicted" },
+          { nodeId: "d", contactUrl: "", standing: "sell-only" },
+          { nodeId: cfg.nodeId, contactUrl: "https://box.deli.test", standing: "serving-primary" },
+        ],
+      },
+      signerNodeId: cfg.nodeId,
+      signature: "sig",
+      endorsements: [],
+    } as const;
+    mountTillApi(
+      app,
+      { ...deps(suite.db), readMembership: () => Promise.resolve(document) },
+      collect([]),
+    );
+    const res = await app.request("/api/till");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.nodeId).toBe(cfg.nodeId);
+    expect(body.servers).toEqual([
+      { nodeId: cfg.nodeId, url: "https://box.deli.test", standing: "serving-primary" },
+      { nodeId: "b", url: "https://cloud.deli.test", standing: "serving-secondary" },
+    ]);
+  });
+
+  it("GET /api/till answers servers: [] when no document is held", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const body = await (await app.request("/api/till")).json();
+    expect(body.servers).toEqual([]);
+    expect(body.nodeId).toBe(cfg.nodeId);
   });
 
   it("GET /api/till DECOUPLES the UI locale (venueLocale) from the receipt invoiceLocale (cfg.locale)", async () => {

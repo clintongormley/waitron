@@ -182,7 +182,15 @@ async function setupVenue(): Promise<{
 }
 
 function apiDeps(cfg: TillConfig): TillApiDeps {
-  return { db: suite.admin, backend, clock, cfg, secureCookies: false, venueLocale: cfg.locale };
+  return {
+    db: suite.admin,
+    backend,
+    clock,
+    cfg,
+    secureCookies: false,
+    venueLocale: cfg.locale,
+    readMembership: () => Promise.resolve(null),
+  };
 }
 
 /** Create a `cloud_poll` receipt printer (no agent needed — the enqueue is a pure INSERT, so no

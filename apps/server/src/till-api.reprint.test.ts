@@ -131,6 +131,7 @@ function deps(db: Database): TillApiDeps {
     cfg,
     secureCookies: false,
     venueLocale: "es-ES",
+    readMembership: () => Promise.resolve(null),
   };
 }
 
