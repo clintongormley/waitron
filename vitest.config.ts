@@ -85,9 +85,9 @@ export default defineConfig({
       // whose suite is `scripts/english-only.test.ts`. The module stayed behind because
       // `packages/db/src/schema/series.test.ts` imports `findSpanish` from it (the package-local
       // vocabulary tests carry their own copy of the tokeniser instead). `packages/db`'s own
-      // config excludes it in the same
-      // change, so it is measured in exactly one place rather than in two or in none — the failure
-      // mode being the last of those, which no threshold anywhere would report.
+      // config excludes it in the same change, so it is measured in exactly one place rather than
+      // in two or in none — the failure mode being the last of those, which no threshold anywhere
+      // would report.
       //
       // Not `scripts/**/*.ts`: the only `.ts` files under `scripts/` are the guard SUITES, and
       // Vitest leaves a suite out of its own coverage table whatever this says (measured on

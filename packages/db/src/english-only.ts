@@ -30,10 +30,10 @@ export const GENERIC_PACKAGES = [
 
 // There is no exempt-package list. A package is Spanish by design exactly when a module DECLARES
 // vocabulary (`WaitronModule.vocabulary`, the seat the composition root wires in
-// `apps/server/src/modules.ts`), and `vocabularyOwners` below derives that module's package from its
-// `migrations.from`; the root suite asserts no owner is generic. `packages/verifactu` — the AEAT
-// library, no descriptor of its own — is in no list at all, like `provisioning` and `tunnel`: not
-// generic, never scanned.
+// `apps/server/src/modules.ts`), and `vocabularyOwners` below derives that module's package from
+// its `migrations.from`; the root suite asserts no owner is generic. `packages/verifactu` — the
+// AEAT library, no descriptor of its own — is in no list at all, like `provisioning` and `tunnel`:
+// not generic, never scanned.
 
 // -----------------------------------------------------------------------------------------------
 // Decision record: apps/* is OUT OF SCOPE for this guard. Prose, not another `as const` array,

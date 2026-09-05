@@ -25,8 +25,8 @@ import { tenants } from "./tenants.js";
  *
  * All identifiers are English (this package is scanned by the english-only guard); the Spanish fiscal
  * term for each concept is given in the doc comments. `tax` here is the *cuota* (the IVA soportado),
- * named `tax` for the same reason `sales.vat_breakdown` and `VatRateLine` do — `cuota` is the fiscal
- * module's declared vocabulary, forbidden here.
+ * named `tax` for the same reason `sales.vat_breakdown` and `VatRateLine` do — `cuota` is the
+ * fiscal module's declared vocabulary, forbidden here.
  */
 
 /**

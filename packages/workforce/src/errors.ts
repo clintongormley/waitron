@@ -106,8 +106,7 @@ declare module "@waitron/shared" {
      * Raised by `setAbsenceStatus` (../absences.ts) when asked to move a non-existent absence to
      * approved/rejected. `absence.*`, grepped against the whole registry — unused before D2, and the
      * English `absence` term (the Spanish `ausencia` is workforce-es's declared vocabulary, so the
-     * code stays English
-     * like the schema, following the domain-concept convention). */
+     * code stays English like the schema, following the domain-concept convention). */
     "absence.not_found": { tenantId: string; absenceId: string };
     /** `createAbsence` (../absences.ts) was asked to create an absence whose date range overlaps an
      * existing absence for the SAME person under this tenant (inclusive on both ends). One person
