@@ -59,6 +59,30 @@ export interface SeedParentsOptions {
   taxId?: string;
   /** registro_sif.numero_instalacion. Default: deterministic-unique per call. */
   numeroInstalacion?: number;
+  /**
+   * Skip the `sales` insert, leaving the rest of the closure. Used by the FK-order apply gate to seed a
+   * mirror that is missing exactly the `sale_id` parent, so a delivered registro parks on `23503` until
+   * {@link insertFiscalSale} plants the sale (Task 8).
+   */
+  skipSale?: boolean;
+}
+
+/**
+ * Inserts the single `sales` row of a FK closure through `db` (superuser/admin — plain, unscoped, no
+ * capture). Split out of {@link seedFiscalParents} so a test can plant the sale AFTER a registro has
+ * already parked on the absent `sale_id` FK, the parent-arrives half of the FK-defer gate (Task 8).
+ */
+export async function insertFiscalSale(db: Database, ids: FiscalIds): Promise<void> {
+  await db.execute(sql`
+    insert into sales (
+      id, tenant_id, till_id, node_id, series_id, invoice_number,
+      issued_at, issued_offset_minutes, total, vat_breakdown,
+      locale, invoice_locales, fiscal_backend, fiscal_state
+    ) values (
+      ${ids.saleId}, ${ids.tenantId}, ${ids.tillId}, ${ids.nodeId}, ${ids.seriesId}, 1,
+      '2026-07-20T19:20:30+01:00', 60, '0.00', '[]'::jsonb,
+      'es', array['es'], 'verifactu', 'recorded'
+    )`);
 }
 
 /**
@@ -94,16 +118,7 @@ export async function seedFiscalParents(
   await db.execute(sql`
     insert into invoice_series (id, tenant_id, node_id, code)
     values (${ids.seriesId}, ${ids.tenantId}, ${ids.nodeId}, 'A')`);
-  await db.execute(sql`
-    insert into sales (
-      id, tenant_id, till_id, node_id, series_id, invoice_number,
-      issued_at, issued_offset_minutes, total, vat_breakdown,
-      locale, invoice_locales, fiscal_backend, fiscal_state
-    ) values (
-      ${ids.saleId}, ${ids.tenantId}, ${ids.tillId}, ${ids.nodeId}, ${ids.seriesId}, 1,
-      '2026-07-20T19:20:30+01:00', 60, '0.00', '[]'::jsonb,
-      'es', array['es'], 'verifactu', 'recorded'
-    )`);
+  if (!opts.skipSale) await insertFiscalSale(db, ids);
   await db.execute(sql`
     insert into registro_sif (id, tenant_id, node_id, nif, id_sistema_informatico, numero_instalacion)
     values (${ids.sifId}, ${ids.tenantId}, ${ids.nodeId}, '89890001K', 'WAITRON01', ${numeroInstalacion})`);
@@ -120,6 +135,13 @@ export interface AnteriorPointer {
 }
 
 export interface RegistroOptions {
+  /**
+   * Explicit registros_facturacion.id. Default: a fresh random uuid. Set it to plant a registro on a
+   * mirror with the SAME id a delivered `cadenas.ultimo_registro_id` references — the parent-arrives
+   * half of the nullable-FK defer gate (Task 8), where the parent can only reach the mirror by direct
+   * insert (the ledger is append-only, so it cannot be re-captured under its own id).
+   */
+  id?: string;
   /** deployment environment stamped on the row — replicated verbatim (never hashed). Default "production". */
   entorno?: Entorno;
   /** The 64-char huella. Default `"F".repeat(64)`. */
@@ -154,10 +176,11 @@ export async function insertFiscalRegistro(
   const huella = opts.huella ?? "F".repeat(64);
   const entorno: Entorno = opts.entorno ?? "production";
   const numSerie = opts.numSerie ?? `A/${secuencia}`;
+  const registroId = opts.id ?? randomUUID();
   const a = opts.anterior;
   const { rows } = await conn.execute<{ id: string }>(sql`
     insert into registros_facturacion (
-      tenant_id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
+      id, tenant_id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
       id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
       tipo_factura, descripcion_operacion, desglose, cuota_total, importe_total,
       primer_registro, sistema_informatico,
@@ -165,7 +188,7 @@ export async function insertFiscalRegistro(
       anterior_fecha_expedicion_factura, anterior_huella,
       fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, entorno
     ) values (
-      ${ids.tenantId}, ${ids.tillId}, ${ids.nodeId}, ${ids.sifId}, ${ids.saleId}, ${secuencia}, 'alta',
+      ${registroId}, ${ids.tenantId}, ${ids.tillId}, ${ids.nodeId}, ${ids.sifId}, ${ids.saleId}, ${secuencia}, 'alta',
       '89890001K', ${numSerie}, '2026-07-20', 'Waitron SL',
       'F2', 'Venta en establecimiento', '[]'::jsonb, '12.35', '123.45',
       ${a === undefined}, '{}'::jsonb,
