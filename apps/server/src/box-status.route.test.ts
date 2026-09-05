@@ -3,14 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { asAppUser, withTenant, type Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { createHealthState } from "./health.js";
 import { readBackupStatus, type BackupStatus } from "./backup-status.js";
-import { mountBoxStatusApi } from "./box-status.js";
+import { mountBoxStatusApi, readConfigConflictCount } from "./box-status.js";
 import { buildBackend } from "./local-fs-backend.js";
 import { mountManagementApi } from "./management-api.js";
 import { FIXTURE_CERT_PEM } from "./testing/tls-fixture.js";
@@ -26,6 +26,20 @@ const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the seeded manager
 const MANAGER_EMAIL = "manager@x.com";
 
 const suite = useTemplateDb({ template: "manifest" });
+
+// The config-conflict count reader under test reads through the `sync_tailer` role — `row_image` is
+// tenant business data, so 0009 grants SELECT on `sync_config_conflicts` to `sync_tailer` only, NOT
+// `app_user` (the same isolation `sync_log` enforces; proven by `config-conflict.grants.test.ts`). So
+// the READER must be a sync_tailer connection, not the superuser `suite.admin` (which would bypass the
+// grant and hide a regression). `sync_reader` is a LOGIN member of `sync_tailer`, created once in the
+// shared-container global setup; seeding still runs as `suite.admin`. Guarded close (CLAUDE.md §4).
+let conflictsReaderDb: Database | undefined;
+beforeAll(async () => {
+  conflictsReaderDb = await suite.pg.connectAs("sync_reader", "rp");
+});
+afterAll(async () => {
+  if (conflictsReaderDb !== undefined) await conflictsReaderDb.close();
+});
 
 // Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
 // so the provisioned venue needs its own NIF — the same per-suite counter the sibling suites use.
@@ -121,6 +135,10 @@ function buildApp(
       readReplicationLag: undefined,
       readDisposal: undefined,
       readBackup: opts.readBackup,
+      // The Slice-7 config-conflict count reader, on the sync_tailer pool (the manifest template carries
+      // the sync module, so sync_config_conflicts exists). Reads through `sync_tailer` — the role that
+      // holds SELECT on the table (0009) — exactly as boot.ts wires it via `lagPool`.
+      readConfigConflicts: () => readConfigConflictCount(conflictsReaderDb!),
       readMode: () => "primary",
       readSingletonRole: () => "primary",
     },
@@ -169,6 +187,9 @@ describe("GET /api/box/status (real postgres)", () => {
     expect(body.cert).toEqual({ available: false }); // tlsCertPath undefined
     expect(body.replication).toEqual({ configured: false }); // no lag reader
     expect(body.backup).toEqual({ configured: false });
+    // The reader is wired, so the surface is configured; no conflicts have been recorded on this fresh
+    // clone yet, so the healthy norm is zero.
+    expect(body.configConflicts).toEqual({ configured: true, count: 0 });
     expect(body.time.source).toMatch(/timedatectl|unavailable/);
   });
 
@@ -201,6 +222,45 @@ describe("GET /api/box/status (real postgres)", () => {
         { id: "primary", lastBackupAt: mtime.toISOString(), ageSeconds: 30, stale: false },
       ],
     });
+  });
+});
+
+describe("GET /api/box/status surfaces the config-conflict count (real postgres)", () => {
+  let app: Hono;
+  let managerCookie: string;
+  let tenantId: string;
+
+  beforeAll(async () => {
+    const t = await setupTenant();
+    tenantId = t.tenantId;
+    app = buildApp(t.tenantId, t.nodeId, {
+      now: new Date("2026-08-29T10:00:00Z"),
+      tlsCertPath: undefined,
+    });
+    managerCookie = await login(app, MANAGER_EMAIL);
+  });
+
+  // sync_config_conflicts is whole-DB (no tenant_id/RLS), so its count(*) spans this file's clone.
+  // Clear it after this suite so the seeded rows never leak into another suite's count read (§4
+  // order-independence fix, whole-branch review).
+  afterAll(async () => {
+    await suite.admin.execute(sql`delete from sync_config_conflicts`);
+  });
+
+  it("reports configConflicts.count === the number of recorded ops rows", async () => {
+    // Clear first as the owner so the assertion is order-independent, then seed exactly three rows and
+    // read them back through the app-role reader the route uses.
+    await suite.admin.execute(sql`delete from sync_config_conflicts`);
+    for (let i = 0; i < 3; i += 1) {
+      await suite.admin.execute(
+        sql`insert into sync_config_conflicts (table_name, origin_id, lane, row_image)
+            values ('products', gen_random_uuid(), 'ordered', ${JSON.stringify({ id: `p${i}`, tenant_id: tenantId })}::jsonb)`,
+      );
+    }
+    const res = await app.request("/api/box/status", { headers: { cookie: managerCookie } });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.configConflicts).toEqual({ configured: true, count: 3 });
   });
 });
 

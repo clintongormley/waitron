@@ -82,6 +82,9 @@ export const CORE_ENROLMENT: readonly EnrolledTable[] = [
   }),
 
   // Group B — mutable with a monotonic `updated_at` watermark → watermark upsert.
+  // configClass: true on the pure config tables below (catalogues/categories/products) — the venue's
+  // menu, which flows DOWN-only from the serving-primary; Slice 7's gate rejects such a row from any
+  // other origin (R-S7-1).
   enrol(catalogues, {
     mode: "watermark-upsert",
     conflictKey: ["id"],
@@ -89,6 +92,7 @@ export const CORE_ENROLMENT: readonly EnrolledTable[] = [
     captureOps: ["insert", "update"],
     fkRank: 0,
     lane: "ordered",
+    configClass: true,
   }),
   enrol(categories, {
     mode: "watermark-upsert",
@@ -97,6 +101,7 @@ export const CORE_ENROLMENT: readonly EnrolledTable[] = [
     captureOps: ["insert", "update"],
     fkRank: 1,
     lane: "ordered",
+    configClass: true,
   }),
   enrol(products, {
     mode: "watermark-upsert",
@@ -105,6 +110,7 @@ export const CORE_ENROLMENT: readonly EnrolledTable[] = [
     captureOps: ["insert", "update"],
     fkRank: 2,
     lane: "ordered",
+    configClass: true,
   }),
 
   // Group C — mutable, NO watermark column, DELETE-capable → single ordered lane.
@@ -125,7 +131,8 @@ export const CORE_ENROLMENT: readonly EnrolledTable[] = [
     lane: "ordered",
   }),
 
-  // Group D — table-service floor closure (C1): mutable, NO watermark, NO delete.
+  // Group D — table-service floor closure (C1): mutable, NO watermark, NO delete. floor_zones and
+  // table_service_statuses are pure config (the floor layout + the status palette) → configClass: true.
   enrol(floorZones, {
     mode: "watermark-upsert",
     conflictKey: ["id"],
@@ -133,6 +140,7 @@ export const CORE_ENROLMENT: readonly EnrolledTable[] = [
     captureOps: ["insert", "update"],
     fkRank: 0,
     lane: "ordered",
+    configClass: true,
   }),
   enrol(tableServiceStatuses, {
     mode: "watermark-upsert",
@@ -141,7 +149,13 @@ export const CORE_ENROLMENT: readonly EnrolledTable[] = [
     captureOps: ["insert", "update"],
     fkRank: 0,
     lane: "ordered",
+    configClass: true,
   }),
+  // dining_tables is DELIBERATELY NOT config-class (configClass default false, R-S7-1): it is a MIXED
+  // config/runtime table — its layout columns are config, but `tab_id`/`status_id` are single-writer
+  // runtime seating state a returned node legitimately owns for its own tab. Rejecting the whole row on
+  // primary-wins would drop that runtime state; per-field merge is the deferred seam (spec §7). So the
+  // gate leaves dining_tables alone and its rows apply from any origin like any runtime table.
   enrol(diningTables, {
     mode: "watermark-upsert",
     conflictKey: ["id"],
@@ -151,7 +165,8 @@ export const CORE_ENROLMENT: readonly EnrolledTable[] = [
     lane: "ordered",
   }),
 
-  // Group F — kitchen KDS closure: mutable, NO watermark, NO delete.
+  // Group F — kitchen KDS closure: mutable, NO watermark, NO delete. kitchen_stations/kitchen_courses
+  // are pure config (the kitchen setup) → configClass: true; ticket_items is runtime (default false).
   enrol(kitchenStations, {
     mode: "watermark-upsert",
     conflictKey: ["id"],
@@ -159,6 +174,7 @@ export const CORE_ENROLMENT: readonly EnrolledTable[] = [
     captureOps: ["insert", "update"],
     fkRank: 0,
     lane: "ordered",
+    configClass: true,
   }),
   enrol(kitchenCourses, {
     mode: "watermark-upsert",
@@ -167,6 +183,7 @@ export const CORE_ENROLMENT: readonly EnrolledTable[] = [
     captureOps: ["insert", "update"],
     fkRank: 0,
     lane: "ordered",
+    configClass: true,
   }),
   enrol(ticketItems, {
     mode: "watermark-upsert",

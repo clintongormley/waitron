@@ -30,6 +30,7 @@ const NON_CORE_ENROLMENT: readonly EnrolledTable[] = [
     captureOps: ["insert", "update"],
     fkRank: 3,
     lane: "fast",
+    configClass: false,
     columns: [
       "id",
       "tenant_id",
@@ -55,6 +56,7 @@ const NON_CORE_ENROLMENT: readonly EnrolledTable[] = [
     captureOps: ["insert"],
     fkRank: 4,
     lane: "fast",
+    configClass: false,
     columns: [
       "id",
       "tenant_id",
@@ -75,6 +77,7 @@ const NON_CORE_ENROLMENT: readonly EnrolledTable[] = [
     captureOps: ["insert", "update"],
     fkRank: 0,
     lane: "ordered",
+    configClass: true,
     columns: ["tenant_id", "offline_mode", "offline_amount_cap", "created_at", "updated_at"],
   },
   // persons + webauthn_credentials, from the kept @waitron/identity dep (mirrors the ...CORE_ENROLMENT spread).
@@ -473,7 +476,7 @@ describe("the commercial-lane apply loop", () => {
         ],
         { subscriberId, ...PROD },
       );
-      expect(first).toEqual({ applied: 1, deferred: 0 });
+      expect(first).toEqual({ applied: 1, deferred: 0, rejected: 0 });
 
       // The SAME id at a HIGHER seq (so the seq cursor does not mask it — this isolates ON CONFLICT
       // DO NOTHING) carrying a DIFFERENT total.
@@ -491,7 +494,7 @@ describe("the commercial-lane apply loop", () => {
         ],
         { subscriberId, ...PROD },
       );
-      expect(repeat).toEqual({ applied: 0, deferred: 0 });
+      expect(repeat).toEqual({ applied: 0, deferred: 0, rejected: 0 });
 
       expect(await saleTotal(saleId)).toBe("10.00"); // unchanged — the different bytes did NOT overwrite
       expect(await saleCount(saleId)).toBe("1"); // exactly one row, never a duplicate
@@ -691,7 +694,7 @@ describe("the commercial-lane apply loop", () => {
         ],
         opts,
       );
-      expect(inOrder).toEqual({ applied: 2, deferred: 0 });
+      expect(inOrder).toEqual({ applied: 2, deferred: 0, rejected: 0 });
 
       // Control (the other direction): shuffle the child BELOW its parent — line at seq3, sale at
       // seq4. Applied ascending, the line hits its absent parent → 23503 → parked; the sale lands;
@@ -765,7 +768,7 @@ describe("the commercial-lane apply loop", () => {
         ],
         { subscriberId, ...PROD },
       );
-      expect(result).toEqual({ applied: 1, deferred: 1 });
+      expect(result).toEqual({ applied: 1, deferred: 1, rejected: 0 });
       expect(await saleCount(goodSale.id as string)).toBe("1");
       expect(await saleLineCount(orphanLine.id as string)).toBe("0"); // never forced in
       const cursor = await postgres.admin.execute<{ seq: string }>(
@@ -1231,7 +1234,7 @@ describe("C1 — the dining_tables FK-closure enrolment (the ordered-lane hard g
       ];
       const result = await applyBatch(applier, rows, { subscriberId, ...PROD });
 
-      expect(result).toEqual({ applied: 4, deferred: 0 }); // all four landed, nothing parked
+      expect(result).toEqual({ applied: 4, deferred: 0, rejected: 0 }); // all four landed, nothing parked
       expect(await laneCursor(subscriberId, originId, "ordered")).toBe(4n); // cursor advanced past them
       // The delivery order is present AND still points at the mirrored table.
       const back = await scalar(
@@ -1267,7 +1270,7 @@ describe("C1 — the dining_tables FK-closure enrolment (the ordered-lane hard g
       ];
       const result = await applyBatch(applier, rows, { subscriberId, ...PROD });
 
-      expect(result).toEqual({ applied: 0, deferred: 1 }); // parked on the absent FK parent
+      expect(result).toEqual({ applied: 0, deferred: 1, rejected: 0 }); // parked on the absent FK parent
       expect(await laneCursor(subscriberId, originId, "ordered")).toBe(0n); // cursor held below it
       expect(
         await scalar(
@@ -1305,7 +1308,7 @@ describe("C1 — the dining_tables FK-closure enrolment (the ordered-lane hard g
       ];
       const result = await applyBatch(applier, rows, { subscriberId, ...PROD });
 
-      expect(result).toEqual({ applied: 0, deferred: 1 }); // parked on the absent floor_zones parent
+      expect(result).toEqual({ applied: 0, deferred: 1, rejected: 0 }); // parked on the absent floor_zones parent
       expect(await laneCursor(subscriberId, originId, "ordered")).toBe(0n); // cursor held below it
       expect(
         await scalar(
@@ -1399,7 +1402,7 @@ describe("C1 — the dining_tables FK-closure enrolment (the ordered-lane hard g
       const before = await syncLogCount();
       const result = await applyBatch(applier, rows, { subscriberId, ...PROD });
 
-      expect(result).toEqual({ applied: 2, deferred: 0 }); // both landed, nothing parked (wedge-free)
+      expect(result).toEqual({ applied: 2, deferred: 0, rejected: 0 }); // both landed, nothing parked (wedge-free)
       expect(await woStatus(woId)).toBe("settled"); // the settle applied verbatim (transition gated off)
       // Converged to cleared: the local 0050 cascade (firing on the seq-1 settle apply) and the captured
       // seq-2 dining_tables UPDATE are the same idempotent status clear — this asserts convergence, not
@@ -1459,7 +1462,7 @@ describe("kitchen-sync enrolment (the ordered-lane gate)", () => {
       ];
       const result = await applyBatch(applier, rows, { subscriberId, ...PROD });
 
-      expect(result).toEqual({ applied: 3, deferred: 0 }); // all three landed, nothing parked
+      expect(result).toEqual({ applied: 3, deferred: 0, rejected: 0 }); // all three landed, nothing parked
       expect(await laneCursor(subscriberId, originId, "ordered")).toBe(3n); // cursor advanced past them
       // The routed product is present AND still points at the mirrored station + course.
       const routed = await postgres.admin.execute<{ station: string; course: string }>(
@@ -1523,7 +1526,7 @@ describe("kitchen-sync enrolment (the ordered-lane gate)", () => {
       ];
       const result = await applyBatch(applier, rows, { subscriberId, ...PROD });
 
-      expect(result).toEqual({ applied: 3, deferred: 0 }); // station, course and item all landed
+      expect(result).toEqual({ applied: 3, deferred: 0, rejected: 0 }); // station, course and item all landed
       expect(await laneCursor(subscriberId, originId, "ordered")).toBe(3n);
       expect(
         await scalar(
@@ -1560,7 +1563,7 @@ describe("kitchen-sync enrolment (the ordered-lane gate)", () => {
       ];
       const result = await applyBatch(applier, rows, { subscriberId, ...PROD });
 
-      expect(result).toEqual({ applied: 0, deferred: 1 }); // parked on the absent kitchen_stations parent
+      expect(result).toEqual({ applied: 0, deferred: 1, rejected: 0 }); // parked on the absent kitchen_stations parent
       expect(await laneCursor(subscriberId, originId, "ordered")).toBe(0n); // cursor held below it
       expect(
         await scalar(

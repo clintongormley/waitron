@@ -21,6 +21,8 @@ export const PAYMENTS_ENROLMENT: readonly EnrolledTable[] = [
     fkRank: 4,
     lane: "fast",
   }),
+  // payment_policy is config-class (membership Slice 7, R-S7-1): the tenant's payment configuration
+  // flows DOWN-only from the serving-primary. payments/payment_refunds above are runtime (default false).
   enrol(paymentPolicy, {
     mode: "watermark-upsert",
     conflictKey: ["tenant_id"],
@@ -28,5 +30,6 @@ export const PAYMENTS_ENROLMENT: readonly EnrolledTable[] = [
     captureOps: ["insert", "update"],
     fkRank: 0,
     lane: "ordered",
+    configClass: true,
   }),
 ];

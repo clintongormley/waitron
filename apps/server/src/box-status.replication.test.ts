@@ -139,6 +139,7 @@ function buildApp(tenantId: string, nodeId: string, now: Date): Hono {
       readReplicationLag: () => lagFor(suite.admin),
       readDisposal: undefined,
       readBackup: undefined,
+      readConfigConflicts: undefined,
       readMode: () => "primary",
       readSingletonRole: () => "primary",
     },

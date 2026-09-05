@@ -57,6 +57,13 @@ export interface ApplyBatchOptions {
    * reference — see {@link dispatchFor}). A row naming a table absent from this set is a hard
    * `sync.table_not_enrolled`. `@waitron/sync` no longer owns this data (SP-2a inversion). */
   enrolments: readonly EnrolledTable[];
+  /** The current serving-primary node id the config-conflict gate keys on (membership Slice 7). On the
+   * CARRIER draining a returned node's tail, a config-class row (an enrolled table with
+   * `configClass: true`) whose `originId` is NOT this id is REJECTED by primary-wins — recorded to
+   * `sync_config_conflicts`, not applied (spec §7). FAIL-SAFE: when `undefined` (this node is not a
+   * carrier / has no known serving-primary) the gate is INERT — every row applies as it does today, so
+   * normal config down-flow is never broken by the gate (R-S7-2). */
+  servingPrimaryId?: string;
 }
 
 export interface ApplyBatchResult {
@@ -68,6 +75,21 @@ export interface ApplyBatchResult {
   /** Rows parked at least once on a `23503 foreign_key_violation` — the belt-and-suspenders defer.
    * A parked row that later lands (its parent arrived in the same batch) still counts here. */
   deferred: number;
+  /** Config-class rows overridden by primary-wins this batch (membership Slice 7): a config-class row
+   * whose origin was not the serving-primary — recorded to `sync_config_conflicts` and settled (the
+   * cursor advances past it, never re-parked), NOT applied. Counted at the single settle site, the same
+   * way `applied`/`deferred` are, so it never double-counts a re-delivery (a seq at/below the cursor is
+   * skipped before the gate, so it is neither re-applied nor re-recorded). Always 0 when the gate is
+   * inert (`servingPrimaryId` undefined). */
+  rejected: number;
+}
+
+/** The reject gate's per-batch context, threaded into {@link tryApplyRow} so both the main pass and the
+ * retry pass share one gate site. `servingPrimaryId` undefined ⇒ inert; `lane` is recorded on a
+ * rejected row (which lane it arrived on). */
+interface GateContext {
+  servingPrimaryId: string | undefined;
+  lane: SyncLane;
 }
 
 interface OriginProgress {
@@ -178,19 +200,25 @@ export async function applyBatch(
 
   let applied = 0;
   let deferred = 0;
+  let rejected = 0;
   const parked: SyncLogRow[] = [];
+  const gate: GateContext = { servingPrimaryId: opts.servingPrimaryId, lane };
 
   // Records a row's outcome against its origin's progress. Returns true if the row is now settled
   // (so a parked row can be removed from the retry queue), false if it is (still) parked. The single
-  // place `applied`/`deferred` are counted, so both passes share one counting site.
-  const settleOrPark = (row: SyncLogRow, outcome: number | "deferred"): boolean => {
+  // place `applied`/`deferred`/`rejected` are counted, so both passes share one counting site.
+  const settleOrPark = (row: SyncLogRow, outcome: number | "deferred" | "rejected"): boolean => {
     const b = bucket(row.originId);
     if (outcome === "deferred") {
       if (!b.deferred.has(row.seq)) deferred += 1; // count a row the first time it is parked only
       b.deferred.add(row.seq);
       return false;
     }
-    if (outcome > 0) applied += 1;
+    // "rejected": a config-class row primary-wins overrode (already recorded to sync_config_conflicts
+    // by tryApplyRow). It is settled — NOT counted as applied, the cursor advances past it (never
+    // re-parked/re-delivered, so the drain is not blocked, spec §7) — and counted in `rejected`.
+    if (outcome === "rejected") rejected += 1;
+    else if (outcome > 0) applied += 1;
     b.deferred.delete(row.seq);
     b.settled.push(row.seq);
     return true;
@@ -204,7 +232,7 @@ export async function applyBatch(
       bucket(row.originId).settled.push(row.seq);
       continue;
     }
-    const outcome = await tryApplyRow(subscriberDb, row, DISPATCH);
+    const outcome = await tryApplyRow(subscriberDb, row, DISPATCH, gate);
     if (!settleOrPark(row, outcome)) parked.push(row);
   }
 
@@ -213,7 +241,7 @@ export async function applyBatch(
   while (parked.length > 0 && madeProgress) {
     madeProgress = false;
     for (let i = parked.length - 1; i >= 0; i -= 1) {
-      const outcome = await tryApplyRow(subscriberDb, parked[i]!, DISPATCH);
+      const outcome = await tryApplyRow(subscriberDb, parked[i]!, DISPATCH, gate);
       if (settleOrPark(parked[i]!, outcome)) {
         parked.splice(i, 1);
         madeProgress = true;
@@ -232,7 +260,7 @@ export async function applyBatch(
     if (high > start) await advanceCursor(subscriberDb, opts.subscriberId, originId, lane, high);
   }
 
-  return { applied, deferred };
+  return { applied, deferred, rejected };
 }
 
 /** A `$1`-bearing statement split into the text before and after the single payload bind. */
@@ -302,9 +330,31 @@ async function tryApplyRow(
   db: Database,
   row: SyncLogRow,
   dispatchMap: ReadonlyMap<string, Dispatch>,
-): Promise<number | "deferred"> {
+  gate: GateContext,
+): Promise<number | "deferred" | "rejected"> {
   const dispatch = dispatchMap.get(row.table);
   if (dispatch === undefined) throw new AppError("sync.table_not_enrolled", { table: row.table });
+  // Config-conflict gate (membership Slice 7, spec §7), read off the injected enrolment set's dispatch
+  // entry (`configClass`), before the apply so both passes reach it once. On the CARRIER draining a
+  // returned node's tail, a config-class row whose origin is NOT the current serving-primary is
+  // overridden by primary-wins: recorded, then settled-as-rejected (not applied). Inert when
+  // servingPrimaryId is undefined (fail-safe — normal config down-flow, R-S7-2).
+  if (
+    dispatch.entry.configClass &&
+    gate.servingPrimaryId !== undefined &&
+    row.originId !== gate.servingPrimaryId
+  ) {
+    await recordConfigConflict(db, row, gate.lane);
+    // KNOWN RESIDUAL (bounded, fail-safe — documented, not fixed; membership Slice 7 whole-branch review).
+    // Dependent-runtime-row stall: a non-config runtime child (e.g. a sale_line / ticket_item) that
+    // FK-references a CONFIG row the returned node created ONLY during the fence window will `23503`-park
+    // once primary-wins rejects that config parent here — the parent never lands, so the child never lands,
+    // stalling THAT origin's drain. This is fail-safe by design: the stalled origin never reports
+    // `drained:true`, so retire/evict REFUSES (`node.retire_not_drained`) — no unsafe eviction — and the
+    // runtime child is NEVER dropped (dropping fiscal-adjacent data would be strictly worse than stalling).
+    // Resolution is the deferred interactive-merge / ops path (spec §7/§9) or wipe-and-restore (R3).
+    return "rejected";
+  }
   try {
     return await applyOneRow(db, row, dispatch);
   } catch (error) {
@@ -386,5 +436,22 @@ async function advanceCursor(
         on conflict (subscriber_id, origin_id, lane) do update
           set last_applied_seq = excluded.last_applied_seq, updated_at = now()
           where excluded.last_applied_seq > sync_cursor.last_applied_seq`,
+  );
+}
+
+/**
+ * Records a config-class row that primary-wins overrode (membership Slice 7, spec §7) into the
+ * whole-DB `sync_config_conflicts` ops table — an append-only surface the box-status read exposes for
+ * review. Raw-SQL, matching {@link advanceCursor}: every value binds as a parameter, so the CLAUDE.md
+ * §3 escaping question does not arise. `rowImage` is the source's verbatim `row_image::text`, bound as
+ * `$1::jsonb` exactly as {@link applyOneRow} does (never JSON.parse'd — a numeric's scale is preserved).
+ * The table carries no RLS and no tenant_id, so no `withTenant` is needed; the rejected row's tenant
+ * lives inside the jsonb image. NEVER log or throw the row bytes — they are another tenant's business
+ * data (errors.ts's "NO PARAM CARRIES ROW CONTENT" rule); they exist only inside this one jsonb column.
+ */
+async function recordConfigConflict(db: Database, row: SyncLogRow, lane: SyncLane): Promise<void> {
+  await db.execute(
+    sql`insert into sync_config_conflicts (table_name, origin_id, lane, row_image)
+        values (${row.table}, ${row.originId}::uuid, ${lane}, ${row.rowImage}::jsonb)`,
   );
 }

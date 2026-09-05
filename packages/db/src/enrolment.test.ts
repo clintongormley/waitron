@@ -87,4 +87,26 @@ describe("CORE_ENROLMENT", () => {
       if (e.watermarkColumn !== null) expect(e.columns).toContain(e.watermarkColumn);
     }
   });
+
+  it("marks exactly the pure config tables config-class; dining_tables + runtime tables are not (R-S7-1)", () => {
+    // Membership Slice 7: the 7 core-owned config tables flow DOWN-only from the serving-primary, so the
+    // apply gate rejects them from any other origin. dining_tables is MIXED (single-writer runtime
+    // tab_id/status_id) and every commercial/runtime table is not config-class. Unit proof of the marker.
+    const configClass = [
+      "catalogues",
+      "categories",
+      "products",
+      "floor_zones",
+      "table_service_statuses",
+      "kitchen_stations",
+      "kitchen_courses",
+    ];
+    for (const e of CORE_ENROLMENT) {
+      expect(e.configClass).toBe(configClass.includes(e.table));
+    }
+    expect(byName.get("dining_tables")!.configClass).toBe(false);
+    expect(byName.get("ticket_items")!.configClass).toBe(false);
+    expect(byName.get("working_orders")!.configClass).toBe(false);
+    expect(byName.get("sales")!.configClass).toBe(false);
+  });
 });

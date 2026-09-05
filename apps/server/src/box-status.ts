@@ -1,5 +1,6 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { sql } from "drizzle-orm";
 import {
   asAppUser,
   withTenant,
@@ -20,10 +21,12 @@ import { createErrorBoundary } from "./error-boundary.js";
 import type { Logger } from "./logger.js";
 
 /**
- * The box-status wire shape. `cert.available: false`, `replication.configured: false` and
- * `backup.configured: false` are the deliberate N/A placeholders — cert when no TLS path is
- * configured or the leaf is unreadable, replication when sync is off (Task 6 supplies the reader),
- * backup when scheduled backup is off (no reader wired). `chain` is passed through untouched; the "no
+ * The box-status wire shape. `cert.available: false`, `replication.configured: false`,
+ * `backup.configured: false` and `configConflicts.configured: false` are the deliberate N/A
+ * placeholders — cert when no TLS path is configured or the leaf is unreadable, replication when sync is
+ * off (Task 6 supplies the reader), backup when scheduled backup is off (no reader wired), and
+ * configConflicts when the sync module is off (a `toggleable` module — its `sync_config_conflicts` ops
+ * table then does not exist, so the reader is absent). `chain` is passed through untouched; the "no
  * records" signal is `chain.height === 0`, never `chain.lastAt`.
  */
 export type BoxStatus = {
@@ -45,6 +48,11 @@ export type BoxStatus = {
         carrierAppliedSeq: string | null;
       };
   backup: BackupStatus;
+  /** The count of config-class rows primary-wins has overridden and recorded for ops review
+   * (membership Slice 7). `configured: false` when the sync module is off (the `sync_config_conflicts`
+   * ops table does not exist, so no reader is wired); otherwise the current `count` (0 is the healthy
+   * norm — conflicts accrue only while a carrier drains a returned node's tail, spec §7). */
+  configConflicts: { configured: false } | { configured: true; count: number };
   duties: Record<string, unknown>;
 };
 
@@ -62,6 +70,7 @@ export type BoxStatusReaders = {
   replicationLag: (() => Promise<SubscriberLag[]>) | undefined;
   disposal: (() => Promise<DisposalStatus>) | undefined;
   backup: (() => Promise<BackupStatus>) | undefined;
+  configConflicts: (() => Promise<{ count: number }>) | undefined;
   duties: () => Record<string, unknown>;
 };
 
@@ -121,6 +130,16 @@ export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxSt
     backup = await readers.backup();
   }
 
+  // Config-conflict count (membership Slice 7). Absent reader ⇒ the sync module is off, so the ops table
+  // does not exist — `configured: false`, the same N/A shape as replication/backup. A reader that FAULTS
+  // propagates (fail-loud, like replication/backup, NOT swallowed like cert): a failed count read is a
+  // real problem worth surfacing, never a silent "off".
+  let configConflicts: BoxStatus["configConflicts"] = { configured: false };
+  if (readers.configConflicts !== undefined) {
+    const c = await readers.configConflicts();
+    configConflicts = { configured: true, count: c.count };
+  }
+
   return {
     mode,
     environment: readers.environment,
@@ -131,6 +150,7 @@ export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxSt
     replication,
     disposal,
     backup,
+    configConflicts,
     duties: readers.duties(),
   };
 }
@@ -145,9 +165,31 @@ export type BoxStatusDeps = {
   readReplicationLag: (() => Promise<SubscriberLag[]>) | undefined;
   readDisposal: (() => Promise<DisposalStatus>) | undefined;
   readBackup: (() => Promise<BackupStatus>) | undefined;
+  readConfigConflicts: (() => Promise<{ count: number }>) | undefined;
   readMode: () => DeploymentMode;
   readSingletonRole: () => SingletonRole;
 };
+
+/**
+ * Counts the append-only `sync_config_conflicts` ops rows (membership Slice 7) — config-class writes
+ * primary-wins overrode while a carrier drained a returned node's tail (spec §7). Read through the
+ * `sync_tailer` role, NOT `app_user`: `row_image` is a jsonb copy of a rejected CONFIG row (tenant
+ * business data), so its SELECT is granted to the dedicated NOLOGIN `sync_tailer` reader only
+ * (0009_sync_config_conflicts.sql), the same isolation `sync_log` enforces (app_user INSERT-only). So
+ * `db` MUST be the sync_tailer pool (`lagPool`/`syncDb`, a sync_tailer member) and this MUST NOT
+ * `asAppUser` — a `SET ROLE app_user` would drop the sync_tailer membership's SELECT and be refused —
+ * mirroring the lag reader's "NO asAppUser here" note (boot.ts). The table carries no RLS and no
+ * tenant_id (0009), so no `withTenant` GUC is needed: a bare `count(*)` is the whole read. It needs no
+ * index (Slice-7 minor: an index is deferred until a list/filter surface lands).
+ */
+export async function readConfigConflictCount(db: Database): Promise<{ count: number }> {
+  const r = await db.execute<{ count: number }>(
+    sql`select count(*)::int as count from sync_config_conflicts`,
+  );
+  // `count(*)` is an aggregate with no GROUP BY, so it ALWAYS returns exactly one row (0 when empty) —
+  // hence `.rows[0]!` rather than a `?? 0` fallback that could never run.
+  return { count: r.rows[0]!.count };
+}
 
 /**
  * The AppError codes this route can surface, and their HTTP status — the same code→status entries the
@@ -196,6 +238,7 @@ export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): 
         replicationLag: deps.readReplicationLag,
         disposal: deps.readDisposal,
         backup: deps.readBackup,
+        configConflicts: deps.readConfigConflicts,
         duties: () =>
           healthSnapshot(deps.health, deps.now()).body.duties as Record<string, unknown>,
       });

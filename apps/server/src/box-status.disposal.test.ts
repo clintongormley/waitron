@@ -115,6 +115,7 @@ function buildApp(
       readReplicationLag: undefined,
       readBackup: undefined,
       readDisposal,
+      readConfigConflicts: undefined,
       readMode: () => "primary",
       readSingletonRole: () => "primary",
     },

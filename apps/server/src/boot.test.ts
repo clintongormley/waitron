@@ -1830,6 +1830,57 @@ describe("startServer, against a real container as the deployment role", () => {
     }
   }, 60_000);
 
+  it("adoptMembership updates the LIVE serving-primary the config-conflict gate reads per batch (membership Slice 7)", async () => {
+    // Whole-branch review I1: the gate must key on a LIVE serving-primary, not a boot-captured scalar —
+    // a promotion/demotion that arrives via gossip (no restart) must be honoured on the next batch. Boot
+    // injects `servingPrimaryId: () => liveServingPrimaryId` into both lanes and updates that holder in
+    // its OWN `adoptMembership` accept branch. This drives that callback (as the REAL-trust-set test
+    // above does) and asserts the injected GETTER reflects the newly-accepted document.
+    // Prove-by-deletion: remove `liveServingPrimaryId = servingPrimaryNodeId(outcome.document)` in boot
+    // and the getter stays undefined after adoption → the final assertion goes red.
+    const SIGNER = "88888888-8888-4888-8888-888888888888";
+    const kp = generateNodeKeyPair();
+    await suite.admin.execute(sql`
+      insert into nodes (id, tenant_id, location_id, name, public_key)
+      values (${SIGNER}, ${TILL_ENV.WAITRON_TILL_TENANT_ID}, ${TILL_ENV.WAITRON_TILL_LOCATION_ID},
+              'Trusted primary', ${kp.publicKey})`);
+    const port = await freePort();
+    const server = await startServer({
+      ...KEY_ENV,
+      DATABASE_URL: databaseUrl,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "production",
+      WAITRON_SYNC_PEERS: JSON.stringify([
+        {
+          nodeId: "99999999-9999-4999-8999-999999999999",
+          url: "http://127.0.0.1:1/",
+          token: "peer-token",
+        },
+      ]),
+      WAITRON_SYNC_DATABASE_URL: syncDatabaseUrl,
+    });
+    try {
+      const ordered = vi
+        .mocked(runSyncPull)
+        .mock.calls.map((c) => c[0])
+        .find((d) => d.lane === "ordered");
+      expect(ordered?.servingPrimaryId).toBeDefined();
+      // No membership held at boot, so the gate is inert (getter returns undefined) — fail-safe.
+      expect(ordered!.servingPrimaryId!()).toBeUndefined();
+      // Adopt a term-6 document the stamped node signed; it names SIGNER as the serving-primary.
+      await ordered!.adoptMembership!(
+        signedMembershipDoc(6, { signerNodeId: SIGNER, keyPair: kp }),
+      );
+      // The injected getter now reflects the newly-accepted serving-primary — LIVE, no restart.
+      expect(ordered!.servingPrimaryId!()).toBe(SIGNER);
+    } finally {
+      await server.close();
+      await suite.admin.execute(sql`delete from node_membership`);
+      await suite.admin.execute(sql`delete from nodes where id = ${SIGNER}`);
+    }
+  }, 60_000);
+
   it("close() swallows a REJECTING pull worker and still tears down the listener and pools", async () => {
     // Teardown-ordering fix: close() used to `await syncWorker` BEFORE the try/finally that guarantees
     // server.close() + the pool teardown, so a worker that settled by rejection threw out of close()

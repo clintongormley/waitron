@@ -58,4 +58,19 @@ describe("the sync error codes carry their declared params", () => {
     expect(error.code).toBe("sync.node_unauthorized");
     expect(error.params).toEqual({});
   });
+
+  it("constructs sync.config_conflict_rejected with its origin + count params (a LOG code)", () => {
+    // Never thrown — recorded to sync_config_conflicts + logged by the pull loop, the same
+    // log-only-but-declared shape as sync.stream_stalled. Declared so its params are typed and its
+    // meaning documented; the pull loop emits it via `log`, not `throw`. Ids + a count only, NO row bytes.
+    const error = new AppError("sync.config_conflict_rejected", {
+      originId: "00000000-0000-0000-0000-000000000000",
+      count: 3,
+    });
+    expect(error.code).toBe("sync.config_conflict_rejected");
+    expect(error.params).toEqual({
+      originId: "00000000-0000-0000-0000-000000000000",
+      count: 3,
+    });
+  });
 });
