@@ -235,10 +235,15 @@ editor + rendering) is the sole remaining sub-project of this track.**
       `test:coverage` green (1285 tests, 95/95/90/88). This was the SP-B **schedule risk** (the
       product-facing UI). Built tasks B1–B8; a11y + final gate = B8.
     - **Deferred follow-ons from Phase B:**
-      - **Pointer drag / move / resize.** v1 authors spans through property-panel steppers + ↑/↓ reorder
-        and selects by click; direct-manipulation drag-and-resize of the placeholder tiles is a follow-on.
-      - **Live card renders.** v1 renders placeholder tiles at the shared card-host seam (`<canvas-grid-preview>`);
-        rendering the real cards in the editor/preview is a committed follow-on.
+      - **Pointer drag / move / resize — LANDED #222 (2026-09-05).** Direct-manipulation drag-to-reorder
+        (Pointer Events, threshold + drop indicator, emits `move-card`) + corner-handle resize (snaps to
+        whole columns/rows, emits `resize-card`) on the editor tiles; the property-panel steppers + ↑/↓ stay
+        as the keyboard/a11y path. The preview stays a pure view emitting intents; the screen owns mutation.
+      - **Live card renders — in flight #223 (representative, NOT the real cards).** The real till widgets
+        can't be reused (they live in `apps/till`, need live POS stores + ~30 props, and importing them or
+        `@waitron/layouts` breaches the #70 bundle rule), so #223 ships dashboard-local static *representative
+        silhouettes* per card type instead — recognizable shapes, no data. Truly-real cards would need a
+        neutral browser-safe shared card package (a separate, larger initiative), not done.
       - **Visual theme editor** (also listed under Follow-ons below).
       - (Clone/duplicate already shipped in Phase B — no longer a follow-on.)
     - **Deferred follow-on — device profile.** A future slice: a first-class device profile bundling
