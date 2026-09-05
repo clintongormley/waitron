@@ -145,9 +145,11 @@ behaviour to today until a move happens.
   in parallel. Per server: `unknown | unreachable | standby | primary`, plus `term`. Failures are
   counted per server.
 - **Move rule:** move when the current target has failed 3 consecutive probes OR answered
-  `acceptingSales: false`, AND some other server has answered `acceptingSales: true` on 2
-  consecutive probes; among several, the highest `term`. No other trigger. No move while a request
-  is in flight (the in-flight request's outcome is handled first, §4.3).
+  `acceptingSales: false`, AND some other server answered `acceptingSales: true` in the latest
+  round; among several, the highest `term`. One yes is enough (owner question, 2026-09-05):
+  `acceptingSales` is boot-captured, so a yes is a settled fact that only a fence or a restart
+  changes — the debounce belongs on the failure side only, where a single miss can be a blip. No
+  other trigger. No move while a request is in flight (its outcome is handled first, §4.3).
 - **Waiting:** no server accepting sales → `waiting`. The status line shows it; nothing is retried
   against a non-selling node.
 - **`probeNow()`** — "check again": runs one probe round immediately.
@@ -203,7 +205,7 @@ Names are the document's node labels where present, else the host. A "Check agai
 
 - **Till (browser-mode vitest, stub fetch):** the router as a state machine — state the failing case
   first: no move on 2 failures, move on 3; a `standby` answer never chosen; `acceptingSales:false`
-  on the current target triggers a move once another says yes twice; highest term wins; no move
+  on the current target triggers a move on the first other yes; highest term wins; no move
   mid-request; `probeNow`; persistence round-trip incl. a throwing `localStorage`; the wrapper
   rewrites `/api/x` to `<target>/api/x` and leaves absolute URLs alone; `till-app` on
   `server-changed` → lock + banner + re-boot; `sale.unconfirmed` on a TypeError and NOT on a
