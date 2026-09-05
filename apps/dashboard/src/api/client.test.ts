@@ -1725,7 +1725,7 @@ describe("DashboardApi — devices (device-identity-1)", () => {
       active: true,
       lastSeenAt: "2026-08-25T14:30:00.000Z",
       enrolledAt: "2026-08-20T09:00:00.000Z",
-      canvasId: "p1",
+      deviceProfileId: "dp1",
     },
     {
       id: "d2",
@@ -1735,7 +1735,7 @@ describe("DashboardApi — devices (device-identity-1)", () => {
       active: false,
       lastSeenAt: null,
       enrolledAt: "2026-08-19T09:00:00.000Z",
-      canvasId: null,
+      deviceProfileId: null,
     },
   ];
 
@@ -1825,6 +1825,42 @@ describe("DashboardApi — devices (device-identity-1)", () => {
     // before it, so use a well-formed uuid here to match the real route contract.
     await expect(
       api.reassignDevice("d1", "11111111-1111-4111-8111-111111111111"),
+    ).rejects.toMatchObject({
+      code: "device.binding_invalid",
+    });
+  });
+
+  it("reassignDeviceProfile POSTs { deviceProfileId } to the device's assign-device-profile route (204)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.reassignDeviceProfile("d1", "dp1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/devices/d1/assign-device-profile", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ deviceProfileId: "dp1" }),
+    });
+  });
+
+  it("reassignDeviceProfile sends { deviceProfileId: null } to clear the assignment", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.reassignDeviceProfile("d1", null)).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/devices/d1/assign-device-profile", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ deviceProfileId: null }),
+    });
+  });
+
+  it("reassignDeviceProfile rejects with { code } on a UUID-shaped unknown/foreign profile (binding invalid)", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "device.binding_invalid" } }, false, 400));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(
+      api.reassignDeviceProfile("d1", "11111111-1111-4111-8111-111111111111"),
     ).rejects.toMatchObject({
       code: "device.binding_invalid",
     });

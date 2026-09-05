@@ -2,7 +2,14 @@ import { afterEach, describe, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./devices-screen.js";
 import type { DevicesScreen } from "./devices-screen.js";
-import type { Canvas, DashboardApi, DeviceRow, Printer, Station, Till } from "../api/client.js";
+import type {
+  DashboardApi,
+  DeviceProfile,
+  DeviceRow,
+  Printer,
+  Station,
+  Till,
+} from "../api/client.js";
 
 /**
  * The Devices screen scanned by axe in both themes, in two states: the default list + generate form, and
@@ -43,7 +50,7 @@ const devices: DeviceRow[] = [
     active: true,
     lastSeenAt: "2026-08-25T14:30:00.000Z",
     enrolledAt: "2026-08-20T09:00:00.000Z",
-    canvasId: "p1",
+    deviceProfileId: "dp1",
   },
   {
     id: "d2",
@@ -53,7 +60,7 @@ const devices: DeviceRow[] = [
     active: false,
     lastSeenAt: null,
     enrolledAt: "2026-08-19T09:00:00.000Z",
-    canvasId: null,
+    deviceProfileId: null,
   },
 ];
 
@@ -62,9 +69,9 @@ const tills: Till[] = [
   { id: "t2", label: "Caja 2", locationId: "loc1", receiptPrinterId: null },
 ];
 
-const canvases: Canvas[] = [
-  { id: "p1", name: "Comedor", definition: { areas: [] } },
-  { id: "p2", name: "Barra", definition: { areas: [] } },
+const deviceProfiles: DeviceProfile[] = [
+  { id: "dp1", name: "Counter till", canvasId: "p1", capabilities: [] },
+  { id: "dp2", name: "Waiter handheld", canvasId: "p2", capabilities: [] },
 ];
 
 const printers: Printer[] = [
@@ -87,7 +94,7 @@ function stubApi(): DashboardApi {
     listDevices: vi.fn().mockResolvedValue(devices),
     listStations: vi.fn().mockResolvedValue(stations),
     listTills: vi.fn().mockResolvedValue(tills),
-    listCanvases: vi.fn().mockResolvedValue(canvases),
+    listDeviceProfiles: vi.fn().mockResolvedValue(deviceProfiles),
     listPrinters: vi.fn().mockResolvedValue(printers),
     createDeviceCode: vi.fn().mockResolvedValue({ code: "ABCD2345" }),
     revokeDevice: vi.fn().mockResolvedValue(undefined),

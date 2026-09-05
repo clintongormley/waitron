@@ -572,7 +572,7 @@ export interface Course {
  * device (device-identity-1): `kind` is the `device_kind` enum (only `kds_station` today), `stationId`
  * the bound kitchen station (null for a future non-station kind), `active` false once revoked,
  * `lastSeenAt` the last time the device authenticated (null before its first call), `enrolledAt` when it
- * redeemed its pairing code. `canvasId` is the device's currently-assigned canvas (null =
+ * redeemed its pairing code. `deviceProfileId` is the device's currently-assigned device profile (null =
  * the form-factor default). The two timestamps are ISO-8601 strings (never `Date`s over the wire). The
  * server orders NEWEST-enrolled first; the screen renders that order as-is. NOT imported from `apps/server`
  * (the #70 bundle rule the shapes above follow); a mismatch surfaces as a runtime shape error a view test
@@ -586,7 +586,7 @@ export interface DeviceRow {
   active: boolean;
   lastSeenAt: string | null;
   enrolledAt: string;
-  canvasId: string | null;
+  deviceProfileId: string | null;
 }
 
 /** One `GET /management-api/canvases` row — a tenant canvas as the canvas picker needs it. The
@@ -1809,7 +1809,7 @@ export class DashboardApi {
    * `{ code: "station.not_found" }`); a sale-capable `"till"`/`"handheld"` binds to a till (`tillId`
    * required — the server rejects a missing one `{ code: "device.till_required" }`), while a
    * `"kds_station"` sends none. The remaining bindings are optional (SP-A.2 §16): an assigned
-   * canvas (`canvasId`, any kind) and the till's static hardware (`receiptPrinterId`,
+   * device profile (`deviceProfileId`, any kind) and the till's static hardware (`receiptPrinterId`,
    * `hasCashDrawer`, `cardProvider` (`none`/`stripe_terminal`/`stripe_on_device`), `cardReaderId`). An
    * omitted optional binding is left at the server default (`card_provider='none'`, `has_cash_drawer=false`,
    * others NULL). A well-formed id naming no tenant row rejects `{ code: "device.binding_invalid" }`. */
@@ -1817,7 +1817,7 @@ export class DashboardApi {
     kind: string;
     stationId?: string;
     tillId?: string;
-    canvasId?: string;
+    deviceProfileId?: string;
     receiptPrinterId?: string;
     hasCashDrawer?: boolean;
     cardProvider?: string;
@@ -1930,6 +1930,19 @@ export class DashboardApi {
   reassignDevice(id: string, canvasId: string | null): Promise<void> {
     return this.#request<void>(`/management-api/devices/${id}/assign-canvas`, "POST", {
       canvasId,
+    });
+  }
+
+  /** `POST /management-api/devices/:id/assign-device-profile` — reassign (or clear) a device's device
+   * profile (device.manage-gated): `deviceProfileId` a tenant device profile's id, or `null` to fall back
+   * to the form-factor default. Answers an empty 204; an unknown device rejects
+   * `{ code: "device.not_found" }`. A UUID-shaped id that names no device profile of this tenant (unknown
+   * or foreign) reaches the composite FK and rejects `{ code: "device.binding_invalid" }`; a MALFORMED
+   * (non-UUID) id is screened earlier and rejects `{ code: "management.request_invalid" }`. The dashboard
+   * only ever sends a real device-profile id or `null`, so those two rejects are defense-in-depth. */
+  reassignDeviceProfile(id: string, deviceProfileId: string | null): Promise<void> {
+    return this.#request<void>(`/management-api/devices/${id}/assign-device-profile`, "POST", {
+      deviceProfileId,
     });
   }
 

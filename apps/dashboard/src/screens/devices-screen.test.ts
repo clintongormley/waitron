@@ -2,7 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
-import type { Canvas, DashboardApi, DeviceRow, Printer, Station, Till } from "../api/client.js";
+import type {
+  DashboardApi,
+  DeviceProfile,
+  DeviceRow,
+  Printer,
+  Station,
+  Till,
+} from "../api/client.js";
 import { DevicesScreen } from "./devices-screen.js";
 
 afterEach(cleanupWidgets);
@@ -40,7 +47,7 @@ const devices: DeviceRow[] = [
     active: true,
     lastSeenAt: "2026-08-25T14:30:00.000Z",
     enrolledAt: "2026-08-20T09:00:00.000Z",
-    canvasId: "p1",
+    deviceProfileId: "dp1",
   },
   {
     id: "d2",
@@ -50,7 +57,7 @@ const devices: DeviceRow[] = [
     active: false,
     lastSeenAt: null,
     enrolledAt: "2026-08-19T09:00:00.000Z",
-    canvasId: null,
+    deviceProfileId: null,
   },
 ];
 
@@ -59,9 +66,9 @@ const tills: Till[] = [
   { id: "t2", label: "Caja 2", locationId: "loc1", receiptPrinterId: null },
 ];
 
-const canvases: Canvas[] = [
-  { id: "p1", name: "Comedor", definition: { areas: [] } },
-  { id: "p2", name: "Barra", definition: { areas: [] } },
+const deviceProfiles: DeviceProfile[] = [
+  { id: "dp1", name: "Counter till", canvasId: "p1", capabilities: [] },
+  { id: "dp2", name: "Waiter handheld", canvasId: "p2", capabilities: [] },
 ];
 
 const printers: Printer[] = [
@@ -84,11 +91,11 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listDevices: vi.fn().mockResolvedValue(devices),
     listStations: vi.fn().mockResolvedValue(stations),
     listTills: vi.fn().mockResolvedValue(tills),
-    listCanvases: vi.fn().mockResolvedValue(canvases),
+    listDeviceProfiles: vi.fn().mockResolvedValue(deviceProfiles),
     listPrinters: vi.fn().mockResolvedValue(printers),
     createDeviceCode: vi.fn().mockResolvedValue({ code: "ABCD2345" }),
     revokeDevice: vi.fn().mockResolvedValue(undefined),
-    reassignDevice: vi.fn().mockResolvedValue(undefined),
+    reassignDeviceProfile: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -152,9 +159,9 @@ describe("devices-screen", () => {
 
     expect(api.listDevices).toHaveBeenCalledTimes(1);
     expect(api.listStations).toHaveBeenCalledTimes(1);
-    // The generate form's till/canvas/hardware pickers are fed from these three list verbs.
+    // The generate form's till/device-profile/hardware pickers are fed from these three list verbs.
     expect(api.listTills).toHaveBeenCalledTimes(1);
-    expect(api.listCanvases).toHaveBeenCalledTimes(1);
+    expect(api.listDeviceProfiles).toHaveBeenCalledTimes(1);
     expect(api.listPrinters).toHaveBeenCalledTimes(1);
     expect(q(el, "[data-test=device-row-d1]")).toBeTruthy();
     expect(q(el, "[data-test=device-row-d2]")).toBeTruthy();
@@ -346,23 +353,23 @@ describe("devices-screen", () => {
     expect(q(el, "[data-test=card-reader-id]")).toBeNull();
   });
 
-  // The assigned-canvas picker is shown for EVERY kind (it is a device-wide binding, not till-only).
-  it("shows the assigned-canvas picker for every kind", async () => {
+  // The device-profile picker is shown for EVERY kind (it is a device-wide binding, not till-only).
+  it("shows the device-profile picker for every kind", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
 
-    expect(q(el, "[data-test=canvas-select]")).toBeTruthy(); // kds_station
+    expect(q(el, "[data-test=device-profile-select]")).toBeTruthy(); // kds_station
     pickKind(el, "handheld");
     await el.updateComplete;
-    expect(q(el, "[data-test=canvas-select]")).toBeTruthy();
+    expect(q(el, "[data-test=device-profile-select]")).toBeTruthy();
     pickKind(el, "till");
     await el.updateComplete;
-    expect(q(el, "[data-test=canvas-select]")).toBeTruthy();
+    expect(q(el, "[data-test=device-profile-select]")).toBeTruthy();
   });
 
-  // A till with every optional binding set: the payload carries tillId + the assigned canvas + all the
-  // hardware bindings, with the card reader id present because the provider is a Stripe Terminal reader.
+  // A till with every optional binding set: the payload carries tillId + the assigned device profile + all
+  // the hardware bindings, with the card reader id present because the provider is a Stripe Terminal reader.
   it("generates a till code with the tillId and every optional binding", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
@@ -371,7 +378,7 @@ describe("devices-screen", () => {
     pickKind(el, "till");
     await el.updateComplete;
     pickSelect(el, "till-select", "t2");
-    pickSelect(el, "canvas-select", "p1");
+    pickSelect(el, "device-profile-select", "dp1");
     pickSelect(el, "receipt-printer-select", "pr1");
     toggleCashDrawer(el, true);
     pickSelect(el, "card-provider-select", "stripe_terminal");
@@ -385,7 +392,7 @@ describe("devices-screen", () => {
     expect(api.createDeviceCode).toHaveBeenCalledWith({
       kind: "till",
       tillId: "t2",
-      canvasId: "p1",
+      deviceProfileId: "dp1",
       receiptPrinterId: "pr1",
       hasCashDrawer: true,
       cardProvider: "stripe_terminal",
@@ -664,10 +671,10 @@ describe("devices-screen", () => {
     expect(banner).toContain(codeMessage("device.not_found", "es-ES"));
   });
 
-  // Each ACTIVE row carries its own canvas <select> (reassign-<id>): a "" default option
-  // (form-factor default) plus one per tenant canvas, PRESELECTED to the device's current
-  // canvasId. d1's fixture is bound to p1, so its select opens on p1.
-  it("renders a per-row reassign select preselected to the device's current canvas", async () => {
+  // Each ACTIVE row carries its own device-profile <select> (reassign-<id>): a "" default option
+  // (form-factor default) plus one per tenant device profile, PRESELECTED to the device's current
+  // deviceProfileId. d1's fixture is bound to dp1, so its select opens on dp1.
+  it("renders a per-row reassign select preselected to the device's current device profile", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
@@ -675,30 +682,32 @@ describe("devices-screen", () => {
     const select = q(el, "[data-test=reassign-d1]") as HTMLSelectElement;
     expect(select).toBeTruthy();
     const options = Array.from(select.querySelectorAll("option"));
-    // The default (form-factor) option plus one per canvas.
-    expect(options.map((o) => o.value)).toEqual(["", "p1", "p2"]);
-    expect(options[0]!.textContent?.trim()).toBe(t("devices.canvas_none", "es-ES"));
-    // Preselected to d1's current binding (p1), not the first option.
-    expect(select.value).toBe("p1");
+    // The default (form-factor) option plus one per device profile.
+    expect(options.map((o) => o.value)).toEqual(["", "dp1", "dp2"]);
+    expect(options[0]!.textContent?.trim()).toBe(t("devices.device_profile_none", "es-ES"));
+    // The profile options render by NAME, not id.
+    expect(options[1]!.textContent?.trim()).toBe("Counter till");
+    // Preselected to d1's current binding (dp1), not the first option.
+    expect(select.value).toBe("dp1");
   });
 
-  // Picking a canvas reassigns the device to it and reloads the list (mirrors revoke's reload). Proven
-  // by deletion: drop the reassignDevice call and the API is never hit.
-  it("reassigns a device to the picked canvas, then reloads the list", async () => {
+  // Picking a device profile reassigns the device to it and reloads the list (mirrors revoke's reload).
+  // Proven by deletion: drop the reassignDeviceProfile call and the API is never hit.
+  it("reassigns a device to the picked device profile, then reloads the list", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
 
-    pickSelect(el, "reassign-d1", "p2");
+    pickSelect(el, "reassign-d1", "dp2");
     await flush(el);
 
-    expect(api.reassignDevice).toHaveBeenCalledWith("d1", "p2");
+    expect(api.reassignDeviceProfile).toHaveBeenCalledWith("d1", "dp2");
     expect(api.listDevices).toHaveBeenCalledTimes(2); // reloaded
   });
 
-  // Picking the "" default clears the assignment — reassignDevice is called with null (form-factor
+  // Picking the "" default clears the assignment — reassignDeviceProfile is called with null (form-factor
   // default), not the empty string.
-  it("clears a device's canvas when Default is picked", async () => {
+  it("clears a device's device profile when Default is picked", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
@@ -706,27 +715,27 @@ describe("devices-screen", () => {
     pickSelect(el, "reassign-d1", "");
     await flush(el);
 
-    expect(api.reassignDevice).toHaveBeenCalledWith("d1", null);
+    expect(api.reassignDeviceProfile).toHaveBeenCalledWith("d1", null);
   });
 
   it("shows an error and does not throw when a reassign is rejected", async () => {
     const api = stubApi({
-      reassignDevice: vi.fn().mockRejectedValue({ code: "device.binding_invalid" }),
+      reassignDeviceProfile: vi.fn().mockRejectedValue({ code: "device.binding_invalid" }),
     });
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
 
-    pickSelect(el, "reassign-d1", "p2");
+    pickSelect(el, "reassign-d1", "dp2");
     await flush(el);
 
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("device.binding_invalid");
     const banner = q(el, "[role=alert]")?.textContent;
     expect(banner).toContain(codeMessage("device.binding_invalid", "es-ES"));
-    // The rejected pick must NOT strand the control on "p2": `live()` reconciles the select back to the
-    // device's ACTUAL binding (p1) on the error re-render, so it never misleads the operator into thinking
-    // a failed reassign took. (A per-option `?selected` binding would leave the live .selected on p2.)
+    // The rejected pick must NOT strand the control on "dp2": `updated()` reconciles the select back to the
+    // device's ACTUAL binding (dp1) on the error re-render, so it never misleads the operator into thinking
+    // a failed reassign took. (A per-option `?selected` binding would leave the live .selected on dp2.)
     const select = q(el, "[data-test=reassign-d1]") as HTMLSelectElement;
-    expect(select.value).toBe("p1");
+    expect(select.value).toBe("dp1");
   });
 
   it("does not show a reassign control for an already-revoked device", async () => {
