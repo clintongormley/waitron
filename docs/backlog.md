@@ -213,10 +213,10 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    [outbox-to-native-replication-swap-design](superpowers/specs/2026-09-05-outbox-to-native-replication-swap-design.md).
    Owner decisions in it: full replacement (no hybrid); no third-party overlay (WireGuard box ↔ its
    own cloud instance, SSH fallback — the same link Track B's relay decision retires the relay for); a
-   returned box drains its ledger back, never its settings, and is then wiped and re-adopted. Two
-   refinements flagged for the owner in the spec: live-service rows are classed like settings
-   (§4.3), and the working-time chain is keyed per location, so it needs the fiscal chain's per-node
-   rekey before its rows can drain safely (§4.4 — a brainstorm of its own, labour advisor's view).
+   returned box drains its ledger back, never its settings, and is then wiped and re-adopted; live-
+   service rows are classed like settings (§4.3); and **the working-time chain is rekeyed per node**
+   like the fiscal chain (§4.4) — a prerequisite for S3/S4 and its own brainstorm + PR (workforce);
+   the labour advisor is asked only whether a location's exported record may show per-node chains.
    Slices S0–S7 in §14; S0 (no `sync_*`, `ENABLE ALWAYS` on the append-only triggers,
    `track_commit_timestamp`, `max_slot_wal_keep_size`) rides item 3's baseline. Next step once the
    owner approves the spec: the implementation plan, then S1.

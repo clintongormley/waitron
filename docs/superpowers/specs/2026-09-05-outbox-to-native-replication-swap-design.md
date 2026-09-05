@@ -19,11 +19,12 @@ slices land, the schema-version gate of `2026-09-05-module-sp2b-schema-version-g
    returned box's unsent sales, payments and fiscal records drain to the new primary; its unsent
    settings edits are discarded. Structural (two publications), not a review step.
 
-Two things the brainstorm did not reach, decided here and **flagged for the owner (§4.3):** live
-service rows the box wrote in its final seconds (open tabs, kitchen progress, print jobs) are treated
-like settings — copied to a standby, never drained back — because by the time the box returns the
-new primary's live state is the real one; and the working-time record's chain is keyed per
-location, not per node, which makes its drain unsafe until it gets the rekey the fiscal chain got.
+Two things the brainstorm did not reach were decided on review the same day: **(4)** live service
+rows the box wrote in its final seconds (open tabs, kitchen progress, print jobs) are treated like
+settings — copied to a standby, never drained back — because by the time the box returns the new
+primary's live state is the real one (§4.3, owner: "correct"); and **(5)** the working-time record's
+chain, keyed per location today, is rekeyed **per node** like the fiscal chain, so each server keeps
+its own clock-in chain (§4.4, owner: "I'm ok with that").
 
 ## 1. What changes, in one paragraph
 
@@ -210,15 +211,15 @@ The disposal guard ("is my own tail fully on the carrier?") becomes step 4's slo
 the cloud and reported to the box over the management API, or read by the box through its own
 subscription's `pg_stat_subscription`. Retire (a box leaving for good) is the same steps without 5.
 
-### 4.3 Flagged for the owner
+### 4.3 Live-service rows (owner decision 2026-09-05)
 
 Live-service rows (`working_orders`, `working_order_lines`, `order_amendments`, `dining_tables`,
 `print_jobs`) are classed `state`, so a box's last seconds of open-tab edits do not travel back. The
 alternative — draining them and letting Postgres 18's `update_origin_differs` detection apply the
 box's stale version over the cloud's live one, logged — is what the prototype measured for settings
-and what the owner rejected for settings. Same reasoning, same answer proposed; say if not.
+and what the owner rejected for settings. Same reasoning, same answer; confirmed by the owner.
 
-### 4.4 Flagged for the owner: the working-time chain is keyed per location, not per node
+### 4.4 The working-time chain gets the fiscal chain's per-node rekey (owner decision 2026-09-05)
 
 `workforce_chains` has primary key (`tenant_id`, `location_id`) and `time_entries` is unique on
 (`tenant_id`, `location_id`, `sequence_no`) — one hash chain of clock-ins per location, whichever
@@ -226,9 +227,12 @@ node writes it. After a promotion the cloud continues that chain from its copy, 
 box's unsent tail holds links with the same sequence numbers: a fork, and a unique-index clash on
 every one of them. The fiscal chain had the same shape and was rekeyed per node (server-as-SIF, #54).
 The working-time record is a launch-day legal duty (`docs/backlog.md`, workforce), so this is not a
-row to lose or to fork. **Prerequisite for S3/S4:** rekey `workforce_chains` and `time_entries` per
-node, the way the fiscal rekey did, with the labour advisor's view on what a per-node chain means
-for the registro de jornada. Until then `time_entries` is the drain-stall shape named in §4.2.
+row to lose or to fork. **Decision:** each node keeps its own working-time chain — `workforce_chains`
+and `time_entries` are rekeyed per node, the way the fiscal rekey did — so a returned box's clock-ins
+are links in its own chain and slot in beside the cloud's. **Prerequisite for S3/S4**, its own
+brainstorm and PR. What remains for the labour advisor is presentation only: whether the exported
+registro de jornada for a location may be shown as two chains. Until the rekey lands, `time_entries`
+is the drain-stall shape named in §4.2.
 
 ## 5. Schema upgrades
 
@@ -362,8 +366,8 @@ with the owner's sign-off, and its PR carries the two-node suite's output.
    publisher's WAL (the drain-window case in §4.2 step 3), measured, not assumed.
 5. The `update_origin_differs` counter with `track_commit_timestamp` **off** — the prototype's
    second run was botched by a leftover slot; the spec requires it on regardless.
-6. The per-node rekey of the working-time chain (§4.4): a brainstorm of its own, with the labour
-   advisor's answer on a per-node registro de jornada, before S3.
+6. The per-node rekey of the working-time chain (§4.4): its own brainstorm and PR before S3; the
+   labour advisor's answer on presenting a location's record as per-node chains, in parallel.
 
 ## 14. Slices (each its own plan; order matters)
 
