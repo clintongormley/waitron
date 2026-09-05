@@ -118,6 +118,17 @@ describe("restoreFromArtifact", () => {
     await expect(stat(join(stagingDir, "db.dump"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("skips secrets when skipSecrets is true (keeps own identity), still restores db+media", async () => {
+    await restoreFromArtifact(deps({ skipSecrets: true }));
+    // db restored (pg_restore fake called) and media restored …
+    expect(runRestore).toHaveBeenCalledTimes(1);
+    expect(await readFile(join(mediaDir, "abc123.jpg"))).toEqual(MEDIA);
+    // … but the secret was NOT written — the node keeps its own identity
+    await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
+    // staging still cleaned
+    await expect(stat(join(stagingDir, "db.dump"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("cleans staging even when pg_restore throws", async () => {
     const boom: PgRestoreRunner = vi.fn(async () => {
       throw new Error("pg_restore failed");

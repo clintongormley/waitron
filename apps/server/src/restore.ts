@@ -53,6 +53,14 @@ export interface RestoreDeps {
   readonly modules: readonly WaitronModule[];
   readonly environment: DeploymentEnvironment;
   readonly runRestore?: PgRestoreRunner;
+  /**
+   * Skip restoring `secrets/*` into `stateDir`. Default `false` (the disaster-recovery CLI restores
+   * everything). R3 rejoin sets `true`: a returning node keeps its OWN identity (its identity keypair
+   * / box key in `stateDir`), so it restores the primary's DB and media but NOT the primary's secrets
+   * (spec §4.4). The whole up-front pass — decrypt, unpack, compatibility gate, traversal guard — still
+   * runs; only the `restoreSecrets` write is elided, keeping that gate+guard a single source of truth.
+   */
+  readonly skipSecrets?: boolean;
   readonly log: Logger;
 }
 
@@ -160,7 +168,9 @@ export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
       log,
     });
     await restoreMedia({ entries: mediaEntries, mediaDir: deps.mediaDir, log });
-    await restoreSecrets({ entries: secretEntries, stateDir: deps.stateDir, log });
+    if (!deps.skipSecrets) {
+      await restoreSecrets({ entries: secretEntries, stateDir: deps.stateDir, log });
+    }
     await invokeRestoreHooks({
       modules: deps.modules,
       mediaDir: deps.mediaDir,
