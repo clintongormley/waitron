@@ -1366,7 +1366,7 @@ declare module "@waitron/shared" {
      * CONCEPT, never the throwing package — the rule `promotion.fence_not_attested` gives. Never renamed
      * once shipped.
      */
-    "promotion.node_fenced": { standing: string };
+    "promotion.node_fenced": { standing: "sell-only" | "evicted" };
     /**
      * `retireSelf` (retire/evict R3) was invoked on a node that is NOT fenced — a node with a
      * `serving-primary`/`serving-secondary` standing in the held chart, a node ABSENT from the chart,

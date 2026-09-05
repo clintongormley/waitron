@@ -24,7 +24,9 @@ export function standingOf(
  * (standings.ts), the retire/evict decommission path, once a fenced `sell-only` node has fully
  * drained its replication tail.
  */
-export function isFencedStanding(standing: NodeStanding | undefined): boolean {
+export function isFencedStanding(
+  standing: NodeStanding | undefined,
+): standing is "sell-only" | "evicted" {
   return standing === "sell-only" || standing === "evicted";
 }
 

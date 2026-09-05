@@ -11,9 +11,13 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import { nextStandings, standingOf, type SignedMembershipDocument } from "@waitron/membership";
+import {
+  isFencedStanding,
+  nextStandings,
+  standingOf,
+  type SignedMembershipDocument,
+} from "@waitron/membership";
 import type { KeyRing } from "@waitron/credentials";
-import { isFenced } from "./membership-fence.js";
 import { refreshDeploymentHolders, type DeploymentHolders } from "./deployment-holders.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
@@ -84,10 +88,12 @@ export function assertFenced(attestation: FenceAttestation): void {
  * old-node-neutralised attestation — the mirrored names track the two different "fence" concepts.
  */
 export function assertNotFenced(held: SignedMembershipDocument | null, nodeId: string): void {
-  if (isFenced(held, nodeId)) {
-    // `isFenced` is false for a null document, so `held` is non-null here; `standingOf` returns the
-    // fenced standing (never `undefined` — a fenced node is by definition present in the chart).
-    throw new AppError("promotion.node_fenced", { standing: standingOf(held!, nodeId)! });
+  // Read the standing once and let `isFencedStanding` (a type guard) narrow it to the fenced union
+  // `"sell-only" | "evicted"` — so the throw payload is type-safe with no non-null assertions. A null
+  // document yields an `undefined` standing, which is not fenced.
+  const standing = held === null ? undefined : standingOf(held, nodeId);
+  if (isFencedStanding(standing)) {
+    throw new AppError("promotion.node_fenced", { standing });
   }
 }
 
