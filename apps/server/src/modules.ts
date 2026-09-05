@@ -19,11 +19,12 @@ import type { EnrolledTable } from "@waitron/sync";
  * verified cross-set dependency graph (spec §3): every non-core module depends on `core`. Cross-set
  * dependencies arrive via BOTH foreign-key references AND `CREATE TRIGGER … ON <table>` targets — a
  * module that installs a capture trigger on another module's table needs that table migrated first.
- * There are three inter-module edges: `workforce → identity` (workforce FKs `persons`, which
- * identity owns), and `sync → identity` + `sync → payments` (sync's capture triggers attach to
+ * There are four inter-module edges: `workforce → identity` (workforce FKs `persons`, which
+ * identity owns), `sync → identity` + `sync → payments` (sync's capture triggers attach to
  * identity's `persons`/`webauthn_credentials` and payments' `payments`/`payment_refunds`/
- * `payment_policy`). All ranges are `"*"` because every module is workspace-locked at version
- * `0.0.0`.
+ * `payment_policy`), and `fiscal → sync` (SP-3a: fiscal's capture triggers will call sync's
+ * `sync_capture()` SPI, so sync's set must migrate first — the enrolment itself lands in a later
+ * task). All ranges are `"*"` because every module is workspace-locked at version `0.0.0`.
  *
  * The `sync` seat is now POPULATED on `core`/`identity`/`payments` (SP-2a): each owning package
  * declares its own enrolment array (`CORE_ENROLMENT`/`IDENTITY_ENROLMENT`/`PAYMENTS_ENROLMENT`) and
@@ -77,17 +78,6 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     },
   },
   {
-    name: "fiscal",
-    version: "0.0.0",
-    tier: "provision-only",
-    requires: { core: "*" },
-    migrations: {
-      name: "fiscal",
-      table: "__drizzle_migrations_fiscal",
-      from: "../fiscal-verifactu/drizzle",
-    },
-  },
-  {
     name: "payments",
     version: "0.0.0",
     tier: "toggleable",
@@ -127,6 +117,17 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     tier: "toggleable",
     requires: { core: "*", modules: { identity: "*", payments: "*" } },
     migrations: { name: "sync", table: "__drizzle_migrations_sync", from: "../sync/drizzle" },
+  },
+  {
+    name: "fiscal",
+    version: "0.0.0",
+    tier: "provision-only",
+    requires: { core: "*", modules: { sync: "*" } },
+    migrations: {
+      name: "fiscal",
+      table: "__drizzle_migrations_fiscal",
+      from: "../fiscal-verifactu/drizzle",
+    },
   },
 ];
 
