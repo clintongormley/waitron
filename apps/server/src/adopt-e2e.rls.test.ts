@@ -235,7 +235,7 @@ let capturedBundle: MirrorBundle | undefined;
 async function fetchBundleCapturing(
   url: string,
   credential: AdoptCredential,
-  standby: { nodeId: string; publicKey: string },
+  standby: { nodeId: string; publicKey: string; contactUrl: string },
 ): Promise<MirrorBundle> {
   const bundle = await fetchMirrorBundle(url, credential, standby);
   capturedBundle = bundle;
@@ -250,6 +250,8 @@ function adoptDeps(overrides: Partial<AdoptDeps> = {}): AdoptDeps {
   return {
     ownerDb: mirror.admin,
     ring: RING,
+    // The mirror's own `config.advertisedOrigin`, sent to the primary as this node's `contactUrl`.
+    advertisedOrigin: "https://standby.deli.test",
     fetchBundle: fetchBundleCapturing,
     persistTrading: async (args) => {
       persistedTrading.push(args);

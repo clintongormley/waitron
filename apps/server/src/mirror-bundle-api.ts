@@ -8,6 +8,9 @@
 // an email (onboarding via the setup UI sets one; the bare `venue` CLI may not), but this path never
 // uses it — it keeps the id-based `loginManagerById` sibling (see the route body for why).
 //
+// It ALSO appends the joining node to the venue's membership document with the `contactUrl` the
+// joiner advertised (till-reroute design §3.3), so tills know how to reach it before it ever promotes.
+//
 // Mounted ONLY on a trading + primary node (boot.ts) — a mirror emits no bundle. If the primary has no
 // relay configured there is nothing for the mirror to dial, so the endpoint refuses `mirror.no_relay`
 // BEFORE `assembleMirrorBundle` mints a token (design §4). The minted token appears once, in the
@@ -16,11 +19,19 @@ import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import {
+  asAppUser,
+  readNodeMembership,
+  withTenant,
+  writeNodeMembership,
+  type Database,
+} from "@waitron/db";
+import { withMember } from "@waitron/membership";
 import { authorizeManager, endManagementSession, loginManagerById } from "@waitron/identity";
 import type { KeyRing } from "@waitron/credentials";
 import type { AdoptResult } from "@waitron/provisioning";
 import { assembleMirrorBundle } from "./mirror-bundle.js";
+import { mintNextMembershipDocument } from "./membership-mint.js";
 import { createErrorBoundary } from "./error-boundary.js";
 import { readJsonBody } from "./read-json-body.js";
 import { isUuid } from "./till-session.js";
@@ -35,8 +46,9 @@ import type { Logger } from "./logger.js";
  * scopes the auth transaction. `stateDir` locates the box CA; `boxHostname` is the box's TLS SAN.
  * `relayUrl` is the primary's own relay coordinates (`loadTunnelConfig`), `undefined` when no tunnel is
  * configured — the endpoint then refuses `mirror.no_relay` rather than minting an undial-able bundle.
- * `ring` is the box vault key `assembleMirrorBundle` uses to unseal the primary's identity key and
- * endorse the standby's key (design §6 R2).
+ * `ring` is the box vault key used to unseal the primary's identity key — `assembleMirrorBundle`
+ * endorses the standby's key with it (design §6 R2), and this route signs the membership document it
+ * appends the standby to with it (till-reroute §3.3).
  */
 export interface MirrorBundleApiDeps {
   appDb: Database;
@@ -99,6 +111,7 @@ export function mountMirrorBundleApi(
         totp?: string;
         standbyNodeId?: string;
         standbyPublicKey?: string;
+        standbyContactUrl?: unknown;
       }>(c);
       if (
         typeof body.personId !== "string" ||
@@ -112,20 +125,23 @@ export function mountMirrorBundleApi(
 
       // The standby identity the primary will reserve + endorse rides in the same body and is REQUIRED
       // on every request (Task 5's fetcher always sends it; pre-production, no bwc). Screened exactly
-      // like the credential above — a non-string/non-UUID `standbyNodeId` or a non-string/empty
-      // `standbyPublicKey` is refused as `mirror.standby_invalid` (a distinct 400 client fault, NOT the
-      // 401 a bad credential gets). This runs AFTER the credential screen so a malformed credential
-      // still reports as `password.invalid`, and BEFORE auth so a well-formed request is fully shaped
-      // before any database work.
+      // like the credential above — a non-string/non-UUID `standbyNodeId`, a non-string/empty
+      // `standbyPublicKey`, or a non-string `standbyContactUrl` is refused as `mirror.standby_invalid`
+      // (a distinct 400 client fault, NOT the 401 a bad credential gets). An EMPTY `standbyContactUrl`
+      // is allowed: a standby that advertises no origin is still a member of the org chart. This runs
+      // AFTER the credential screen so a malformed credential still reports as `password.invalid`, and
+      // BEFORE auth so a well-formed request is fully shaped before any database work.
       if (
         typeof body.standbyNodeId !== "string" ||
         !isUuid(body.standbyNodeId) ||
         typeof body.standbyPublicKey !== "string" ||
-        body.standbyPublicKey === ""
+        body.standbyPublicKey === "" ||
+        typeof body.standbyContactUrl !== "string"
       ) {
         throw new AppError("mirror.standby_invalid", {});
       }
       const standby = { nodeId: body.standbyNodeId, publicKey: body.standbyPublicKey };
+      const standbyContactUrl = body.standbyContactUrl;
 
       // Authenticate + authorize: `loginManagerById` mints a session (password + TOTP when enrolled),
       // `authorizeManager` checks the admin-only `mirror.create`. Runs as `app_user` under the
@@ -168,6 +184,30 @@ export function mountMirrorBundleApi(
         designated: deps.designated,
         standby,
       });
+      // A node joins the org chart AT ADOPT, not at promotion (till-reroute design §3.3): a till
+      // reroutes by the document's per-node `contactUrl`, so the address of every member has to be
+      // published before the failover that needs it, never as part of it. `withMember` leaves every
+      // other node exactly as it was; the next term is signed by this primary with its own identity
+      // key, read as `app_user` (the promote.ts shape) — `app_user` holds INSERT/UPDATE on
+      // `node_membership` (0097_node_membership_write_grant.sql).
+      //
+      // Bundle assembly and this write are deliberately separate transactions (CLAUDE.md §3): they run
+      // on different roles' connections and the response sits between this flow and the mirror. Ordered
+      // BEFORE the response, so a failed append is a 500 and the mirror never adopts a bundle whose
+      // node the document omits; a re-run is idempotent in content (`withMember` refreshes a listed
+      // node in place) and merely bumps the term again.
+      const held = await readNodeMembership(deps.appDb);
+      const document = await mintNextMembershipDocument(
+        { db: deps.appDb, ring: deps.ring },
+        {
+          tenantId: deps.designated.tenantId,
+          heldDocument: held,
+          nodes: withMember(held?.body.nodes ?? [], standby.nodeId, standbyContactUrl),
+          signerNodeId: deps.designated.nodeId,
+        },
+      );
+      await writeNodeMembership(deps.appDb, document);
+
       // The token appears once, here, and is never logged.
       return c.json(bundle);
     }),

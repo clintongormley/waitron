@@ -747,6 +747,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
                   ownerDb,
                   ring,
                   fetchBundle: fetchMirrorBundle,
+                  advertisedOrigin: config.advertisedOrigin,
                   persistTrading,
                   // `writeModuleConfig` returns the path it wrote; the dep only needs `Promise<void>`,
                   // so discard it the same way `persistTrading` above wraps `writeTradingEnv`.

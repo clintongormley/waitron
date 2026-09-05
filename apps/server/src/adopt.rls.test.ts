@@ -42,6 +42,10 @@ const RING = loadKeyRing({
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 
+// This mirror's own advertised origin (`config.advertisedOrigin` in boot) — adopt sends it to the
+// primary as the joining node's `contactUrl`, the address a rerouting till dials (till-reroute §3.3).
+const ADVERTISED_ORIGIN = "https://standby.deli.test";
+
 // The SOURCE database supplies the primary's real parent rows; the MIRROR database is a fresh,
 // never-stamped clone that adopt provisions. Two independent clones of the same template.
 const source = useTemplateDb({ template: "manifest" });
@@ -166,7 +170,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
     const persisted: PersistTradingArgs[] = [];
     const persistedModuleConfigs: ModuleConfig[] = [];
     let fetchArgs: { primaryUrl: string; credential: AdoptCredential } | undefined;
-    let capturedStandby: { nodeId: string; publicKey: string } | undefined;
+    let capturedStandby: { nodeId: string; publicKey: string; contactUrl: string } | undefined;
     const credential: AdoptCredential = {
       personId: "99999999-9999-9999-9999-999999999999",
       password: "dashPass123",
@@ -176,6 +180,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
       {
         ownerDb: mirror.admin,
         ring: RING,
+        advertisedOrigin: ADVERTISED_ORIGIN,
         fetchBundle: async (primaryUrl, cred, standby) => {
           fetchArgs = { primaryUrl, credential: cred };
           capturedStandby = standby;
@@ -197,6 +202,9 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
     // The orchestrator returns the adopted tenant and forwarded the operator's inputs to the fetcher.
     expect(result.tenantId).toBe(designated.tenantId);
     expect(fetchArgs).toEqual({ primaryUrl: "https://primary.test/", credential });
+    // This node's OWN advertised origin travelled with the standby identity: the primary records it as
+    // the joining node's `contactUrl` in the membership document (till-reroute §3.3).
+    expect(capturedStandby!.contactUrl).toBe(ADVERTISED_ORIGIN);
 
     // Environment stamped to the primary's value, mode flipped to mirror.
     expect(await readDeploymentEnvironment(mirror.admin)).toBe("preproduction");
@@ -276,6 +284,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
       {
         ownerDb: mirror.admin,
         ring: RING,
+        advertisedOrigin: ADVERTISED_ORIGIN,
         fetchBundle: async (_url, _cred, s) => {
           standby = s;
           return bundle;
@@ -332,6 +341,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
       {
         ownerDb: mirror.admin,
         ring: RING,
+        advertisedOrigin: ADVERTISED_ORIGIN,
         fetchBundle: async (_url, _cred, standby) => {
           capturedStandby = standby;
           return bundle;
@@ -402,6 +412,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
       {
         ownerDb: mirror.admin,
         ring: RING,
+        advertisedOrigin: ADVERTISED_ORIGIN,
         fetchBundle: async () => bundle,
         persistTrading: async () => {},
         persistModuleConfig: async (c) => {
@@ -439,6 +450,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
         {
           ownerDb: mirror.admin,
           ring: RING,
+          advertisedOrigin: ADVERTISED_ORIGIN,
           fetchBundle: async () => bundle,
           persistTrading: async () => {
             tradingPersisted = true;

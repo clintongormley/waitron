@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   asAppUser,
   readMembershipTrustSet,
+  readNodeMembership,
   stampDeployment,
   withTenant,
   type Database,
@@ -14,7 +15,12 @@ import {
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { hashPassword, hashPin } from "@waitron/identity";
-import { canonicalize, generateNodeKeyPair, verifyBytes } from "@waitron/membership";
+import {
+  canonicalize,
+  generateNodeKeyPair,
+  verifyBytes,
+  verifyMembershipDocument,
+} from "@waitron/membership";
 import { applyVenue, planVenue, type AdoptResult } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -151,10 +157,19 @@ function mountApp(designated: AdoptResult, relayUrl: string | undefined, log?: L
   return app;
 }
 
-/** A well-formed standby identity — a fresh nodeId + the real STANDBY_PUB — required in every request
- * now (the primary reserves this standby's identity and endorses this key). */
-function validStandby(): { standbyNodeId: string; standbyPublicKey: string } {
-  return { standbyNodeId: crypto.randomUUID(), standbyPublicKey: STANDBY_PUB };
+/** A well-formed standby identity — a fresh nodeId, the real STANDBY_PUB, and the address the standby
+ * advertises — required in every request now (the primary reserves this standby's identity, endorses
+ * this key, and records the address in the membership document). */
+function validStandby(): {
+  standbyNodeId: string;
+  standbyPublicKey: string;
+  standbyContactUrl: string;
+} {
+  return {
+    standbyNodeId: crypto.randomUUID(),
+    standbyPublicKey: STANDBY_PUB,
+    standbyContactUrl: "https://cloud.deli.test",
+  };
 }
 
 async function post(app: Hono, body: unknown): Promise<Response> {
@@ -227,6 +242,40 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
     }
   });
 
+  it("appends the standby to the membership document with its contactUrl, term bumped, signed by the primary", async () => {
+    const { designated, adminPersonId, primaryPublicKey } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+    const standbyNodeId = crypto.randomUUID();
+
+    // `node_membership` is a whole-database singleton, so the term this mint bumps is whatever the
+    // shared template already holds — read it rather than assume 0.
+    const before = await readNodeMembership(suite.admin);
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      standbyNodeId,
+      standbyPublicKey: STANDBY_PUB,
+      standbyContactUrl: "https://cloud.deli.test",
+    });
+    expect(res.status).toBe(200);
+
+    const after = await readNodeMembership(suite.admin);
+    expect(after?.body.term).toBe((before?.body.term ?? -1) + 1);
+    // The joining node is listed as a serving secondary at the address it advertised — the address a
+    // till reroutes to after a failover (till-reroute §3.3).
+    expect(after?.body.nodes).toContainEqual({
+      nodeId: standbyNodeId,
+      contactUrl: "https://cloud.deli.test",
+      standing: "serving-secondary",
+    });
+    // Signed by THIS primary, and it verifies against the primary's own key — so the document a till
+    // later fetches is authentic, not merely present.
+    expect(after?.signerNodeId).toBe(designated.nodeId);
+    expect(verifyMembershipDocument(after!, { [designated.nodeId]: primaryPublicKey }).valid).toBe(
+      true,
+    );
+  });
+
   it("refuses a non-admin (staff) credential with 403", async () => {
     const { designated } = await setupVenue();
     const staffPersonId = await seedStaff(designated.tenantId);
@@ -294,6 +343,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
       password: ADMIN_PASSWORD,
       standbyNodeId: standby.nodeId,
       standbyPublicKey: standby.publicKey,
+      standbyContactUrl: "https://cloud.deli.test",
     });
     expect(res.status).toBe(200);
     const bundle = (await res.json()) as {
@@ -343,12 +393,15 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
     expect(res.status).toBe(400);
     expect((await res.json()).error.code).toBe("mirror.standby_invalid");
 
-    // A non-UUID standby nodeId is refused the same way.
+    // A non-UUID standby nodeId is refused the same way. Every field but the one under test is
+    // well-formed — `standbyContactUrl: ""` is VALID (a standby that advertises nothing is still a
+    // member) — so each sub-case fails for its own reason, not for a second missing field.
     const res2 = await post(app, {
       personId: adminPersonId,
       password: ADMIN_PASSWORD,
       standbyNodeId: "not-a-uuid",
       standbyPublicKey: STANDBY_PUB,
+      standbyContactUrl: "",
     });
     expect(res2.status).toBe(400);
     expect((await res2.json()).error.code).toBe("mirror.standby_invalid");
@@ -359,8 +412,24 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
       password: ADMIN_PASSWORD,
       standbyNodeId: crypto.randomUUID(),
       standbyPublicKey: "",
+      standbyContactUrl: "",
     });
     expect(res3.status).toBe(400);
     expect((await res3.json()).error.code).toBe("mirror.standby_invalid");
+  });
+
+  it("refuses a non-string standbyContactUrl as mirror.standby_invalid", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      standbyNodeId: crypto.randomUUID(),
+      standbyPublicKey: STANDBY_PUB,
+      standbyContactUrl: 42,
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: { code: "mirror.standby_invalid", params: {} } });
   });
 });
