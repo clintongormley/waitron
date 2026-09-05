@@ -1437,6 +1437,40 @@ declare module "@waitron/shared" {
      */
     "node.retire_superseded": { heldTerm: number; mintedTerm: number };
     /**
+     * `rejoinAsSecondary` (rejoin R3 — wipe + restore a returned ex-primary as a clean secondary) was
+     * invoked on a node that is NOT fenced — a node holding `serving-primary`/`serving-secondary` in the
+     * held chart, a node ABSENT from the chart, or a node holding no membership document at all. Only a
+     * fenced (`sell-only`/`evicted`) node may be wiped; a serving node is still trading and must NEVER be
+     * wiped (its own-origin tail could still be un-shipped). Refused BEFORE any irreversible step (no
+     * pool close, no wipe). `rejoin.*` names the DOMAIN CONCEPT — a fact about a rejoin ACTION, not about
+     * the process (`server.*`) — the same rule `node.retire_not_fenced` gives. No params: the refusal
+     * names no row, so a log line leaks nothing (the `node.read_only` no-leak discipline). Never renamed
+     * once shipped.
+     */
+    "rejoin.not_fenced": Record<string, never>;
+    /**
+     * `rejoinAsSecondary` found the node fenced but the held document names no serving-primary CARRIER —
+     * so there is no survivor to have drained onto and to stream from after the restore. Refused
+     * FAIL-SAFE (DISTINCT from `rejoin.not_fenced`): signalled to this action by an `undefined`
+     * drain-progress reader, which the caller passes exactly when the held chart has no carrier to point
+     * the disposal read at. `rejoin.*`, not `server.*`: a fact about this node's state in the topology
+     * (`node.retire_no_carrier`'s rule). No params — the refusal names no row (the `node.read_only`
+     * no-leak discipline). Never renamed once shipped.
+     */
+    "rejoin.no_carrier": Record<string, never>;
+    /**
+     * `rejoinAsSecondary` found the node fenced with a carrier, but the disposal guard reports its
+     * own-origin `sync_log` tail has NOT fully drained onto that carrier. Refused BEFORE the wipe — a
+     * node must not be wiped while rows it originated are still un-shipped, or they would be lost with the
+     * wipe (CLAUDE.md §5 unrecoverable-invariant). The gate is the disposal guard's `drained` BOOLEAN
+     * alone, NEVER a comparison of `carrierAppliedSeq >= ownTailSeq`: those two legitimately differ while
+     * `drained` is `true` (`ownTailSeq` is the cross-lane MAX and `carrierAppliedSeq` the cross-lane MIN
+     * — see `readDrainProgress` in @waitron/sync), the same rule `node.retire_not_drained` gives.
+     * `rejoin.*`, not `server.*`: a fact about this node's state in the topology. No params — the refusal
+     * names no row (`node.read_only`'s no-leak discipline). Never renamed once shipped.
+     */
+    "rejoin.not_drained": Record<string, never>;
+    /**
      * A mirror could not be assembled because the PRIMARY it was pointed at has no stamped environment
      * (sync cloud-mirror C2b — the read-only mirror pulls + applies a primary's rows, the topology
      * `node.read_only` describes). The operator's assemble flow asks the primary for a bundle; a primary
