@@ -778,8 +778,10 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       nodeId: cfg.nodeId,
       servers: [],
     });
-    // Nothing sensitive: no pin, certificate, connection string or verification url reaches the wire.
-    expect(JSON.stringify(body)).not.toMatch(/pin|secret|password|url|cert/i);
+    // Nothing sensitive: no pin, certificate, connection string or AEAT verification url reaches the
+    // wire. `verificationUrl` is named exactly rather than a bare `url`, because `servers[].url` is a
+    // BY-DESIGN wire key (the address the till is told to dial) that a bare alternative would trip on.
+    expect(JSON.stringify(body)).not.toMatch(/pin|secret|password|verificationUrl|cert/i);
   });
 
   it("GET /api/till lists the venue's servers from the membership document, primary first, evicted and address-less nodes excluded", async () => {
@@ -791,6 +793,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
           { nodeId: "b", contactUrl: "https://cloud.deli.test", standing: "serving-secondary" },
           { nodeId: "c", contactUrl: "https://old.deli.test", standing: "evicted" },
           { nodeId: "d", contactUrl: "", standing: "sell-only" },
+          { nodeId: "e", contactUrl: "https://spare.deli.test", standing: "sell-only" },
           { nodeId: cfg.nodeId, contactUrl: "https://box.deli.test", standing: "serving-primary" },
         ],
       },
@@ -810,6 +813,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect(body.servers).toEqual([
       { nodeId: cfg.nodeId, url: "https://box.deli.test", standing: "serving-primary" },
       { nodeId: "b", url: "https://cloud.deli.test", standing: "serving-secondary" },
+      { nodeId: "e", url: "https://spare.deli.test", standing: "sell-only" },
     ]);
   });
 
