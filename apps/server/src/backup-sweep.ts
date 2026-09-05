@@ -1,7 +1,9 @@
-// The scheduled backup worker (onboarding slice 4b-ii, widened for BR-1 storage fan-out). Each tick
-// takes ONE `pg_dump` into a STAGING temp file, encrypts it ONCE under the operator's recovery key,
-// then `put`s the SAME ciphertext to EVERY configured `StorageBackend` and prunes each to `retain` —
-// then sleeps `intervalMs` before the next. The loop shell (abort-checked at the top and again before
+// The scheduled backup worker (onboarding slice 4b-ii, widened for BR-1 storage fan-out, then BR-2's
+// full-archive assembly). Each tick takes ONE `pg_dump` into a STAGING temp file, assembles the FULL
+// backup archive around it (manifest.json + db.dump + module non-DB state + state secrets, packed by
+// `packArchive`), encrypts the WHOLE archive ONCE under the operator's recovery key, then `put`s the
+// SAME ciphertext to EVERY configured `StorageBackend` as `waitron-<stamp>.backup.enc` and prunes each
+// to `retain` — then sleeps `intervalMs` before the next. The loop shell (abort-checked at the top and again before
 // each sleep, a failed tick logged and swallowed) is unchanged from the pre-fan-out version and still
 // MIRRORS `packages/sync/src/retention.ts`'s `runRetentionSweep`: a wedged pg_dump or an unreachable
 // backend must never kill the loop and, with it, the box's only backup duty.
@@ -21,16 +23,53 @@
 
 import { chmod, mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import type { Database } from "@waitron/db";
+import type { WaitronModule } from "@waitron/module";
 import { encryptArtifact } from "./artifact-cipher.js";
+import { packArchive, type ArchiveEntry } from "./backup-archive.js";
+import { buildManifest, type BackupManifest } from "./backup-manifest.js";
+import { collectModuleNonDbState } from "./backup-sources.js";
+import type { DeploymentEnvironment } from "./config.js";
 import { codeOf } from "./error-code.js";
 import type { Logger } from "./logger.js";
-import { BACKUP_KEY_PREFIX, dumpFileName, realPgDump, type PgDumpRunner } from "./pg-dump.js";
+import {
+  BACKUP_KEY_PREFIX,
+  backupArchiveKey,
+  dumpFileName,
+  realPgDump,
+  type PgDumpRunner,
+} from "./pg-dump.js";
+import { collectStateSecrets } from "./state-secrets.js";
 import type { StorageBackend } from "./storage-backend.js";
 import "./errors.js";
+
+/** The manifest builder the sweep uses; matches {@link buildManifest}'s signature. Injectable so the
+ * fan-out/archive-assembly tests stay pure-DI (no real journal), while the real DB integration is
+ * covered by a `useTemplateDb` suite driving the default. */
+export type ManifestBuilder = (deps: {
+  readonly db: Database;
+  readonly modules: readonly WaitronModule[];
+  readonly environment: DeploymentEnvironment;
+  readonly now: Date;
+}) => Promise<BackupManifest>;
 
 export interface BackupSweepDeps {
   /** Every destination this run fans the SAME encrypted artifact out to. */
   backends: StorageBackend[];
+  /** A PRIVILEGED pool (superuser/BYPASSRLS — the same role the dump uses) for {@link buildManifest}:
+   * `appliedSchemaVersion` reads each module's `__drizzle_migrations_*` journal, on which `app_user`
+   * holds NO SELECT, so the app pool would fail. NOT the app pool. */
+  db: Database;
+  /** The running composition's modules — their `backup.nonDbState` refs drive the media/etc. capture
+   * and their names + applied schema versions populate the manifest. */
+  modules: readonly WaitronModule[];
+  /** Stamped into the manifest so BR-3's restore can refuse an incompatible target. */
+  environment: DeploymentEnvironment;
+  /** Maps a module's declared non-DB source id (e.g. `"media"`) to the absolute dir it resolves to
+   * (`{ media: config.mediaDir }`) — see `collectModuleNonDbState`. */
+  resolvers: Record<string, string>;
+  /** State dir holding the RECOVERY_FILES secrets captured into `secrets/<path>` (state-secrets.ts). */
+  stateDir: string;
   /** The libpq connection string `pg_dump` dumps — the privileged backup role, not the app pool's. */
   databaseUrl: string;
   /** The operator-held passphrase the dump is encrypted under before it ever reaches a backend. */
@@ -47,23 +86,32 @@ export interface BackupSweepDeps {
   log: Logger;
   /** Injectable for tests; defaults to the real `pg_dump` shell-out. */
   runDump?: PgDumpRunner;
+  /** Injectable so the fan-out/archive-assembly tests need no real journal; defaults to the real
+   * {@link buildManifest} (reads the schema versions off `db`). */
+  buildManifest?: ManifestBuilder;
   /** Injectable so the filename stamp is deterministic under test; defaults to wall-clock now. */
   now?: () => Date;
 }
 
-/** The suffix an encrypted artifact carries on top of `dumpFileName`'s `waitron-<stamp>.dump`. */
-const ENC_SUFFIX = ".enc";
-
 /**
- * One backup: dump to a staging file, encrypt it once, fan the same ciphertext out to every backend,
+ * One backup: dump the DB to a staging file, then assemble the FULL backup archive — a manifest, the
+ * DB dump, every module's non-DB state (the media store), and the state-dir secrets — encrypt the
+ * whole archive ONCE, fan the same ciphertext out to every backend as `waitron-<stamp>.backup.enc`,
  * and prune each backend to `retain`. Exported (rather than kept internal to `runBackupSweep`) so a
  * single tick can be unit-tested directly, without driving the loop's sleep/abort machinery.
+ *
+ * FAIL-VISIBLE: the manifest, the media capture, and the secrets read all happen BEFORE the first
+ * `put`, so a throw in any of them (an unreadable journal, a missing recovery file →
+ * `recovery.state_incomplete`) propagates out of `runOnce` to the tick's `backup.failed` and NO
+ * partial archive is fanned out — an incomplete backup must never masquerade as a recovery-ready one
+ * (CLAUDE.md §5, backup IS the cold-recovery path).
  */
 export async function runOnce(deps: Omit<BackupSweepDeps, "intervalMs" | "sleep">): Promise<void> {
   const runDump = deps.runDump ?? realPgDump;
-  const now = deps.now ?? (() => new Date());
+  const buildBackupManifest = deps.buildManifest ?? buildManifest;
+  const stamp = (deps.now ?? (() => new Date()))();
   await mkdir(deps.stagingDir, { recursive: true });
-  const dumpName = dumpFileName(now());
+  const dumpName = dumpFileName(stamp);
   const staged = join(deps.stagingDir, dumpName);
   try {
     await runDump({ databaseUrl: deps.databaseUrl, outFile: staged, signal: deps.signal });
@@ -71,8 +119,28 @@ export async function runOnce(deps: Omit<BackupSweepDeps, "intervalMs" | "sleep"
     // exists, matching the restrictive perms the encrypted artifact already gets on disk
     // (`LocalFsBackend.put` writes 0o600) — pg_dump's own umask can leave it group/other-readable.
     await chmod(staged, 0o600);
-    const ciphertext = encryptArtifact(await readFile(staged), deps.recoveryKey);
-    const key = `${dumpName}${ENC_SUFFIX}`;
+    const dumpBytes = await readFile(staged);
+    // Assemble the archive entries in a deterministic order: index first, then the dump, then the
+    // module non-DB state (`media/<sha>`), then the secrets (`secrets/<path>`). Any throw here (see
+    // the FAIL-VISIBLE note above) escapes before the fan-out below.
+    const manifest = await buildBackupManifest({
+      db: deps.db,
+      modules: deps.modules,
+      environment: deps.environment,
+      now: stamp,
+    });
+    const secrets = await collectStateSecrets(deps.stateDir);
+    const entries: ArchiveEntry[] = [
+      { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
+      { name: "db.dump", bytes: dumpBytes },
+      ...(await collectModuleNonDbState(deps.modules, deps.resolvers)),
+      ...Object.entries(secrets).map(([path, contents]) => ({
+        name: `secrets/${path}`,
+        bytes: Buffer.from(contents),
+      })),
+    ];
+    const ciphertext = encryptArtifact(packArchive(entries), deps.recoveryKey);
+    const key = backupArchiveKey(stamp);
     // Fan out to every backend concurrently; each keeps its own try/catch so a THROWING failure is
     // logged and swallowed rather than rejecting the batch — a throwing backend never costs the
     // others their backup (fail-safe, per this file's header). `allSettled` therefore never rejects

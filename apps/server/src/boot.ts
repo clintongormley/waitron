@@ -375,8 +375,8 @@ function startListening(
  * is idempotent and always drains the connection pools, whatever the teardown does first — the
  * mode-specific parts arrive as `teardown` (a `BootTeardown`): `stopWork` stops any background work
  * and awaits it (the loop plus the sync/retention workers in trading mode; a no-op in setup mode),
- * then `closePools` releases the pools (app + sync + retention in trading mode; the app pool alone in
- * setup mode). `mdns` is the shared mDNS responder both modes start in the prefix; `close()` stops it
+ * then `closePools` releases the pools (app + sync + retention + the backup manifest pool in trading
+ * mode; the app pool alone in setup mode). `mdns` is the shared mDNS responder both modes start in the prefix; `close()` stops it
  * FIRST — the box is going down, so it must stop advertising `waitron.local` before anything else.
  */
 function makeStartedServer(
@@ -1474,23 +1474,27 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // backup writer against the same dir/source either). It MIRRORS
   // the retention worker's shape exactly: its OWN AbortController + worker promise (declared beside the
   // sync/tunnel ones so close() below tears it down), a `.catch` logging `codeOf`, and a teardown that
-  // aborts + awaits. `runBackupSweep` shells out to `pg_dump` and holds no long-lived pool of its own,
-  // so there is nothing to add to `closePools` — the probe pool below is the only pool it involves, and
-  // that is closed in its own `finally` (the worker shells out to a fresh `pg_dump` process and never
-  // touches the probe pool, so the two never share a connection).
+  // aborts + awaits. Unlike the pre-BR-2 dump-only sweep, `runBackupSweep` now DOES hold a long-lived
+  // pool: BR-2's archive embeds a manifest, and `buildManifest` reads each module's applied schema
+  // version off the `__drizzle_migrations_*` journal — which `app_user` holds no SELECT on — so it needs
+  // a PRIVILEGED pool. That pool is `backupDb` below (the SAME connection the RLS probe just validated,
+  // reused rather than reopened), closed in `closePools` like `syncDb`/`retentionDb`; the dump itself
+  // still shells out to a fresh `pg_dump` process over `backupConfig.databaseUrl`.
   //
   // Before the worker starts, an RLS PROBE (`assertBackupCanReadFiscal`): under FORCE RLS a `pg_dump`
   // as a role that is neither SUPERUSER nor BYPASSRLS either loud-fails or silently emits an empty
   // fiscal dump, so a fenced backup role must never be enabled (backup-probe.ts). The probe opens a
-  // short-lived pool to `backupConfig.databaseUrl` — the EXACT connection string `runBackupSweep` /
+  // pool to `backupConfig.databaseUrl` — the EXACT connection string `runBackupSweep` /
   // `realPgDump` dump with, no SET ROLE and no second role — so a green probe is evidence about the
-  // real dump connection, not an adjacent one. It is FAIL-SAFE, NEVER fatal (CLAUDE.md §5 — nothing may
+  // real dump connection, not an adjacent one; on success that pool is HANDED to the worker as
+  // `backupDb` (its manifest reads run over the same validated privileged connection), and only on a
+  // FAILURE path is it closed here in the `finally`. It is FAIL-SAFE, NEVER fatal (CLAUDE.md §5 — nothing may
   // block a sale): a fenced role, an unreachable backup database, or ANY other probe error leaves
   // backup off (`backupWorker` stays undefined) and logs `backup.disabled_probe_failed` (with the
   // structured `errorCode` so a connection/network fault is distinguishable from an RLS fence — the
   // event name covers ANY probe failure, not just a fence) rather than throwing out of boot — a bad backup
-  // role must not brick the till. The whole open+assert sits inside the `try`, and the probe pool is
-  // closed in the `finally` whichever way it settles, so nothing leaks. `backupWorker` is the single
+  // role must not brick the till. The whole open+assert sits inside the `try`, and the pool is closed in
+  // the `finally` on any path that did NOT hand it to the worker, so nothing leaks. `backupWorker` is the single
   // source of truth for "backup is on": it is assigned ONLY on the probe's success path (so a fenced or
   // unreachable role leaves it `undefined`), and the box-status wiring and teardown below both gate on
   // `backupWorker !== undefined`. When `backupConfig` is set on a non-singleton node (mirror or local
@@ -1510,15 +1514,34 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // mid-dump. `runBackupSweep` re-creates it (recursively) each tick, so a wiped dir self-heals.
   const backupStagingDir = join(config.stateDir, "backup-staging");
   let backupWorker: Promise<void> | undefined;
+  // The privileged pool the sweep's `buildManifest` reads the drizzle journal off. Assigned ONLY on the
+  // probe's success path (the probe pool is reused), so it is `undefined` whenever backup is off/fenced;
+  // closed in `closePools` below, AFTER `stopWork` has aborted + awaited `backupWorker`, so no tick can
+  // touch it mid-close.
+  let backupDb: Database | undefined;
   if (isSingletonPrimary && backupConfig !== undefined) {
     let probeDb: Database | undefined;
     try {
       probeDb = await createPostgresDb(backupConfig.databaseUrl);
       await assertBackupCanReadFiscal(probeDb);
+      // The probe just validated this exact privileged connection; hand it to the worker as `backupDb`
+      // (rather than opening a SECOND pool to the same role) and null `probeDb` so the `finally` no
+      // longer closes it — ownership has passed to `backupDb`, closed in `closePools`.
+      backupDb = probeDb;
+      probeDb = undefined;
       backupWorker = runBackupSweep({
-        // The full fan-out: the same encrypted artifact is `put` to EVERY configured destination each
+        // The full fan-out: the same encrypted archive is `put` to EVERY configured destination each
         // tick (`WAITRON_BACKUP_DIR`'s "primary" entry plus any in `WAITRON_BACKUP_DESTINATIONS`).
         backends: backupBackends,
+        // The privileged pool for the manifest's schema-version reads (NOT the app pool — app_user has
+        // no SELECT on the `__drizzle_migrations_*` journal), plus the composition the archive captures:
+        // every module's non-DB state + schema versions, this box's environment, the media resolver, and
+        // the state dir the recovery secrets are read from.
+        db: backupDb,
+        modules: ALL_MODULES,
+        environment: config.environment,
+        resolvers: { media: config.mediaDir },
+        stateDir: config.stateDir,
         stagingDir: backupStagingDir,
         databaseUrl: backupConfig.databaseUrl,
         recoveryKey: backupConfig.recoveryKey,
@@ -1535,8 +1558,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       log("error", "backup.disabled_probe_failed", { errorCode: codeOf(err) });
     } finally {
       // `.catch(() => {})`: a throw in this `finally` would ESCAPE the surrounding try/catch, so a
-      // pool-close rejection on the strict §5 path must never become a boot-aborting throw. The
-      // probe's own errors are already handled by the `catch` above.
+      // pool-close rejection on the strict §5 path must never become a boot-aborting throw. Only a
+      // FAILURE path reaches here with `probeDb` still set — on success it was nulled after handoff to
+      // `backupDb`. The probe's own errors are already handled by the `catch` above.
       if (probeDb !== undefined) await probeDb.close().catch(() => {});
     }
   } else if (isSingletonPrimary) {
@@ -1638,7 +1662,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // `configured:false` covers both "no backup env" and "backup env set but the role is fenced /
       // unreachable" — the box-status surface reports the effective state, not merely the config. Reads
       // freshness PER destination off the SAME `backupBackends` the sweep writes to, each via
-      // `list("waitron-")` (which matches the encrypted `.dump.enc` artifacts the sweep produces); `now`
+      // `list("waitron-")` (which matches the encrypted `.backup.enc` archives the sweep produces); `now`
       // is the live wall-clock factory (`() => new Date()`) established at boot, CALLED per box-status
       // request so `ageSeconds` is measured against request time. `backupConfig!` is safe: `backupWorker`
       // is only ever assigned when `backupConfig` was defined (the probe block above runs under
@@ -1965,14 +1989,18 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         // The scheduled backup sweep worker, torn down the identical way: backupController.abort() above
         // already signalled it, so this only awaits its settle, swallowing a settle-by-rejection so it
         // can never skip the guaranteed pool teardown below. runBackupSweep swallows its own per-tick
-        // faults (a wedged pg_dump, a full disk) so it never rejects in production, and it holds no
-        // connection pool of its own (it shells out to pg_dump) — nothing to add to closePools.
+        // faults (a wedged pg_dump, a full disk) so it never rejects in production. Awaiting it HERE
+        // before `closePools` is what lets `closePools` close its privileged manifest pool (`backupDb`)
+        // safely — no tick is left mid-flight reading the journal off it.
         if (backupWorker !== undefined) await backupWorker.catch(() => {});
       },
       closePools: async () => {
         await db.close();
         if (syncDb !== undefined) await syncDb.close();
         if (retentionDb !== undefined) await retentionDb.close();
+        // The backup sweep's privileged manifest pool. `stopWork` above already aborted + awaited
+        // `backupWorker`, so no tick can be reading the journal off it as it closes.
+        if (backupDb !== undefined) await backupDb.close();
       },
     },
     mdns,

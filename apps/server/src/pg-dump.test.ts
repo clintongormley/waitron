@@ -2,7 +2,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { dumpAtomic, dumpFileName, type PgDumpRunner } from "./pg-dump.js";
+import { backupArchiveKey, dumpAtomic, dumpFileName, type PgDumpRunner } from "./pg-dump.js";
 
 describe("dumpFileName", () => {
   it("produces a sortable, colon-free, .dump-suffixed name", () => {
@@ -16,6 +16,19 @@ describe("dumpFileName", () => {
     const earlier = dumpFileName(new Date("2026-08-29T17:55:01Z"));
     const later = dumpFileName(new Date("2026-08-29T17:55:02Z"));
     expect([later, earlier].sort()).toEqual([earlier, later]);
+  });
+});
+
+describe("backupArchiveKey", () => {
+  it("produces a colon-free .backup.enc key sharing dumpFileName's stamp", () => {
+    const at = new Date("2026-08-29T17:55:01.123Z");
+    const key = backupArchiveKey(at);
+    expect(key).toBe("waitron-20260829T175501Z.backup.enc");
+    expect(key).not.toContain(":");
+    // Same stamp as the staging dump for the same instant, so a run's files line up.
+    expect(key).toBe(dumpFileName(at).replace(/\.dump$/, ".backup.enc"));
+    // Shares the BACKUP_KEY_PREFIX the prune/status scans use, so it is pruned + read fresh.
+    expect(key.startsWith("waitron-")).toBe(true);
   });
 });
 

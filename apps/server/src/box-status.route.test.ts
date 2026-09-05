@@ -172,14 +172,14 @@ describe("GET /api/box/status (real postgres)", () => {
     expect(body.time.source).toMatch(/timedatectl|unavailable/);
   });
 
-  it("flows the per-destination backup shape through the route, reading a .dump.enc artifact as FRESH", async () => {
+  it("flows the per-destination backup shape through the route, reading a .backup.enc artifact as FRESH", async () => {
     // The success-path twin of the `configured:false` case above: a real `LocalFsBackend` holding an
-    // encrypted `waitron-<ts>.dump.enc` artifact must read FRESH per destination over the actual HTTP
-    // route + manager gate — the regression Task 5 left (the old `.dump`-anchored reader reported a
+    // encrypted `waitron-<ts>.backup.enc` archive must read FRESH per destination over the actual HTTP
+    // route + manager gate — the regression BR-1 left (the old `.dump`-anchored reader reported a
     // working backup permanently stale) proven end-to-end, not just at the unit level.
     const now = new Date("2026-08-29T10:00:00Z");
     const dir = mkdtempSync(join(tmpdir(), "box-status-backup-"));
-    const artifact = join(dir, "waitron-20260829T095900Z.dump.enc");
+    const artifact = join(dir, "waitron-20260829T095900Z.backup.enc");
     writeFileSync(artifact, "ciphertext");
     const mtime = new Date(now.getTime() - 30_000); // 30s old — inside the 60s stale window
     utimesSync(artifact, mtime, mtime);

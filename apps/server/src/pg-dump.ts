@@ -67,15 +67,30 @@ export const realPgDump: PgDumpRunner = (args) => dumpAtomic(args, pgDumpShellOu
  * `list(BACKUP_KEY_PREFIX)` for it. Single source of truth so the three cannot drift apart. */
 export const BACKUP_KEY_PREFIX = "waitron-";
 
-/** A filesystem-safe, lexically-sortable dump filename for `now`: `waitron-<basic-ISO>.dump`, e.g.
- * `waitron-20260829T175501Z.dump`. No colons (Windows/tooling safe) and second-precision basic ISO,
- * so a lexical sort of these names is a chronological sort. The sweep stamps the staging dump (and,
- * with the `.enc` suffix, the fanned-out artifact key) with this; pruning is per-backend off
- * `list(BACKUP_KEY_PREFIX)` (backup-sweep.ts), not by re-reading the staging dir. */
-export function dumpFileName(now: Date): string {
-  const stamp = now
+/** A filesystem-safe, lexically-sortable timestamp for `now`: basic ISO, no colons (Windows/tooling
+ * safe) and second-precision, so a lexical sort of names built from it is a chronological sort, e.g.
+ * `20260829T175501Z`. Shared by `dumpFileName` (the staging dump) and `backupArchiveKey` (the
+ * fanned-out artifact), so the two cannot drift on how they stamp the SAME instant. */
+function basicIsoStamp(now: Date): string {
+  return now
     .toISOString()
     .replace(/[-:]/g, "")
     .replace(/\.\d+Z$/, "Z");
-  return `${BACKUP_KEY_PREFIX}${stamp}.dump`;
+}
+
+/** The pre-encryption STAGING dump filename for `now`: `waitron-<basic-ISO>.dump`, e.g.
+ * `waitron-20260829T175501Z.dump`. This names only the raw `pg_dump` on disk; the fanned-out
+ * artifact carries {@link backupArchiveKey}'s `.backup.enc` name instead (the two share the same
+ * stamp so a run's staging file and its artifact line up). */
+export function dumpFileName(now: Date): string {
+  return `${BACKUP_KEY_PREFIX}${basicIsoStamp(now)}.dump`;
+}
+
+/** The fanned-out artifact KEY for `now`: `waitron-<basic-ISO>.backup.enc` — the full encrypted
+ * backup archive (manifest + db dump + module non-DB state + state secrets), distinct from the
+ * `.dump` STAGING name above. Pruning and freshness both scan `list(BACKUP_KEY_PREFIX)` (backup-sweep.ts /
+ * backup-status.ts), which is suffix-agnostic, so this key is pruned and read fresh like any
+ * `waitron-*` object. */
+export function backupArchiveKey(now: Date): string {
+  return `${BACKUP_KEY_PREFIX}${basicIsoStamp(now)}.backup.enc`;
 }
