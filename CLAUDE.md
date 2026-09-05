@@ -340,8 +340,8 @@ _Reference_.
 - **Every commit needs `git commit -s`**; CI's `dco` job walks the whole PR range. **A PR that goes
   `BEHIND` is not rebased for that alone** (owner decision 2026-09-05): with every check green on
   the current head and every conversation resolved, when GitHub still reports it `MERGEABLE` and
-  what `main` gained since the merge-base is documentation, or code overlapping no code file this
-  branch changed, it lands as it is with `gh pr merge --squash --admin`. `--admin` there bypasses
+  what `main` gained since the merge-base is documentation, or code only in files this branch did
+  not touch, it lands as it is with `gh pr merge --squash --admin`. `--admin` there bypasses
   the up-to-date requirement and nothing else — never a failing check or an open review. The
   up-to-date rule guards against semantic conflicts, which documentation cannot cause, and the
   post-merge unfiltered `main` run tests the merged tree (verified #119 with code, #240 with five
