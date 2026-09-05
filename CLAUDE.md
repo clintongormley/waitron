@@ -83,9 +83,16 @@ narrower: `pnpm reap`, `pnpm install --frozen-lockfile`, `format:check`, then `t
 and `bundle-smoke`, which nothing local runs. A green from any one of the three is evidence about
 what it ran.
 
-**Coverage thresholds** are `statements 98 / lines 98 / functions 98 / branches 95` in every package
-except the four browser packages (`packages/ui`, `apps/till`, `apps/dashboard`, `apps/setup`), which
-carry `95/95/90/88` with a documented reason in their own config.
+**Coverage thresholds** are split (owner decision 2026-09-05): `statements 98 / lines 98 /
+functions 98 / branches 95` in `verifactu`, `fiscal-verifactu`, `core`, `db`, `sync` and `payments`
+— the fiscal core and the data-layer foundations — and the `90/90/85/85` floor in every other
+package, browser packages included. The six are the owner's list, not a rule that derives them
+(`apps/server` holds the AEAT transport and sits at the floor). The root project keeps the high
+bar: its coverage table is the root `scripts/*.mjs` plus the vocabulary module, two of them the
+classifiers that decide what CI and the hook run. Which package holds which bar is pinned by
+`scripts/coverage-thresholds.test.ts` — a hardcoded list, safe only because the root project is
+the one gate never narrowed away; moving a package is an edit to that list, with the reason in
+the commit.
 
 Traps, each of which cost a round trip:
 

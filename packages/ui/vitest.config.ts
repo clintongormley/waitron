@@ -53,20 +53,7 @@ export default defineConfig({
         "src/a11y-helpers.ts",
         "src/tokens/token-test-helpers.ts",
       ],
-      // Floors measured, then set just below current levels (see
-      // docs/developers/ or the coverage-mutation report for the measured numbers).
-      // Global thresholds, not `perFile` — this is a ~10-file package where per-file
-      // 100% would block legitimate work on any one component. Statements/lines get
-      // the tightest floor (204 units measured, so 1% is coarse-grained already);
-      // functions and branches get more slack because they're counted over far fewer
-      // units (22 and 45 respectively), so a single hard-to-reach function or branch
-      // swings the percentage a lot more.
-      thresholds: {
-        statements: 95,
-        lines: 95,
-        functions: 90,
-        branches: 88,
-      },
+      thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
     },
   },
 });

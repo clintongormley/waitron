@@ -41,9 +41,9 @@
 #   pnpm format:check               always     1912-2066ms (3 runs). The ONLY step that reads prose,
 #                                              so it runs on a documentation-only push.
 #   pnpm lint                       code       1681-1860ms (3 runs)
-#   pnpm vitest run --coverage      code       2.22-2.24s (3 runs, 2026-08-01, five suites). The
-#                                              REPO-LEVEL Vitest project, which is never narrowed:
-#                                              the two classifiers below, the two guards that read
+#   pnpm vitest run --coverage      code       2.22-2.24s (3 runs, 2026-08-01, when it held five
+#                                              suites). The REPO-LEVEL Vitest project, never narrowed:
+#                                              the two classifiers below, the guards that read
 #                                              `packages/` and `apps/` whole, and the tests for the
 #                                              sign-off script this file's first step runs. Unscoped
 #                                              by construction — see the step's own comment for why
@@ -464,9 +464,10 @@ node scripts/reap-testcontainers.mjs || true
 
 # The REPO-LEVEL Vitest project, and the only step here that no scope can narrow. It holds the two
 # classifiers under `scripts/` — if either is wrong every gating decision above it is wrong — the
-# tests for check-signoff.sh, which the first step of this file runs, and, since 2026-08-01, the two
-# guards that read `packages/` and `apps/` whole: guarded-teardowns scans every `*.test.ts` under
-# both, english-only scans the seven generic packages' `src/`. Those two lived in `packages/db`
+# tests for check-signoff.sh, which the first step of this file runs, and, since 2026-08-01, the
+# guards that read `packages/` and `apps/` whole (the repo-root vitest.config.ts lists them):
+# guarded-teardowns scans every `*.test.ts` under both, english-only scans the generic packages'
+# `src/`, and so on. The first two lived in `packages/db`
 # until then, where they only loaded when `packages/db` was in scope; the receipts for what that
 # skipped are in the repo-root vitest.config.ts.
 #

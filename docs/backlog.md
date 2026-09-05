@@ -174,11 +174,11 @@ plan → PR; items marked **[owner]** never land unattended.
 harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.test.ts`, every
 `vitest.config.ts`, CLAUDE.md §2–§4):
 
-1. **Coverage split** (an afternoon, land first so every later PR runs against the new bar): keep
-   98/98/98/95 on `verifactu`, `fiscal-verifactu`, `core`, `db`, `sync`, `payments`; 90/90/85/85
-   elsewhere (the four browser packages keep their documented 95/95/90/88 or take the new floor,
-   whichever is lower); update CLAUDE.md §2's thresholds paragraph in the same PR. Receipt: 71 files
-   already carry `v8 ignore`.
+1. **Coverage split — PR #239 open 2026-09-05:** 98/98/98/95 kept on `verifactu`, `fiscal-verifactu`,
+   `core`, `db`, `sync`, `payments`; the 90/90/85/85 floor everywhere else (the four browser
+   packages' 95/95/90/88 was above the floor on every axis, so they took the floor).
+   The root project (the classifiers) keeps the high bar — a judgement call flagged at review.
+   `scripts/coverage-thresholds.test.ts` pins which package holds which bar; CLAUDE.md §2 updated.
 2. **Native logical replication prototype — DONE 2026-09-05: all of (a)–(d) PASS, (e) measured.**
    Findings: [native-replication-post-rls-prototype-findings](superpowers/specs/2026-09-05-native-replication-post-rls-prototype-findings.md)
    — real migrations applied as a non-superuser OWNER (`rolsuper = f`), RLS stripped, two
@@ -1852,7 +1852,7 @@ genuinely-decision-bearing.
   33890775789 — and, being single packages, could only be split by sharding their test FILES with
   vitest `--shard=i/N` (a matrix job), each shard emitting a partial-coverage `blob`, with a paired
   `test-heavy-merge` / `test-server-merge` job merging the blobs (`vitest --merge-reports`) and
-  enforcing the 98/98/98/95 thresholds on the total. The `test:shard` / `test:merge` package scripts
+  enforcing the package's thresholds on the total. The `test:shard` / `test:merge` package scripts
   carry the mechanism; `scripts/ci-workflow.test.mjs` pins the matrix↔denominator↔merge wiring AND the
   script shapes. **Measured on PR #216's run 33908208779:** test-heavy 374s → shards 136/220/89s +
   merge 24s ≈ **244s**; test-server 341s → shards 139/131/131s + merge 35s ≈ **174s**. The merge tax
@@ -1905,7 +1905,9 @@ naming is **`core_<schema>`** (self-describing about what it migrates, not the p
 a **per-package call**: (a) the `@vitest/coverage-v8` cross-fork branch-merge bug needs `singleFork` where
 a package runs under `pnpm -r` oversubscription; (b) a shared container is one cluster on a 100-connection
 budget, so a package whose suites open many backends caps at `maxForks: 4`. `packages/db` is the
-reason-(b) reference, `packages/payments` the reason-(a) one. Plan:
+reason-(b) reference, `packages/payments` the reason-(a) one — but both carry the HIGH coverage bar, so
+a new package that copies either config must set the `90/90/85/85` floor (CLAUDE.md §2), or
+`scripts/coverage-thresholds.test.ts` fails it in the ungated `lint` job. Plan:
 `docs/superpowers/plans/2026-08-19-shared-test-container.md`.
 
 ---
