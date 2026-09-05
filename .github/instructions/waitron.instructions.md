@@ -92,10 +92,14 @@ if a PR touching that package needs to loosen or work around that rule, treat it
 question to raise, not a lint config nit to wave through.
 
 `packages/db`, `packages/core`, `packages/fiscal` and `@waitron/shared` are English throughout —
-identifiers and table/column names alike; `packages/verifactu` and `packages/fiscal-verifactu`
-are Spanish, mirroring AEAT's own specification, XML and conformance vectors 1:1. Both directions
-are mechanically enforced (`scripts/english-only.test.ts` for the English packages,
+identifiers and table/column names alike; `packages/verifactu`, `packages/fiscal-verifactu` and
+`packages/workforce-es` are Spanish by design (the first two mirror AEAT's own specification, XML
+and conformance vectors 1:1; the third is the Spain labour module). Both directions are mechanically
+enforced (`scripts/english-only.test.ts` for the English packages — its forbidden set is the base
+list in `packages/db/src/english-only.ts` plus each Spanish module's own `vocabulary` declaration;
 `packages/fiscal/src/no-regime-vocabulary.test.ts` for regime words such as "chain"/"hash" written
 in English), not left to review discipline. A PR introducing a Spanish identifier into a generic
-package, an English regime term into `packages/fiscal`, or one that widens either guard's
-exclusion list to let one through, is a design question to raise, not a nit to wave through.
+package, an English regime term into `packages/fiscal`, one that adds a module's word to the base
+list instead of the module's declaration, or one that drops a generic package from
+`GENERIC_PACKAGES` (and its pin) to make a scan pass, is a design question to raise, not a nit to
+wave through.

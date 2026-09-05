@@ -53,7 +53,11 @@ wide margin.
   its hunk — one a documented operator procedure that the change had turned into a `42501`. Read the
   runbooks and README paraphrases of test assertions across the whole base-to-tip range; a diff shows
   three lines of context. Per-task review cannot see this class; budget one base-to-tip pass before the
-  PR (`/finish-branch` step 2's convention reviewer does it).
+  PR (`/finish-branch` step 2's convention reviewer does it). The PATH SET matters: SP-3b's receipt
+  sweep grepped `packages/` and `apps/` and could not see
+  `.github/instructions/waitron.instructions.md` — the prose Copilot reviews every PR against —
+  which kept describing a deleted exclusion list; a base-to-tip pass reads that file and every claim
+  stated in prose without the identifier.
 - **Claims about the outside world need receipts too — and the source's own words.** Every external
   claim gets a provenance row (`2026-07-30-deli-hardware-design.md` sourced eight prices and then
   asserted unsourced that "iOS Safari implements none of those APIs" — its decisive claim). Quote,
@@ -164,11 +168,15 @@ unfiltered `main` run, not a wrong hook.
   once shipped**; deprecate and add a sibling. `server.*` is reserved for facts about the process
   itself (`apps/server/src/errors.ts`). Every file that throws a code imports its registry
   (`import "./errors.js"`); reachability is guarded once, in the root project (§4).
-- **Spanish domain terms are deliberate**, guarded by `packages/db/src/english-only.ts` (suite
-  `scripts/english-only.test.ts`, root project). Fiscal tables and columns use the Veri\*Factu
-  vocabulary (`envios`, `estado`, `huella`, `secuencia`, `entorno`); add new tokens to
-  `SPANISH_WORDS`. `packages/verifactu` and `packages/fiscal-verifactu` are exempt; `apps/*` is out of
-  scope by a recorded decision, so Spanish IDENTIFIERS in app UI code are caught only by review.
+- **Spanish domain terms are deliberate, and a module declares its own.** The guard
+  (`packages/db/src/english-only.ts`; suite `scripts/english-only.test.ts`, root project) forbids,
+  in every generic package, a base list of generic Spanish plus every module's declared
+  `vocabulary` seat; an owner's own package (derived from `migrations.from`) is never scanned. One
+  declaring home per word: a fiscal term goes in `FISCAL_VOCABULARY` (`packages/fiscal-verifactu`),
+  a labour term in `WORKFORCE_ES_VOCABULARY` (`packages/workforce-es`), never the base list — the
+  suite fails on a clash. `packages/verifactu` is an unlisted library (in no list, never scanned);
+  `apps/*` is out of scope by a recorded decision, so Spanish IDENTIFIERS in app UI code are caught
+  only by review. Design: `docs/superpowers/specs/2026-09-05-module-sp3b-vocabulary-design.md`.
 - **`@waitron/db`'s `exports` map is enumerated, not a wildcard** — `.`, `./testing/postgres.js`,
   `./testing/seed.js`, `./testing/lifecycle.js`, `./testing/shared-container.js`. A wildcard would
   publish the whole harness and give `asAppUser` a second import path. Consequence: `apps/server`

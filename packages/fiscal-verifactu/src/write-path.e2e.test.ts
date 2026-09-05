@@ -248,7 +248,7 @@ describe("the write path against the real Veri*Factu backend", () => {
     // here. There is nothing to inject an exploding fetch INTO. The structural proof instead:
     // every source file this write path actually runs never references a network primitive —
     // proven by reading their own text, the same "read the source, don't just trust the
-    // interface" shape `vocabulary-scope.test.ts` and `packages/fiscal/src/no-regime-vocabulary.
+    // interface" shape `no-regime-scope.test.ts` and `packages/fiscal/src/no-regime-vocabulary.
     // test.ts` already use for an analogous property.
     const NETWORK_PRIMITIVE = /\bfetch\s*\(|XMLHttpRequest|from\s+["']node:https?["']/;
     const WRITE_PATH_SOURCES = [

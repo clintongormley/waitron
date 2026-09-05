@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
-import { orderedMigrationSets, type WaitronModule } from "./index.js";
+import { orderedMigrationSets, packageDirOf, type WaitronModule } from "./index.js";
 
 const mod = (name: string, requires?: WaitronModule["requires"]): WaitronModule => ({
   name,
@@ -70,5 +70,25 @@ describe("orderedMigrationSets", () => {
   it("throws module.requires_invalid on a malformed range string", () => {
     const mods = [mod("core"), mod("workforce", { core: "not-a-range" })];
     expect(thrownCode(() => orderedMigrationSets(mods))).toBe("module.requires_invalid");
+  });
+});
+
+describe("packageDirOf", () => {
+  it("derives the package dir from migrations.from, which need not equal the module name", () => {
+    const fiscal = mod("fiscal");
+    const descriptor: WaitronModule = {
+      ...fiscal,
+      migrations: { ...fiscal.migrations, from: "../fiscal-verifactu/drizzle" },
+    };
+    expect(packageDirOf(descriptor)).toBe("fiscal-verifactu");
+  });
+
+  it("throws on a migrations.from of any other shape, rather than skipping the module", () => {
+    const fiscal = mod("fiscal");
+    const descriptor: WaitronModule = {
+      ...fiscal,
+      migrations: { ...fiscal.migrations, from: "./elsewhere" },
+    };
+    expect(() => packageDirOf(descriptor)).toThrow(/fiscal.*\.\.\/<pkg>\/drizzle/);
   });
 });

@@ -58,16 +58,19 @@ export default defineConfig({
       // isn't on that default list.
       //
       // src/english-only.ts is measured by the ROOT Vitest project instead
-      // (see the repo-root vitest.config.ts), because that is where its suite
-      // now lives: scripts/english-only.test.ts, moved out of this package on
-      // 2026-08-01 so that a push touching only packages/ui or only
-      // packages/payments still runs it. What is left here loading the module
-      // is src/schema/series.test.ts, which imports `findSpanish` alone.
+      // (see the repo-root vitest.config.ts), because that is where its
+      // suite now lives: scripts/english-only.test.ts, moved out of this
+      // package on 2026-08-01 so that a push touching only packages/ui or
+      // only packages/payments still runs it. Nothing in this package
+      // imports it any more; it stays under src/ so this package's
+      // typecheck covers it (the root project typechecks nothing).
       //
-      // Excluded rather than left to be measured on that one import, and the
-      // difference was run rather than reasoned about. Three states of
-      // `pnpm --filter @waitron/db test:coverage`, statements / branches /
-      // functions / lines, all re-run on 2026-08-01:
+      // Excluded rather than left to be measured here, and the difference
+      // was run rather than reasoned about — on 2026-08-01, when
+      // src/schema/series.test.ts still imported `findSpanish`; SP-3b removed
+      // that importer, so row 2 below is history, not a state this tree can
+      // reproduce. Three states of `pnpm --filter @waitron/db test:coverage`,
+      // statements / branches / functions / lines, all re-run on 2026-08-01:
       //
       //   1  suite still here, i.e. this branch's merge base 6d30ed2
       //      99.75 / 96.02 / 100 / 99.75, exit 0, with english-only.ts itself

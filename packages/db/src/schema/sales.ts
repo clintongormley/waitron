@@ -130,10 +130,10 @@ export const sales = pgTable(
     // registro's `destinatarios`, for the same reason `corrects_sale_id`/`fiscal_state` are here
     // (see this table's own comment above): a full invoice's recipient is a reprint/Z-report fact,
     // and keeping it here answers "who was this invoiced to?" with no cross-boundary join. English
-    // names, because `destinatario`/`destinatarios` are in SPANISH_WORDS (english-only.ts) and this
-    // package is scanned; they mirror the module's `Counterparty` shape
-    // (packages/fiscal/src/backend.ts). All NULLABLE with no backfill (pre-production, no deployed
-    // data), and immutable table-wide like every other column here.
+    // names, because `destinatario`/`destinatarios` are the fiscal module's declared vocabulary
+    // and this package is scanned by the english-only guard; they mirror the module's
+    // `Counterparty` shape (packages/fiscal/src/backend.ts). All NULLABLE with no backfill
+    // (pre-production, no deployed data), and immutable table-wide like every other column here.
     counterpartyTaxId: text("counterparty_tax_id"),
     counterpartyLegalName: text("counterparty_legal_name"),
     counterpartyCountryCode: text("counterparty_country_code"),

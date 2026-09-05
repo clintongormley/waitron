@@ -307,7 +307,7 @@ All three decisions are now taken.
 every NEW module package, `apps/dashboard` module screens, `apps/server/src/modules.ts`, and the
 control-plane docs):
 
-1. **Finish fiscal as a module:** SP-3b vocabulary, SP-3c gated-provisioning seam, SP-3d
+1. **Finish fiscal as a module:** SP-3b vocabulary (in flight), SP-3c gated-provisioning seam, SP-3d
    backup/restore hook (= BR-4) — the queued slices under *Waitron module system*.
 2. **`fiscal-none` module** (tiny; the UK case; forces every chain/huella/`entorno` assumption
    through the `FiscalBackend` seam — a better pluggability proof than TicketBAI). Put the two agreed
@@ -761,9 +761,14 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
       with condition-based-waiting (`fetchHealthOk` poll-until-200); ci.yml now uploads shard blobs on
       failure so a future flake names its exact test. Sibling `mirror-e2e.rls.test.ts:~381` remains a
       candidate if it recurs. See memory `test-server-e2e-timing-flakes`.
-  - **SP-3b — module-owned vocabulary (NEXT candidate).** Move fiscal's Spanish terms out of the centralized
-    `packages/db/src/english-only.ts` (`EXEMPT_PACKAGES`/`SPANISH_WORDS`) into the fiscal module's own
-    `vocabulary` seat. Independent of 3a.
+  - **SP-3b — module-owned vocabulary — IN FLIGHT (spec + plan on `feat/module-sp3b-vocabulary`).**
+    Fiscal's and workforce-es's Spanish terms move out of the centralized `packages/db/src/english-only.ts`
+    into `FISCAL_VOCABULARY` / `WORKFORCE_ES_VOCABULARY`, declared on each descriptor's `vocabulary` seat;
+    the root suite assembles the forbidden set, derives each owner's package from `migrations.from`, and
+    asserts base ∩ modules = ∅. `EXEMPT_PACKAGES` deleted; `GENERIC_PACKAGES` stays explicit (measured:
+    a scan-everything flip would hit `provisioning` 155 times — a separate decision). No runtime change.
+    Spec: [sp-3b](superpowers/specs/2026-09-05-module-sp3b-vocabulary-design.md); plan:
+    [sp-3b plan](superpowers/plans/2026-09-05-module-sp3b-vocabulary.md).
   - **SP-3c — module-owned gated provisioning.** Sever the direct `@waitron/provisioning →
     @waitron/fiscal-verifactu` import; route `registerSif` through the descriptor's `provisioningSeeds` seat
     and make `makeFiscalBackend`'s choice module-driven (Spain stays hardwired-but-clean via the existing

@@ -15,8 +15,8 @@ import { persons } from "@waitron/identity";
 
 /**
  * The KIND of absence, in ENGLISH — this is a GENERIC package the english-only guard scans, and the
- * Spanish `vacaciones`/`baja`/`permiso` tokens are all in `SPANISH_WORDS`. The Spanish rendering of
- * these labels (`holiday`→vacaciones, `sick_leave`→baja, `leave`→permiso) belongs to
+ * Spanish `vacaciones`/`baja`/`permiso` tokens are workforce-es's declared vocabulary. The Spanish
+ * rendering of these labels (`holiday`→vacaciones, `sick_leave`→baja, `leave`→permiso) belongs to
  * packages/workforce-es, over this English enum; it is a later slice's job and is not built here.
  *
  * A pgEnum rather than a text CHECK, matching @waitron/identity's `personStatus`/`personRole` and

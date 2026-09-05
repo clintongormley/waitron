@@ -3,6 +3,7 @@
 export { ANOS_CONSERVACION, TITULARES_ACCESO, exportTimeRecord } from "./registro-jornada.js";
 export type { LineaJornada, RegistroDeJornada, TitularAcceso } from "./registro-jornada.js";
 export { WORKFORCE_ES_MIGRATIONS } from "./migrations.js";
+export { WORKFORCE_ES_VOCABULARY } from "./vocabulary.js";
 export { convenioConfig, overtimeModel } from "./schema/convenio-config.js";
 export { resolveWorkTimeRuleset } from "./convenio.js";
 

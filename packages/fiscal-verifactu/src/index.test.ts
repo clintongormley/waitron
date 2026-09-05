@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   appendToChain,
   FISCAL_MIGRATIONS,
+  FISCAL_VOCABULARY,
   cadenas,
   contadoresInstalacion,
   currentSif,
@@ -68,5 +69,12 @@ describe("package public surface (./index.js)", () => {
     // to assert on here — errors.reachability.test.ts and this package's own `pnpm typecheck` are
     // what would catch it going missing.
     expect(typeof VerifactuBackend).toBe("function");
+  });
+
+  it("re-exports the module's declared vocabulary (FISCAL_VOCABULARY) from the package root", () => {
+    // The `vocabulary` seat is wired from this barrel (apps/server/src/modules.ts); the root
+    // english-only suite reads it through the descriptor, so a re-export deleted here would fail
+    // there, not in this package's own gate.
+    expect(FISCAL_VOCABULARY).toContain("huella");
   });
 });

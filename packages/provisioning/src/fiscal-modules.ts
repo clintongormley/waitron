@@ -20,9 +20,10 @@ export interface FiscalModules {
  * resolves to no implemented set and is REFUSED — the input half of D4's defence-in-depth.
  *
  * This registry lives in @waitron/provisioning, not @waitron/fiscal, on purpose: the literals
- * "verifactu" and "iva" trip @waitron/fiscal's no-regime-vocabulary guard and english-only's
- * SPANISH_WORDS respectively. @waitron/provisioning is in neither GENERIC_PACKAGES nor
- * EXEMPT_PACKAGES, so the english-only scan never reaches it (see the plan's placement decision).
+ * "verifactu" and "iva" trip @waitron/fiscal's no-regime-vocabulary guard and the english-only
+ * guard respectively (`iva` is in the fiscal module's own vocabulary, packages/fiscal-verifactu).
+ * @waitron/provisioning is not a generic package (english-only.ts's GENERIC_PACKAGES), so the scan
+ * never reaches it.
  */
 const REGISTRY: Record<string, FiscalModules> = {
   // Frozen at definition: resolveFiscalModules returns the live entry and is public API (index.ts),

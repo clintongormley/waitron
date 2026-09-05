@@ -49,6 +49,11 @@ export interface WaitronModule {
    * and injects it, so @waitron/sync imports no domain schema (spec §2/§5). */
   readonly sync?: readonly EnrolledTable[];
   readonly cards?: unknown; // SP-4
+  /** SP-3b: the domain terms this module OWNS — legitimate inside its own package (derived from
+   * `migrations.from`, `../<pkg>/drizzle`), forbidden in every generic package. Tokens, not words:
+   * lowercase ASCII, unaccented, singular and plural separately, nothing stemmed. Interpreted only
+   * by the root english-only suite, which unions every declaration with the guard's base list and
+   * asserts the two are disjoint; no runtime consumer. Omit the seat rather than declare `[]`. */
   readonly vocabulary?: readonly string[];
   readonly permissions?: readonly string[];
   readonly duties?: unknown; // cronjobs
@@ -146,4 +151,24 @@ export function orderedMigrationSets(modules: readonly WaitronModule[]): Migrati
   }
 
   return ordered.map((m) => m.migrations);
+}
+
+/** `../<pkg>/drizzle` — the shape every descriptor's `migrations.from` has (spec §4). */
+const MIGRATIONS_FROM = /^\.\.\/([^/]+)\/drizzle$/;
+
+/**
+ * The `packages/<dir>` a module's package lives in, derived from `migrations.from`. The one place
+ * that PARSES that string to recover the package directory — the root guards (english-only,
+ * module-graph-honesty) map descriptors to package dirs through it; `@waitron/migrations`'s
+ * `resolveMigrationsFolder` resolves the same string as an opaque path. Throws on any other shape —
+ * a derivation that silently skipped would exempt nothing and scan nothing.
+ */
+export function packageDirOf(module: WaitronModule): string {
+  const match = MIGRATIONS_FROM.exec(module.migrations.from);
+  if (match === null) {
+    throw new Error(
+      `module ${module.name}: migrations.from (${module.migrations.from}) is not ../<pkg>/drizzle`,
+    );
+  }
+  return match[1]!;
 }

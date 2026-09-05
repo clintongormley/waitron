@@ -23,8 +23,8 @@ import { persons } from "@waitron/identity";
  * in `time_entries` must keep its referent) — so the app role holds SELECT, INSERT, UPDATE and no
  * DELETE (drizzle/0001_workforce_d1a_rls.sql), the same shape as `persons`.
  *
- * No `convenio_ref`: the 2026-08-02 plan §3 listed one, but `convenio` is a Spanish token in
- * `SPANISH_WORDS` (Slice 1) that the English-only guard forbids in this generic package, and it has
+ * No `convenio_ref`: the 2026-08-02 plan §3 listed one, but `convenio` is workforce-es's declared
+ * vocabulary, which the English-only guard forbids in this generic package, and it has
  * no Slice-2 consumer — the convenio figures live in `convenio_config` (D2, packages/workforce-es).
  * A D2 slice adds an English-named reference column then, if one is needed.
  */

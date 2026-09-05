@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "../apps/server/src/modules.js";
+import { packageDirOf } from "../packages/module/src/module.js";
 
 /**
  * Every module descriptor's `requires` must NAME every cross-module dependency its migrations create
@@ -113,16 +114,14 @@ function stripSql(source: string): string {
     .replace(/'(?:[^']|'')*'/g, (literal) => literal.replace(/[^\n]/g, " "));
 }
 
-/** From every descriptor's `migrations.from` (`../<pkg>/drizzle`), the package DIR → module NAME map.
- * A package is only in scope if some descriptor points at it — that is what makes `fiscal-verifactu`
- * resolve to the module named `fiscal`, not to a module named after the directory. */
+/** From every descriptor's `migrations.from` (`../<pkg>/drizzle`), the package DIR → module NAME
+ * map, through `@waitron/module`'s `packageDirOf` — the one place that parses that string to
+ * recover the package directory. A package is only in scope if some descriptor points at it —
+ * that is what makes `fiscal-verifactu` resolve to the module named `fiscal`, not to a module named
+ * after the directory. A descriptor whose `from` has another shape throws rather than silently
+ * dropping its package from the scan. */
 function packageDirToModule(): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const module of ALL_MODULES) {
-    const match = /^\.\.\/(.+)\/drizzle$/.exec(module.migrations.from);
-    if (match?.[1] !== undefined) map.set(match[1], module.name);
-  }
-  return map;
+  return new Map(ALL_MODULES.map((module) => [packageDirOf(module), module.name]));
 }
 
 interface DrizzlePackage {
