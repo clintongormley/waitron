@@ -154,6 +154,15 @@ export const en = {
   "device.till_enrol_title": "Set up this till",
   "device.till_enrol_hint": "Enter the pairing code shown on the dashboard",
   "device.till_enrol_submit": "Set up",
+  // KDS enrol (SP-B4 fresh-display enrol overlay) — the STANDALONE enrol screen the lock screen's
+  // `device.setup` affordance now opens for a FRESH kitchen display, symmetric with the
+  // `device.handheld_enrol_*`/`device.till_enrol_*` overlays above. Its own per-kind title/hint/submit
+  // (the code-field label reuses `device.enrol_code`, which names no device type). A refused code shows
+  // the shared generic `device.enrol_failed`. DISTINCT from the `device.enrol_*` keys above, which the
+  // station screen's own device-mode enrol sub-view still uses.
+  "device.kds_enrol_title": "Set up this kitchen display",
+  "device.kds_enrol_hint": "Enter the pairing code shown on the dashboard",
+  "device.kds_enrol_submit": "Set up",
   "device.enrol_failed": "That pairing code was not accepted. Ask a manager for a new one.",
   // Expo / pass display (KDS-3) — the expediter's cross-station board: a card per open order, its items
   // grouped by course. `expo.open` is the counter's nav control (mirrors `station.open`); `expo.title`
@@ -496,6 +505,9 @@ export const es: Record<StringKey, string> = {
   "device.till_enrol_title": "Configurar esta caja",
   "device.till_enrol_hint": "Introduce el código de emparejamiento que aparece en el panel",
   "device.till_enrol_submit": "Configurar",
+  "device.kds_enrol_title": "Configurar esta pantalla de cocina",
+  "device.kds_enrol_hint": "Introduce el código de emparejamiento que aparece en el panel",
+  "device.kds_enrol_submit": "Configurar",
   "device.enrol_failed":
     "No se aceptó ese código de emparejamiento. Pide uno nuevo a un responsable.",
   "expo.open": "Pase",

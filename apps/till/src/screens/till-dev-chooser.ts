@@ -21,7 +21,7 @@ import type { DevDeviceList, DevMintRequest, TillApi } from "../api/client.js";
  * so the tool renders a load-failure hint instead of an empty, broken-looking list. The hint does not
  * assert the cause: it only KNOWS the list failed to load, not why.
  *
- * Modelled on `till-enrol-screen.ts` / `till-schedule-screen.ts`: `.api` threaded from the app, `wt-*`
+ * Modelled on `till-device-enrol-screen.ts` / `till-schedule-screen.ts`: `.api` threaded from the app, `wt-*`
  * primitives (`wt-card`/`wt-button`/`wt-input`) + token-styled native `<select>`s (there is no
  * `wt-select` primitive — the same fallback the schedule screen's pickers use), `baseStyles`.
  */
