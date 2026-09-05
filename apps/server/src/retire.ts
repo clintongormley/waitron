@@ -86,9 +86,12 @@ export async function retireSelf(deps: RetireDeps): Promise<RetireResult> {
     throw new AppError("node.retire_not_fenced", {});
   }
 
-  // 5. No carrier: fenced, but the held chart names no serving-primary to carry the tail forward, so
-  // the drain cannot be confirmed. Signalled by an `undefined` drain-progress reader. Refused fail-safe.
-  if (deps.readDrainProgress === undefined) {
+  // 5. No carrier: fenced, but no serving-primary is available to carry the tail forward, so the drain
+  // cannot be confirmed. Signalled by an `undefined` drain-progress reader OR an `undefined` boot carrier
+  // id. Boot derives both from the same condition, so in practice they are undefined together; guarding
+  // BOTH here refuses fail-safe on a caller that passes one without the other, and — the point — narrows
+  // `deps.carrierNodeId` to a string for step 5b so the carrier-change guard needs no non-null assertion.
+  if (deps.readDrainProgress === undefined || deps.carrierNodeId === undefined) {
     throw new AppError("node.retire_no_carrier", {});
   }
 
@@ -100,7 +103,7 @@ export async function retireSelf(deps: RetireDeps): Promise<RetireResult> {
   const currentCarrier = servingPrimaryNodeId(held!);
   if (currentCarrier !== deps.carrierNodeId) {
     throw new AppError("node.retire_carrier_changed", {
-      boundCarrierNodeId: deps.carrierNodeId!, // defined: readDrainProgress !== undefined ⇒ carrier bound
+      boundCarrierNodeId: deps.carrierNodeId,
       currentCarrierNodeId: currentCarrier ?? null,
     });
   }

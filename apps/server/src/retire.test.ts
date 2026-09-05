@@ -181,6 +181,23 @@ describe("retireSelf", () => {
     await db.close();
   });
 
+  it("refuses with node.retire_no_carrier when a drain reader is passed but the boot carrier id is undefined", async () => {
+    // Boundary hardening (Copilot): the invariant "readDrainProgress defined ⇒ carrierNodeId defined" is
+    // boot-derived, but retireSelf must not lean on a non-null assertion — a reader passed WITHOUT a
+    // carrier id is refused fail-safe as no_carrier, never a carrier_changed carrying an undefined
+    // boundCarrierNodeId. `deps`'s default would substitute CARRIER_ID, so override carrierNodeId directly.
+    const { db, deps, nodeId } = await fencedNode();
+    await writeNodeMembership(db, heldDoc(nodeId, "sell-only")); // held names a carrier
+    const base = deps(noopLog, async () => drained);
+    const err = await captureError(() => retireSelf({ ...base, carrierNodeId: undefined }));
+    expect(isAppError(err) && err.code).toBe("node.retire_no_carrier");
+
+    const held = await readNodeMembership(db);
+    expect(held?.body.term).toBe(3); // no write
+    expect(held!.body.nodes.find((n) => n.nodeId === nodeId)?.standing).toBe("sell-only");
+    await db.close();
+  });
+
   it("refuses an undrained fenced node with node.retire_not_drained and writes nothing", async () => {
     const { db, deps, nodeId } = await fencedNode();
     await writeNodeMembership(db, heldDoc(nodeId, "sell-only"));
