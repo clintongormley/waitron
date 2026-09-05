@@ -15,8 +15,9 @@ import { contadoresInstalacion, registroSif } from "./schema/sif.js";
  * AEAT caps `IdSistemaInformatico` at two characters (`packages/verifactu`'s `ID_SISTEMA_LENGTH`).
  *
  * Exported because the rule is defined once for the whole package: `registro_sif` carries no CHECK
- * on the column, so EVERY write path into it must apply this bound itself. `./provisioning.ts`'s
- * `parseReservedState` is the second such path (`writeReservedSif` below).
+ * on the column, so every write path into it must apply this bound itself. `registerSif` below
+ * does; so does `./provisioning.ts`'s `parseReservedState`. `writeReservedSif` does not — it is a
+ * primitive its callers validate for.
  */
 export const ID_SISTEMA_MAX_LENGTH = 2;
 
