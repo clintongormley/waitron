@@ -262,14 +262,15 @@ All three decisions are now taken.
    until a till can reach the second box. Route DECIDED 2026-09-05 (the decisions-first line above):
    the auth model does not change — the device cookie stays httpOnly and gains a tenant-domain scope;
    `devices`/`tills`/`device_profiles`/`canvases` must replicate first (config-class, no new table);
-   the promoted cloud serves tills on its public name; the app never talks to the local agent. Then:
-   static ordered server list cached on the till (the membership document's `contactUrl`s),
-   N-consecutive-failure detection with hysteresis, a manual "switch server" control, PIN re-prompt on
-   switch (v1; portable signed token later), idempotency key on settle/pay. Carry the warm-standby
-   cleanups: the `dining_tables` enrolment comment says single-writer-by-construction (drop the
-   "mixed config/runtime" deferral); the config-conflict gate keeps only the fence-window case; R3a's
-   two deferrals (till reads routed through the display-data node; selling gated on REBOOT completion,
-   not the PONR). Rewrite CLAUDE.md §5's "nothing blocks a sale" wording in the same change.
+   the promoted cloud serves tills on its public name; the app never talks to the local agent.
+   **Spec written 2026-09-05, awaiting owner review:**
+   [`2026-09-05-till-reroute-design.md`](superpowers/specs/2026-09-05-till-reroute-design.md) — the
+   till FOLLOWS THE PRIMARY (probe every server, obey `acceptingSales`; no manual switch — owner
+   2026-09-05; a status line + "check again" instead), server list = the membership document's
+   `contactUrl`s (adopt now appends the joining node), PIN re-prompt on a move, `sale.unconfirmed` for
+   the request in flight, CORS + tenant-domain cookie, venue-wide till reads (absorbs R3a's two
+   deferrals), CLAUDE.md §5 rewrite. The `dining_tables` comment and config-conflict-gate cleanups
+   are dropped: both files die with the outbox (swap spec §7). Six slices; the run-it proof is item 2.
 2. **The cloud standby, end to end (MVP)** — the box↔cloud-instance WireGuard link (relay DECIDED
    2026-09-05: none; `@waitron/tunnel`, `WAITRON_TUNNEL_*` and the tunnel-aware dispatcher are
    deleted once the link carries replication, never before — the decisions-first line above), a
