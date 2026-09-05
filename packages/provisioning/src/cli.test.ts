@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { WaitronModule } from "@waitron/module";
+import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { AppError } from "@waitron/shared";
 import type { Database, DeploymentEnvironment } from "@waitron/db";
 import { manifestSets } from "@waitron/migrations";
@@ -29,21 +30,11 @@ const VENUE_RESULT = {
 
 /** The composition list the CLI injects into `planVenue`/`applyVenue`. Fake, because what `venue`
  * decides is which list it threads, not what any real module seeds. */
-function fakeModule(name: string, seed?: { summary: string }): WaitronModule {
-  return {
-    name,
-    version: "0.0.0",
-    tier: "toggleable",
-    migrations: { name, table: `__drizzle_migrations_${name}`, from: `../${name}/drizzle` },
-    ...(seed === undefined
-      ? {}
-      : { provisioning: { seed: { summary: seed.summary, run: async () => "done" } } }),
-  };
-}
-
 const MODULES: readonly WaitronModule[] = [
   fakeModule("core"),
-  fakeModule("probe", { summary: "seed the probe" }),
+  fakeModule("probe", {
+    provisioning: { seed: { summary: "seed the probe", run: async () => "done" } },
+  }),
 ];
 
 /** Every venue option supplied, so a run reaches the apply with no prompt. `--territory ES-common`

@@ -16,6 +16,7 @@ export type {
   ModuleProvisioning,
   NodeSeed,
   ProvisionedNode,
+  SeedReport,
   StandbyProvisioning,
   StandbyReservation,
 } from "./provisioning.js";

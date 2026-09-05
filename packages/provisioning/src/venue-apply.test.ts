@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import type { WaitronModule } from "@waitron/module";
+import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import type { CapabilityFlag } from "@waitron/layouts";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { planVenue, type VenueAction, type VenueRequest } from "./venue-plan.js";
@@ -462,11 +462,7 @@ describe("applyVenue", () => {
 
   describe("seed-module runs the named module's seed inside the venue transaction", () => {
     const seeded: string[] = [];
-    const recorder: WaitronModule = {
-      name: "probe",
-      version: "0.0.0",
-      tier: "toggleable",
-      migrations: { name: "probe", table: "__drizzle_migrations_probe", from: "../probe/drizzle" },
+    const recorder = fakeModule("probe", {
       provisioning: {
         seed: {
           summary: "record the node",
@@ -476,11 +472,8 @@ describe("applyVenue", () => {
           },
         },
       },
-    };
-    const exploding: WaitronModule = {
-      ...recorder,
-      name: "boom",
-      migrations: { name: "boom", table: "__drizzle_migrations_boom", from: "../boom/drizzle" },
+    });
+    const exploding = fakeModule("boom", {
       provisioning: {
         seed: {
           summary: "explode",
@@ -489,7 +482,7 @@ describe("applyVenue", () => {
           },
         },
       },
-    };
+    });
 
     it("runs the seed with the node it just created and reports its line", async () => {
       const modules = [...ALL_MODULES, recorder];
@@ -527,12 +520,7 @@ describe("applyVenue", () => {
       // The guard's other half: the module IS held, but carries no seed to run. Only `deps.modules`
       // is consulted, so a same-named descriptor without the seat is refused exactly as an absent
       // one is — the plan alone never decides what runs.
-      const seedless: WaitronModule = {
-        name: recorder.name,
-        version: recorder.version,
-        tier: recorder.tier,
-        migrations: recorder.migrations,
-      };
+      const seedless = fakeModule(recorder.name);
       await expect(
         applyVenue(plan, { db: suite.db, modules: [...ALL_MODULES, seedless] }),
       ).rejects.toThrow(refusal);

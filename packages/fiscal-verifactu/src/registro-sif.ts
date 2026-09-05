@@ -15,9 +15,11 @@ import { contadoresInstalacion, registroSif } from "./schema/sif.js";
  * AEAT caps `IdSistemaInformatico` at two characters (`packages/verifactu`'s `ID_SISTEMA_LENGTH`).
  *
  * Exported because the rule is defined once for the whole package: `registro_sif` carries no CHECK
- * on the column, so every write path into it must apply this bound itself. `registerSif` below
- * does; so does `./provisioning.ts`'s `parseReservedState`. `writeReservedSif` does not — it is a
- * primitive its callers must validate for.
+ * on the column, so every write path into it must apply this bound itself. Both write primitives do
+ * — `registerSif` and `writeReservedSif` below each open with `assertUsableIdSistema` — so no caller
+ * can put an unusable id into the column. `./provisioning.ts`'s `parseReservedState` applies the
+ * same bound EARLIER on the wire path, reporting `sif.reservation_invalid` for a malformed bundle
+ * before `writeReservedSif` is reached.
  */
 export const ID_SISTEMA_MAX_LENGTH = 2;
 
@@ -152,6 +154,10 @@ function resetChainHead(tx: Transaction, tenantId: TenantId, nodeId: NodeId): Pr
  * retire — a reserved node is new. The `registro_sif_instalacion_uq` unique on
  * (nif, id_sistema_informatico, numero_instalacion) is the never-reuse backstop; a duplicate number
  * raises 23505.
+ *
+ * Opens with `assertUsableIdSistema`, exactly as `registerSif` does: this is the OTHER write path
+ * into `registro_sif.id_sistema_informatico`, the column carries no CHECK, and applying the bound in
+ * both primitives is what makes it an invariant no caller can skip.
  */
 export async function writeReservedSif(
   tx: Transaction,
@@ -163,6 +169,8 @@ export async function writeReservedSif(
     numeroInstalacion: number;
   },
 ): Promise<{ id: string }> {
+  assertUsableIdSistema(params.idSistemaInformatico);
+
   const [inserted] = await tx
     .insert(registroSif)
     .values({

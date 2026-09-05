@@ -1092,12 +1092,17 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // pool is open, and spread it in to form the full `TillConfig` the routes dispatch on — the merge
   // the type demands (`config.till` is `Omit<TillConfig, "orderFlow">`, see `till-config.ts`). A
   // boot-time read, not per request: the mode is stable provisioning-time config.
-  const till: TillConfig = { ...config.till, orderFlow: await readOrderFlow(db, config.till) };
-  // The regime provisioning stamped this node with (`nodes.filing_module`), read ONCE here beside the
-  // order flow for the same reason: it is provisioning-time config. `makeFiscalBackend` cross-checks
-  // it against the enabled fiscal module, so a node whose records were filed under another regime
-  // fails the boot rather than chaining under the wrong one (§5 — unrepairable).
-  const filingModule = await readFilingModule(db, config.till);
+  //
+  // The regime provisioning stamped this node with (`nodes.filing_module`) is read ONCE here beside
+  // it, for the same reason: it too is provisioning-time config. `makeFiscalBackend` cross-checks it
+  // against the enabled fiscal module, so a node whose records were filed under another regime fails
+  // the boot rather than chaining under the wrong one (§5 — unrepairable). The two reads have no
+  // data dependency on each other, so they run together.
+  const [orderFlow, filingModule] = await Promise.all([
+    readOrderFlow(db, config.till),
+    readFilingModule(db, config.till),
+  ]);
+  const till: TillConfig = { ...config.till, orderFlow };
   // The venue's DEFAULT UI locale, derived ONCE now the pool is open — the DISPLAY counterpart to the
   // fiscal `till.locale`/`invoiceLocales` (left untouched). `readVenueLocale` applies the shared
   // `override → province → country → English` chain, reading the tenant's country + the location's
@@ -1126,6 +1131,8 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     app,
     {
       db,
+      // `setsToMigrate` is the ENABLED module set on this (trading) branch — boot.ts:551 — so the
+      // slot picks from what is enabled, not from ALL_MODULES.
       backend: makeFiscalBackend(setsToMigrate, filingModule, db, env),
       clock: systemClock(),
       cfg: till,

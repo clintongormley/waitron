@@ -68,12 +68,16 @@ function parseReservedState(state: unknown): ReservedSifState {
       reason: `idSistemaInformatico is not a string of 1 to ${String(ID_SISTEMA_MAX_LENGTH)} characters`,
     });
   }
-  if (!Number.isInteger(numeroInstalacion) || (numeroInstalacion as number) < 1) {
+  if (
+    typeof numeroInstalacion !== "number" ||
+    !Number.isInteger(numeroInstalacion) ||
+    numeroInstalacion < 1
+  ) {
     throw new AppError("sif.reservation_invalid", {
       reason: "numeroInstalacion is not a positive integer",
     });
   }
-  return { nif, idSistemaInformatico, numeroInstalacion: numeroInstalacion as number };
+  return { nif, idSistemaInformatico, numeroInstalacion };
 }
 
 /**

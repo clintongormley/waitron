@@ -13,16 +13,20 @@ export function fiscalSlot(
   modules: readonly WaitronModule[],
   stamped: string | null,
 ): FiscalContribution {
-  const candidates = modules.filter((m) => m.fiscal !== undefined);
-  if (candidates.length === 0) throw new AppError("module.fiscal_slot_empty", {});
+  // Collect the CONTRIBUTIONS, not the modules: pairing each with its owner's name here is what lets
+  // the checks below read `only.fiscal` without a non-null assertion.
+  const candidates = modules.flatMap((m) =>
+    m.fiscal === undefined ? [] : [{ name: m.name, fiscal: m.fiscal }],
+  );
+  const [only] = candidates;
+  if (only === undefined) throw new AppError("module.fiscal_slot_empty", {});
   if (candidates.length > 1) {
     throw new AppError("module.fiscal_slot_ambiguous", {
-      candidates: candidates.map((m) => m.name),
+      candidates: candidates.map((c) => c.name),
     });
   }
-  const slot = candidates[0]!.fiscal!;
-  if (stamped !== null && stamped !== slot.id) {
-    throw new AppError("module.fiscal_slot_mismatch", { stamped, enabled: slot.id });
+  if (stamped !== null && stamped !== only.fiscal.id) {
+    throw new AppError("module.fiscal_slot_mismatch", { stamped, enabled: only.fiscal.id });
   }
-  return slot;
+  return only.fiscal;
 }

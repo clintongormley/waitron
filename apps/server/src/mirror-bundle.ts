@@ -135,9 +135,9 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
   const modules = enabledModules(ALL_MODULES, moduleConfig);
 
   // Reserve the standby's dormant identity through each enabled module's provisioning seat
-  // (reserved-standby-identity design §6 R2) and unseal the primary's identity key IN PARALLEL — the
-  // two have no data dependency (the endorsement needs only the private key + `deps.standby`, never
-  // `reserved`).
+  // (reserved-standby-identity design §6 R2), unseal the primary's identity key, and read the box CA
+  // IN PARALLEL — the three have no data dependency (the endorsement needs only the private key +
+  // `deps.standby`, never `reserved`, and the CA is a file read).
   //
   // The reservation shares ONE `withTenant` transaction, so every module's reads and its allocation are
   // consistent with each other. What a module reserves, and what it throws when the primary is not in a
@@ -147,7 +147,7 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
   // PRIVATE key, unsealed as `app_user` inside `readNodeIdentityKey`'s own transaction, and `endorseKey`
   // signs canonicalize({nodeId, publicKey}) so the endorsement chains the standby's key back to the
   // primary's setup-established trust anchor (reserved-standby-identity §4).
-  const [reserved, primaryPrivateKey] = await Promise.all([
+  const [reserved, primaryPrivateKey, boxCaPem] = await Promise.all([
     withTenant(deps.appDb, deps.designated.tenantId, async (tx) => {
       const primary = {
         tenantId: brandTenantId(deps.designated.tenantId),
@@ -165,6 +165,7 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
       return { modules: states, series };
     }),
     readNodeIdentityKey(deps.appDb, deps.ring, deps.designated.tenantId),
+    readFile(caCertPath(deps.stateDir), "utf8"),
   ]);
 
   const endorsement = endorseKey(
@@ -173,8 +174,6 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
     deps.designated.nodeId,
     primaryPrivateKey,
   );
-
-  const boxCaPem = await readFile(caCertPath(deps.stateDir), "utf8");
 
   // `enrolPeer` INSERTs a `sync_peers` row (not idempotent, not auto-reaped), so it runs AFTER the
   // reads have succeeded — never concurrently with them. Were it folded in with a read, a rejected

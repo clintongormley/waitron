@@ -1,26 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { WaitronModule } from "@waitron/module";
+import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { isAppError } from "@waitron/shared";
 import { obligadoTenantId } from "./tenant-id.js";
 import { describeVenueAction, planVenue, type VenueRequest } from "./venue-plan.js";
 
 // planVenue is generic over the module list now, so these tests build their own: a seedless module
 // and a seeding one, which is all the planner reads.
-function fakeModule(name: string, seed?: { summary: string }): WaitronModule {
-  return {
-    name,
-    version: "0.0.0",
-    tier: "toggleable",
-    migrations: { name, table: `__drizzle_migrations_${name}`, from: `../${name}/drizzle` },
-    ...(seed === undefined
-      ? {}
-      : { provisioning: { seed: { summary: seed.summary, run: async () => "done" } } }),
-  };
-}
-
 const MODULES: readonly WaitronModule[] = [
   fakeModule("core"),
-  fakeModule("probe", { summary: "seed the probe" }),
+  fakeModule("probe", {
+    provisioning: { seed: { summary: "seed the probe", run: async () => "done" } },
+  }),
 ];
 
 function request(overrides: Partial<VenueRequest> = {}): VenueRequest {
@@ -268,9 +259,13 @@ describe("planVenue", () => {
 
   it("emits one seed-module per module declaring a seed, last, in list order, carrying its summary", () => {
     const seeds = planVenue(request(), [
-      fakeModule("b", { summary: "seed b" }),
+      fakeModule("b", {
+        provisioning: { seed: { summary: "seed b", run: async () => "done" } },
+      }),
       fakeModule("core"),
-      fakeModule("a", { summary: "seed a" }),
+      fakeModule("a", {
+        provisioning: { seed: { summary: "seed a", run: async () => "done" } },
+      }),
     ]).filter((a) => a.kind === "seed-module");
     expect(seeds).toEqual([
       { kind: "seed-module", module: "b", summary: "seed b" },

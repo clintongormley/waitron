@@ -83,6 +83,12 @@ declare module "@waitron/shared" {
      * publishes no path to its `errors.ts` — so a consumer cannot follow this repo's "the throwing
      * file imports the registry directly" convention across that boundary. Move both codes down if
      * a package ever needs to throw them.
+     *
+     * It has NO production thrower today: the last one was `provisionNode`'s own tenant read, which
+     * SP-3c moved into the fiscal module's seed (that seed reads `tenants.tax_id` and throws a plain
+     * Error for an absent row, since the node's FK makes it unreachable). It stays because this
+     * file's other codes cite the note above as their naming rule, and because the error-boundary
+     * and till-api suites use it as their sample code.
      */
     "tenant.not_found": { id: string };
     /**

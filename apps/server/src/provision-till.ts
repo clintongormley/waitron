@@ -4,7 +4,7 @@
 import { and, eq } from "drizzle-orm";
 import { nodes, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import type { WaitronModule } from "@waitron/module";
+import type { SeedReport, WaitronModule } from "@waitron/module";
 import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import type { NodeId, TenantId } from "@waitron/shared";
 import "./errors.js";
@@ -42,7 +42,7 @@ export async function provisionNode(
   db: Database,
   params: ProvisionNodeParams,
   modules: readonly WaitronModule[],
-): Promise<{ module: string; report: string }[]> {
+): Promise<readonly SeedReport[]> {
   return withTenant(db, params.tenantId, async (tx) => {
     const locationId = await ownedNodeLocation(tx, params.tenantId, params.nodeId);
     const node = {
@@ -50,7 +50,7 @@ export async function provisionNode(
       locationId: brandLocationId(locationId),
       nodeId: params.nodeId,
     };
-    const seeded: { module: string; report: string }[] = [];
+    const seeded: SeedReport[] = [];
     for (const m of modules) {
       if (m.provisioning?.seed === undefined) continue;
       seeded.push({ module: m.name, report: await m.provisioning.seed.run(tx, node) });

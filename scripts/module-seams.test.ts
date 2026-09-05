@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -35,10 +35,10 @@ const REGIME_PACKAGES = ["@waitron/fiscal-verifactu", "@waitron/verifactu"];
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
-  for (const entry of readdirSync(dir)) {
-    const p = join(dir, entry);
-    if (statSync(p).isDirectory()) {
-      if (entry === "testing" || entry === "node_modules") continue;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === "testing" || entry.name === "node_modules") continue;
       out.push(...sourceFiles(p));
     } else if (p.endsWith(".ts") && !p.endsWith(".test.ts")) out.push(p);
   }

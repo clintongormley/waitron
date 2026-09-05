@@ -9,7 +9,7 @@ import {
   tenantId as brandTenantId,
 } from "@waitron/shared";
 import type { CapabilityFlag } from "@waitron/layouts";
-import type { WaitronModule } from "@waitron/module";
+import type { SeedReport, WaitronModule } from "@waitron/module";
 import type { VenueAction } from "./venue-plan.js";
 
 export interface VenueApplyDeps {
@@ -33,7 +33,7 @@ export interface VenueResult {
    * create-series gate below never returns a phantom id for a row it did not insert). */
   seriesIds: string[];
   /** One entry per `seed-module` action run, in plan order: the module and its one-line report. */
-  seeded: { module: string; report: string }[];
+  seeded: readonly SeedReport[];
 }
 
 /**
@@ -70,7 +70,7 @@ export async function applyVenue(
     let locationId = "";
     let tillId = "";
     let nodeId = "";
-    const seeded: { module: string; report: string }[] = [];
+    const seeded: SeedReport[] = [];
     const seriesIds: string[] = [];
 
     for (const action of actions) {

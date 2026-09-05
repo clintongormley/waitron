@@ -6,7 +6,7 @@ import {
   esPrimerRegistro,
   reserveInstallationNumber,
   writeReservedSif,
-} from "./index.js";
+} from "./registro-sif.js";
 import { seedNodesForSifContention, type SifContentionFixture } from "./testing/seed.js";
 
 /**

@@ -20,6 +20,14 @@ export interface NodeSeed {
   run(tx: Transaction, node: ProvisionedNode): Promise<string>;
 }
 
+/** One module's line in a provisioning run's summary: which module seeded, and the one-line report
+ * its `NodeSeed.run` returned. Named here because both runners (`@waitron/provisioning`'s
+ * `applyVenue` and `apps/server`'s `provisionNode`) return a list of these. */
+export interface SeedReport {
+  readonly module: string;
+  readonly report: string;
+}
+
 export interface StandbyReservation {
   /** Module-owned, opaque to the carrier, JSON-serialisable (it rides the mirror bundle). */
   readonly state: unknown;

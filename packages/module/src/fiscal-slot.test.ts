@@ -1,27 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { isAppError } from "@waitron/shared";
 import type { FiscalBackend, FiscalContribution } from "@waitron/fiscal";
 import { fiscalSlot } from "./fiscal-slot.js";
-import type { WaitronModule } from "./module.js";
+import { fakeModule } from "./testing/fake-module.js";
 
 const contribution = (id: string): FiscalContribution => ({
   id,
   makeBackend: () => ({ id }) as unknown as FiscalBackend,
 });
 
-function descriptor(name: string, fiscal?: FiscalContribution): WaitronModule {
-  return {
-    name,
-    version: "0.0.0",
-    tier: "toggleable",
-    migrations: { name, table: `__drizzle_migrations_${name}`, from: `../${name}/drizzle` },
-    ...(fiscal === undefined ? {} : { fiscal }),
-  };
-}
-
-const CORE = descriptor("core");
-const A = descriptor("a", contribution("a"));
-const B = descriptor("b", contribution("b"));
+const CORE = fakeModule("core");
+const A = fakeModule("a", { fiscal: contribution("a") });
+const B = fakeModule("b", { fiscal: contribution("b") });
 
 describe("fiscalSlot", () => {
   it("selects the one module declaring a fiscal contribution", () => {
@@ -33,15 +22,9 @@ describe("fiscalSlot", () => {
   });
 
   it("throws module.fiscal_slot_empty when no module contributes", () => {
-    const err = (() => {
-      try {
-        fiscalSlot([CORE], null);
-        return undefined;
-      } catch (e) {
-        return e;
-      }
-    })();
-    expect(isAppError(err) && err.code).toBe("module.fiscal_slot_empty");
+    expect(() => fiscalSlot([CORE], null)).toThrow(
+      expect.objectContaining({ code: "module.fiscal_slot_empty" }),
+    );
   });
 
   it("throws module.fiscal_slot_ambiguous naming both candidates when two contribute", () => {
