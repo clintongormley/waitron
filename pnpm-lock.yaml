@@ -767,6 +767,12 @@ importers:
 
   packages/module:
     dependencies:
+      '@waitron/db':
+        specifier: workspace:*
+        version: link:../db
+      '@waitron/fiscal':
+        specifier: workspace:*
+        version: link:../fiscal
       '@waitron/migrations':
         specifier: workspace:*
         version: link:../migrations

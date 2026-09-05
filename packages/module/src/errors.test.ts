@@ -30,4 +30,13 @@ describe("module error registry", () => {
     });
     expect(isAppError(invalid) && invalid.code).toBe("module.requires_invalid");
   });
+
+  it("constructs the fiscal-slot codes with their params", () => {
+    const empty = new AppError("module.fiscal_slot_empty", {});
+    expect(isAppError(empty) && empty.code).toBe("module.fiscal_slot_empty");
+    const ambiguous = new AppError("module.fiscal_slot_ambiguous", { candidates: ["a", "b"] });
+    expect(isAppError(ambiguous) && ambiguous.code).toBe("module.fiscal_slot_ambiguous");
+    const mismatch = new AppError("module.fiscal_slot_mismatch", { stamped: "b", enabled: "a" });
+    expect(isAppError(mismatch) && mismatch.code).toBe("module.fiscal_slot_mismatch");
+  });
 });

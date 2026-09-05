@@ -12,6 +12,14 @@ export {
   parseModuleOverrides,
   serializeModuleConfig,
 } from "./config.js";
+export type {
+  ModuleProvisioning,
+  NodeSeed,
+  ProvisionedNode,
+  StandbyProvisioning,
+  StandbyReservation,
+} from "./provisioning.js";
+export { fiscalSlot } from "./fiscal-slot.js";
 export type { Reconciliation } from "./reconcile.js";
 export { reconcile } from "./reconcile.js";
 import "./errors.js";
