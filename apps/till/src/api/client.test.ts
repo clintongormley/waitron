@@ -170,7 +170,6 @@ describe("TillApi", () => {
       tipsEnabled: false,
       canvas: {
         formFactor: "till",
-        capabilities: [],
         tabs: [
           {
             key: "counter",
@@ -180,6 +179,8 @@ describe("TillApi", () => {
           },
         ],
       },
+      // Capabilities ride the payload as an explicit sibling of `canvas` (device-profile §5.3, Task 9).
+      capabilities: [],
       receipt: { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias por su visita" },
     };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(info));

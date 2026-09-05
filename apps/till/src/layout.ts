@@ -66,10 +66,12 @@ export interface ThemeOverride {
   tokens: Record<string, string>;
 }
 
+// Capabilities NO LONGER live on the canvas — they relocated onto the device profile and now ride the
+// `/api/till` payload as an explicit `capabilities` sibling (device-profile design 2026-09-05 §5.3,
+// Task 9). See `TillInfo.capabilities` in `api/client.ts`; the render axis reads them there.
 export interface CanvasDef {
   formFactor: FormFactor;
   tabs: TabDef[];
-  capabilities: CapabilityFlag[];
   theme?: ThemeOverride;
 }
 

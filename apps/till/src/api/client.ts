@@ -19,7 +19,7 @@
 // The till's LOCAL canvas/receipt shapes (`../layout.ts`) — plain data, browser-safe, bundle-decoupled
 // exactly like every interface below. `GET /api/till` carries the device's layout canvas + the receipt
 // trim; importing these from `../layout.js` (never `@waitron/layouts`) keeps the decoupling.
-import type { CanvasDef, ReceiptConfig } from "../layout.js";
+import type { CanvasDef, CapabilityFlag, ReceiptConfig } from "../layout.js";
 // `StationThresholds`/`TimingBand` are plain data shapes from the GENERIC `@waitron/shared` package
 // (not a server package), so importing their types here doesn't reintroduce the bundle-decoupling risk
 // the note above warns about — every till widget already depends on `@waitron/shared` for money/locale
@@ -95,6 +95,14 @@ export interface TillInfo {
    * counter tab.
    */
   canvas: CanvasDef;
+  /**
+   * The CALLING device's CAPABILITY set (device-profile design 2026-09-05 §5.3, Task 9). Relocated OFF
+   * the canvas onto the device profile, so it rides the payload as an explicit sibling rather than inside
+   * `canvas`. `profile.capabilities` for a device with a profile; `[]` for a no-profile or cookieless
+   * request. The render axis (`card-grid.ts`) hides `tender-pay`/`kds-board` when the required flag is
+   * absent. REQUIRED — the server resolves one for every boot.
+   */
+  capabilities: CapabilityFlag[];
 }
 
 /**

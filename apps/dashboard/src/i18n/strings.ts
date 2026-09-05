@@ -564,8 +564,6 @@ export const en = {
   "canvas_editor.config_columns": "Product columns",
   "canvas_editor.visible_when": "Show only when",
   "canvas_editor.permission_note": "Only shown to staff with the required permission",
-  "canvas_editor.capability_warning":
-    "This card needs a capability that this canvas doesn't have — enable it in canvas settings",
   // Tab settings (B7)
   "canvas_editor.tab_settings": "Tab settings",
   "canvas_editor.tab_title": "Tab name",
@@ -574,7 +572,6 @@ export const en = {
   // Canvas settings (B7)
   "canvas_editor.canvas_settings": "Canvas settings",
   "canvas_editor.name": "Name",
-  "canvas_editor.capabilities": "Capabilities",
   "canvas_editor.save": "Save",
   "canvas_editor.cancel": "Cancel",
   // NOTE: the canvas-editor client-side validation banner pseudo-codes (canvas_editor.err_*) live in
@@ -1101,8 +1098,6 @@ export const es: Record<StringKey, string> = {
   "canvas_editor.config_columns": "Columnas de productos",
   "canvas_editor.visible_when": "Mostrar solo cuando",
   "canvas_editor.permission_note": "Solo se muestra al personal con el permiso necesario",
-  "canvas_editor.capability_warning":
-    "Esta tarjeta necesita una capacidad que este lienzo no tiene: actívala en los ajustes del lienzo",
   // Ajustes de pestaña (B7)
   "canvas_editor.tab_settings": "Ajustes de pestaña",
   "canvas_editor.tab_title": "Nombre de la pestaña",
@@ -1111,7 +1106,6 @@ export const es: Record<StringKey, string> = {
   // Ajustes del lienzo (B7)
   "canvas_editor.canvas_settings": "Ajustes del lienzo",
   "canvas_editor.name": "Nombre",
-  "canvas_editor.capabilities": "Capacidades",
   "canvas_editor.save": "Guardar",
   "canvas_editor.cancel": "Cancelar",
   // (canvas_editor.err_* viven en i18n/codes.ts, no aquí — ver la nota en el mapa `en`.)

@@ -57,7 +57,7 @@ import type {
   TillProduct,
   TillSaleResult,
 } from "./api/client.js";
-import type { CanvasDef, ReceiptConfig, TabDef } from "./layout.js";
+import type { CanvasDef, CapabilityFlag, ReceiptConfig, TabDef } from "./layout.js";
 import type { ShellAffordance } from "./widgets/tab-shell.js";
 import type { OrderLine } from "./state/working-order.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
@@ -472,6 +472,14 @@ export class TillApp extends LitElement {
    */
   @state() private canvas?: CanvasDef;
   /**
+   * The CALLING device's CAPABILITY set (device-profile design 2026-09-05 §5.3, Task 9) — read from
+   * `GET /api/till` on boot, relocated OFF the canvas onto the device profile. Threaded to the card grid,
+   * which HIDES a card whose `requiredCapability` is absent (`tender-pay` → `integrated-card-payment`,
+   * `kds-board` → `act-as-kds`). Defaults to `[]` (nothing capability-gated shows) — the value a
+   * no-profile / cookieless boot resolves to.
+   */
+  @state() private capabilities: CapabilityFlag[] = [];
+  /**
    * The authored NON-FISCAL receipt trim (header subtitle + footer message), read from `GET /api/till`
    * on boot and threaded to `till-ticket-view`. Defaults to `{}` (no trim) — the value an older server
    * that omits the field, or a tenant that never opened the receipt editor, resolves to. It renders
@@ -612,6 +620,9 @@ export class TillApp extends LitElement {
       // The device's layout canvas (SP-B), always present on a successful boot. The shell renders its
       // tabs; `#tabBody` hands the `counter` tab to the counter screen as its `counterTab`.
       this.canvas = till.canvas;
+      // The device's capability set (device-profile §5.3, Task 9) — relocated off the canvas onto the
+      // profile, now an explicit payload sibling. Threaded to the card grid's render axis.
+      this.capabilities = till.capabilities;
       // The initial active tab for the canvas tab shell (SP-B2.1) — the first authored tab (the
       // `counter` tab by convention).
       this.activeTabKey = till.canvas.tabs[0]?.key;
@@ -2126,7 +2137,7 @@ export class TillApp extends LitElement {
     return html`<till-card-grid
       .tab=${tab}
       .store=${this.#store}
-      .capabilities=${this.canvas?.capabilities ?? []}
+      .capabilities=${this.capabilities}
       .canConfigureTill=${this.canEdit}
       .products=${this.products}
       .heldOrders=${this.heldOrders}

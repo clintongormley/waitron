@@ -14,8 +14,8 @@ import {
   setPersonLocale,
 } from "@waitron/identity";
 import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalogue";
-import { getReceipt, getCanvas, getCanvasForFormFactor } from "@waitron/layouts";
-import type { CanvasDef } from "@waitron/layouts";
+import { getReceipt, getCanvas, getCanvasForFormFactor, getDeviceProfile } from "@waitron/layouts";
+import type { CanvasDef, CapabilityFlag } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
 import { createErrorBoundary } from "./error-boundary.js";
@@ -660,25 +660,37 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // The authored receipt trim, or the built-in default when the tenant has never opened the editor:
         // `getReceipt` reads it from `tenant_receipts`, returning DEFAULT_RECEIPT on absence — no backfill.
         const receipt = await getReceipt(tx, deps.cfg.tenantId);
-        // SP-B4: EVERY request resolves a CanvasDef (never undefined), so the counter always has a canvas
-        // to render. Cookieless (no device) → the `till` form-factor default (`getCanvasForFormFactor`
-        // falls back to DEFAULT_CANVASES.till when the tenant has authored none). An enrolled device →
-        // its explicitly assigned canvas if the id resolves, else the built-in/default canvas for its
-        // form factor.
+        // SP-B4 + device-profile §5.3: EVERY request resolves a CanvasDef (never undefined) plus the
+        // device's capability set, so the counter always has a canvas to render and the render axis
+        // knows which capability cards to draw. Capabilities relocated OFF the canvas onto the device
+        // PROFILE (Task 9), so both the canvas and the capabilities resolve THROUGH the profile:
+        //  - Cookieless (no device) → the `till` form-factor default canvas + `capabilities: []`.
+        //  - An enrolled device → resolve its profile (`getDeviceProfile`). The canvas is the profile's
+        //    referenced canvas if `profile.canvasId` resolves, else the built-in/default for the device's
+        //    form factor; the capabilities are `profile.capabilities`.
+        //  - An enrolled device with NO profile (`deviceProfileId === null`) → the form-factor default
+        //    canvas + `capabilities: []` (the render axis hides the capability cards; the server firewall
+        //    already refuses their actions — this makes render and firewall agree, design §5.3).
         let canvas: CanvasDef;
+        let capabilities: CapabilityFlag[] = [];
         if (device != null) {
+          const profile =
+            device.deviceProfileId != null
+              ? await getDeviceProfile(tx, deps.cfg.tenantId, device.deviceProfileId)
+              : undefined;
+          capabilities = profile?.capabilities ?? [];
           let assigned: CanvasDef | undefined;
-          if (device.canvasId != null) {
-            assigned = (await getCanvas(tx, deps.cfg.tenantId, device.canvasId))?.definition;
+          if (profile?.canvasId != null) {
+            assigned = (await getCanvas(tx, deps.cfg.tenantId, profile.canvasId))?.definition;
           }
           // The `?.definition` (getCanvas's return is optional) then `??` is belt-and-braces: a
           // NON-null `canvasId` that resolves to NO canvas is UNREACHABLE by construction, so it
-          // is intentionally untested. The composite FK `devices(tenant_id, canvas_id) →
-          // canvases(tenant_id, id)` is ON DELETE RESTRICT
-          // (packages/db/drizzle/0095_parched_meteorite.sql:16), enforced even on PGlite: a device can
-          // neither be enrolled with a non-existent canvas id (FK violation at insert) nor keep a
-          // reference to a canvas deleted out from under it (RESTRICT blocks the delete). The `??` still
-          // yields a valid form-factor default should that invariant ever be relaxed.
+          // is intentionally untested. The composite FK `device_profiles(tenant_id, canvas_id) →
+          // canvases(tenant_id, id)` is ON DELETE RESTRICT (device_profiles migration), enforced even on
+          // PGlite: a profile can neither reference a non-existent canvas id (FK violation at insert) nor
+          // keep a reference to a canvas deleted out from under it (RESTRICT blocks the delete). The `??`
+          // still yields a valid form-factor default should that invariant ever be relaxed, and covers a
+          // profile whose `canvasId` is NULL (a "default canvas + these capabilities" profile, §5.2).
           canvas =
             assigned ??
             (await getCanvasForFormFactor(tx, deps.cfg.tenantId, deviceFormFactor(device.kind)));
@@ -692,6 +704,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           courses,
           receipt,
           canvas,
+          capabilities,
         };
       });
       /* v8 ignore start */
@@ -745,10 +758,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // Rides this same unauthenticated boot fetch, so the till makes no second request.
         receipt: boot.receipt,
         // The calling device's resolved layout CANVAS (SP-B4), a bare `CanvasDef`, ALWAYS present so the
-        // counter always has a canvas to render. For an enrolled device it is the assigned canvas if the
-        // `canvasId` resolves, else the built-in default for its form factor; for a cookieless request it
-        // is the `till` form-factor default. There is no longer a `layout` field — the canvas replaces it.
+        // counter always has a canvas to render. For an enrolled device it is the profile's referenced
+        // canvas if it resolves, else the built-in default for its form factor; for a cookieless request
+        // it is the `till` form-factor default. There is no longer a `layout` field — the canvas replaces it.
         canvas: boot.canvas,
+        // The calling device's CAPABILITY set (device-profile §5.3, Task 9). Relocated OFF the canvas onto
+        // the device profile, so it rides the payload as an explicit sibling rather than inside `canvas`.
+        // `profile.capabilities` for an enrolled device with a profile; `[]` for a no-profile or cookieless
+        // request — the render axis hides `tender-pay`/`kds-board` when the flag is absent (`card-grid.ts`).
+        capabilities: boot.capabilities,
       });
     }),
   );

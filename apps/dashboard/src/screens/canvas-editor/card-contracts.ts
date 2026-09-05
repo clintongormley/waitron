@@ -168,11 +168,11 @@ export interface TabDef {
   columns: number;
   cards: CardInstance[];
 }
-/** A whole canvas (mirror of CanvasDef). */
+/** A whole canvas (mirror of CanvasDef). Capabilities relocated onto the device profile (Task 9), so
+ * they are no longer part of the canvas record. */
 export interface CanvasDef {
   formFactor: FormFactor;
   tabs: TabDef[];
-  capabilities: CapabilityFlag[];
   theme?: { tokens: Record<string, string> };
 }
 
@@ -184,7 +184,6 @@ export interface CanvasDef {
 // by card-contracts.parity.test.ts, which deep-imports the pure source and asserts deep equality.
 const TILL: CanvasDef = {
   formFactor: "till",
-  capabilities: ["integrated-card-payment", "open-cash-drawer"],
   tabs: [
     {
       key: "counter",
@@ -209,7 +208,6 @@ const TILL: CanvasDef = {
 
 const PHONE: CanvasDef = {
   formFactor: "phone-portrait",
-  capabilities: [],
   tabs: [
     {
       key: "floor",
@@ -228,7 +226,6 @@ const PHONE: CanvasDef = {
 
 const TABLET: CanvasDef = {
   formFactor: "tablet-landscape",
-  capabilities: [],
   tabs: [
     {
       key: "floor",
@@ -247,7 +244,6 @@ const TABLET: CanvasDef = {
 
 const KDS: CanvasDef = {
   formFactor: "kds",
-  capabilities: ["act-as-kds"],
   tabs: [
     {
       key: "kitchen",

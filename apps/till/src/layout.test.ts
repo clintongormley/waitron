@@ -6,7 +6,6 @@ describe("CanvasDef mirror", () => {
   it("accepts a canvas literal shaped like the layouts package", () => {
     const canvas: CanvasDef = {
       formFactor: "till",
-      capabilities: ["integrated-card-payment", "open-cash-drawer"],
       tabs: [
         {
           key: "counter",

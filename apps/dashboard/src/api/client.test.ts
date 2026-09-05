@@ -1917,7 +1917,7 @@ describe("DashboardApi — canvas editor CRUD (SP-B3.2)", () => {
       jsonResponse({
         id: "c1",
         name: "Till",
-        definition: { formFactor: "till", tabs: [], capabilities: [] },
+        definition: { formFactor: "till", tabs: [] },
       }),
     );
     const api = new DashboardApi("", fetchImpl);
@@ -1931,7 +1931,7 @@ describe("DashboardApi — canvas editor CRUD (SP-B3.2)", () => {
   it("createCanvas POSTs name+definition and returns the id", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "c9" }, true, 201));
     const api = new DashboardApi("", fetchImpl);
-    const def = { formFactor: "till", tabs: [], capabilities: [] };
+    const def = { formFactor: "till", tabs: [] };
     const r = await api.createCanvas("New", def);
     expect(fetchImpl).toHaveBeenCalledWith(
       "/management-api/canvases",
@@ -1946,7 +1946,7 @@ describe("DashboardApi — canvas editor CRUD (SP-B3.2)", () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
     await expect(
-      api.updateCanvas("c1", "N", { formFactor: "till", tabs: [], capabilities: [] }),
+      api.updateCanvas("c1", "N", { formFactor: "till", tabs: [] }),
     ).resolves.toBeUndefined();
     expect(fetchImpl).toHaveBeenCalledWith(
       "/management-api/canvases/c1",

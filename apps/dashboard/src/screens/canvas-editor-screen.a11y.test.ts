@@ -19,7 +19,6 @@ const canvases: Canvas[] = [
     name: "Counter till",
     definition: {
       formFactor: "till",
-      capabilities: [],
       tabs: [
         {
           key: "counter",

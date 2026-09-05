@@ -102,11 +102,29 @@ async function enrolDeviceFixture(): Promise<{
 const NO_BINDINGS = {
   tillId: null,
   canvasId: null,
+  deviceProfileId: null,
   receiptPrinterId: null,
   hasCashDrawer: false,
   cardProvider: "none",
   cardReaderId: null,
 } as const;
+
+/** Insert a `device_profiles` row on the admin connection (RLS bypassed — pure setup, the
+ * `enrolTillDeviceFixture` canvas-insert shape). Carries the capability set that the capability firewall
+ * now reads THROUGH the device profile (device-profile design 2026-09-05 §5.3, Task 9). `canvasId` is
+ * optional — a profile may reference a canvas or fall back to the form-factor default (§5.2). */
+async function seedDeviceProfile(
+  cfg: TillConfig,
+  name: string,
+  capabilities: CapabilityFlag[],
+  canvasId: string | null = null,
+): Promise<string> {
+  const prof = await suite.admin.execute<{ id: string }>(sql`
+    insert into device_profiles (tenant_id, name, canvas_id, capabilities)
+    values (${cfg.tenantId}, ${name}, ${canvasId}::uuid, ${JSON.stringify(capabilities)}::jsonb)
+    returning id`);
+  return prof.rows[0]!.id;
+}
 
 /** Enrol a REAL `till` device carrying a NON-NULL canvas + hardware binding (SP-A.2 §16) — a layout
  * canvas the manager authored, the seeded till, a cash drawer, and an integrated card reader. Proves
@@ -118,6 +136,7 @@ async function enrolTillDeviceFixture(): Promise<{
   deviceId: string;
   token: string;
   canvasId: string;
+  deviceProfileId: string;
 }> {
   const { cfg } = await setupStation();
   const prof = await suite.admin.execute<{ id: string }>(sql`
@@ -125,14 +144,23 @@ async function enrolTillDeviceFixture(): Promise<{
     values (${cfg.tenantId}, 'Front counter', ${JSON.stringify(DEFAULT_CANVASES.till)}::jsonb)
     returning id`);
   const canvasId = prof.rows[0]!.id;
+  // The device profile carries the capabilities the firewall now reads (Task 9): both fenced flags, the
+  // values `DEFAULT_PROFILE_CAPABILITIES.till` seeds. Its canvas reference is the front-counter canvas.
+  const deviceProfileId = await seedDeviceProfile(
+    cfg,
+    "Counter",
+    ["integrated-card-payment", "open-cash-drawer"],
+    canvasId,
+  );
   const { code } = await asApp(suite.admin, cfg, (tx) =>
     // A `till` is sale-capable, so it REQUIRES a till_id (SP-A.2 §16.4) — the seeded till. It also
-    // carries the assigned canvas + the hardware trio (cash drawer + integrated card reader).
+    // carries the assigned canvas, the device profile, and the hardware trio (cash drawer + reader).
     generatePairingCode(tx, cfg, {
       kind: "till",
       stationId: null,
       tillId: cfg.tillId,
       canvasId,
+      deviceProfileId,
       hasCashDrawer: true,
       cardProvider: "stripe_terminal",
       cardReaderId: "reader_ABC",
@@ -140,7 +168,7 @@ async function enrolTillDeviceFixture(): Promise<{
     }),
   );
   const dev = await asApp(suite.admin, cfg, (tx) => enrolDevice(tx, cfg, { code }));
-  return { cfg, deviceId: dev.deviceId, token: dev.token, canvasId };
+  return { cfg, deviceId: dev.deviceId, token: dev.token, canvasId, deviceProfileId };
 }
 
 /** Flip `active = false` on the superuser connection — the revocation a `device.manage` route performs.
@@ -249,11 +277,12 @@ async function probeAssert(
   return { ok: false, code: isAppError(thrown) ? thrown.code : String(thrown) };
 }
 
-/** Enrol a REAL handheld carrying an ASSIGNED canvas whose capabilities are `[]` (the phone-portrait
- * default) — the generalised stand-in for the old hardcoded handheld: a device that reaches a fenced
- * route but whose canvas declares NEITHER `integrated-card-payment` NOR `open-cash-drawer`, so the
- * capability firewall refuses it exactly as `assertNotHandheld` refused it by kind. The canvas row is
- * inserted on the admin connection (RLS bypassed) — pure setup, the `enrolTillDeviceFixture` shape. */
+/** Enrol a REAL handheld carrying an ASSIGNED device profile whose capabilities are `[]` (Task 9) — the
+ * generalised stand-in for the old hardcoded handheld: a device that reaches a fenced route but whose
+ * PROFILE declares NEITHER `integrated-card-payment` NOR `open-cash-drawer`, so the capability firewall
+ * refuses it exactly as `assertNotHandheld` refused it by kind. Both the phone-portrait canvas and the
+ * empty-capability profile are inserted on the admin connection (RLS bypassed) — pure setup, the
+ * `enrolTillDeviceFixture` shape. */
 async function enrolHandheldWithCanvasFixture(): Promise<{
   cfg: TillConfig;
   deviceId: string;
@@ -265,14 +294,17 @@ async function enrolHandheldWithCanvasFixture(): Promise<{
     values (${cfg.tenantId}, 'Waiter phone', ${JSON.stringify(DEFAULT_CANVASES["phone-portrait"])}::jsonb)
     returning id`);
   const canvasId = prof.rows[0]!.id;
+  // The profile declares NO capabilities — the render/firewall source of truth after the Task 9 cutover.
+  const deviceProfileId = await seedDeviceProfile(cfg, "Waiter", [], canvasId);
   const { code } = await asApp(suite.admin, cfg, (tx) =>
     // A handheld is sale-capable, so it REQUIRES a till_id (SP-A.2 §16.4) — the seeded till. It carries
-    // the phone-portrait canvas, whose `capabilities: []` grant neither fenced flag.
+    // the phone-portrait canvas and a profile whose `capabilities: []` grant neither fenced flag.
     generatePairingCode(tx, cfg, {
       kind: "handheld",
       stationId: null,
       tillId: cfg.tillId,
       canvasId,
+      deviceProfileId,
       label: "Waiter phone",
     }),
   );
@@ -372,9 +404,9 @@ describe("requireDevice (real Postgres)", () => {
     expect(await lastSeenAt(deviceId)).not.toBeNull(); // the guard recorded the sighting
   });
 
-  it("carries the device's assigned canvas + till + hardware bindings back on the binding (SP-A.2 §16)", async () => {
-    const { cfg, deviceId, token, canvasId } = await enrolTillDeviceFixture();
-    // A `till` device with a NON-NULL canvas, till and hardware binding surfaces every column
+  it("carries the device's assigned canvas + profile + till + hardware bindings back on the binding (SP-A.2 §16, device-profile §5)", async () => {
+    const { cfg, deviceId, token, canvasId, deviceProfileId } = await enrolTillDeviceFixture();
+    // A `till` device with a NON-NULL canvas, profile, till and hardware binding surfaces every column
     // verbatim — the fields the boot reads (`/api/device/me`, `/api/till`) later echo.
     expect(await probe(cfg, `${deviceId}.${token}`)).toEqual({
       ok: true,
@@ -384,6 +416,7 @@ describe("requireDevice (real Postgres)", () => {
         stationId: null,
         tillId: cfg.tillId,
         canvasId,
+        deviceProfileId,
         receiptPrinterId: null,
         hasCashDrawer: true,
         cardProvider: "stripe_terminal",
@@ -480,9 +513,10 @@ describe("tryReadDevice and assertNotHandheld (real Postgres)", () => {
 });
 
 describe("assertDeviceCapability (real Postgres)", () => {
-  it("refuses a device whose assigned canvas LACKS the capability, naming the action", async () => {
-    // The phone-portrait canvas carries `capabilities: []` — it lacks BOTH fenced flags. Prove-by-
-    // deletion: drop the `!capabilities.includes(...)` check in `assertDeviceCapability` and these pass.
+  it("refuses a device whose assigned PROFILE LACKS the capability, naming the action", async () => {
+    // The handheld's profile carries `capabilities: []` — it lacks BOTH fenced flags. Prove-by-
+    // deletion: drop the `!profile.capabilities.includes(...)` check in `assertDeviceCapability` and
+    // these pass.
     const { cfg, deviceId, token } = await enrolHandheldWithCanvasFixture();
     expect(
       await probeCapability(cfg, `${deviceId}.${token}`, "integrated-card-payment", "pay"),
@@ -492,8 +526,8 @@ describe("assertDeviceCapability (real Postgres)", () => {
     ).toEqual({ ok: false, code: "device.forbidden_action", params: { action: "drawer_open" } });
   });
 
-  it("passes a device whose assigned canvas HAS the capability", async () => {
-    // The `till` fixture's canvas is `DEFAULT_CANVASES.till`, which declares BOTH flags.
+  it("passes a device whose assigned PROFILE HAS the capability", async () => {
+    // The `till` fixture's profile declares BOTH flags (DEFAULT_PROFILE_CAPABILITIES.till).
     const { cfg, deviceId, token } = await enrolTillDeviceFixture();
     expect(
       await probeCapability(cfg, `${deviceId}.${token}`, "integrated-card-payment", "pay"),
@@ -503,9 +537,9 @@ describe("assertDeviceCapability (real Postgres)", () => {
     ).toEqual({ ok: true });
   });
 
-  it("refuses a device with NO assigned canvas (canvasId null)", async () => {
-    // A kds_station enrolled with no canvas assigned declares no capabilities at all → refused before
-    // any canvas read. Prove-by-deletion: drop the `canvasId === null` guard and this throws
+  it("refuses a device with NO assigned device profile (deviceProfileId null) — fail-closed", async () => {
+    // A kds_station enrolled with no profile assigned declares no capabilities at all → refused before
+    // any profile read. Prove-by-deletion: drop the `deviceProfileId === null` guard and this throws
     // elsewhere instead of the clean 403.
     const { cfg, deviceId, token } = await enrolDeviceFixture();
     expect(
@@ -526,9 +560,9 @@ describe("assertDeviceCapability (real Postgres)", () => {
     });
   });
 
-  it("preserves the handheld firewall: a handheld (canvas caps []) is still blocked from pay + drawer", async () => {
+  it("preserves the handheld firewall: a handheld (profile caps []) is still blocked from pay + drawer", async () => {
     // The behaviour `assertNotHandheld` enforced by KIND is now enforced by CAPABILITY: a handheld's
-    // capability-less canvas carries neither flag, so pay and drawer are refused exactly as before —
+    // capability-less profile carries neither flag, so pay and drawer are refused exactly as before —
     // but via the capability, not the device kind.
     const { cfg, deviceId, token } = await enrolHandheldWithCanvasFixture();
     expect(

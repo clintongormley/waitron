@@ -50,7 +50,10 @@ declare module "@waitron/shared" {
     };
     // A CanvasDef failed validateCanvas. `reason` says which rule:
     //   not_object       — input (or a tab/card) was not a plain object;
-    //   bad_capabilities — `capabilities` was not an array of known capability flags;
+    //   bad_capabilities — RETIRED (Task 9): capabilities left the canvas for the device profile, so
+    //                      validateCanvas no longer throws this. The union member is kept (a shipped
+    //                      code shape is never removed, CLAUDE.md §3) but is now unreachable from here;
+    //                      a bad capability set surfaces as `device_profile.invalid` instead;
     //   bad_form_factor  — `formFactor` was not a FormFactor;
     //   no_tabs          — `tabs` was not a non-empty array;
     //   bad_tab          — a tab was malformed (missing/blank key or title, over-long title);

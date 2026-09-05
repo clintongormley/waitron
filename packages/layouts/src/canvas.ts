@@ -67,10 +67,13 @@ export interface ThemeOverride {
   tokens: Record<string, string>;
 }
 
-/** A whole layout canvas (design §4.1): a form factor, its tabs, capability flags, optional theme. */
+/**
+ * A whole layout canvas (design §4.1): a form factor, its tabs, an optional theme. Capabilities NO
+ * LONGER live here — they relocated onto the device profile (device-profile design 2026-09-05 §5.3,
+ * Task 9): a canvas is the DISPLAY, capabilities are facts about the BOX, resolved through the profile.
+ */
 export interface CanvasDef {
   formFactor: FormFactor;
   tabs: TabDef[];
-  capabilities: CapabilityFlag[];
   theme?: ThemeOverride;
 }

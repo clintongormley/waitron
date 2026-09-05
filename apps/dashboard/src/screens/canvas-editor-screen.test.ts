@@ -13,7 +13,6 @@ const canvases: Canvas[] = [
     name: "Counter till",
     definition: {
       formFactor: "till",
-      capabilities: [],
       tabs: [
         {
           key: "counter",
@@ -461,7 +460,6 @@ describe("canvas-editor-screen editor mode", () => {
 // carries a `visibleWhen` so the visibility-toggle test has a card with visibility states to edit.
 const validTillDefinition = {
   formFactor: "till",
-  capabilities: [],
   tabs: [
     {
       key: "counter",
@@ -578,32 +576,6 @@ describe("canvas-editor-screen property panel + save (B7)", () => {
     expect("visibleWhen" in definition.tabs[0].cards[4]).toBe(false);
   });
 
-  it("warns when a placed card's requiredCapability is not in the canvas capabilities", async () => {
-    const { el } = await openValidEditor();
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=palette-kds-board]")!.click(); // needs act-as-kds
-    await el.updateComplete;
-    selectCard(el, 5); // the new kds-board (validTill has 5 cards at 0..4)
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-test=capability-warning]")).toBeTruthy();
-  });
-
-  it("clears the capability warning once the capability is enabled in canvas settings", async () => {
-    const { el } = await openValidEditor();
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=palette-kds-board]")!.click();
-    await el.updateComplete;
-    selectCard(el, 5);
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-test=capability-warning]")).toBeTruthy();
-    // Enable act-as-kds in canvas settings, then re-select the card.
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=canvas-settings]")!.click();
-    await el.updateComplete;
-    toggle(el, "cap-act-as-kds", true);
-    await el.updateComplete;
-    selectCard(el, 5);
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-test=capability-warning]")).toBeNull();
-  });
-
   it("shows a permission note for a card that requires a permission", async () => {
     const { el } = await openValidEditor();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=palette-table-layout-editor]")!.click();
@@ -650,7 +622,9 @@ describe("canvas-editor-screen property panel + save (B7)", () => {
     expect(el.shadowRoot!.querySelectorAll("[data-test^=tab-btn-]").length).toBe(1);
   });
 
-  it("edits the canvas name, form factor and capabilities in canvas settings", async () => {
+  it("edits the canvas name and form factor in canvas settings", async () => {
+    // Capabilities are no longer edited here — they relocated onto the device profile (Task 9), so
+    // canvas settings offers only the name + form factor now.
     const { el, api } = await openValidEditor();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=canvas-settings]")!.click();
     await el.updateComplete;
@@ -662,15 +636,14 @@ describe("canvas-editor-screen property panel + save (B7)", () => {
     select.value = "kds";
     select.dispatchEvent(new Event("change", { bubbles: true }));
     await el.updateComplete;
-    toggle(el, "cap-act-as-kds", true);
-    await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     await flush(el);
     const [id, name, definition] = (api.updateCanvas as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(id).toBe("c1");
     expect(name).toBe("Renamed");
     expect(definition.formFactor).toBe("kds");
-    expect(definition.capabilities).toContain("act-as-kds");
+    // The saved definition carries no capabilities key (relocated to the device profile, Task 9).
+    expect("capabilities" in definition).toBe(false);
   });
 
   it("Save on a new canvas calls createCanvas with the name and definition, and returns to the list", async () => {
@@ -775,28 +748,15 @@ describe("canvas-editor-screen property panel + save (B7)", () => {
     expect(definition.tabs[0].cards[5].visibleWhen).toEqual(["empty"]);
   });
 
-  it("removes a capability when its switch is toggled off in canvas settings", async () => {
-    // Open a canvas that ALREADY has capabilities, so the switch starts checked and the toggle
-    // exercises the `set.delete(flag)` (removal) branch — not just the add branch.
-    const withCaps = {
-      ...validTillDefinition,
-      capabilities: ["integrated-card-payment", "open-cash-drawer"],
-    };
-    const { el, api } = await openValidEditor({
-      getCanvas: vi
-        .fn()
-        .mockResolvedValue({ id: "c1", name: "Counter till", definition: withCaps }),
-    });
+  it("canvas settings no longer renders a Capabilities section (relocated to the device profile, Task 9)", async () => {
+    // Capabilities editing moved to the device-profile editor. Canvas settings offers only the name +
+    // form factor, so neither the section nor any capability switch is present.
+    const { el } = await openValidEditor();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=canvas-settings]")!.click();
     await el.updateComplete;
-    toggle(el, "cap-integrated-card-payment", false);
-    await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
-    await flush(el);
-    const definition = (api.updateCanvas as ReturnType<typeof vi.fn>).mock.calls[0][2];
-    expect(definition.capabilities).not.toContain("integrated-card-payment");
-    // The other capability is untouched (deletion removes only the toggled flag).
-    expect(definition.capabilities).toContain("open-cash-drawer");
+    expect(el.shadowRoot!.querySelector("[data-test=capabilities]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=cap-integrated-card-payment]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=cap-act-as-kds]")).toBeNull();
   });
 
   it("clamps a tab's column count to 1..24 and ignores a non-numeric entry", async () => {

@@ -262,13 +262,13 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   );
 
   // ── Bump one of the bound station's items (DEVICE-GUARDED) ────────────────────────────────────────────
-  // Capability note (SP-A.2 §16, Task 14): the `act-as-kds` capability flag is DECLARED on the kds
-  // default canvas, but route-level enforcement here is deliberately DEFERRED. Existing `kds_station`
-  // devices carry `canvasId = null`, so an `assertDeviceCapability(deps, c, "act-as-kds", …)`
-  // would refuse them (a device with no canvas declares no capabilities) — a regression on the bump
-  // path. This route is already `requireDevice` + station-ownership gated (only a `kds_station` device
-  // bound to the station reaches it), so the flag adds no protection here today; wiring it awaits KDS
-  // devices being provisioned with a kds canvas.
+  // Capability note (SP-A.2 §16, Task 14; device-profile §5.3, Task 9): the `act-as-kds` capability flag
+  // is DECLARED in `DEFAULT_PROFILE_CAPABILITIES.kds`, but route-level enforcement here is deliberately
+  // DEFERRED. Existing `kds_station` devices carry `deviceProfileId = null`, so an
+  // `assertDeviceCapability(deps, c, "act-as-kds", …)` would refuse them (a device with no profile
+  // declares no capabilities) — a regression on the bump path. This route is already `requireDevice` +
+  // station-ownership gated (only a `kds_station` device bound to the station reaches it), so the flag
+  // adds no protection here today; wiring it awaits KDS devices being provisioned with a kds profile.
   app.post("/api/device/ticket-items/:id/advance", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
