@@ -130,7 +130,12 @@ rules-first CLAUDE.md rewrite (#235, 972 → 415 lines, stale facts fixed, four 
 folded in), the model rule relocated to the shared global `~/.claude/CLAUDE.md` with only the
 waitron yardstick kept in-repo (#236), and the
 `/finish-branch` rewrite (run-it reviewer + convention reviewer; SDD's final whole-branch review
-dropped as a duplicate). **Owner decisions recorded (they supersede older spec text where they
+dropped as a duplicate). **Same evening, revised for cost:** Fable only where the owner talks plus two
+fresh-context seats, Opus 5.1 for execution, Codex (`gpt-6-astra`, `.codex/config.toml`,
+`~/workspace/tools/codex-seat.sh`) for the implementer seat and the pre-PR diff review that replaces
+Copilot. A three-way run-it reviewer probe on planted defects (Fable / Opus / Astra) found no
+Fable-only catch — `docs/superpowers/specs/2026-09-05-model-seats-experiment.md`; moving the run-it
+seat to Astra is an open owner decision. **Owner decisions recorded (they supersede older spec text where they
 conflict):**
 
 - **No database will ever hold two tenants** (a throwaway preproduction demo aside). The
@@ -1758,6 +1763,14 @@ it wants doing before go-live rather than after.
 ---
 
 ## Debt and odd jobs
+
+- **Two stale lock-order claims in `apps/server/src/working-order.ts`** (found by the 2026-09-05
+  model-seats probe, verified against main): the `unjoinTable` docstring (~line 2656) says it
+  "MATCHES the sale/settle path and mergeTabs" — true today, but a twin to keep in step; and the
+  `mergeTabs` docstring (~line 2170) says the `dining_tables` lock "seq-scans" because `tab_id` is
+  unindexed — `EXPLAIN` as `app_user` shows `LockRows → Sort → Bitmap Heap Scan` on the tenant
+  index, so the mechanism claim is false (the conclusion, identical order for both backends, is not
+  re-proven either way). Thin both on next touch (§1: state what is measured).
 
 Deferred follow-ups from finished work. None blocks anything; each makes later work cheaper. Per-slice
 UX/perf nits live in the PR threads and git history; what remains here is cross-cutting or
