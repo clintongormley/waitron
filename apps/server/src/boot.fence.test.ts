@@ -377,6 +377,14 @@ describe("boot fence (real Postgres): a held sell-only membership doc fences a r
       // to share before R2 mounted the drain source above.
       const printJobs = await fetch(`${base}/print-api/agent/jobs`);
       expect(printJobs.status).toBe(404);
+
+      // Fenced ⇒ acceptingSales:false; Case B is the control on the same identity.
+      const probe = await fetch(`${base}/api/node`);
+      expect(probe.status).toBe(200);
+      expect(await probe.json()).toMatchObject({
+        nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+        acceptingSales: false,
+      });
     } finally {
       await server.close();
     }
@@ -421,6 +429,15 @@ describe("boot fence (real Postgres): a held sell-only membership doc fences a r
       });
       expect(status.status).toBe(200);
       expect((await status.json()).disposal).toEqual({ applicable: false });
+
+      // Unfenced ⇒ acceptingSales:true — the control for Case A's false.
+      const probe = await fetch(`${base}/api/node`);
+      expect(probe.status).toBe(200);
+      expect(await probe.json()).toMatchObject({
+        nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+        standing: "serving-primary",
+        acceptingSales: true,
+      });
     } finally {
       await server.close();
     }

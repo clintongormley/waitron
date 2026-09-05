@@ -7,19 +7,27 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   asAppUser,
   readMembershipTrustSet,
+  readNodeMembership,
   stampDeployment,
   withTenant,
+  writeNodeMembership,
   type Database,
 } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { hashPassword, hashPin } from "@waitron/identity";
-import { canonicalize, generateNodeKeyPair, verifyBytes } from "@waitron/membership";
+import {
+  canonicalize,
+  generateNodeKeyPair,
+  verifyBytes,
+  verifyMembershipDocument,
+} from "@waitron/membership";
 import { applyVenue, planVenue, type AdoptResult } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
 // Real Postgres, not PGlite: the endpoint authenticates + authorizes as `app_user` under FORCE RLS
 // (the dashboard login shape) and mints the token as a `sync_retention` member — neither is observable
@@ -151,10 +159,19 @@ function mountApp(designated: AdoptResult, relayUrl: string | undefined, log?: L
   return app;
 }
 
-/** A well-formed standby identity — a fresh nodeId + the real STANDBY_PUB — required in every request
- * now (the primary reserves this standby's identity and endorses this key). */
-function validStandby(): { standbyNodeId: string; standbyPublicKey: string } {
-  return { standbyNodeId: crypto.randomUUID(), standbyPublicKey: STANDBY_PUB };
+/** A well-formed standby identity — a fresh nodeId, the real STANDBY_PUB, and the address the standby
+ * advertises — required in every request now (the primary reserves this standby's identity, endorses
+ * this key, and records the address in the membership document). */
+function validStandby(): {
+  standbyNodeId: string;
+  standbyPublicKey: string;
+  standbyContactUrl: string;
+} {
+  return {
+    standbyNodeId: crypto.randomUUID(),
+    standbyPublicKey: STANDBY_PUB,
+    standbyContactUrl: "https://cloud.deli.test",
+  };
 }
 
 async function post(app: Hono, body: unknown): Promise<Response> {
@@ -227,6 +244,132 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
     }
   });
 
+  it("appends the standby to the membership document with its contactUrl, term bumped, signed by the primary", async () => {
+    const { designated, adminPersonId, primaryPublicKey } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+    const standbyNodeId = crypto.randomUUID();
+
+    // The "everyone else survives" assertions below are only worth anything over a NON-EMPTY held
+    // chart, so this test seeds its own rather than inherit whatever a sibling left behind (CLAUDE.md
+    // §4: order-independent). `node_membership` is a whole-database singleton whose term carries
+    // across the shared template, so the seed is minted one past the held term rather than at 0.
+    const seedTerm = ((await readNodeMembership(suite.admin))?.body.term ?? -1) + 1;
+    await writeNodeMembership(
+      suite.admin,
+      signedMembershipDoc(seedTerm, {
+        signerNodeId: designated.nodeId,
+        nodes: [
+          {
+            nodeId: designated.nodeId,
+            contactUrl: "https://box.deli.test",
+            standing: "serving-primary",
+          },
+          {
+            nodeId: crypto.randomUUID(),
+            contactUrl: "https://spare.deli.test",
+            standing: "sell-only",
+          },
+        ],
+      }),
+    );
+    const before = await readNodeMembership(suite.admin);
+    // Non-vacuity: the seed above is what makes the survival loops mean anything, so a seed that
+    // silently wrote nothing fails loudly here rather than turning them into no-ops.
+    expect(before?.body.nodes.length ?? 0).toBeGreaterThan(0);
+
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      standbyNodeId,
+      standbyPublicKey: STANDBY_PUB,
+      standbyContactUrl: "https://cloud.deli.test",
+    });
+    expect(res.status).toBe(200);
+
+    const after = await readNodeMembership(suite.admin);
+    expect(after?.body.term).toBe((before?.body.term ?? -1) + 1);
+    // The joining node is listed as a serving secondary at the address it advertised — the address a
+    // till reroutes to after a failover (till-reroute §3.3).
+    expect(after?.body.nodes).toContainEqual({
+      nodeId: standbyNodeId,
+      contactUrl: "https://cloud.deli.test",
+      standing: "serving-secondary",
+    });
+    // APPENDED, not replaced: every node the held chart already carried survives verbatim — standing
+    // and contactUrl untouched. Without this, minting from an EMPTY list instead of the held one
+    // passes every other assertion here while silently evicting the rest of the venue.
+    for (const node of before?.body.nodes ?? []) {
+      expect(after?.body.nodes).toContainEqual(node);
+    }
+    // Signed by THIS primary, and it verifies against the primary's own key — so the document a till
+    // later fetches is authentic, not merely present.
+    expect(after?.signerNodeId).toBe(designated.nodeId);
+    expect(verifyMembershipDocument(after!, { [designated.nodeId]: primaryPublicKey }).valid).toBe(
+      true,
+    );
+
+    // A RE-ADOPT of the same node (a wiped standby that kept its id, or a moved address): the entry is
+    // refreshed IN PLACE — one entry for that nodeId carrying the new url, not a second one — and the
+    // term bumps again.
+    const res2 = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      standbyNodeId,
+      standbyPublicKey: STANDBY_PUB,
+      standbyContactUrl: "https://cloud2.deli.test",
+    });
+    expect(res2.status).toBe(200);
+
+    const afterReadopt = await readNodeMembership(suite.admin);
+    expect(afterReadopt?.body.term).toBe(after!.body.term + 1);
+    expect(afterReadopt?.body.nodes.filter((n) => n.nodeId === standbyNodeId)).toEqual([
+      {
+        nodeId: standbyNodeId,
+        contactUrl: "https://cloud2.deli.test",
+        standing: "serving-secondary",
+      },
+    ]);
+    for (const node of before?.body.nodes ?? []) {
+      expect(afterReadopt?.body.nodes).toContainEqual(node);
+    }
+  });
+
+  it("lists EVERY standby under concurrent adopts — the term guard is retried, not last-writer-wins", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+    // Eight adopts fired at once at ONE primary — two operators, or one retrying operator with two
+    // tabs. Under the unguarded plain upsert this measured 3 of 8 listed with all eight answered 200:
+    // five standbys were handed a bundle (reserved number, endorsement, sync token) and left out of
+    // the chart, which is exactly the failure the route exists to prevent.
+    const standbyNodeIds = Array.from({ length: 8 }, () => crypto.randomUUID());
+    const responses = await Promise.all(
+      standbyNodeIds.map((standbyNodeId) =>
+        post(app, {
+          personId: adminPersonId,
+          password: ADMIN_PASSWORD,
+          standbyNodeId,
+          standbyPublicKey: STANDBY_PUB,
+          standbyContactUrl: `https://cloud-${standbyNodeId}.deli.test`,
+        }),
+      ),
+    );
+    // Every request either lists its node or FAILS — a 200 for a node the chart omits is the defect.
+    expect(responses.map((r) => r.status)).toEqual(Array.from({ length: 8 }, () => 200));
+
+    const after = await readNodeMembership(suite.admin);
+    const listed = new Set((after?.body.nodes ?? []).map((n) => n.nodeId));
+    expect(standbyNodeIds.filter((id) => !listed.has(id))).toEqual([]);
+    // Each entry carries ITS OWN advertised address: a chart that listed the ids but collapsed the
+    // urls onto one winner would still strand seven tills.
+    for (const id of standbyNodeIds) {
+      expect(after?.body.nodes).toContainEqual({
+        nodeId: id,
+        contactUrl: `https://cloud-${id}.deli.test`,
+        standing: "serving-secondary",
+      });
+    }
+  });
+
   it("refuses a non-admin (staff) credential with 403", async () => {
     const { designated } = await setupVenue();
     const staffPersonId = await seedStaff(designated.tenantId);
@@ -294,6 +437,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
       password: ADMIN_PASSWORD,
       standbyNodeId: standby.nodeId,
       standbyPublicKey: standby.publicKey,
+      standbyContactUrl: "https://cloud.deli.test",
     });
     expect(res.status).toBe(200);
     const bundle = (await res.json()) as {
@@ -343,12 +487,15 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
     expect(res.status).toBe(400);
     expect((await res.json()).error.code).toBe("mirror.standby_invalid");
 
-    // A non-UUID standby nodeId is refused the same way.
+    // A non-UUID standby nodeId is refused the same way. Every field but the one under test is
+    // well-formed — `standbyContactUrl: ""` is VALID (a standby that advertises nothing is still a
+    // member) — so each sub-case fails for its own reason, not for a second missing field.
     const res2 = await post(app, {
       personId: adminPersonId,
       password: ADMIN_PASSWORD,
       standbyNodeId: "not-a-uuid",
       standbyPublicKey: STANDBY_PUB,
+      standbyContactUrl: "",
     });
     expect(res2.status).toBe(400);
     expect((await res2.json()).error.code).toBe("mirror.standby_invalid");
@@ -359,8 +506,77 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
       password: ADMIN_PASSWORD,
       standbyNodeId: crypto.randomUUID(),
       standbyPublicKey: "",
+      standbyContactUrl: "",
     });
     expect(res3.status).toBe(400);
     expect((await res3.json()).error.code).toBe("mirror.standby_invalid");
+  });
+
+  it("refuses a standbyContactUrl that is not a bare origin as mirror.standby_invalid", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+
+    // A trailing slash: a well-formed URL, but NOT the bare origin the primary would sign into the
+    // chart — tills concatenate paths onto it, and a browser Origin header never carries one.
+    const slash = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      standbyNodeId: crypto.randomUUID(),
+      standbyPublicKey: STANDBY_PUB,
+      standbyContactUrl: "https://cloud.deli.test/",
+    });
+    expect(slash.status).toBe(400);
+    expect(await slash.json()).toEqual({ error: { code: "mirror.standby_invalid", params: {} } });
+
+    // A scheme a till must never dial. Refused for the same reason and under the same code — the
+    // primary holds this line itself rather than trusting the joiner to have screened its own value.
+    const script = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      standbyNodeId: crypto.randomUUID(),
+      standbyPublicKey: STANDBY_PUB,
+      standbyContactUrl: "javascript:alert(1)",
+    });
+    expect(script.status).toBe(400);
+    expect((await script.json()).error.code).toBe("mirror.standby_invalid");
+  });
+
+  it("ACCEPTS an empty standbyContactUrl and records the member address-less", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+    const standbyNodeId = crypto.randomUUID();
+
+    // The documented positive case: a standby that advertises no origin is still a member. Every
+    // other `""` row in this file fails for a DIFFERENT field, so without this the accept path is
+    // asserted nowhere.
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      standbyNodeId,
+      standbyPublicKey: STANDBY_PUB,
+      standbyContactUrl: "",
+    });
+    expect(res.status).toBe(200);
+    const after = await readNodeMembership(suite.admin);
+    expect(after?.body.nodes).toContainEqual({
+      nodeId: standbyNodeId,
+      contactUrl: "",
+      standing: "serving-secondary",
+    });
+  });
+
+  it("refuses a non-string standbyContactUrl as mirror.standby_invalid", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      standbyNodeId: crypto.randomUUID(),
+      standbyPublicKey: STANDBY_PUB,
+      standbyContactUrl: 42,
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: { code: "mirror.standby_invalid", params: {} } });
   });
 });

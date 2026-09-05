@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isFencedStanding, servingPrimaryNodeId, standingOf } from "./fence.js";
+import { isFencedStanding, routableServers, servingPrimaryNodeId, standingOf } from "./fence.js";
 import type { MembershipNode, NodeStanding, SignedMembershipDocument } from "./types.js";
 
 const doc = (nodes: readonly MembershipNode[]): SignedMembershipDocument => ({
@@ -45,5 +45,42 @@ describe("servingPrimaryNodeId", () => {
     expect(
       servingPrimaryNodeId(doc([node("n1", "sell-only"), node("n2", "serving-secondary")])),
     ).toBeUndefined();
+  });
+});
+
+describe("routableServers", () => {
+  // `node` above leaves `contactUrl` empty, which is itself unroutable, so these build their own.
+  const at = (nodeId: string, standing: NodeStanding, contactUrl = `https://${nodeId}`) => ({
+    nodeId,
+    contactUrl,
+    standing,
+  });
+
+  it("answers [] when no document is held", () => {
+    expect(routableServers(null)).toEqual([]);
+  });
+
+  it("orders primary, then secondary, then sell-only, whatever order the chart lists them in", () => {
+    expect(
+      routableServers(
+        doc([at("c", "sell-only"), at("a", "serving-secondary"), at("b", "serving-primary")]),
+      ),
+    ).toEqual([
+      { nodeId: "b", url: "https://b", standing: "serving-primary" },
+      { nodeId: "a", url: "https://a", standing: "serving-secondary" },
+      { nodeId: "c", url: "https://c", standing: "sell-only" },
+    ]);
+  });
+
+  it("excludes an evicted node — it has left the venue", () => {
+    expect(routableServers(doc([at("gone", "evicted"), at("here", "serving-primary")]))).toEqual([
+      { nodeId: "here", url: "https://here", standing: "serving-primary" },
+    ]);
+  });
+
+  it("excludes a node with no contactUrl — there is no address to dial", () => {
+    expect(
+      routableServers(doc([at("blank", "serving-secondary", ""), at("here", "serving-primary")])),
+    ).toEqual([{ nodeId: "here", url: "https://here", standing: "serving-primary" }]);
   });
 });

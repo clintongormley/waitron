@@ -55,9 +55,12 @@ const CREDENTIAL: AdoptCredential = {
 
 // The standby identity the mirror mints in memory (Task 3 `generateStandbyIdentity`) and the fetcher
 // sends to the primary for endorsement + number allocation — only its public half + nodeId travel.
+// `contactUrl` is the standby's own `advertisedOrigin`: the primary records it in the membership
+// document so a till can route to this node after a failover (till-reroute design §3.3).
 const STANDBY = {
   nodeId: "55555555-5555-5555-5555-555555555555",
   publicKey: "STANDBY_PUB",
+  contactUrl: "https://cloud.deli.test",
 };
 
 const servers: ServerType[] = [];
@@ -102,8 +105,10 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     expect(bundle.syncToken).toBe("plaintext-sync-token");
     // The request the fetcher made: a POST to the primary's mirror-bundle path carrying the credential
     // OBJECT plus the standby identity, serialised as the JSON body. The primary authenticates the
-    // credential fields and reserves + endorses the standby from `standbyNodeId`/`standbyPublicKey`
-    // (membership promotion R2) — so both must ride the body flattened alongside the credential.
+    // credential fields, reserves + endorses the standby from `standbyNodeId`/`standbyPublicKey`
+    // (membership promotion R2) and records `standbyContactUrl` as the joining node's address in the
+    // membership document (till-reroute §3.3) — so all three ride the body flattened alongside the
+    // credential.
     expect(seen).toEqual({
       method: "POST",
       path: "/management-api/mirror-bundle",
@@ -111,6 +116,7 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
         ...CREDENTIAL,
         standbyNodeId: STANDBY.nodeId,
         standbyPublicKey: STANDBY.publicKey,
+        standbyContactUrl: STANDBY.contactUrl,
       }),
     });
   });

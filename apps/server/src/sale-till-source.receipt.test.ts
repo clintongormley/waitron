@@ -223,7 +223,14 @@ async function enrolTillDeviceId(cfg: TillConfig, boundTillId: string): Promise<
 }
 
 function apiDeps(cfg: TillConfig): TillApiDeps {
-  return { db: suite.admin, backend, clock, cfg, secureCookies: false, venueLocale: cfg.locale };
+  return {
+    db: suite.admin,
+    backend,
+    clock,
+    cfg,
+    secureCookies: false,
+    venueLocale: cfg.locale,
+  };
 }
 
 /** Log in through the HTTP surface and return the session cookie the route sets. */

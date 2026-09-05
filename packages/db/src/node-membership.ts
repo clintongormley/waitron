@@ -47,9 +47,12 @@ export async function readNodeMembership(
  * `number` term with this bigint column). Deriving it here keeps the column and the in-blob term in
  * step for writes through this accessor; the DB does not enforce it, so a raw SQL write could set
  * them apart.
- * `app_user` now holds INSERT/UPDATE on `node_membership` (Slice 3's runtime-adoption grant), but the
- * runtime adoption write is the term-guarded `persistNodeMembershipIfNewer` below, not this accessor:
- * this stays the dumb plain-upsert setter for the owner/promote paths (owner decision, Slice 2).
+ * `app_user` holds INSERT/UPDATE on `node_membership` (Slice 3's runtime-adoption grant), but every
+ * APP-POOL write goes through the term-guarded `persistNodeMembershipIfNewer` below — gossip adoption
+ * (`membership-adopt.ts`), retirement (`retire.ts`) and the adopt handshake's org-chart append
+ * (`mirror-bundle-api.ts`), none of which can assume it is the only writer. This accessor is the
+ * OWNER-connection setter, used where no concurrent writer exists: seeding (`membership-seed.ts`) and
+ * the promote transaction (`promote.ts`, via `writeNodeMembershipTx`) — owner decision, Slice 2.
  */
 export async function writeNodeMembership(
   db: Database,

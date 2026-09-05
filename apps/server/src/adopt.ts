@@ -46,8 +46,14 @@ export interface AdoptDeps {
   fetchBundle: (
     primaryUrl: string,
     credential: AdoptCredential,
-    standby: { nodeId: string; publicKey: string },
+    standby: { nodeId: string; publicKey: string; contactUrl: string },
   ) => Promise<MirrorBundle>;
+  /** This node's own advertised origin (`config.advertisedOrigin`), sent to the primary as the joining
+   * node's `contactUrl`: the primary records it in the membership document so a till can route here
+   * after a failover (till-reroute design §3.3). The ROUTE's contract accepts `""` (a node that
+   * advertises nothing is still a member), but this node never sends one: `config.advertisedOrigin`
+   * falls back to `managementOrigin`, and `bareOrigin` refuses `""`. */
+  advertisedOrigin: string;
   /** Persists `trading.env` so the next boot enters the trading branch (the setup-api dep, bound to
    * `writeTradingEnv` in boot). */
   persistTrading: (args: PersistTradingArgs) => Promise<void>;
@@ -97,11 +103,14 @@ export async function adoptFromPrimary(
 ): Promise<{ tenantId: string }> {
   // Mint the standby's own identity in memory BEFORE the fetch (design §6 R2): its public half + nodeId
   // are sent to the primary, which reserves the standby's fiscal identity and endorses its key, returning
-  // both in `bundle.reservedIdentity`. The private half stays local until it is sealed below.
+  // both in `bundle.reservedIdentity`. The private half stays local until it is sealed below. This
+  // node's advertised origin rides along as the joining node's `contactUrl`, which the primary appends
+  // to the membership document (till-reroute §3.3).
   const standby = generateStandbyIdentity();
   const bundle = await deps.fetchBundle(req.primaryUrl, req.credential, {
     nodeId: standby.nodeId,
     publicKey: standby.publicKey,
+    contactUrl: deps.advertisedOrigin,
   });
   const { designated, rows } = bundle;
 

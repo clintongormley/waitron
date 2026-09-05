@@ -2,7 +2,7 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq } from "drizzle-orm";
 import { AppError, SUPPORTED_LOCALES } from "@waitron/shared";
-import { asAppUser, locations, tenants, withTenant } from "@waitron/db";
+import { asAppUser, locations, readNodeMembership, tenants, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
   authorize,
@@ -18,6 +18,7 @@ import { getReceipt, getCanvas, getCanvasForFormFactor, getDeviceProfile } from 
 import type { CanvasDef, CapabilityFlag } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
+import { routableServers } from "@waitron/membership";
 import { createErrorBoundary } from "./error-boundary.js";
 import { readJsonBody } from "./read-json-body.js";
 import type { Logger } from "./logger.js";
@@ -621,6 +622,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // the sole canvas binding since the Task 10 cutover). The counter therefore always has a canvas
       // to render from.
       const device = await tryReadDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
+      // The venue's server list (till-reroute §3.2). Read HERE, outside the boot transaction below:
+      // `node_membership` is a whole-DB singleton row with no `tenant_id`, so it has no place under
+      // `withTenant`'s tenant scope. Read straight off `deps.db`, like every other read in this file.
+      const held = await readNodeMembership(deps.db);
       // ONE transaction reads the issuer identity and the authored receipt trim (`getReceipt`, its own
       // `tenant_receipts` row — SP-B4), plus the resolved canvas below: all run inside the same
       // `withTenant` + `asAppUser` block (RLS scopes each to this till's tenant), never a second
@@ -768,6 +773,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // `profile.capabilities` for an enrolled device with a profile; `[]` for a no-profile or cookieless
         // request — the render axis hides `tender-pay`/`kds-board` when the flag is absent (`card-grid.ts`).
         capabilities: boot.capabilities,
+        // The node answering this request, and the venue's routable servers (till-reroute §3.2) — the
+        // till polls `GET /api/node` on each of them to follow the primary across a failover, and needs
+        // `nodeId` to tell which one it is currently talking to. `[]` while no document is held.
+        nodeId: deps.cfg.nodeId,
+        servers: routableServers(held),
       });
     }),
   );

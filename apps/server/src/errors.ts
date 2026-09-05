@@ -1505,12 +1505,16 @@ declare module "@waitron/shared" {
     "mirror.no_relay": Record<string, never>;
     /**
      * A mirror-bundle request carried a malformed STANDBY identity (membership promotion R2) — the
-     * `standbyNodeId` was absent or not a UUID, or the `standbyPublicKey` was absent or empty. The
-     * primary reserves the standby's fiscal identity and endorses its key, so a well-formed standby
-     * node id + public key is required on every request. A CLIENT request-shape fault, reported as HTTP
-     * 400 by the bundle route's local STATUS map — deliberately NOT folded into `password.invalid`
-     * (401): a bad standby identity is a distinct fault from a bad credential, and mislabelling it as a
-     * credential error would mislead the operator (the rule §1's error-code conventions give).
+     * `standbyNodeId` was absent or not a UUID, the `standbyPublicKey` was absent or empty, or the
+     * `standbyContactUrl` was absent, not a string, or a non-empty value that is not a bare http(s)
+     * origin (`""` IS accepted — a standby that advertises no origin is still a member; anything else
+     * the primary would sign into the org chart and every till would dial must pass the same
+     * `isBareOrigin` rule `config.ts` applies to this node's own advertised origin). The primary reserves the standby's fiscal identity, endorses its key
+     * and records its address in the membership document, so all three are required on every request.
+     * A CLIENT request-shape fault, reported as HTTP 400 by the bundle route's local STATUS map —
+     * deliberately NOT folded into `password.invalid` (401): a bad standby identity is a distinct fault
+     * from a bad credential, and mislabelling it as a credential error would mislead the operator (the
+     * rule §1's error-code conventions give).
      *
      * NO params: the request is refused by shape and names no row, so a log line leaks nothing — the
      * same `sync.*`/`tunnel.*` no-leak discipline `mirror.no_relay`/`node.read_only` follow, and the
@@ -1539,6 +1543,22 @@ declare module "@waitron/shared" {
      * once shipped.
      */
     "mirror.bundle_fetch_failed": Record<string, never>;
+    /**
+     * The venue's membership document could not be written because every read-mint-write round lost
+     * its term race — a concurrent writer committed a term at least as high each time, so this mint
+     * was built on a chart that is already stale. Thrown by the mirror-bundle adopt handshake
+     * (`mirror-bundle-api.ts`), which retries against `persistNodeMembershipIfNewer`'s term guard and
+     * refuses rather than force a write that would drop the winner's node from the chart.
+     *
+     * Reported as HTTP 503 by the bundle route's local STATUS map (the declare-here / status-in-route
+     * split): TRANSIENT and server-side, so the caller retries the whole adopt — not a fault in the
+     * request, which is why it is not a 4xx. `attempts` is the round bound the loop exhausted, a
+     * constant of this process; it names no row, no node and no address, so the no-leak discipline
+     * `mirror.no_relay` follows is kept. `membership.*` names the DOMAIN CONCEPT — the org chart —
+     * never the throwing package (`tenant.not_found`'s note above gives the rule), and sits beside
+     * `membership.key_invalid` in @waitron/membership. Never renamed once shipped.
+     */
+    "membership.write_contended": { attempts: number };
     /** The recovery-bundle download request carried no `passphrase` string (or an empty one). A
      * client error — the operator must supply the passphrase the bundle will be encrypted under. */
     "recovery.passphrase_required": Record<string, never>;

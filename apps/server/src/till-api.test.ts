@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTenant, writeNodeMembership } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -34,6 +34,7 @@ import { deviceFormFactor, enrolDevice, generatePairingCode } from "./device.js"
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE, requireSession } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import "./errors.js";
 
 // PGlite, not real Postgres: the session routes are LOGIC (login → cookie → logout), and the login
@@ -769,9 +770,49 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       // Capabilities relocated onto the device profile (Task 9): a cookieless request has no profile, so
       // the explicit sibling is the empty set (the render axis then hides the capability cards).
       capabilities: [],
+      // The node this till is talking to, and the venue's routable server list — empty here because
+      // `node_membership` holds no row (the server-list test below writes one and removes it again).
+      nodeId: cfg.nodeId,
+      servers: [],
     });
-    // Nothing sensitive: no pin, certificate, connection string or verification url reaches the wire.
-    expect(JSON.stringify(body)).not.toMatch(/pin|secret|password|url|cert/i);
+    // Nothing sensitive: no pin, certificate, connection string or AEAT verification url reaches the
+    // wire. `verificationUrl` is named exactly rather than a bare `url`, because `servers[].url` is a
+    // BY-DESIGN wire key (the address the till is told to dial) that a bare alternative would trip on.
+    expect(JSON.stringify(body)).not.toMatch(/pin|secret|password|verificationUrl|cert/i);
+  });
+
+  it("GET /api/till lists the venue's servers from the membership document, primary first, evicted and address-less nodes excluded", async () => {
+    const app = new Hono();
+    // The route reads `node_membership` itself, so the document goes into the DATABASE. Removed in the
+    // `finally` below: every other test in this suite asserts `servers: []` off an empty table, so a
+    // leftover row would make those pass or fail on this test's ordering (CLAUDE.md §4).
+    await writeNodeMembership(
+      suite.db,
+      signedMembershipDoc(5, {
+        signerNodeId: cfg.nodeId,
+        nodes: [
+          { nodeId: "b", contactUrl: "https://cloud.deli.test", standing: "serving-secondary" },
+          { nodeId: "c", contactUrl: "https://old.deli.test", standing: "evicted" },
+          { nodeId: "d", contactUrl: "", standing: "sell-only" },
+          { nodeId: "e", contactUrl: "https://spare.deli.test", standing: "sell-only" },
+          { nodeId: cfg.nodeId, contactUrl: "https://box.deli.test", standing: "serving-primary" },
+        ],
+      }),
+    );
+    try {
+      mountTillApi(app, deps(suite.db), collect([]));
+      const res = await app.request("/api/till");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.nodeId).toBe(cfg.nodeId);
+      expect(body.servers).toEqual([
+        { nodeId: cfg.nodeId, url: "https://box.deli.test", standing: "serving-primary" },
+        { nodeId: "b", url: "https://cloud.deli.test", standing: "serving-secondary" },
+        { nodeId: "e", url: "https://spare.deli.test", standing: "sell-only" },
+      ]);
+    } finally {
+      await suite.db.execute(sql`delete from node_membership`);
+    }
   });
 
   it("GET /api/till DECOUPLES the UI locale (venueLocale) from the receipt invoiceLocale (cfg.locale)", async () => {

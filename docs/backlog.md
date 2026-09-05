@@ -275,7 +275,7 @@ All three decisions are now taken.
    the auth model does not change — the device cookie stays httpOnly and gains a tenant-domain scope;
    `devices`/`tills`/`device_profiles`/`canvases` must replicate first (config-class, no new table);
    the promoted cloud serves tills on its public name; the app never talks to the local agent.
-   **Spec written 2026-09-05, awaiting owner review:**
+   **S1 (server truth) BUILT 2026-09-06, PR pending; S2-S6 next:**
    [`2026-09-05-till-reroute-design.md`](superpowers/specs/2026-09-05-till-reroute-design.md) — the
    till FOLLOWS THE PRIMARY (probe every server, obey `acceptingSales`; no manual switch — owner
    2026-09-05; a status line + "check again" instead), server list = the membership document's
@@ -285,6 +285,15 @@ All three decisions are now taken.
    are dropped: both files die with the outbox (swap spec §7). Six slices; the run-it proof is item 2.
    **Plan:** [`2026-09-05-till-reroute.md`](superpowers/plans/2026-09-05-till-reroute.md) (22 tasks,
    one branch per slice: `feat/till-reroute-s1-server-truth` … `feat/till-reroute-s6-e2e`).
+   Two things S1 measured, both for item 3's re-admission design: (i) the chart APPENDS without
+   bound while `MAX_NODES = 8` (`packages/membership/src/verify.ts`) makes every verifier refuse a
+   longer document as `malformed` — and every wipe-and-re-adopt mints a FRESH nodeId while
+   `evictNode` only marks the old one, so roughly eight disaster-recovery re-adopts leave the venue
+   with a document no node will accept, with no self-heal; re-admission must retire the previous
+   entry rather than add a second. (ii) A post-setup change to `WAITRON_ADVERTISED_ORIGIN` is never
+   re-published — nothing refreshes this node's own entry at boot — so the chart keeps the stale
+   address forever, and a node that promotes while absent from the chart appends itself
+   address-less (`nextStandings`), which `routableServers` drops, so no till is told to dial it.
 2. **The cloud standby, end to end (MVP)** — the box↔cloud-instance WireGuard link (relay DECIDED
    2026-09-05: none; `@waitron/tunnel`, `WAITRON_TUNNEL_*` and the tunnel-aware dispatcher are
    deleted once the link carries replication, never before — the decisions-first line above), a

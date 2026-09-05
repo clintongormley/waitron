@@ -73,6 +73,7 @@ import {
 import type { StripeAccountDeps } from "./stripe-account.js";
 import { mountWebhook } from "./webhook.js";
 import { mountTillApi } from "./till-api.js";
+import { mountNodeApi } from "./node-api.js";
 import { mountDeviceApi } from "./device-api.js";
 import { mountPrintApi } from "./print-api.js";
 import { mountManagementApi } from "./management-api.js";
@@ -747,6 +748,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
                   ownerDb,
                   ring,
                   fetchBundle: fetchMirrorBundle,
+                  advertisedOrigin: config.advertisedOrigin,
                   persistTrading,
                   // `writeModuleConfig` returns the path it wrote; the dep only needs `Promise<void>`,
                   // so discard it the same way `persistTrading` above wraps `writeTradingEnv`.
@@ -763,7 +765,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
             establishIdentity: (tenantId, nodeId) =>
               establishNodeIdentity({ ownerDb, ring }, tenantId, nodeId),
             seedMembership: (tenantId, nodeId) =>
-              seedTermZeroMembership({ db: ownerDb, ring }, tenantId, nodeId),
+              seedTermZeroMembership(
+                { db: ownerDb, ring },
+                tenantId,
+                nodeId,
+                config.advertisedOrigin,
+              ),
             sealAeat: (tenantId, cert) => sealAeatCredential(ownerDb, ring, tenantId, cert),
             persistTrading,
             databaseUrl: config.databaseUrl,
@@ -1121,6 +1128,23 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       cardProvider,
       venueLocale,
       devMode: config.devMode,
+    },
+    log,
+  );
+  // The public role probe a till polls to follow the venue's primary across a failover (till-reroute
+  // §3.1). Mounted on every trading boot, not in setup: "not accepting sales" from a mirror or a fenced
+  // node is the answer that steers a till away, so those boots must answer it too. `!fencedOrMirror` is
+  // redundant while `deployment_role_valid_ck` rejects (mirror, primary) and the fence above demotes the
+  // singleton axis; kept so the probe refuses if either stops.
+  mountNodeApi(
+    app,
+    {
+      nodeId: till.nodeId,
+      acceptingSales: isSingletonPrimary && !fencedOrMirror,
+      environment: config.environment,
+      // These deps carry no `db`, so the whole-DB membership read is injected rather than taken off a
+      // handle — the one place in this boot that still binds it.
+      readMembership: () => readNodeMembership(db),
     },
     log,
   );

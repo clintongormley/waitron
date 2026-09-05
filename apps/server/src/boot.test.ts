@@ -1281,6 +1281,11 @@ describe("startServer, against a real container as the deployment role", () => {
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_STATE_DIR: stateDir,
           WAITRON_ENV: "preproduction",
+          // Deliberately DISTINCT from the `managementOrigin` this boot falls back to
+          // (`http://localhost:5191`, the dev default — WAITRON_MANAGEMENT_ORIGIN is unset here), so
+          // the contactUrl assertion below tells the two apart: a seed wired to `managementOrigin`
+          // would write that localhost default instead.
+          WAITRON_ADVERTISED_ORIGIN: "https://box.deli.test",
         });
         // Trust the CA the box minted, so the self-signed leaf verifies over the loopback dial.
         const ca = await readFile(join(stateDir, "tls", "ca.crt"));
@@ -1335,6 +1340,19 @@ describe("startServer, against a real container as the deployment role", () => {
           const trust = await readMembershipTrustSet(check, json.tenantId);
           expect(Object.keys(trust)).toHaveLength(1);
           expect(Object.values(trust)[0]).toMatch(/.+/);
+
+          // The term-0 document the same provision seeded names this primary at the origin tills
+          // route on (till-reroute design §3.3) — `config.advertisedOrigin`, NOT `managementOrigin`.
+          // The two are distinct here on purpose (see WAITRON_ADVERTISED_ORIGIN above), so a seed
+          // reading the wrong one shows up as `http://localhost:5191`, and an unwired one as `""`.
+          const held = await readNodeMembership(check);
+          expect(held?.body.nodes).toEqual([
+            {
+              nodeId: trading.WAITRON_TILL_NODE_ID,
+              contactUrl: "https://box.deli.test",
+              standing: "serving-primary",
+            },
+          ]);
 
           // The restart was requested exactly once, AFTER the 200 flushed (setTimeout(0) in
           // setup-api.ts), as a SIGTERM to this process — the graceful-shutdown latch bin.ts installs.
@@ -1612,6 +1630,20 @@ describe("startServer, against a real container as the deployment role", () => {
       // { provisioned: false, ... } fact sheet a setup box serves.
       const status = await fetch(`http://127.0.0.1:${port}/setup-api/status`);
       expect(status.status).toBe(404);
+
+      // The role probe a till reroutes on (till-reroute design §3.1), mounted in the trading branch
+      // beside mountTillApi: this box is unfenced at (mode, singleton_role) = (primary, primary), so
+      // it answers `acceptingSales: true` under its own node id. `environment` pins that
+      // `config.environment` — not a hardcoded literal — reaches the probe: this boot sets
+      // WAITRON_ENV=production, so a probe wired to the "preproduction" default would read that here.
+      // The mirror and fence suites hold the other two arms (both false).
+      const probe = await fetch(`http://127.0.0.1:${port}/api/node`);
+      expect(probe.status).toBe(200);
+      expect(await probe.json()).toMatchObject({
+        nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+        acceptingSales: true,
+        environment: "production",
+      });
     } finally {
       await server.close();
     }

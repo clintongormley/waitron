@@ -309,6 +309,12 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       expect(heldOrders.status).toBe(401);
       expect(await heldOrders.json()).toEqual({ error: { code: "session.required", params: {} } });
 
+      // Mirror ⇒ acceptingSales:false; the primary boot in "primary boot of the same identity DOES
+      // mount the sync source" is the control on the same identity.
+      const probe = await fetch(`${base}/api/node`);
+      expect(probe.status).toBe(200);
+      expect(await probe.json()).toMatchObject({ acceptingSales: false });
+
       // The mirror's health-only pass ran: recordPass advanced lastPassAt (its "work" is the pull
       // worker, not fiscal duties). setDeploymentMode('mirror') co-set singleton_role='secondary'
       // above, so singletonPass (singleton-pass.ts) resolves this node as a non-singleton and runs
@@ -481,6 +487,15 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       expect(printJobs.status).not.toBe(404);
       const deviceStation = await fetch(`${base}/api/device/station`);
       expect(deviceStation.status).not.toBe(404);
+
+      // Primary ⇒ acceptingSales:true — the control for the mirror's false; both boots are unfenced,
+      // so `mode` is the only axis that differs.
+      const probe = await fetch(`${base}/api/node`);
+      expect(probe.status).toBe(200);
+      expect(await probe.json()).toMatchObject({
+        nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+        acceptingSales: true,
+      });
     } finally {
       await server.close();
     }
