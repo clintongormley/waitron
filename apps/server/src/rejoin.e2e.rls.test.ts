@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -195,19 +195,14 @@ async function makeTarget(): Promise<RealPostgres> {
   return pg;
 }
 
-/** Per-test media + state dirs, plus the pre-existing `restore-staging`. A returning box already has its
- * media store and its state-secrets dir. `restore-staging` (`<stateDir>/restore-staging`) is created
- * here as ARRANGE because the SHIPPED restore/rejoin path does NOT create it: verified by deletion —
- * with this `mkdir` removed, `runRejoin` reaches `rejoin.wiped` (the drop+create RAN) and then the
- * restore throws (assertSafeEntryName → realpath ENOENT on the missing dir), returning code 1 with the
- * box left wiped-but-not-restored. Only the BACKUP side (`backup-sweep.ts` `runOnce`) mkdir's its
- * staging; nothing in `bin-rejoin`/`runRejoin`/`restoreFromArtifact`/`restore-command` does. Flagged as
- * a shipped-code concern for the controller (this is a TEST-ONLY task — not patched here). */
+/** Per-test media + state dirs. `<stateDir>/restore-staging` is DELIBERATELY not created here: the
+ * shipped `restoreFromArtifact` mkdir's its own staging/media/state roots before the guard realpath's
+ * them (restore.ts), so this e2e exercises that fix end to end rather than masking it. Only the
+ * node's OWN identity secret is pre-written, to prove `skipSecrets` keeps it. */
 async function arrangeDirs(): Promise<{ mediaDir: string; stateDir: string; stagingDir: string }> {
   const mediaDir = await mkdtemp(join(scratchRoot, "media-"));
   const stateDir = await mkdtemp(join(scratchRoot, "state-"));
   const stagingDir = join(stateDir, "restore-staging");
-  await mkdir(stagingDir, { recursive: true });
   await writeFile(join(stateDir, "identity.key"), OWN_IDENTITY);
   return { mediaDir, stateDir, stagingDir };
 }
