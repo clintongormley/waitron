@@ -117,6 +117,24 @@ describe("rejoinAsSecondary", () => {
     await db.close();
   });
 
+  it("refuses with rejoin.no_carrier when a carrier IS present but the drain reader is undefined", async () => {
+    // Boundary hardening: the no_carrier guard is `carrier === undefined || readDrainProgress ===
+    // undefined`. The test above pins the first leg (no carrier in the chart). This pins the SECOND leg
+    // independently — the held chart DOES name a serving-primary, but the caller passed no drain reader,
+    // which must still be refused fail-safe as no_carrier (mirrors retire.test.ts's analogous boundary
+    // test for its own no_carrier OR). Without this, a regression dropping the reader half of the OR
+    // would pass every other test at 100% coverage.
+    const { db, nodeId, deps } = await setup();
+    await writeNodeMembership(db, heldDoc(nodeId, "sell-only")); // default carrier: true
+    const d = deps({ readDrainProgress: undefined });
+
+    const err = await captureError(() => rejoinAsSecondary(d));
+    expect(isAppError(err) && err.code).toBe("rejoin.no_carrier");
+    expect(d.closePreWipe).not.toHaveBeenCalled();
+    expect(d.wipeDatabase).not.toHaveBeenCalled();
+    await db.close();
+  });
+
   it("refuses when the tail has not fully drained onto the carrier", async () => {
     const { db, nodeId, deps } = await setup();
     await writeNodeMembership(db, heldDoc(nodeId, "sell-only"));
