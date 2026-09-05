@@ -573,6 +573,9 @@ importers:
       '@waitron/fiscal':
         specifier: workspace:*
         version: link:../fiscal
+      '@waitron/module':
+        specifier: workspace:*
+        version: link:../module
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared

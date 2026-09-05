@@ -46,16 +46,22 @@ export function resolveFiscalModules(territory: string): FiscalModules {
  * that, `IdSistemaInformatico` on every registro the node files. Config, not a CLI argument, per
  * spec D5 / ground-truth #2. `apps/server/src/provision-till.ts` still takes it as an argument
  * (register-till.ts's shim), duplicating the length rule — converging the two is a noted follow-up.
+ *
+ * SP-3c gave `packages/fiscal-verifactu` its own `WAITRON_ID_SISTEMA` for the module's provisioning
+ * seat. The two must hold the same value: they mint installation numbers against the SAME
+ * (NIF, IdSIF) counter, and a divergence would split one obligado's counter in two. Converging onto
+ * that one is part of the same follow-up.
  */
 export const WAITRON_ID_SISTEMA = "W1";
 const ID_SISTEMA_MAX_LENGTH = 2;
 
 /** Validates the product constant (a programming error if wrong, not operator error).
  *
- * Throws `provisioning.id_sistema_invalid`, not `apps/server`'s `sif.id_sistema_invalid`: the
- * latter is not in scope for this package's type-checker (`apps/server` cannot be imported from a
- * package). See that code's doc comment in `errors.ts` for the receipt and the convergence
- * follow-up. */
+ * Throws `provisioning.id_sistema_invalid`, still a distinct code from
+ * `sif.id_sistema_invalid`. The scope obstacle that FORCED the split is gone — that code now lives
+ * in `packages/fiscal-verifactu/src/errors.ts`, which this package depends on, so throwing it here
+ * type-checks. Converging the two is the remaining step, not a blocked one; see the code's doc
+ * comment in `errors.ts`. */
 export function assertUsableIdSistema(value: string): void {
   if (value.length === 0 || value.length > ID_SISTEMA_MAX_LENGTH) {
     throw new AppError("provisioning.id_sistema_invalid", {

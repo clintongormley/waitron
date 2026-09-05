@@ -4,6 +4,8 @@ export type { VerifactuBackendOptions } from "./backend.js";
 export { FISCAL_MIGRATIONS } from "./migrations.js";
 export { FISCAL_ENROLMENT } from "./enrolment.js";
 export { FISCAL_VOCABULARY } from "./vocabulary.js";
+export { FISCAL_PROVISIONING, WAITRON_ID_SISTEMA } from "./provisioning.js";
+export { FISCAL_SLOT, rejectResolveClient } from "./slot.js";
 export {
   cadenas,
   contadoresInstalacion,

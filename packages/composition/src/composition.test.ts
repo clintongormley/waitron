@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FISCAL_VOCABULARY } from "@waitron/fiscal-verifactu";
+import { FISCAL_PROVISIONING, FISCAL_SLOT, FISCAL_VOCABULARY } from "@waitron/fiscal-verifactu";
 import { manifestSets } from "@waitron/migrations";
 import { orderedMigrationSets } from "@waitron/module";
 import { WORKFORCE_ES_VOCABULARY } from "@waitron/workforce-es";
@@ -33,5 +33,18 @@ describe("ALL_MODULES vocabulary seat", () => {
   it("workforce-es declares the Spain labour module's own vocabulary, by reference", () => {
     const wfes = ALL_MODULES.find((m) => m.name === "workforce-es");
     expect(wfes?.vocabulary).toBe(WORKFORCE_ES_VOCABULARY);
+  });
+});
+
+describe("ALL_MODULES provisioning and fiscal seats", () => {
+  it("fiscal declares its provisioning contribution and fills the fiscal slot, by reference", () => {
+    const fiscal = ALL_MODULES.find((m) => m.name === "fiscal");
+    expect(fiscal?.provisioning).toBe(FISCAL_PROVISIONING);
+    expect(fiscal?.fiscal).toBe(FISCAL_SLOT);
+  });
+  it("exactly one module fills the fiscal slot", () => {
+    expect(ALL_MODULES.filter((m) => m.fiscal !== undefined).map((m) => m.name)).toEqual([
+      "fiscal",
+    ]);
   });
 });

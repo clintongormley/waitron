@@ -52,6 +52,15 @@ declare module "@waitron/shared" {
      * translatable refusal rather than a locally invented installation number. See ./registro-sif.ts. */
     "sif.not_registered": { tenantId: string; nodeId: string };
 
+    /** `IdSistemaInformatico` is empty or longer than AEAT's two-character cap
+     * (`packages/verifactu`'s `ID_SISTEMA_LENGTH`). Checked by `registerSif` because nothing
+     * downstream re-checks it: the column carries no CHECK and every registro copies the value. */
+    "sif.id_sistema_invalid": { value: string; maxLength: number };
+
+    /** A standby's reserved SIF state arrived from the primary malformed (the mirror bundle is wire
+     * input). `reason` is our own English description, never the payload. */
+    "sif.reservation_invalid": { reason: string };
+
     /**
      * Task 14's brief drafted this as `ErrorCode.FISCAL_CHAIN_APPEND_CONTENTION`, appended
      * directly to `packages/shared/src/errors.ts`'s `ErrorCode` — the same SCREAMING_SNAKE_CASE,

@@ -258,12 +258,12 @@ declare module "@waitron/shared" {
      * before it can reach `registro_sif.id_sistema_informatico` and, through that, every registro a
      * node files, where it could only be superseded by re-registration, never corrected.
      *
-     * `provisioning.*`, and the choice is forced as much as reasoned: `apps/server/src/errors.ts`
-     * already registers `sif.id_sistema_invalid` with this exact shape, but `apps/server` cannot be
-     * imported from a package, so that declaration is not in scope for `@waitron/provisioning`'s
-     * type-checker — `throw new AppError("sif.id_sistema_invalid", …)` here fails `tsc` with
-     * `error TS2345: Argument of type '"sif.id_sistema_invalid"' is not assignable to parameter of
-     * type 'keyof ErrorParams'` (measured on this tree). It is not a NODE-provisioning code in the
+     * `provisioning.*` was originally forced rather than chosen: `sif.id_sistema_invalid` was
+     * registered in `apps/server/src/errors.ts`, which a package cannot import, so throwing it here
+     * failed `tsc` with TS2345. That obstacle is GONE — SP-3c moved the code into
+     * `packages/fiscal-verifactu/src/errors.ts`, a dependency of this package, and throwing it here
+     * now type-checks (measured by substituting the throw and running this package's `typecheck`).
+     * The code survives only as an un-converged duplicate. It is not a NODE-provisioning code in the
      * sense the header above warns against: it validates Waitron's own global product constant, not
      * any one node's SIF row. Converging the two length rules onto a single code is a noted
      * follow-up (see the doc comment on `WAITRON_ID_SISTEMA`).

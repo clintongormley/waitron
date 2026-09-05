@@ -11,6 +11,20 @@ import type { Transaction } from "@waitron/db";
 import { cadenas } from "./schema/cadenas.js";
 import { contadoresInstalacion, registroSif } from "./schema/sif.js";
 
+/** AEAT caps `IdSistemaInformatico` at two characters (`packages/verifactu`'s `ID_SISTEMA_LENGTH`). */
+const ID_SISTEMA_MAX_LENGTH = 2;
+
+/**
+ * Nothing downstream re-checks this: `registro_sif` carries no CHECK on the column and every
+ * registro copies the value onto a record that can only be superseded by re-registering onto a
+ * fresh chain. So it is checked HERE, before the registration writes anything.
+ */
+function assertUsableIdSistema(value: string): void {
+  if (value.length === 0 || value.length > ID_SISTEMA_MAX_LENGTH) {
+    throw new AppError("sif.id_sistema_invalid", { value, maxLength: ID_SISTEMA_MAX_LENGTH });
+  }
+}
+
 export interface RegisterSifParams {
   tenantId: TenantId;
   nodeId: NodeId;
@@ -186,6 +200,8 @@ export async function registerSif(
   tx: Transaction,
   params: RegisterSifParams,
 ): Promise<SifRegistration> {
+  assertUsableIdSistema(params.idSistemaInformatico);
+
   // Retire any live identity for this node first, so the partial unique index
   // (registro_sif_activo_uq) has room for the new one. The old row is never updated beyond this
   // timestamp: its registros are immutable and must keep pointing at the identity that actually

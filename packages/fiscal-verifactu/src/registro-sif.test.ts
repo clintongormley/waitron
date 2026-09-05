@@ -119,6 +119,27 @@ describe("registerSif", () => {
     expect(seen).toEqual([...seen].sort((a, b) => a - b));
     expect(new Set(seen).size).toBe(seen.length);
   });
+
+  it.each([
+    ["longer than two characters", "WTRN01"],
+    ["empty", ""],
+  ])("refuses an IdSistemaInformatico that is %s, before writing anything", async (_label, bad) => {
+    const err = await withTenant(db, TENANT_A.id, (tx) =>
+      registerSif(tx, {
+        ...SIF_PARAMS,
+        idSistemaInformatico: bad,
+        tenantId: TENANT_A.id,
+        nodeId: TENANT_A.nodeId,
+      }),
+    ).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AppError);
+    expect((err as AppError).code).toBe("sif.id_sistema_invalid");
+    expect((err as AppError).params).toEqual({ value: bad, maxLength: 2 });
+    const written = await db.execute(
+      sql`select 1 from registro_sif where node_id = ${TENANT_A.nodeId}`,
+    );
+    expect(written.rows).toEqual([]);
+  });
 });
 
 describe("re-registration begins a new chain", () => {
