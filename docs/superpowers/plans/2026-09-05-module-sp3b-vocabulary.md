@@ -854,6 +854,31 @@ describe("vocabularyOwners / forbiddenVocabulary", () => {
   });
 });
 
+describe("the package-local tokeniser copies", () => {
+  // `findSpanish` is deliberately not importable from @waitron/db (its barrel says why: drizzle-kit
+  // loads the barrel, and english-only.ts computes PACKAGES_ROOT from import.meta.dirname at load
+  // time), so each vocabulary owner's package-local control carries a verbatim copy of `tokenise`.
+  // This pins every copy byte-identical to the original, so a change to how the guard tokenises
+  // cannot leave a package-local control silently disagreeing with the root guard.
+  const TOKENISE = /function tokenise\(line: string\): string\[\] \{[\s\S]*?\n\}/;
+  const original = TOKENISE.exec(readSource(join(PACKAGES_ROOT, "db", "src", "english-only.ts")))?.[0];
+
+  it("finds the original to compare against", () => {
+    expect(original).toBeDefined();
+  });
+
+  it.each(OWNERS.map((o) => [o.module, o.packageDir] as const))(
+    "%s: its local copy is byte-identical to the guard's tokeniser",
+    (_module, packageDir) => {
+      const copies = sourceFilesIn(packageDir)
+        .filter((f) => /vocabulary(-scope)?\.test\.ts$/.test(f))
+        .map((f) => TOKENISE.exec(readSource(f))?.[0]);
+      expect(copies).toHaveLength(1);
+      expect(copies[0]).toBe(original);
+    },
+  );
+});
+
 describe.each(discovered)("%s", (_label, file) => {
   it("uses English vocabulary only", () => {
     const violations = findSpanish(readSource(file), FORBIDDEN);
@@ -1057,6 +1082,9 @@ Each line: make the edit, run `pnpm vitest run scripts/english-only.test.ts`, co
 2. Append `export const huella = 1;` to `packages/sync-enrolment/src/index.ts` → expected red: the `sync-enrolment: /sync-enrolment/src/index.ts` case, `1: huella — export const huella = 1;`. Restore.
 3. Add `"fiscal-verifactu",` to `GENERIC_PACKAGES` in `english-only.ts` → expected red: `scopes itself to the twenty generic packages` AND `never scans a vocabulary owner's package`. Restore.
 4. Add `"huella",` to `SPANISH_WORDS` in `english-only.ts` → expected red: `has one declaring home per word` with `huella (owned by fiscal)`. Restore.
+5. In `packages/workforce-es/src/vocabulary.test.ts`, change `.filter(Boolean)` inside `tokenise` to `.filter((t) => t.length > 0)` → expected red: `workforce-es: its local copy is byte-identical to the guard's tokeniser`. Restore.
+
+Step 8's measurement doubles as the arbiter of a disagreement between the two earlier task reviews (one counted today's `SPANISH_WORDS` at 135 words, the other at 142): report BOTH numbers it prints.
 
 After restoring, run `git status --short` — only `packages/db/src/english-only.ts` and `scripts/english-only.test.ts` may be modified.
 
