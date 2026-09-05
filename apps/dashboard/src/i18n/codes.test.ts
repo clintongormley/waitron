@@ -84,11 +84,14 @@ it("has a sentence for each in-use delete code (device-profile follow-ons)", () 
   // these, mapped to 409. Each must map to real copy in BOTH languages, never the raw wire code and
   // never the GENERIC fallback (compared against ITS OWN language's generic). Proven by deletion: drop
   // either from CODE_MESSAGES and both codeMessage calls return their language's generic → red.
-  const GENERIC_ES = "Algo salió mal, inténtalo de nuevo";
-  const GENERIC_EN = "Something went wrong, try again";
+  // GENERIC is not exported, so derive each language's generic from the fallback path itself — an
+  // unmapped code degrades to GENERIC — rather than hard-coding the copy (which drifts if it changes).
+  const GENERIC_ES = codeMessage("test.unmapped_code", "es");
+  const GENERIC_EN = codeMessage("test.unmapped_code", "en");
   for (const code of ["canvas.in_use", "device_profile.in_use"]) {
     expect(codeMessage(code, "es")).not.toBe(code);
     expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
+    expect(codeMessage(code, "en")).not.toBe(code);
     expect(codeMessage(code, "en")).not.toBe(GENERIC_EN);
   }
 });
