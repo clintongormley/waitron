@@ -44,6 +44,7 @@ const deps = {
   nodeId: "n",
   environment: "production",
   enrolments: ALL_SYNC_ENROLMENTS,
+  moduleVersions: {},
 };
 
 describe("mountSyncApi peer auth + handshake", () => {
@@ -83,6 +84,7 @@ describe("mountSyncApi peer auth + handshake", () => {
           nodeId: NODE_A,
           environment: "production",
           enrolments: ALL_SYNC_ENROLMENTS,
+          moduleVersions: {},
         },
         log,
       );
@@ -106,6 +108,10 @@ describe("mountSyncApi peer auth + handshake", () => {
     try {
       const peer = await enrolPeer(postgres.admin, { subscriberId: "helloPeer", name: "hello" });
       const app = new Hono();
+      // SP-2b: /hello advertises this node's per-module applied schema versions so a subscriber can
+      // park a row whose owning module the source has migrated ahead of it. The handshake echoes the
+      // injected map verbatim.
+      const moduleVersions = { core: 3, payments: 1 };
       mountSyncApi(
         app,
         {
@@ -114,6 +120,7 @@ describe("mountSyncApi peer auth + handshake", () => {
           nodeId: "n",
           environment: "production",
           enrolments: ALL_SYNC_ENROLMENTS,
+          moduleVersions,
         },
         log,
       );
@@ -127,6 +134,7 @@ describe("mountSyncApi peer auth + handshake", () => {
         nodeId: "n",
         environment: "production",
         membership: null,
+        moduleVersions: { core: 3, payments: 1 },
       });
     } finally {
       await pool.close();
@@ -156,6 +164,7 @@ describe("mountSyncApi peer auth + handshake", () => {
           nodeId: "n",
           environment: "production",
           enrolments: ALL_SYNC_ENROLMENTS,
+          moduleVersions: {},
         },
         log,
       );
@@ -251,6 +260,7 @@ describe("mountSyncApi peer auth + handshake", () => {
           nodeId: NODE_A,
           environment: "production",
           enrolments: ALL_SYNC_ENROLMENTS,
+          moduleVersions: {},
         },
         log,
       );
@@ -393,6 +403,7 @@ describe("mountSyncApi peer auth + handshake", () => {
           nodeId: NODE_A,
           environment: "production",
           enrolments: ALL_SYNC_ENROLMENTS,
+          moduleVersions: {},
           ownOriginOnly: true,
         },
         log,
@@ -442,6 +453,7 @@ describe("POST /sync-api/cursor — subscribers report their cursor to the sourc
           nodeId: NODE_A,
           environment: "production",
           enrolments: ALL_SYNC_ENROLMENTS,
+          moduleVersions: {},
         },
         log,
       );
@@ -484,6 +496,7 @@ describe("POST /sync-api/cursor — subscribers report their cursor to the sourc
           nodeId: NODE_A,
           environment: "production",
           enrolments: ALL_SYNC_ENROLMENTS,
+          moduleVersions: {},
         },
         log,
       );
@@ -523,6 +536,7 @@ describe("POST /sync-api/cursor — subscribers report their cursor to the sourc
           nodeId: NODE_A,
           environment: "production",
           enrolments: ALL_SYNC_ENROLMENTS,
+          moduleVersions: {},
         },
         log,
       );
@@ -564,6 +578,7 @@ describe("POST /sync-api/cursor — subscribers report their cursor to the sourc
           nodeId: NODE_A,
           environment: "production",
           enrolments: ALL_SYNC_ENROLMENTS,
+          moduleVersions: {},
         },
         log,
       );

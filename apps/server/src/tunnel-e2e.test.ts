@@ -155,6 +155,7 @@ describe("headline e2e — the cloud pulls through the outbound tunnel and the r
         nodeId: NODE_A,
         environment: "production",
         enrolments: ALL_SYNC_ENROLMENTS,
+        moduleVersions: {},
       },
       syncLog,
     );

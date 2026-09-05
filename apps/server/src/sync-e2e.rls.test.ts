@@ -108,6 +108,7 @@ function sourceHttp(environment: "production" | "preproduction"): HttpClient {
       nodeId: NODE_A,
       environment,
       enrolments: ALL_SYNC_ENROLMENTS,
+      moduleVersions: {},
     },
     log,
   );

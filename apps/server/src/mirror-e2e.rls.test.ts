@@ -294,6 +294,7 @@ beforeAll(async () => {
       nodeId: PRIMARY_SYNC_NODE,
       environment: "preproduction",
       enrolments: ALL_SYNC_ENROLMENTS,
+      moduleVersions: {},
     },
     log,
   );

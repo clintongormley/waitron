@@ -86,6 +86,10 @@ export interface SyncApiDeps {
    * `?lane=` → `tablesForLane(deps.enrolments, lane)` SERVER-SIDE to bound the read to that lane's
    * tables. `@waitron/sync` no longer owns this set. */
   enrolments: readonly EnrolledTable[];
+  /** Each module's applied schema version, advertised on `/hello` for the subscriber's version gate
+   * (SP-2b). A boot snapshot from `moduleAppliedVersions()`: a subscriber parks a sync row whose
+   * owning module the source has migrated ahead of it. */
+  moduleVersions: Record<string, number>;
   /** When true, `/sync-api/log` serves ONLY this node's own origin (`deps.nodeId`), ignoring a
    * peer-supplied `?originId=`. The membership-rejoin R2 DRAIN source: a fenced (sell-only) node serves
    * its own tail so the carrier can drain it, and must NOT relay any other origin (design §6 step 3).
@@ -108,9 +112,10 @@ async function requirePeer(db: Database, c: Context): Promise<{ subscriberId: st
  * mountWebhook / mountTillApi / mountCatalogueApi convention). Every route is behind `requirePeer`,
  * which resolves the caller's Bearer token to its enrolled `sync_peers` identity (a missing/blank
  * token fails closed before any DB work). `/sync-api/hello` returns this node's
- * { nodeId, environment, membership } for the peer's environment handshake — `membership` is the held
- * SignedMembershipDocument (design §5), `null` when this node has never adopted one, which the puller
- * re-runs its accept fence against. `/sync-api/log` streams the tenant's captured sync_log rows
+ * { nodeId, environment, membership, moduleVersions } for the peer's environment handshake —
+ * `membership` is the held SignedMembershipDocument (design §5), `null` when this node has never
+ * adopted one, which the puller re-runs its accept fence against; `moduleVersions` is each module's
+ * applied schema version (SP-2b), which the subscriber's version gate parks a row against. `/sync-api/log` streams the tenant's captured sync_log rows
  * past `after` as NDJSON with row_image as raw jsonb text (design §4c), and `/sync-api/cursor` records
  * how far the authenticated peer has applied this node's log. The DB connection is a sync_tailer AND
  * app_user member pool (production's `syncDb`, boot.ts): it looks the peer up in `sync_peers`, reads
@@ -125,7 +130,12 @@ export function mountSyncApi(app: Hono, deps: SyncApiDeps, log: Logger): void {
       // fence against it (membership-adopt.ts). `null` when this node has never adopted one. Read on
       // the same app-role pool (app_user holds SELECT on node_membership).
       const membership = await readNodeMembership(deps.db);
-      return c.json({ nodeId: deps.nodeId, environment: deps.environment, membership });
+      return c.json({
+        nodeId: deps.nodeId,
+        environment: deps.environment,
+        membership,
+        moduleVersions: deps.moduleVersions,
+      });
     }),
   );
   app.get("/sync-api/log", (c) =>

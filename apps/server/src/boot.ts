@@ -579,11 +579,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // SP-2b: hoisted to `startServer` scope so the sync mount/pull sites (~700 lines below) can inject
   // it into the sync deps (the schema-version park gate). Populated ONLY in the trading-mode block
   // below, under the SAME `config.till !== undefined` condition that guards those sites, so the sync
-  // wiring never sees it unassigned. Declared WITHOUT a default here because Task 1 has no reader
-  // outside the block yet — `no-useless-assignment` rejects a `{}` that is overwritten before any
-  // read. Task 2, which adds the first out-of-block read at a `config.till`-guarded site, must add
-  // `= {}` then (TS cannot correlate the two conditionals, so it will demand definite assignment).
-  let myModuleVersions: Record<string, number>;
+  // wiring never sees it unassigned. The `= {}` default is what satisfies definite-assignment at the
+  // out-of-block reads (the `mountSyncApi` sites, SP-2b) — TS cannot correlate the two `config.till`
+  // conditionals, so it would otherwise demand it — while never actually advertising `{}`, because
+  // those reads only run when `config.till !== undefined`, the same condition that populated it.
+  let myModuleVersions: Record<string, number> = {};
   if (config.till !== undefined) {
     const driftProbe = await createPostgresDb(config.migrationsDatabaseUrl);
     try {
@@ -1328,6 +1328,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
           nodeId: till.nodeId,
           environment: config.environment,
           enrolments: ALL_SYNC_ENROLMENTS,
+          moduleVersions: myModuleVersions,
         },
         log,
       );
@@ -1348,6 +1349,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
           environment: config.environment,
           enrolments: ALL_SYNC_ENROLMENTS,
           ownOriginOnly: true,
+          moduleVersions: myModuleVersions,
         },
         log,
       );
