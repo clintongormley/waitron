@@ -62,15 +62,20 @@ const pgDumpShellOut: PgDumpRunner = async ({ databaseUrl, outFile, signal }) =>
 export const realPgDump: PgDumpRunner = (args) => dumpAtomic(args, pgDumpShellOut);
 /* v8 ignore stop */
 
+/** The key-naming convention every backup artifact shares: `dumpFileName` builds names from it, and
+ * both the sweep's prune (`backup-sweep.ts`) and the status reader (`backup-status.ts`) scan
+ * `list(BACKUP_KEY_PREFIX)` for it. Single source of truth so the three cannot drift apart. */
+export const BACKUP_KEY_PREFIX = "waitron-";
+
 /** A filesystem-safe, lexically-sortable dump filename for `now`: `waitron-<basic-ISO>.dump`, e.g.
  * `waitron-20260829T175501Z.dump`. No colons (Windows/tooling safe) and second-precision basic ISO,
  * so a lexical sort of these names is a chronological sort. The sweep stamps the staging dump (and,
  * with the `.enc` suffix, the fanned-out artifact key) with this; pruning is per-backend off
- * `list("waitron-")` (backup-sweep.ts), not by re-reading the staging dir. */
+ * `list(BACKUP_KEY_PREFIX)` (backup-sweep.ts), not by re-reading the staging dir. */
 export function dumpFileName(now: Date): string {
   const stamp = now
     .toISOString()
     .replace(/[-:]/g, "")
     .replace(/\.\d+Z$/, "Z");
-  return `waitron-${stamp}.dump`;
+  return `${BACKUP_KEY_PREFIX}${stamp}.dump`;
 }

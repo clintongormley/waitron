@@ -1,3 +1,4 @@
+import { BACKUP_KEY_PREFIX } from "./pg-dump.js";
 import type { StorageBackend } from "./storage-backend.js";
 
 /**
@@ -39,21 +40,32 @@ export async function readBackupStatus(
 ): Promise<BackupStatus> {
   if (backends.length === 0) return { configured: false };
 
-  const destinations: DestinationStatus[] = [];
-  for (const backend of backends) {
-    const objects = await backend.list("waitron-"); // newest-first
-    const newest = objects[0];
-    if (newest === undefined) {
-      destinations.push({ id: backend.id, lastBackupAt: null, ageSeconds: null, stale: true });
-      continue;
-    }
-    const ageMs = now.getTime() - newest.mtimeMs;
-    destinations.push({
-      id: backend.id,
-      lastBackupAt: new Date(newest.mtimeMs).toISOString(),
-      ageSeconds: Math.floor(ageMs / 1000),
-      stale: ageMs > staleAfterMs,
-    });
-  }
+  // Each destination is read independently and concurrently — this is on the box-status request path,
+  // so the destinations' `list` calls run in parallel rather than serially.
+  const destinations = await Promise.all(
+    backends.map((backend) => destinationStatus(backend, staleAfterMs, now)),
+  );
   return { configured: true, destinations };
+}
+
+/** One destination's freshness. Scans `list(BACKUP_KEY_PREFIX)` (newest-first per the
+ * `StorageBackend` contract); a destination with no artifact yet reports null fields and
+ * `stale: true`. */
+async function destinationStatus(
+  backend: StorageBackend,
+  staleAfterMs: number,
+  now: Date,
+): Promise<DestinationStatus> {
+  const objects = await backend.list(BACKUP_KEY_PREFIX); // newest-first
+  const newest = objects[0];
+  if (newest === undefined) {
+    return { id: backend.id, lastBackupAt: null, ageSeconds: null, stale: true };
+  }
+  const ageMs = now.getTime() - newest.mtimeMs;
+  return {
+    id: backend.id,
+    lastBackupAt: new Date(newest.mtimeMs).toISOString(),
+    ageSeconds: Math.floor(ageMs / 1000),
+    stale: ageMs > staleAfterMs,
+  };
 }

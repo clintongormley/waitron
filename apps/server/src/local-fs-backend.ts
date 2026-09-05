@@ -1,11 +1,14 @@
-import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { writeFileAtomic } from "./fs-atomic.js";
 import type { BackupDestination, StorageBackend, StoredObject } from "./storage-backend.js";
 
 /**
- * v1 storage backend: a local directory. `put` writes to `<target>.partial` then `rename`s onto the
- * final key, the same temp-then-rename idiom as `dumpAtomic` (`pg-dump.ts`) — so a fan-out write that
- * dies mid-write never leaves a half-written key visible under its real name.
+ * v1 storage backend: a local directory. `put` writes to `<target>.tmp` then `rename`s onto the final
+ * key via `writeFileAtomic` (`fs-atomic.ts`) — the same temp-then-rename idiom as `dumpAtomic`
+ * (`pg-dump.ts`), so a fan-out write that dies mid-write never leaves a half-written key visible under
+ * its real name. `list` therefore excludes that helper's `.tmp` suffix (below) so a leftover temp is
+ * never returned as a backup.
  */
 export class LocalFsBackend implements StorageBackend {
   constructor(
@@ -15,17 +18,7 @@ export class LocalFsBackend implements StorageBackend {
 
   async put(key: string, bytes: Uint8Array): Promise<void> {
     await mkdir(this.dir, { recursive: true });
-    const target = join(this.dir, key);
-    const partial = `${target}.partial`;
-    try {
-      await writeFile(partial, bytes, { mode: 0o600 });
-      await rename(partial, target);
-    } catch (err) {
-      // Best-effort cleanup: a failure here (e.g. EACCES on a read-only mount) must never replace
-      // the real write/rename error below — the same posture `dumpAtomic` takes (`pg-dump.ts`).
-      await rm(partial, { force: true }).catch(() => {});
-      throw err;
-    }
+    await writeFileAtomic(join(this.dir, key), bytes, 0o600);
   }
 
   async get(key: string): Promise<Buffer> {
@@ -42,7 +35,9 @@ export class LocalFsBackend implements StorageBackend {
     }
     const out: StoredObject[] = [];
     for (const name of names) {
-      if (!name.startsWith(prefix) || name.endsWith(".partial")) continue;
+      // Exclude `writeFileAtomic`'s in-progress temp (`<target>.tmp`): it starts with `waitron-` too,
+      // so a leftover from a crash between write and rename would otherwise read as a finished backup.
+      if (!name.startsWith(prefix) || name.endsWith(".tmp")) continue;
       let info;
       try {
         info = await stat(join(this.dir, name));

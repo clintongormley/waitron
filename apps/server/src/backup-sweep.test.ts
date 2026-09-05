@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { decryptArtifact } from "./artifact-cipher.js";
-import { runBackupSweep, runOnce } from "./backup-sweep.js";
+import { type BackupSweepDeps, runBackupSweep, runOnce } from "./backup-sweep.js";
 import type { StorageBackend, StoredObject } from "./storage-backend.js";
 
 const execFileAsync = promisify(execFile);
@@ -149,29 +149,39 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
     await rm(staging, { recursive: true, force: true });
   });
 
+  // Mirrors the `deps()` helper in the runOnce block: the five constant loop fields in one place, with
+  // the per-test signal/sleep/log (and optional runDump/now) supplied as overrides. `signal`/`sleep`/
+  // `log` are required here because every loop test drives its own AbortController through them.
+  type LoopOverrides = Partial<BackupSweepDeps> & Pick<BackupSweepDeps, "signal" | "sleep" | "log">;
+  const loopDeps = (backend: StorageBackend, overrides: LoopOverrides): BackupSweepDeps => ({
+    backends: [backend],
+    databaseUrl: "postgres://x",
+    recoveryKey: "recovery-key-1",
+    stagingDir: staging,
+    intervalMs: 10,
+    retain: 7,
+    ...overrides,
+  });
+
   it("dumps once, fans to the backend, logs backup.destination_completed, then exits on abort", async () => {
     const controller = new AbortController();
     const backend = new FakeBackend("only");
     const logged: Array<[string, string]> = [];
 
-    await runBackupSweep({
-      backends: [backend],
-      databaseUrl: "postgres://x",
-      recoveryKey: "recovery-key-1",
-      stagingDir: staging,
-      intervalMs: 10,
-      retain: 7,
-      signal: controller.signal,
-      log: (level, event) => logged.push([level, event]),
-      runDump: async ({ outFile }: { outFile: string }) => {
-        await writeFile(outFile, "DUMP-BYTES");
-      },
-      now: () => new Date("2026-09-05T00:00:00Z"),
-      // Aborts on the first (and only) sleep, so the loop runs exactly one iteration then exits.
-      sleep: async () => {
-        controller.abort();
-      },
-    });
+    await runBackupSweep(
+      loopDeps(backend, {
+        signal: controller.signal,
+        log: (level, event) => logged.push([level, event]),
+        runDump: async ({ outFile }) => {
+          await writeFile(outFile, "DUMP-BYTES");
+        },
+        now: () => new Date("2026-09-05T00:00:00Z"),
+        // Aborts on the first (and only) sleep, so the loop runs exactly one iteration then exits.
+        sleep: async () => {
+          controller.abort();
+        },
+      }),
+    );
 
     expect(backend.objects.size).toBe(1);
     expect(logged).toContainEqual(["info", "backup.destination_completed"]);
@@ -186,24 +196,20 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
 
     // The loop must NOT die on a dump failure: the throw is caught, logged as a warn, and a second
     // iteration runs before the abort — the same "logged and swallowed" contract runRetentionSweep has.
-    await runBackupSweep({
-      backends: [backend],
-      databaseUrl: "postgres://x",
-      recoveryKey: "recovery-key-1",
-      stagingDir: staging,
-      intervalMs: 10,
-      retain: 7,
-      signal: controller.signal,
-      log: (level, event) => logged.push([level, event]),
-      runDump: async () => {
-        dumpCalls += 1;
-        throw new Error("pg_dump exploded");
-      },
-      sleep: async () => {
-        ticks += 1;
-        if (ticks >= 2) controller.abort();
-      },
-    });
+    await runBackupSweep(
+      loopDeps(backend, {
+        signal: controller.signal,
+        log: (level, event) => logged.push([level, event]),
+        runDump: async () => {
+          dumpCalls += 1;
+          throw new Error("pg_dump exploded");
+        },
+        sleep: async () => {
+          ticks += 1;
+          if (ticks >= 2) controller.abort();
+        },
+      }),
+    );
 
     expect(logged).toContainEqual(["warn", "backup.failed"]);
     // Swallowed, not fatal: a second dump was attempted after the first threw.
@@ -215,22 +221,18 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
     const backend = new FakeBackend("only");
     const logged: Array<[string, string, Record<string, unknown> | undefined]> = [];
 
-    await runBackupSweep({
-      backends: [backend],
-      databaseUrl: "postgres://x",
-      recoveryKey: "recovery-key-1",
-      stagingDir: staging,
-      intervalMs: 10,
-      retain: 7,
-      signal: controller.signal,
-      log: (level, event, fields) => logged.push([level, event, fields]),
-      runDump: async () => {
-        throw new Error("plain error, not an AppError");
-      },
-      sleep: async () => {
-        controller.abort();
-      },
-    });
+    await runBackupSweep(
+      loopDeps(backend, {
+        signal: controller.signal,
+        log: (level, event, fields) => logged.push([level, event, fields]),
+        runDump: async () => {
+          throw new Error("plain error, not an AppError");
+        },
+        sleep: async () => {
+          controller.abort();
+        },
+      }),
+    );
 
     const failure = logged.find(([, event]) => event === "backup.failed");
     expect(failure).toBeDefined();
@@ -244,23 +246,19 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
     const backend = new FakeBackend("only");
     const sleep = vi.fn();
 
-    await runBackupSweep({
-      backends: [backend],
-      databaseUrl: "postgres://x",
-      recoveryKey: "recovery-key-1",
-      stagingDir: staging,
-      intervalMs: 10,
-      retain: 7,
-      signal: controller.signal,
-      log: vi.fn(),
-      // Aborts DURING the dump itself, not in `sleep` — pins the loop's second abort check
-      // (immediately after the tick, before the sleep it would otherwise take).
-      runDump: async ({ outFile }: { outFile: string }) => {
-        controller.abort();
-        await writeFile(outFile, "DUMP-BYTES");
-      },
-      sleep,
-    });
+    await runBackupSweep(
+      loopDeps(backend, {
+        signal: controller.signal,
+        log: vi.fn(),
+        // Aborts DURING the dump itself, not in `sleep` — pins the loop's second abort check
+        // (immediately after the tick, before the sleep it would otherwise take).
+        runDump: async ({ outFile }) => {
+          controller.abort();
+          await writeFile(outFile, "DUMP-BYTES");
+        },
+        sleep,
+      }),
+    );
 
     expect(backend.objects.size).toBe(1); // the in-flight tick still completed
     expect(sleep).not.toHaveBeenCalled();

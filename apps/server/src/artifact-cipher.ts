@@ -15,10 +15,9 @@ export const VERSION = 1;
  * it undecryptable. The guard test in artifact-cipher.test.ts asserts this literal still equals
  * `SCRYPT_PARAMS` today (they match) and FAILS the moment `SCRYPT_PARAMS` is changed in place without
  * a new frozen entry here — forcing the safe move (bump VERSION, add the new params, leave v1 pinned). */
-const KDF_BY_VERSION: Record<number, ScryptParams> = {
+export const KDF_BY_VERSION: Record<number, ScryptParams> = {
   1: { N: 2 ** 17, r: 8, p: 1, keylen: 32, maxmem: 256 * 1024 * 1024 },
 };
-export { KDF_BY_VERSION };
 const SALT_LEN = 16;
 const IV_LEN = 12;
 const TAG_LEN = 16;

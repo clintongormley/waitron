@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { codeOf } from "./error-code.js";
 import type { Logger } from "./logger.js";
-import { dumpFileName, realPgDump, type PgDumpRunner } from "./pg-dump.js";
+import { BACKUP_KEY_PREFIX, dumpFileName, realPgDump, type PgDumpRunner } from "./pg-dump.js";
 import type { StorageBackend } from "./storage-backend.js";
 import "./errors.js";
 
@@ -65,18 +65,23 @@ export async function runOnce(deps: Omit<BackupSweepDeps, "intervalMs" | "sleep"
     await chmod(staged, 0o600);
     const ciphertext = encryptArtifact(await readFile(staged), deps.recoveryKey);
     const key = `${dumpName}${ENC_SUFFIX}`;
-    for (const backend of deps.backends) {
-      try {
-        await backend.put(key, ciphertext);
-        await pruneBackend(backend, deps.retain);
-        deps.log("info", "backup.destination_completed", { destination: backend.id, key });
-      } catch (err) {
-        deps.log("warn", "backup.destination_failed", {
-          destination: backend.id,
-          errorCode: codeOf(err),
-        });
-      }
-    }
+    // Fan out to every backend concurrently; each keeps its own try/catch so one failure is logged
+    // and swallowed rather than rejecting the batch — one bad backend never costs the others their
+    // backup (fail-safe, per this file's header). `allSettled` therefore never rejects here.
+    await Promise.allSettled(
+      deps.backends.map(async (backend) => {
+        try {
+          await backend.put(key, ciphertext);
+          await pruneBackend(backend, deps.retain);
+          deps.log("info", "backup.destination_completed", { destination: backend.id, key });
+        } catch (err) {
+          deps.log("warn", "backup.destination_failed", {
+            destination: backend.id,
+            errorCode: codeOf(err),
+          });
+        }
+      }),
+    );
   } finally {
     await rm(staged, { force: true });
   }
@@ -85,8 +90,8 @@ export async function runOnce(deps: Omit<BackupSweepDeps, "intervalMs" | "sleep"
 /** Keep the newest `retain` `waitron-*` artifacts on `backend` and delete the rest. `list` returns
  * newest-first (the `StorageBackend` contract), so the surplus is simply everything past `retain`. */
 async function pruneBackend(backend: StorageBackend, retain: number): Promise<void> {
-  const objects = await backend.list("waitron-");
-  for (const obj of objects.slice(retain)) await backend.delete(obj.key);
+  const objects = await backend.list(BACKUP_KEY_PREFIX);
+  await Promise.all(objects.slice(retain).map((obj) => backend.delete(obj.key)));
 }
 
 /**

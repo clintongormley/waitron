@@ -17,7 +17,11 @@ import { writeFile, rename, rm } from "node:fs/promises";
  * default-permissions path to keep. This gives atomic VISIBILITY only; it does not fsync, so it makes
  * no durability claim across a power loss — only that the visible file is whole.
  */
-export async function writeFileAtomic(path: string, data: string, mode: number): Promise<void> {
+export async function writeFileAtomic(
+  path: string,
+  data: string | Uint8Array,
+  mode: number,
+): Promise<void> {
   const tmp = `${path}.tmp`;
   // Drop any stale tmp so `writeFile` creates a fresh file and actually applies `mode` (a reused tmp
   // keeps its old, possibly-broader perms — a secret-leak risk on this helper's secret callers).

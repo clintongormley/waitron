@@ -87,42 +87,19 @@ describe("loadBackupConfig destinations + recovery key", () => {
     ).toThrow(new AppError("backup.recovery_key_too_short", { min: 12 }));
   });
 
-  it("rejects malformed WAITRON_BACKUP_DESTINATIONS JSON", () => {
-    expect(() => loadBackupConfig({ ...base, WAITRON_BACKUP_DESTINATIONS: "not json" })).toThrow(
-      new AppError("backup.destinations_invalid", { reason: "not_json" }),
+  // Every WAITRON_BACKUP_DESTINATIONS rejection funnels through the same
+  // `backup.destinations_invalid` throw with a machine-readable `reason`; the cases differ only in
+  // the input JSON and the expected reason, so they share one table. `resolve("")` is cwd, so an
+  // empty id/dir must fail closed BEFORE the resolve (CLAUDE.md §3), which the last two cases pin.
+  it.each([
+    ["not json", "not_json"],
+    ['{"kind":"local-fs"}', "not_array"],
+    ['[{"kind":"local-fs","id":"usb"}]', "bad_entry"],
+    ['[{"kind":"local-fs","id":"usb","dir":""}]', "bad_entry"],
+    ['[{"kind":"local-fs","id":"","dir":"/mnt/b"}]', "bad_entry"],
+  ])("rejects WAITRON_BACKUP_DESTINATIONS %j with reason %s", (json, reason) => {
+    expect(() => loadBackupConfig({ ...base, WAITRON_BACKUP_DESTINATIONS: json })).toThrow(
+      new AppError("backup.destinations_invalid", { reason }),
     );
-  });
-
-  it("rejects a WAITRON_BACKUP_DESTINATIONS value that is valid JSON but not an array", () => {
-    expect(() =>
-      loadBackupConfig({ ...base, WAITRON_BACKUP_DESTINATIONS: '{"kind":"local-fs"}' }),
-    ).toThrow(new AppError("backup.destinations_invalid", { reason: "not_array" }));
-  });
-
-  it("rejects a WAITRON_BACKUP_DESTINATIONS entry missing a required field", () => {
-    expect(() =>
-      loadBackupConfig({
-        ...base,
-        WAITRON_BACKUP_DESTINATIONS: '[{"kind":"local-fs","id":"usb"}]',
-      }),
-    ).toThrow(new AppError("backup.destinations_invalid", { reason: "bad_entry" }));
-  });
-
-  it("rejects a WAITRON_BACKUP_DESTINATIONS entry with an empty dir (never resolve(''))", () => {
-    expect(() =>
-      loadBackupConfig({
-        ...base,
-        WAITRON_BACKUP_DESTINATIONS: '[{"kind":"local-fs","id":"usb","dir":""}]',
-      }),
-    ).toThrow(new AppError("backup.destinations_invalid", { reason: "bad_entry" }));
-  });
-
-  it("rejects a WAITRON_BACKUP_DESTINATIONS entry with an empty id", () => {
-    expect(() =>
-      loadBackupConfig({
-        ...base,
-        WAITRON_BACKUP_DESTINATIONS: '[{"kind":"local-fs","id":"","dir":"/mnt/b"}]',
-      }),
-    ).toThrow(new AppError("backup.destinations_invalid", { reason: "bad_entry" }));
   });
 });
