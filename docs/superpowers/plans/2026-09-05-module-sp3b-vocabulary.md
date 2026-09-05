@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-05-module-sp3b-vocabulary-design.md` — read it first; the plan argues from it.
 
+> **Superseded in part (2026-09-05, the simplify pass before the PR).** Tasks 3–5 below describe the shape as first built. The landed shape differs: the descriptor helpers (`packageDirOf`, `vocabularyOwners`, `forbiddenVocabulary`) live in `@waitron/module`, not `english-only.ts`; the package-local tokeniser copies and their byte-identity pin were dropped; `series.test.ts` keeps only the column pin; `modules.test.ts` pins the seats by reference only. The spec's *Implementation notes* paragraph is the receipt; this plan is kept as the record of the run.
+
 ## Global Constraints
 
 - **Worktree:** all work happens in `/Users/clintongormley/workspace/worktrees/waitron-feat-module-sp3b-vocabulary` on branch `feat/module-sp3b-vocabulary`. Never commit to `main`.
