@@ -1,5 +1,5 @@
 import { CORE_ENROLMENT } from "@waitron/db";
-import { FISCAL_ENROLMENT } from "@waitron/fiscal-verifactu";
+import { FISCAL_ENROLMENT, FISCAL_VOCABULARY } from "@waitron/fiscal-verifactu";
 import { IDENTITY_ENROLMENT } from "@waitron/identity";
 import type { WaitronModule } from "@waitron/module";
 import { PAYMENTS_ENROLMENT } from "@waitron/payments";
@@ -130,6 +130,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../fiscal-verifactu/drizzle",
     },
     sync: FISCAL_ENROLMENT,
+    vocabulary: FISCAL_VOCABULARY,
   },
 ];
 
