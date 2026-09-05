@@ -100,7 +100,7 @@ import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
 import { listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { mountSyncApi } from "./sync-api.js";
-import { mountBoxStatusApi } from "./box-status.js";
+import { mountBoxStatusApi, readConfigConflictCount } from "./box-status.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
 import { loadBackupConfig } from "./backup-config.js";
@@ -1367,6 +1367,18 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // A rejection (untrusted / not-newer) is the quiet normal case; a real DB/transport fault is caught
     // and logged by runSyncPull as sync.membership_adopt_failed. Shared by both lanes (idempotent — the
     // persist's WHERE guard is monotonic under the two-lane race).
+    // Membership Slice 7: the LIVE serving-primary node id the apply path's config-conflict gate keys
+    // on. Initialised from the held membership document at boot, and UPDATED by the `adoptMembership`
+    // callback below when it accepts a strictly-newer document — so a promotion/demotion that arrives
+    // via gossip (no restart) is honoured on the NEXT batch, not only after a reboot (whole-branch
+    // review I1). Injected into both pull lanes as a GETTER (`() => liveServingPrimaryId`) that
+    // `syncPullOnce` reads fresh per batch. `undefined` (no held doc / no serving-primary in the chart)
+    // leaves the gate INERT — normal config down-flow is never broken (fail-safe, R-S7-2). This is a
+    // SEPARATE live holder from the disposal reader's boot-captured `carrierNodeId` const far below:
+    // disposal deliberately keys on the boot-time carrier (a fenced node does not restart on a gossiped
+    // promotion), whereas the gate must track the live serving-primary.
+    let liveServingPrimaryId =
+      heldMembership === null ? undefined : servingPrimaryNodeId(heldMembership);
     const adoptMembership = async (raw: unknown): Promise<void> => {
       const outcome = await adoptMembershipDocument(
         { db: localSyncDb, trustSet: membershipTrustSet },
@@ -1377,6 +1389,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // accept fence + persist it delegates to are proven end-to-end in membership-gossip.e2e.test.ts.
       if (outcome.accepted) {
         log("info", "membership.adopted", { term: outcome.document.body.term });
+        // Membership Slice 7: keep the config-conflict gate's serving-primary LIVE. The newly-accepted
+        // document may promote/demote the serving-primary, and both pull lanes read this holder fresh
+        // per batch through the getter injected below — so the gate honours the new chart without a
+        // restart (whole-branch review I1). `undefined` when the new chart names no serving-primary,
+        // which leaves the gate inert (fail-safe, R-S7-2).
+        liveServingPrimaryId = servingPrimaryNodeId(outcome.document);
         // Membership rejoin R1 (design §6 step 2): if this document fences THIS node while it is
         // running unfenced (was serving-primary this boot), restart into the fenced posture — the boot
         // path (reconcile axes + mount the read-only gate) applies on reboot. Same next-tick SIGTERM
@@ -1406,6 +1424,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         lane,
         enrolments: ALL_SYNC_ENROLMENTS,
         adoptMembership,
+        // Membership Slice 7: the LIVE serving-primary id for the apply path's config-conflict gate,
+        // passed as a getter read fresh per batch (see `liveServingPrimaryId` above). On the CARRIER
+        // draining a returned node this resolves to the carrier's own id (the returned node's rows carry
+        // a different origin → rejected); on a normal secondary/mirror it is the primary it pulls from
+        // (rows carry origin = primary → applied). `undefined` leaves the gate inert (fail-safe, R-S7-2).
+        servingPrimaryId: () => liveServingPrimaryId,
       });
     // The ORDERED lane at the existing idle interval (config.minTickMs) and the FAST payments lane at
     // the tighter syncConfig.fastMinIdleMs, both against the same peers/localDb/http, both under the one
@@ -1691,6 +1715,13 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         backupWorker !== undefined
           ? () => readBackupStatus(backupBackends, backupConfig!.staleAfterMs, now())
           : undefined,
+      // The Slice-7 config-conflict count surface. Present iff sync is on (`syncDb !== undefined`) — the
+      // sync module is `toggleable`, so its `sync_config_conflicts` table exists only when the module is
+      // migrated; without sync no conflict can ever be recorded, so box-status reports configured:false
+      // (the same gate the replication lag reader uses). Reads on the app `db` pool (app_user holds
+      // SELECT, 0009) under the app role — see readConfigConflictCount.
+      readConfigConflicts:
+        syncDb === undefined ? undefined : () => readConfigConflictCount(db, till.tenantId),
       // Report the effective mode the box is actually serving as — the same holder the read-only gate
       // and mirror-session middlewares read — so the status matches what the box enforces and tracks a
       // live promotion the same way, rather than issuing a fresh DB read of its own.

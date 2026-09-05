@@ -11,6 +11,7 @@ const base: BoxStatusReaders = {
   replicationLag: undefined,
   disposal: undefined,
   backup: undefined,
+  configConflicts: async () => ({ count: 0 }),
   duties: () => ({ "fiscal.drain": { stale: false } }),
 };
 
@@ -27,6 +28,7 @@ describe("collectBoxStatus", () => {
       replication: { configured: false },
       disposal: { applicable: false },
       backup: { configured: false },
+      configConflicts: { configured: true, count: 0 },
       duties: { "fiscal.drain": { stale: false } },
     });
   });
@@ -154,5 +156,24 @@ describe("collectBoxStatus", () => {
         backup: () => Promise.reject(new Error("backup dir read failed")),
       }),
     ).rejects.toThrow("backup dir read failed");
+  });
+
+  it("surfaces the config-conflict count when a reader is present", async () => {
+    const status = await collectBoxStatus({ ...base, configConflicts: async () => ({ count: 4 }) });
+    expect(status.configConflicts).toEqual({ configured: true, count: 4 });
+  });
+
+  it("reports configConflicts N-A when no reader is configured (sync module off)", async () => {
+    const status = await collectBoxStatus({ ...base, configConflicts: undefined });
+    expect(status.configConflicts).toEqual({ configured: false });
+  });
+
+  it("propagates a configConflicts reader fault (fail-loud, no configured:false fallback)", async () => {
+    await expect(
+      collectBoxStatus({
+        ...base,
+        configConflicts: () => Promise.reject(new Error("conflict count read failed")),
+      }),
+    ).rejects.toThrow("conflict count read failed");
   });
 });

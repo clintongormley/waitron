@@ -222,6 +222,108 @@ describe("syncPullOnce applies a peer's batch and advances the cursor", () => {
     }
   });
 
+  it("threads the servingPrimaryId GETTER into applyBatch and reads it FRESH per batch (membership Slice 7)", async () => {
+    // Spec §7: proves the getter flows syncPullOnce → applyBatch → the config-conflict gate over the real
+    // pull path, AND that it is read fresh per batch (the whole-branch review I1 fix). The CARRIER drains
+    // the RETURNED node's tail. Batch 1 keys serving-primary = NODE_PRIMARY (≠ the returned origin), so a
+    // products (config-class) row is primary-wins rejected + recorded, not applied. We then FLIP the getter
+    // to NODE_RETURNED and pull batch 2: the same origin now IS the serving-primary, so its config row is
+    // accepted. If the getter were captured once (not read per batch) batch 2 would still reject.
+    // Prove-by-deletion of the wiring: drop `servingPrimaryId: deps.servingPrimaryId?.()` in syncPullOnce
+    // and batch 1 applies instead of rejecting → `first.rejected` is 0 and the row lands.
+    await setEnv("production");
+    const b = await seedBase();
+    const cat = await postgres.admin.execute<{ id: string }>(
+      sql`insert into catalogues (tenant_id, name) values (${b.tenantId}, 'Deli') returning id`,
+    );
+    const catalogueId = cat.rows[0]!.id;
+    const subscriberId = uuid();
+    const NODE_PRIMARY = uuid(); // the serving-primary batch 1 is keyed to
+    const NODE_RETURNED = uuid(); // the returned node the carrier drains (≠ serving-primary in batch 1)
+    const productImage = (id: string): Record<string, unknown> => ({
+      id,
+      tenant_id: b.tenantId,
+      catalogue_id: catalogueId,
+      category_id: null,
+      station_id: null,
+      course_id: null,
+      descriptions: { en: "Coffee" },
+      pricing_unit: "each",
+      unit_price: "1.30",
+      vat_class: "general",
+      active: true,
+      image: null,
+      allergens: null,
+      manual_allergens: null,
+      recipe_derivation: null,
+      diet_derivation: null,
+      diet_override: null,
+      diet: null,
+      created_at: "2026-09-02T10:00:00+00:00",
+      updated_at: "2026-09-02T10:00:00+00:00",
+    });
+    const p1 = uuid();
+    const p2 = uuid();
+    const row = (seq: bigint, id: string): SyncLogRow => ({
+      seq,
+      originId: NODE_RETURNED,
+      table: "products",
+      op: "insert",
+      tenantId: b.tenantId,
+      rowImage: JSON.stringify(productImage(id)),
+    });
+    // /log serves batch 1 (P1 at seq 1) before the cursor advances, batch 2 (P2 at seq 2) after.
+    const http: HttpClient = async (url) => {
+      if (url.includes("/sync-api/hello")) {
+        return { status: 200, text: async () => JSON.stringify({ environment: "production" }) };
+      }
+      const ndjson = url.includes("after=0")
+        ? encodeBatch([row(1n, p1)])
+        : encodeBatch([row(2n, p2)]);
+      return { status: 200, text: async () => ndjson };
+    };
+    const applier = await postgres.pg.connectAs("sync_applier", "ap");
+    try {
+      let servingPrimary: string | undefined = NODE_PRIMARY; // flipped between the two batches
+      const deps = {
+        localDb: applier,
+        subscriberId,
+        tenantId: b.tenantId,
+        localEnvironment: "production",
+        enrolments: CORE_ENROLMENT,
+        http,
+        batchLimit: 500,
+        servingPrimaryId: () => servingPrimary, // the GETTER read fresh per batch
+      };
+      const peer = { nodeId: NODE_RETURNED, url: "http://peer/", token: "tok" };
+
+      const first = await syncPullOnce(deps, peer);
+      expect(first.rejected).toBe(1); // primary-wins overrode the returned node's config write
+      expect(first.applied).toBe(0);
+      const p1Count = await postgres.admin.execute<{ v: string }>(
+        sql`select count(*)::int::text as v from products where id = ${p1}`,
+      );
+      expect(p1Count.rows[0]!.v).toBe("0"); // P1 did NOT land
+      const recorded = await postgres.admin.execute<{ row_image_id: string | null }>(
+        sql`select row_image->>'id' as row_image_id from sync_config_conflicts
+            where origin_id = ${NODE_RETURNED}::uuid`,
+      );
+      expect(recorded.rows.map((r) => r.row_image_id)).toEqual([p1]);
+
+      // Flip the live serving-primary to the returned node's own id; the NEXT batch must honour it.
+      servingPrimary = NODE_RETURNED;
+      const second = await syncPullOnce(deps, peer);
+      expect(second.rejected).toBe(0); // origin now IS the serving-primary → accepted
+      expect(second.applied).toBe(1);
+      const p2Count = await postgres.admin.execute<{ v: string }>(
+        sql`select count(*)::int::text as v from products where id = ${p2}`,
+      );
+      expect(p2Count.rows[0]!.v).toBe("1"); // P2 landed — the getter was read fresh for batch 2
+    } finally {
+      await applier.close();
+    }
+  });
+
   it("throws on a non-200 from either endpoint (a transport error the loop backs off on)", async () => {
     await setEnv("production");
     const applier = await postgres.pg.connectAs("sync_applier", "ap");

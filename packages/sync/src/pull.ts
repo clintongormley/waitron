@@ -49,6 +49,16 @@ export interface SyncPullDeps {
    * `applyBatch` opts so the apply loop builds its dispatch from the composition root's set, not a set
    * `@waitron/sync` owns. */
   enrolments: readonly EnrolledTable[];
+  /** A GETTER for the current serving-primary node id, threaded into `applyBatch`'s config-conflict
+   * gate (membership Slice 7). Read FRESH per batch (`deps.servingPrimaryId?.()` in {@link syncPullOnce}),
+   * NOT captured once — a promotion/demotion that arrives via gossip while the loop runs must be
+   * reflected on the next batch without a restart (whole-branch review I1). On the CARRIER draining a
+   * returned node's tail it returns the carrier's own nodeId, so a config-class row whose origin is NOT
+   * the serving-primary is rejected by primary-wins and recorded to `sync_config_conflicts` (spec §7).
+   * Optional and FAIL-SAFE: absent, or returning undefined (this node is not a carrier / has no known
+   * serving-primary), leaves the gate inert and every row applies as it does today, so normal config
+   * down-flow is never broken (R-S7-2). Boot passes `() => liveServingPrimaryId`. */
+  servingPrimaryId?: () => string | undefined;
 }
 
 /** {@link syncPullOnce}'s result: the applied/deferred counts of {@link ApplyBatchResult} plus
@@ -128,6 +138,10 @@ export async function syncPullOnce(deps: SyncPullDeps, peer: PullPeer): Promise<
     sourceEnvironment,
     lane,
     enrolments: deps.enrolments,
+    // The config-conflict gate's serving-primary id (membership Slice 7), read FRESH from the injected
+    // getter for THIS batch — so a promotion/demotion since the last batch is honoured without a restart.
+    // undefined leaves the gate inert (fail-safe); applyBatch decides per row (spec §7).
+    servingPrimaryId: deps.servingPrimaryId?.(),
   });
   // Re-read the (subscriber, origin, lane) cursor: `advanced` is whether applyBatch moved THIS lane's
   // cursor this iteration. A full page that did NOT advance is all-parked — every row 23503-parked on
@@ -258,6 +272,17 @@ export async function runSyncPull(deps: RunSyncPullDeps): Promise<void> {
         let last: SyncPullResult | undefined;
         while (!deps.signal.aborted) {
           last = await pullOnce(deps, peer);
+          // Config-conflict observability (membership Slice 7, spec §7): when this batch had config-class
+          // rows overridden by primary-wins, LOG it for ops — never throw (throwing would grow the peer's
+          // backoff and stall the drain; the rows are already recorded to sync_config_conflicts and
+          // settled). Emitted here, where `log` lives, mirroring the membership_adopt / cursor_report
+          // log lines below. IDS + COUNT only, never row bytes (errors.ts's row-content rule).
+          if (last.rejected > 0) {
+            deps.log("warn", "sync.config_conflict_rejected", {
+              originId: peer.nodeId,
+              count: last.rejected,
+            });
+          }
           if (last.fetched < deps.batchLimit || !last.advanced) break;
         }
         // Best-effort membership adoption (spec §5): hand the peer's advertised document to the

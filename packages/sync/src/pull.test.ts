@@ -51,6 +51,7 @@ const BATCH = 500;
 const full = (applied: number): SyncPullResult => ({
   applied,
   deferred: 0,
+  rejected: 0,
   fetched: BATCH,
   advanced: true,
 });
@@ -60,6 +61,7 @@ const full = (applied: number): SyncPullResult => ({
 const noopFull = (): SyncPullResult => ({
   applied: 0,
   deferred: 0,
+  rejected: 0,
   fetched: BATCH,
   advanced: true,
 });
@@ -68,12 +70,14 @@ const noopFull = (): SyncPullResult => ({
 const parkedFull = (): SyncPullResult => ({
   applied: 0,
   deferred: BATCH,
+  rejected: 0,
   fetched: BATCH,
   advanced: false,
 });
 const short = (applied: number, fetched = 0): SyncPullResult => ({
   applied,
   deferred: 0,
+  rejected: 0,
   fetched,
   advanced: true,
 });
@@ -164,6 +168,76 @@ describe("runSyncPull loop control", () => {
     });
     expect(calls).toBe(1); // pulled ONCE, then broke to the sleep — did NOT re-pull the stuck page
     expect(sleeps).toEqual([100]); // yielded to the idle round-robin sleep, not a busy-loop
+  });
+
+  it("logs sync.config_conflict_rejected (warn, ids + count) when a batch had config rows overridden, without breaking the drain", async () => {
+    // Membership Slice 7 (spec §7): a batch that primary-wins rejected config-class rows on reports
+    // `rejected > 0`. The drain must LOG it for ops — never throw — and keep going (the rows are already
+    // recorded + settled; the cursor advanced). Prove by deletion: remove the `if (last.rejected > 0)`
+    // log and this assertion goes red while the loop still drains healthily.
+    const controller = new AbortController();
+    const logs: { level: string; code: string; params?: Record<string, unknown> }[] = [];
+    const log = (level: string, code: string, params?: Record<string, unknown>): void => {
+      logs.push({ level, code, params });
+    };
+    // A full page that rejected 2 rows and advanced (drain continues), then a short page that rejected 1
+    // more (drain stops). Both must log; neither may grow backoff.
+    const results: SyncPullResult[] = [
+      { applied: 3, deferred: 0, rejected: 2, fetched: BATCH, advanced: true },
+      { applied: 0, deferred: 0, rejected: 1, fetched: 0, advanced: true },
+    ];
+    let calls = 0;
+    const pullOnce = async (): Promise<SyncPullResult> => results[calls++] ?? short(0);
+    const sleep = async (): Promise<void> => {
+      controller.abort();
+    };
+    await runSyncPull({
+      ...dummyDeps,
+      peers: [peerA],
+      pullOnce,
+      sleep,
+      signal: controller.signal,
+      minIdleMs: 100,
+      maxBackoffMs: 800,
+      log,
+    });
+    const rejected = logs.filter((l) => l.code === "sync.config_conflict_rejected");
+    expect(rejected).toEqual([
+      {
+        level: "warn",
+        code: "sync.config_conflict_rejected",
+        params: { originId: peerA.nodeId, count: 2 },
+      },
+      {
+        level: "warn",
+        code: "sync.config_conflict_rejected",
+        params: { originId: peerA.nodeId, count: 1 },
+      },
+    ]);
+    // The peer stayed HEALTHY — a rejection is logged, never a pull failure or a backoff growth.
+    expect(logs.some((l) => l.code === "sync.pull_failed")).toBe(false);
+  });
+
+  it("does NOT log sync.config_conflict_rejected when a batch rejected nothing", async () => {
+    const controller = new AbortController();
+    const logs: { code: string }[] = [];
+    const pullOnce = async (): Promise<SyncPullResult> => short(0); // rejected: 0
+    const sleep = async (): Promise<void> => {
+      controller.abort();
+    };
+    await runSyncPull({
+      ...dummyDeps,
+      peers: [peerA],
+      pullOnce,
+      sleep,
+      signal: controller.signal,
+      minIdleMs: 100,
+      maxBackoffMs: 800,
+      log: (_level, code) => {
+        logs.push({ code });
+      },
+    });
+    expect(logs.some((l) => l.code === "sync.config_conflict_rejected")).toBe(false);
   });
 
   it("backs off exponentially on a transport error and logs sync.stream_stalled once at saturation", async () => {

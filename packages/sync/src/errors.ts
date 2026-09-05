@@ -47,5 +47,13 @@ declare module "@waitron/shared" {
      * PARAMS — the response is uniform (fail-closed, no oracle), and a token must never reach a log
      * line or a test name. Mapped to HTTP 401 by `mountSyncApi`'s error boundary. */
     "sync.node_unauthorized": Record<string, never>;
+    /** One or more config-class rows from a NON-serving-primary origin were overridden by primary-wins
+     * while the CARRIER drained a returned/fenced node's tail (membership Slice 7, design §7): each was
+     * recorded to `sync_config_conflicts` and settled (NOT applied — the cursor advances past it so the
+     * drain is never blocked). Like `sync.stream_stalled` this is a LOG code — the pull loop emits it via
+     * `log`, it is NEVER thrown, and it never blocks the drain. `originId` names the origin whose config
+     * writes were rejected this pull; `count` is how many were rejected (a count, never row content —
+     * the file header's "NO PARAM CARRIES ROW CONTENT" rule; the bytes live only in the ops table). */
+    "sync.config_conflict_rejected": { originId: string; count: number };
   }
 }
