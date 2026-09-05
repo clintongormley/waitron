@@ -335,10 +335,17 @@ control-plane docs):
 
 **Coordination rules for the three sessions** (each paid for already, CLAUDE.md §2/§4):
 
-- **Serialise pushes and browser-mode test runs.** Never two pre-push hooks at once — Tracks B and
-  C both touch browser packages (real headless Chromium; two overlapping gates force-quit the machine
-  on 2026-08-30) and Track A's real-PG suites race on Docker ports. Before `git push` or a local
-  `test:coverage`, `pgrep -f .husky/pre-push` must print nothing; wait if it does.
+- **One Chromium gate at a time (CLAUDE.md §2) — not one push at a time.** Corrected 2026-09-05: an
+  earlier wording here serialised every push, which the evidence does not support. Both 2026-08-30
+  force-quits were overlapping BROWSER-MODE coverage runs on this 64 GB box (each of `packages/ui`,
+  `apps/till`, `apps/dashboard`, `apps/setup` launches a headless Chromium; a whole-workspace run
+  launches four beside testcontainers); the owner reports ordinary hooks have run in parallel without
+  trouble. A hook launches Chromium only when its scope reaches one of those four — a change to one
+  of them, or to what they import (`@waitron/shared`, `@waitron/catalogue`, `@waitron/diagnostics`,
+  `@waitron/layouts`, or every `vitest.config.ts`, as Track A item 1 does). Before such a push,
+  `pgrep -fl "chromium_headless_shell|Chromium"` must print nothing; any other push needs no wait.
+  Never run `pnpm -r test:coverage` beside anything. Real-PG suites racing on Docker ports show as
+  `EADDRINUSE` and pass on retry (CLAUDE.md §4) — a flake, not a reason to serialise.
 - **No new CORE migration in Tracks B/C until Track A's squash lands** (the module rule already
   forbids it without a stated reason). Module-owned migrations (Track C) are regenerated on rebase
   per CLAUDE.md §3's recipe; whoever lands second rebases.
