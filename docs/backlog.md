@@ -131,7 +131,7 @@ folded in), the model rule relocated to the shared global `~/.claude/CLAUDE.md` 
 waitron yardstick kept in-repo (#236), and the
 `/finish-branch` rewrite (run-it reviewer + convention reviewer; SDD's final whole-branch review
 dropped as a duplicate). **Same evening, revised for cost:** Fable only where the owner talks plus two
-fresh-reader seats, Opus 5.1 for execution, Codex (`gpt-6-astra`, `.codex/config.toml`,
+fresh-context seats, Opus 5.1 for execution, Codex (`gpt-6-astra`, `.codex/config.toml`,
 `~/workspace/tools/codex-seat.sh`) for the implementer seat and the pre-PR diff review that replaces
 Copilot. A three-way run-it reviewer probe on planted defects (Fable / Opus / Astra) found no
 Fable-only catch — `docs/superpowers/specs/2026-09-05-model-seats-experiment.md`; moving the run-it

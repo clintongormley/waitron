@@ -1,6 +1,6 @@
 # Project-scoped Codex config. Codex reads AGENTS.md (a symlink to CLAUDE.md here) up to
-# project_doc_max_bytes; the default cap is below that file's size, so a lower value silently
-# drops the later sections.
+# project_doc_max_bytes and silently drops whatever lies beyond it. The default cap is below
+# that file's size, so leaving it unset would truncate the later sections.
 project_doc_max_bytes = 131072
 
 model = "gpt-6-astra"
