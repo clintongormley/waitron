@@ -829,10 +829,10 @@ vs gated on an unbuilt foundation or an external dependency:
   (6) **rejoin — drain-then-restore** — **R1 (fence-on-rejoin) LANDED #214** (2026-09-04);
   **R2 (drain-as-source + disposal guard) LANDED #219** (2026-09-05); **R3 split** (2026-09-05) into
   **retire/evict (decommission) LANDED #224** (2026-09-05, no restore) and **wipe-and-restore
-  (rejoin-as-secondary) still GATED on a `pg_restore` consumer** [fiscal-adjacent → owner sign-off before
-  land]; (7) **conflict
-  surface** (config down-only + ops conflict log) **LANDED #229** (2026-09-05). Slice 6 rejoin arc is now
-  COMPLETE bar wipe-and-restore (still gated on `pg_restore`).
+  (rejoin-as-secondary) IMPLEMENTED on `feat/membership-rejoin-r3-wipe-restore`, PENDING LAND**
+  [fiscal-adjacent → owner sign-off before land]; (7) **conflict
+  surface** (config down-only + ops conflict log) **LANDED #229** (2026-09-05). Slice 6 rejoin arc
+  COMPLETE (fence R1 / drain R2 / retire-evict / conflict-surface / wipe-and-restore R3) pending R3 land.
   **Slice 6 R1 (fence-on-rejoin) LANDED #214** (2026-09-04): a returned/superseded node that holds or
   adopts a membership document marking it **sell-only/evicted** now boots **FENCED**. Two mechanisms
   cooperate: a **demote-only** `singleton_role → secondary` reconciliation at boot (owner-pool write,
@@ -883,19 +883,26 @@ vs gated on an unbuilt foundation or an external dependency:
     node whose tail reached only a *stale* survivor (fiscal-unrecoverable). **Carrier-side reaction to
     `evicted` (stop pulling) is out of scope** — the carrier learns via gossip and the box is then
     disposed (its pull just goes unreachable).
-  - **R3 (wipe-and-restore, spec §6 step 4) — the rejoin-as-secondary path — its `pg_restore` consumer
-    gate is CLEARED by BR-3 #232; the R3-specific composition remains.** Drain (R2 ✓) → discard the
-    diverged DB → restore the current primary's baseline → stream, returning as `serving-secondary`.
-    **BR-3 #232 shipped the `pg_restore` consumer** (+ decrypt/unpack/compatibility-gate/path-traversal
-    guards) and exposes composable steps; what R3 still builds on top is the **composition**: call BR-3's
-    `restoreDatabase`+`restoreMedia` (SKIP secrets to keep the rejoining node's OWN identity), do the
-    all-entries-guard upfront pass, wipe/pre-create the target DB, then re-enrol-as-streaming-secondary +
-    re-fence (R1 #214). Same producer as before (`pg-dump.ts`/`backup-sweep.ts`, `row_security=off`, so the
-    `sync_log`-in-backup half is satisfied). Same gate as the promote-action cold-restore slice (Slice 4),
-    also cleared by BR-3. The
+  - **R3 (wipe-and-restore, spec §6 step 4) — the rejoin-as-secondary path — IMPLEMENTED on
+    `feat/membership-rejoin-r3-wipe-restore`, PENDING LAND** [fiscal-adjacent → owner sign-off before
+    land; no PR number yet — filled in at land]. Design:
+    [membership-rejoin-r3-wipe-and-restore](superpowers/specs/2026-09-05-membership-rejoin-r3-wipe-and-restore-design.md).
+    Drain (R2 ✓, reusing R2's lane-agnostic disposal guard, `readDrainProgress`) → discard the diverged
+    DB → restore the current primary's baseline → reboot FENCED (sell-only), streaming the primary's
+    log as a clean subscriber; re-admission to `serving-secondary` is a separate, deferred slice (no
+    self-promotion — demote-never-promote). New operator CLI `waitron-rejoin`
+    (`rejoin-command.ts`/`bin-rejoin.ts`) drives `rejoinAsSecondary`
+    (`apps/server/src/rejoin.ts`, guard ladder `not_fenced`/`no_carrier`/`not_drained`) through
+    `dropAndCreateDatabase` (DROP+CREATE wipe, `db-wipe.ts`), then BR-3's `restoreFromArtifact`
+    (DB+media, new `skipSecrets` flag keeps the rejoining node's OWN identity), then reboot fenced (R1
+    #214). Same producer as before (`pg-dump.ts`/`backup-sweep.ts`, `row_security=off`, so the
+    `sync_log`-in-backup half is satisfied). **Fiscal safety rides the drain guarantee, unchanged:** the
     disposal guard measures the enrolled `sync_log` tail only — the per-node fiscal chain
-    (`registros_facturacion`) is deliberately NOT in `sync_log` and does not replicate to the carrier, so
-    `drained` is a statement about replicable app data, not the fiscal chain (unchanged by the restore).
+    (`registros_facturacion`) is deliberately NOT in `sync_log` today, so this same lane-agnostic guard
+    auto-covers the fiscal chain with no R3 change once H2/SP-3 enrols it onto a lane. A real-PG e2e
+    found + fixed a wiped-but-not-restored DR bug: `restoreFromArtifact` assumed its staging/media/state
+    roots already existed; a rejoin left the DB wiped with nothing restored into it. Fixed by having
+    restore create those roots itself before its guard runs.
   - **Slice 7 (conflict surface) LANDED #229** (2026-09-05). Primary-wins for config-class rows: on the
     carrier draining a returned/fenced node, a config-class row whose `originId` is not the current
     serving-primary is REJECTED (not applied — the primary's config stands) and RECORDED to the new

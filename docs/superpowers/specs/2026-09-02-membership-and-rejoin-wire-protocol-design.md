@@ -178,6 +178,11 @@ sequence is therefore **drain-first, then rebuild**:
    step 3 already shipped Server 1's own records up to Server 2, they come **back down** inside the restored
    baseline (as Server 1-origin rows) — nothing is lost by the wipe.
 
+> **Dated pointer, 2026-09-05 — step 4's mechanism is now built.** The wipe-and-restore composition this
+> step describes is supplied by the R3 slice of the rejoin arc:
+> [membership-rejoin-r3-wipe-and-restore](2026-09-05-membership-rejoin-r3-wipe-and-restore-design.md)
+> (`feat/membership-rejoin-r3-wipe-restore`, pending land). The rest of this document is as written.
+
 The gate between 3 and 4 is strict: **drain to completion, *then* wipe-and-restore** — a wipe before the
 tail is safe would destroy exactly the records parent §5 exists to protect. An in-place delta-pull is valid
 *only* in the provably-clean case (the node was stopped with everything already replicated); given the
