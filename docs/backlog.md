@@ -370,9 +370,8 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
   no live case to prove flow-down against yet. Folds into **SP-2**'s scope, built alongside the
   first genuinely-toggleable module. Spec:
   [sp-1d](superpowers/specs/2026-09-04-module-sp1d-adopt-bootstrap-design.md).
-- **SP-2a — sync enrolment inversion + graph-honesty guard — in flight on
-  `feat/module-sp2a-sync-inversion`.** SP-2 split into two slices (owner decision 2026-09-05, SP-2b
-  below). Every domain package declares its own sync **enrolment** via the new leaf
+- **SP-2a — sync enrolment inversion + graph-honesty guard — LANDED #227 (2026-09-05).** SP-2 split
+  into two slices (owner decision 2026-09-05, SP-2b below). Every domain package declares its own sync **enrolment** via the new leaf
   `@waitron/sync-enrolment` (`enrol()` derives each entry's table + column list off the owning
   package's own Drizzle schema, so it cannot drift); `@waitron/sync` imports no domain schema and
   drops `@waitron/payments` entirely, keeping `@waitron/identity` **only** for `peers.ts`'s scrypt
@@ -384,6 +383,12 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
   table set equals the tables actually carrying an installed `sync_capture` trigger).
   Behaviour-preserving — same 22 tables, identical generated apply SQL. Spec:
   [sp-2a](superpowers/specs/2026-09-05-module-sp2a-sync-inversion-design.md).
+  **Deferred follow-up (Option B, spec §2e):** `@waitron/sync` still depends on `@waitron/identity`
+  for `peers.ts`'s scrypt helpers (`hashSecret`/`verifySecret`, `secret-hash.ts` — a #144 non-schema
+  coupling). Relocating those to a leaf (`@waitron/shared`) would let `@waitron/sync` depend on **no**
+  domain package at all — a real improvement, but it touches `@waitron/identity`'s public surface and
+  every `hashSecret` consumer, so it was out of scope for this schema-inversion slice. Small,
+  unclaimed, do-anytime.
 - **SP-2b — schema-version handshake + park gate (next).** The hello handshake advertises each
   enabled module's `appliedSchemaVersion`; a subscriber applies a module's rows only when
   `myVersion >= sourceVersion`, else parks them (skipped, cursor not advanced) until it reboots and
@@ -394,10 +399,9 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
 - **SP-4 — module UI surface** (card-registry inversion + self-sourcing cards + fiscal's cards) — **after
   B3.2** (shares `@waitron/layouts` / `apps/till` card-grid).
 
-With SP-1a + SP-1b + SP-1c landed and SP-1d's adopt-bootstrap half landed (#220), **SP-2a is in
-flight** — it is parallel-safe with the B3.2 layout-editor session, is the one that unblocks SP-3
-(H2's fiscal-record lane rides SP-2a's sync inversion), and picks up SP-1c's deferred
-graph-honesty guard. **Ongoing flow-down defers again** (owner decision 2026-09-05, receipt
+With SP-1a + SP-1b + SP-1c landed, SP-1d's adopt-bootstrap half landed (#220), and **SP-2a landed
+(#227)** — it unblocked SP-3 (H2's fiscal-record lane rides SP-2a's sync inversion) and delivered
+SP-1c's deferred graph-honesty guard. **Ongoing flow-down defers again** (owner decision 2026-09-05, receipt
 refreshed): SP-2a introduces no genuinely-toggleable module, and no config channel exists to carry
 a later primary-side change (spec §7) — it is built alongside the first genuinely-toggleable
 module, not here. SP-2b (schema-version handshake + park gate) is next; SP-4 waits for B3.2.
