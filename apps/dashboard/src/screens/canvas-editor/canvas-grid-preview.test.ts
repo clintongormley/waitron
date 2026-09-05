@@ -70,3 +70,341 @@ describe("canvas-grid-preview", () => {
     expect(el.shadowRoot!.querySelector("[data-test=empty-grid]")).toBeTruthy();
   });
 });
+
+// ── Direct manipulation (pointer drag-to-reorder + resize handle) ──────────────────────────────────
+// These drive REAL PointerEvents (browser-mode / Playwright) against the rendered grid. The preview is
+// a VIEW: it emits `move-card {from,to}` and `resize-card {index,colSpan,rowSpan}` INTENTS and never
+// mutates the tab — the screen owns mutation. `setPointerCapture` on a synthetic pointer is a no-op
+// here (guarded in the element), so the listeners are bound on the source element and we dispatch the
+// whole gesture (down → move → up) on it.
+function pointer(
+  target: EventTarget,
+  type: "pointerdown" | "pointermove" | "pointerup" | "pointercancel",
+  x: number,
+  y: number,
+  pointerId = 1,
+): void {
+  target.dispatchEvent(
+    new PointerEvent(type, {
+      clientX: x,
+      clientY: y,
+      pointerId,
+      button: 0,
+      bubbles: true,
+      composed: true,
+    }),
+  );
+}
+function centre(el: Element): [number, number] {
+  const r = el.getBoundingClientRect();
+  return [r.left + r.width / 2, r.top + r.height / 2];
+}
+
+describe("canvas-grid-preview drag-to-reorder", () => {
+  async function mountInteractive(selectedIndex = -1) {
+    const { el } = await mountWidget<CanvasGridPreview>("canvas-grid-preview", {
+      tab,
+      interactive: true,
+      selectedIndex,
+    });
+    await el.updateComplete;
+    return el;
+  }
+  function tileEl(el: CanvasGridPreview, index: number): HTMLElement {
+    return el.shadowRoot!.querySelector<HTMLElement>(`[data-test=tile-${index}]`)!;
+  }
+
+  it("emits move-card {from,to} when a tile is dragged past a neighbour", async () => {
+    const el = await mountInteractive();
+    let detail: { from: number; to: number } | null = null;
+    el.addEventListener("move-card", (e) => {
+      detail = (e as CustomEvent<{ from: number; to: number }>).detail;
+    });
+    const t0 = tileEl(el, 0);
+    const t1 = tileEl(el, 1);
+    const [x0, y0] = centre(t0);
+    const r1 = t1.getBoundingClientRect();
+    pointer(t0, "pointerdown", x0, y0);
+    // Drag well past tile-1's centre (towards its right edge) so it lands after it.
+    pointer(t0, "pointermove", r1.right - 4, r1.top + r1.height / 2);
+    pointer(t0, "pointerup", r1.right - 4, r1.top + r1.height / 2);
+    expect(detail).toEqual({ from: 0, to: 1 });
+  });
+
+  it("emits move-card {from:1,to:0} when a later tile is dragged before an earlier one", async () => {
+    const el = await mountInteractive();
+    let detail: { from: number; to: number } | null = null;
+    el.addEventListener("move-card", (e) => {
+      detail = (e as CustomEvent<{ from: number; to: number }>).detail;
+    });
+    const t0 = tileEl(el, 0);
+    const t1 = tileEl(el, 1);
+    const [x1, y1] = centre(t1);
+    const r0 = t0.getBoundingClientRect();
+    pointer(t1, "pointerdown", x1, y1);
+    pointer(t1, "pointermove", r0.left + 4, r0.top + r0.height / 2);
+    pointer(t1, "pointerup", r0.left + 4, r0.top + r0.height / 2);
+    expect(detail).toEqual({ from: 1, to: 0 });
+  });
+
+  it("does NOT emit move-card for a below-threshold gesture; a plain click still selects", async () => {
+    const el = await mountInteractive();
+    let moved = false;
+    let selected = -1;
+    el.addEventListener("move-card", () => (moved = true));
+    el.addEventListener("select-card", (e) => {
+      selected = (e as CustomEvent<{ index: number }>).detail.index;
+    });
+    const t0 = tileEl(el, 0);
+    const [x0, y0] = centre(t0);
+    pointer(t0, "pointerdown", x0, y0);
+    pointer(t0, "pointermove", x0 + 3, y0); // < 5px threshold
+    pointer(t0, "pointerup", x0 + 3, y0);
+    t0.click();
+    expect(moved).toBe(false);
+    expect(selected).toBe(0);
+  });
+
+  it("swallows the click that trails a real drag, then selects normally on the next click", async () => {
+    const el = await mountInteractive();
+    const selections: number[] = [];
+    el.addEventListener("select-card", (e) => {
+      selections.push((e as CustomEvent<{ index: number }>).detail.index);
+    });
+    const t0 = tileEl(el, 0);
+    const t1 = tileEl(el, 1);
+    const [x0, y0] = centre(t0);
+    const r1 = t1.getBoundingClientRect();
+    pointer(t0, "pointerdown", x0, y0);
+    pointer(t0, "pointermove", r1.right - 4, r1.top + r1.height / 2);
+    pointer(t0, "pointerup", r1.right - 4, r1.top + r1.height / 2);
+    t0.click(); // the synthetic click a real drag leaves behind — must NOT select
+    expect(selections).toEqual([]);
+    t0.click(); // a fresh, unrelated click selects as usual
+    expect(selections).toEqual([0]);
+  });
+
+  it("marks the dragged tile and an insertion point while dragging", async () => {
+    const el = await mountInteractive();
+    const t0 = tileEl(el, 0);
+    const t1 = tileEl(el, 1);
+    const [x0, y0] = centre(t0);
+    const r1 = t1.getBoundingClientRect();
+    pointer(t0, "pointerdown", x0, y0);
+    pointer(t0, "pointermove", r1.right - 4, r1.top + r1.height / 2);
+    await el.updateComplete;
+    expect(tileEl(el, 0).classList.contains("dragging")).toBe(true);
+    // Dropping after tile-1 (the last non-dragged tile) marks it as the trailing insertion point.
+    expect(tileEl(el, 1).classList.contains("drop-after")).toBe(true);
+    pointer(t0, "pointerup", r1.right - 4, r1.top + r1.height / 2);
+    await el.updateComplete;
+    // Cleared after the gesture ends.
+    expect(el.shadowRoot!.querySelector(".dragging")).toBeNull();
+  });
+
+  it("marks a leading insertion point when dropping before the first tile", async () => {
+    const el = await mountInteractive();
+    const t0 = tileEl(el, 0);
+    const t1 = tileEl(el, 1);
+    const [x1, y1] = centre(t1);
+    const r0 = t0.getBoundingClientRect();
+    pointer(t1, "pointerdown", x1, y1);
+    pointer(t1, "pointermove", r0.left + 4, r0.top + r0.height / 2);
+    await el.updateComplete;
+    expect(tileEl(el, 0).classList.contains("drop-before")).toBe(true);
+    pointer(t1, "pointerup", r0.left + 4, r0.top + r0.height / 2);
+  });
+
+  it("resets click-suppression on a new gesture: a drag with no trailing click never swallows the next click", async () => {
+    // A real drag sets #suppressClick so its OWN trailing synthetic click is ignored — but pointer
+    // capture releasing over a different tile means the browser fires NO trailing click on the source,
+    // leaving the flag stuck true. The `#suppressClick = false` reset in #onTilePointerDown is what
+    // clears it at the START of the next gesture, so that gesture's legitimate click still selects.
+    // (Prove-by-deletion: removing that reset makes this test fail — the next click is swallowed.)
+    const el = await mountInteractive();
+    const selections: number[] = [];
+    el.addEventListener("select-card", (e) => {
+      selections.push((e as CustomEvent<{ index: number }>).detail.index);
+    });
+    const t0 = tileEl(el, 0);
+    const t1 = tileEl(el, 1);
+    const [x0, y0] = centre(t0);
+    const r1 = t1.getBoundingClientRect();
+    // A REAL drag past the threshold — but NO trailing click is dispatched on t0.
+    pointer(t0, "pointerdown", x0, y0);
+    pointer(t0, "pointermove", r1.right - 4, r1.top + r1.height / 2);
+    pointer(t0, "pointerup", r1.right - 4, r1.top + r1.height / 2);
+    // The NEXT gesture: its pointerdown must reset the stuck flag, so this legitimate click selects.
+    pointer(t0, "pointerdown", x0, y0);
+    pointer(t0, "pointerup", x0, y0);
+    t0.click();
+    expect(selections).toEqual([0]);
+  });
+
+  it("starts each gesture from clean drag state after a MISSED pointerup (no wedge at 0)", async () => {
+    // Robustness: if a pointerup is ever missed (reachable only when setPointerCapture didn't take —
+    // the documented best-effort path), draggingIndex/dropIndex survive into the next gesture, whose
+    // fresh #drag has no cached tiles. The threshold-crossed state is derived from draggingIndex !==
+    // null, so the measure block is skipped and #insertionIndex runs over an empty cache, pinning
+    // dropIndex to 0 for the whole next gesture. The draggingIndex/dropIndex reset in
+    // #onTilePointerDown clears that. (Prove-by-deletion: without the reset the second gesture wedges
+    // to 0, so move-card never fires with the correct `to` and this test fails.)
+    const el = await mountInteractive();
+    let detail: { from: number; to: number } | null = null;
+    el.addEventListener("move-card", (e) => {
+      detail = (e as CustomEvent<{ from: number; to: number }>).detail;
+    });
+    const t0 = tileEl(el, 0);
+    const t1 = tileEl(el, 1);
+    const [x0, y0] = centre(t0);
+    const r1 = t1.getBoundingClientRect();
+    // FIRST gesture: cross the threshold so draggingIndex is set — but NO pointerup (the missed case).
+    pointer(t0, "pointerdown", x0, y0);
+    pointer(t0, "pointermove", r1.right - 4, r1.top + r1.height / 2);
+    // SECOND gesture: a fresh drag of tile-0 past tile-1 must measure tiles and land AFTER it, not
+    // wedge at 0.
+    pointer(t0, "pointerdown", x0, y0);
+    pointer(t0, "pointermove", r1.right - 4, r1.top + r1.height / 2);
+    pointer(t0, "pointerup", r1.right - 4, r1.top + r1.height / 2);
+    expect(detail).toEqual({ from: 0, to: 1 });
+  });
+
+  it("clears drag state and emits no move-card when the pointer stream is cancelled", async () => {
+    // A cancelled pointer stream (touch-cancel, an OS/browser gesture takeover) fires pointercancel
+    // instead of pointerup. The gesture must be abandoned: drag state cleared, capture released, and
+    // NO move-card emitted (a cancelled gesture is not a reorder). (Prove-by-deletion: without the
+    // pointercancel handler the dragged tile stays dimmed and the drop indicator stays visible.)
+    const el = await mountInteractive();
+    let moved = false;
+    el.addEventListener("move-card", () => (moved = true));
+    const t0 = tileEl(el, 0);
+    const t1 = tileEl(el, 1);
+    const [x0, y0] = centre(t0);
+    const r1 = t1.getBoundingClientRect();
+    pointer(t0, "pointerdown", x0, y0);
+    pointer(t0, "pointermove", r1.right - 4, r1.top + r1.height / 2); // past threshold → dragging
+    await el.updateComplete;
+    expect(tileEl(el, 0).classList.contains("dragging")).toBe(true);
+    expect(el.shadowRoot!.querySelector(".drop-before, .drop-after")).toBeTruthy();
+    pointer(t0, "pointercancel", r1.right - 4, r1.top + r1.height / 2);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".dragging")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".drop-before, .drop-after")).toBeNull();
+    expect(moved).toBe(false);
+  });
+
+  it("does not emit move-card from the inert thumbnail (drag is gated to interactive)", async () => {
+    const { el } = await mountWidget<CanvasGridPreview>("canvas-grid-preview", {
+      tab,
+      interactive: false,
+    });
+    await el.updateComplete;
+    let moved = false;
+    el.addEventListener("move-card", () => (moved = true));
+    const t0 = el.shadowRoot!.querySelector<HTMLElement>("[data-test=tile-0]")!;
+    const t1 = el.shadowRoot!.querySelector<HTMLElement>("[data-test=tile-1]")!;
+    const [x0, y0] = centre(t0);
+    const [x1, y1] = centre(t1);
+    pointer(t0, "pointerdown", x0, y0);
+    pointer(t0, "pointermove", x1, y1);
+    pointer(t0, "pointerup", x1, y1);
+    expect(moved).toBe(false);
+  });
+});
+
+describe("canvas-grid-preview resize handle", () => {
+  async function mountInteractive(selectedIndex: number) {
+    const { el } = await mountWidget<CanvasGridPreview>("canvas-grid-preview", {
+      tab,
+      interactive: true,
+      selectedIndex,
+    });
+    await el.updateComplete;
+    return el;
+  }
+
+  it("renders a resize handle only on the selected interactive tile", async () => {
+    const el = await mountInteractive(0);
+    const t0 = el.shadowRoot!.querySelector<HTMLElement>("[data-test=tile-0]")!;
+    const t1 = el.shadowRoot!.querySelector<HTMLElement>("[data-test=tile-1]")!;
+    expect(t0.querySelector("[data-test=resize-handle]")).toBeTruthy();
+    expect(t1.querySelector("[data-test=resize-handle]")).toBeNull();
+  });
+
+  it("renders no resize handle when nothing is selected", async () => {
+    const el = await mountInteractive(-1);
+    expect(el.shadowRoot!.querySelector("[data-test=resize-handle]")).toBeNull();
+  });
+
+  it("renders no resize handle on an inert thumbnail even with a selectedIndex", async () => {
+    const { el } = await mountWidget<CanvasGridPreview>("canvas-grid-preview", {
+      tab,
+      interactive: false,
+      selectedIndex: 0,
+    });
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=resize-handle]")).toBeNull();
+  });
+
+  it("emits resize-card with a grown colSpan when the handle is dragged right", async () => {
+    const el = await mountInteractive(0);
+    let detail: { index: number; colSpan: number; rowSpan: number } | null = null;
+    el.addEventListener("resize-card", (e) => {
+      detail = (e as CustomEvent<{ index: number; colSpan: number; rowSpan: number }>).detail;
+    });
+    const handle = el.shadowRoot!.querySelector<HTMLElement>("[data-test=resize-handle]")!;
+    const [hx, hy] = centre(handle);
+    pointer(handle, "pointerdown", hx, hy);
+    pointer(handle, "pointermove", hx + 400, hy); // several columns to the right
+    pointer(handle, "pointerup", hx + 400, hy);
+    expect(detail).not.toBeNull();
+    expect(detail!.index).toBe(0);
+    expect(detail!.colSpan).toBeGreaterThan(8); // started at 8
+    expect(detail!.rowSpan).toBe(6); // no vertical movement
+  });
+
+  it("does not re-emit resize-card when a pointermove lands on the same snapped spans", async () => {
+    const el = await mountInteractive(0);
+    let count = 0;
+    el.addEventListener("resize-card", () => (count += 1));
+    const handle = el.shadowRoot!.querySelector<HTMLElement>("[data-test=resize-handle]")!;
+    const [hx, hy] = centre(handle);
+    pointer(handle, "pointerdown", hx, hy);
+    pointer(handle, "pointermove", hx + 400, hy); // crosses a column boundary → emits once
+    pointer(handle, "pointermove", hx + 400, hy); // identical spans → no second emit
+    expect(count).toBe(1);
+    pointer(handle, "pointermove", hx + 400, hy + 400); // rows change → emits again
+    expect(count).toBe(2);
+  });
+
+  it("cancels the resize on pointercancel: a later pointermove on the handle emits no resize-card", async () => {
+    // A cancelled pointer stream fires pointercancel instead of pointerup. The resize must be
+    // abandoned (#resize cleared, capture released) so a later stray pointermove on the handle does
+    // not resume a resize the user cancelled. (Prove-by-deletion: without the pointercancel handler
+    // #resize survives and the trailing pointermove emits a resize-card.)
+    const el = await mountInteractive(0);
+    let count = 0;
+    el.addEventListener("resize-card", () => (count += 1));
+    const handle = el.shadowRoot!.querySelector<HTMLElement>("[data-test=resize-handle]")!;
+    const [hx, hy] = centre(handle);
+    pointer(handle, "pointerdown", hx, hy); // starts the resize
+    pointer(handle, "pointercancel", hx, hy); // OS/browser takeover — resize abandoned
+    pointer(handle, "pointermove", hx + 400, hy); // a stray move must NOT resume the resize
+    expect(count).toBe(0);
+  });
+
+  it("resize-handle pointerdown starts a resize, not a drag (emits resize-card, never move-card)", async () => {
+    const el = await mountInteractive(0);
+    let moved = false;
+    let resized = false;
+    el.addEventListener("move-card", () => (moved = true));
+    el.addEventListener("resize-card", () => (resized = true));
+    const handle = el.shadowRoot!.querySelector<HTMLElement>("[data-test=resize-handle]")!;
+    const [hx, hy] = centre(handle);
+    pointer(handle, "pointerdown", hx, hy);
+    pointer(handle, "pointermove", hx + 400, hy);
+    pointer(handle, "pointerup", hx + 400, hy);
+    expect(moved).toBe(false);
+    expect(resized).toBe(true);
+  });
+});

@@ -37,6 +37,12 @@ export const SELLING_FORM_FACTORS: readonly FormFactor[] = ["till"];
 export const GRID_MAX_COLUMNS = 24;
 export const MAX_TAB_TITLE_LENGTH = 60;
 
+/** Fixed row height (px) for the INTERACTIVE editor grid's `grid-auto-rows`: the px meaning of a
+ * card's `rowSpan`. The interactive grid and the future live-card renderer share this unit so the
+ * editor stays WYSIWYG. A dashboard-local editor constant with NO `@waitron/layouts` source
+ * counterpart, so — like `PRODUCT_GRID_MAX_COLUMNS` — it carries no parity-test guard. */
+export const EDITOR_ROW_HEIGHT = 48;
+
 /** Upper bound on a product-grid card's own `config.columns` (design §4). A dashboard-local de-dup of
  * the `1..12` the editor's clamp and the client validator both apply — NOT a parity constant (the
  * source inlines the literal), so it carries no parity-test guard. */

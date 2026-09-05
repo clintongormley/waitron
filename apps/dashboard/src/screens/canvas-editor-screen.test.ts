@@ -349,6 +349,78 @@ describe("canvas-editor-screen editor mode", () => {
     expect(tile(el, 0).style.gridColumn).toBe("span 8");
   });
 
+  function fireIntent(el: CanvasEditorScreen, type: string, detail: unknown) {
+    el.shadowRoot!.querySelector("canvas-grid-preview")!.dispatchEvent(
+      new CustomEvent(type, { detail, bubbles: true, composed: true }),
+    );
+  }
+
+  it("applies a move-card intent by splicing the card to its new index and following it", async () => {
+    const el = await openEditor();
+    // product-grid (span 8) at 0, then held-orders (span 4) at 1.
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=palette-held-orders]")!.click();
+    await el.updateComplete;
+    fireIntent(el, "move-card", { from: 0, to: 1 });
+    await el.updateComplete;
+    // product-grid spliced to index 1; held-orders now leads.
+    expect(tile(el, 0).style.gridColumn).toBe("span 4");
+    expect(tile(el, 1).style.gridColumn).toBe("span 8");
+    // Selection followed the moved card to index 1 — its property panel is shown with colSpan 8.
+    const colspan = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
+      "[data-test=card-colspan]",
+    )!;
+    expect(colspan.value).toBe("8");
+  });
+
+  it("applies a resize-card intent through the existing span clamp (grow)", async () => {
+    const el = await openEditor();
+    fireIntent(el, "resize-card", { index: 0, colSpan: 10, rowSpan: 9 });
+    await el.updateComplete;
+    expect(tile(el, 0).style.gridColumn).toBe("span 10");
+    expect(tile(el, 0).style.gridRow).toBe("span 9");
+  });
+
+  it("clamps a resize-card intent to the tab columns (high) and to 1 (low)", async () => {
+    const el = await openEditor();
+    fireIntent(el, "resize-card", { index: 0, colSpan: 99, rowSpan: 0 });
+    await el.updateComplete;
+    expect(tile(el, 0).style.gridColumn).toBe("span 12"); // clamped to columns
+    expect(tile(el, 0).style.gridRow).toBe("span 1"); // clamped to >= 1
+    fireIntent(el, "resize-card", { index: 0, colSpan: -3, rowSpan: 4 });
+    await el.updateComplete;
+    expect(tile(el, 0).style.gridColumn).toBe("span 1"); // clamped to >= 1
+  });
+
+  it("does not rebuild the draft on resize moves that stay pinned at the clamp bound", async () => {
+    // The resize drag re-emits raw spans each cell it crosses; dragging PAST the max-column bound
+    // (raw colSpan 13, 14, 15…) snaps to the SAME clamped result each step. The owner must rebuild
+    // the draft only when the clamped spans actually change, not on every beyond-bound move.
+    // (Prove-by-deletion: without the skip in #setSpans, each beyond-bound move rebuilds the draft to
+    // an identical clamped result, so the active-tab object identity changes and this test fails.)
+    const el = await openEditor();
+    const preview = el.shadowRoot!.querySelector("canvas-grid-preview") as HTMLElement & {
+      tab: object | null;
+    };
+    // Card 0 starts at colSpan 8 (columns 12). First beyond-bound move clamps 13 → 12: a genuine
+    // change, so it rebuilds once.
+    fireIntent(el, "resize-card", { index: 0, colSpan: 13, rowSpan: 6 });
+    await el.updateComplete;
+    expect(tile(el, 0).style.gridColumn).toBe("span 12");
+    const tabAtClamp = preview.tab; // the draft's active tab, once the clamp is reached
+    // Further beyond-bound moves all clamp to the same 12 — the owner must NOT rebuild.
+    fireIntent(el, "resize-card", { index: 0, colSpan: 14, rowSpan: 6 });
+    await el.updateComplete;
+    fireIntent(el, "resize-card", { index: 0, colSpan: 15, rowSpan: 6 });
+    await el.updateComplete;
+    expect(preview.tab).toBe(tabAtClamp); // same object identity: no #updateActiveTab clone
+    expect(tile(el, 0).style.gridColumn).toBe("span 12"); // output unchanged, only wasted work removed
+    // A genuine change still rewrites — the skip must not over-suppress.
+    fireIntent(el, "resize-card", { index: 0, colSpan: 5, rowSpan: 6 });
+    await el.updateComplete;
+    expect(preview.tab).not.toBe(tabAtClamp);
+    expect(tile(el, 0).style.gridColumn).toBe("span 5");
+  });
+
   it("refuses to move the first card up (no-op at the boundary)", async () => {
     const el = await openEditor();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=palette-held-orders]")!.click();
