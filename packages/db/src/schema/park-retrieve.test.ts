@@ -12,7 +12,7 @@ import { locations, tenants, tills } from "./tenants.js";
 // Real Postgres (a template clone), not PGlite. These are engine constraints (a UNIQUE, a composite
 // FK, a constraint definition read back from pg_catalog) that PGlite would also enforce; they run
 // against the container because the whole fixture — a node, an invoice series, a priced product —
-// is the shared `core` template's, and cloning it is cheaper than migrating a WASM cluster per test.
+// is the shared `core` template's.
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";

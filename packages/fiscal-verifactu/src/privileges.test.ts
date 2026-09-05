@@ -21,8 +21,10 @@ import { PRIVILEGES } from "./privileges.expected.js";
  * the template is migrated once in globalSetup and this suite only clones it, where PGlite would
  * boot a WASM cluster and re-apply every migration set.
  *
- * `has_table_privilege` answers TABLE-level privilege only, so column grants are out of scope; the
- * expectation file's header records that and points at what does cover them.
+ * `has_table_privilege` answers TABLE-level privilege only, so the matrix does not pin column
+ * grants; the second describe below guards the one column-level fact that needs it.
+ * `scripts/schema-equivalence.sh` diffs the dumped ACLs, column grants included, but that is a
+ * one-shot proof of the squash rather than a standing guard.
  */
 const suite = useTemplateDb({ template: "manifest" });
 
@@ -48,5 +50,25 @@ describe("app_user's table privileges are exactly the captured matrix", () => {
 
   it("is not vacuous: the matrix names the fiscal table and grants it no UPDATE", () => {
     expect(PRIVILEGES.registros_facturacion).toBe("SI");
+  });
+});
+
+describe("column-level grants app_user must not hold", () => {
+  it("holds SELECT and NOT UPDATE on nodes.public_key", async () => {
+    // The membership trust anchor: boot reads the key on the app pool, and it is stamped owner-role
+    // at provision only. The table matrix above cannot express this — `nodes` reads `S` there
+    // whatever the column ACL says — so it is guarded here (CLAUDE.md §3, never widen a grant).
+    //
+    // Both arms in one `toEqual`, not the UPDATE half alone: a probe whose only expectation is
+    // `false` cannot tell "the grant is absent" from "the probe is aimed at nothing". Measured on
+    // PostgreSQL 18.6, `has_column_privilege` ERRORs on a name that does not exist (`column "nope" of
+    // relation "pg_class" does not exist`, likewise for an unknown relation or role) rather than
+    // answering `false`, so a typo is loud; and the SELECT arm is the control that the probe tells a
+    // held privilege from a withheld one on this very column.
+    const { rows } = await suite.admin.execute<{ sel: boolean; upd: boolean }>(sql`
+      select
+        has_column_privilege('app_user', 'nodes', 'public_key', 'SELECT') as sel,
+        has_column_privilege('app_user', 'nodes', 'public_key', 'UPDATE') as upd`);
+    expect(rows[0]).toEqual({ sel: true, upd: false });
   });
 });

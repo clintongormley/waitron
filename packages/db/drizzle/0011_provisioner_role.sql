@@ -89,9 +89,8 @@ GRANT USAGE ON SCHEMA public TO tenant_provisioner;
 -- Proven on PostgreSQL 18.4, and proven by deletion: a LOGIN role created `in role
 -- tenant_provisioner` ALONE (its only direct membership, read from pg_auth_members) inserts a tenant,
 -- reads it back, and inserts its location; commenting this GRANT out makes the read fail
--- `permission denied for table tenants` (42501). That experiment lived in
--- `packages/db/src/provisioner-role.rls.test.ts`, retired 2026-09-06 with the RLS suites — the
--- `tenant_provisioner` bucket itself is scheduled to go with them (drop-RLS design §1).
+-- `permission denied for table tenants` (42501). This bucket is removed by
+-- `docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md` §1.
 --
 -- Idempotency, narrowed to what was actually observed: re-running the GRANT AS THE SAME GRANTOR is
 -- a NOTICE, not an error — `NOTICE: role "tenant_provisioner" has already been granted membership
@@ -118,7 +117,8 @@ GRANT app_user TO tenant_provisioner;
 -- matters beyond this file: a later plan names "check for an existing tenant by NIF" as its
 -- idempotency strategy for a `tenant` command, and that check cannot work as specified. Verified
 -- live: `tenants_tenant_isolation`'s USING (id = current_tenant_id()) hides an EXISTING row from
--- `select ... from tenants where nif = ...` under `provisioner_login` with app.tenant_id unset —
+-- `select ... from tenants where nif = ...` under a LOGIN role in `tenant_provisioner`, with
+-- app.tenant_id unset —
 -- there is no tenant scope to adopt yet for a lookup that precedes knowing which tenant it would
 -- be. A NIF collision surfaces only when it is actually inserted, as 23505 on tenants_nif_key,
 -- independent of whether SELECT is granted.

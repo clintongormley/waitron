@@ -10,12 +10,12 @@ import { seedNode } from "./testing/seed.js";
 import { withTenant } from "./tenancy.js";
 import { locations, tenants, tills } from "./schema/tenants.js";
 
-// Real Postgres, not PGlite, and not describeEachTarget: the two things this suite proves that
-// PGlite cannot are the `reject_mutation` trigger firing against a role that HAS been granted the
-// privilege (every PGlite connection is a superuser, and a superuser can DISABLE TRIGGER) and the
-// parent-row lock serialising concurrent appends (PGlite serialises every query onto one backend, so
-// the race never happens) — CLAUDE.md §4. The happy-path append and the hash re-verification would
-// pass on either target; they ride along on the one container this suite already needs.
+// Real Postgres, not PGlite, and not describeEachTarget: the ONE thing here PGlite cannot show is
+// the parent-row lock serialising concurrent appends — PGlite puts every query on one backend, so
+// the race never happens and a pass there would be theatre (CLAUDE.md §4). Everything else would
+// pass on either target and rides along on the container this suite already needs, the WT001 case
+// included: `reject_mutation` fires for every actor, the owner and a superuser alike, and the case
+// grants the privilege rather than disabling the trigger.
 //
 // `order_amendments` is append-only for EVERY role, the owner included (reject_mutation blocks
 // UPDATE/DELETE/TRUNCATE), so nothing can clean it up between tests — the table only grows. Each
@@ -60,8 +60,7 @@ async function rollBackAfter(
 describe("order_amendments append helper", () => {
   // A clone of the shared container's `core` template. Docker is required (the package globalSetup
   // fails loudly without it): the concurrency proof below opens distinct backends via
-  // `suite.pg.connect()`, and PGlite (one serialised backend, and a superuser that can DISABLE
-  // TRIGGER) can show neither that nor the reject_mutation backstop this suite proves.
+  // `suite.pg.connect()`, which one serialised PGlite backend cannot give.
   const suite = useTemplateDb({ template: "core" });
 
   // As the connection owner — pure setup: two tenants, each with a location, a till and a node

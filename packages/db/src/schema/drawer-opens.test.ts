@@ -41,7 +41,7 @@ async function rollBackAfter(
   });
 }
 
-describe("drawer_opens schema (cash-drawer audit — RLS + append-only grants + FORCE + composite FKs)", () => {
+describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, composite FKs)", () => {
   const suite = useTemplateDb({ template: "core" });
 
   // Scaffolding seeded once as the owner (superuser bypasses RLS — pure setup). A location, a till and
