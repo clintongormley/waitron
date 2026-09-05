@@ -142,16 +142,18 @@ behaviour to today until a move happens.
   (guarded like `dev-device.ts`); seeded with `{ url: location.origin }` so a first boot or a wiped
   store still has the box.
 - **Probe loop:** every 5 s, `GET /api/node` on every listed server, 3 s timeout (`AbortController`),
-  in parallel. Per server: `unknown | unreachable | standby | primary`, plus `term`. Failures are
-  counted per server.
-- **Move rule:** move when the current target has failed 3 consecutive probes OR answered
-  `acceptingSales: false`, AND some other server answered `acceptingSales: true` in the latest
-  round; among several, the highest `term`. One yes is enough (owner question, 2026-09-05):
-  `acceptingSales` is boot-captured, so a yes is a settled fact that only a fence or a restart
-  changes — the debounce belongs on the failure side only, where a single miss can be a blip. No
-  other trigger. No move while a request is in flight (its outcome is handled first, §4.3).
-- **Waiting:** no server accepting sales → `waiting`. The status line shows it; nothing is retried
-  against a non-selling node.
+  in parallel. Per server: `unknown | unreachable | standby | primary`, plus `term`. No counters.
+- **Target rule (owner, 2026-09-05 — "keep trying until one server responds positively"):** after
+  each round, if any server answered `acceptingSales: true`, the target is that server (the highest
+  `term` if several). If none did, the target stays where it is and the till keeps probing. That is
+  the whole rule: there is no giving up on a server and no failure count. A blip of the box while
+  the cloud is a standby moves nothing, because nobody else said yes; the till moves exactly when
+  another server says yes, which is exactly when a human has promoted it. `acceptingSales` is
+  boot-captured, so one yes is a settled fact. No move while a request is in flight (its outcome is
+  handled first, §4.3); the move happens on the next round.
+- **Waiting:** no server accepting sales in the latest round → `waiting`. The status line shows what
+  each server said; requests to the current target still go out (it may be back next round) and
+  their failures surface as today (`boot.error`, `sale.error`, `sale.unconfirmed`).
 - **`probeNow()`** — "check again": runs one probe round immediately.
 - Emits `server-changed` and `state-changed` events; `till-app` listens.
 
@@ -191,22 +193,24 @@ Names are the document's node labels where present, else the host. A "Check agai
 | Situation | Probe results | Till |
 | --- | --- | --- |
 | Normal | box: primary | works; status "On: Box" |
-| Box dies, cloud unpromoted | box: unreachable; cloud: standby | `waiting`; sells nothing; "waiting for promotion"; keeps probing both |
+| Box dies, cloud unpromoted | box: unreachable; cloud: standby | `waiting`; stays aimed at the box; "waiting for promotion"; keeps probing both |
 | Cloud promoted | cloud: primary | moves; PIN prompt; carries on |
 | Box returns (fenced) | cloud: primary; box: standby | stays on cloud; status shows box as standby |
 | Box promoted back | box: primary; cloud: standby | moves back; PIN prompt |
 | Internet down, box alive | box: primary; cloud: unreachable | works; status shows cloud unreachable |
-| Box + internet down | both unreachable | `waiting`; the MVP's accepted no-failover case |
+| Box + internet down | both unreachable | `waiting`; stays aimed at the box; the MVP's accepted no-failover case |
 | Two primaries (isolated ex-primary) | both primary | highest term; a till seeing only the old one stays |
+| Box blips once, cloud a standby | box: unreachable (one round); cloud: standby | no move — nobody else said yes; next round the box is back |
 | Request in flight when the box dies | — | `sale.unconfirmed`, basket kept, human decides |
 | Page closed while `waiting`, no service worker | — | reopen from the box fails; staff open the cloud address (cookie covers it) |
 
 ## 6. Testing
 
 - **Till (browser-mode vitest, stub fetch):** the router as a state machine — state the failing case
-  first: no move on 2 failures, move on 3; a `standby` answer never chosen; `acceptingSales:false`
-  on the current target triggers a move on the first other yes; highest term wins; no move
-  mid-request; `probeNow`; persistence round-trip incl. a throwing `localStorage`; the wrapper
+  first: a round with no yes anywhere leaves the target where it is (a blip moves nothing); a
+  `standby` answer is never chosen; the first round in which another server says yes moves the
+  target; highest term wins among several yeses; no move mid-request (deferred to the next round);
+  `probeNow`; persistence round-trip incl. a throwing `localStorage`; the wrapper
   rewrites `/api/x` to `<target>/api/x` and leaves absolute URLs alone; `till-app` on
   `server-changed` → lock + banner + re-boot; `sale.unconfirmed` on a TypeError and NOT on a
   `{ code }`; the status line renders each row of §5.
