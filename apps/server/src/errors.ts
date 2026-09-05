@@ -1349,6 +1349,25 @@ declare module "@waitron/shared" {
      */
     "promotion.membership_superseded": { heldTerm: number; mintedTerm: number };
     /**
+     * A promote was refused because THIS node's held membership document marks it fenced
+     * (`sell-only`/`evicted`) — it has been superseded by a carrier that is already serving. Membership
+     * rejoin R1 reconciles a fenced node to the SAME deployment axes as a healthy local secondary
+     * (`mode='primary'`, `singleton_role='secondary'`), so the axis guards (`not_a_local_secondary`,
+     * the already-primary no-op) cannot catch it; only this fence check can. Promoting it in place would
+     * resume the fiscal submitter duties on a SUPERSEDED chain — two submitters under one NIF, the exact
+     * unrecoverable failure the whole design exists to prevent (CLAUDE.md §5). Thrown BEFORE any state
+     * change (before the point-of-no-return), so the node is left exactly as it was. A fenced node
+     * returns to service via wipe-and-restore (a fresh boot that clears the fence), never by in-place
+     * promotion. Thrown from BOTH promote paths (`assertNotFenced`, `promote.ts`): the local-secondary
+     * promote (the R1-axes-evade case above) and the mirror→primary promote (a fenced mirror that was
+     * superseded — guarded there alongside `membership_superseded`). `standing` names the fenced standing
+     * (`sell-only`/`evicted`) for diagnosis — a topology fact already in the served membership document,
+     * not a secret. `promotion.*` names the DOMAIN
+     * CONCEPT, never the throwing package — the rule `promotion.fence_not_attested` gives. Never renamed
+     * once shipped.
+     */
+    "promotion.node_fenced": { standing: "sell-only" | "evicted" };
+    /**
      * `retireSelf` (retire/evict R3) was invoked on a node that is NOT fenced — a node with a
      * `serving-primary`/`serving-secondary` standing in the held chart, a node ABSENT from the chart,
      * or a node holding no membership document at all. Only a fenced (`sell-only`) node leaves for
