@@ -135,8 +135,8 @@ fresh-context seats, Opus 5.1 for execution, Codex (`gpt-6-astra`, `.codex/confi
 `~/workspace/tools/codex-seat.sh`) for the implementer seat and the pre-PR diff review that replaces
 Copilot (LANDED #242). Copilot still auto-reviews every PR from a GitHub-side setting (not a repo
 workflow); on #242 it made two right wording calls and two false positives (it cannot see a symlink in
-the diff). Switched off 2026-09-06 (the `copilot_code_review` rule removed from the main ruleset). Seats
-settled the same day: Astra takes plan-vs-spec review and run-it review; Fable keeps brainstorm/spec/plan,
+the diff). Switched off 2026-09-06 (the `copilot_code_review` rule removed from the main ruleset; #243 landed
+with zero reviews, the proof). Seats settled the same day (#243): Astra takes plan-vs-spec review and run-it review; Fable keeps brainstorm/spec/plan,
 a new fiscal-spec review, and fix round five; Opus the driver and the two non-author reviewers.
 **Open:** rewire `/finish-branch` step 1 so `/simplify`'s four lenses dispatch through
 `codex-seat.sh implement` instead of Opus. A three-way run-it reviewer probe on planted defects (Fable / Opus / Astra) found no
