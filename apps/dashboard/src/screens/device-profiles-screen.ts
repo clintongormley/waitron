@@ -15,21 +15,8 @@ import type { StringKey } from "../i18n/strings.js";
 // declaring a second copy; a profile's `capabilities` (opaque `string[]` on the wire) is rendered
 // defensively against it.
 import { CAPABILITY_FLAGS, type CapabilityFlag } from "./canvas-editor/card-contracts.js";
+import { toggleMembership } from "../array-utils.js";
 import type { Canvas, DeviceProfile, DashboardApi } from "../api/client.js";
-
-/** Toggle `value`'s membership of `current`, returning a NEW array ordered by `all` (deterministic,
- * not click order): add it when `checked`, drop it otherwise, then filter `all` to what remains. */
-function toggleMembership<T>(
-  current: readonly T[],
-  all: readonly T[],
-  value: T,
-  checked: boolean,
-): T[] {
-  const set = new Set(current);
-  if (checked) set.add(value);
-  else set.delete(value);
-  return all.filter((x) => set.has(x));
-}
 
 /**
  * The management dashboard's DEVICE-PROFILES screen — the venue authors reusable device profiles,
@@ -192,13 +179,15 @@ export class DeviceProfilesScreen extends LitElement {
     }
   }
 
-  /** The shared shape of every mutation: clear the error banner, run `action`, reload on success, and
-   * turn a rejection into the `errorKey` banner (never an unhandled rejection). */
+  /** The shared shape of every mutation: clear the error banner, run `action`, reload the PROFILES on
+   * success, and turn a rejection into the `errorKey` banner (never an unhandled rejection). Only the
+   * profiles are reloaded — no profile write can change the tenant's canvas set, so the already-loaded
+   * `this.canvases` is left untouched (one fewer round-trip per write). */
   async #mutate(action: () => Promise<unknown>): Promise<void> {
     this.errorKey = null;
     try {
       await action();
-      await this.#load();
+      this.profiles = await this.api.listDeviceProfiles();
     } catch (error) {
       this.errorKey = codeOf(error);
     }

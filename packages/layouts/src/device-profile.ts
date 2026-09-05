@@ -1,6 +1,6 @@
 import "./errors.js";
 import { AppError } from "@waitron/shared";
-import { CAPABILITY_FLAGS, type CapabilityFlag, FORM_FACTORS, type FormFactor } from "./canvas.js";
+import { CAPABILITY_FLAGS, type CapabilityFlag, type FormFactor } from "./canvas.js";
 
 /**
  * Fail-closed validation of a device profile's capability set (design §7). Rejects a non-array or any
@@ -33,6 +33,5 @@ export const DEFAULT_PROFILE_CAPABILITIES: Record<FormFactor, CapabilityFlag[]> 
   "tablet-landscape": [],
   kds: ["act-as-kds"],
 };
-
-// Referenced so a future FORM_FACTORS change forces this map to be revisited (exhaustive keys above).
-void FORM_FACTORS;
+// The `Record<FormFactor, …>` annotation makes this map exhaustive: a new FORM_FACTORS member fails
+// to compile until it is added here.

@@ -47,6 +47,29 @@ export type DeviceProfileRow = {
   capabilities: CapabilityFlag[];
 };
 
+/** The `DeviceProfileRow` column projection shared by every `.select()` and `.returning()` here. */
+const PROFILE_COLUMNS = {
+  id: deviceProfiles.id,
+  name: deviceProfiles.name,
+  canvasId: deviceProfiles.canvasId,
+  capabilities: deviceProfiles.capabilities,
+} as const;
+
+/** Re-attach the `CapabilityFlag[]` shape the plain-jsonb `capabilities` column drops (see header). */
+function toRow(row: {
+  id: string;
+  name: string;
+  canvasId: string | null;
+  capabilities: unknown;
+}): DeviceProfileRow {
+  return {
+    id: row.id,
+    name: row.name,
+    canvasId: row.canvasId,
+    capabilities: row.capabilities as CapabilityFlag[],
+  };
+}
+
 const FOREIGN_KEY_VIOLATION = "23503";
 
 /**
@@ -83,21 +106,11 @@ export async function listDeviceProfiles(
   tenantId: string,
 ): Promise<DeviceProfileRow[]> {
   const rows = await tx
-    .select({
-      id: deviceProfiles.id,
-      name: deviceProfiles.name,
-      canvasId: deviceProfiles.canvasId,
-      capabilities: deviceProfiles.capabilities,
-    })
+    .select(PROFILE_COLUMNS)
     .from(deviceProfiles)
     .where(eq(deviceProfiles.tenantId, tenantId))
     .orderBy(asc(deviceProfiles.name));
-  return rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    canvasId: row.canvasId,
-    capabilities: row.capabilities as CapabilityFlag[],
-  }));
+  return rows.map(toRow);
 }
 
 /** One device profile by id, or `undefined` when the tenant has no such profile. */
@@ -107,21 +120,11 @@ export async function getDeviceProfile(
   id: string,
 ): Promise<DeviceProfileRow | undefined> {
   const [row] = await tx
-    .select({
-      id: deviceProfiles.id,
-      name: deviceProfiles.name,
-      canvasId: deviceProfiles.canvasId,
-      capabilities: deviceProfiles.capabilities,
-    })
+    .select(PROFILE_COLUMNS)
     .from(deviceProfiles)
     .where(and(eq(deviceProfiles.tenantId, tenantId), eq(deviceProfiles.id, id)));
   if (row === undefined) return undefined;
-  return {
-    id: row.id,
-    name: row.name,
-    canvasId: row.canvasId,
-    capabilities: row.capabilities as CapabilityFlag[],
-  };
+  return toRow(row);
 }
 
 /** Create a device profile for the tenant, returning the stored row. Manager/admin only
@@ -150,18 +153,8 @@ export async function createDeviceProfile(
         canvasId: input.canvasId ?? null,
         capabilities,
       })
-      .returning({
-        id: deviceProfiles.id,
-        name: deviceProfiles.name,
-        canvasId: deviceProfiles.canvasId,
-        capabilities: deviceProfiles.capabilities,
-      });
-    return {
-      id: row!.id,
-      name: row!.name,
-      canvasId: row!.canvasId,
-      capabilities: row!.capabilities as CapabilityFlag[],
-    };
+      .returning(PROFILE_COLUMNS);
+    return toRow(row!);
   } catch (error) {
     translateWriteError(error);
   }
@@ -202,18 +195,8 @@ export async function updateDeviceProfile(
         updatedAt: sql`now()`,
       })
       .where(and(eq(deviceProfiles.tenantId, input.tenantId), eq(deviceProfiles.id, input.id)))
-      .returning({
-        id: deviceProfiles.id,
-        name: deviceProfiles.name,
-        canvasId: deviceProfiles.canvasId,
-        capabilities: deviceProfiles.capabilities,
-      });
-    updated = rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      canvasId: row.canvasId,
-      capabilities: row.capabilities as CapabilityFlag[],
-    }));
+      .returning(PROFILE_COLUMNS);
+    updated = rows.map(toRow);
   } catch (error) {
     translateWriteError(error);
   }

@@ -31,8 +31,9 @@ export const CARD_TYPES = [
 export type CardType = (typeof CARD_TYPES)[number];
 
 /**
- * Server-enforced device-capability flags a canvas may carry (design §5, layer 2) — generalising the
- * hardcoded assertNotHandheld firewall. Declarative here; ENFORCEMENT lands in SP-A.2 (device slice).
+ * Server-enforced device-capability flags a device profile may carry (design §5, layer 2) —
+ * generalising the hardcoded assertNotHandheld firewall. Capabilities live on the device profile
+ * (`device-profile.ts`), not the canvas; enforcement is `assertDeviceCapability` (apps/server).
  */
 export const CAPABILITY_FLAGS = [
   "integrated-card-payment",

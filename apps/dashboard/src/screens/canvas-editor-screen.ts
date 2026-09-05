@@ -12,6 +12,7 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "./canvas-editor/canvas-grid-preview.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
+import { toggleMembership } from "../array-utils.js";
 import type { StringKey } from "../i18n/strings.js";
 import {
   CARD_CONTRACTS,
@@ -33,22 +34,6 @@ import type { Canvas, DashboardApi } from "../api/client.js";
  * form-factor keys that populated the options). */
 function formFactorFromEvent(event: Event): FormFactor {
   return (event.target as HTMLSelectElement).value as FormFactor;
-}
-
-/** Toggle `value`'s membership of `current`, returning a NEW array ordered by `all` (deterministic,
- * not click order): add it when `checked`, drop it otherwise, then filter `all` to what remains. The
- * write-back for the `visibleWhen` toggle (which OMITS the key when the result is empty). Formerly
- * shared with the capability toggle, which relocated to the device-profile editor (Task 9). */
-function toggleMembership<T>(
-  current: readonly T[],
-  all: readonly T[],
-  value: T,
-  checked: boolean,
-): T[] {
-  const set = new Set(current);
-  if (checked) set.add(value);
-  else set.delete(value);
-  return all.filter((x) => set.has(x));
 }
 
 /** Clamp a card span: colSpan to `1..columns`, rowSpan to `≥1`. The single source of the span clamp —

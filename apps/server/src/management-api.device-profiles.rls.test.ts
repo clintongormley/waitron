@@ -394,6 +394,24 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     ).toMatchObject({
       error: { code: "management.request_invalid", params: { field: "canvasId" } },
     });
+
+    // A canvasId that is a string but NOT a UUID → the UUID-shape screen (`requireBodyUuid`), a clean
+    // 400 rather than a downstream `22P02` 500 on the `canvas_id` uuid column.
+    const malformedCanvas = await app.request("/management-api/device-profiles", {
+      method: "POST",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({
+        name: uniqueName("BadShape"),
+        canvasId: "not-a-uuid",
+        capabilities: [],
+      }),
+    });
+    expect(malformedCanvas.status).toBe(400);
+    expect(
+      (await malformedCanvas.json()) as { error: { code: string; params: { field: string } } },
+    ).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "canvasId" } },
+    });
   });
 
   it("PUT with a malformed body → 400 management.request_invalid naming the field", async () => {

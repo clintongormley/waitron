@@ -91,6 +91,7 @@ import {
 import type { TillConfig } from "./till-config.js";
 import { createErrorBoundary } from "./error-boundary.js";
 import { readJsonBody } from "./read-json-body.js";
+import { requireBodyUuid } from "./request-screens.js";
 import {
   clearManagementCookie,
   readManagementSessionId,
@@ -1101,7 +1102,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // Create a device profile. Body { name, canvasId?, capabilities }; a non-object body, a non-string
-  // `name`, an absent `capabilities`, or a `canvasId` that is neither a string nor null →
+  // `name`, an absent `capabilities`, or a `canvasId` that is present but not a UUID string →
   // `management.request_invalid` naming the FIELD; `createDeviceProfile` then enforces `till.configure`,
   // validates the capability set (400 `device_profile.invalid` {bad_capabilities}), maps a bad canvas
   // reference to 400 `device_profile.invalid` {bad_canvas_ref} and a duplicate name to 409
@@ -1123,16 +1124,17 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (!("capabilities" in body)) {
         throw new AppError("management.request_invalid", { field: "capabilities" });
       }
-      const canvasIdRaw = body.canvasId;
-      if (canvasIdRaw !== undefined && canvasIdRaw !== null && typeof canvasIdRaw !== "string") {
-        throw new AppError("management.request_invalid", { field: "canvasId" });
-      }
       // Bind the narrowed fields to locals: the `typeof`/`in` guards narrow the properties HERE, but
       // that narrowing does not survive into the `withTenant` closure (TS resets a captured property to
-      // its declared type), so the closure reads these — the create-canvas pattern above. `canvasId`
-      // defaults an omitted key to `null` (the store's `canvasId ?? null`).
+      // its declared type), so the closure reads these — the create-canvas pattern above. `canvasId` is
+      // screened for UUID SHAPE via the shared `requireBodyUuid` (an omitted or `null` key → `null`; a
+      // malformed string → 400 `management.request_invalid`, never a downstream `22P02` 500 on the
+      // `canvas_id` uuid column).
       const { name, capabilities } = body;
-      const canvasId = canvasIdRaw ?? null;
+      const canvasId =
+        body.canvasId === undefined || body.canvasId === null
+          ? null
+          : requireBodyUuid(body.canvasId, "canvasId");
       const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         return createDeviceProfile(tx, {
@@ -1170,12 +1172,13 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (!("capabilities" in body)) {
         throw new AppError("management.request_invalid", { field: "capabilities" });
       }
-      const canvasIdRaw = body.canvasId;
-      if (canvasIdRaw !== undefined && canvasIdRaw !== null && typeof canvasIdRaw !== "string") {
-        throw new AppError("management.request_invalid", { field: "canvasId" });
-      }
+      // `canvasId` screened for UUID SHAPE via the shared `requireBodyUuid` (an omitted or `null` key →
+      // `null`; a malformed string → 400 `management.request_invalid`, never a downstream `22P02` 500).
       const { name, capabilities } = body;
-      const canvasId = canvasIdRaw ?? null;
+      const canvasId =
+        body.canvasId === undefined || body.canvasId === null
+          ? null
+          : requireBodyUuid(body.canvasId, "canvasId");
       const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         return updateDeviceProfile(tx, {
