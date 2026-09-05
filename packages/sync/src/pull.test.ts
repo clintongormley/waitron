@@ -56,6 +56,7 @@ const full = (applied: number): SyncPullResult => ({
   applied,
   deferred: 0,
   rejected: 0,
+  versionParked: 0,
   fetched: BATCH,
   advanced: true,
 });
@@ -66,6 +67,7 @@ const noopFull = (): SyncPullResult => ({
   applied: 0,
   deferred: 0,
   rejected: 0,
+  versionParked: 0,
   fetched: BATCH,
   advanced: true,
 });
@@ -75,6 +77,7 @@ const parkedFull = (): SyncPullResult => ({
   applied: 0,
   deferred: BATCH,
   rejected: 0,
+  versionParked: 0,
   fetched: BATCH,
   advanced: false,
 });
@@ -82,6 +85,7 @@ const short = (applied: number, fetched = 0): SyncPullResult => ({
   applied,
   deferred: 0,
   rejected: 0,
+  versionParked: 0,
   fetched,
   advanced: true,
 });
@@ -187,8 +191,8 @@ describe("runSyncPull loop control", () => {
     // A full page that rejected 2 rows and advanced (drain continues), then a short page that rejected 1
     // more (drain stops). Both must log; neither may grow backoff.
     const results: SyncPullResult[] = [
-      { applied: 3, deferred: 0, rejected: 2, fetched: BATCH, advanced: true },
-      { applied: 0, deferred: 0, rejected: 1, fetched: 0, advanced: true },
+      { applied: 3, deferred: 0, rejected: 2, versionParked: 0, fetched: BATCH, advanced: true },
+      { applied: 0, deferred: 0, rejected: 1, versionParked: 0, fetched: 0, advanced: true },
     ];
     let calls = 0;
     const pullOnce = async (): Promise<SyncPullResult> => results[calls++] ?? short(0);

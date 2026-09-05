@@ -343,6 +343,11 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
         nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
         environment: "preproduction",
         membership: null, // no document adopted → the handshake carries a null membership (design §5)
+        // Real boot computes the per-module applied versions from the migrated DB (SP-2b) and /hello
+        // echoes them; the exact numbers drift with every migration, so assert the map is genuinely
+        // populated (`core` a real number) rather than pinning drift-prone values — the content is
+        // covered exactly in sync-api.rls.test.ts.
+        moduleVersions: expect.objectContaining({ core: expect.any(Number) }),
       });
 
       // The C2b mirror-bundle endpoint IS mounted on this primary (it holds a sync_retention connection):

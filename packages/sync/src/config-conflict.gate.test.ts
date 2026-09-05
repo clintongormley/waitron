@@ -206,7 +206,7 @@ describe("Slice 7 — the config-conflict apply gate (primary-wins)", () => {
         ],
         { subscriberId, servingPrimaryId: NODE_PRIMARY, ...PROD },
       );
-      expect(result).toEqual({ applied: 0, deferred: 0, rejected: 1 });
+      expect(result).toEqual({ applied: 0, deferred: 0, rejected: 1, versionParked: 0 });
       expect(await productCount(productId)).toBe("0"); // primary-wins: the row was NOT applied
 
       const recorded = await conflicts(NODE_RETURNED);
@@ -233,7 +233,7 @@ describe("Slice 7 — the config-conflict apply gate (primary-wins)", () => {
         ],
         { subscriberId, servingPrimaryId: NODE_PRIMARY, ...PROD },
       );
-      expect(redeliver).toEqual({ applied: 0, deferred: 0, rejected: 0 }); // skipped by the cursor
+      expect(redeliver).toEqual({ applied: 0, deferred: 0, rejected: 0, versionParked: 0 }); // skipped by the cursor
       expect(await conflicts(NODE_RETURNED)).toHaveLength(1); // not recorded a second time
     } finally {
       await applier.close();
@@ -263,7 +263,7 @@ describe("Slice 7 — the config-conflict apply gate (primary-wins)", () => {
         ],
         { subscriberId, servingPrimaryId: NODE_PRIMARY, ...PROD },
       );
-      expect(result).toEqual({ applied: 1, deferred: 0, rejected: 0 }); // origin IS the serving-primary
+      expect(result).toEqual({ applied: 1, deferred: 0, rejected: 0, versionParked: 0 }); // origin IS the serving-primary
       expect(await productCount(productId)).toBe("1"); // applied
       expect(await conflicts(NODE_PRIMARY)).toHaveLength(0); // nothing rejected
     } finally {
@@ -296,7 +296,7 @@ describe("Slice 7 — the config-conflict apply gate (primary-wins)", () => {
         ],
         { subscriberId, ...PROD }, // no servingPrimaryId
       );
-      expect(result).toEqual({ applied: 1, deferred: 0, rejected: 0 });
+      expect(result).toEqual({ applied: 1, deferred: 0, rejected: 0, versionParked: 0 });
       expect(await productCount(productId)).toBe("1"); // applied — gate inert
       expect(await conflicts(NODE_RETURNED)).toHaveLength(0);
     } finally {
@@ -339,7 +339,7 @@ describe("Slice 7 — the config-conflict apply gate (primary-wins)", () => {
         ],
         { subscriberId, servingPrimaryId: NODE_PRIMARY, ...PROD },
       );
-      expect(result).toEqual({ applied: 2, deferred: 0, rejected: 0 }); // both applied, none rejected
+      expect(result).toEqual({ applied: 2, deferred: 0, rejected: 0, versionParked: 0 }); // both applied, none rejected
       expect(await tableCount(table.id as string)).toBe("1");
       expect(await workingOrderCount(order.id as string)).toBe("1");
       expect(await conflicts(NODE_RETURNED)).toHaveLength(0); // no config-conflict recorded

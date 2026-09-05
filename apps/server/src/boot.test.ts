@@ -1735,6 +1735,11 @@ describe("startServer, against a real container as the deployment role", () => {
         nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
         environment: "production",
         membership: null, // no document adopted → the handshake carries a null membership (design §5)
+        // Real boot computes the per-module applied versions from the migrated DB (SP-2b) and /hello
+        // echoes them; the exact numbers drift with every migration, so assert the map is genuinely
+        // populated (`core` a real number) rather than pinning drift-prone values — the content is
+        // covered exactly in sync-api.rls.test.ts.
+        moduleVersions: expect.objectContaining({ core: expect.any(Number) }),
       });
       // A tokenless request is refused — the fail-closed guard, not just the route, is live.
       const unauth = await fetch(`http://127.0.0.1:${port}/sync-api/hello`);
