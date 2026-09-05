@@ -38,14 +38,19 @@ import {
 } from "@waitron/identity";
 import {
   createCanvas,
+  createDeviceProfile,
   deleteCanvas,
+  deleteDeviceProfile,
   getReceipt,
   getCanvas,
+  getDeviceProfile,
   getTenantTheme,
   listCanvases,
+  listDeviceProfiles,
   putReceipt,
   putTenantTheme,
   updateCanvas,
+  updateDeviceProfile,
 } from "@waitron/layouts";
 import {
   clearPlacement,
@@ -262,6 +267,17 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // listed explicitly as the house style requires (an unmapped code would default to 400, the wrong 4xx).
   "course.not_found": 404,
   "course.name_taken": 409,
+  // Device-profile CRUD (Task 4, design 2026-09-05 §5.1). A GET/PUT/DELETE-by-id (or a malformed id
+  // screened to it by `requireDeviceProfileId`) that names no profile the tenant owns → 404
+  // (`device_profile.not_found`); a duplicate profile name collides on the `(tenant, name)` unique,
+  // translated from 23505 by `device-profile-store.ts` → 409 (`device_profile.name_taken`), the same
+  // conflict shape a taken canvas name has. An unknown capability flag (fail-closed `validateCapabilities`)
+  // OR a `canvasId` naming no canvas (the composite FK 23503) is refused → 400 (`device_profile.invalid`,
+  // params `{ reason: "bad_capabilities" | "bad_canvas_ref" }`), the same 400 family as `canvas.invalid`.
+  // The `?? 400` default already covers the 400, but it is listed explicitly as the house style requires.
+  "device_profile.not_found": 404,
+  "device_profile.name_taken": 409,
+  "device_profile.invalid": 400,
 };
 
 // The one error boundary every management route wraps its handler in — the shared
@@ -356,6 +372,19 @@ function requireCourseId(id: string): string {
  */
 function requireCanvasId(id: string): string {
   if (!isUuid(id)) throw new AppError("canvas.not_found", {});
+  return id;
+}
+
+/**
+ * Screen a `/management-api/device-profiles/:id` path param as a UUID, returning it. The twin of
+ * `requireCanvasId` for the device-profile routes: a malformed id passed into a `uuid` column would
+ * `22P02` → an opaque 500, so refusing it here as `device_profile.not_found` turns that 500 into a
+ * clean 404. Like `canvas.not_found`, `device_profile.not_found` carries NO params (errors.ts), so a
+ * well-formed-but-absent id (the GET/PUT/DELETE-by-id 404) and a malformed one give the identical 404
+ * body. Shared by the GET, PUT and DELETE `:id` device-profile routes.
+ */
+function requireDeviceProfileId(id: string): string {
+  if (!isUuid(id)) throw new AppError("device_profile.not_found", {});
   return id;
 }
 
@@ -1014,6 +1043,167 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           managementSessionId: sessionId,
           tenantId: deps.cfg.tenantId,
           theme,
+        });
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  // ── Device profiles (Task 4) ───────────────────────────────────────────────────────────────────
+  // The dashboard's reusable device-profile CRUD (design 2026-09-05 §5.1) — a named capability set +
+  // optional default canvas that a device (a later task's reassign route) points at. Mirrors the
+  // canvas block: all routes are gated (`requireManagementSession` first, 401 before any DB work) and
+  // every DB touch runs `withTenant` + `asAppUser`, so RLS scopes the `device_profiles` rows and the
+  // authorize gate to this dashboard's own tenant. The READS (`GET /device-profiles`,
+  // `/device-profiles/:id`) carry their own explicit `authorizeManager(..., "till.configure")` —
+  // `listDeviceProfiles`/`getDeviceProfile` do NOT self-authorize (the canvas-read shape) — while the
+  // WRITES delegate the gate to the store fns (`createDeviceProfile`/`updateDeviceProfile`/
+  // `deleteDeviceProfile`, proven by-deletion in the store rls suite). A malformed body field is
+  // refused as `management.request_invalid` naming the FIELD before the store call; the store then maps
+  // an unknown capability / bad canvas reference to `device_profile.invalid` (400), a duplicate name to
+  // `device_profile.name_taken` (409), and an absent id to `device_profile.not_found` (404).
+
+  // The tenant's device profiles, for the editor list. Gated on `till.configure` via the explicit
+  // `authorizeManager` (the read fn does not gate). Returns `{ deviceProfiles: [{id,name,canvasId,capabilities}] }`.
+  app.get("/management-api/device-profiles", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const deviceProfiles = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "till.configure",
+        });
+        return listDeviceProfiles(tx, deps.cfg.tenantId);
+      });
+      return c.json({ deviceProfiles });
+    }),
+  );
+
+  // One device profile by id, or 404 `device_profile.not_found`. `:id` screened by
+  // `requireDeviceProfileId` (malformed → the same 404). Gated on `till.configure` via the explicit
+  // `authorizeManager`.
+  app.get("/management-api/device-profiles/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireDeviceProfileId(c.req.param("id"));
+      const profile = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "till.configure",
+        });
+        return getDeviceProfile(tx, deps.cfg.tenantId, id);
+      });
+      if (profile === undefined) throw new AppError("device_profile.not_found", {});
+      return c.json(profile);
+    }),
+  );
+
+  // Create a device profile. Body { name, canvasId?, capabilities }; a non-object body, a non-string
+  // `name`, an absent `capabilities`, or a `canvasId` that is neither a string nor null →
+  // `management.request_invalid` naming the FIELD; `createDeviceProfile` then enforces `till.configure`,
+  // validates the capability set (400 `device_profile.invalid` {bad_capabilities}), maps a bad canvas
+  // reference to 400 `device_profile.invalid` {bad_canvas_ref} and a duplicate name to 409
+  // `device_profile.name_taken`. Returns the stored row at 201.
+  app.post("/management-api/device-profiles", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody<{
+        name?: unknown;
+        canvasId?: unknown;
+        capabilities?: unknown;
+      }>(c);
+      if (typeof body !== "object" || body === null || Array.isArray(body)) {
+        throw new AppError("management.request_invalid", { field: "body" });
+      }
+      if (typeof body.name !== "string") {
+        throw new AppError("management.request_invalid", { field: "name" });
+      }
+      if (!("capabilities" in body)) {
+        throw new AppError("management.request_invalid", { field: "capabilities" });
+      }
+      const canvasIdRaw = body.canvasId;
+      if (canvasIdRaw !== undefined && canvasIdRaw !== null && typeof canvasIdRaw !== "string") {
+        throw new AppError("management.request_invalid", { field: "canvasId" });
+      }
+      // Bind the narrowed fields to locals: the `typeof`/`in` guards narrow the properties HERE, but
+      // that narrowing does not survive into the `withTenant` closure (TS resets a captured property to
+      // its declared type), so the closure reads these — the create-canvas pattern above. `canvasId`
+      // defaults an omitted key to `null` (the store's `canvasId ?? null`).
+      const { name, capabilities } = body;
+      const canvasId = canvasIdRaw ?? null;
+      const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return createDeviceProfile(tx, {
+          managementSessionId: sessionId,
+          tenantId: deps.cfg.tenantId,
+          name,
+          canvasId,
+          capabilities,
+        });
+      });
+      return c.json(result, 201);
+    }),
+  );
+
+  // Replace a device profile's name, canvas reference and capabilities. Same body-screen as POST;
+  // `updateDeviceProfile` enforces `till.configure`, validates (400 `device_profile.invalid`), maps a
+  // duplicate name to 409 and an absent id (matched zero rows via `.returning`) to 404
+  // `device_profile.not_found` — so a PUT to a since-deleted profile is a 404, not a masked "saved".
+  // Returns the stored row at 200.
+  app.put("/management-api/device-profiles/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireDeviceProfileId(c.req.param("id"));
+      const body = await readJsonBody<{
+        name?: unknown;
+        canvasId?: unknown;
+        capabilities?: unknown;
+      }>(c);
+      if (typeof body !== "object" || body === null || Array.isArray(body)) {
+        throw new AppError("management.request_invalid", { field: "body" });
+      }
+      if (typeof body.name !== "string") {
+        throw new AppError("management.request_invalid", { field: "name" });
+      }
+      if (!("capabilities" in body)) {
+        throw new AppError("management.request_invalid", { field: "capabilities" });
+      }
+      const canvasIdRaw = body.canvasId;
+      if (canvasIdRaw !== undefined && canvasIdRaw !== null && typeof canvasIdRaw !== "string") {
+        throw new AppError("management.request_invalid", { field: "canvasId" });
+      }
+      const { name, capabilities } = body;
+      const canvasId = canvasIdRaw ?? null;
+      const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return updateDeviceProfile(tx, {
+          managementSessionId: sessionId,
+          tenantId: deps.cfg.tenantId,
+          id,
+          name,
+          canvasId,
+          capabilities,
+        });
+      });
+      return c.json(result);
+    }),
+  );
+
+  // Delete a device profile. `:id` screened by `requireDeviceProfileId`; `deleteDeviceProfile` enforces
+  // `till.configure`. An absent id (matched zero rows via `.returning`) → 404 `device_profile.not_found`,
+  // mirroring `deleteCanvas`. → 204 on success.
+  app.delete("/management-api/device-profiles/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireDeviceProfileId(c.req.param("id"));
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await deleteDeviceProfile(tx, {
+          managementSessionId: sessionId,
+          tenantId: deps.cfg.tenantId,
+          id,
         });
       });
       return c.body(null, 204);
