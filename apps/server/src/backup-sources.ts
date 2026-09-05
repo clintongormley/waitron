@@ -65,10 +65,12 @@ export async function collectModuleNonDbState(
         .filter((d) => d.isFile())
         .map((d) => d.name)
         .sort();
-      for (const name of names) {
-        const bytes = await readFile(join(dir, name));
-        entries.push({ name: `${ref.source}/${name}`, bytes });
-      }
+      // Read the (already-sorted) files concurrently. `Array.map` preserves index order, so zipping
+      // the results back against `names` keeps the deterministic sorted archive order intact.
+      const blobs = await Promise.all(names.map((name) => readFile(join(dir, name))));
+      names.forEach((name, i) => {
+        entries.push({ name: `${ref.source}/${name}`, bytes: blobs[i]! });
+      });
     }
   }
   return entries;

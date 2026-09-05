@@ -23,6 +23,24 @@ export type BackupManifest = {
 };
 
 /**
+ * Reads each module's ACTUAL applied schema version off `db` — `appliedSchemaVersion`'s row count of
+ * the module's own drizzle journal table, never a hardcoded or expected count — and returns a
+ * name → version map covering every module in the list (0 for a module present but never migrated,
+ * not omitted). The reads run concurrently via `Promise.all`. Shared by {@link buildManifest} (which
+ * needs every module's version for the archive index) and boot's SP-1b drift probe (which only cares
+ * whether each version is > 0).
+ */
+export async function schemaVersionsByModule(
+  db: Database,
+  modules: readonly WaitronModule[],
+): Promise<Record<string, number>> {
+  const entries = await Promise.all(
+    modules.map(async (m) => [m.name, await appliedSchemaVersion(db, m.migrations)] as const),
+  );
+  return Object.fromEntries(entries);
+}
+
+/**
  * Builds a {@link BackupManifest} by reading each module's ACTUAL applied schema version off `db` —
  * never a hardcoded or expected count — so the manifest reflects what this database really carries,
  * including a module that shipped in `modules` but was never migrated here (version 0, not omitted:
@@ -35,15 +53,10 @@ export async function buildManifest(deps: {
   readonly environment: DeploymentEnvironment;
   readonly now: Date;
 }): Promise<BackupManifest> {
-  const entries = await Promise.all(
-    deps.modules.map(
-      async (m) => [m.name, await appliedSchemaVersion(deps.db, m.migrations)] as const,
-    ),
-  );
   return {
     manifestVersion: 1,
     createdAt: deps.now.toISOString(),
     environment: deps.environment,
-    modules: Object.fromEntries(entries),
+    modules: await schemaVersionsByModule(deps.db, deps.modules),
   };
 }

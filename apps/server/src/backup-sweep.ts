@@ -119,16 +119,20 @@ export async function runOnce(deps: Omit<BackupSweepDeps, "intervalMs" | "sleep"
   try {
     // Collect the cheap, throw-prone pieces FIRST — the manifest, the module non-DB state
     // (`media/<sha>`), and the state secrets (`secrets/<path>`). A misconfigured box fails here
-    // before the whole-DB dump is wasted (see the FAIL-FAST note above). This changes only the
-    // COLLECTION order; the packed ENTRY order below is unchanged.
-    const manifest = await buildBackupManifest({
-      db: deps.db,
-      modules: deps.modules,
-      environment: deps.environment,
-      now: stamp,
-    });
-    const secrets = await collectStateSecrets(deps.stateDir);
-    const nonDbState = await collectModuleNonDbState(deps.modules, deps.resolvers);
+    // before the whole-DB dump is wasted (see the FAIL-FAST note above). The three are independent,
+    // so they run concurrently; `Promise.all` still rejects (and the tick still fails BEFORE the
+    // dump) if ANY of them throws. This changes only the COLLECTION order; the packed ENTRY order
+    // below is unchanged.
+    const [manifest, secrets, nonDbState] = await Promise.all([
+      buildBackupManifest({
+        db: deps.db,
+        modules: deps.modules,
+        environment: deps.environment,
+        now: stamp,
+      }),
+      collectStateSecrets(deps.stateDir),
+      collectModuleNonDbState(deps.modules, deps.resolvers),
+    ]);
 
     // Cheap collection passed — now take the expensive dump into the staging file.
     await mkdir(deps.stagingDir, { recursive: true });

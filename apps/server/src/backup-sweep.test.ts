@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@waitron/db";
@@ -34,6 +34,12 @@ const FIXED_MANIFEST: BackupManifest = {
 };
 const fixedManifest: ManifestBuilder = async () => FIXED_MANIFEST;
 
+// A fresh injectable `runDump` spy that writes the sentinel dump bytes — used by the fail-visible
+// tests to assert the dump was NEVER called (a throw in the cheap collection must fail the tick
+// before the dump). One per test so the call-count assertions stay isolated.
+const dumpSpy = () =>
+  vi.fn(async ({ outFile }: { outFile: string }) => writeFile(outFile, "DUMP-BYTES"));
+
 // Write the full RECOVERY_FILES set under a fresh temp state dir, so `collectStateSecrets` succeeds.
 // Omit one path (`skip`) to drive the fail-visible "incomplete state" case.
 async function makeStateDir(skip?: string): Promise<string> {
@@ -41,9 +47,7 @@ async function makeStateDir(skip?: string): Promise<string> {
   for (const rel of RECOVERY_FILES) {
     if (rel === skip) continue;
     const target = join(dir, rel);
-    await mkdir(join(dir, rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "."), {
-      recursive: true,
-    });
+    await mkdir(join(dir, dirname(rel)), { recursive: true });
     await writeFile(target, `${rel}-contents`);
   }
   return dir;
@@ -158,9 +162,7 @@ describe("runOnce (fan-out)", () => {
     const failingManifest: ManifestBuilder = async () => {
       throw boom;
     };
-    const runDump = vi.fn(async ({ outFile }: { outFile: string }) => {
-      await writeFile(outFile, "DUMP-BYTES");
-    });
+    const runDump = dumpSpy();
     await expect(runOnce({ ...deps([a]), buildManifest: failingManifest, runDump })).rejects.toBe(
       boom,
     );
@@ -173,9 +175,7 @@ describe("runOnce (fan-out)", () => {
   it("fail-visible: an incomplete state dir (missing a recovery file) ships NO partial archive and never dumps", async () => {
     const a = new FakeBackend("a");
     const incompleteState = await makeStateDir("secrets.env"); // omit the vault key
-    const runDump = vi.fn(async ({ outFile }: { outFile: string }) => {
-      await writeFile(outFile, "DUMP-BYTES");
-    });
+    const runDump = dumpSpy();
     try {
       await expect(
         runOnce({ ...deps([a]), stateDir: incompleteState, runDump }),

@@ -23,7 +23,7 @@ import {
 } from "@waitron/payments-stripe";
 import type { PaymentProvider } from "@waitron/payments";
 import { drain } from "@waitron/fiscal-verifactu";
-import { appliedSchemaVersion, applyMigrations, migrationOptionsFor } from "@waitron/migrations";
+import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules, orderedMigrationSets, reconcile } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { ALL_MODULES, ALL_SYNC_ENROLMENTS } from "./modules.js";
@@ -106,6 +106,7 @@ import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
 import { loadBackupConfig } from "./backup-config.js";
 import { assertBackupCanReadFiscal } from "./backup-probe.js";
 import { runBackupSweep } from "./backup-sweep.js";
+import { schemaVersionsByModule } from "./backup-manifest.js";
 import { readBackupStatus } from "./backup-status.js";
 import { buildBackend } from "./local-fs-backend.js";
 import { fetchHttpClient } from "./sync-http.js";
@@ -578,10 +579,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   if (config.till !== undefined) {
     const driftProbe = await createPostgresDb(config.migrationsDatabaseUrl);
     try {
-      const migrated = new Set<string>();
-      for (const m of ALL_MODULES) {
-        if ((await appliedSchemaVersion(driftProbe, m.migrations)) > 0) migrated.add(m.name);
-      }
+      const versions = await schemaVersionsByModule(driftProbe, ALL_MODULES);
+      const migrated = new Set(
+        Object.entries(versions)
+          .filter(([, v]) => v > 0)
+          .map(([name]) => name),
+      );
       // `setsToMigrate` already holds `enabledModules(ALL_MODULES, moduleConfig)` in trading mode
       // (the branch above), so reuse it rather than recompute the same filter.
       const r = reconcile(
