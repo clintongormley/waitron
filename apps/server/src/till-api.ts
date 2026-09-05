@@ -18,7 +18,7 @@ import { getReceipt, getCanvas, getCanvasForFormFactor, getDeviceProfile } from 
 import type { CanvasDef, CapabilityFlag } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
-import type { NodeStanding, SignedMembershipDocument } from "@waitron/membership";
+import { routableServers, type SignedMembershipDocument } from "@waitron/membership";
 import { createErrorBoundary } from "./error-boundary.js";
 import { readJsonBody } from "./read-json-body.js";
 import type { Logger } from "./logger.js";
@@ -148,29 +148,6 @@ export interface TillApiDeps {
    * singleton row with no tenant scope, so the read runs OUTSIDE the boot `withTenant` block.
    */
   readMembership: () => Promise<SignedMembershipDocument | null>;
-}
-
-const STANDING_ORDER: Record<NodeStanding, number> = {
-  "serving-primary": 0,
-  "serving-secondary": 1,
-  "sell-only": 2,
-  evicted: 3,
-};
-
-/**
- * The servers a till may route to, best first (till-reroute design §3.2): an `evicted` node is no
- * longer part of the venue and a node with no `contactUrl` has no address to dial, so neither is
- * routable. Ordered by standing so the till tries the primary before a secondary, and a sell-only
- * node last.
- */
-export function routableServers(
-  held: SignedMembershipDocument | null,
-): Array<{ nodeId: string; url: string; standing: NodeStanding }> {
-  if (held === null) return [];
-  return held.body.nodes
-    .filter((n) => n.contactUrl !== "" && n.standing !== "evicted")
-    .sort((a, b) => STANDING_ORDER[a.standing] - STANDING_ORDER[b.standing])
-    .map((n) => ({ nodeId: n.nodeId, url: n.contactUrl, standing: n.standing }));
 }
 
 /**

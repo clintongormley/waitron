@@ -41,3 +41,22 @@ export function isFencedStanding(
 export function servingPrimaryNodeId(document: SignedMembershipDocument): string | undefined {
   return document.body.nodes.find((n) => n.standing === "serving-primary")?.nodeId;
 }
+
+/** The standings a till may route to, best first — `evicted` is absent because such a node has left
+ * the venue (till-reroute design §3.2). */
+const ROUTABLE: readonly NodeStanding[] = ["serving-primary", "serving-secondary", "sell-only"];
+
+export interface RoutableServer {
+  readonly nodeId: string;
+  readonly url: string;
+  readonly standing: NodeStanding;
+}
+
+/** The venue's routable servers from a held chart: an address, a routable standing, primary first. */
+export function routableServers(held: SignedMembershipDocument | null): RoutableServer[] {
+  if (held === null) return [];
+  return held.body.nodes
+    .filter((n) => n.contactUrl !== "" && ROUTABLE.includes(n.standing))
+    .sort((a, b) => ROUTABLE.indexOf(a.standing) - ROUTABLE.indexOf(b.standing))
+    .map((n) => ({ nodeId: n.nodeId, url: n.contactUrl, standing: n.standing }));
+}
