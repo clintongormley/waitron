@@ -223,6 +223,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // default already covers the two 400s, but they are listed explicitly as the house style requires.
   "canvas.not_found": 404,
   "canvas.name_taken": 409,
+  // A DELETE of a canvas a device profile still references (the composite FK `device_profiles_canvas_fk`,
+  // ON DELETE RESTRICT) → 409, translated from the driver's 23001 by `canvas-store.ts`. The house
+  // conflict convention (the same 409 a `*.name_taken` collision has), not the `?? 400` default.
+  "canvas.in_use": 409,
   "canvas.invalid": 400,
   "theme.invalid": 400,
   "shared.invalid_id": 400,
@@ -278,6 +282,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // The `?? 400` default already covers the 400, but it is listed explicitly as the house style requires.
   "device_profile.not_found": 404,
   "device_profile.name_taken": 409,
+  // A DELETE of a profile a device — or a pending pairing code — still references (the composite FKs
+  // `devices_device_profile_fk` / `device_pairing_codes_device_profile_fk`, ON DELETE RESTRICT) → 409,
+  // translated from the driver's 23001 by `device-profile-store.ts`. The house conflict convention (the
+  // same 409 a `*.name_taken` collision has), not the `?? 400` default. Mirrors `canvas.in_use`.
+  "device_profile.in_use": 409,
   "device_profile.invalid": 400,
 };
 

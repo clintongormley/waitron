@@ -92,6 +92,12 @@ declare module "@waitron/shared" {
     // duplicate name. `canvas-store.ts` translates the driver's 23505 into this so a duplicate returns
     // a clean 409, never a raw 500. No params: the offending name is never echoed (§1).
     "canvas.name_taken": Record<string, never>;
+    // A canvas DELETE was refused because a device profile still references it (the tenant-consistent
+    // composite FK `device_profiles_canvas_fk`, ON DELETE RESTRICT). `canvas-store.ts` translates the
+    // driver's 23001 restrict_violation into this so a still-referenced canvas returns a clean 409,
+    // never a raw 500. No params: the FACT of the reference is the whole message — never echo WHICH
+    // profile references it (§1); the management API maps it to 409 on the code alone.
+    "canvas.in_use": Record<string, never>;
     // A device-profile create/update was rejected on a field the store validates. `reason`:
     //   bad_capabilities — the capability set failed validateCapabilities (device-profile.ts, design
     //                      §7): input was not an array, or an element was not a known CAPABILITY_FLAG
@@ -114,6 +120,13 @@ declare module "@waitron/shared" {
     // from the driver's 23505 so a duplicate returns a clean 409, never a raw 500. No params: the
     // offending name is never echoed (§1). Mirrors `canvas.name_taken`.
     "device_profile.name_taken": Record<string, never>;
+    // A device-profile DELETE was refused because a device — or a pending pairing code — still
+    // references it (the composite FKs `devices_device_profile_fk` /
+    // `device_pairing_codes_device_profile_fk`, ON DELETE RESTRICT). `device-profile-store.ts`
+    // translates the driver's 23001 restrict_violation into this so a still-referenced profile returns
+    // a clean 409, never a raw 500. No params: the FACT of the reference is the whole message — never
+    // echo WHICH device references it (§1). Mirrors `canvas.in_use`.
+    "device_profile.in_use": Record<string, never>;
     // A ThemeOverride failed validateThemeOverride. `reason`:
     //   not_object    — input was not a plain object;
     //   bad_tokens    — `tokens` was missing or not a plain object;

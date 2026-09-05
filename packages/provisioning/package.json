@@ -20,6 +20,7 @@
     "@waitron/fiscal": "workspace:*",
     "@waitron/fiscal-verifactu": "workspace:*",
     "@waitron/identity": "workspace:*",
+    "@waitron/layouts": "workspace:*",
     "@waitron/migrations": "workspace:*",
     "@waitron/shared": "workspace:*",
     "drizzle-orm": "^0.45.2"

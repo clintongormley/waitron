@@ -28,7 +28,6 @@ import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import pg from "pg";
-import { and, eq } from "drizzle-orm";
 import {
   asAppUser,
   createPostgresDb,
@@ -36,12 +35,8 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
-import {
-  createDeviceProfile,
-  DEFAULT_PROFILE_CAPABILITIES,
-  listDeviceProfiles,
-} from "@waitron/layouts";
+import { hashPassword, hashPin } from "@waitron/identity";
+import { DEFAULT_DEVICE_PROFILES, defaultProfileName, listDeviceProfiles } from "@waitron/layouts";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import {
@@ -442,47 +437,41 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
   return { reused: false, env };
 }
 
-/** The name of the default device profile `dev:setup` seeds for the counter till (design §10). */
-export const DEFAULT_DEVICE_PROFILE_NAME = "Counter";
+/** The name of the till device profile `applyVenue` seeds for the counter till, resolved to the seeded
+ * venue's locale (design §10; task-3 follow-on b). `dev:setup` provisions via `applyVenue`, which seeds
+ * the whole starter set (Counter/Kitchen/Handheld) from `DEFAULT_DEVICE_PROFILES`, so this is just the
+ * `till` entry's locale-resolved name — English "Counter" for the demo default (en-GB), "Mostrador" for
+ * an es-ES seed. */
+export function tillDeviceProfileName(locale: string): string {
+  const till = DEFAULT_DEVICE_PROFILES.find((profile) => profile.formFactor === "till")!;
+  return defaultProfileName(till, locale);
+}
 
 /**
- * Find-or-create the tenant's default "Counter" device profile and return its id. Idempotent across
- * runs (matched by name): a fresh run creates it, a reuse run finds it. The profile binds NO canvas
- * (`canvasId: null` → falls back to the `till` form-factor default canvas) and carries the built-in
- * `till` capabilities (`DEFAULT_PROFILE_CAPABILITIES.till` = integrated-card-payment + open-cash-drawer),
- * so the enrolled counter till resolves its canvas + capabilities through it (design §5.3/§10). Without
- * a profile an enrolled device gets `capabilities: []` and the /api/pay + /api/drawer firewall refuses
- * pay/drawer while the render axis hides the capability cards — so the dev till would be unable to sell.
+ * Find the tenant's till device profile and return its id — the profile `applyVenue` seeded at
+ * provisioning (task-3 follow-on b: every new tenant gets the Counter/Kitchen/Handheld starter set), so
+ * the minted `till` pairing code can carry it and the enrolled counter till resolves its canvas +
+ * capabilities through it (design §5.3/§10). Without a bound profile an enrolled device gets
+ * `capabilities: []` and the /api/pay + /api/drawer firewall refuses pay/drawer while the render axis
+ * hides the capability cards — so the dev till would be unable to sell.
  *
- * `createDeviceProfile` is the same store the management route uses, so it authorises `till.configure`
- * against a management session. A session is started for the provisioned admin (`role='admin'`, seeded
- * by applyVenue), which holds every permission — the same shape the demo owner would use in the
- * dashboard. Runs on the caller's already-tenant-scoped app-role tx.
+ * Since `dev:setup` provisions through `applyVenue`, the profile already exists on both the fresh and
+ * the reuse path; this LOCATES it (by its locale-resolved name) rather than creating it — the seeding
+ * moved into provisioning. A missing profile is a provisioning regression, so it throws loudly rather
+ * than mint a code with no profile. Runs on the caller's already-tenant-scoped app-role tx.
  */
-async function ensureDefaultDeviceProfile(tx: Transaction, tenantId: string): Promise<string> {
-  const existing = (await listDeviceProfiles(tx, tenantId)).find(
-    (profile) => profile.name === DEFAULT_DEVICE_PROFILE_NAME,
-  );
-  if (existing !== undefined) return existing.id;
-  // The admin `applyVenue` seeds (role='admin') authors the profile: createDeviceProfile gates on a
-  // `till.configure` management session, and admin holds every permission.
-  const [admin] = await tx
-    .select({ id: persons.id })
-    .from(persons)
-    .where(and(eq(persons.tenantId, tenantId), eq(persons.role, "admin")));
-  if (admin === undefined) {
+async function findTillDeviceProfile(
+  tx: Transaction,
+  tenantId: string,
+  locale: string,
+): Promise<string> {
+  const name = tillDeviceProfileName(locale);
+  const profile = (await listDeviceProfiles(tx, tenantId)).find((p) => p.name === name);
+  if (profile === undefined) {
     throw new Error(
-      "dev-setup: provisioned tenant has no admin to author the default device profile",
+      `dev-setup: provisioned tenant is missing the seeded "${name}" till device profile — applyVenue should have seeded it`,
     );
   }
-  const session = await startManagementSession(tx, { tenantId, personId: admin.id });
-  const profile = await createDeviceProfile(tx, {
-    managementSessionId: session.id,
-    tenantId,
-    name: DEFAULT_DEVICE_PROFILE_NAME,
-    canvasId: null,
-    capabilities: DEFAULT_PROFILE_CAPABILITIES.till,
-  });
   return profile.id;
 }
 
@@ -493,8 +482,9 @@ async function ensureDefaultDeviceProfile(tx: Transaction, tenantId: string): Pr
  * run, fresh venue OR idempotent reuse: a code is single-use and expires in 15 minutes, so a stale
  * unredeemed one simply lapses — always handing the dev a fresh valid code is the point.
  *
- * The minted code carries the tenant's default "Counter" device profile (find-or-created here), so the
- * enrolled counter till resolves its canvas + capabilities through it and stays sale-capable — the
+ * The minted code carries the tenant's till device profile — the "Counter" (or its locale name) entry
+ * `applyVenue` seeded at provisioning (task-3 follow-on b), LOCATED here via `findTillDeviceProfile` —
+ * so the enrolled counter till resolves its canvas + capabilities through it and stays sale-capable. The
  * device-profile cutover (Task 10) made the profile the SOLE canvas/capability binding, so a code with
  * no profile would enrol a till the firewall refuses pay/drawer on (design §10).
  *
@@ -522,7 +512,7 @@ export async function mintTillPairingCode(db: Database, env: DevEnv): Promise<{ 
   };
   return withTenant(db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-    const deviceProfileId = await ensureDefaultDeviceProfile(tx, cfg.tenantId);
+    const deviceProfileId = await findTillDeviceProfile(tx, cfg.tenantId, cfg.locale);
     return generatePairingCode(tx, cfg, {
       kind: "till",
       stationId: null,

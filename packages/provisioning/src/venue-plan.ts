@@ -1,4 +1,5 @@
 import { AppError } from "@waitron/shared";
+import { DEFAULT_DEVICE_PROFILES, defaultProfileName, type CapabilityFlag } from "@waitron/layouts";
 import {
   WAITRON_ID_SISTEMA,
   assertUsableIdSistema,
@@ -59,6 +60,14 @@ export type VenueAction =
       province: string;
       timeZone: string;
       dayCutover: string;
+    }
+  | {
+      // Non-fiscal. Seeds the tenant's starter device profiles (Counter/Kitchen/Handheld), authored
+      // under an admin management session (so seed-admin must precede it). Touches no series/SIF/chain.
+      // Names are already resolved to the venue's primary invoice locale here in the pure planner;
+      // capabilities are the form-factor defaults from DEFAULT_DEVICE_PROFILES.
+      kind: "seed-device-profiles";
+      profiles: { name: string; capabilities: CapabilityFlag[] }[];
     }
   | { kind: "create-till"; name: string }
   | { kind: "create-node"; name: string; filingModule: string; taxModule: string }
@@ -144,6 +153,17 @@ export function planVenue(request: VenueRequest): VenueAction[] {
       passwordHash: request.admin.passwordHash,
       email: request.admin.email,
     },
+    // Seed the starter device-profile set right after the admin: createDeviceProfile authorises a
+    // `till.configure` management session, which only the just-seeded admin can open. Names are
+    // resolved HERE to the venue's primary invoice locale (locales[0]); a re-provision is made
+    // idempotent (find-or-create by name) in applyVenue. Non-fiscal, so it precedes create-location.
+    {
+      kind: "seed-device-profiles",
+      profiles: DEFAULT_DEVICE_PROFILES.map((profile) => ({
+        name: defaultProfileName(profile, locales[0]!),
+        capabilities: profile.capabilities,
+      })),
+    },
     {
       kind: "create-location",
       name: request.location.name,
@@ -180,6 +200,8 @@ export function describeVenueAction(action: VenueAction): string {
       // The admin's NAME only — never the pin hash. This line goes into the plan summary an operator
       // reads, and the hash is a secret (§ SECRET DISCIPLINE).
       return `seed admin ${action.displayName}`;
+    case "seed-device-profiles":
+      return `seed device profiles ${action.profiles.map((p) => p.name).join(", ")}`;
     case "create-location":
       return `create location ${action.name} in ${action.fiscalTerritory} (${action.invoiceLocales.join(", ")})`;
     case "create-till":

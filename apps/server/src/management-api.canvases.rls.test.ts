@@ -237,6 +237,38 @@ describe("Management API — layout-canvas CRUD (Task 11)", () => {
     });
   });
 
+  it("DELETE a canvas a device profile still references → 409 canvas.in_use, canvas survives", async () => {
+    const app = mountApp(tenantId);
+    // Create a canvas, then bind a device profile to it as the owner (RLS bypassed — setup). The
+    // composite FK device_profiles_canvas_fk is ON DELETE RESTRICT, so the DELETE trips a 23001 the
+    // store translates to canvas.in_use → the house 409.
+    const created = await app.request("/management-api/canvases", {
+      method: "POST",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({ name: uniqueName("Referenced"), definition: phoneCanvas("Bound") }),
+    });
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+
+    await suite.admin.execute(sql`
+      insert into device_profiles (tenant_id, name, canvas_id)
+      values (${tenantId}, ${uniqueName("Binding profile")}, ${id})`);
+
+    const res = await app.request(`/management-api/canvases/${id}`, {
+      method: "DELETE",
+      headers: { cookie: managerCookie },
+    });
+    expect(res.status).toBe(409);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "canvas.in_use" },
+    });
+    // The canvas survived the refused delete (RESTRICT): GET still returns it.
+    const got = await app.request(`/management-api/canvases/${id}`, {
+      headers: { cookie: managerCookie },
+    });
+    expect(got.status).toBe(200);
+  });
+
   it("GET by a MALFORMED id → 404 canvas.not_found (the requireCanvasId screen)", async () => {
     const app = mountApp(tenantId);
     const res = await app.request("/management-api/canvases/not-a-uuid", {

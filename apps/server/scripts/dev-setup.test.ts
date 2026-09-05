@@ -284,30 +284,41 @@ describe("devSetup against real Postgres", () => {
     }
     // A plaintext code the operator reads into the pairing screen (never stored in plaintext).
     expect(result.code).toMatch(/^[0-9A-Z-]{4,}$/);
-    // Device-profile cutover (Task 10): the seeded tenant gets a DEFAULT device profile ("Counter",
-    // no bound canvas so it falls back to the form-factor default, the two `till` capabilities) so the
-    // enrolled counter till stays sale-capable — without a profile the /api/pay + /api/drawer firewall
-    // refuses pay/drawer and the render axis hides the capability cards (design §10). Read as the
-    // RLS-bypassing admin: exactly one such profile.
+    // task-3 follow-on b: provisioning (applyVenue) now seeds the whole starter device-profile set —
+    // Counter (till) / Kitchen (kds) / Handheld (phone-portrait) — for every new tenant, not just the
+    // one "Counter" profile dev:setup used to create. The demo default locale is en-GB, so the English
+    // names. Each binds no canvas (falls back to the form-factor default) and carries its form-factor
+    // capabilities. Read as the RLS-bypassing admin.
     const { rows: profiles } = await suite.admin.execute<{
       id: string;
+      name: string;
       canvas_id: string | null;
       capabilities: string[];
     }>(
-      sql`select id, canvas_id, capabilities from device_profiles
-          where tenant_id = ${first.env.WAITRON_TILL_TENANT_ID} and name = 'Counter'`,
+      sql`select id, name, canvas_id, capabilities from device_profiles
+          where tenant_id = ${first.env.WAITRON_TILL_TENANT_ID} order by name`,
     );
-    expect(profiles).toHaveLength(1);
-    expect(profiles[0]!.canvas_id).toBeNull();
-    expect(profiles[0]!.capabilities).toEqual(["integrated-card-payment", "open-cash-drawer"]);
-    // Exactly one till-kind code row, bound to the provisioned till AND carrying the default profile so
-    // the enrolled device resolves its canvas + capabilities through it (read as the RLS-bypassing admin).
+    expect(
+      profiles.map((p) => ({ name: p.name, canvas_id: p.canvas_id, capabilities: p.capabilities })),
+    ).toEqual([
+      {
+        name: "Counter",
+        canvas_id: null,
+        capabilities: ["integrated-card-payment", "open-cash-drawer"],
+      },
+      { name: "Handheld", canvas_id: null, capabilities: [] },
+      { name: "Kitchen", canvas_id: null, capabilities: ["act-as-kds"] },
+    ]);
+    // The minted till code binds to the COUNTER (till) profile so the enrolled counter till resolves its
+    // canvas + capabilities through it. Exactly one till-kind code row, bound to the provisioned till AND
+    // that profile (read as the RLS-bypassing admin).
+    const counter = profiles.find((p) => p.name === "Counter")!;
     const { rows } = await suite.admin.execute<{ n: number }>(
       sql`select count(*)::int as n from device_pairing_codes
           where tenant_id = ${first.env.WAITRON_TILL_TENANT_ID}
             and device_kind = 'till'
             and till_id = ${first.env.WAITRON_TILL_TILL_ID}
-            and device_profile_id = ${profiles[0]!.id}`,
+            and device_profile_id = ${counter.id}`,
     );
     expect(rows[0]!.n).toBe(1);
   });

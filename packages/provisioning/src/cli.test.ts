@@ -1031,6 +1031,7 @@ describe("runCli venue", () => {
     expect(actions.map((action) => action.kind)).toEqual([
       "ensure-tenant",
       "seed-admin",
+      "seed-device-profiles",
       "create-location",
       "create-till",
       "create-node",

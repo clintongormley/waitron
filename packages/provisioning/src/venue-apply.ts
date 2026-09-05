@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { withTenant, type Database, type Transaction } from "@waitron/db";
 import { registerSif, type SifRegistration } from "@waitron/fiscal-verifactu";
+import { startManagementSession } from "@waitron/identity";
+import { createDeviceProfile, listDeviceProfiles } from "@waitron/layouts";
 import { nodeId as brandNodeId, tenantId as brandTenantId } from "@waitron/shared";
+import type { CapabilityFlag } from "@waitron/layouts";
 import type { VenueAction } from "./venue-plan.js";
 
 export interface VenueApplyDeps {
@@ -92,6 +95,19 @@ export async function applyVenue(
             select ${tenantId}, ${action.displayName}, ${action.pinHash}, ${action.passwordHash}, ${action.email ?? null}, 'admin'
             where not exists (
               select 1 from persons where tenant_id = ${tenantId} and role = 'admin')`);
+          break;
+        case "seed-device-profiles":
+          // Non-fiscal. Seed the tenant's starter device profiles under an admin management session —
+          // the SAME store path the management dashboard uses (createDeviceProfile), so its
+          // capability validation and the `till.configure` gate run here too. seed-admin must have run
+          // first (the admin is the only person who can open that session); a hand-built plan that
+          // runs this before seed-admin is refused as a plan-integrity error, mirroring the ordering
+          // guards below. Idempotent: find-or-create by name, so a D8 second-shop re-run adds no
+          // duplicate (profiles belong to the tenant, not a shop). Runs on the caller's owner tx under
+          // the tenant GUC — device_profiles/management_sessions are FORCE-RLS, satisfied because
+          // withTenant set current_tenant_id() to this tenant, proven under the owner role in
+          // venue-apply.node-privilege.rls.test.ts.
+          await seedDeviceProfiles(tx, tenantId, action.profiles);
           break;
         case "create-location": {
           locationId = randomUUID();
@@ -186,6 +202,48 @@ export async function applyVenue(
     if (tillId === "") throw new Error("applyVenue: plan is missing create-till");
     return { tenantId, locationId, tillId, nodeId, sif, seriesIds };
   });
+}
+
+/**
+ * Seed the tenant's starter device profiles idempotently (find-or-create by name). Looks up the admin
+ * seed-admin created — the only person who can open a `till.configure` management session the store's
+ * `createDeviceProfile` authorises against — opens one, and creates each missing profile with
+ * `canvasId: null` (→ the form-factor default canvas at runtime). Names + capabilities are already
+ * resolved by the planner. Runs on the caller's tenant-scoped tx.
+ */
+async function seedDeviceProfiles(
+  tx: Transaction,
+  tenantId: string,
+  profiles: { name: string; capabilities: CapabilityFlag[] }[],
+): Promise<void> {
+  // Find-or-create is NAME-based, so idempotency is scoped to a SAME-LOCALE, same-names re-provision: a
+  // different-locale re-run would seed a second, differently-named set, and a tenant who renamed a
+  // seeded profile would have it re-created. Acceptable because profiles are tenant-editable AND the
+  // double-provision latch makes a tenant re-provision unreachable in practice.
+  const existing = new Set((await listDeviceProfiles(tx, tenantId)).map((p) => p.name));
+  const toCreate = profiles.filter((p) => !existing.has(p.name));
+  if (toCreate.length === 0) return; // a re-provision whose profiles all exist: nothing to do
+
+  // The admin seed-admin created (role='admin') authors the profiles; a plan that reaches here without
+  // one ran seed-device-profiles before seed-admin — a plan-integrity bug, refused like the ordering
+  // guards in the apply loop. Raw SQL, like the other lookups here (no @waitron/identity persons import).
+  const admin = await tx.execute<{ id: string }>(
+    sql`select id from persons where tenant_id = ${tenantId} and role = 'admin' limit 1`,
+  );
+  const personId = admin.rows[0]?.id;
+  if (personId === undefined) {
+    throw new Error("applyVenue: seed-device-profiles before seed-admin");
+  }
+  const session = await startManagementSession(tx, { tenantId, personId });
+  for (const profile of toCreate) {
+    await createDeviceProfile(tx, {
+      managementSessionId: session.id,
+      tenantId,
+      name: profile.name,
+      canvasId: null,
+      capabilities: profile.capabilities,
+    });
+  }
 }
 
 /** Reads the obligado's tax_id (the NIF) from the tenant row and registers the node as its SIF. */

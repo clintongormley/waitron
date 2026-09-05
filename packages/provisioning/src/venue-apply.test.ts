@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { FISCAL_MIGRATIONS } from "@waitron/fiscal-verifactu";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
+import type { CapabilityFlag } from "@waitron/layouts";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { planVenue, type VenueAction, type VenueRequest } from "./venue-plan.js";
 import { obligadoTenantId } from "./tenant-id.js";
@@ -116,6 +117,43 @@ describe("applyVenue", () => {
       pin_hash: "scrypt$abc$def",
       password_hash: "scrypt$pwd$hash",
     });
+  });
+
+  it("seeds exactly the three starter device profiles (names per the venue locale, no canvas, form-factor caps)", async () => {
+    // task-3 follow-on b: every new tenant is seeded Counter/Kitchen/Handheld at provisioning. es-ES
+    // venue → the Spanish names; each binds canvasId NULL (→ form-factor default canvas at runtime) and
+    // carries the form-factor default capabilities. A distinct obligado so the profile set is this
+    // run's alone (the suite shares one database). Proven by deletion: drop the seed-device-profiles
+    // handler in applyVenue and this reads zero rows.
+    const result = await applyVenue(planVenue(request("B10101010")), { db: suite.db });
+
+    const profiles = await suite.db.execute<{
+      name: string;
+      canvas_id: string | null;
+      capabilities: CapabilityFlag[];
+    }>(sql`
+      select name, canvas_id, capabilities from device_profiles
+      where tenant_id = ${result.tenantId} order by name`);
+    expect(profiles.rows).toEqual([
+      { name: "Cocina", canvas_id: null, capabilities: ["act-as-kds"] },
+      {
+        name: "Mostrador",
+        canvas_id: null,
+        capabilities: ["integrated-card-payment", "open-cash-drawer"],
+      },
+      { name: "Móvil", canvas_id: null, capabilities: [] },
+    ]);
+  });
+
+  it("seeds the starter profiles only once across re-runs (idempotent find-or-create by name)", async () => {
+    // The profiles belong to the TENANT, not a shop, so a D8 second-shop re-run must not duplicate
+    // them. applyVenue find-or-creates by name. Proven by deletion: drop the existing-name filter and
+    // the second run throws device_profile.name_taken (the per-tenant name unique).
+    const first = await applyVenue(planVenue(request("B20202020")), { db: suite.db });
+    await applyVenue(planVenue(request("B20202020")), { db: suite.db });
+    const count = await suite.db.execute<{ n: number }>(sql`
+      select count(*)::int as n from device_profiles where tenant_id = ${first.tenantId}`);
+    expect(count.rows[0]?.n).toBe(3); // three, not six
   });
 
   it("writes the admin's dashboard email when the request carries one, and NULL when it omits it", async () => {
@@ -310,6 +348,17 @@ describe("applyVenue", () => {
     };
 
     it.each([
+      {
+        name: "seed-device-profiles before seed-admin",
+        plan: [
+          ensure,
+          {
+            kind: "seed-device-profiles",
+            profiles: [{ name: "Counter", capabilities: [] }],
+          } as VenueAction,
+        ],
+        message: "applyVenue: seed-device-profiles before seed-admin",
+      },
       {
         name: "create-till before create-location",
         plan: [ensure, { kind: "create-till", name: "Caja 1" } as VenueAction],

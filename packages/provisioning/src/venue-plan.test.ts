@@ -30,17 +30,51 @@ function request(overrides: Partial<VenueRequest> = {}): VenueRequest {
 }
 
 describe("planVenue", () => {
-  it("emits ensure-tenant → seed-admin → location → till → node → register-sif → two series, in order", () => {
+  it("emits ensure-tenant → seed-admin → seed-device-profiles → location → till → node → register-sif → two series, in order", () => {
     const actions = planVenue(request());
     expect(actions.map((a) => a.kind)).toEqual([
       "ensure-tenant",
       "seed-admin",
+      "seed-device-profiles",
       "create-location",
       "create-till",
       "create-node",
       "register-sif",
       "create-series",
       "create-series",
+    ]);
+  });
+
+  it("seeds the starter device-profile set right after the admin (the admin holds till.configure)", () => {
+    // The profiles are authored under an admin management session (seed-admin runs first), so
+    // seed-device-profiles is emitted immediately after seed-admin. Non-fiscal — it touches no
+    // series/SIF/chain — so its position relative to create-till onward does not matter.
+    const actions = planVenue(request());
+    expect(actions[1]?.kind).toBe("seed-admin");
+    expect(actions[2]?.kind).toBe("seed-device-profiles");
+  });
+
+  it("resolves the starter profiles' names from the venue's primary invoice locale (es → Spanish)", () => {
+    const action = planVenue(request()).find((a) => a.kind === "seed-device-profiles");
+    // es-ES venue → the Spanish names, each carrying its form-factor default capabilities.
+    expect(action).toEqual({
+      kind: "seed-device-profiles",
+      profiles: [
+        { name: "Mostrador", capabilities: ["integrated-card-payment", "open-cash-drawer"] },
+        { name: "Cocina", capabilities: ["act-as-kds"] },
+        { name: "Móvil", capabilities: [] },
+      ],
+    });
+  });
+
+  it("resolves the starter profiles' names in English for an en venue", () => {
+    const action = planVenue(
+      request({ location: { ...request().location, invoiceLocales: ["en-GB"] } }),
+    ).find((a) => a.kind === "seed-device-profiles");
+    expect(action?.kind === "seed-device-profiles" && action.profiles.map((p) => p.name)).toEqual([
+      "Counter",
+      "Kitchen",
+      "Handheld",
     ]);
   });
 
@@ -193,6 +227,7 @@ describe("planVenue", () => {
     expect(actions.map((a) => a.kind)).toEqual([
       "ensure-tenant",
       "seed-admin",
+      "seed-device-profiles",
       "create-location",
       "create-till",
       "create-node",
@@ -209,6 +244,7 @@ describe("describeVenueAction", () => {
     expect(lines).toEqual([
       "ensure tenant ES/B12345678 (Deli SL)",
       "seed admin Owner",
+      "seed device profiles Mostrador, Cocina, Móvil",
       "create location Mostrador in ES-common (es-ES)",
       "create till Caja 1",
       "create node Mostrador filing=verifactu tax=iva",

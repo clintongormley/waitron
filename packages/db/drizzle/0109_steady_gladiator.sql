@@ -5,8 +5,9 @@
 -- 0095 adds the other device-binding FKs and 0107 adds device_profiles_canvas_fk. Each references the
 -- EXISTING device_profiles_tenant_id_key UNIQUE (device-profiles.ts, added by 0106) — so NO new unique
 -- is created here. ON DELETE RESTRICT: a device_profiles row is not hard-deleted while a device or a
--- pairing code references it (the store's deleteDeviceProfile lets that raw restrict_violation
--- propagate). MATCH SIMPLE (the FK default) skips the check whenever any key column is NULL, so a NULL
+-- pairing code references it (the store's deleteDeviceProfile catches that raw restrict_violation
+-- (SQLSTATE 23001) and translates it to a clean device_profile.in_use, a 409). MATCH SIMPLE (the FK
+-- default) skips the check whenever any key column is NULL, so a NULL
 -- device_profile_id is unconstrained — the binding is optional, and only a non-NULL value must name a
 -- profile of the SAME tenant.
 ALTER TABLE "devices"

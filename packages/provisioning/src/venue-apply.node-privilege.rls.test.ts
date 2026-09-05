@@ -147,7 +147,7 @@ describe("who may INSERT a node under FORCE RLS", () => {
     // `applyVenue` had just committed). The PGlite unit test does NOT catch this — its superuser
     // connection bypasses RLS, so the same raw SELECT sees the rows. This scoped read-back is the
     // gap that test cannot close.
-    const { counts, node, sif } = await withTenant(owner, result.tenantId, async (tx) => {
+    const { counts, node, sif, profiles } = await withTenant(owner, result.tenantId, async (tx) => {
       const counts = await tx.execute<{
         tenants: number;
         nodes: number;
@@ -163,12 +163,34 @@ describe("who may INSERT a node under FORCE RLS", () => {
         select filing_module, tax_module from nodes where id = ${result.nodeId}`);
       const sif = await tx.execute<{ nif: string }>(sql`
         select nif from registro_sif where id = ${result.sif.id}`);
-      return { counts, node, sif };
+      // The starter device profiles, read back under the same scope. This is the ONE place the store's
+      // createDeviceProfile (which opens an admin management session and validates capabilities) runs
+      // as the non-superuser OWNER under real FORCE RLS on device_profiles / management_sessions —
+      // the gap PGlite (a superuser that bypasses RLS) cannot close.
+      const profiles = await tx.execute<{
+        name: string;
+        canvas_id: string | null;
+        capabilities: string[];
+      }>(sql`
+        select name, canvas_id, capabilities from device_profiles
+        where tenant_id = ${result.tenantId} order by name`);
+      return { counts, node, sif, profiles };
     });
 
     expect(counts.rows[0]).toEqual({ tenants: 1, nodes: 1, series: 2, sif: 1 });
     expect(node.rows[0]).toEqual({ filing_module: "verifactu", tax_module: "iva" });
     // The SIF's nif came from the tenant's tax_id, read inside the transaction — never an argument.
     expect(sif.rows[0]?.nif).toBe("B12345678");
+    // Exactly the three starter profiles, es-ES names (this venue's primary invoice locale), each with
+    // no bound canvas and the form-factor default capabilities.
+    expect(profiles.rows).toEqual([
+      { name: "Cocina", canvas_id: null, capabilities: ["act-as-kds"] },
+      {
+        name: "Mostrador",
+        canvas_id: null,
+        capabilities: ["integrated-card-payment", "open-cash-drawer"],
+      },
+      { name: "Móvil", canvas_id: null, capabilities: [] },
+    ]);
   });
 });

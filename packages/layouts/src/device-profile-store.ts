@@ -71,23 +71,39 @@ function toRow(row: {
 }
 
 const FOREIGN_KEY_VIOLATION = "23503";
+const RESTRICT_VIOLATION = "23001";
+
+/** The composite FKs a device (or a pending pairing code) holds on a profile, both ON DELETE RESTRICT
+ * (Task 5's `devices_device_profile_fk`, and `device_pairing_codes_device_profile_fk`). A delete that
+ * trips EITHER is a "still in use" conflict; matched on the constraint NAME (a `Set` membership test,
+ * one branch for both) so an unrelated RESTRICT can never be mislabelled `device_profile.in_use`. */
+const PROFILE_REFERENCING_CONSTRAINTS = new Set([
+  "devices_device_profile_fk",
+  "device_pairing_codes_device_profile_fk",
+]);
 
 /**
- * Translate the two driver errors the profile write paths care about into their domain codes, and
+ * Translate the driver errors the profile write/delete paths care about into their domain codes, and
  * re-throw anything else untouched:
  *   - a `device_profiles_tenant_name_key` collision (a duplicate name per tenant, SQLSTATE 23505) →
- *     `device_profile.name_taken` — the `asNameTaken` twin from `canvas-store.ts`, matched on the
- *     CONSTRAINT NAME so the composite `device_profiles_tenant_id_key` (the FK target devices point
+ *     `device_profile.name_taken` — the `translateWriteError` twin from `canvas-store.ts`, matched on
+ *     the CONSTRAINT NAME so the composite `device_profiles_tenant_id_key` (the FK target devices point
  *     at, a cryptographically-unreachable `defaultRandom()` clash on writes) is re-thrown untouched,
  *     with the same "no constraint name reported ⇒ translate" fallback for PGlite;
  *   - a `device_profiles_canvas_fk` violation (a `canvas_id` that is absent or belongs to another
  *     tenant, SQLSTATE 23503) → `device_profile.invalid` {reason: "bad_canvas_ref"}. Matched on the
  *     constraint name so the `tenant_id → tenants` FK (server-controlled, never client input) can
- *     never be mislabelled. The name is the only 23503 a client value can trip here.
- * The 23503 detection uses `@waitron/db`'s `pgErrorConstraint` (a cause-chain walk), the same
- * mechanism `@waitron/printing`'s `printers.ts` uses, not a top-level `.code` read.
+ *     never be mislabelled. The name is the only 23503 a client value can trip here;
+ *   - a `devices_device_profile_fk` / `device_pairing_codes_device_profile_fk` violation (a delete of a
+ *     profile a live device or pending pairing code still references, ON DELETE RESTRICT, SQLSTATE
+ *     23001) → `device_profile.in_use` — a clean 409 rather than a raw 500. Matched on the constraint
+ *     NAME so an unrelated RESTRICT is re-thrown untouched.
+ * The 23503/23001 detection uses `@waitron/db`'s `pgErrorConstraint` (a cause-chain walk), the same
+ * mechanism `@waitron/printing`'s `printers.ts` uses, not a top-level `.code` read. Exported for the
+ * crafted-error unit test (`device-profile-store.test.ts`), NOT from the package barrel — the same
+ * shape as `canvas-store.ts`'s `translateWriteError`.
  */
-function translateWriteError(err: unknown): never {
+export function translateWriteError(err: unknown): never {
   if (isUniqueViolation(err)) {
     const constraint = uniqueViolationConstraint(err);
     if (constraint === undefined || constraint === "device_profiles_tenant_name_key") {
@@ -96,6 +112,10 @@ function translateWriteError(err: unknown): never {
   }
   if (pgErrorConstraint(err, FOREIGN_KEY_VIOLATION) === "device_profiles_canvas_fk") {
     throw new AppError("device_profile.invalid", { reason: "bad_canvas_ref" });
+  }
+  const restrictConstraint = pgErrorConstraint(err, RESTRICT_VIOLATION);
+  if (restrictConstraint !== undefined && PROFILE_REFERENCING_CONSTRAINTS.has(restrictConstraint)) {
+    throw new AppError("device_profile.in_use", {});
   }
   throw err;
 }
@@ -210,8 +230,10 @@ export async function updateDeviceProfile(
  * Delete a device profile. Manager/admin only (`till.configure`). An absent id (or another tenant's
  * row, RLS-hidden) throws `device_profile.not_found`, read back via `.returning({ id })` — the same
  * by-id config-CRUD idiom `deleteCanvas` uses, so a DELETE that matched zero rows is a 404 rather than
- * a silent success. A device still referencing the profile (Task 5's composite FK, ON DELETE RESTRICT)
- * surfaces as the raw DB error the same way `deleteCanvas` lets a referenced canvas propagate.
+ * a silent success. A device (or a pending pairing code) still referencing the profile (Task 5's
+ * composite FKs, ON DELETE RESTRICT) trips a 23001 restrict_violation, which `translateWriteError`
+ * turns into `device_profile.in_use` (a clean 409) rather than letting the raw DB error propagate to a
+ * 500 — the twin of `deleteCanvas`.
  */
 export async function deleteDeviceProfile(
   tx: Transaction,
@@ -221,10 +243,15 @@ export async function deleteDeviceProfile(
     managementSessionId: input.managementSessionId,
     permission: "till.configure",
   });
-  const deleted = await tx
-    .delete(deviceProfiles)
-    .where(and(eq(deviceProfiles.tenantId, input.tenantId), eq(deviceProfiles.id, input.id)))
-    .returning({ id: deviceProfiles.id });
+  let deleted: { id: string }[];
+  try {
+    deleted = await tx
+      .delete(deviceProfiles)
+      .where(and(eq(deviceProfiles.tenantId, input.tenantId), eq(deviceProfiles.id, input.id)))
+      .returning({ id: deviceProfiles.id });
+  } catch (error) {
+    translateWriteError(error);
+  }
   if (deleted.length === 0) {
     throw new AppError("device_profile.not_found", {});
   }
