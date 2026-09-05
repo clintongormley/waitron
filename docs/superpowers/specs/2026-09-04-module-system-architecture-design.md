@@ -270,6 +270,9 @@ Each is its own spec → plan → build → PR.
   append-only/FORCE-RLS/TRUNCATE guards on the subscriber exactly as the H2 spec details; provisioning
   still mints exactly one SIF per node at provision (`venue-apply.ts:158`), now gated on the fiscal
   module being the chosen slot, never toggled after.
+  _(2026-09-05, SP-3c: the mint now runs through the fiscal module's `provisioning.seed`;
+  `venue-apply.ts` imports no regime — see
+  [`2026-09-05-module-sp3c-gated-provisioning-design.md`](2026-09-05-module-sp3c-gated-provisioning-design.md).)_
 - **One database per environment** and the environment handshake are unchanged (SP-2 inherits
   `apply.ts:126-145`).
 - **English-only guard preserved, not exempted-around.** The generic packages stay guarded; Spanish

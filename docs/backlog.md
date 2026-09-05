@@ -331,8 +331,9 @@ All three decisions are now taken.
 every NEW module package, `apps/dashboard` module screens, `apps/server/src/modules.ts`, and the
 control-plane docs):
 
-1. **Finish fiscal as a module:** SP-3b vocabulary (landed #240), SP-3c gated-provisioning seam, SP-3d
-   backup/restore hook (= BR-4) — the queued slices under *Waitron module system*.
+1. **Finish fiscal as a module:** SP-3b vocabulary (landed #240), SP-3c gated-provisioning seam (in PR,
+   `feat/module-sp3c-gated-provisioning`), SP-3d backup/restore hook (= BR-4) — the queued slices under
+   *Waitron module system*.
 2. **`fiscal-none` module** (tiny; the UK case; forces every chain/huella/`entorno` assumption
    through the `FiscalBackend` seam — a better pluggability proof than TicketBAI). Put the two agreed
    rules (new domains land as modules; no new core table without a stated reason) into CLAUDE.md §3
@@ -663,7 +664,10 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
   Key deviations from the architecture, both deliberate: actual state is **derived** from
   `appliedSchemaVersion` (**no `deployment` column** — nothing to keep consistent), and the fiscal gate is
   a **loud refusal**, not a working fiscal-less venue — `applyVenue` mandates a SIF (`venue-apply.ts`), so
-  that path is SP-3. The SP-1a migrate/seed forward-warning is addressed by gating the seed (refusal) and
+  that path is SP-3. _(2026-09-05, SP-3c: `applyVenue` mandates no SIF any more — it runs whatever
+  `provisioning.seed` the module list it is handed carries. The refusal itself is unchanged; a working
+  venue with no fiscal identity now needs `fiscal-none`, not SP-3.)_ The SP-1a migrate/seed
+  forward-warning is addressed by gating the seed (refusal) and
   showing the migrate-path divergence benign (over-migration lands as soft-disable), source-unification
   deferred to SP-3. Error code `module.mandatory_not_disableable` is tier-driven (names no module).
   Behaviour-preserving by default. Copilot approved; both its comments (409 status mapping; drop an
@@ -811,10 +815,33 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
       `mirror-bundle.ts` (`reserveInstallationNumber`, `deriveReservedSeriesCodes`), `provision-till.ts`
       (`registerSif`), `boot.ts` (`drain`) and `till-backend.ts` (`VerifactuBackend`). `fiscal-none` cannot
       land until each is behind a module seat, so SP-3c decides which it covers and which `fiscal-none` does.
-  - **SP-3c — module-owned gated provisioning.** Sever the direct `@waitron/provisioning →
-    @waitron/fiscal-verifactu` import; route `registerSif` through the descriptor's `provisioningSeeds` seat
-    and make `makeFiscalBackend`'s choice module-driven (Spain stays hardwired-but-clean via the existing
-    `resolveFiscalModules` registry — country-selection stays out of scope).
+      _(2026-09-05, SP-3c: four of the five are behind seats — `reserved-identity.ts` and
+      `mirror-bundle.ts` through `provisioning.standby`, `provision-till.ts` through `provisioning.seed`,
+      `till-backend.ts` through the `fiscal` slot. `boot.ts`'s `drain` is the one deferred to
+      `fiscal-none`, allowlisted with its reason in `scripts/module-seams.test.ts`.)_
+  - **SP-3c — module-owned gated provisioning — in PR (`feat/module-sp3c-gated-provisioning`).** The
+    fiscal regime is reached through two typed descriptor seats: `provisioning` (`seed.summary`/`run` per
+    node; `standby.reserve`/`establish` for a mirror's dormant identity) and `fiscal` (`id` +
+    `makeBackend`, selected by `@waitron/module`'s `fiscalSlot`, which refuses zero candidates, two, or a
+    node stamped for another regime). `ALL_MODULES` moved into a new `@waitron/composition` package;
+    `FiscalBackend` gained an `id`, so `sales.fiscal_backend` is the backend's own id rather than a
+    hardcoded `"verifactu"` at each sale/correction/substitution site, and `packages/core`'s
+    caller-supplied `fiscalBackend` input is gone. `@waitron/provisioning` is now a generic runner —
+    `planVenue(request, modules)` emits one `seed-module` action per seeding module, last and in list
+    order, and `applyVenue` runs them inside its ONE transaction (a throwing seed rolls the venue back);
+    it declares no regime package under `dependencies` (both stay devDependencies, for the e2e's real
+    backend). `provisionNode`/`register-till`, the standby reservation and establishment, and the host's
+    `makeFiscalBackend` all go through the seats; `WAITRON_ID_SISTEMA` and its validator moved into
+    `packages/fiscal-verifactu`, retiring `provisioning.id_sistema_invalid`.
+    **Allocation decision (owner, 2026-09-05):** this slice takes the whole provisioning family plus the
+    backend slot; the RUNTIME fiscal pass — `boot.ts`'s `drain`, `aeat-transport.ts`,
+    `aeat-credential.ts`, the wizard's cert gate and `FiscalBackend.reconcile` — is deferred to
+    `fiscal-none`, where an implementation with no transport makes that seat's shape obvious rather than
+    guessed (spec §12). `scripts/module-seams.test.ts` (root project, reads text) pins the boundary and
+    allowlists the deferred files WITH their reason, so the deferral is a ratchet: `fiscal-none` shrinks
+    the list, nothing grows it. Spec:
+    [sp-3c](superpowers/specs/2026-09-05-module-sp3c-gated-provisioning-design.md); plan:
+    [sp-3c plan](superpowers/plans/2026-09-05-module-sp3c-gated-provisioning.md).
   - **SP-3d — fiscal backup/restore contribution (= BR-4).** Fill the module `backup.restore` seat with the
     fresh-chain / disjoint-series behaviour that lets a restored box trade again as primary (cold-DR),
     never resuming the dead chain. Unblocked by SP-3a's module seams (see the Backup & restore section).
@@ -828,10 +855,11 @@ graph-honesty guard; SP-2b closes the cross-node schema-skew hazard the rolling-
 model depends on. **Ongoing flow-down and the enabled-set pull filter both stay deferred** (same
 receipt each time: nothing is genuinely toggleable yet, so there is no live case to build either
 against) — both are built alongside the first genuinely-toggleable module. **SP-3a (fiscal-record sync
-lane) LANDED #238 (2026-09-05)** — H2's fiscal-record lane is delivered. Next module slices are
-**SP-3c (gated-provisioning seam) / SP-3d (backup-restore hook = BR-4)**, independent of each other —
-**SP-3b (vocabulary) LANDED #240 (2026-09-05)** — then `fiscal-none` (Track C item 2, which needs SP-3c's
-seam); **SP-4** waits for B3.2.
+lane) LANDED #238 (2026-09-05)** — H2's fiscal-record lane is delivered. **SP-3b (vocabulary) LANDED
+#240 (2026-09-05)** and **SP-3c (gated-provisioning seam) is in PR
+(`feat/module-sp3c-gated-provisioning`)**, leaving **SP-3d (backup-restore hook = BR-4)** as the open
+module slice. `fiscal-none` (Track C item 2) follows SP-3c: it fills the same two seats and designs the
+runtime-duty seat SP-3c deferred. **SP-4** waits for B3.2.
 
 ### Product work still open (beneath the two tracks)
 
