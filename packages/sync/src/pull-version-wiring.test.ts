@@ -4,7 +4,12 @@ import { type Database } from "@waitron/db";
 // Isolated from pull.test.ts's membership suite (which drives the REAL applyBatch): this file mocks
 // applyBatch so it can capture the opts syncPullOnce threads into it. vi.mock is file-scoped, so the
 // membership tests' real applyBatch is untouched.
-const applyBatchMock = vi.fn(async () => ({ applied: 0, deferred: 0, versionParked: 0 }));
+const applyBatchMock = vi.fn(async () => ({
+  applied: 0,
+  deferred: 0,
+  rejected: 0,
+  versionParked: 0,
+}));
 vi.mock("./apply.js", () => ({ applyBatch: applyBatchMock }));
 
 // Imported AFTER the mock declaration; vi.mock is hoisted so pull.ts binds the mocked applyBatch.

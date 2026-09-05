@@ -52,7 +52,7 @@ only the modules in its own enabled set"). Two receipts, both grounded (§7 ruli
 
 1. **It is cursor-unsafe with the current single per-lane cursor.** Excluding a module's tables from the
    source read while the lane cursor still advances to the batch's high settled seq moves the cursor
-   **past** rows that were never delivered (`packages/sync/src/apply.ts:224-233` advances to `high`; the
+   **past** rows that were never delivered (the `eligible`/`high` cursor-advance in `applyBatch` (`packages/sync/src/apply.ts:305-309`) advances to `high`; the
    next fetch is `seq > cursor`, `source.ts:55`). If the subscriber later enables that module, its
    historical rows below the advanced cursor are **gone** — the exact silent gap this initiative exists to
    prevent. Safe source-side exclusion needs the exclusion to be monotone with the cursor (never re-include
@@ -67,12 +67,12 @@ It is built alongside the first genuinely-toggleable module, designed against th
 ## 3. The mechanism reuses the proven park machinery (unchanged in kind)
 
 `apply.ts` already parks rows and holds the cursor safely. Today the only park trigger is a `23503`
-foreign-key violation (`tryApplyRow` returns the `"deferred"` sentinel, `apply.ts:301-316`). The
-bookkeeping (`OriginProgress.deferred` set, `settleOrPark`, `apply.ts:73-78/186-197`) and the cursor-advance
+foreign-key violation (`tryApplyRow` returns the `"deferred"` sentinel, `apply.ts:407-414`). The
+bookkeeping (`OriginProgress.deferred` set, `settleOrPark`, `apply.ts:113-118/243-261`) and the cursor-advance
 (`eligible = settled.filter(s => [...deferred].every(d => s < d))`, `high = max(eligible)`,
-`apply.ts:224-233`) guarantee a parked seq **holds the lane cursor strictly below itself**, so it — and
+`apply.ts:305-309`) guarantee a parked seq **holds the lane cursor strictly below itself**, so it — and
 everything above it — is re-fetched (`seq > cursor`) and redelivered on the next batch until it applies.
-**At-least-once, never-skip** (the comment at `apply.ts:224-227` states it; verified in the SP-2b
+**At-least-once, never-skip** (the comment at `apply.ts:301-304` states it; verified in the SP-2b
 grounding).
 
 **SP-2b adds a second park reason,** routed through the same machinery: before the FK-apply attempt, a row
@@ -90,7 +90,7 @@ logic**; it slots into an existing shape. (The version-park is therefore skipped
 cannot change a version verdict within one batch — an implementation nicety, not a correctness point.)
 
 **Telemetry, not folded into the FK counter.** `ApplyBatchResult.deferred` and the `deferred` count are
-documented as "parked on a `23503`" (`apply.ts:63-70/186-197`). A version-park gets its **own** counter
+documented as "parked on a `23503`" (`apply.ts:87-89/243-261`). A version-park gets its **own** counter
 (e.g. `ApplyBatchResult.versionParked`) and a log line, so an operator watching a rolling migration sees
 "N rows parked awaiting this node's migration" distinctly from FK-defers. The gate is a normal operational
 state, not an error — **no new error code** (§7 ruling 4).
@@ -193,7 +193,7 @@ SP-2a's just-landed threading and its fixtures, for no gain the map does not alr
    the pull deps), threads both into `applyBatch` opts.
 4. **Apply:** for each row, resolve `module` via the dispatch map; if `source[module] > subscriber[module]`,
    park (funnel through the `deferred` machinery, hold cursor, increment `versionParked`); else apply
-   normally. The environment gate (`apply.ts:126-145`) still runs first, unchanged — it refuses the whole
+   normally. The environment gate (`apply.ts:171-190`) still runs first, unchanged — it refuses the whole
    batch on an environment mismatch before any per-module version check.
 5. **Convergence:** the operator reboots the subscriber; it migrates the lagging module; its boot-snapshot
    version rises to ≥ the source's; the next pull re-fetches the parked seqs (held below the cursor) and
@@ -240,13 +240,13 @@ SP-2a's just-landed threading and its fixtures, for no gain the map does not alr
 - **Behaviour-preserving with no skew:** every existing sync suite passes unchanged (equal versions → the
   gate never fires). The graph-honesty guard, parity pin, and real-PG completeness pin (SP-2a) are
   unaffected — no enrolment metadata moves.
-- **The env gate still precedes the version gate** (`apply.ts:126-145` unchanged) — a version test must not
+- **The env gate still precedes the version gate** (`apply.ts:171-190` unchanged) — a version test must not
   weaken the environment refusal.
 
 ## 9. Invariants preserved (receipts)
 
 - **The cursor/park machinery is unchanged in kind** — SP-2b adds a park *reason*, not a new cursor model;
-  the at-least-once/never-skip property (`apply.ts:224-233`) carries the version-park unchanged (§3).
+  the at-least-once/never-skip property (`apply.ts:301-309`) carries the version-park unchanged (§3).
 - **No migration, no grant, no schema change, no new error code** — the version numbers ride the existing
   `/hello` JSON; the gate is in-memory apply logic (§3/§7.4).
 - **Behaviour-preserving with no skew** — equal versions never park; a pre-SP-2b peer that omits
