@@ -95,6 +95,12 @@ export async function runRejoin(deps: {
     deps.out(`rejoin failed: ${code}`);
     return 1;
   };
+  // The no-code generic failure (a caught throw whose `.message` must never reach the terminal) — the
+  // counterpart to `reportCode`, shared by the connect/read catches and the orchestrator's fallthrough.
+  const failGeneric = (): number => {
+    deps.out("rejoin failed");
+    return 1;
+  };
 
   const recoveryKey = deps.env.WAITRON_BACKUP_RECOVERY_KEY;
   if (isUnset(recoveryKey)) {
@@ -221,22 +227,19 @@ export async function runRejoin(deps: {
   try {
     appDb = await connect(appDbUrl);
   } catch {
-    deps.out("rejoin failed");
-    return 1;
+    return failGeneric();
   }
   try {
     syncDb = await connect(syncDbUrl);
   } catch {
     await appDb.close();
-    deps.out("rejoin failed");
-    return 1;
+    return failGeneric();
   }
   try {
     held = await readNodeMembership(appDb);
   } catch {
     await Promise.all([appDb.close(), syncDb.close()]);
-    deps.out("rejoin failed");
-    return 1;
+    return failGeneric();
   }
 
   const carrier = held === null ? undefined : servingPrimaryNodeId(held);
@@ -310,7 +313,6 @@ export async function runRejoin(deps: {
     // and NEVER echoes `err.message`/`String(err)`: a failed `pg_restore` (bad perms, a non-fresh
     // target, a full disk) or an unrelated throw could carry the admin connection string. This is the
     // independent second layer behind `pg-restore.ts`'s own password-stripping.
-    deps.out("rejoin failed");
-    return 1;
+    return failGeneric();
   }
 }

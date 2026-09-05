@@ -157,9 +157,8 @@ async function seedFiscalRegistro(admin: Database, huella: string): Promise<void
 function containerPgRestore(containerId: string): PgRestoreRunner {
   let n = 0;
   return async ({ databaseUrl: url, inFile, signal }) => {
-    const u = new URL(url);
-    const dbn = u.pathname.replace(/^\//, "");
-    const internal = `postgresql://${u.username}:${u.password}@localhost:5432/${dbn}`;
+    const dbn = new URL(url).pathname.replace(/^\//, "");
+    const internal = internalUrl(url, dbn);
     const inContainer = `/tmp/waitron-rejoin-e2e-${process.pid}-${(n += 1)}.dump`;
     await execFileAsync("docker", ["cp", inFile, `${containerId}:${inContainer}`]);
     try {
