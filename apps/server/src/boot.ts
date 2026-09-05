@@ -576,16 +576,23 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // `execute`, never inside a transaction — because `appliedSchemaVersion`'s 42P01 catch for a
   // never-migrated table poisons an enclosing transaction (spec §3); a fresh connection used
   // auto-commit satisfies that just as the pool would.
+  // SP-2b: hoisted to `startServer` scope so the sync mount/pull sites (~700 lines below) can inject
+  // it into the sync deps (the schema-version park gate). Populated ONLY in the trading-mode block
+  // below, under the SAME `config.till !== undefined` condition that guards those sites, so the sync
+  // wiring never sees it unassigned. Declared WITHOUT a default here because Task 1 has no reader
+  // outside the block yet — `no-useless-assignment` rejects a `{}` that is overwritten before any
+  // read. Task 2, which adds the first out-of-block read at a `config.till`-guarded site, must add
+  // `= {}` then (TS cannot correlate the two conditionals, so it will demand definite assignment).
+  let myModuleVersions: Record<string, number>;
   if (config.till !== undefined) {
     const driftProbe = await createPostgresDb(config.migrationsDatabaseUrl);
     try {
       // SP-2b: one sweep of every module's applied schema version, keyed by name (main's
       // `schemaVersionsByModule`, which BR-2's backup manifest shares — the driftProbe is an
       // auto-commit pool, so its `Promise.all` reads are each isolated); the migrated Set is derived
-      // from it (version > 0). `myModuleVersions` is kept in scope because later SP-2b tasks inject it
-      // into the sync deps (the schema-version park gate). The Set handed to `reconcile` is
-      // byte-for-byte the one the former inline loop built.
-      const myModuleVersions = await schemaVersionsByModule(driftProbe, ALL_MODULES);
+      // from it (version > 0). The Set handed to `reconcile` is byte-for-byte the one the former
+      // inline loop built.
+      myModuleVersions = await schemaVersionsByModule(driftProbe, ALL_MODULES);
       const migrated = new Set(
         Object.entries(myModuleVersions)
           .filter(([, v]) => v > 0)
