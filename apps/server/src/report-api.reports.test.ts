@@ -17,9 +17,9 @@ import "./errors.js";
 // `computeVatSummaryForPeriod` / `computeTopSellers` onto the JSON — end to end in-process, the way
 // `report-api.overview.test.ts` proves the overview route. Unlike the overview (which anchors on
 // TODAY), these routes take an explicit day/range, so the fixtures seed sales on FIXED historical
-// business days and query them by date — no dependence on the wall clock. The differential
-// RLS-isolation proof is the real-Postgres suite (report-api.pg.test.ts), which PGlite cannot show
-// because every PGlite connection is a superuser that bypasses grants + FORCE RLS (CLAUDE.md §4).
+// business days and query them by date — no dependence on the wall clock. The `report.view` gate run
+// as the non-superuser app role is the real-Postgres suite's (report-api.pg.test.ts), which PGlite
+// cannot show because every PGlite connection is a superuser holding every grant (CLAUDE.md §4).
 const noopLog: Logger = () => {};
 
 let tenantId: string;

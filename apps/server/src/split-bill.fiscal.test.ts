@@ -462,8 +462,8 @@ describe("split-bill cross-tenant isolation (FORCE RLS hides the foreign tab; th
     // tenant Y the owner's row is HIDDEN (count 0); neutralising `working_orders`' isolation policy to
     // `true` inside a ROLLED-BACK transaction makes it APPEAR (count 1) — so the predicate, not mere table
     // access, hid it. The `alter policy` runs as the owner (superuser), before dropping to `app_user`.
-    // Rolled back, so the policy is restored and no rows move. Copied verbatim in shape from
-    // transfer-lines.pg.test.ts:344-367.
+    // Rolled back, so the policy is restored and no rows move. (Its model, the equivalent block in the
+    // transfer-lines real-Postgres suite, was retired with the other tenant-isolation cases.)
     const conn = await suite.pg.connect();
     try {
       await conn.execute(sql`begin`);

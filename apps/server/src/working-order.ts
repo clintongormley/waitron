@@ -3667,10 +3667,9 @@ export interface StationQueueGroup {
  * Ordered by `ticket_items.queued_at` ascending, so within the grouping the oldest line seen for an
  * order fixes that group's position (oldest-first) and its `queuedAt`. Node-scoped
  * (`node_id = cfg.nodeId`) exactly as `listPrepQueue` was — the queue is one node's — so `cfg` is used
- * here (unlike the advance verbs). Runs on the CALLER's transaction under its tenant/app_user scope; RLS
- * confines the tenant. PGlite proves the join, the exclusions, the grouping and the ordering; the
- * node/tenant SCOPING is real-Postgres's job (working-order.pg.test.ts), the same split `listPrepQueue`
- * used (CLAUDE.md §4).
+ * here (unlike the advance verbs). Runs on the CALLER's transaction under its tenant/app_user scope.
+ * PGlite proves the join, the exclusions, the grouping and the ordering; the NODE scoping is
+ * real-Postgres's job (working-order.pg.test.ts), the same split `listPrepQueue` used (CLAUDE.md §4).
  *
  * On a mirror this `cfg.nodeId` filter is the mirror's OWN reserved id, not the origin whose replicated
  * rows carry the primary's — see the latent-mirror-trap comment on the `GET /api/working-orders` cluster
@@ -4105,10 +4104,10 @@ export interface ExpoOrder {
  *
  * Ordered by `opened_at` (oldest order first — the most urgent to dispatch), then course `display_order`
  * NULLS FIRST (the null course fires earliest), then `line_no`/item id for a stable within-course order.
- * Runs on the CALLER's transaction under its tenant/`app_user` scope; RLS confines the tenant. PGlite
- * proves the join, the exclusions, the course grouping and the fired/away roll-ups — plain SQL a single
- * backend proves; the node/tenant RLS SCOPING is real-Postgres's job (working-order.pg.test.ts), the
- * same split `listStationQueue` uses (CLAUDE.md §4).
+ * Runs on the CALLER's transaction under its tenant/`app_user` scope. PGlite proves the join, the
+ * exclusions, the course grouping and the fired/away roll-ups — plain SQL a single backend proves; the
+ * NODE scoping is real-Postgres's job (working-order.pg.test.ts), the same split `listStationQueue`
+ * uses (CLAUDE.md §4).
  *
  * Same mirror caveat as `listStationQueue`'s own `cfg.nodeId` filter above — see that comment.
  */

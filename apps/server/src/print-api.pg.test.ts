@@ -170,7 +170,7 @@ describe("Print API over real Postgres (as the app role)", () => {
     expect(done.rows[0]!.delivered_at).not.toBeNull();
   });
 
-  it("claims ONLY the calling agent's own printers' jobs under RLS (cross-agent → empty)", async () => {
+  it("agent scope: claims ONLY the calling agent's own printers' jobs (cross-agent → empty)", async () => {
     const app = mountApp(tenantA);
     const mine = await enrolAgent(app, "Mine RLS");
     const other = await enrolAgent(app, "Other RLS");
@@ -186,7 +186,7 @@ describe("Print API over real Postgres (as the app role)", () => {
     expect(untouched.rows[0]!.status).toBe("queued");
   });
 
-  it("a REVOKED agent fails the claim instantly under RLS (401)", async () => {
+  it("a REVOKED agent fails the claim instantly (401)", async () => {
     const app = mountApp(tenantA);
     const { agentId, token } = await enrolAgent(app, "Revocable");
     await createPrinter(app, agentId, "Revocable printer");

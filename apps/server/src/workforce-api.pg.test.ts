@@ -190,7 +190,7 @@ describe("Workforce API over real Postgres (roster publish, decide columns, gate
     );
   });
 
-  it("publishes end-to-end under RLS and returns the breaches array", async () => {
+  it("publishes end-to-end as the app role and returns the breaches array", async () => {
     const v = await setupVenue();
     // Seed the location's convenio_config (as admin — superuser bypasses RLS; tenant_id set explicitly).
     await suite.admin.execute(
@@ -321,7 +321,7 @@ describe("Workforce API over real Postgres (roster publish, decide columns, gate
     );
   });
 
-  it("assembles planned-vs-actual under RLS for the tenant's own location", async () => {
+  it("assembles planned-vs-actual for the tenant's own location as the app role", async () => {
     // The route assembles + returns rows under withTenant + asAppUser (the windowing/scoping logic is
     // already covered on PGlite in Task 5). Seed one shift on a PUBLISHED roster version as admin
     // (tenant_id explicit; the planned side is published-only, so a null-version draft would be excluded)

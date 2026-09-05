@@ -1209,9 +1209,9 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
 // `returning` → `ticket.invalid_transition`); `advanceTicket` bumps every not-yet-`to` line of one
 // order at one station together; `listStationQueue` groups a station's items by order, dropping
 // collected and abandoned orders. PGlite proves the transition logic, the whole-ticket fan-out and the
-// grouping/exclusion filters — plain SQL a single backend proves; the RLS/tenant-isolation + node
-// scoping are real-Postgres's job (working-order.pg.test.ts). Every write runs through
-// `withTenant` + `asAppUser`, so grants and RLS are in force, not bypassed.
+// grouping/exclusion filters — plain SQL a single backend proves; the NODE scoping is real-Postgres's
+// job (working-order.pg.test.ts). Every write runs through `withTenant` + `asAppUser`, so the app
+// role's grants are in force, not bypassed.
 // ---------------------------------------------------------------------------------------------------
 
 /** The order's ticket items joined to their line, in line_no order — each item's id (the bump target),
@@ -2012,8 +2012,9 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
 // the config/fire verbs use (`course.not_found` for an absent / foreign / retired course), and throws
 // `tab.line_not_found` for a `line_no` not on the tab. Non-fiscal: it touches only `working_order_lines`
 // (open tab) and `ticket_items` (kitchen), never a filed record. PGlite proves the update + the guards —
-// plain SQL a single backend proves; RLS/node isolation is real-Postgres's job (working-order.pg.test.ts).
-// Every write runs through `withTenant` + `asAppUser`, so grants and RLS are in force, not bypassed.
+// plain SQL a single backend proves; the two-backend serialisation of a concurrent send/recall/fire is
+// real-Postgres's job (working-order.pg.test.ts). Every write runs through `withTenant` + `asAppUser`,
+// so the app role's grants are in force, not bypassed.
 // ---------------------------------------------------------------------------------------------------
 describe("setLineCourse (A1: move a held line to another course)", () => {
   it("moves a HELD line to another course, updating both course_id snapshots", async () => {
@@ -2760,8 +2761,8 @@ describe("addTabRound hold-on-send (A3)", () => {
 // by course in display_order with per-course fired/away roll-ups. Unlike `listStationQueue` (one
 // station, no station name) it joins `kitchen_stations` to label each item's station. PGlite proves the
 // join, the collected/abandoned/fully-away exclusions, the course grouping and the roll-ups — plain SQL a
-// single backend proves; the node/tenant RLS scoping is real-Postgres's job (working-order.pg.test.ts).
-// Every read/write runs through `withTenant` + `asAppUser`, so grants and RLS are in force, not bypassed.
+// single backend proves; the NODE scoping is real-Postgres's job (working-order.pg.test.ts).
+// Every read/write runs through `withTenant` + `asAppUser`, so the app role's grants are in force.
 // ---------------------------------------------------------------------------------------------------
 describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
   it("aggregates one order's two-station single-course lines into one course with station names, excluding collected/abandoned orders", async () => {
@@ -3009,9 +3010,9 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
 // items and no-op when none match). `markCourseAway` stamps `away_at = now()` on every READY item of the
 // course (dispatch what is plated), gated on the course EXISTING (`requireCourse` → course.not_found),
 // idempotent via `away_at IS NULL`. PGlite proves the set-based logic, the held-skip and the ready-only
-// dispatch — plain SQL a single backend proves; the RLS/node scoping is real-Postgres's job
-// (working-order.pg.test.ts, the folded-in listExpoQueue RLS test). Every write runs through
-// `withTenant` + `asAppUser`, so grants and RLS are in force, not bypassed.
+// dispatch — plain SQL a single backend proves; the NODE scoping is real-Postgres's job
+// (working-order.pg.test.ts's `listExpoQueue` node-symmetry case). Every write runs through
+// `withTenant` + `asAppUser`, so the app role's grants are in force, not bypassed.
 // ---------------------------------------------------------------------------------------------------
 
 /** Fire ONE course of an order across TWO stations — two products in the SAME (earliest, so auto-fired)

@@ -9,7 +9,7 @@ import { FakeStripeReport } from "./testing/fake-stripe-report.js";
 import { FakeStripe } from "./testing/fake-stripe.js";
 
 // A non-superuser LOGIN role that inherits app_user's grants — the same shape as
-// stripe.rls.test.ts/device.pg.test.ts/hosted.rls.test.ts's own probe roles. The unique name (rather
+// stripe.rls.test.ts/device.rls.test.ts/hosted.rls.test.ts's own probe roles. The unique name (rather
 // than one generic name reused across all four) is now load-bearing, not just grep-bait: the four RLS
 // suites share ONE cluster via the package globalSetup, whose `roles` create all four ONCE and
 // idempotently, so two same-named roles would be a real collision — the distinct names are what avoid
@@ -120,7 +120,7 @@ describe("reconcile sweep through StripeReconciler under real row-level security
       expect(refunder.lastRefund?.paymentIntentId).toBe(externalRef);
 
       // Read back under the PROBE's own tenant scope, not admin — so this also exercises the
-      // incidents SELECT grant (proven for `payments` by hosted.rls.test.ts/device.pg.test.ts, but
+      // incidents SELECT grant (proven for `payments` by hosted.rls.test.ts/device.rls.test.ts, but
       // not yet for `incidents` anywhere in this package) rather than merely trusting the in-memory
       // result.
       const readBack = await withTenant(probe, seeded.tenantId, async (tx) => {

@@ -1096,7 +1096,7 @@ describe("cross-till end-to-end", () => {
     expect(await listHeldOrders({ db: suite.admin }, nodeB)).toEqual([]);
   });
 
-  it("node scope: the by-id family (get/update/abandon) fails closed on a foreign-node order under RLS", async () => {
+  it("node scope: the by-id family (get/update/abandon) fails closed on a foreign-node order", async () => {
     const { cfg: nodeA, cafe } = await setupVenue();
     // A second register under the SAME tenant + location, differing only in node_id. RLS is
     // tenant-scoped, so it does NOT hide node A's order from node B — only the `node_id = cfg.nodeId`

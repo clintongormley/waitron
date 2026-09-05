@@ -11,14 +11,15 @@ import { mountReportApi } from "./report-api.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
 import "./errors.js";
 
-// Real Postgres, not PGlite: this suite proves the two report gates (`report.export`, `report.view`)
-// BY DELETION against the real cluster, with every DB touch under test going through the route's own
-// `withTenant` + `asAppUser`, so the reads run as the non-superuser app role rather than the superuser
-// the harness hands out (CLAUDE.md §4). The route mechanics (year/period/declarationType screens,
-// STATUS map, the 2944-byte ISO-8859-1 body) are already proven in-process on PGlite
-// (`report-api.test.ts`), and the overview tile in `report-api.overview.test.ts` — so with the gates
-// as its only remaining subject this file is a candidate for the PGlite tier once the suites are
-// re-tagged.
+// Real Postgres, not PGlite: this suite refuses the modelo 303 export and the overview to a staff
+// session, with every DB touch under test going through the route's own `withTenant` + `asAppUser`,
+// so the reads run as the non-superuser app role rather than the superuser the harness hands out
+// (CLAUDE.md §4). Only the `report.export` case carries a guard-by-deletion receipt (recorded on it);
+// the `report.view` case asserts the refusal without one. The route mechanics (year/period/
+// declarationType screens, STATUS map, the 2944-byte ISO-8859-1 body) are already proven in-process on
+// PGlite (`report-api.test.ts`), and the overview tile in `report-api.overview.test.ts` — so with the
+// two gates as its only remaining subject this file is a candidate for the PGlite tier once the suites
+// are re-tagged.
 const LOCALE = "es-ES";
 
 const suite = useTemplateDb({ template: "manifest" });
@@ -36,11 +37,7 @@ function nextNif(): string {
 
 interface Venue {
   tenantId: string;
-  /** This venue's obligado NIF — stored on `tenants.tax_id`, read back into the file's identificación. */
-  taxId: string;
-  tillId: string;
   nodeId: string;
-  seriesId: string;
   /** A live MANAGEMENT session cookie for a `manager` (holds `report.export`). */
   managerCookie: string;
   /** A live MANAGEMENT session cookie for a `staff` person (holds nothing — the gate refuses it). */
@@ -109,12 +106,7 @@ async function setupVenue(): Promise<Venue> {
 
   return {
     tenantId: venue.tenantId,
-    taxId,
-    tillId: venue.tillId,
     nodeId: venue.nodeId,
-    // Any of the tenant's series satisfies the sale FK; the reporting aggregate does not filter by
-    // series. The plan emits the standard series first, so seriesIds[0] is it.
-    seriesId: venue.seriesIds[0]!,
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSid}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSid}`,
   };
