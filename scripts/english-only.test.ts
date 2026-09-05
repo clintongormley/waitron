@@ -33,16 +33,37 @@ import { forbiddenVocabulary, vocabularyOwners } from "../packages/module/src/vo
 const OWNERS = vocabularyOwners(ALL_MODULES);
 const FORBIDDEN = forbiddenVocabulary(SPANISH_WORDS, ALL_MODULES);
 
+/** The tokeniser's own tests run against a FIXED set, so a change to a module's declaration
+ * cannot redden a test that is about tokenising. Assembly is tested separately. */
+const FIXTURE: ReadonlySet<string> = new Set([
+  "huella",
+  "registros",
+  "facturacion",
+  "numero",
+  "instalacion",
+  "anulacion",
+  "envio",
+  "cadena",
+  "serie",
+  "importe",
+  "alta",
+  "tipo",
+  "operacion",
+  "mesa",
+  "empleado",
+  "fichaje",
+]);
+
 /**
  * Per-owner vacuous-pass anchors: terms each declaration MUST find in its owner's real source. A new
  * owner must add a row here (the "every owner has an anchor" test below insists), so a declaration
  * can never pass empty — the same reason module-graph-honesty pins its three known edges. The
- * workforce-es anchors include labour terms so `packages/workforce`, the English generic package
- * under that Spanish module, is provably guarded.
+ * declaration file itself (`vocabulary.ts`, where every term is a string literal) is excluded from
+ * the scan, so an anchor must occur in the owner's REAL source.
  */
 const ANCHORS: Record<string, readonly string[]> = {
   fiscal: ["huella", "registro", "facturacion"],
-  "workforce-es": ["convenio", "jornada", "empleado", "fichaje"],
+  "workforce-es": ["convenio", "jornada", "trabajador"],
 };
 
 const discovered = GENERIC_PACKAGES.flatMap((name) =>
@@ -152,9 +173,11 @@ describe("each module's vocabulary declaration", () => {
     "%s: fires on its owner's own source, so the declaration is not decorative",
     (module, owner) => {
       // Proves two things at once: the declaration matches vocabulary that actually occurs in the
-      // owner's package, and the owner is excluded by SCOPE — not by a list too weak to fire on it.
-      // Delete an anchor term from the module's list and this goes red.
-      const files = sourceFilesIn(owner.packageDir);
+      // owner's REAL source, and the owner is excluded by SCOPE — not by a list too weak to fire
+      // on it. Delete an anchor term from the module's list and this goes red.
+      // The declaration file is excluded: every declared term is a literal there, so it would
+      // satisfy any anchor and prove nothing about the package's real source.
+      const files = sourceFilesIn(owner.packageDir).filter((f) => !f.endsWith("/vocabulary.ts"));
       expect(files.length).toBeGreaterThan(0);
       const own = new Set(owner.terms);
       const fired = new Set(
@@ -167,7 +190,7 @@ describe("each module's vocabulary declaration", () => {
 
 describe("findSpanish", () => {
   it("flags a Spanish identifier", () => {
-    const found = findSpanish("const ultimaHuella = head.lastHash;", FORBIDDEN);
+    const found = findSpanish("const ultimaHuella = head.lastHash;", FIXTURE);
     expect(found.map((v) => v.word)).toEqual(["huella"]);
   });
 
@@ -176,29 +199,25 @@ describe("findSpanish", () => {
     // that reaches a migration and then a database.
     const found = findSpanish(
       'export const records = pgTable("registros_facturacion", {});',
-      FORBIDDEN,
+      FIXTURE,
     );
     expect(found.map((v) => v.word)).toEqual(["registros", "facturacion"]);
   });
 
   it("flags a Spanish column name inside an object key", () => {
-    const found = findSpanish('  numeroInstalacion: text("numero_instalacion"),', FORBIDDEN);
+    const found = findSpanish('  numeroInstalacion: text("numero_instalacion"),', FIXTURE);
     expect(found.map((v) => v.word)).toEqual(["numero", "instalacion", "numero", "instalacion"]);
   });
 
   it("flags accented forms as well as unaccented", () => {
     // Both spellings occur in the sources — the XSDs are accented, the column names are not.
-    expect(findSpanish("const anulación = 1;", FORBIDDEN).map((v) => v.word)).toEqual([
-      "anulacion",
-    ]);
-    expect(findSpanish("const anulacion = 1;", FORBIDDEN).map((v) => v.word)).toEqual([
-      "anulacion",
-    ]);
-    expect(findSpanish("const envío = 1;", FORBIDDEN).map((v) => v.word)).toEqual(["envio"]);
+    expect(findSpanish("const anulación = 1;", FIXTURE).map((v) => v.word)).toEqual(["anulacion"]);
+    expect(findSpanish("const anulacion = 1;", FIXTURE).map((v) => v.word)).toEqual(["anulacion"]);
+    expect(findSpanish("const envío = 1;", FIXTURE).map((v) => v.word)).toEqual(["envio"]);
   });
 
   it("reports the line number", () => {
-    const found = findSpanish("const ok = 1;\nconst cadena = 2;\n", FORBIDDEN);
+    const found = findSpanish("const ok = 1;\nconst cadena = 2;\n", FIXTURE);
     expect(found).toEqual([{ line: 2, word: "cadena", text: "const cadena = 2;" }]);
   });
 
@@ -209,7 +228,7 @@ describe("findSpanish", () => {
       findSpanish(
         "import { invoiceSeries } from './series.js';\n" +
           "const importedRows = delta.filter((r) => r.renumbered);\n",
-        FORBIDDEN,
+        FIXTURE,
       ),
     ).toEqual([]);
   });
@@ -217,25 +236,25 @@ describe("findSpanish", () => {
   it("does not flag words shared by both languages", () => {
     // total, base, local, error, real: identical in Spanish and English, and all five appear in the
     // naming contract. Flagging them would make the guard fire on `sales.total` on its first day.
-    expect(findSpanish("const { total, base, locale, error } = row;", FORBIDDEN)).toEqual([]);
+    expect(findSpanish("const { total, base, locale, error } = row;", FIXTURE)).toEqual([]);
   });
 
   it("does not flag NIF", () => {
     // tenants.nif is in the naming contract: a legal identifier and an acronym, not vocabulary.
-    expect(findSpanish('nif: text("nif").notNull(),', FORBIDDEN)).toEqual([]);
+    expect(findSpanish('nif: text("nif").notNull(),', FIXTURE)).toEqual([]);
   });
 
   it("ignores Spanish inside line and block comments", () => {
     // Comments explaining the regime are legitimate and wanted; the constraint is on identifiers
     // and table/column names.
-    expect(findSpanish("// mirrors AEAT's registro de alta and its huella", FORBIDDEN)).toEqual([]);
+    expect(findSpanish("// mirrors AEAT's registro de alta and its huella", FIXTURE)).toEqual([]);
     expect(
-      findSpanish("/*\n * The cadena head. Spanish stays in the module.\n */", FORBIDDEN),
+      findSpanish("/*\n * The cadena head. Spanish stays in the module.\n */", FIXTURE),
     ).toEqual([]);
   });
 
   it("still flags code on a line that also carries a comment", () => {
-    const found = findSpanish("const cadena = 1; // the chain head", FORBIDDEN);
+    const found = findSpanish("const cadena = 1; // the chain head", FIXTURE);
     expect(found.map((v) => v.word)).toEqual(["cadena"]);
   });
 
@@ -252,20 +271,26 @@ describe("findSpanish", () => {
     ]);
   });
 
+  it("flags a labour term, so packages/workforce (English, under workforce-es) is guarded", () => {
+    expect(
+      findSpanish("const empleado = 1; const fichaje = 2;", FORBIDDEN).map((v) => v.word),
+    ).toEqual(["empleado", "fichaje"]);
+  });
+
   it("permits the operation_description column named in the naming contract", () => {
     // Passes on its own merits rather than through an exception list: the column was renamed out of
     // Spanish, so it tokenises to `operation` and `description` and there is nothing to forgive.
-    expect(findSpanish('operationDescription: text("operation_description"),', FORBIDDEN)).toEqual(
+    expect(findSpanish('operationDescription: text("operation_description"),', FIXTURE)).toEqual(
       [],
     );
     // And the Spanish form it replaced is still caught, which stops the rename being reverted.
     expect(
-      findSpanish('descriptionOperacion: text("description_operacion"),', FORBIDDEN).map(
+      findSpanish('descriptionOperacion: text("description_operacion"),', FIXTURE).map(
         (v) => v.word,
       ),
     ).toEqual(["operacion", "operacion"]);
     expect(
-      findSpanish('tipoOperacion: text("tipo_operacion"),', FORBIDDEN).map((v) => v.word),
+      findSpanish('tipoOperacion: text("tipo_operacion"),', FIXTURE).map((v) => v.word),
     ).toEqual(["tipo", "operacion", "tipo", "operacion"]);
   });
 });

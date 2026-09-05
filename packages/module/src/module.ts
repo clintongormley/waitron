@@ -157,10 +157,11 @@ export function orderedMigrationSets(modules: readonly WaitronModule[]): Migrati
 const MIGRATIONS_FROM = /^\.\.\/([^/]+)\/drizzle$/;
 
 /**
- * The `packages/<dir>` a module's package lives in, derived from `migrations.from`. The ONE reader
- * of that string's shape: the root guards (english-only, module-graph-honesty) map descriptors to
- * package directories through it. Throws on any other shape — a derivation that silently skipped
- * would exempt nothing and scan nothing.
+ * The `packages/<dir>` a module's package lives in, derived from `migrations.from`. The one place
+ * that PARSES that string to recover the package directory — the root guards (english-only,
+ * module-graph-honesty) map descriptors to package dirs through it; `@waitron/migrations`'s
+ * `resolveMigrationsFolder` resolves the same string as an opaque path. Throws on any other shape —
+ * a derivation that silently skipped would exempt nothing and scan nothing.
  */
 export function packageDirOf(module: WaitronModule): string {
   const match = MIGRATIONS_FROM.exec(module.migrations.from);

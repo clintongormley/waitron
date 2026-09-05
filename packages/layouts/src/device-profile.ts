@@ -45,10 +45,10 @@ export interface DefaultDeviceProfile {
   capabilities: CapabilityFlag[];
   /**
    * The seeded name per BARE language subtag (`"es"`, `"en"`). These names are LOCALE CONTENT — the
-   * tenant renames them freely — NOT schema tokens, so the Spanish literals live here, in an isolated
-   * map, rather than in `packages/db`'s `SPANISH_WORDS`; the english-only guard (which scans this
-   * package) does not flag them because none is a Spanish word it knows. `defaultProfileName` resolves
-   * a full invoice-locale tag against this map.
+   * tenant renames them freely — NOT schema tokens, so the Spanish literals live here, in an
+   * isolated map, rather than in the guard's base list or a module's `vocabulary` declaration; the
+   * english-only guard (which scans this package) does not flag them because none is a Spanish word
+   * it knows. `defaultProfileName` resolves a full invoice-locale tag against this map.
    */
   nameByLocale: Record<string, string>;
 }

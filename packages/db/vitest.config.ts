@@ -66,9 +66,11 @@ export default defineConfig({
       // typecheck covers it (the root project typechecks nothing).
       //
       // Excluded rather than left to be measured here, and the difference
-      // was run rather than reasoned about. Three states of `pnpm --filter
-      // @waitron/db test:coverage`, statements / branches / functions /
-      // lines, all re-run on 2026-08-01:
+      // was run rather than reasoned about — on 2026-08-01, when
+      // src/schema/series.test.ts still imported `findSpanish`; SP-3b removed
+      // that importer, so row 2 below is history, not a state this tree can
+      // reproduce. Three states of `pnpm --filter @waitron/db test:coverage`,
+      // statements / branches / functions / lines, all re-run on 2026-08-01:
       //
       //   1  suite still here, i.e. this branch's merge base 6d30ed2
       //      99.75 / 96.02 / 100 / 99.75, exit 0, with english-only.ts itself

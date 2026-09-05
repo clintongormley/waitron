@@ -7,8 +7,8 @@ export const PACKAGES_ROOT = join(import.meta.dirname, "..", "..");
 /**
  * English throughout — identifiers and table/column names alike (spec §2). A package neither
  * listed here nor owning a module's declared `vocabulary` (`@waitron/module`'s `vocabularyOwners`,
- * read by the root suite) is never scanned: `packages/verifactu` (the AEAT library, no descriptor
- * of its own), `provisioning`, `tunnel`.
+ * read by the root suite) is never scanned — `packages/verifactu` (the AEAT library, no
+ * descriptor of its own), `provisioning` and `tunnel` among them.
  */
 export const GENERIC_PACKAGES = [
   "db",
@@ -73,14 +73,14 @@ export const GENERIC_PACKAGES = [
  * on the vocabulary it exists to define. Its suite (`scripts/english-only.test.ts`, the repo-level
  * Vitest project) carries fiscal words in its fixtures but needs no entry here: `sourceFilesIn`
  * only ever walks `packages/<name>/src`, so the suite is out of scope by location.
- * `no-regime-vocabulary.test.ts` (Task 11) has the identical structural problem one level down:
- * it is a SEPARATE guard, one this guard's forbidden set cannot substitute for, because it
- * exists to catch regime vocabulary written in ENGLISH — `chain`, `hash`, `sif` — which is not
- * Spanish and this guard has no way to see. Its own forbidden-term list necessarily contains a few
- * words that overlap this one's (`huella`, `registro`, `cadena`, `encadenamiento`, `incidencia`,
- * all literal Spanish-language string entries), and without this exclusion this guard would flag
- * that list as a Spanish violation — of a file whose entire purpose is to name violations, in a
- * different and narrower sense than this file's own.
+ * `no-regime-vocabulary.test.ts` has the identical structural problem one level down: it is a
+ * SEPARATE guard, one this guard's forbidden set cannot substitute for, because it exists to catch
+ * regime vocabulary written in ENGLISH — `chain`, `hash`, `sif` — which is not Spanish and this
+ * guard has no way to see. Its own forbidden-term list necessarily contains a few words the fiscal
+ * module declares (`huella`, `registro`, `cadena`, `encadenamiento`, `incidencia`, all literal
+ * Spanish-language string entries), and without this exclusion this guard would flag that list as a
+ * Spanish violation — of a file whose entire purpose is to name violations, in a different and
+ * narrower sense than this file's own.
  *
  * Excluded by name rather than by a `*.test.ts` pattern: reading text executes nothing, so test
  * files stay in scope, and a Spanish fixture name in packages/db is exactly as wrong as a Spanish
@@ -108,6 +108,9 @@ export const SELF = ["english-only.ts", "no-regime-vocabulary.test.ts"] as const
  * assembles the forbidden set with `@waitron/module`'s `forbiddenVocabulary` and asserts this list
  * and the module declarations are DISJOINT — a word has one declaring home, so a fiscal term added
  * here is a failing test, not a second copy. Add a term here only if no module owns it.
+ * `estado`/`estados` and `tipo`/`tipos` stay here although fiscal columns spell them: they are
+ * generic Spanish for *state* and *kind* that any package might reach for; a fiscal column of the
+ * same spelling is coincidence, not ownership.
  *
  * Singular and plural are listed separately and nothing is stemmed — stemming `series` to `serie`
  * would fire on `invoice_series`, which is in the naming contract. Words identical in both

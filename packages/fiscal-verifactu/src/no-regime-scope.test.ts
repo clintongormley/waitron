@@ -3,12 +3,12 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /**
- * The narrower guard in packages/fiscal (no-regime-vocabulary.test.ts, which forbids ENGLISH
- * regime terms in the regime-neutral contract package) must not reach INTO this package. It has no
- * exported surface — its sources come from `import.meta.glob(["./**\/*.ts", …])`, resolved
- * relative to the calling file, so a relative, non-parent-escaping glob is structurally incapable
- * of walking out of `packages/fiscal/src`. Proving that without importing its internals means
- * reading its source text.
+ * packages/fiscal's guard — narrower than the tree-wide english-only guard —
+ * (no-regime-vocabulary.test.ts, which forbids ENGLISH regime terms in the regime-neutral contract
+ * package) must not reach INTO this package. It has no exported surface — its sources come from
+ * `import.meta.glob(["./**\/*.ts", …])`, resolved relative to the calling file, so a relative,
+ * non-parent-escaping glob is structurally incapable of walking out of `packages/fiscal/src`.
+ * Proving that without importing its internals means reading its source text.
  */
 describe("packages/fiscal's no-regime-vocabulary guard is scoped to packages/fiscal, not here", () => {
   const noRegimeVocabularySource = readFileSync(

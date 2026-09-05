@@ -1,9 +1,9 @@
 /**
  * The Spanish terms this module OWNS (module-system architecture §3; SP-3b spec §2–§3): legitimate
- * inside this package, forbidden in every generic package. Declared here and wired onto the `fiscal`
- * descriptor's `vocabulary` seat by the composition root (`apps/server/src/modules.ts`); read only by
- * the root english-only suite, which assembles the forbidden set from every module's declaration.
- * Nothing at runtime consults it.
+ * inside this package, forbidden in every generic package. Declared here and wired onto the
+ * `fiscal` descriptor's `vocabulary` seat by the composition root (`apps/server/src/modules.ts`);
+ * interpreted only by the root english-only suite, which assembles the forbidden set from every
+ * module's declaration. Nothing at runtime consults it.
  *
  * Tokens, not words — the guard's tokeniser contract (`packages/db/src/english-only.ts`): lowercase
  * ASCII, accents already removed (`anulación` and `anulacion` are one token), singular and plural

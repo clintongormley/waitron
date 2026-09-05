@@ -20,7 +20,9 @@ semantics and typechecks them, and `scripts/module-graph-honesty.test.ts` reads 
 instead of its own regex. The package-local tokeniser copies (§6) and their byte-identity pin were
 dropped: the root suite runs on every non-docs push and is the positive control, with the guard's
 own comment stripping. The `invoice_series` test keeps only the exact column pin (the word filters
-were dead behind it), and `modules.test.ts` pins the two seats by reference only.
+were dead behind it), and `modules.test.ts` pins the two seats by reference only. The package-local
+file that remains in `packages/fiscal-verifactu` proves only the reverse-direction scoping of
+`packages/fiscal`'s guard and is named `no-regime-scope.test.ts`.
 
 ---
 
@@ -108,8 +110,7 @@ forbidden already. The labour section moves as it is.
 - `EXEMPT_PACKAGES` — **deleted**. Its one live use was the suite's assertion that no exempt package
   is generic; that assertion now runs over the derived owners (§5). `packages/verifactu` (the AEAT
   library, no descriptor) becomes an unlisted library like `provisioning`, `tunnel` and `ui`: not
-  generic, not scanned, its Spanish-by-design nature recorded in its own package rather than in
-  `packages/db`.
+  generic, not scanned; CLAUDE.md §3 records it.
 - `SPANISH_WORDS` — keeps its export name (it is cited by name in a dozen comments, half of which stay
   true) and becomes the **base list**: the POS section plus `descripcion`/`descripciones`. Its doc
   says what it now is and points at the seat.
@@ -155,11 +156,15 @@ runtime values only because the root project is not typechecked (CLAUDE.md §2).
    repeats a token, and `base ∩ modules = ∅` (§2).
 3. **Positive control per owner, proven by deletion.** The owner's own terms fire on the owner's own
    `src/` (measured 2026-09-05: `registros.ts` yields `registro`/`registros`/`facturacion`/`huella`/
-   `secuencia`; `convenio-config.ts` yields `convenio`×90, `jornada`×9). This replaces "the wordlist is
-   not decorative", which scanned `packages/verifactu` — a library that now sits in no list.
+   `secuencia`; `convenio-config.ts` yields `convenio`×19 and `registro-jornada.ts` `jornada`×9).
+   This replaces "the wordlist is not decorative", which scanned `packages/verifactu` — a library
+   that now sits in no list. The declaration file (`vocabulary.ts`) is excluded from this scan —
+   every declared term is a literal there and would satisfy any anchor.
 4. **The generic scan** with `forbiddenVocabulary(SPANISH_WORDS, ALL_MODULES)`.
 5. The existing `findSpanish` unit tests (identifier, string literal, accents, comments, shared words,
-   NIF, whole-token matching) pass the assembled set explicitly.
+   NIF, whole-token matching) run against a fixed local set, so a change to a module's declaration
+   cannot redden a test about tokenising; one test contrasts the base list with the assembled set to
+   show the parameter is honoured.
 
 ## 6. Consumers that change
 
@@ -234,6 +239,8 @@ this slice changes *who declares* the words, not *where* they are looked for.
 - Add `"fiscal-verifactu"` to `GENERIC_PACKAGES` → the derived-owner assertion goes red.
 - Add `"huella"` to the base list → the disjointness assertion goes red naming the owner.
 - Change fiscal's `migrations.from` to a non-`../<pkg>/drizzle` shape → `vocabularyOwners` throws.
+- Add a term that occurs nowhere in the owner's real source to its declaration and its anchors → the
+  positive control goes red (the declaration file is excluded from the scan).
 
 ## 10. Interactions
 
