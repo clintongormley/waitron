@@ -220,6 +220,12 @@ phase forces a change to the app or the fiscal core.
   It first ships as the cloud-mirror's outbound-tunnel leg rather than the dashboard's, but the
   box-dials-out mechanism is the *same* one T1 will reuse.
 
+  > **Superseded 2026-09-05** ([`2026-09-05-relay-decision.md`](2026-09-05-relay-decision.md)): no
+  > relay and no snitun reimplementation. The box holds a WireGuard link to its own cloud instance;
+  > remote access is that instance forwarding the box's name down the link without terminating TLS
+  > (the blind property kept; login still terminates on the box). The one-name-two-resolutions claim
+  > above is an open item recorded there.
+
 - **T2 — branded front door + custom domain (polish on T1).** `app.waitron.<tld>` shows a **venue
   picker** from a **thin cloud account** (the customer / billing / tunnel-ownership record — *not*
   operational identity), then tunnels to the chosen box, which does the real login. Custom domain: the

@@ -2,6 +2,12 @@
 
 **Status:** design, awaiting owner review · **Date:** 2026-08-27 · **Branch:** `feat/sync-outbound-tunnel`
 
+> **Superseded 2026-09-05** ([`2026-09-05-relay-decision.md`](2026-09-05-relay-decision.md)). Replication
+> between a box and its own cloud instance flows over a WireGuard link (owner decision), and remote
+> access is that instance forwarding the box's name down the link without terminating TLS — so no relay
+> is built, ours or off-the-shelf. `@waitron/tunnel` (landed #150) stays until the link carries
+> replication, then is deleted with its boot wiring and dispatcher. Text below left as written.
+
 ## 0. Where this sits
 
 "Build the sync cloud-mirror peer" (backlog top-tier #2) is three subsystems, proven against a

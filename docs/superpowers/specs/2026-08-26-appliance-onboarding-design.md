@@ -97,7 +97,7 @@ requires a DNS zone we operate, which is a paid service. Everything else falls o
 | Discovery | mDNS (Avahi) + IP-QR fallback | public DNS → LAN IP locally, relay remotely |
 | Certificate | **self-signed**, box mints its own CA | **real** Let's Encrypt via ACME DNS-01 (auto, invisible) |
 | Per-device trust step | **yes** — trust the box CA once per device | **no** — cert is already trusted |
-| Remote access | none (LAN only) | the blind tunnel (dashboard design §5 T1/T2) |
+| Remote access | none (LAN only) | the blind tunnel (dashboard design §5 T1/T2) — _2026-09-05: now the box's WireGuard link to its own cloud instance, which forwards the box's name without terminating TLS ([`2026-09-05-relay-decision.md`](2026-09-05-relay-decision.md))_ |
 | Cost | free | subscription |
 
 **The honest cost of "free" is the per-device trust step.** A self-signed cert the user merely

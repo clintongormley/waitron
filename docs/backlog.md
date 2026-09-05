@@ -75,7 +75,8 @@ Route A vs B for the till reroute (it decides the till's auth model — **taken 
 [`2026-09-05-till-reroute-route-decision.md`](superpowers/specs/2026-09-05-till-reroute-route-decision.md));
 `tills` vs `devices` (device
 management and the till-enrol screen, [owner]); and the relay choice (ours or off-the-shelf, which
-shapes the control plane). **All three are Track B's first job** — its "decisions first" line below —
+shapes the control plane — **taken 2026-09-05**, neither:
+[`2026-09-05-relay-decision.md`](superpowers/specs/2026-09-05-relay-decision.md)). **All three are Track B's first job** — its "decisions first" line below —
 taken before Track B builds anything; Track 1 and Track C consume them. **Track 1 therefore works areas 2–18 now
 and leaves area 1 (setup wizard — its provisioning paths move under Track B item 2) and area 19
 (device management) until those decisions are recorded.** Everything else in the four tracks
@@ -137,8 +138,9 @@ conflict):**
   mirror today or as a primary (hosted in Spain, so Q16 does not arise); the shared multi-tenant cloud store
   (cloud-storage §2/§9) is DROPPED, and with it the parked *multi-tenant transport* (whole-log reader
   role). Density comes from many isolated instances per host, never from a shared database. The only
-  multi-tenant pieces are the stateless tunnel relay, a small control plane (accounts, subscriptions,
-  instances, relay tokens, rollout — not yet designed) and the preproduction trial demo. Consequence
+  multi-tenant pieces are a small control plane (accounts, subscriptions, instances, WireGuard
+  credentials + public names, rollout — not yet designed) and the preproduction trial demo; the
+  stateless tunnel relay is gone (decision 2026-09-05, `2026-09-05-relay-decision.md`). Consequence
   for recommendation 1 below: the last consumer of FORCE RLS is gone; the replication prototype was
   the only remaining gate on dropping it — **cleared 2026-09-05** (Track A item 2).
 - **The deli gets two boxes + cloud failover on day one** and must survive internet-down, box-down
@@ -221,8 +223,11 @@ credential stays an httpOnly cookie and reaches every host as a tenant-domain co
 primary-issued one-time ticket (LAN-only second box, post-MVP); the native agent is built from the
 start for hardware only (printing first) and never carries browser traffic
 ([`2026-09-05-till-reroute-route-decision.md`](superpowers/specs/2026-09-05-till-reroute-route-decision.md));
-(ii) the relay choice — ours or off-the-shelf (item 2's opening, moved here from Track C; Track C's
-control plane consumes the answer); (iii) `tills` vs `devices` — the decision half of item 7, pulled
+(ii) the relay choice — ours or off-the-shelf (item 2's opening, moved here from Track C) —
+**TAKEN 2026-09-05: no relay.** Replication rides the box↔own-cloud-instance WireGuard link (owner
+decision, Track A session); remote access is the instance forwarding the box's name down the link
+without terminating TLS; `@waitron/tunnel` + its wiring are retired with item 2's build
+([`2026-09-05-relay-decision.md`](superpowers/specs/2026-09-05-relay-decision.md)); (iii) `tills` vs `devices` — the decision half of item 7, pulled
 forward because Track 1's area 19 waits on it; the build and its H2 receipt stay after Track A's
 squash. Record each in this file as it is taken.
 
@@ -238,10 +243,11 @@ squash. Record each in this file as it is taken.
    "mixed config/runtime" deferral); the config-conflict gate keeps only the fence-window case; R3a's
    two deferrals (till reads routed through the display-data node; selling gated on REBOOT completion,
    not the PONR). Rewrite CLAUDE.md §5's "nothing blocks a sale" wording in the same change.
-2. **The cloud standby, end to end (MVP)** — real relay hosting for `@waitron/tunnel` (proven only
-   against a local stand-in; FIRST decide whether the relay is ours or off-the-shelf — Tailscale /
-   cloudflared / frp — the "decisions first" line above), a
-   per-tenant cloud instance provisioning path, then prove by RUNNING: on-prem primary → adopt →
+2. **The cloud standby, end to end (MVP)** — the box↔cloud-instance WireGuard link (relay DECIDED
+   2026-09-05: none; `@waitron/tunnel`, `WAITRON_TUNNEL_*` and the tunnel-aware dispatcher are
+   deleted once the link carries replication, never before — the decisions-first line above), a
+   per-tenant cloud instance provisioning path (the instance also forwards the box's remote name
+   down the link without terminating TLS), then prove by RUNNING: on-prem primary → adopt →
    mirror → human promotion → tills reroute to the promoted cloud → the venue sells and files. A
    second LOCAL box is post-MVP; when it comes, the same adopt path over the LAN with no relay is the
    candidate (wizard mode 4 wraps it).
@@ -282,13 +288,16 @@ control-plane docs):
    dedicated cloud instance per tenant, the only multi-tenant service Waitron will run is a small
    control plane: accounts (a customer of ours, a concept the schema does not have — a tenant is a
    taxpayer, and one customer may own several), subscriptions, instances (which box/VM serves which
-   tenant, its version; region is Spain by decision), relay tokens for the tunnel, and version
+   tenant, its version; region is Spain by decision), a WireGuard keypair + endpoint per box and the
+   box's public names (no relay tokens — the relay is gone, decision 2026-09-05), and version
    rollout per tenant. Density comes from many isolated instances per host, never a shared database.
-   Consumes Track B's relay decision (what the control plane hands out depends on it).
+   Track B's relay decision is taken (2026-09-05, `2026-09-05-relay-decision.md` §3); still open
+   there and this brainstorm's to settle: one name or two for LAN-vs-remote reach.
    Docs-only until designed; nothing here is on the sale path.
 5. **Reconsider the backup container against off-the-shelf** (brainstorm, not a mandate): `WBA1` +
    `artifact-cipher.ts` (whole-dump in memory, restorable only by Waitron code — `pg_dump | age`,
-   tar). The tunnel/relay half of this question moved to Track B's "decisions first" line.
+   tar). The tunnel/relay half of this question moved to Track B's "decisions first" line (taken
+   2026-09-05: no relay).
 6. **De-triplicate the three alta builders — [owner]** in `fiscal-verifactu/src/backend.ts`
    (`recordSale` / `recordCorrection` / `recordSubstitution`; already under *Debt → Fiscal*): needs
    the huella-invariance re-run across all three.
@@ -1261,7 +1270,8 @@ vs gated on an unbuilt foundation or an external dependency:
   the primary-only workers on promotion) + the C2a promote action — see the membership arc above.
 - **Hard-gated (leave until the gate clears):** break-glass secret mint (→ Slice 2); the **restore
   consumer** (backup regime BR-3 — clears R3 rejoin + promote Slice 4; BR-1 producer/encryption LANDED
-  #226); real cloud hosting/relay (cloud-mirror follow-ups, the T1 relay — **MVP-critical since
+  #226); real cloud hosting/relay (cloud-mirror follow-ups, the T1 relay — _2026-09-05: no relay; the
+  box's WireGuard link to its own cloud instance, `2026-09-05-relay-decision.md`_ — **MVP-critical since
   2026-09-05, Track B item 2**); the go-native decision
   (on-device agent); and the **owner-gated fiscal H2** hash-chain sync lane — never landed without
   owner sign-off.
@@ -1325,7 +1335,8 @@ Design: [backup-restore-regime](superpowers/specs/2026-09-04-backup-restore-regi
 
 **Remaining, each its own design pass:**
 
-- **Cloud-mirror follow-ups (deferred).** From B (spec §11, within the semi-trusted-relay threat model,
+- **Cloud-mirror follow-ups (deferred).** _2026-09-05: the B items below retire with `@waitron/tunnel`
+  (`2026-09-05-relay-decision.md`); do not build them._ From B (spec §11, within the semi-trusted-relay threat model,
   each self-healing or fail-closed today): the box→relay control-frame splice race; a max pre-`go`
   frame-length guard; ignore-`go`-before-`ack`; a registration/handshake timeout; a `tunnelHttpClient`
   disposal seam for C's long-running subscriber; SNI-based multi-box routing — all owed to the real T1
