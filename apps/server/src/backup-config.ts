@@ -2,24 +2,41 @@ import { resolve } from "node:path";
 import { AppError } from "@waitron/shared";
 import { isUnset } from "./env-value.js";
 import { positiveInt } from "./config.js";
+import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
+import type { BackupDestination } from "./storage-backend.js";
 import "./errors.js";
 
 /**
- * The scheduled `pg_dump` backup config (slice 4b-ii). OPT-IN and fail-closed, the same posture
- * `loadTunnelConfig`/`loadSyncConfig` take: `WAITRON_BACKUP_DIR` is the off-switch, so a box that
- * sets no backup env gets `undefined` and no backup duty runs. When the dir IS set the whole thing
- * is required — a privileged `WAITRON_BACKUP_DATABASE_URL` `pg_dump` connects as (the app pool's
- * least-privileged role cannot dump every table), and a blank one fails closed rather than resolving
- * to a degenerate connection string ("an empty connection string is a valid connection string",
- * CLAUDE.md §3).
+ * The scheduled `pg_dump` backup config (slice 4b-ii, widened for BR-1 storage fan-out). OPT-IN and
+ * fail-closed, the same posture `loadTunnelConfig`/`loadSyncConfig` take: with no destination
+ * configured the whole thing is `undefined` and no backup duty runs. `WAITRON_BACKUP_DIR` remains the
+ * single-destination convenience — it becomes one local-fs destination with `id: "primary"` —
+ * and `WAITRON_BACKUP_DESTINATIONS` (a JSON array) appends any further destinations after it, so a
+ * box can fan a dump out to more than one place without dropping the simple case. When at least one
+ * destination is configured the whole rest of the config is required: a privileged
+ * `WAITRON_BACKUP_DATABASE_URL` `pg_dump` connects as (the app pool's least-privileged role cannot
+ * dump every table), and an operator `WAITRON_BACKUP_RECOVERY_KEY` the artifact is encrypted under —
+ * required so an unattended backup can never write an unencrypted artifact — with a 12-char floor
+ * shared with the recovery bundle (`MIN_PASSPHRASE_LENGTH`). A blank value for any of these fails
+ * closed rather than resolving to a degenerate default ("an empty connection string is a valid
+ * connection string", CLAUDE.md §3).
  */
 export interface BackupConfig {
+  /** Where dumps are written. At least one destination when this config exists at all; a lone
+   * `WAITRON_BACKUP_DIR` becomes the single entry `{ kind: "local-fs", id: "primary", dir }`.
+   * Ids and resolved dirs are both unique — `parseDestinations` throws `backup.destinations_invalid`
+   * on a duplicate `id` (`reason: "duplicate_id"`) or a duplicate resolved `dir`
+   * (`reason: "duplicate_dir"`, including `WAITRON_BACKUP_DIR` re-listed in the destinations JSON). */
+  destinations: BackupDestination[];
+  /** The operator-held passphrase every backup artifact is encrypted under, from
+   * `WAITRON_BACKUP_RECOVERY_KEY`. Required whenever `destinations` is non-empty; a blank or missing
+   * value throws `backup.recovery_key_missing`, and one under `MIN_PASSPHRASE_LENGTH` characters
+   * throws `backup.recovery_key_too_short`. */
+  recoveryKey: string;
   /** The privileged connection `pg_dump` runs over — a role that can read every table, NOT the app
-   * pool's least-privileged deployment role. Required when `dir` is set; a blank value fails closed. */
+   * pool's least-privileged deployment role. Required when a destination is configured; a blank value
+   * fails closed. */
   databaseUrl: string;
-  /** The ABSOLUTE directory dumps are written to and pruned within. `resolve`d at load so the backup
-   * duty joins timestamped filenames onto a settled base, not one whose meaning shifts with cwd. */
-  dir: string;
   /** How often the backup duty takes a dump, from `WAITRON_BACKUP_INTERVAL_MS`. */
   intervalMs: number;
   /** How many dumps to keep before the oldest is pruned, from `WAITRON_BACKUP_RETAIN` (a positive
@@ -43,26 +60,101 @@ const DEFAULT_BACKUP_STALE_AFTER_MS = 2 * 24 * 60 * 60 * 1000;
 type Env = Record<string, string | undefined>;
 
 /**
- * Enabled iff `WAITRON_BACKUP_DIR` is set (absent OR empty → `undefined` → backup off, via `isUnset`
- * — the same off-switch `loadTunnelConfig` uses for an empty relay url). When on, the backup db url
- * is required and a blank one throws `server.config_invalid` (`required_with_backup_dir`) rather than
- * reaching `pg_dump` as `""`. The dir is `resolve`d to an absolute path — never `resolve("")`, which
- * is cwd (the "empty value is a valid value" trap, CLAUDE.md §3), and here it cannot be, because the
- * `isUnset` gate above has already ruled out the empty value.
+ * `WAITRON_BACKUP_DIR`, if set, becomes the single-destination convenience `{ kind: "local-fs",
+ * id: "primary", dir }` — resolved to an absolute path at load, never `resolve("")` (the
+ * `isUnset` gate above has already ruled the empty value out). `WAITRON_BACKUP_DESTINATIONS`, if set,
+ * is parsed as a JSON array of `{ kind: "local-fs", id, dir }` descriptors and appended after it;
+ * malformed JSON, a non-array, or a shape-invalid entry all throw `backup.destinations_invalid` with
+ * a machine-readable `reason` rather than reaching `pg_dump`/the storage backend with something
+ * unusable.
+ */
+function parseDestinations(env: Env): BackupDestination[] {
+  const out: BackupDestination[] = [];
+  const dir = env.WAITRON_BACKUP_DIR;
+  if (!isUnset(dir)) out.push({ kind: "local-fs", id: "primary", dir: resolve(dir) });
+
+  const extra = env.WAITRON_BACKUP_DESTINATIONS;
+  if (!isUnset(extra)) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(extra);
+    } catch {
+      throw new AppError("backup.destinations_invalid", { reason: "not_json" });
+    }
+    if (!Array.isArray(parsed)) {
+      throw new AppError("backup.destinations_invalid", { reason: "not_array" });
+    }
+    for (const raw of parsed) {
+      const entry = raw as { kind?: unknown; id?: unknown; dir?: unknown } | null;
+      if (
+        typeof entry !== "object" ||
+        entry === null ||
+        entry.kind !== "local-fs" ||
+        typeof entry.id !== "string" ||
+        typeof entry.dir !== "string" ||
+        // An empty id or dir is invalid, not merely present: `resolve("")` is cwd ("an empty
+        // connection string is a valid connection string", CLAUDE.md §3), so this fails closed
+        // BEFORE the resolve below rather than silently backing up to the process working dir.
+        isUnset(entry.id) ||
+        isUnset(entry.dir)
+      ) {
+        throw new AppError("backup.destinations_invalid", { reason: "bad_entry" });
+      }
+      out.push({ kind: "local-fs", id: entry.id, dir: resolve(entry.dir) });
+    }
+  }
+
+  // Reject collisions: two destinations sharing an `id` (the key a backend is logged/pruned under)
+  // or a resolved `dir` (the same directory reached twice — most easily by re-listing
+  // `WAITRON_BACKUP_DIR` in `WAITRON_BACKUP_DESTINATIONS`) are a config mistake, not a deliberate
+  // double-write. Dirs are compared AFTER `resolve`, so `/mnt/a` and `/mnt/a/` collide.
+  const seenIds = new Set<string>();
+  const seenDirs = new Set<string>();
+  for (const d of out) {
+    if (seenIds.has(d.id)) {
+      throw new AppError("backup.destinations_invalid", { reason: "duplicate_id" });
+    }
+    seenIds.add(d.id);
+    if (seenDirs.has(d.dir)) {
+      throw new AppError("backup.destinations_invalid", { reason: "duplicate_dir" });
+    }
+    seenDirs.add(d.dir);
+  }
+  return out;
+}
+
+/**
+ * Enabled iff at least one destination is configured (`WAITRON_BACKUP_DIR` and/or
+ * `WAITRON_BACKUP_DESTINATIONS` — see `parseDestinations`); with neither set this returns
+ * `undefined` and no backup duty runs, the same off-switch `loadTunnelConfig` uses for an empty
+ * relay url. When enabled, the backup db url and the recovery key are both required: a blank
+ * `WAITRON_BACKUP_DATABASE_URL` throws `server.config_invalid` (`required_with_backup_destination`), a
+ * missing/blank `WAITRON_BACKUP_RECOVERY_KEY` throws `backup.recovery_key_missing`, and one shorter
+ * than `MIN_PASSPHRASE_LENGTH` throws `backup.recovery_key_too_short` — fail-closed rather than
+ * letting an unattended backup ship unencrypted or under a guessable key.
  */
 export function loadBackupConfig(env: Env): BackupConfig | undefined {
-  const rawDir = env.WAITRON_BACKUP_DIR;
-  if (isUnset(rawDir)) return undefined;
+  const destinations = parseDestinations(env);
+  if (destinations.length === 0) return undefined;
+
   const databaseUrl = env.WAITRON_BACKUP_DATABASE_URL;
   if (isUnset(databaseUrl)) {
     throw new AppError("server.config_invalid", {
       variable: "WAITRON_BACKUP_DATABASE_URL",
-      reason: "required_with_backup_dir",
+      reason: "required_with_backup_destination",
     });
   }
+
+  const recoveryKey = env.WAITRON_BACKUP_RECOVERY_KEY;
+  if (isUnset(recoveryKey)) throw new AppError("backup.recovery_key_missing", {});
+  if (recoveryKey.length < MIN_PASSPHRASE_LENGTH) {
+    throw new AppError("backup.recovery_key_too_short", { min: MIN_PASSPHRASE_LENGTH });
+  }
+
   return {
+    destinations,
+    recoveryKey,
     databaseUrl,
-    dir: resolve(rawDir),
     intervalMs: positiveInt(env, "WAITRON_BACKUP_INTERVAL_MS", DEFAULT_BACKUP_INTERVAL_MS),
     retain: positiveInt(env, "WAITRON_BACKUP_RETAIN", DEFAULT_BACKUP_RETAIN),
     staleAfterMs: positiveInt(env, "WAITRON_BACKUP_STALE_AFTER_MS", DEFAULT_BACKUP_STALE_AFTER_MS),

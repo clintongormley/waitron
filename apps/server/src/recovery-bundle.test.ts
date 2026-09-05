@@ -1,3 +1,4 @@
+import { randomBytes, createCipheriv } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import {
@@ -6,6 +7,7 @@ import {
   decryptBundle,
   type BundleFiles,
 } from "./recovery-bundle.js";
+import { deriveKey, SCRYPT_PARAMS } from "./scrypt-kdf.js";
 
 const FILES: BundleFiles = {
   "secrets.env": "WAITRON_CREDENTIALS_KEY=abc\nWAITRON_CREDENTIALS_KEY_VERSION=1\n",
@@ -122,6 +124,45 @@ describe("recovery-bundle envelope", () => {
     expect(() => decryptBundle(JSON.stringify(env), PASS)).toThrow(
       new AppError("recovery.bundle_invalid", { reason: "malformed" }),
     );
+  });
+
+  it("decrypts a bundle whose envelope records a non-default, in-bounds scrypt cost (self-describing KDF)", () => {
+    // A bundle is an external, operator-held artifact meant to survive indefinitely. It records its
+    // OWN kdf.N/r/p precisely so it stays decryptable after SCRYPT_PARAMS is later hardened — decrypt
+    // must derive with the ENVELOPE's recorded cost, not today's compiled default. Simulate an
+    // envelope sealed under a lighter (but still in-bounds) cost than the current default to prove
+    // that path: N=2^14 here vs the default N=2^17.
+    const lighterCost = {
+      N: 2 ** 14,
+      r: SCRYPT_PARAMS.r,
+      p: SCRYPT_PARAMS.p,
+      keylen: SCRYPT_PARAMS.keylen,
+      maxmem: SCRYPT_PARAMS.maxmem,
+    };
+    expect(lighterCost.N).not.toBe(SCRYPT_PARAMS.N); // guards the premise of this test
+    const salt = randomBytes(16);
+    const iv = randomBytes(12);
+    const key = deriveKey(PASS, salt, lighterCost);
+    const cipher = createCipheriv("aes-256-gcm", key, iv);
+    const ct = Buffer.concat([
+      cipher.update(Buffer.from(JSON.stringify(FILES), "utf8")),
+      cipher.final(),
+    ]);
+    const envelope = {
+      v: 1,
+      kdf: {
+        name: "scrypt",
+        N: lighterCost.N,
+        r: lighterCost.r,
+        p: lighterCost.p,
+        salt: salt.toString("base64"),
+      },
+      cipher: "aes-256-gcm",
+      iv: iv.toString("base64"),
+      tag: cipher.getAuthTag().toString("base64"),
+      ct: ct.toString("base64"),
+    };
+    expect(decryptBundle(JSON.stringify(envelope), PASS)).toEqual(FILES);
   });
 
   it("rejects an over-large ct on STRING length, without decoding it (DoS guard)", () => {

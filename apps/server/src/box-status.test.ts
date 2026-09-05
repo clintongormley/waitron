@@ -74,21 +74,28 @@ describe("collectBoxStatus", () => {
     ).rejects.toThrow("lag read failed");
   });
 
-  it("passes a configured backup summary through from its reader", async () => {
+  it("passes a per-destination backup summary through from its reader", async () => {
     const status = await collectBoxStatus({
       ...base,
       backup: async () => ({
         configured: true,
-        lastBackupAt: "2026-08-29T09:00:00.000Z",
-        ageSeconds: 3600,
-        stale: false,
+        destinations: [
+          {
+            id: "primary",
+            lastBackupAt: "2026-08-29T09:00:00.000Z",
+            ageSeconds: 3600,
+            stale: false,
+          },
+          { id: "offsite", lastBackupAt: null, ageSeconds: null, stale: true },
+        ],
       }),
     });
     expect(status.backup).toEqual({
       configured: true,
-      lastBackupAt: "2026-08-29T09:00:00.000Z",
-      ageSeconds: 3600,
-      stale: false,
+      destinations: [
+        { id: "primary", lastBackupAt: "2026-08-29T09:00:00.000Z", ageSeconds: 3600, stale: false },
+        { id: "offsite", lastBackupAt: null, ageSeconds: null, stale: true },
+      ],
     });
   });
 

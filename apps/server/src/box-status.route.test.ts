@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
@@ -9,7 +9,9 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { createHealthState } from "./health.js";
+import { readBackupStatus, type BackupStatus } from "./backup-status.js";
 import { mountBoxStatusApi } from "./box-status.js";
+import { buildBackend } from "./local-fs-backend.js";
 import { mountManagementApi } from "./management-api.js";
 import { FIXTURE_CERT_PEM } from "./testing/tls-fixture.js";
 
@@ -89,7 +91,11 @@ async function setupTenant(): Promise<{ tenantId: string; nodeId: string; manage
 function buildApp(
   tenantId: string,
   nodeId: string,
-  opts: { now: Date; tlsCertPath: string | undefined },
+  opts: {
+    now: Date;
+    tlsCertPath: string | undefined;
+    readBackup?: () => Promise<BackupStatus>;
+  },
 ): Hono {
   const app = new Hono();
   mountManagementApi(
@@ -114,7 +120,7 @@ function buildApp(
       tlsCertPath: opts.tlsCertPath,
       readReplicationLag: undefined,
       readDisposal: undefined,
-      readBackup: undefined,
+      readBackup: opts.readBackup,
       readMode: () => "primary",
       readSingletonRole: () => "primary",
     },
@@ -164,6 +170,37 @@ describe("GET /api/box/status (real postgres)", () => {
     expect(body.replication).toEqual({ configured: false }); // no lag reader
     expect(body.backup).toEqual({ configured: false });
     expect(body.time.source).toMatch(/timedatectl|unavailable/);
+  });
+
+  it("flows the per-destination backup shape through the route, reading a .dump.enc artifact as FRESH", async () => {
+    // The success-path twin of the `configured:false` case above: a real `LocalFsBackend` holding an
+    // encrypted `waitron-<ts>.dump.enc` artifact must read FRESH per destination over the actual HTTP
+    // route + manager gate — the regression Task 5 left (the old `.dump`-anchored reader reported a
+    // working backup permanently stale) proven end-to-end, not just at the unit level.
+    const now = new Date("2026-08-29T10:00:00Z");
+    const dir = mkdtempSync(join(tmpdir(), "box-status-backup-"));
+    const artifact = join(dir, "waitron-20260829T095900Z.dump.enc");
+    writeFileSync(artifact, "ciphertext");
+    const mtime = new Date(now.getTime() - 30_000); // 30s old — inside the 60s stale window
+    utimesSync(artifact, mtime, mtime);
+    const backend = buildBackend({ kind: "local-fs", id: "primary", dir });
+
+    const { tenantId, nodeId } = await setupTenant();
+    const backupApp = buildApp(tenantId, nodeId, {
+      now,
+      tlsCertPath: undefined,
+      readBackup: () => readBackupStatus([backend], 60_000, now),
+    });
+    const cookie = await login(backupApp, MANAGER_EMAIL);
+    const res = await backupApp.request("/api/box/status", { headers: { cookie } });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.backup).toEqual({
+      configured: true,
+      destinations: [
+        { id: "primary", lastBackupAt: mtime.toISOString(), ageSeconds: 30, stale: false },
+      ],
+    });
   });
 });
 

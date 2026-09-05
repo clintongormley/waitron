@@ -1,6 +1,5 @@
 import { execFile } from "node:child_process";
-import { readdir, rename, stat, unlink } from "node:fs/promises";
-import { join } from "node:path";
+import { rename, unlink } from "node:fs/promises";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -18,12 +17,12 @@ export type PgDumpRunner = (args: {
 
 /**
  * Dump via `inner` to a `<outFile>.partial` temp name, then atomically `rename` it onto `outFile` only
- * on success. This is the guard that stops a TRUNCATED dump from surfacing as a fresh, recovery-ready
- * backup: a dump killed mid-write — the routine shutdown path (`backupController.abort()` → SIGTERM to
- * `pg_dump`) or a full disk — would otherwise leave a partial `waitron-*.dump` with a fresh mtime that
- * `readBackupStatus` reports as `lastBackupAt`/`stale:false`, a dangerously wrong "recovery-ready"
- * signal since backup IS the cold-recovery path (CLAUDE.md §5). The `.partial` suffix does NOT match
- * `DUMP_FILE_NAME`, so `readBackupStatus`/`pruneOldDumps` never count the temp file; `rename` is atomic
+ * on success. This is the guard that stops a TRUNCATED dump from being encrypted and fanned out as a
+ * fresh, recovery-ready backup: a dump killed mid-write — the routine shutdown path
+ * (`backupController.abort()` → SIGTERM to `pg_dump`) or a full disk — leaves only the `.partial`, so
+ * the sweep's `readFile(staged)` (backup-sweep.ts) either reads a COMPLETE dump or fails with ENOENT
+ * and never encrypts a truncated one, which would be a dangerously wrong "recovery-ready" artifact
+ * since backup IS the cold-recovery path (CLAUDE.md §5). `rename` is atomic
  * within a directory, so the final name only ever appears fully written. On any failure the leftover
  * `.partial` is removed best-effort (so partials don't accumulate) and the error is re-thrown so
  * `runBackupSweep` logs `backup.failed`. `inner` is injectable so this temp-then-rename logic is
@@ -63,45 +62,20 @@ const pgDumpShellOut: PgDumpRunner = async ({ databaseUrl, outFile, signal }) =>
 export const realPgDump: PgDumpRunner = (args) => dumpAtomic(args, pgDumpShellOut);
 /* v8 ignore stop */
 
+/** The key-naming convention every backup artifact shares: `dumpFileName` builds names from it, and
+ * both the sweep's prune (`backup-sweep.ts`) and the status reader (`backup-status.ts`) scan
+ * `list(BACKUP_KEY_PREFIX)` for it. Single source of truth so the three cannot drift apart. */
+export const BACKUP_KEY_PREFIX = "waitron-";
+
 /** A filesystem-safe, lexically-sortable dump filename for `now`: `waitron-<basic-ISO>.dump`, e.g.
  * `waitron-20260829T175501Z.dump`. No colons (Windows/tooling safe) and second-precision basic ISO,
- * so a lexical sort of these names is a chronological sort — which is what `pruneOldDumps` relies on. */
+ * so a lexical sort of these names is a chronological sort. The sweep stamps the staging dump (and,
+ * with the `.enc` suffix, the fanned-out artifact key) with this; pruning is per-backend off
+ * `list(BACKUP_KEY_PREFIX)` (backup-sweep.ts), not by re-reading the staging dir. */
 export function dumpFileName(now: Date): string {
   const stamp = now
     .toISOString()
     .replace(/[-:]/g, "")
     .replace(/\.\d+Z$/, "Z");
-  return `waitron-${stamp}.dump`;
-}
-
-/** Matches the `waitron-<stamp>.dump` filenames `dumpFileName` emits — the single source of truth for
- * that convention, shared by `pruneOldDumps` here and `readBackupStatus` (backup-status.ts). */
-export const DUMP_FILE_NAME = /^waitron-.*\.dump$/;
-
-/** Keep the newest `retain` `waitron-*.dump` files in `dir` and unlink the rest. Newest-first is a
- * descending NAME sort, which equals age order because `dumpFileName` is sortable. Non-matching files
- * are ignored, and a missing `dir` is tolerated (returns without error). A candidate that is not a
- * regular file (e.g. a directory named like a dump) is skipped rather than unlinked — the same
- * `isFile()` guard `readBackupStatus` applies — so a `waitron-*.dump` DIR never throws EISDIR/EPERM
- * every tick. */
-export async function pruneOldDumps(dir: string, retain: number): Promise<void> {
-  let entries: string[];
-  try {
-    entries = await readdir(dir);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
-    throw err;
-  }
-  const dumps = entries
-    .filter((name) => DUMP_FILE_NAME.test(name))
-    .sort()
-    .reverse();
-  await Promise.all(
-    dumps.slice(retain).map(async (name) => {
-      const path = join(dir, name);
-      const info = await stat(path);
-      if (!info.isFile()) return; // a dir named like a dump is not a backup — don't unlink
-      await unlink(path);
-    }),
-  );
+  return `${BACKUP_KEY_PREFIX}${stamp}.dump`;
 }

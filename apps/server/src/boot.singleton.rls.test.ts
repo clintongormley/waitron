@@ -258,6 +258,9 @@ function dutyEnv(port: number) {
     WAITRON_TUNNEL_TOKEN: "tunnel-secret",
     WAITRON_BACKUP_DIR: backupDir,
     WAITRON_BACKUP_DATABASE_URL: "postgres://user:pw@127.0.0.1:1/db",
+    // Required since BR-1 Task 4 (fail-closed like the db url) — without it loadBackupConfig throws
+    // backup.recovery_key_missing before either boot reaches the wiring this suite asserts.
+    WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
   };
 }
 

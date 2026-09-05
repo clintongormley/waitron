@@ -107,6 +107,7 @@ import { loadBackupConfig } from "./backup-config.js";
 import { assertBackupCanReadFiscal } from "./backup-probe.js";
 import { runBackupSweep } from "./backup-sweep.js";
 import { readBackupStatus } from "./backup-status.js";
+import { buildBackend } from "./local-fs-backend.js";
 import { fetchHttpClient } from "./sync-http.js";
 import { tunnelHttpClient } from "./tunnel-http.js";
 import { readOnlyGate } from "./read-only-gate.js";
@@ -1488,6 +1489,18 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // secondary) the config is simply not consulted (the `isSingletonPrimary` gate), matching retention/tunnel.
   const backupConfig = loadBackupConfig(env);
   const backupController = new AbortController();
+  // Build the `StorageBackend`s ONCE, here in boot scope, so the sweep worker below and the
+  // box-status freshness reader further down share the SAME array — one `buildBackend` per configured
+  // destination, not two divergent lists. Empty when backup is off (`backupConfig === undefined`), in
+  // which case the sweep block is skipped and the reader is never wired (`backupWorker` stays
+  // undefined), so the empty array is never read.
+  const backupBackends = backupConfig?.destinations.map(buildBackend) ?? [];
+  // The pre-encryption dump is staged under `<stateDir>/backup-staging`, NOT an OS tmp dir: it must
+  // never sit (even briefly) inside a directory a destination's `list("waitron-")` scan walks, or a
+  // stray plaintext dump could be read back as if it were a stored artifact — and under stateDir it
+  // lives on the box's persistent volume beside its other state, not on a tmpfs that may be wiped
+  // mid-dump. `runBackupSweep` re-creates it (recursively) each tick, so a wiped dir self-heals.
+  const backupStagingDir = join(config.stateDir, "backup-staging");
   let backupWorker: Promise<void> | undefined;
   if (isSingletonPrimary && backupConfig !== undefined) {
     let probeDb: Database | undefined;
@@ -1495,8 +1508,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       probeDb = await createPostgresDb(backupConfig.databaseUrl);
       await assertBackupCanReadFiscal(probeDb);
       backupWorker = runBackupSweep({
-        dir: backupConfig.dir,
+        // The full fan-out: the same encrypted artifact is `put` to EVERY configured destination each
+        // tick (`WAITRON_BACKUP_DIR`'s "primary" entry plus any in `WAITRON_BACKUP_DESTINATIONS`).
+        backends: backupBackends,
+        stagingDir: backupStagingDir,
         databaseUrl: backupConfig.databaseUrl,
+        recoveryKey: backupConfig.recoveryKey,
         intervalMs: backupConfig.intervalMs,
         retain: backupConfig.retain,
         signal: backupController.signal,
@@ -1608,10 +1625,13 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // The backup freshness reader (Task 6): present only when the RLS probe above ENABLED backup, so
       // `configured:false` covers both "no backup env" and "backup env set but the role is fenced /
       // unreachable" — the box-status surface reports the effective state, not merely the config. Reads
-      // the SAME dir `runBackupSweep` writes into, scanning for the newest dump per request; `now` is the
-      // live wall-clock factory (`() => new Date()`) established at boot, CALLED per box-status request so
-      // `ageSeconds` is measured against request time. `backupConfig!` is safe: `backupWorker` is only ever assigned when `backupConfig`
-      // was defined (the probe block above runs under `backupConfig !== undefined`).
+      // freshness PER destination off the SAME `backupBackends` the sweep writes to, each via
+      // `list("waitron-")` (which matches the encrypted `.dump.enc` artifacts the sweep produces); `now`
+      // is the live wall-clock factory (`() => new Date()`) established at boot, CALLED per box-status
+      // request so `ageSeconds` is measured against request time. `backupConfig!` is safe: `backupWorker`
+      // is only ever assigned when `backupConfig` was defined (the probe block above runs under
+      // `backupConfig !== undefined`), and when it is defined `backupBackends` is that config's mapped
+      // destinations.
       // The producer-side disposal guard (membership rejoin R2, design §5.1): wraps the shared
       // `readFenceDrainProgress` (above) with the carrier id for the wire shape. Absent (undefined) on a
       // serving node → box-status reports disposal.applicable:false. The `carrierNodeId !== undefined`
@@ -1623,7 +1643,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
           : undefined,
       readBackup:
         backupWorker !== undefined
-          ? () => readBackupStatus(backupConfig!.dir, backupConfig!.staleAfterMs, now())
+          ? () => readBackupStatus(backupBackends, backupConfig!.staleAfterMs, now())
           : undefined,
       // Report the effective mode the box is actually serving as — the same holder the read-only gate
       // and mirror-session middlewares read — so the status matches what the box enforces and tracks a

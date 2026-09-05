@@ -1,11 +1,6 @@
-import {
-  randomBytes,
-  scryptSync,
-  createCipheriv,
-  createDecipheriv,
-  type DecipherGCM,
-} from "node:crypto";
+import { randomBytes, createCipheriv, createDecipheriv, type DecipherGCM } from "node:crypto";
 import { AppError } from "@waitron/shared";
+import { deriveKey, SCRYPT_PARAMS } from "./scrypt-kdf.js";
 import "./errors.js";
 
 /** The floor for a bundle passphrase. The bundle wraps the unrecoverable vault master key, so a weak
@@ -17,14 +12,11 @@ export const MIN_PASSPHRASE_LENGTH = 12;
 export type BundleFiles = Record<string, string>;
 
 const ENVELOPE_VERSION = 1;
-// scrypt work factor. N=2^17 per OWASP 2024 — the bundle wraps the vault master key AND the TLS
-// private keys and is a downloadable, offline-brute-forceable file, so the KDF must be strong. At
-// N=2^17, r=8 the derivation needs exactly 128*N*r = 134,217,728 bytes = 128 MiB, and scryptSync
-// throws at the exact boundary; maxmem is 256 MiB to sit above 128*N*r with headroom. keylen 32 =
-// AES-256.
-const SCRYPT = { N: 2 ** 17, r: 8, p: 1, keylen: 32, maxmem: 256 * 1024 * 1024 } as const;
 // Bounds an UNTRUSTED envelope's KDF cost so a hand-edited bundle cannot make decrypt allocate wildly.
-// The operator runs decrypt on their own bundle, so this is defence-in-depth, not a security boundary.
+// decryptBundle derives with the ENVELOPE's OWN recorded kdf.N/r/p (self-describing, so a bundle
+// stays decryptable after SCRYPT_PARAMS is later hardened — see decryptBundle), so this bound is what
+// actually caps the real scryptSync call's memory use, not just the envelope's shape. The operator
+// runs decrypt on their own bundle, so this is defence-in-depth, not a security boundary.
 const MAX_SCRYPT_N = 2 ** 20;
 // Bounds an UNTRUSTED envelope's ciphertext so a hostile bundle cannot make decrypt allocate a huge
 // Buffer (from `env.ct`) BEFORE the GCM auth failure. The bundle only ever holds 6 small secret files
@@ -43,17 +35,13 @@ interface Envelope {
   ct: string;
 }
 
-function deriveKey(passphrase: string, salt: Buffer, N: number, r: number, p: number): Buffer {
-  return scryptSync(passphrase, salt, SCRYPT.keylen, { N, r, p, maxmem: SCRYPT.maxmem });
-}
-
 export function encryptBundle(files: BundleFiles, passphrase: string): string {
   if (passphrase.length < MIN_PASSPHRASE_LENGTH) {
     throw new AppError("recovery.passphrase_too_short", { min: MIN_PASSPHRASE_LENGTH });
   }
   const salt = randomBytes(16);
   const iv = randomBytes(12);
-  const key = deriveKey(passphrase, salt, SCRYPT.N, SCRYPT.r, SCRYPT.p);
+  const key = deriveKey(passphrase, salt);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
   const ct = Buffer.concat([
     cipher.update(Buffer.from(JSON.stringify(files), "utf8")),
@@ -61,7 +49,13 @@ export function encryptBundle(files: BundleFiles, passphrase: string): string {
   ]);
   const envelope: Envelope = {
     v: ENVELOPE_VERSION,
-    kdf: { name: "scrypt", N: SCRYPT.N, r: SCRYPT.r, p: SCRYPT.p, salt: salt.toString("base64") },
+    kdf: {
+      name: "scrypt",
+      N: SCRYPT_PARAMS.N,
+      r: SCRYPT_PARAMS.r,
+      p: SCRYPT_PARAMS.p,
+      salt: salt.toString("base64"),
+    },
     cipher: "aes-256-gcm",
     iv: iv.toString("base64"),
     tag: cipher.getAuthTag().toString("base64"),
@@ -114,8 +108,10 @@ function parseEnvelope(envelopeJson: string): Envelope {
     // gross cases, NOT the real backstop: OpenSSL's actual limit is slightly larger
     // (~128*r*(N+2+p)), so a shape-valid envelope just under it could still throw a raw
     // ERR_CRYPTO_INVALID_SCRYPT_PARAMS out of scryptSync — which decryptBundle's try/catch turns
-    // into our contract error. That try/catch, not this bound, is what guarantees no raw 500.
-    128 * N * r > SCRYPT.maxmem ||
+    // into our contract error. That try/catch, not this bound, is what guarantees no raw 500. These
+    // values genuinely reach scryptSync (decryptBundle derives with the envelope's own kdf.N/r/p), so
+    // unlike a pure shape check, getting this bound wrong lets a hostile N actually reach scryptSync.
+    128 * N * r > SCRYPT_PARAMS.maxmem ||
     // Cap the base64 STRING length before decoding: salt/iv/tag decode to exactly 16/12/16 bytes
     // (~24 base64 chars), so 64 is generous. Without this, a hostile huge salt/iv/tag string would
     // allocate a large Buffer below just to be rejected by the exact-length check — same DoS shape
@@ -138,13 +134,16 @@ export function decryptBundle(envelopeJson: string, passphrase: string): BundleF
   const env = parseEnvelope(envelopeJson);
   let decipher: DecipherGCM;
   try {
-    const key = deriveKey(
-      passphrase,
-      Buffer.from(env.kdf.salt, "base64"),
-      env.kdf.N,
-      env.kdf.r,
-      env.kdf.p,
-    );
+    // Derive with the ENVELOPE's own recorded cost, not the compiled default: a bundle is an
+    // external, operator-held artifact meant to survive indefinitely, and it stays decryptable after
+    // SCRYPT_PARAMS is hardened only if decrypt honours whatever cost it was actually sealed under.
+    const key = deriveKey(passphrase, Buffer.from(env.kdf.salt, "base64"), {
+      N: env.kdf.N,
+      r: env.kdf.r,
+      p: env.kdf.p,
+      keylen: SCRYPT_PARAMS.keylen,
+      maxmem: SCRYPT_PARAMS.maxmem,
+    });
     decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(env.iv, "base64"));
     decipher.setAuthTag(Buffer.from(env.tag, "base64"));
   } catch {
