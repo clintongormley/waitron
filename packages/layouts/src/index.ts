@@ -30,6 +30,14 @@ export {
   deleteCanvas,
   getCanvasForFormFactor,
 } from "./canvas-store.js";
+export {
+  listDeviceProfiles,
+  getDeviceProfile,
+  createDeviceProfile,
+  updateDeviceProfile,
+  deleteDeviceProfile,
+} from "./device-profile-store.js";
+export type { DeviceProfileRow } from "./device-profile-store.js";
 export { getTenantTheme, putTenantTheme } from "./theme-store.js";
 export { getReceipt, putReceipt } from "./receipt-store.js";
 

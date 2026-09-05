@@ -9,12 +9,12 @@ import { CAPABILITY_FLAGS, type CapabilityFlag, FORM_FACTORS, type FormFactor } 
  */
 export function validateCapabilities(input: unknown): CapabilityFlag[] {
   if (!Array.isArray(input)) {
-    throw new AppError("device_profile.invalid", { field: "capabilities" });
+    throw new AppError("device_profile.invalid", { reason: "bad_capabilities" });
   }
   const out: CapabilityFlag[] = [];
   for (const raw of input) {
     if (typeof raw !== "string" || !(CAPABILITY_FLAGS as readonly string[]).includes(raw)) {
-      throw new AppError("device_profile.invalid", { field: "capabilities" });
+      throw new AppError("device_profile.invalid", { reason: "bad_capabilities" });
     }
     const flag = raw as CapabilityFlag;
     if (!out.includes(flag)) out.push(flag);

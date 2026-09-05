@@ -22,6 +22,7 @@ describe("validateCapabilities", () => {
     } catch (e) {
       expect(e).toBeInstanceOf(AppError);
       expect((e as AppError).code).toBe("device_profile.invalid");
+      expect((e as AppError).params).toEqual({ reason: "bad_capabilities" });
     }
   });
 });

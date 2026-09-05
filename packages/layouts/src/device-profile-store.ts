@@ -1,0 +1,248 @@
+import "./errors.js";
+import {
+  deviceProfiles,
+  isUniqueViolation,
+  pgErrorConstraint,
+  uniqueViolationConstraint,
+} from "@waitron/db";
+import type { Transaction } from "@waitron/db";
+import { authorizeManager } from "@waitron/identity";
+import { AppError } from "@waitron/shared";
+import { and, asc, eq, sql } from "drizzle-orm";
+import type { CapabilityFlag } from "./canvas.js";
+import { validateCapabilities } from "./device-profile.js";
+
+/**
+ * The list/get/create/update/delete service over `device_profiles` (design 2026-09-05 §5.1). MANY rows
+ * per tenant, keyed by `id`, names unique per tenant. The twin of `canvas-store.ts`, sharing its
+ * shape exactly — read that file's header for the (tx, …)-is-caller-scoped / no-GUC-set convention.
+ *
+ * Every function takes a `(tx, …)` the CALLER has already scoped — the management routes open it with
+ * `withTenant(deps.db, tenantId, …)` + `asAppUser(tx)`, so the app role's tenant-isolation policy
+ * supplies `current_tenant_id()` and no function here sets a GUC. Proven under that exact shape in
+ * `device-profile-store.rls.test.ts` (real Postgres — RLS as the app role is a false pass on PGlite,
+ * CLAUDE.md §4).
+ *
+ * The writers run, in order: (1) `authorizeManager(..., "till.configure")` — the write gate, before
+ * any DB write, proven by-deletion in the suite; (2) `validateCapabilities` — fail-closed on an
+ * unknown capability flag (throws `device_profile.invalid` {reason: "bad_capabilities"} before the
+ * write, since capabilities drive the /api/pay + /api/drawer firewall); (3) the drizzle write, whose
+ * 23505 on the per-tenant name unique becomes `device_profile.name_taken` and whose 23503 on the
+ * tenant-consistent composite FK `device_profiles_canvas_fk` becomes `device_profile.invalid`
+ * {reason: "bad_canvas_ref"} (see `translateWriteError`). `deleteDeviceProfile` authorises but has no
+ * capabilities to validate. Reads return `capabilities` as PARSED jsonb (an array) — no `::text[]`
+ * cast: it is a jsonb column, not PG `name[]` (CLAUDE.md §4's cast note is about `name[]`). The `as`
+ * cast re-attaches the `CapabilityFlag[]` shape the plain-jsonb column drops (it is not
+ * `.$type<>()`-annotated, to avoid a `@waitron/layouts` → `@waitron/db` circular dependency, see
+ * `packages/db/src/schema/device-profiles.ts`).
+ */
+
+/** The shape every read and write returns: identity, name, the optional canvas reference, and the
+ * validated capability set. `canvasId` is `null` when the profile falls back to the form-factor
+ * default canvas (design §5.3). */
+export type DeviceProfileRow = {
+  id: string;
+  name: string;
+  canvasId: string | null;
+  capabilities: CapabilityFlag[];
+};
+
+const FOREIGN_KEY_VIOLATION = "23503";
+
+/**
+ * Translate the two driver errors the profile write paths care about into their domain codes, and
+ * re-throw anything else untouched:
+ *   - a `device_profiles_tenant_name_key` collision (a duplicate name per tenant, SQLSTATE 23505) →
+ *     `device_profile.name_taken` — the `asNameTaken` twin from `canvas-store.ts`, matched on the
+ *     CONSTRAINT NAME so the composite `device_profiles_tenant_id_key` (the FK target devices point
+ *     at, a cryptographically-unreachable `defaultRandom()` clash on writes) is re-thrown untouched,
+ *     with the same "no constraint name reported ⇒ translate" fallback for PGlite;
+ *   - a `device_profiles_canvas_fk` violation (a `canvas_id` that is absent or belongs to another
+ *     tenant, SQLSTATE 23503) → `device_profile.invalid` {reason: "bad_canvas_ref"}. Matched on the
+ *     constraint name so the `tenant_id → tenants` FK (server-controlled, never client input) can
+ *     never be mislabelled. The name is the only 23503 a client value can trip here.
+ * The 23503 detection uses `@waitron/db`'s `pgErrorConstraint` (a cause-chain walk), the same
+ * mechanism `@waitron/printing`'s `printers.ts` uses, not a top-level `.code` read.
+ */
+function translateWriteError(err: unknown): never {
+  if (isUniqueViolation(err)) {
+    const constraint = uniqueViolationConstraint(err);
+    if (constraint === undefined || constraint === "device_profiles_tenant_name_key") {
+      throw new AppError("device_profile.name_taken", {});
+    }
+  }
+  if (pgErrorConstraint(err, FOREIGN_KEY_VIOLATION) === "device_profiles_canvas_fk") {
+    throw new AppError("device_profile.invalid", { reason: "bad_canvas_ref" });
+  }
+  throw err;
+}
+
+/** All of the current tenant's device profiles, ordered by name. RLS scopes the read to the tenant. */
+export async function listDeviceProfiles(
+  tx: Transaction,
+  tenantId: string,
+): Promise<DeviceProfileRow[]> {
+  const rows = await tx
+    .select({
+      id: deviceProfiles.id,
+      name: deviceProfiles.name,
+      canvasId: deviceProfiles.canvasId,
+      capabilities: deviceProfiles.capabilities,
+    })
+    .from(deviceProfiles)
+    .where(eq(deviceProfiles.tenantId, tenantId))
+    .orderBy(asc(deviceProfiles.name));
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    canvasId: row.canvasId,
+    capabilities: row.capabilities as CapabilityFlag[],
+  }));
+}
+
+/** One device profile by id, or `undefined` when the tenant has no such profile. */
+export async function getDeviceProfile(
+  tx: Transaction,
+  tenantId: string,
+  id: string,
+): Promise<DeviceProfileRow | undefined> {
+  const [row] = await tx
+    .select({
+      id: deviceProfiles.id,
+      name: deviceProfiles.name,
+      canvasId: deviceProfiles.canvasId,
+      capabilities: deviceProfiles.capabilities,
+    })
+    .from(deviceProfiles)
+    .where(and(eq(deviceProfiles.tenantId, tenantId), eq(deviceProfiles.id, id)));
+  if (row === undefined) return undefined;
+  return {
+    id: row.id,
+    name: row.name,
+    canvasId: row.canvasId,
+    capabilities: row.capabilities as CapabilityFlag[],
+  };
+}
+
+/** Create a device profile for the tenant, returning the stored row. Manager/admin only
+ * (`till.configure`). */
+export async function createDeviceProfile(
+  tx: Transaction,
+  input: {
+    managementSessionId: string;
+    tenantId: string;
+    name: string;
+    canvasId: string | null | undefined;
+    capabilities: unknown;
+  },
+): Promise<DeviceProfileRow> {
+  await authorizeManager(tx, {
+    managementSessionId: input.managementSessionId,
+    permission: "till.configure",
+  });
+  const capabilities = validateCapabilities(input.capabilities);
+  try {
+    const [row] = await tx
+      .insert(deviceProfiles)
+      .values({
+        tenantId: input.tenantId,
+        name: input.name,
+        canvasId: input.canvasId ?? null,
+        capabilities,
+      })
+      .returning({
+        id: deviceProfiles.id,
+        name: deviceProfiles.name,
+        canvasId: deviceProfiles.canvasId,
+        capabilities: deviceProfiles.capabilities,
+      });
+    return {
+      id: row!.id,
+      name: row!.name,
+      canvasId: row!.canvasId,
+      capabilities: row!.capabilities as CapabilityFlag[],
+    };
+  } catch (error) {
+    translateWriteError(error);
+  }
+}
+
+/**
+ * Replace a profile's name, canvas reference and capabilities in place, returning the stored row.
+ * Manager/admin only (`till.configure`). An absent id (or another tenant's row, RLS-hidden) throws
+ * `device_profile.not_found` — the by-id config-CRUD idiom `updateCanvas` uses, read back via
+ * `.returning({ id })` so a PUT that matched zero rows is a 404, never a masked "saved" 204. A name
+ * collision throws `device_profile.name_taken`, a bad canvas reference `device_profile.invalid`
+ * {reason: "bad_canvas_ref"} (see `translateWriteError`).
+ */
+export async function updateDeviceProfile(
+  tx: Transaction,
+  input: {
+    managementSessionId: string;
+    tenantId: string;
+    id: string;
+    name: string;
+    canvasId: string | null | undefined;
+    capabilities: unknown;
+  },
+): Promise<DeviceProfileRow> {
+  await authorizeManager(tx, {
+    managementSessionId: input.managementSessionId,
+    permission: "till.configure",
+  });
+  const capabilities = validateCapabilities(input.capabilities);
+  let updated: DeviceProfileRow[];
+  try {
+    const rows = await tx
+      .update(deviceProfiles)
+      .set({
+        name: input.name,
+        canvasId: input.canvasId ?? null,
+        capabilities,
+        updatedAt: sql`now()`,
+      })
+      .where(and(eq(deviceProfiles.tenantId, input.tenantId), eq(deviceProfiles.id, input.id)))
+      .returning({
+        id: deviceProfiles.id,
+        name: deviceProfiles.name,
+        canvasId: deviceProfiles.canvasId,
+        capabilities: deviceProfiles.capabilities,
+      });
+    updated = rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      canvasId: row.canvasId,
+      capabilities: row.capabilities as CapabilityFlag[],
+    }));
+  } catch (error) {
+    translateWriteError(error);
+  }
+  if (updated.length === 0) {
+    throw new AppError("device_profile.not_found", {});
+  }
+  return updated[0]!;
+}
+
+/**
+ * Delete a device profile. Manager/admin only (`till.configure`). An absent id (or another tenant's
+ * row, RLS-hidden) throws `device_profile.not_found`, read back via `.returning({ id })` — the same
+ * by-id config-CRUD idiom `deleteCanvas` uses, so a DELETE that matched zero rows is a 404 rather than
+ * a silent success. A device still referencing the profile (Task 5's composite FK, ON DELETE RESTRICT)
+ * surfaces as the raw DB error the same way `deleteCanvas` lets a referenced canvas propagate.
+ */
+export async function deleteDeviceProfile(
+  tx: Transaction,
+  input: { managementSessionId: string; tenantId: string; id: string },
+): Promise<void> {
+  await authorizeManager(tx, {
+    managementSessionId: input.managementSessionId,
+    permission: "till.configure",
+  });
+  const deleted = await tx
+    .delete(deviceProfiles)
+    .where(and(eq(deviceProfiles.tenantId, input.tenantId), eq(deviceProfiles.id, input.id)))
+    .returning({ id: deviceProfiles.id });
+  if (deleted.length === 0) {
+    throw new AppError("device_profile.not_found", {});
+  }
+}

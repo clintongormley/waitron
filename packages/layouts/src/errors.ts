@@ -89,14 +89,19 @@ declare module "@waitron/shared" {
     // duplicate name. `canvas-store.ts` translates the driver's 23505 into this so a duplicate returns
     // a clean 409, never a raw 500. No params: the offending name is never echoed (§1).
     "canvas.name_taken": Record<string, never>;
-    // A device profile's capability set failed validateCapabilities (device-profile.ts, design §7):
-    // the input was not an array, or an element was not a known CAPABILITY_FLAG. Sibling of
-    // `canvas.invalid`'s `bad_capabilities` rule, split out as capabilities move off the canvas onto a
-    // first-class device profile. `field` names the offending field ("capabilities"), NEVER the
-    // offending value (§1) — fail-closed: an unknown flag must never reach the /api/pay + /api/drawer
-    // firewall.
+    // A device-profile create/update was rejected on a field the store validates. `reason`:
+    //   bad_capabilities — the capability set failed validateCapabilities (device-profile.ts, design
+    //                      §7): input was not an array, or an element was not a known CAPABILITY_FLAG
+    //                      (fail-closed — an unknown flag must never reach the /api/pay + /api/drawer
+    //                      firewall);
+    //   bad_canvas_ref   — `canvas_id` violated the tenant-consistent composite FK
+    //                      `device_profiles_canvas_fk` (a canvas that is absent, or belongs to another
+    //                      tenant): `device-profile-store.ts` translates the driver's 23503 so a bad
+    //                      reference returns a clean 4xx, never a raw 500.
+    // A `reason` enum PARALLEL to `canvas.invalid`'s discriminator; NEVER echoes the offending value
+    // (§1) — the enum names WHICH field went wrong, not what the caller supplied.
     "device_profile.invalid": {
-      field?: "capabilities";
+      reason: "bad_capabilities" | "bad_canvas_ref";
     };
     // A GET-by-id on the management device-profile surface named no profile the tenant owns (an absent
     // id, or another tenant's row RLS hides). No params: the caller-supplied id is not echoed (§1) —
