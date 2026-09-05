@@ -87,6 +87,6 @@ const DEFAULT_PROFILE_LANGUAGE = "es";
  * map does not cover. Pure.
  */
 export function defaultProfileName(profile: DefaultDeviceProfile, locale: string): string {
-  const language = (locale.split("-")[0] ?? "").toLowerCase();
+  const language = locale.split("-")[0]!.toLowerCase();
   return profile.nameByLocale[language] ?? profile.nameByLocale[DEFAULT_PROFILE_LANGUAGE]!;
 }

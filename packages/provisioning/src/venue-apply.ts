@@ -216,6 +216,10 @@ async function seedDeviceProfiles(
   tenantId: string,
   profiles: { name: string; capabilities: CapabilityFlag[] }[],
 ): Promise<void> {
+  // Find-or-create is NAME-based, so idempotency is scoped to a SAME-LOCALE, same-names re-provision: a
+  // different-locale re-run would seed a second, differently-named set, and a tenant who renamed a
+  // seeded profile would have it re-created. Acceptable because profiles are tenant-editable AND the
+  // double-provision latch makes a tenant re-provision unreachable in practice.
   const existing = new Set((await listDeviceProfiles(tx, tenantId)).map((p) => p.name));
   const toCreate = profiles.filter((p) => !existing.has(p.name));
   if (toCreate.length === 0) return; // a re-provision whose profiles all exist: nothing to do

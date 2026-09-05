@@ -308,18 +308,22 @@ editor + rendering) is the sole remaining sub-project of this track.**
       stamps it on the till pairing code. Spec
       [device-profile-design](superpowers/specs/2026-09-05-device-profile-design.md). **Still
       per-device (NOT relocated):** till / station / hardware. **Still deferred:** area / order-routing /
-      printer-target aggregation. **Deferred follow-ons this slice leaves open:**
+      printer-target aggregation. **Deferred follow-ons this slice leaves open** — the follow-on batch
+      LANDED (this branch, `feat/device-profile-followons`, 2026-09-05) closed (b), (c) and (d); **(a) the
+      aggregated bundle is now the sole deferred item:**
       - **(a) The aggregated bundle** — relocating till / station / hardware onto the profile and adding
         area / order-routing / printer-target, the larger "profile" the SP-B rename reserved the word for.
-      - **(b) Tenant-facing built-in default profiles** beyond the single dev seed — a tenant onboarding
-        with a small set of ready-made profiles (a real UI/seed, not just `dev:setup`).
-      - **(c) The SP-C dev-switcher device-profile picker** — letting the dev role switch which profile
-        the current device carries from the in-app switcher (dev ergonomics only).
-      - **(d) A clean 4xx on an in-use delete** — deleting a `device_profile` still referenced by a
-        device (or a `canvas` still referenced by a profile) hits the FK `ON DELETE RESTRICT` and both
-        stores currently propagate the raw pg foreign-key/RESTRICT error (`device-profile-store.ts:231`
-        says so explicitly, matching `deleteCanvas`); map it to a `device_profile.in_use` / `canvas.in_use`
-        error code returning a clean 4xx instead.
+      - **(b) Tenant-facing default profiles — LANDED (this branch, 2026-09-05).** `provisionVenue` now
+        seeds every new tenant a starter device-profile set (find-or-create by name, locale-resolved
+        names, `canvasId: null` → the form-factor default canvas), authored by the seeded admin on the
+        caller's tenant-scoped tx; `DEFAULT_DEVICE_PROFILES` shared with the dev seed.
+      - **(c) The SP-C dev-switcher device-profile picker — LANDED (this branch, 2026-09-05).** The dev
+        role can switch which profile the current device carries from the in-app switcher; dev-minted
+        devices now carry a `deviceProfileId`.
+      - **(d) A clean 4xx on an in-use delete — LANDED (this branch, 2026-09-05).** Both stores now
+        translate the FK `ON DELETE RESTRICT` `23001` restrict_violation into a clean 409 —
+        `device_profile.in_use` (`device-profile-store.ts`) / `canvas.in_use` (`canvas-store.ts`) —
+        matched on the referencing constraint so an unrelated RESTRICT is never mislabelled.
   - **B4 LANDED #218 (2026-09-04):** dropped the old widget model and rehomed the non-fiscal
     receipt trim. **Removed:** `WIDGET_TYPES`/`WidgetInstance`/`LayoutDef`/`Region`/`WIDGET_CONFIG`/
     `validateLayout`/`store.ts`/`DEFAULT_LAYOUT` from `@waitron/layouts`; the till's region render
