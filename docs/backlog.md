@@ -121,7 +121,7 @@ editor + rendering) is the sole remaining sub-project of this track.**
   superseding their original "mounted always" text. Design:
   [sp-c-dev-device-switcher](superpowers/specs/2026-09-03-sp-c-dev-device-switcher-design.md); plan:
   [sp-c plan](superpowers/plans/2026-09-03-sp-c-dev-device-switcher.md). No SP-C follow-ups deferred.
-- **SP-B — grid editor + rendering — B1 #204; B2 (#206+#207); B3 split into B3.1 (LANDED #209, 2026-09-04) + B3.2 (LANDED #213, 2026-09-04: Phase A profile→canvas rename + Phase B the canvas editor UI); B4 LANDED #218 (2026-09-04). SP-B B1–B4 build sequence complete (Follow-ons below remain).**
+- **SP-B — grid editor + rendering — B1 #204; B2 (#206+#207); B3 split into B3.1 (LANDED #209, 2026-09-04) + B3.2 (LANDED #213, 2026-09-04: Phase A profile→canvas rename + Phase B the canvas editor UI); B4 LANDED #218 (2026-09-04). SP-B B1–B4 build sequence complete. Editor-polish follow-on batch also LANDED (2026-09-05): fresh-display KDS enrol #221, pointer drag/move/resize #222, representative card silhouettes #223. Larger follow-ons still open below (visual theme editor, device profile, truly-real card renders, NFC pairing, community sharing).**
   The HA-Sections editor UI plus making screens render from grid profiles (wrap the bespoke
   floor/KDS/table-order screens as cards; phased). The schedule risk. Removes the old widget model
   (`WIDGET_TYPES`/`validateLayout`/`till_layouts`) once rendering swaps over. Design:
@@ -239,11 +239,14 @@ editor + rendering) is the sole remaining sub-project of this track.**
         (Pointer Events, threshold + drop indicator, emits `move-card`) + corner-handle resize (snaps to
         whole columns/rows, emits `resize-card`) on the editor tiles; the property-panel steppers + ↑/↓ stay
         as the keyboard/a11y path. The preview stays a pure view emitting intents; the screen owns mutation.
-      - **Live card renders — in flight #223 (representative, NOT the real cards).** The real till widgets
-        can't be reused (they live in `apps/till`, need live POS stores + ~30 props, and importing them or
-        `@waitron/layouts` breaches the #70 bundle rule), so #223 ships dashboard-local static *representative
-        silhouettes* per card type instead — recognizable shapes, no data. Truly-real cards would need a
-        neutral browser-safe shared card package (a separate, larger initiative), not done.
+      - **Live card renders — LANDED #223 (2026-09-05, representative, NOT the real cards).** The real till
+        widgets can't be reused (they live in `apps/till`, need live POS stores + ~30 props, and importing
+        them or `@waitron/layouts` breaches the #70 bundle rule), so #223 ships dashboard-local static
+        *representative silhouettes* per card type (`card-preview.ts`: exhaustive switch, memoized) — a
+        recognizable shape per type, no data, decorative (`pointer-events:none`/`aria-hidden`) so the drag/
+        resize seam still works. **Still open — truly-real cards** would need a neutral browser-safe shared
+        card package both apps import (extracting the till widgets off their live stores/props): a separate,
+        larger initiative, not started.
       - **Visual theme editor** (also listed under Follow-ons below).
       - (Clone/duplicate already shipped in Phase B — no longer a follow-on.)
     - **Deferred follow-on — device profile.** A future slice: a first-class device profile bundling
