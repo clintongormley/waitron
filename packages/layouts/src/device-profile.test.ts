@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import { validateCapabilities, DEFAULT_PROFILE_CAPABILITIES } from "./device-profile.js";
+import {
+  validateCapabilities,
+  DEFAULT_PROFILE_CAPABILITIES,
+  DEFAULT_DEVICE_PROFILES,
+  defaultProfileName,
+} from "./device-profile.js";
 import { FORM_FACTORS, CAPABILITY_FLAGS } from "./canvas.js";
 
 describe("validateCapabilities", () => {
@@ -51,5 +56,55 @@ describe("DEFAULT_PROFILE_CAPABILITIES", () => {
     ]);
     expect(DEFAULT_PROFILE_CAPABILITIES.kds).toEqual(["act-as-kds"]);
     expect(DEFAULT_PROFILE_CAPABILITIES["phone-portrait"]).toEqual([]);
+  });
+});
+
+describe("DEFAULT_DEVICE_PROFILES", () => {
+  it("is the three-entry starter set: Counter (till), Kitchen (kds), Handheld (phone-portrait)", () => {
+    expect(DEFAULT_DEVICE_PROFILES.map((p) => p.formFactor)).toEqual([
+      "till",
+      "kds",
+      "phone-portrait",
+    ]);
+  });
+
+  it("carries the form-factor default capabilities for each entry", () => {
+    for (const profile of DEFAULT_DEVICE_PROFILES) {
+      expect(profile.capabilities).toEqual(DEFAULT_PROFILE_CAPABILITIES[profile.formFactor]);
+    }
+  });
+
+  it("names every entry in both es and en", () => {
+    for (const profile of DEFAULT_DEVICE_PROFILES) {
+      expect(typeof profile.nameByLocale.es).toBe("string");
+      expect(typeof profile.nameByLocale.en).toBe("string");
+      expect(profile.nameByLocale.es!.length).toBeGreaterThan(0);
+      expect(profile.nameByLocale.en!.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("uses the owner-decided Spanish and English names", () => {
+    const byFormFactor = Object.fromEntries(DEFAULT_DEVICE_PROFILES.map((p) => [p.formFactor, p]));
+    expect(byFormFactor.till!.nameByLocale).toEqual({ es: "Mostrador", en: "Counter" });
+    expect(byFormFactor.kds!.nameByLocale).toEqual({ es: "Cocina", en: "Kitchen" });
+    expect(byFormFactor["phone-portrait"]!.nameByLocale).toEqual({ es: "Móvil", en: "Handheld" });
+  });
+});
+
+describe("defaultProfileName", () => {
+  const till = DEFAULT_DEVICE_PROFILES.find((p) => p.formFactor === "till")!;
+
+  it("resolves the language subtag of a full invoice-locale tag", () => {
+    expect(defaultProfileName(till, "es-ES")).toBe("Mostrador");
+    expect(defaultProfileName(till, "en-GB")).toBe("Counter");
+  });
+
+  it("is case-insensitive on the language subtag", () => {
+    expect(defaultProfileName(till, "ES-es")).toBe("Mostrador");
+  });
+
+  it("falls back to Spanish for a locale the map does not cover", () => {
+    expect(defaultProfileName(till, "fr-FR")).toBe("Mostrador");
+    expect(defaultProfileName(till, "")).toBe("Mostrador");
   });
 });
