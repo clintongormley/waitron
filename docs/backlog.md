@@ -133,7 +133,9 @@ waitron yardstick kept in-repo (#236), and the
 dropped as a duplicate). **Same evening, revised for cost:** Fable only where the owner talks plus two
 fresh-context seats, Opus 5.1 for execution, Codex (`gpt-6-astra`, `.codex/config.toml`,
 `~/workspace/tools/codex-seat.sh`) for the implementer seat and the pre-PR diff review that replaces
-Copilot. A three-way run-it reviewer probe on planted defects (Fable / Opus / Astra) found no
+Copilot (LANDED #242). Copilot still auto-reviews every PR from a GitHub-side setting (not a repo
+workflow); on #242 it made two right wording calls and two false positives (it cannot see a symlink in
+the diff). Turning it off is an owner action in the repository's GitHub settings. A three-way run-it reviewer probe on planted defects (Fable / Opus / Astra) found no
 Fable-only catch — `docs/superpowers/specs/2026-09-05-model-seats-experiment.md`; moving the run-it
 seat to Astra is an open owner decision. **Owner decisions recorded (they supersede older spec text where they
 conflict):**
