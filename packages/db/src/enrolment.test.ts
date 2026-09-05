@@ -81,4 +81,10 @@ describe("CORE_ENROLMENT", () => {
       lane: "ordered",
     });
   });
+
+  it("every non-null watermarkColumn is a real column of its table", () => {
+    for (const e of CORE_ENROLMENT) {
+      if (e.watermarkColumn !== null) expect(e.columns).toContain(e.watermarkColumn);
+    }
+  });
 });

@@ -5,7 +5,7 @@ import { defineConfig } from "vitest/config";
 //
 //   the two CLASSIFIERS (`scripts/changed-*.mjs`) that decide what CI and the pre-push hook run;
 //   the five repo-wide GUARDS (`scripts/*.test.ts`), which read `packages/` and `apps/` whole —
-//   guarded-teardowns scans every `*.test.ts` under both, english-only scans the nine generic
+//   guarded-teardowns scans every `*.test.ts` under both, english-only scans the twenty generic
 //   packages' `src/`, errors-reachable walks each `packages/*` public barrel's import graph
 //   for an `errors.ts` that has gone unreachable, allergen-names-drift pins the 14 EU allergen
 //   display names equal across the till and dashboard i18n copies, and module-graph-honesty

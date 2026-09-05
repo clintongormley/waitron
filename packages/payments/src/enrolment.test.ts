@@ -44,4 +44,9 @@ describe("PAYMENTS_ENROLMENT", () => {
       Object.values(getTableColumns(paymentPolicy)).map((c) => c.name),
     );
   });
+  it("every non-null watermarkColumn is a real column of its table", () => {
+    for (const e of PAYMENTS_ENROLMENT) {
+      if (e.watermarkColumn !== null) expect(e.columns).toContain(e.watermarkColumn);
+    }
+  });
 });

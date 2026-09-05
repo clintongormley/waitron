@@ -14,9 +14,13 @@ import { applyBatch, type SyncLogRow } from "./apply.js";
 // (persons/webauthn_credentials) from `IDENTITY_ENROLMENT` — `@waitron/sync` KEEPS its `@waitron/identity`
 // dep (peers.ts's scrypt helpers), so importing its enrolment re-adds no coupling. Only the three payments
 // tables stay hand-built: `@waitron/payments` was deliberately DROPPED from `@waitron/sync`'s deps by the
-// inversion, so importing `PAYMENTS_ENROLMENT` would re-add exactly the coupling the slice removed. Their
-// columns are the real physical column lists (verified against the live schema); the owning package's
-// enrolment.test.ts pins that they cannot drift.
+// inversion, so importing `PAYMENTS_ENROLMENT` would re-add exactly the coupling the slice removed. These
+// three entries are hand-copied to mirror `PAYMENTS_ENROLMENT`, but nothing here ties the hand-copy back to
+// the payments schema: `@waitron/payments` is intentionally not a dependency of `@waitron/sync`, so this
+// fixture cannot import the schema to self-check, and a payments-schema change would leave this copy stale
+// with no guard here to catch it — it must be kept in sync by hand. The authoritative, schema-pinned copy is
+// `PAYMENTS_ENROLMENT` in `@waitron/payments`'s own `enrolment.test.ts` (which checks `columns` against
+// `getTableColumns` of the real tables); this fixture is a manual mirror of it, not a guarded one.
 const NON_CORE_ENROLMENT: readonly EnrolledTable[] = [
   {
     table: "payments",

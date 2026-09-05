@@ -33,4 +33,9 @@ describe("IDENTITY_ENROLMENT", () => {
       Object.values(getTableColumns(webauthnCredentials)).map((c) => c.name),
     );
   });
+  it("every non-null watermarkColumn is a real column of its table", () => {
+    for (const e of IDENTITY_ENROLMENT) {
+      if (e.watermarkColumn !== null) expect(e.columns).toContain(e.watermarkColumn);
+    }
+  });
 });
