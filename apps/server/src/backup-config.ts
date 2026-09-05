@@ -24,8 +24,9 @@ import "./errors.js";
 export interface BackupConfig {
   /** Where dumps are written. At least one destination when this config exists at all; a lone
    * `WAITRON_BACKUP_DIR` becomes the single entry `{ kind: "local-fs", id: "primary", dir }`.
-   * Duplicate ids are not rejected in v1 — they simply fan the same dump out twice under two names;
-   * a uniqueness check is a follow-on, not required for this destination count. */
+   * Ids and resolved dirs are both unique — `parseDestinations` throws `backup.destinations_invalid`
+   * on a duplicate `id` (`reason: "duplicate_id"`) or a duplicate resolved `dir`
+   * (`reason: "duplicate_dir"`, including `WAITRON_BACKUP_DIR` re-listed in the destinations JSON). */
   destinations: BackupDestination[];
   /** The operator-held passphrase every backup artifact is encrypted under, from
    * `WAITRON_BACKUP_RECOVERY_KEY`. Required whenever `destinations` is non-empty; a blank or missing
@@ -102,6 +103,23 @@ function parseDestinations(env: Env): BackupDestination[] {
       out.push({ kind: "local-fs", id: entry.id, dir: resolve(entry.dir) });
     }
   }
+
+  // Reject collisions: two destinations sharing an `id` (the key a backend is logged/pruned under)
+  // or a resolved `dir` (the same directory reached twice — most easily by re-listing
+  // `WAITRON_BACKUP_DIR` in `WAITRON_BACKUP_DESTINATIONS`) are a config mistake, not a deliberate
+  // double-write. Dirs are compared AFTER `resolve`, so `/mnt/a` and `/mnt/a/` collide.
+  const seenIds = new Set<string>();
+  const seenDirs = new Set<string>();
+  for (const d of out) {
+    if (seenIds.has(d.id)) {
+      throw new AppError("backup.destinations_invalid", { reason: "duplicate_id" });
+    }
+    seenIds.add(d.id);
+    if (seenDirs.has(d.dir)) {
+      throw new AppError("backup.destinations_invalid", { reason: "duplicate_dir" });
+    }
+    seenDirs.add(d.dir);
+  }
   return out;
 }
 
@@ -110,7 +128,7 @@ function parseDestinations(env: Env): BackupDestination[] {
  * `WAITRON_BACKUP_DESTINATIONS` — see `parseDestinations`); with neither set this returns
  * `undefined` and no backup duty runs, the same off-switch `loadTunnelConfig` uses for an empty
  * relay url. When enabled, the backup db url and the recovery key are both required: a blank
- * `WAITRON_BACKUP_DATABASE_URL` throws `server.config_invalid` (`required_with_backup_dir`), a
+ * `WAITRON_BACKUP_DATABASE_URL` throws `server.config_invalid` (`required_with_backup_destination`), a
  * missing/blank `WAITRON_BACKUP_RECOVERY_KEY` throws `backup.recovery_key_missing`, and one shorter
  * than `MIN_PASSPHRASE_LENGTH` throws `backup.recovery_key_too_short` — fail-closed rather than
  * letting an unattended backup ship unencrypted or under a guessable key.
@@ -123,7 +141,7 @@ export function loadBackupConfig(env: Env): BackupConfig | undefined {
   if (isUnset(databaseUrl)) {
     throw new AppError("server.config_invalid", {
       variable: "WAITRON_BACKUP_DATABASE_URL",
-      reason: "required_with_backup_dir",
+      reason: "required_with_backup_destination",
     });
   }
 

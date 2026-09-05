@@ -31,6 +31,18 @@ describe("artifact cipher", () => {
     );
   });
 
+  // The header prefix (magic|version|salt|iv) is authenticated as GCM AAD, so tampering with a
+  // header byte fails authentication exactly like a flipped ciphertext byte — it is NOT an
+  // unauthenticated side-channel a tamperer can edit unnoticed. Flip a salt byte (offset 5, right
+  // after magic+version) to a byte that still parses as a valid frame but no longer matches the AAD.
+  it("rejects a tampered header byte (AAD authentication)", () => {
+    const framed = encryptArtifact(randomBytes(64), "pw-000000000000");
+    framed[5] ^= 0xff; // first salt byte — inside the authenticated header, frame still well-formed
+    expect(() => decryptArtifact(framed, "pw-000000000000")).toThrowError(
+      expect.objectContaining({ code: "recovery.passphrase_invalid" }),
+    );
+  });
+
   it("rejects a frame with a bad magic/version", () => {
     expect(() => decryptArtifact(Buffer.alloc(49), "pw-000000000000")).toThrowError(
       expect.objectContaining({ code: "backup.artifact_invalid" }),

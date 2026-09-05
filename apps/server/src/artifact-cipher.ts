@@ -21,17 +21,27 @@ export const KDF_BY_VERSION: Record<number, ScryptParams> = {
 const SALT_LEN = 16;
 const IV_LEN = 12;
 const TAG_LEN = 16;
-const HEADER_LEN = MAGIC.length + 1 + SALT_LEN + IV_LEN + TAG_LEN; // 49
+/** The authenticated header prefix: MAGIC|version|salt|iv, everything before the tag. These bytes are
+ * bound into the GCM tag as AAD, so a flipped magic/version/salt/iv byte fails authentication just
+ * like a flipped ciphertext byte does — the frame header is not a plaintext side-channel a tamperer
+ * can edit unnoticed. */
+const AAD_LEN = MAGIC.length + 1 + SALT_LEN + IV_LEN; // 33 — magic+version+salt+iv, NOT the tag
+const HEADER_LEN = AAD_LEN + TAG_LEN; // 49
 
-/** Encrypt bytes under a passphrase. Frame: MAGIC|version|salt|iv|tag|ciphertext (all binary). */
+/** Encrypt bytes under a passphrase. Frame: MAGIC|version|salt|iv|tag|ciphertext (all binary). The
+ * MAGIC|version|salt|iv header prefix is authenticated as GCM AAD, so tampering with it fails
+ * decryption. Derives with `KDF_BY_VERSION[VERSION]` (the same map decrypt reads) so write/read cost
+ * symmetry is structural, not merely test-enforced. */
 export function encryptArtifact(plaintext: Uint8Array, passphrase: string): Buffer {
   const salt = randomBytes(SALT_LEN);
   const iv = randomBytes(IV_LEN);
-  const key = deriveKey(passphrase, salt);
+  const key = deriveKey(passphrase, salt, KDF_BY_VERSION[VERSION]);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const header = Buffer.concat([MAGIC, Buffer.from([VERSION]), salt, iv]);
+  cipher.setAAD(header);
   const ct = Buffer.concat([cipher.update(plaintext), cipher.final()]);
   const tag = cipher.getAuthTag();
-  return Buffer.concat([MAGIC, Buffer.from([VERSION]), salt, iv, tag, ct]);
+  return Buffer.concat([header, tag, ct]);
 }
 
 /** Decrypt a framed artifact. Throws backup.artifact_invalid (malformed frame) or
@@ -53,7 +63,11 @@ export function decryptArtifact(framed: Uint8Array, passphrase: string): Buffer 
   const iv = buf.subarray(off, (off += IV_LEN));
   const tag = buf.subarray(off, (off += TAG_LEN));
   const ct = buf.subarray(off);
+  // The exact header bytes as read from the frame — magic|version|salt|iv, up to but not including
+  // the tag — must be re-supplied as AAD before the tag is set, matching the encrypt side.
+  const header = buf.subarray(0, AAD_LEN);
   const decipher = createDecipheriv("aes-256-gcm", deriveKey(passphrase, salt, params), iv);
+  decipher.setAAD(header);
   decipher.setAuthTag(tag);
   try {
     return Buffer.concat([decipher.update(ct), decipher.final()]);

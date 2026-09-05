@@ -86,6 +86,33 @@ describe("runOnce (fan-out)", () => {
     );
   });
 
+  it("surfaces the errno of a NodeJS.ErrnoException in backup.destination_failed", async () => {
+    // A LocalFsBackend fault (ENOSPC/EACCES/EROFS) is a NodeJS.ErrnoException, whose `.code` is a
+    // fixed symbol carrying no secrets. codeOf() maps it to "unknown" (only AppErrors resolve), so
+    // the raw errno is logged alongside to keep it diagnosable.
+    const enospc = Object.assign(new Error("no space left on device"), { code: "ENOSPC" });
+    const failing: StorageBackend = {
+      id: "full-disk",
+      async put() {
+        throw enospc;
+      },
+      async get() {
+        return Buffer.alloc(0);
+      },
+      async list() {
+        return [];
+      },
+      async delete() {},
+    };
+    const log = vi.fn();
+    await runOnce(deps([failing], log));
+    expect(log).toHaveBeenCalledWith(
+      "warn",
+      "backup.destination_failed",
+      expect.objectContaining({ destination: "full-disk", errorCode: "unknown", errno: "ENOSPC" }),
+    );
+  });
+
   it("prunes each backend to retain", async () => {
     const a = new FakeBackend("a");
     for (const t of ["waitron-1.dump.enc", "waitron-2.dump.enc"])

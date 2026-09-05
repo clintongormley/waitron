@@ -6,10 +6,18 @@
 // MIRRORS `packages/sync/src/retention.ts`'s `runRetentionSweep`: a wedged pg_dump or an unreachable
 // backend must never kill the loop and, with it, the box's only backup duty.
 //
-// A per-destination failure (a bad backend, a full disk, a network fault) is caught, logged as
-// `backup.destination_failed`, and does NOT stop the remaining destinations — one bad backend must
-// never cost the others their backup (fail-safe, CLAUDE.md §5: nothing may block a sale, and backup
+// A per-destination fault that THROWS (a bad backend, a full disk, a network fault) is caught, logged
+// as `backup.destination_failed`, and does NOT stop the remaining destinations — a throwing backend
+// never costs the others their backup (fail-safe, CLAUDE.md §5: nothing may block a sale, and backup
 // housekeeping is best-effort in the same spirit).
+//
+// A destination that HANGS rather than throws (an unresponsive mount, a stalled network write) is NOT
+// abandoned mid-tick in v1: `Promise.allSettled` waits for every backend to settle, so a wedged `put`
+// stalls the whole tick and teardown's `await backupWorker` blocks with it. This is the same
+// between-ticks abort model the sibling sync/tunnel/retention sweep workers use — abort is checked at
+// tick boundaries, not inside an in-flight backend call. An abort-aware per-destination timeout is a
+// follow-on for when a network-latency backend (s3/sftp) lands; the only backend today is local-fs,
+// where a `put` does not hang. It is deliberately NOT implemented here.
 
 import { chmod, mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -65,9 +73,11 @@ export async function runOnce(deps: Omit<BackupSweepDeps, "intervalMs" | "sleep"
     await chmod(staged, 0o600);
     const ciphertext = encryptArtifact(await readFile(staged), deps.recoveryKey);
     const key = `${dumpName}${ENC_SUFFIX}`;
-    // Fan out to every backend concurrently; each keeps its own try/catch so one failure is logged
-    // and swallowed rather than rejecting the batch — one bad backend never costs the others their
-    // backup (fail-safe, per this file's header). `allSettled` therefore never rejects here.
+    // Fan out to every backend concurrently; each keeps its own try/catch so a THROWING failure is
+    // logged and swallowed rather than rejecting the batch — a throwing backend never costs the
+    // others their backup (fail-safe, per this file's header). `allSettled` therefore never rejects
+    // here. (A HANGING backend is a different matter — see the header: `allSettled` waits for it, so
+    // in v1 it stalls the tick rather than being abandoned.)
     await Promise.allSettled(
       deps.backends.map(async (backend) => {
         try {
@@ -75,9 +85,14 @@ export async function runOnce(deps: Omit<BackupSweepDeps, "intervalMs" | "sleep"
           await pruneBackend(backend, deps.retain);
           deps.log("info", "backup.destination_completed", { destination: backend.id, key });
         } catch (err) {
+          // A `LocalFsBackend` fault is a `NodeJS.ErrnoException` (ENOSPC/EACCES/EROFS), for which
+          // `codeOf` yields "unknown" (it only maps AppErrors). Surface the raw errno too — it is a
+          // fixed symbol, not the path or message, so it carries no secrets — while keeping
+          // `codeOf` for the AppError cases.
           deps.log("warn", "backup.destination_failed", {
             destination: backend.id,
             errorCode: codeOf(err),
+            errno: (err as NodeJS.ErrnoException).code,
           });
         }
       }),
