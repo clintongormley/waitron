@@ -118,6 +118,25 @@ describe("restoreFromArtifact", () => {
     await expect(stat(join(stagingDir, "db.dump"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("creates its own destination roots (staging/media/state) when they do not yet exist", async () => {
+    // A fresh/returning box may not carry `<stateDir>/restore-staging`, its media store, or its
+    // state dir. Restore must create each before the guard `realpath`s it — otherwise the guard
+    // ENOENTs, and via `runRejoin` that happens AFTER the irreversible wipe (wiped-but-not-restored).
+    // Point all three roots at not-yet-existing subpaths and assert the restore SUCCEEDS. Proven by
+    // deletion: remove the three `mkdir`s in restore.ts and this fails with ENOENT from `realpath`.
+    const newStaging = join(stagingDir, "restore-staging");
+    const newMedia = join(mediaDir, "media-store");
+    const newState = join(stateDir, "state-store");
+    await restoreFromArtifact(
+      deps({ stagingDir: newStaging, mediaDir: newMedia, stateDir: newState }),
+    );
+
+    expect(runRestore).toHaveBeenCalledTimes(1); // db restored — staging dir was created
+    expect(await readFile(join(newMedia, "abc123.jpg"))).toEqual(MEDIA); // media dir was created
+    expect(await readFile(join(newState, "secrets.env"), "utf8")).toBe(SECRET); // state dir was created
+    await expect(stat(join(newStaging, "db.dump"))).rejects.toMatchObject({ code: "ENOENT" }); // cleaned
+  });
+
   it("skips secrets when skipSecrets is true (keeps own identity), still restores db+media", async () => {
     await restoreFromArtifact(deps({ skipSecrets: true }));
     // db restored (pg_restore fake called) and media restored …

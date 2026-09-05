@@ -1,4 +1,4 @@
-import { realpath, rm } from "node:fs/promises";
+import { mkdir, realpath, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { AppError } from "@waitron/shared";
 import { expectedSchemaVersion } from "@waitron/migrations";
@@ -145,6 +145,17 @@ export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
   if (firstUnexpected !== undefined) {
     throw new AppError("restore.unexpected_entry", { name: firstUnexpected.name });
   }
+
+  // Restore creates its OWN destination roots before the guard realpath's them: the backup side
+  // mkdir's its staging (backup-sweep.ts `runOnce`), so the restore side must mkdir its staging AND
+  // its media/state destinations, or the guard's `realpath` ENOENTs on a fresh box — after `runRejoin`
+  // has already run the IRREVERSIBLE wipe, leaving the box wiped-but-not-restored. All three are
+  // proven necessary by deletion (restore.test.ts): the db.dump→stagingDir, media/*→mediaDir and
+  // secrets/*→stateDir guards each realpath their root, and the secret-guard loop runs even under
+  // `skipSecrets`. Recursive mkdir of an existing dir is a harmless no-op.
+  await mkdir(deps.stagingDir, { recursive: true });
+  await mkdir(deps.mediaDir, { recursive: true });
+  await mkdir(deps.stateDir, { recursive: true });
 
   // GUARD — every entry against ITS destination root, before ANY write. The db.dump goes to
   // stagingDir, media/* to mediaDir, secrets/* to stateDir; each is guarded against the root it
