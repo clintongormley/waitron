@@ -82,6 +82,11 @@ export const devices = pgTable(
     // uuid, NULLABLE: the tenant-consistent (tenant_id, canvas_id) → canvases(tenant_id,
     // id) composite FK is hand-written in the --custom migration. MATCH SIMPLE skips the check on a NULL.
     canvasId: uuid("canvas_id"),
+    // The assigned reusable DEVICE PROFILE (device-profile design 2026-09-05 §5.1) — the binding bundle
+    // (name + canvas reference + capabilities) this device resolves against. Bare uuid, NULLABLE: the
+    // tenant-consistent (tenant_id, device_profile_id) → device_profiles(tenant_id, id) composite FK is
+    // hand-written in the --custom migration, the `station_id` idiom. MATCH SIMPLE skips the check on a NULL.
+    deviceProfileId: uuid("device_profile_id"),
     // Static hardware binding (SP-A.2 §16.3) — the per-device receipt printer (and its cash-drawer kick).
     // Bare uuid, NULLABLE: the tenant-consistent (tenant_id, receipt_printer_id) → printers(tenant_id, id)
     // composite FK is hand-written in the --custom migration. MATCH SIMPLE skips the check on a NULL.
@@ -167,6 +172,11 @@ export const devicePairingCodes = pgTable(
     // binding (§16.3); credentials stay in the vault, never here.
     tillId: uuid("till_id"),
     canvasId: uuid("canvas_id"),
+    // `device_profile_id` — the reusable device profile to stamp on the enrolled device (device-profile
+    // design 2026-09-05 §5.1). Bare uuid, NULLABLE: the tenant-consistent (tenant_id, device_profile_id)
+    // → device_profiles(tenant_id, id) composite FK is hand-written --custom, the `station_id` idiom; a
+    // NULL is skipped by MATCH SIMPLE.
+    deviceProfileId: uuid("device_profile_id"),
     receiptPrinterId: uuid("receipt_printer_id"),
     hasCashDrawer: boolean("has_cash_drawer").notNull().default(false),
     cardProvider: text("card_provider").notNull().default("none"),

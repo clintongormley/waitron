@@ -1,4 +1,4 @@
-import { asAppUser, captureError, withTenant } from "@waitron/db";
+import { asAppUser, captureError, pgErrorCode, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -230,6 +230,39 @@ describe("device-profile store under real row-level security", () => {
       await asApp(tenantId, (tx) => getDeviceProfile(tx, tenantId, created.id)),
     ).toBeUndefined();
     expect(await rowCount(tenantId)).toBe(0);
+  });
+
+  it("refuses to delete a device profile a device still references (ON DELETE RESTRICT)", async () => {
+    // Task 5 added devices.device_profile_id → device_profiles(tenant_id, id) ON DELETE RESTRICT; the
+    // Task-3 store test deferred this delete-referenced case to that FK. deleteDeviceProfile does NOT
+    // translate the restrict_violation — its header says the raw DB error propagates, exactly as
+    // deleteCanvas lets a referenced canvas propagate — so this asserts the raw SQLSTATE, not an AppError.
+    const tenantId = await seedTenant(suite.admin);
+    const session = await seedSession(tenantId, "manager");
+    const created = await asApp(tenantId, (tx) =>
+      createDeviceProfile(tx, {
+        managementSessionId: session,
+        tenantId,
+        name: "Referenced",
+        canvasId: null,
+        capabilities: [],
+      }),
+    );
+    // Seed a location + a device that binds the profile, as the superuser owner (RLS bypassed — setup).
+    const location = await suite.admin.execute<{ id: string }>(sql`
+      insert into locations (tenant_id, name, invoice_locales, operation_description)
+      values (${tenantId}, 'Loc', array['es'], 'Hostelería') returning id`);
+    await suite.admin.execute(sql`
+      insert into devices (tenant_id, location_id, device_kind, label, token_hash, device_profile_id)
+      values (${tenantId}, ${location.rows[0]!.id}, 'till', 'Bound device', 'scrypt$00$00', ${created.id})`);
+    const error = await captureError(() =>
+      asApp(tenantId, (tx) =>
+        deleteDeviceProfile(tx, { managementSessionId: session, tenantId, id: created.id }),
+      ),
+    );
+    expect(isAppError(error)).toBe(false); // propagated raw, not translated to a domain code
+    expect(pgErrorCode(error)).toBe("23001"); // restrict_violation, fired by the device's FK
+    expect(await rowCount(tenantId)).toBe(1); // the profile survived the refused delete
   });
 
   it("throws device_profile.not_found when updating an id the tenant does not own", async () => {
