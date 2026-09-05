@@ -8,9 +8,12 @@ import { FISCAL_TERRITORIES, resolveFiscalModules } from "../packages/provisioni
 /**
  * The module seams (SP-3c): the swappable fiscal regime is reached only through the descriptor's
  * seats. Generic provisioning code imports neither regime package nor the composition list (its
- * `bin.ts` is the CLI's composition root and may); the server's non-list files import no regime
- * package. Provisioning's imports of `@waitron/identity` and `@waitron/layouts` are legitimate —
- * those modules are not swappable slots — so the boundary is the REGIME, not "any module".
+ * `bin.ts` is the CLI's composition root and may); no file under `apps/server/src` imports a regime
+ * package outside the deferred runtime pass below. There is no `modules.ts` exception — the
+ * composition list lives in `packages/composition`, which this guard does not scan because naming
+ * every module is that package's job. Provisioning's imports of `@waitron/identity` and
+ * `@waitron/layouts` are legitimate — those modules are not swappable slots — so the boundary is
+ * the REGIME, not "any module".
  *
  * Reads text, like `module-graph-honesty` — a `from "@waitron/…"` inside a comment counts; stated
  * rather than papered over. Only the DIRECT import is seen: a file reaching the regime through
@@ -72,7 +75,7 @@ describe("apps/server imports the Spanish regime only from the deferred runtime 
     expect(files.some((f) => f.endsWith("till-backend.ts"))).toBe(true);
   });
   it.each(files.map((f) => [relative(REPO_ROOT, f), f]))("%s", (rel, file) => {
-    if (rel === "apps/server/src/modules.ts" || DEFERRED_RUNTIME_PASS.has(rel)) return;
+    if (DEFERRED_RUNTIME_PASS.has(rel)) return;
     expect(imports(file, REGIME_PACKAGES)).toEqual([]);
   });
   it("the allowlist names only files that still import the regime (no stale entries)", () => {

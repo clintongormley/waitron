@@ -379,11 +379,15 @@ the provisioning e2e use them); the guard (§9) is what stops the composition ro
    is the swappable slot, not "any module": provisioning legitimately imports `@waitron/identity`
    (`seed-admin`, `startManagementSession`) and `@waitron/layouts` (device profiles), neither of
    which is a slot another package could fill.
-2. No non-test file under `apps/server/src` (excluding `src/testing/`) except `modules.ts` imports
-   `@waitron/fiscal-verifactu` or `@waitron/verifactu`, **with an explicit allowlist** —
-   `boot.ts` (`drain`), `aeat-transport.ts`, `aeat-credential.ts` — each entry carrying the deferral
-   reason (§12). The `fiscal-none` slice shrinks the allowlist to empty and the assertion to
-   `modules.ts` only.
+2. No non-test file under `apps/server/src` (excluding `src/testing/`) imports
+   `@waitron/fiscal-verifactu` or `@waitron/verifactu`, **with an explicit allowlist** — `boot.ts`
+   (`drain`) and `aeat-transport.ts` — each entry carrying the deferral reason (§12), plus a
+   companion assertion that every allowlisted file still imports the regime, so an entry cannot go
+   stale. There is NO `modules.ts` exception: the composition list moved to `packages/composition`,
+   which this guard does not scan, because naming every module is that package's job.
+   `aeat-credential.ts` is deferred by §12 as well but is not allowlisted — it names no regime
+   package itself, reaching the transport through `./aeat-transport.js`, so the assertion already
+   holds for it. The `fiscal-none` slice shrinks the allowlist to empty.
 3. A **positive control**: a synthetic source line `import { x } from "@waitron/fiscal-verifactu"` in a
    non-allowlisted path is detected (the guard is not vacuous).
 4. Every `filing` value `resolveFiscalModules` can return names a `fiscal.id` in `ALL_MODULES` (§3).
