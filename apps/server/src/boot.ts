@@ -1117,6 +1117,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // The session cookie is `Secure` only when TLS is configured. Hoisted to ONE binding so the till
   // and management mounts below both read the same value — a shared local, not a duplicated literal.
   const secureCookies = config.tls !== undefined;
+  // The whole-DB membership singleton row both the till mount and the role probe below read, hoisted
+  // to one binding for the same reason `secureCookies` is.
+  const readMembership = () => readNodeMembership(db);
   mountTillApi(
     app,
     {
@@ -1128,30 +1131,20 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       cardProvider,
       venueLocale,
       devMode: config.devMode,
-      readMembership: () => readNodeMembership(db),
+      readMembership,
     },
     log,
   );
-  // The public role probe a till polls on every server it knows, to follow the venue's primary across
-  // a failover (till-reroute design §3.1). Mounted on EVERY trading boot — a mirror and a fenced node
-  // included, because "I am not accepting sales" is the answer that steers a till away — and NOT in
-  // setup mode, where an absent route correctly reads as "not a server a till can sell through". It is
-  // a GET, so a read-only node's gate passes it; the one DB read is the whole-DB membership row.
-  // `isSingletonPrimary && !fencedOrMirror` IS the design's "mode primary AND singleton_role primary
-  // AND not fenced" — `DeploymentMode` is only 'primary' | 'mirror', so `!isMirror` is `mode ===
-  // 'primary'` — reusing the two locals the mount guards below read so the probe cannot claim sales on
-  // a node whose write surface those same locals put behind the read-only gate. `!fencedOrMirror` is
-  // REDUNDANT today and kept deliberately (no test kills it, measured): `deployment_role_valid_ck`
-  // rejects (mirror, primary) and the fence above demotes the singleton axis, so both arms already
-  // reach `isSingletonPrimary === false` — this conjunct is what keeps the probe answering false if
-  // either of those two ever stops holding. Captured HERE and never re-read per request: `promote.ts`
-  // refreshes both holders in-process, but promotion takes effect on RESTART, so a promoted node
-  // whose holders have already flipped must keep answering false until it comes back up.
+  // The public role probe a till polls to follow the venue's primary across a failover (till-reroute
+  // §3.1). Mounted on every trading boot, not in setup: "not accepting sales" from a mirror or a fenced
+  // node is the answer that steers a till away, so those boots must answer it too. `!fencedOrMirror` is
+  // redundant while `deployment_role_valid_ck` rejects (mirror, primary) and the fence above demotes the
+  // singleton axis; kept so the probe refuses if either stops.
   mountNodeApi(app, {
     nodeId: till.nodeId,
     acceptingSales: isSingletonPrimary && !fencedOrMirror,
     environment: config.environment,
-    readMembership: () => readNodeMembership(db),
+    readMembership,
   });
   // The operational agent/device groups — NOT mounted under mirror mode, and NOT on a FENCED node.
   // Unlike the dashboard read

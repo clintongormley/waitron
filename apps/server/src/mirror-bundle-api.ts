@@ -184,22 +184,13 @@ export function mountMirrorBundleApi(
         designated: deps.designated,
         standby,
       });
-      // A node joins the org chart AT ADOPT, not at promotion (till-reroute design §3.3): a till
-      // reroutes by the document's per-node `contactUrl`, so the address of every member has to be
-      // published before the failover that needs it, never as part of it. `withMember` leaves every
-      // other node exactly as it was; the next term is signed by this primary with its own identity
-      // key, read as `app_user` (the promote.ts shape) — `app_user` holds INSERT/UPDATE on
-      // `node_membership` (0097_node_membership_write_grant.sql).
-      //
-      // Bundle assembly and this write are deliberately separate transactions (CLAUDE.md §3): they run
-      // on different roles' connections and the response sits between this flow and the mirror. Ordered
-      // BEFORE the response, so a failed append is a 500 and the mirror never adopts a bundle whose
-      // node the document omits; a SERIAL re-run is idempotent in content (`withMember` refreshes a
-      // listed node in place) and merely bumps the term again. Serial is the operative word:
-      // `writeNodeMembership` is the plain upsert with no term guard, so two adopts read the same held
-      // term, both mint N+1, and the second drops the first's node — tolerable only because adopt is an
-      // operator-driven, one-at-a-time flow at MVP. A slice that adopts two standbys concurrently must
-      // move this to the term-guarded `persistNodeMembershipIfNewer` and re-read on a false.
+      // The standby joins the org chart AT ADOPT and BEFORE the response, so a bundle is never handed
+      // out for a node the chart omits (till-reroute design §3.3) — a till reroutes by `contactUrl`,
+      // which must be published before the failover that needs it. Deliberately OUTSIDE assembly's own
+      // `withTenant` transactions (CLAUDE.md §3), which have already bumped the standby's installation
+      // counter. `writeNodeMembership` is a plain upsert with no term guard, so adopts must stay
+      // serial: concurrent ones would both mint N+1 and the second would drop the first's node. A
+      // concurrent-adopt slice needs read-mint-write retried on `persistNodeMembershipIfNewer`.
       const held = await readNodeMembership(deps.appDb);
       const document = await mintNextMembershipDocument(
         { db: deps.appDb, ring: deps.ring },

@@ -1,4 +1,3 @@
-import { nextStandings, withMember } from "@waitron/membership";
 import { writeNodeMembership, type Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import { mintNextMembershipDocument } from "./membership-mint.js";
@@ -21,9 +20,7 @@ export async function seedTermZeroMembership(
   const document = await mintNextMembershipDocument(deps, {
     tenantId,
     heldDocument: null,
-    // `nextStandings` of an empty set IS the single-node term-0 chart (self, serving-primary, `""`);
-    // `withMember` then refreshes only its `contactUrl`, leaving that standing intact.
-    nodes: withMember(nextStandings([], nodeId), nodeId, contactUrl),
+    nodes: [{ nodeId, contactUrl, standing: "serving-primary" }],
     signerNodeId: nodeId,
   });
   await writeNodeMembership(deps.db, document);
