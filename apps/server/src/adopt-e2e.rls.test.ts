@@ -47,7 +47,7 @@ import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 import { writeModuleConfig, readModuleConfig } from "./module-config.js";
 import { parseModuleConfig, isEnabled } from "@waitron/module";
-import { ALL_MODULES } from "./modules.js";
+import { ALL_MODULES, ALL_SYNC_ENROLMENTS } from "./modules.js";
 import {
   adoptFromPrimary,
   type AdoptCredential,
@@ -59,9 +59,6 @@ import { readMirrorToken } from "./mirror-token.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { parseEnvFile } from "./env-file.js";
 import { readFileSync } from "node:fs";
-// The assembled module sync-enrolment set, injected into mountSyncApi/runSyncPull the way boot does
-// (SP-2a inversion): @waitron/sync no longer owns it.
-const SYNC_ENROLMENT = ALL_MODULES.flatMap((m) => m.sync ?? []);
 
 // C2b — the HEADLINE end-to-end (Task 11): a fresh mirror in SETUP mode adopts a bundle fetched from a
 // booted primary, then REBOOTS into mirror mode and pulls + serves the primary's catalogues read-only
@@ -432,7 +429,7 @@ beforeAll(async () => {
       tenantId: designated.tenantId,
       nodeId: designated.nodeId,
       environment: "preproduction",
-      enrolments: SYNC_ENROLMENT,
+      enrolments: ALL_SYNC_ENROLMENTS,
     },
     log,
   );

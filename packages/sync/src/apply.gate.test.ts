@@ -5,16 +5,18 @@ import { AppError } from "@waitron/shared";
 import { captureError, pgErrorCode, CORE_ENROLMENT } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
+import { IDENTITY_ENROLMENT } from "@waitron/identity";
 import type { EnrolledTable } from "@waitron/sync-enrolment";
 import { applyBatch, type SyncLogRow } from "./apply.js";
 
 // The apply loop consumes an INJECTED enrolment set (SP-2a inversion) — `@waitron/sync` no longer owns
-// it. `@waitron/sync`'s tests may import `@waitron/db` (the dep exists), so the 17 core-owned tables
-// come from CORE_ENROLMENT; the five non-core tables this suite applies (payments from the payments
-// module, persons/webauthn_credentials from identity) are declared here as local fixtures rather than
-// importing those packages, since dropping the payments dep + the schema-inversion invariant forbid a
-// domain-package import in packages/sync/src. Columns are the real physical column lists (verified
-// against the live schema); the owning packages' enrolment.test.ts pin that they cannot drift.
+// it. The 17 core-owned tables come from `CORE_ENROLMENT` (`@waitron/db`), and identity's two tables
+// (persons/webauthn_credentials) from `IDENTITY_ENROLMENT` — `@waitron/sync` KEEPS its `@waitron/identity`
+// dep (peers.ts's scrypt helpers), so importing its enrolment re-adds no coupling. Only the three payments
+// tables stay hand-built: `@waitron/payments` was deliberately DROPPED from `@waitron/sync`'s deps by the
+// inversion, so importing `PAYMENTS_ENROLMENT` would re-add exactly the coupling the slice removed. Their
+// columns are the real physical column lists (verified against the live schema); the owning package's
+// enrolment.test.ts pins that they cannot drift.
 const NON_CORE_ENROLMENT: readonly EnrolledTable[] = [
   {
     table: "payments",
@@ -71,47 +73,8 @@ const NON_CORE_ENROLMENT: readonly EnrolledTable[] = [
     lane: "ordered",
     columns: ["tenant_id", "offline_mode", "offline_amount_cap", "created_at", "updated_at"],
   },
-  {
-    table: "persons",
-    mode: "watermark-upsert",
-    conflictKey: ["id"],
-    watermarkColumn: null,
-    captureOps: ["insert", "update"],
-    fkRank: 0,
-    lane: "ordered",
-    columns: [
-      "id",
-      "tenant_id",
-      "display_name",
-      "pin_hash",
-      "password_hash",
-      "totp_secret",
-      "locale",
-      "email",
-      "role",
-      "status",
-      "created_at",
-    ],
-  },
-  {
-    table: "webauthn_credentials",
-    mode: "watermark-upsert",
-    conflictKey: ["id"],
-    watermarkColumn: null,
-    captureOps: ["insert", "update", "delete"],
-    fkRank: 1,
-    lane: "ordered",
-    columns: [
-      "id",
-      "tenant_id",
-      "person_id",
-      "credential_id",
-      "public_key",
-      "counter",
-      "transports",
-      "created_at",
-    ],
-  },
+  // persons + webauthn_credentials, from the kept @waitron/identity dep (mirrors the ...CORE_ENROLMENT spread).
+  ...IDENTITY_ENROLMENT,
 ];
 // The full 22-table set the composition root would assemble, built ONCE at module scope so the apply
 // loop's dispatch WeakMap (keyed on the array reference) builds its map a single time across this suite.

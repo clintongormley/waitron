@@ -13,11 +13,8 @@ import type { Logger } from "./logger.js";
 import { realSleep } from "./loop.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountSyncApi } from "./sync-api.js";
-import { ALL_MODULES } from "./modules.js";
+import { ALL_SYNC_ENROLMENTS } from "./modules.js";
 import { tunnelHttpClient } from "./tunnel-http.js";
-// The assembled module sync-enrolment set, injected into mountSyncApi/runSyncPull the way boot does
-// (SP-2a inversion): @waitron/sync no longer owns it.
-const SYNC_ENROLMENT = ALL_MODULES.flatMap((m) => m.sync ?? []);
 
 // The headline end-to-end (sub-project B): the CLOUD pulls a box's sync data THROUGH the outbound
 // tunnel, and the relay in the middle stays BLIND. It composes every part of the transport slice into
@@ -157,7 +154,7 @@ describe("headline e2e — the cloud pulls through the outbound tunnel and the r
         tenantId: TENANT,
         nodeId: NODE_A,
         environment: "production",
-        enrolments: SYNC_ENROLMENT,
+        enrolments: ALL_SYNC_ENROLMENTS,
       },
       syncLog,
     );
@@ -209,7 +206,7 @@ describe("headline e2e — the cloud pulls through the outbound tunnel and the r
         localEnvironment: "production",
         http,
         batchLimit: 500,
-        enrolments: SYNC_ENROLMENT,
+        enrolments: ALL_SYNC_ENROLMENTS,
       };
       const peer: PullPeer = { nodeId: NODE_A, url: peerUrl, token: sourcePeerToken };
 

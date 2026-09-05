@@ -32,13 +32,10 @@ import { enrolPeer } from "@waitron/sync";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer } from "./boot.js";
 import { mountSyncApi } from "./sync-api.js";
-import { ALL_MODULES } from "./modules.js";
+import { ALL_SYNC_ENROLMENTS } from "./modules.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
 import { roleUrl } from "./testing/postgres.js";
-// The assembled module sync-enrolment set, injected into mountSyncApi/runSyncPull the way boot does
-// (SP-2a inversion): @waitron/sync no longer owns it.
-const SYNC_ENROLMENT = ALL_MODULES.flatMap((m) => m.sync ?? []);
 
 // Membership rejoin R1 (design §6) boot integration: a returned ex-primary whose held membership
 // document marks it sell-only/evicted must come up FENCED — its saved singleton axis reconciled DOWN to
@@ -278,7 +275,7 @@ beforeAll(async () => {
       tenantId: TILL_ENV.WAITRON_TILL_TENANT_ID,
       nodeId: PEER_SOURCE_NODE,
       environment: "production",
-      enrolments: SYNC_ENROLMENT,
+      enrolments: ALL_SYNC_ENROLMENTS,
     },
     () => {},
   );

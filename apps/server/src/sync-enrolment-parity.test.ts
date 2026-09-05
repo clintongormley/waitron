@@ -1,13 +1,13 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { EnrolledTable } from "@waitron/sync";
-import { ALL_MODULES } from "./modules.js";
+import { ALL_SYNC_ENROLMENTS } from "./modules.js";
 
 // The behaviour-preserving oracle for the SP-2a inversion. Before the flip, this pinned the assembled
 // module set against `@waitron/sync`'s central `ENROLLED`; that constant is now deleted, so the frozen
 // snapshot below IS the oracle — a 22-table copy of the shared metadata the deleted
 // `packages/sync/src/registry.test.ts` SPEC pinned (mode / conflictKey / watermarkColumn / captureOps /
-// fkRank / lane). The assembled `ALL_MODULES.flatMap(m => m.sync ?? [])` must reproduce it exactly, so a
+// fkRank / lane). The assembled `ALL_SYNC_ENROLMENTS` (`ALL_MODULES.flatMap(m => m.sync ?? [])`) must reproduce it exactly, so a
 // per-package enrolment array that drifts fails HERE, in the composition root where the whole set is
 // visible. The per-table `columns` are asserted (derived, cannot drift) in each OWNING package's
 // enrolment.test.ts and are not re-pinned here.
@@ -59,7 +59,7 @@ const SPEC: Record<string, Shared> = {
   ticket_items: { mode: "watermark-upsert", conflictKey: ["id"], watermarkColumn: null, captureOps: ["insert", "update"], fkRank: 4, lane: "ordered" }, // prettier-ignore
 };
 
-const assembled = ALL_MODULES.flatMap((m) => m.sync ?? []);
+const assembled = ALL_SYNC_ENROLMENTS;
 const byName = new Map(assembled.map((e) => [e.table, e]));
 
 describe("the assembled module enrolment set reproduces the frozen 22-table snapshot (behaviour-preserving)", () => {

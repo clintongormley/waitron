@@ -7,10 +7,7 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { enrolPeer, syncPullOnce, type HttpClient } from "@waitron/sync";
 import type { Logger } from "./logger.js";
 import { mountSyncApi } from "./sync-api.js";
-import { ALL_MODULES } from "./modules.js";
-// The assembled module sync-enrolment set, injected into mountSyncApi/runSyncPull the way boot does
-// (SP-2a inversion): @waitron/sync no longer owns it.
-const SYNC_ENROLMENT = ALL_MODULES.flatMap((m) => m.sync ?? []);
+import { ALL_SYNC_ENROLMENTS } from "./modules.js";
 
 // Two-node end-to-end (design §5, §7). TWO manifest-migrated databases in the shared container, each
 // a `useTemplateDb` clone of the `manifest` template — `source` and `target` — are the minimum that
@@ -105,7 +102,13 @@ function sourceHttp(environment: "production" | "preproduction"): HttpClient {
   const app = new Hono();
   mountSyncApi(
     app,
-    { db: sourceReader, tenantId: TENANT, nodeId: NODE_A, environment, enrolments: SYNC_ENROLMENT },
+    {
+      db: sourceReader,
+      tenantId: TENANT,
+      nodeId: NODE_A,
+      environment,
+      enrolments: ALL_SYNC_ENROLMENTS,
+    },
     log,
   );
   return (url, init) => Promise.resolve(app.request(url, { headers: init.headers }));
@@ -178,7 +181,7 @@ describe("two-node sync end-to-end over a real HTTP wire", () => {
       localEnvironment: "production",
       http: sourceHttp("production"),
       batchLimit: 500,
-      enrolments: SYNC_ENROLMENT,
+      enrolments: ALL_SYNC_ENROLMENTS,
     };
     const peer = { nodeId: NODE_A, url: "", token: sourcePeerToken };
 
@@ -221,7 +224,7 @@ describe("two-node sync end-to-end over a real HTTP wire", () => {
       localEnvironment: "preproduction",
       http: sourceHttp("production"),
       batchLimit: 500,
-      enrolments: SYNC_ENROLMENT,
+      enrolments: ALL_SYNC_ENROLMENTS,
     };
     const peer = { nodeId: NODE_A, url: "", token: sourcePeerToken };
     const err = await captureError(() => syncPullOnce(mismatched, peer));
@@ -260,7 +263,7 @@ describe("two-node sync end-to-end over a real HTTP wire", () => {
       localEnvironment: "production",
       http: sourceHttp("production"),
       batchLimit: 500,
-      enrolments: SYNC_ENROLMENT,
+      enrolments: ALL_SYNC_ENROLMENTS,
     };
     const peer = { nodeId: NODE_A, url: "", token: sourcePeerToken };
 

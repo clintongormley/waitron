@@ -68,7 +68,7 @@ function afterSeq(raw: string | undefined): bigint {
  * The `lane` param as a `SyncLane`, clamping anything that is NOT the literal `fast` — a missing
  * param, `ordered`, or garbage — to `ordered`. Used by BOTH peer-authenticated routes: `/sync-api/log` reads
  * it from the `?lane=` query and maps it to `tablesForLane(lane)` SERVER-SIDE (it never accepts a
- * client-supplied table list — both nodes run the same enrolment registry), while `/sync-api/cursor`
+ * client-supplied table list — both nodes run the same injected enrolment set), while `/sync-api/cursor`
  * reads it from the POST body to key which lane's cursor the subscriber is reporting. Same
  * machine-to-machine fail-safe posture both take for `after`/`limit` (no 400 convention): the ordered
  * lane is never silently lost, and the fast tick always sends `lane=fast` explicitly (spec §4c). The

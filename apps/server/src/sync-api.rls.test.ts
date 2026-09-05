@@ -8,11 +8,8 @@ import { decodeBatch, enrolPeer } from "@waitron/sync";
 import { generateNodeKeyPair } from "@waitron/membership";
 import type { Logger } from "./logger.js";
 import { mountSyncApi } from "./sync-api.js";
-import { ALL_MODULES } from "./modules.js";
+import { ALL_SYNC_ENROLMENTS } from "./modules.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
-// The assembled module sync-enrolment set, injected into mountSyncApi/runSyncPull the way boot does
-// (SP-2a inversion): @waitron/sync no longer owns it.
-const SYNC_ENROLMENT = ALL_MODULES.flatMap((m) => m.sync ?? []);
 
 const log: Logger = () => {};
 const NODE_A = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -46,7 +43,7 @@ const deps = {
   tenantId: "t",
   nodeId: "n",
   environment: "production",
-  enrolments: SYNC_ENROLMENT,
+  enrolments: ALL_SYNC_ENROLMENTS,
 };
 
 describe("mountSyncApi peer auth + handshake", () => {
@@ -85,7 +82,7 @@ describe("mountSyncApi peer auth + handshake", () => {
           tenantId: "t",
           nodeId: NODE_A,
           environment: "production",
-          enrolments: SYNC_ENROLMENT,
+          enrolments: ALL_SYNC_ENROLMENTS,
         },
         log,
       );
@@ -116,7 +113,7 @@ describe("mountSyncApi peer auth + handshake", () => {
           tenantId: "t",
           nodeId: "n",
           environment: "production",
-          enrolments: SYNC_ENROLMENT,
+          enrolments: ALL_SYNC_ENROLMENTS,
         },
         log,
       );
@@ -158,7 +155,7 @@ describe("mountSyncApi peer auth + handshake", () => {
           tenantId: "t",
           nodeId: "n",
           environment: "production",
-          enrolments: SYNC_ENROLMENT,
+          enrolments: ALL_SYNC_ENROLMENTS,
         },
         log,
       );
@@ -253,7 +250,7 @@ describe("mountSyncApi peer auth + handshake", () => {
           tenantId,
           nodeId: NODE_A,
           environment: "production",
-          enrolments: SYNC_ENROLMENT,
+          enrolments: ALL_SYNC_ENROLMENTS,
         },
         log,
       );
@@ -395,7 +392,7 @@ describe("mountSyncApi peer auth + handshake", () => {
           tenantId,
           nodeId: NODE_A,
           environment: "production",
-          enrolments: SYNC_ENROLMENT,
+          enrolments: ALL_SYNC_ENROLMENTS,
           ownOriginOnly: true,
         },
         log,
@@ -444,7 +441,7 @@ describe("POST /sync-api/cursor — subscribers report their cursor to the sourc
           tenantId,
           nodeId: NODE_A,
           environment: "production",
-          enrolments: SYNC_ENROLMENT,
+          enrolments: ALL_SYNC_ENROLMENTS,
         },
         log,
       );
@@ -486,7 +483,7 @@ describe("POST /sync-api/cursor — subscribers report their cursor to the sourc
           tenantId: "t",
           nodeId: NODE_A,
           environment: "production",
-          enrolments: SYNC_ENROLMENT,
+          enrolments: ALL_SYNC_ENROLMENTS,
         },
         log,
       );
@@ -525,7 +522,7 @@ describe("POST /sync-api/cursor — subscribers report their cursor to the sourc
           tenantId: "t",
           nodeId: NODE_A,
           environment: "production",
-          enrolments: SYNC_ENROLMENT,
+          enrolments: ALL_SYNC_ENROLMENTS,
         },
         log,
       );
@@ -566,7 +563,7 @@ describe("POST /sync-api/cursor — subscribers report their cursor to the sourc
           tenantId: "t",
           nodeId: NODE_A,
           environment: "production",
-          enrolments: SYNC_ENROLMENT,
+          enrolments: ALL_SYNC_ENROLMENTS,
         },
         log,
       );

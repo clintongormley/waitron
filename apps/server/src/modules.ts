@@ -2,6 +2,7 @@ import { CORE_ENROLMENT } from "@waitron/db";
 import { IDENTITY_ENROLMENT } from "@waitron/identity";
 import type { WaitronModule } from "@waitron/module";
 import { PAYMENTS_ENROLMENT } from "@waitron/payments";
+import type { EnrolledTable } from "@waitron/sync";
 
 /**
  * Every Waitron module, in the composition list's order — which IS the migration order for this
@@ -125,3 +126,11 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     migrations: { name: "sync", table: "__drizzle_migrations_sync", from: "../sync/drizzle" },
   },
 ];
+
+/** The composition root's assembled sync-enrolment set — every module's declared enrolment, in
+ * ALL_MODULES order (SP-2a inversion). `@waitron/sync` no longer owns this; boot injects it into
+ * mountSyncApi/runSyncPull/readDrainProgress, and the tests use the same reference. Assembled from
+ * ALL_MODULES (not the enabled set) — the enabled-set-aware pull is SP-2b. */
+export const ALL_SYNC_ENROLMENTS: readonly EnrolledTable[] = ALL_MODULES.flatMap(
+  (m) => m.sync ?? [],
+);
