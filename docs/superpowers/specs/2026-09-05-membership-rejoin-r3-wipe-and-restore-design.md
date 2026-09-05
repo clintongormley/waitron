@@ -73,9 +73,12 @@ baseline (as returned-node-origin rows), so nothing the drain protected is lost 
 `node.retire_carrier_changed` guard because its drain reader is bound at **boot** and re-checked at
 **request** time — a fenced node does not restart on a carrier change, so the boot-bound reader could
 measure against a stale carrier by the time the request arrives (the I1 whole-branch-review fact). R3
-has no such gap: the CLI reads the held document **once** and derives both the carrier it keys
-`readDrainProgress` on **and** the carrier it would compare against from that **same** read, so they
-cannot diverge within one invocation. A `carrier_changed` code here would be **unreachable** — dead
+has no such gap: the CLI reads the held document **once** and threads that **same** document into both
+consumers — it keys `readDrainProgress` on the carrier derived from it, and passes the document itself
+into `rejoinAsSecondary` as `deps.held` for the standing guards (which no longer re-read
+`node_membership`). One read, two consumers, so no membership rewrite can slip between them and leave
+the drain reader keyed on an old carrier while the guards see a new one. A `carrier_changed` code here
+would be **unreachable** — dead
 code the repo's error-reachability discipline forbids — so it is deliberately omitted. The staleness it
 guards against is instead closed by the node having rebooted into the fence after the failover (R1),
 which is what produced the held document the CLI reads. (`readDrainProgress`'s carrier-cursor keying

@@ -7,10 +7,13 @@ import type { Database } from "@waitron/db";
 import type { SignedMembershipDocument } from "@waitron/membership";
 import { describe, expect, it, vi } from "vitest";
 import type { RejoinDeps, RejoinResult } from "./rejoin.js";
+import type { RestoreDeps, ValidatedArtifact } from "./restore.js";
 import { runRejoin } from "./rejoin-command.js";
 
 const RECOVERY_KEY = "s3cr3t-recovery-key-value";
-const RESTORE_URL = "postgres://admin:hunter2@localhost/fresh_target";
+// DATABASE_URL and WAITRON_RESTORE_DATABASE_URL name the SAME host+port+database by default (the R3
+// target invariant Gap #2 enforces) — differing only in the connecting role, which is not compared.
+const RESTORE_URL = "postgres://admin:hunter2@localhost/app_db";
 const APP_URL = "postgres://app@localhost/app_db";
 const SYNC_URL = "postgres://tailer@localhost/app_db";
 const MAINTENANCE_URL = "postgres://admin:hunter2@localhost/postgres";
@@ -55,13 +58,16 @@ const HAPPY_REJOIN = vi.fn(async (): Promise<RejoinResult> => ({
   carrierNodeId: "carrier-result",
 }));
 
+const FAKE_VALIDATED = {} as ValidatedArtifact;
+
 async function run(
   over: Record<string, string | undefined>,
   opts: {
     argv?: string[];
     rejoin?: (d: RejoinDeps) => Promise<RejoinResult>;
     connect?: (url: string) => Promise<Database>;
-    restore?: () => Promise<void>;
+    validate?: (args: RestoreDeps) => Promise<ValidatedArtifact>;
+    write?: (v: ValidatedArtifact, args: RestoreDeps) => Promise<void>;
     artifactExists?: boolean;
   } = {},
 ): Promise<{ code: number; out: string[] }> {
@@ -76,7 +82,8 @@ async function run(
     out: (l) => out.push(l),
     rejoin: opts.rejoin ?? HAPPY_REJOIN,
     connect: opts.connect ?? (async () => fakeDb()),
-    restore: opts.restore ?? (async () => {}),
+    validate: opts.validate ?? (async () => FAKE_VALIDATED),
+    write: opts.write ?? (async () => {}),
   });
   return { code, out };
 }
@@ -160,6 +167,46 @@ describe("waitron-rejoin rejoin", () => {
     expect(out.join("\n")).toMatch(/WAITRON_RESTORE_DATABASE_URL/);
   });
 
+  it("refuses when DATABASE_URL and WAITRON_RESTORE_DATABASE_URL name different databases, opening no pool and wiping nothing", async () => {
+    // Gap #2: the guards inspect DATABASE_URL's db while the wipe force-drops WAITRON_RESTORE_DATABASE_URL's
+    // db — a mismatch would vouch for db A and destroy db B. Refuse BEFORE any pool is opened. Proven by
+    // deletion: remove the same-target check in rejoin-command.ts and this proceeds (connect + rejoin run).
+    const connect = vi.fn(async () => fakeDb());
+    const rejoin = vi.fn(HAPPY_REJOIN);
+    const { code, out } = await run(
+      { WAITRON_RESTORE_DATABASE_URL: "postgres://admin:hunter2@localhost/OTHER_db" },
+      { connect, rejoin },
+    );
+    expect(code).toBe(1);
+    expect(out.join("\n")).toMatch(/same host, port and database/);
+    expect(connect).not.toHaveBeenCalled(); // no pool opened
+    expect(rejoin).not.toHaveBeenCalled(); // the wipe/restore orchestrator never ran
+  });
+
+  it("refuses when the two target URLs differ only by host (guards would vouch for the wrong server)", async () => {
+    const { code, out } = await run({
+      WAITRON_RESTORE_DATABASE_URL: "postgres://admin:hunter2@other-host/app_db",
+    });
+    expect(code).toBe(1);
+    expect(out.join("\n")).toMatch(/same host, port and database/);
+  });
+
+  it("refuses (fail closed) when DATABASE_URL cannot be parsed as a standard URL", async () => {
+    const connect = vi.fn(async () => fakeDb());
+    const { code, out } = await run({ DATABASE_URL: "not a url" }, { connect });
+    expect(code).toBe(1);
+    expect(out.join("\n")).toMatch(/standard libpq URLs/);
+    expect(connect).not.toHaveBeenCalled();
+  });
+
+  it("proceeds when the two target URLs match on host+port+database (differing only by role)", async () => {
+    // APP_URL connects as `app`, RESTORE_URL as `admin`, both to localhost/app_db — a legitimate pair.
+    const rejoin = vi.fn(HAPPY_REJOIN);
+    const { code } = await run({}, { rejoin });
+    expect(code).toBe(0);
+    expect(rejoin).toHaveBeenCalledOnce();
+  });
+
   it("reports a rejoin.* code without echoing a raw message and returns 1", async () => {
     const { code, out } = await run(
       {},
@@ -236,10 +283,12 @@ describe("waitron-rejoin rejoin", () => {
     let received: RejoinDeps | undefined;
     const rejoin = vi.fn(async (d: RejoinDeps): Promise<RejoinResult> => {
       received = d;
-      // Exercise the real closures the orchestrator would drive (Task 3), on the fakes.
+      // Exercise the real closures the orchestrator would drive, on the fakes: validate BEFORE the
+      // wipe, write AFTER it.
+      const validated = await d.validate();
       await d.closePreWipe();
       await d.wipeDatabase();
-      await d.restore();
+      await d.write(validated);
       d.log("info", "rejoin.test", {});
       return { restored: true as const, carrierNodeId: "carrier-result" };
     });

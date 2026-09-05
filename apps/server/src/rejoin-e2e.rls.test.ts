@@ -20,7 +20,7 @@ import { ALL_MODULES, ALL_SYNC_ENROLMENTS } from "./modules.js";
 import { buildManifest } from "./backup-manifest.js";
 import { packArchive, type ArchiveEntry } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
-import { restoreFromArtifact, type RestoreDeps } from "./restore.js";
+import { writeValidated, type RestoreDeps, type ValidatedArtifact } from "./restore.js";
 import type { PgRestoreRunner } from "./pg-restore.js";
 import { runRejoin } from "./rejoin-command.js";
 import { locateSharedContainer } from "./testing/locate-shared-container.js";
@@ -227,19 +227,22 @@ function envFor(target: RealPostgres, dirs: { mediaDir: string; stateDir: string
   } satisfies Record<string, string>;
 }
 
-/** Drive the real `runRejoin`, substituting only the in-container `pg_restore`. */
+/** Drive the real `runRejoin`, substituting only the in-container `pg_restore`. `validate` is left as
+ * the shipped `validateArtifact` (the real decrypt → gate → guard, which runs BEFORE the wipe); only
+ * the destructive `write` phase redirects `pg_restore` into the container. `envOver` lets a test perturb
+ * the env (e.g. a wrong recovery key) to exercise a pre-wipe refusal. */
 async function drive(
   target: RealPostgres,
   dirs: { mediaDir: string; stateDir: string },
+  envOver: Record<string, string> = {},
 ): Promise<{ code: number; out: string[] }> {
   const out: string[] = [];
   const code = await runRejoin({
     argv: ["rejoin", artifactPath],
-    env: envFor(target, dirs),
+    env: { ...envFor(target, dirs), ...envOver },
     out: (l) => out.push(l),
-    // The REAL restore, with only the pg_restore shell-out redirected into the container.
-    restore: (rd: RestoreDeps) =>
-      restoreFromArtifact({ ...rd, runRestore: containerPgRestore(containerId!) }),
+    write: (v: ValidatedArtifact, rd: RestoreDeps) =>
+      writeValidated(v, { ...rd, runRestore: containerPgRestore(containerId!) }),
   });
   return { code, out };
 }
@@ -421,6 +424,55 @@ describe("R3 rejoin-as-secondary (real Postgres, end to end)", () => {
     await expect(stat(join(dirs.stagingDir, "db.dump"))).rejects.toMatchObject({ code: "ENOENT" });
     await expect(stat(join(dirs.mediaDir, MEDIA_NAME))).rejects.toMatchObject({ code: "ENOENT" });
     // The own-identity secret is untouched (the whole flow refused before any secret decision).
+    expect(await readFile(join(dirs.stateDir, "identity.key"), "utf8")).toBe(OWN_IDENTITY);
+  });
+
+  it("refuses a WRONG recovery key BEFORE the wipe and leaves the diverged db UNTOUCHED", async () => {
+    if (containerId === undefined) return; // LOUD skip logged in beforeAll
+
+    // THE HEADLINE REGRESSION (Gap #1). The whole-branch review reproduced this as broken: with the old
+    // ordering (wipe → restore) a wrong recovery key — the commonest DR operator error — destroyed the db
+    // and THEN failed at decrypt, leaving the box wiped-but-not-restored. Now `validateArtifact` decrypts
+    // BEFORE the wipe, so the refusal is safe.
+    //
+    // ARRANGE — a diverged target with a fenced held chart and NO own-origin tail (drains trivially), so
+    // the guard ladder passes and the flow reaches validate exactly as the happy path does.
+    const target = await makeTarget();
+    const targetName = new URL(target.uri).pathname.replace(/^\//, "");
+    const seed = await createPostgresDb(target.uri);
+    try {
+      await seedFiscalRegistro(seed, DIVERGED_HUELLA);
+      await writeNodeMembership(seed, heldDoc());
+    } finally {
+      await seed.close();
+    }
+    const dirs = await arrangeDirs();
+
+    // ACT — a WRONG recovery key. `validateArtifact` decrypts and refuses BEFORE the wipe.
+    const { code, out } = await drive(target, dirs, {
+      WAITRON_BACKUP_RECOVERY_KEY: "the-WRONG-recovery-key-not-the-baseline-one",
+    });
+
+    // The decrypt-phase code is collapsed to one non-oracle message (rejoin-command.ts), exit 1.
+    expect(code).toBe(1);
+    expect(out.join("\n")).toContain("wrong recovery key or corrupt artifact");
+
+    // ASSERT — the diverged db is UNTOUCHED: validate refused before the DROP DATABASE ran.
+    const fresh = await createPostgresDb(databaseUrl(adminUri, targetName));
+    try {
+      const rows = await fresh.execute<{ n: number; huella: string | null }>(sql`
+        select count(*)::int as n, max(huella) as huella from registros_facturacion
+      `);
+      expect(rows.rows[0]?.n).toBe(1); // the diverged row is still present …
+      expect(rows.rows[0]?.huella).toBe(DIVERGED_HUELLA); // … and it is the diverged chain, not wiped
+    } finally {
+      await fresh.close();
+    }
+
+    // Nothing was staged and no media was written — the restore write phase never started.
+    await expect(stat(join(dirs.stagingDir, "db.dump"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(join(dirs.mediaDir, MEDIA_NAME))).rejects.toMatchObject({ code: "ENOENT" });
+    // The own-identity secret is untouched (the flow refused before any secret decision).
     expect(await readFile(join(dirs.stateDir, "identity.key"), "utf8")).toBe(OWN_IDENTITY);
   });
 });

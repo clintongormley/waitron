@@ -11,7 +11,12 @@ import { isUnset } from "./env-value.js";
 import { createLogger } from "./logger.js";
 import { ALL_MODULES, ALL_SYNC_ENROLMENTS } from "./modules.js";
 import { rejoinAsSecondary, type RejoinDeps, type RejoinResult } from "./rejoin.js";
-import { restoreFromArtifact, type RestoreDeps } from "./restore.js";
+import {
+  validateArtifact,
+  writeValidated,
+  type RestoreDeps,
+  type ValidatedArtifact,
+} from "./restore.js";
 import { tryLoadTillConfig } from "./till-config.js";
 import "./errors.js";
 
@@ -23,13 +28,30 @@ type Env = NodeJS.ProcessEnv;
  * artifact" would hand an operator (or an attacker running this CLI against a stolen artifact — a
  * whole-database backup) an oracle to guess the recovery key against. The reasoning is identical to
  * `restore-command.ts`'s `DECRYPT_PHASE_CODES`; rejoin reaches the same decrypt phase because
- * `rejoinAsSecondary` drives `restoreFromArtifact` on the same artifact.
+ * `validateArtifact` (run before the wipe) decrypts the same artifact.
  */
 const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
   "recovery.passphrase_invalid",
   "backup.artifact_invalid",
   "backup.archive_invalid",
 ]);
+
+/** The comparable target a libpq URL names, for the `DATABASE_URL` vs `WAITRON_RESTORE_DATABASE_URL`
+ * same-database check. `null` when the string is not a standard URL or names no database in its path —
+ * either way uncomparable, which on this irreversible path must refuse (fail closed). The port defaults
+ * to libpq's `5432` so an explicit `:5432` and an omitted port compare equal. Username/password are
+ * deliberately NOT compared — the app pool and the restore admin legitimately connect as different
+ * roles to the same database. */
+function parseDbTarget(url: string): { host: string; port: string; database: string } | null {
+  try {
+    const u = new URL(url);
+    const database = u.pathname.replace(/^\//, "");
+    if (database === "") return null;
+    return { host: u.hostname, port: u.port || "5432", database };
+  } catch {
+    return null;
+  }
+}
 
 /**
  * `waitron-rejoin rejoin <artifact-path>` — WIPE this fenced, fully-drained ex-primary's local
@@ -44,9 +66,12 @@ const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
  * value must refuse rather than silently resolve to localhost.
  *
  * Env contract:
- *  - `DATABASE_URL` — the app pool. Holds the pre-wipe `node_membership` read (both here, to key the
- *    drain reader on the carrier, and inside `rejoinAsSecondary`, for the standing guards). Closed by
- *    `closePreWipe` BEFORE the wipe — the `WITH (FORCE)` drop terminates any lingering backend.
+ *  - `DATABASE_URL` — the app pool. Holds the ONE pre-wipe `node_membership` read, whose result keys
+ *    the drain reader on the carrier AND is threaded into `rejoinAsSecondary` as its standing-guard
+ *    input (read once, two consumers). MUST name the same host+port+database as
+ *    `WAITRON_RESTORE_DATABASE_URL` (the target-invariant check below), or the guards would vouch for a
+ *    different db than the one wiped. Closed by `closePreWipe` BEFORE the wipe — the `WITH (FORCE)` drop
+ *    terminates any lingering backend.
  *  - `WAITRON_SYNC_DATABASE_URL` — the sync_tailer pool. Carries the carrier-keyed drain read
  *    (`withTenant` + `readDrainProgress`). Also closed by `closePreWipe`.
  *  - `WAITRON_MAINTENANCE_DATABASE_URL` — a privileged connection to a DIFFERENT (maintenance)
@@ -62,9 +87,11 @@ const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
  *    node's OWN identity secrets, restoring only the ledger + media).
  *
  * Seams (all defaulted to the real wiring, injected by tests so the flow is unit-tested without a
- * container): `connect` (`createPostgresDb`) opens the app/sync/maintenance pools, `restore`
- * (`restoreFromArtifact`) runs the baseline restore, and `rejoin` (`rejoinAsSecondary`) is the
- * orchestrator. `bin-rejoin.ts` supplies `process.argv`/`process.env` and exits on the returned code.
+ * container): `connect` (`createPostgresDb`) opens the app/sync/maintenance pools, `validate`
+ * (`validateArtifact`) runs the write-free decrypt/gate/guard pass BEFORE the wipe and `write`
+ * (`writeValidated`) runs the destructive restore AFTER it — both over one shared `RestoreDeps` (one
+ * decrypt of the same bytes), and `rejoin` (`rejoinAsSecondary`) is the orchestrator. `bin-rejoin.ts`
+ * supplies `process.argv`/`process.env` and exits on the returned code.
  *
  * Returns a process exit code: 0 on success, 1 on an expected disaster-recovery failure (a missing or
  * empty env var, an unprovisioned box, an unreadable artifact, an invalid `WAITRON_ENV`, a restore URL
@@ -81,7 +108,8 @@ export async function runRejoin(deps: {
   out: (line: string) => void;
   rejoin?: (d: RejoinDeps) => Promise<RejoinResult>;
   connect?: (url: string) => Promise<Database>;
-  restore?: (args: RestoreDeps) => Promise<void>;
+  validate?: (args: RestoreDeps) => Promise<ValidatedArtifact>;
+  write?: (validated: ValidatedArtifact, args: RestoreDeps) => Promise<void>;
 }): Promise<number> {
   const [cmd, artifactPath] = deps.argv;
   if (cmd !== "rejoin" || artifactPath === undefined) {
@@ -121,12 +149,34 @@ export async function runRejoin(deps: {
     deps.out("DATABASE_URL must be set to the app pool for the pre-wipe membership read");
     return 1;
   }
-  // OPERATOR INVARIANT: `DATABASE_URL` (the db the guards inspect via `node_membership`) and
-  // `WAITRON_RESTORE_DATABASE_URL` (the db the wipe drops and the restore targets) MUST name the same
-  // database. The `not_fenced`/`not_drained` guards are meaningful only if the db they read is the one
-  // that then gets wiped and restored; point them at different databases and the guards vouch for a box
-  // that is not the one being rebuilt. Not enforced here at runtime — a cross-URL db-name check is an
-  // owner-decision follow-up, not part of R3.
+
+  // TARGET INVARIANT, enforced BEFORE any pool is opened or anything irreversible runs: `DATABASE_URL`
+  // (the db the guards inspect via `node_membership`) and `WAITRON_RESTORE_DATABASE_URL` (the db the
+  // wipe force-drops and the restore targets) MUST name the same database — otherwise the guards vouch
+  // for db A while db B is force-dropped. Fail CLOSED: an unparseable URL cannot be compared, and on an
+  // irreversible path we do not proceed unverified (the operator supplies standard libpq URLs for a
+  // rejoin). `restoreTarget.database` is then the single source of truth for the target db NAME, reused
+  // below for `dropAndCreateDatabase` (so a socket/opaque restore URL with no db name is refused here).
+  // `WAITRON_MAINTENANCE_DATABASE_URL` deliberately names a DIFFERENT db on the same server, so it is
+  // not compared here.
+  const appTarget = parseDbTarget(appDbUrl);
+  const restoreTarget = parseDbTarget(databaseUrl);
+  if (appTarget === null || restoreTarget === null) {
+    deps.out(
+      "DATABASE_URL and WAITRON_RESTORE_DATABASE_URL must be standard libpq URLs naming a target database, so they can be verified to match",
+    );
+    return 1;
+  }
+  if (
+    appTarget.host !== restoreTarget.host ||
+    appTarget.port !== restoreTarget.port ||
+    appTarget.database !== restoreTarget.database
+  ) {
+    deps.out(
+      "DATABASE_URL and WAITRON_RESTORE_DATABASE_URL must name the same host, port and database: the guards inspect one db while the wipe force-drops the other",
+    );
+    return 1;
+  }
 
   const syncDbUrl = deps.env.WAITRON_SYNC_DATABASE_URL;
   if (isUnset(syncDbUrl)) {
@@ -181,18 +231,9 @@ export async function runRejoin(deps: {
     return reportCode((err as AppError).code);
   }
 
-  // The target db name is the single source of truth for `dropAndCreateDatabase`, parsed from the
-  // restore URL's path. A socket/opaque form (or a URL with no path) names no database and is refused.
-  let dbName: string;
-  try {
-    dbName = new URL(databaseUrl).pathname.replace(/^\//, "");
-  } catch {
-    dbName = "";
-  }
-  if (dbName === "") {
-    deps.out("WAITRON_RESTORE_DATABASE_URL must name the target database in its path");
-    return 1;
-  }
+  // The target db name for `dropAndCreateDatabase` is the one already parsed for the match check above
+  // (`restoreTarget.database`, non-empty by construction — a URL with no db name was refused there).
+  const dbName = restoreTarget.database;
 
   const mediaDir = deps.env.WAITRON_MEDIA_DIR;
   const stateDir = deps.env.WAITRON_STATE_DIR;
@@ -206,15 +247,18 @@ export async function runRejoin(deps: {
   );
 
   const connect = deps.connect ?? createPostgresDb;
-  const restoreImpl = deps.restore ?? restoreFromArtifact;
+  const validateImpl = deps.validate ?? validateArtifact;
+  const writeImpl = deps.write ?? writeValidated;
   const rejoin = deps.rejoin ?? rejoinAsSecondary;
 
-  // Open the pre-wipe pools and read the held chart ONCE here to key the drain reader on the carrier —
-  // the same read `rejoinAsSecondary` makes for its guards (the doc is read twice; there is no
-  // stale-carrier gap because both reads see the one held document). These stay OPEN through the guard
-  // phase: `rejoinAsSecondary` reads `node_membership` from `appDb` and the drain snapshot from
-  // `syncDb`, then calls `closePreWipe` after the last guard and before the wipe — so we must NOT close
-  // them in a `finally` that races the FORCE drop; the orchestrator owns the ordering.
+  // Open the pre-wipe pools and read the held chart ONCE here — that single document is BOTH what keys
+  // the drain reader on the carrier AND what `rejoinAsSecondary` runs its standing guards against
+  // (threaded in as `held`, never re-read). One read, two consumers, so no membership rewrite can slip
+  // between them and leave the drain reader keyed on an old carrier while the guards see a new one.
+  // These pools stay OPEN through the guard + validate phase: `rejoinAsSecondary` reads the drain
+  // snapshot from `syncDb`, then calls `closePreWipe` after the last guard and after `validate` and
+  // before the wipe — so we must NOT close them in a `finally` that races the FORCE drop; the
+  // orchestrator owns the ordering.
   //
   // A `pg` connect/read failure (a bad connection string, a server that is down, a permission error)
   // rejects with an error whose `.message` can carry the connection string; report it GENERICALLY here
@@ -257,13 +301,29 @@ export async function runRejoin(deps: {
             }),
           );
 
+  // The BR-3 restore inputs, assembled ONCE and shared by both the write-free `validate` and the
+  // destructive `write` seams — a single decrypt/unpack of the same bytes across the wipe.
+  const restoreDeps: RestoreDeps = {
+    artifact,
+    recoveryKey,
+    databaseUrl,
+    mediaDir: resolveConfigDir(mediaDir, DEFAULT_MEDIA_ROOT),
+    stateDir: resolvedStateDir,
+    stagingDir: join(resolvedStateDir, "restore-staging"),
+    migrationsRoot: isUnset(migrationsDir) ? DEFAULT_MIGRATIONS_ROOT : migrationsDir,
+    modules: ALL_MODULES,
+    environment,
+    skipSecrets: true,
+    log,
+  };
+
   const rejoinDeps: RejoinDeps = {
-    appDb,
+    held,
     nodeId: cfg.nodeId,
     readDrainProgress: drainReader,
     // Close BOTH pre-wipe pools. `Database` is closed with `.close()`, NEVER `.driver.end()`
     // (`.driver` is a string tag, not a pool) — client.ts. The orchestrator awaits this after the last
-    // guard and before the wipe.
+    // guard and after `validate`, before the wipe.
     closePreWipe: () => Promise.all([appDb.close(), syncDb.close()]).then(() => {}),
     wipeDatabase: async () => {
       const admin = await connect(maintenanceUrl);
@@ -273,20 +333,10 @@ export async function runRejoin(deps: {
         await admin.close();
       }
     },
-    restore: () =>
-      restoreImpl({
-        artifact,
-        recoveryKey,
-        databaseUrl,
-        mediaDir: resolveConfigDir(mediaDir, DEFAULT_MEDIA_ROOT),
-        stateDir: resolvedStateDir,
-        stagingDir: join(resolvedStateDir, "restore-staging"),
-        migrationsRoot: isUnset(migrationsDir) ? DEFAULT_MIGRATIONS_ROOT : migrationsDir,
-        modules: ALL_MODULES,
-        environment,
-        skipSecrets: true,
-        log,
-      }),
+    // VALIDATE before the wipe (decrypt → gate → guard, no writes); WRITE after it. Both drive the SAME
+    // `restoreDeps` — one decrypt of the same in-memory bytes on either side of the irreversible wipe.
+    validate: () => validateImpl(restoreDeps),
+    write: (validated) => writeImpl(validated, restoreDeps),
     log,
   };
 
