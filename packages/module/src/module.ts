@@ -1,6 +1,7 @@
 import semver from "semver";
 import { AppError } from "@waitron/shared";
 import type { MigrationSet } from "@waitron/migrations";
+import type { EnrolledTable } from "@waitron/sync-enrolment";
 import "./errors.js";
 
 /**
@@ -34,7 +35,10 @@ export interface WaitronModule {
   // Typed `unknown` on purpose: keeping @waitron/module from depending on sync/layouts/scheduler/
   // identity yet. Each slice tightens its own field's type when it lands. NOT sloppiness — the spec
   // (§3) records these as the deferred slices' seats.
-  readonly sync?: unknown; // SP-2
+  /** SP-2a: the tables this module enrols into @waitron/sync, declared BY the owning package. The
+   * first deferred seat to gain its real type; the composition root assembles every module's enrolment
+   * and injects it, so @waitron/sync imports no domain schema (spec §2/§5). */
+  readonly sync?: readonly EnrolledTable[];
   readonly cards?: unknown; // SP-4
   readonly vocabulary?: readonly string[];
   readonly permissions?: readonly string[];
