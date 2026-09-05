@@ -65,7 +65,8 @@ below). Two structures are known to be out of date and must not be built on:
    core or module — until Track A item 3 lands.** UI corrections are polish and need none; anything
    that does is parked behind A3. Track A therefore goes first and fast: coverage split (an
    afternoon) → prototype (a day) → A3 starts immediately; it is the long pole for everyone.
-   **2026-09-05:** the split is PR #239 and the prototype has reported (item 2) — A3 is next.
+   **2026-09-05:** the split LANDED (#239), the prototype has reported (item 2), item 4's spec is
+   drafted and awaits owner review — A3 is next, and carries the swap's schema half (S0).
 2. **The module framework's UI seats** (cards, permissions, i18n arriving with a module) are
    unproven until Track C's `fiscal-none` + bookings-as-a-module land. New product domains wait for
    them and land as modules; polishing existing screens does not.
@@ -174,7 +175,7 @@ plan → PR; items marked **[owner]** never land unattended.
 harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.test.ts`, every
 `vitest.config.ts`, CLAUDE.md §2–§4):
 
-1. **Coverage split — PR #239 open 2026-09-05:** 98/98/98/95 kept on `verifactu`, `fiscal-verifactu`,
+1. **Coverage split — LANDED #239 (2026-09-05):** 98/98/98/95 kept on `verifactu`, `fiscal-verifactu`,
    `core`, `db`, `sync`, `payments`; the 90/90/85/85 floor everywhere else (the four browser
    packages' 95/95/90/88 was above the floor on every axis, so they took the floor).
    The root project (the classifiers) keeps the high bar — a judgement call flagged at review.
@@ -191,8 +192,8 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    would stop sales). Also: `FOR ALL TABLES` is superuser-only, so each module publishes an explicit
    table list; additive DDL is subscriber-first and the missing-column stall is loud and self-heals;
    `time_entries.ingest_seq` does not replicate; one superuser provisioning step for the `REPLICATION`
-   role. **Cross-track (Track C):** module SP-2b's schema-version gate rests on "deliberate rejection
-   of native logical replication" — read the findings before building it.
+   role. **Cross-track (Track C):** module SP-2b's schema-version gate (LANDED #230) rests on
+   "deliberate rejection of native logical replication"; item 4's spec retires it (its §5).
 3. **Drop FORCE RLS + the multi-role set — [owner] at land** (one PR chain; the largest change on
    this list; gated on item 2 only because the answer changes what the sync layer must be). Keep
    `tenant_id` columns + composite FKs, the owner-vs-`app_user` split (the append-only guarantee rests
@@ -208,10 +209,17 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    before merge:** on `postgres:18-alpine` as `app_user`, `UPDATE registros_facturacion` fails
    (`42501`) and `INSERT` succeeds. Measure real-PG test-file count (190 today) + full-suite wall
    clock before/after.
-4. **Outbox → native replication swap spec** (only if item 2 passed): the schema-version gate
-   becomes "subscriptions error until the subscriber migrates" (the rolling-reboot model already
-   chosen); lanes, defer, retention, cursors become Postgres's job. Spec first; slices are their own
-   items.
+4. **Outbox → native replication swap spec — DRAFTED 2026-09-05, awaiting owner review:**
+   [outbox-to-native-replication-swap-design](superpowers/specs/2026-09-05-outbox-to-native-replication-swap-design.md).
+   Owner decisions in it: full replacement (no hybrid); no third-party overlay (WireGuard box ↔ its
+   own cloud instance, SSH fallback — the same link Track B's relay decision retires the relay for); a
+   returned box drains its ledger back, never its settings, and is then wiped and re-adopted. Two
+   refinements flagged for the owner in the spec: live-service rows are classed like settings
+   (§4.3), and the working-time chain is keyed per location, so it needs the fiscal chain's per-node
+   rekey before its rows can drain safely (§4.4 — a brainstorm of its own, labour advisor's view).
+   Slices S0–S7 in §14; S0 (no `sync_*`, `ENABLE ALWAYS` on the append-only triggers,
+   `track_commit_timestamp`, `max_slot_wal_keep_size`) rides item 3's baseline. Next step once the
+   owner approves the spec: the implementation plan, then S1.
 
 **Track B — failover** (sequential; = Priorities' Track 2; owns `apps/till`, `apps/server`'s boot /
 promote / till-session / read-only gate / box-* / rejoin, `packages/membership`, `packages/printing`,
