@@ -69,7 +69,10 @@ Spanish via `WAITRON_SEED_LOCALE=es-ES`. ~25 fleshed-out screens on one enforced
 ### Whole-project design review (2026-09-05) — decisions taken, recommendations pending
 
 A base-to-tip review of the code and every Track-2 spec, with the owner answering the review's
-questions. Landed from it: CLAUDE.md §1 comment rule + §6 model-selection trial (#233), and the
+questions. Landed from it: CLAUDE.md §1 comment rule + §6 model-selection trial (#233), the
+rules-first CLAUDE.md rewrite (#235, 972 → 415 lines, stale facts fixed, four memory-only traps
+folded in), the model rule relocated to the shared global `~/.claude/CLAUDE.md` with only the
+waitron yardstick kept in-repo (#236), and the
 `/finish-branch` rewrite (run-it reviewer + convention reviewer; SDD's final whole-branch review
 dropped as a duplicate). **Owner decisions recorded (they supersede older spec text where they
 conflict):**
