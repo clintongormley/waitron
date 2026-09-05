@@ -6,8 +6,10 @@ import { ALL_MODULES } from "../apps/server/src/modules.js";
 /**
  * Every module descriptor's `requires` must NAME every cross-module dependency its migrations create
  * in SQL. A module depends on another when its `drizzle/*.sql` either FK-`REFERENCES` a table the
- * other module owns, OR installs a `CREATE TRIGGER … ON <table>` against one — both edges force a
- * migration-order dependency, because the referenced/triggered table must exist first.
+ * other module owns, installs a `CREATE TRIGGER … ON <table>` against one, OR calls another module's
+ * `sync_capture` SPI via `EXECUTE FUNCTION sync_capture()` in a trigger — all three edges force a
+ * migration-order dependency, because the referenced/triggered table or the called function must
+ * exist first.
  *
  * WHY THIS HAS TO BE A TREE-WIDE ROOT-PROJECT PROGRAM. The `requires` graph lives in one package
  * (`apps/server/src/modules.ts`) but the evidence for it — the `CREATE TABLE`/`REFERENCES`/
@@ -28,13 +30,22 @@ import { ALL_MODULES } from "../apps/server/src/modules.js";
  * deferred the automated guard to SP-2, where descriptor package-ownership begins. This is it.
  *
  * MECHANISM. This reads SQL as TEXT (never executing it). It maps every `CREATE TABLE "<name>"` to
- * its owning module, then for each module scans for the two edge kinds, resolves each target table to
- * its owner, drops same-module targets, and asserts the surviving cross-module set is a subset of the
- * descriptor's declared `requires`. A package is in scope only if a descriptor's `migrations.from`
+ * its owning module and every `CREATE FUNCTION "<name>"` to the module that defines it, then for each
+ * module scans for the edge kinds (FK reference, trigger, and the `sync_capture` SPI call), resolves
+ * each target table/function to its owner, drops same-module targets, and asserts the surviving
+ * cross-module set is a subset of the descriptor's declared `requires`. A package is in scope only if a descriptor's `migrations.from`
  * (`../<pkg>/drizzle`) points at it, so the module NAME (e.g. `fiscal`) is derived from the descriptor
  * rather than assumed equal to the package DIR name (e.g. `fiscal-verifactu`).
  *
  * KNOWN LIMITATIONS, stated rather than papered over (CLAUDE.md §1):
+ *   - The SPI-call edge is scoped to the `sync_capture` function SPECIFICALLY, not to arbitrary
+ *     cross-module function calls. `EXECUTE_SYNC_CAPTURE` matches only `EXECUTE FUNCTION sync_capture`;
+ *     the OWNER of `sync_capture` is auto-resolved from `CREATE FUNCTION` across the tree (so it is
+ *     `sync`, not hardcoded), but a trigger calling some OTHER module's function would not surface.
+ *     This is deliberate — a general function-call scan would surface unrelated edges (RLS helpers,
+ *     shared trigger functions) beyond SP-3a's scope. Extend `EXECUTE_SYNC_CAPTURE` when another
+ *     cross-module SPI appears. The `fiscal→sync` vacuous-pass anchor pins that this edge is actually
+ *     found in the tree's real spelling.
  *   - It is a regex over comment- and string-stripped text, NOT a SQL parser. `stripSql` blanks
  *     slash-star blocks, `--` line comments, and `'…'` string literals (preserving line numbers), so a
  *     `references`/`create trigger` mention in any of those is ignored — pinned by the detector's
@@ -76,6 +87,15 @@ const REFERENCES = /\breferences\s+"?(?:public"?\.)?"?(\w+)"?/gi;
  * `DEFERRABLE`) is the word "on". */
 const CREATE_TRIGGER =
   /\bcreate\s+(?:constraint\s+)?trigger\s+\S+\s+.*?\bon\s+"?(?:public"?\.)?"?(\w+)"?/gis;
+
+/** `CREATE [OR REPLACE] FUNCTION ["public".]"<name>"` — to resolve which module DEFINES a function. */
+const CREATE_FUNCTION = /\bcreate\s+(?:or\s+replace\s+)?function\s+"?(?:public"?\.)?"?(\w+)"?/gi;
+/** `EXECUTE (FUNCTION|PROCEDURE) sync_capture` — a trigger calling sync's capture SPI. Scoped to
+ * sync_capture deliberately: a general cross-module function-call scan would surface unrelated edges
+ * (RLS helper calls, shared trigger functions) beyond SP-3a's scope. Limitation stated, not papered
+ * over (CLAUDE.md §1) — extend to other SPIs when one appears. */
+const EXECUTE_SYNC_CAPTURE =
+  /\bexecute\s+(?:function|procedure)\s+"?(?:public"?\.)?"?(sync_capture)"?/gi;
 
 const EDGE_KINDS = [
   ["FK reference", REFERENCES],
@@ -144,6 +164,37 @@ function ownerOfTable(discovered: DrizzlePackage[]): Map<string, string> {
     }
   }
   return owner;
+}
+
+/** Which module DEFINES sync_capture (and any other function), from CREATE FUNCTION across the tree. */
+function ownerOfFunction(discovered: DrizzlePackage[]): Map<string, string> {
+  const owner = new Map<string, string>();
+  for (const { moduleName, sqls } of discovered) {
+    for (const raw of sqls) {
+      for (const match of stripSql(raw).matchAll(CREATE_FUNCTION)) {
+        const fn = match[1]?.toLowerCase();
+        if (fn !== undefined && !owner.has(fn)) owner.set(fn, moduleName);
+      }
+    }
+  }
+  return owner;
+}
+
+/** Cross-module edges a file creates by CALLING the sync_capture SPI a different module owns. */
+function spiEdgesFor(
+  rawSql: string,
+  moduleName: string,
+  funcOwner: Map<string, string>,
+): Set<string> {
+  const sql = stripSql(rawSql);
+  const deps = new Set<string>();
+  for (const match of sql.matchAll(EXECUTE_SYNC_CAPTURE)) {
+    const fn = match[1]?.toLowerCase();
+    if (fn === undefined) continue;
+    const dep = funcOwner.get(fn);
+    if (dep !== undefined && dep !== moduleName) deps.add(dep);
+  }
+  return deps;
 }
 
 interface Edge {
@@ -242,17 +293,48 @@ describe("the detector itself", () => {
       { dep: "beta", kind: "trigger", table: "gadgets" },
     ]);
   });
+
+  it("flags a cross-module sync_capture SPI call", () => {
+    const funcOwner = new Map([["sync_capture", "sync"]]);
+    const sql = `create trigger foo_capture after insert on foo\n  for each row execute function sync_capture();`;
+    expect([...spiEdgesFor(sql, "fiscal", funcOwner)]).toEqual(["sync"]);
+  });
+
+  it("ignores a same-module sync_capture call", () => {
+    const funcOwner = new Map([["sync_capture", "sync"]]);
+    const sql = `create trigger p_capture after insert on p for each row execute function sync_capture();`;
+    expect([...spiEdgesFor(sql, "sync", funcOwner)]).toEqual([]); // sync calling its own SPI
+  });
+
+  it("ignores a sync_capture mention inside a comment", () => {
+    const funcOwner = new Map([["sync_capture", "sync"]]);
+    const sql = `-- execute function sync_capture() — describing the old shape\ncreate table foo (id uuid);`;
+    expect([...spiEdgesFor(sql, "fiscal", funcOwner)]).toEqual([]);
+  });
 });
 
 describe("the tree's module graph is honest", () => {
   const discovered = discoverDrizzlePackages();
   const owner = ownerOfTable(discovered);
+  const funcOwner = ownerOfFunction(discovered);
   const modules = discovered.map((pkg) => pkg.moduleName);
+
+  // Every cross-module edge a file creates: FK/trigger edges (via `edgeDetails`) plus the SPI-call
+  // edges (a trigger EXECUTEing a function a different module owns, e.g. fiscal → sync via
+  // sync_capture). Both fold into the same `{dep, kind, table}` shape so one violations loop covers
+  // them and the message reads the same way.
+  function crossModuleEdges(raw: string, moduleName: string): Edge[] {
+    const edges = edgeDetails(raw, moduleName, owner);
+    for (const dep of spiEdgesFor(raw, moduleName, funcOwner)) {
+      edges.push({ dep, kind: "sync_capture SPI", table: "sync_capture" });
+    }
+    return edges;
+  }
 
   const foundEdges = new Set<string>();
   for (const pkg of discovered) {
     for (const raw of pkg.sqls) {
-      for (const edge of edgeDetails(raw, pkg.moduleName, owner)) {
+      for (const edge of crossModuleEdges(raw, pkg.moduleName)) {
         foundEdges.add(`${pkg.moduleName}→${edge.dep}`);
       }
     }
@@ -270,6 +352,7 @@ describe("the tree's module graph is honest", () => {
     expect(foundEdges.has("sync→identity")).toBe(true);
     expect(foundEdges.has("sync→payments")).toBe(true);
     expect(foundEdges.has("workforce→identity")).toBe(true);
+    expect(foundEdges.has("fiscal→sync")).toBe(true);
   });
 
   it("every FK/trigger edge in the SQL is named in the depending descriptor's requires", () => {
@@ -277,7 +360,7 @@ describe("the tree's module graph is honest", () => {
     for (const pkg of discovered) {
       const declared = declaredDepsOf(pkg.moduleName);
       for (const raw of pkg.sqls) {
-        for (const edge of edgeDetails(raw, pkg.moduleName, owner)) {
+        for (const edge of crossModuleEdges(raw, pkg.moduleName)) {
           if (declared.has(edge.dep)) continue;
           const message = `${pkg.moduleName} depends on ${edge.dep} via ${edge.kind} on ${edge.table} — not in requires`;
           if (!violations.includes(message)) violations.push(message);
