@@ -488,15 +488,46 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
   module, designed against the enablement lifecycle then.
 - **SP-3 — fiscal as a module (= H2's fiscal-record lane)** + vocabulary + gated provisioning; swappable. The
   standalone H2 spec/plan (branch `feat/h2-fiscal-record-sync`, never merged) are reference material for this.
-  - **SP-3a — fiscal-record sync lane — IN FLIGHT on `feat/module-sp3a-fiscal-record-lane`.** The first
-    SP-3 slice: enrols the six fiscal tables (`registros_facturacion`, `registro_sif`, `cadenas`, `envios`,
-    `envio_flujo`, `acks`) onto the sync ordered lane via `@waitron/sync-enrolment`, adds the capture
-    triggers, declares the `fiscal → sync` module edge (manifest reorder + descriptor `requires` + the
-    graph-honesty SPI-edge guard), and applies fiscal rows verbatim on a mirror (immutable, RLS-forced,
-    no AEAT submission) with the schema-version park gate. Spec:
+  SP-3 was split into **four slices** (owner decision 2026-09-05, during the SP-3a brainstorm), each its
+  own spec→plan→PR under the architecture-spec umbrella: **3a** sync lane, **3b** vocabulary, **3c**
+  gated-provisioning seam, **3d** backup/restore hook (= BR-4, folded into SP-3 by owner decision).
+  - **SP-3a — fiscal-record sync lane — LANDED #238 (2026-09-05).** Enrols the six fiscal tables
+    (`registros_facturacion` insert-only + `registro_sif`/`cadenas`/`envios`/`envio_flujo`/`acks`
+    watermark-upsert) onto the sync ordered lane via a package-owned `FISCAL_ENROLMENT`
+    (`@waitron/sync-enrolment`); fiscal **owns its capture DDL** (`0014_fiscal_sync_capture.sql`, calling
+    sync's `sync_capture()` SPI — owner principle: fiscal independent, API-only), giving a `fiscal → sync`
+    module edge that **reordered the manifest so fiscal migrates last** and extended the graph-honesty
+    guard to detect the SPI edge. Fiscal rows apply **verbatim** on a mirror (no huella recompute;
+    immutability honoured — a stray mutation as the apply role is `42501` (grant), `WT001` only for a
+    bypassing superuser, verified on `postgres:18`); `contadores_instalacion` not enrolled; SP-2b
+    module-version park wired. Six real-PG proven-by-deletion gates in `apps/server`. Consequence: because
+    `0014` calls the sync SPI, fiscal's migrations no longer run standalone, so its PGlite harnesses migrate
+    the full manifest (a **dev-only** `@waitron/migrations` cycle; prod graph acyclic). Copilot's 5 findings
+    all applied. Spec:
     [sp-3a](superpowers/specs/2026-09-05-module-sp3a-fiscal-record-lane-design.md); plan:
-    [sp-3a plan](superpowers/plans/2026-09-05-module-sp3a-fiscal-record-lane.md). (LANDED marking happens
-    at land via `/land-branch`.)
+    [sp-3a plan](superpowers/plans/2026-09-05-module-sp3a-fiscal-record-lane.md).
+    - *Deferred (surfaced by the whole-branch review, NOT done — do-anytime):* (a) the ~300-line two-clone
+      apply-harness duplication across the four `apps/server/src/fiscal-*.rls.test.ts` suites → extract a
+      shared `useFiscalMirrorPair()` helper (kept per-suite for now to avoid a vacuous-pass risk in the
+      fiscal gates); (b) generalise the graph-honesty SPI detector from the `sync_capture`-specific match to
+      **all** trigger `EXECUTE FUNCTION` cross-module edges — would also catch the currently-undetected
+      `reject_mutation` (fiscal→core, workforce→core) edges, verified safe on today's tree; (c) micro-opts
+      (guard `stripSql` runs 6× per file; parallelise source/target seeds).
+    - *Flake stabilised, not just re-run (owner directive):* the CI `test-server` shard's documented
+      `boot.test.ts` 503-not-200 flake (a wall-clock `/health` readiness race) was root-caused and fixed
+      with condition-based-waiting (`fetchHealthOk` poll-until-200); ci.yml now uploads shard blobs on
+      failure so a future flake names its exact test. Sibling `mirror-e2e.rls.test.ts:~381` remains a
+      candidate if it recurs. See memory `test-server-e2e-timing-flakes`.
+  - **SP-3b — module-owned vocabulary (NEXT candidate).** Move fiscal's Spanish terms out of the centralized
+    `packages/db/src/english-only.ts` (`EXEMPT_PACKAGES`/`SPANISH_WORDS`) into the fiscal module's own
+    `vocabulary` seat. Independent of 3a.
+  - **SP-3c — module-owned gated provisioning.** Sever the direct `@waitron/provisioning →
+    @waitron/fiscal-verifactu` import; route `registerSif` through the descriptor's `provisioningSeeds` seat
+    and make `makeFiscalBackend`'s choice module-driven (Spain stays hardwired-but-clean via the existing
+    `resolveFiscalModules` registry — country-selection stays out of scope).
+  - **SP-3d — fiscal backup/restore contribution (= BR-4).** Fill the module `backup.restore` seat with the
+    fresh-chain / disjoint-series behaviour that lets a restored box trade again as primary (cold-DR),
+    never resuming the dead chain. Unblocked by SP-3a's module seams (see the Backup & restore section).
 - **SP-4 — module UI surface** (card-registry inversion + self-sourcing cards + fiscal's cards) — **after
   B3.2** (shares `@waitron/layouts` / `apps/till` card-grid).
 
@@ -506,8 +537,10 @@ unblocked SP-3 (H2's fiscal-record lane rides SP-2a's sync inversion) and delive
 graph-honesty guard; SP-2b closes the cross-node schema-skew hazard the rolling-reboot convergence
 model depends on. **Ongoing flow-down and the enabled-set pull filter both stay deferred** (same
 receipt each time: nothing is genuinely toggleable yet, so there is no live case to build either
-against) — both are built alongside the first genuinely-toggleable module. Next module slice is
-**SP-3 (fiscal as a module = H2's fiscal-record lane)**; **SP-4** waits for B3.2.
+against) — both are built alongside the first genuinely-toggleable module. **SP-3a (fiscal-record sync
+lane) LANDED #238 (2026-09-05)** — H2's fiscal-record lane is delivered. Next module slices are
+**SP-3b (vocabulary) / SP-3c (gated-provisioning seam) / SP-3d (backup-restore hook = BR-4)**, all
+independent; **SP-4** waits for B3.2.
 
 ### Product work still open (beneath the two tracks)
 
@@ -1034,7 +1067,7 @@ vs gated on an unbuilt foundation or an external dependency:
   (on-device agent); and the **owner-gated fiscal H2** hash-chain sync lane — never landed without
   owner sign-off.
 
-### Backup & restore regime (BR-1 #226 + BR-2 #228 + BR-3 #232 LANDED; only BR-4 remains, gated on module-system SP-3)
+### Backup & restore regime (BR-1 #226 + BR-2 #228 + BR-3 #232 LANDED; only BR-4 remains — now = SP-3d, UNBLOCKED by SP-3a #238)
 
 A generic core backup/restore service (storage-media plugins + module hooks), decomposed BR-1..BR-4.
 Design: [backup-restore-regime](superpowers/specs/2026-09-04-backup-restore-regime-design.md); BR-1 plan:
@@ -1084,10 +1117,12 @@ Design: [backup-restore-regime](superpowers/specs/2026-09-04-backup-restore-regi
     pre-created fresh DB); a manifest-shape coded refusal (fails safe under GCM auth today); generalizing
     entry routing off declared source ids (a fail-visible `restore.unexpected_entry` reject is in; full
     generalization when a 2nd non-DB `nonDbState` source lands).
-- **BR-4 — fiscal restore hook (fresh chain / disjoint series) — the ONLY remaining backup-regime slice,
-  GATED on module-system SP-3.** Lands with **fiscal-as-a-module (SP-3)** — not yet built (SP-2 landed on
-  main). Fills the empty v1 restore-hook seat BR-3 ships; unblocks promote-Slice-4 cold-DR
-  trading-again-as-primary. Owner-gated (H2).
+- **BR-4 — fiscal restore hook (fresh chain / disjoint series) — the ONLY remaining backup-regime slice;
+  now scoped as SP-3d (folded into SP-3, owner decision 2026-09-05). UNBLOCKED — SP-3a (#238) landed the
+  fiscal module seams it was gated on.** Fills the empty v1 restore-hook seat BR-3 ships (the module
+  `backup.restore` seat); mints a fresh chain / disjoint series so a restored box trades again as primary
+  without resuming the dead chain; unblocks promote-Slice-4 cold-DR trading-again-as-primary. Owner-gated
+  (H2). Built as SP-3d — see the module-system section's SP-3 breakdown.
 
 **Remaining, each its own design pass:**
 
