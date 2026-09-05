@@ -25,6 +25,12 @@ stack). The front-end vite servers can stay up.
 - 🔧 **corrections logged** — issues captured below, fixes not yet landed
 - ✅ **done** — reviewed, and any corrections have landed
 
+**Sequencing (2026-09-05, from `backlog.md` → *Priorities → Sequencing*):** work areas 2–18 now.
+Leave area 1 (setup wizard) until the cloud-standby provisioning path lands (Track B item 2) and
+area 19 (device management) until the `tills` vs `devices` decision is recorded (Track B item 7). A
+correction that needs a **new table** is parked until the FORCE RLS removal + migration squash lands
+(Track A item 3); everything else is polish and proceeds.
+
 ## Walkthrough order & status
 
 | # | Area | App | Status | Corrections logged |

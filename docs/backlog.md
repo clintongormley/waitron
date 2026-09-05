@@ -55,6 +55,29 @@ beneath them.
   **Never land anything touching the unrepairable fiscal core (H2) without owner sign-off** —
   hash-chained records, never-reused invoice numbers.
 
+**Sequencing — what unblocks what (2026-09-05).** Four sessions run at once: Track 1 (UI, the
+`ui-review.md` walkthrough) plus the three design-review tracks A/B/C (*Whole-project design review*
+below). Two structures are known to be out of date and must not be built on:
+
+1. **FORCE RLS + the multi-role set + the unsquashed migrations** (Track A item 3). Every new table
+   written before it lands gets policies, grants and an `*.rls.test.ts` that are deleted weeks
+   later, and migration numbers collide on every rebase (#165). **Rule: no new table anywhere —
+   core or module — until Track A item 3 lands.** UI corrections are polish and need none; anything
+   that does is parked behind A3. Track A therefore goes first and fast: coverage split (an
+   afternoon) → prototype (a day) → A3 starts immediately; it is the long pole for everyone.
+2. **The module framework's UI seats** (cards, permissions, i18n arriving with a module) are
+   unproven until Track C's `fiscal-none` + bookings-as-a-module land. New product domains wait for
+   them and land as modules; polishing existing screens does not.
+
+Three **decisions** shape UI work and cost nothing to take now (docs-only brainstorms, build later):
+Route A vs B for the till reroute (it decides the till's auth model — Track B item 1); `tills` vs
+`devices` (device management and the till-enrol screen — Track B item 7, [owner]); and the relay
+choice (Track C item 5, which shapes the control plane). **Track 1 therefore works areas 2–18 now
+and leaves area 1 (setup wizard — its provisioning paths move under Track B item 2) and area 19
+(device management) until those decisions are recorded.** Everything else in the four tracks
+proceeds in parallel under the coordination rules in the design-review section (serialised pushes;
+whoever lands second rebases).
+
 **MVP for go-live (owner decision 2026-09-05).** A primary server, on-prem OR in the cloud:
 
 - **On-prem primary + a redundant CLOUD server** for failover with human promotion. A second LOCAL
@@ -919,7 +942,9 @@ sweep + `waitron-sync-evict`; cloud-mirror identity/auth (A, #144), outbound tun
 #164). Designs + findings under `docs/superpowers/specs/2026-08-{02,27,28,29}-*sync*` and
 `*cloud-mirror*`.
 
-**Track 2 infra-session — start-here menu (mapped 2026-09-01).** The infra track runs as its own
+**Track 2 infra-session — start-here menu (mapped 2026-09-01; SUPERSEDED 2026-09-05 — Track B's
+ordered list under *Priorities → Whole-project design review* is the menu now; the notes below are
+the state each landed slice left behind).** The infra track runs as its own
 interactive session, so "needs supervision" is not a disqualifier — the real question is ready-to-build
 vs gated on an unbuilt foundation or an external dependency:
 
