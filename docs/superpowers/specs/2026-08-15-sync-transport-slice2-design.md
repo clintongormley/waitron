@@ -195,6 +195,10 @@ watermark / captureOps.
 `envios`/`acks` never appear here (they are fiscal-lane, not enrolled — governing §11's fast-lane
 ineligibility is honoured by construction: they are not in `ENROLLED` at all).
 
+(2026-09-05: SP-3a enrols the six fiscal tables — `envios`/`acks` among them — on the *ordered* lane;
+this "not enrolled" statement is superseded — see
+[`2026-09-05-module-sp3a-fiscal-record-lane-design.md`](2026-09-05-module-sp3a-fiscal-record-lane-design.md).)
+
 ### 4c. The source read + `/sync-api/log` gain a lane/table filter
 
 **`readSyncLogSince`** (`source.ts:22-52`) gains an optional table filter:

@@ -1,12 +1,12 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
+import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
 import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
 import { recordSale, recordVoid } from "@waitron/core";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
-import { FISCAL_MIGRATIONS } from "./migrations.js";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import { VerifactuBackend } from "./backend.js";
 import { reconcile } from "./reconcile.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
@@ -19,9 +19,10 @@ const SERVER_NOW = new Date("2026-07-21T00:00:00Z");
 const DRAIN_AT = new Date("2026-07-21T00:01:00Z"); // past the seeded `proximo_intento_en`
 const PERIOD = { year: "2026", month: "07" };
 
-// IDENTITY_MIGRATIONS between core and fiscal (manifest order core → identity → fiscal): recordVoid
-// now calls `authorize`, which reads identity's persons/sessions.
-const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, FISCAL_MIGRATIONS] });
+// TEST_MIGRATIONS is the full manifest (identity migrates before fiscal): recordVoid now calls
+// `authorize`, which reads identity's persons/sessions, and fiscal's SP-3a capture migration needs
+// sync_capture() from the sync set. See ../test/migrations.ts.
+const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
 /**
  * Real per-test isolation, deliberately NOT drain.test.ts's shared-and-accumulating convention:

@@ -1,20 +1,24 @@
 import type { GlobalSetupContext } from "vitest/node";
-import { CORE_MIGRATIONS } from "@waitron/db";
 import { runMigrationSets } from "@waitron/db/testing/postgres.js";
 import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
-import { FISCAL_MIGRATIONS } from "../migrations.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
 /**
  * Boots ONE shared PostgreSQL container for the whole @waitron/fiscal-verifactu real-Postgres tier
- * and migrates the single `core_fiscal` template its suites clone (~26ms each) instead of booting
+ * and migrates the single `manifest` template its suites clone (~26ms each) instead of booting
  * and migrating a container per file. See the plan at
  * `docs/superpowers/plans/2026-08-19-shared-test-container.md`.
  *
- * One template, because every real-PG suite in this package migrates exactly the same pair — CORE
- * then FISCAL. That ordering (core first, since the fiscal schema builds on it) is the runtime's
- * responsibility and nothing enforces it, so it is spelled out here exactly as the now-removed
- * per-file `startRealPostgres` did (and as migrations.test.ts documents). Suites clone the template
- * with `useTemplateDb({ template: "core_fiscal" })`. `inmutabilidad.test.ts` is not in this tier —
+ * One template — the FULL migration manifest (`migrationOptionsFor(manifestSets(), null)`), the same
+ * path @waitron/sync's globalSetup uses. It used to migrate just the CORE + FISCAL pair, but SP-3a
+ * gave fiscal a capture migration (`0014_fiscal_sync_capture.sql`) that installs `sync_capture()`
+ * triggers on fiscal's own tables — and `sync_capture()` is defined by @waitron/sync's
+ * `0000_sync_outbox.sql`. So the fiscal set no longer migrates standalone: sync (and therefore its
+ * own prerequisites, identity + payments) must exist first. Rather than hand-list that dependency
+ * chain here — a cross-package list that goes stale the moment the graph changes (CLAUDE.md §2) —
+ * the template migrates the whole manifest, which orders fiscal last (the topo resolver / manifest
+ * put sync before fiscal), exactly as production does. Suites clone it with
+ * `useTemplateDb({ template: "manifest" })`. `inmutabilidad.test.ts` is not in this tier —
  * it is PGlite-only (`usePgliteDb`) and migrates its own set — but it still runs under this
  * globalSetup (see the Docker paragraph below).
  *
@@ -54,7 +58,7 @@ export default async function ({ provide }: GlobalSetupContext) {
       "chain/SIF lock contention the concurrency suites prove, and its superuser bypasses the " +
       "row-level security the RLS suites exist to verify (see chain.pglite-cannot-test-contention.test.ts).",
     templates: {
-      core_fiscal: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS, FISCAL_MIGRATIONS]),
+      manifest: (uri) => runMigrationSets(uri, migrationOptionsFor(manifestSets(), null)),
     },
     roles: [
       // Non-superuser LOGIN roles — being non-superuser is what makes FORCE ROW LEVEL SECURITY

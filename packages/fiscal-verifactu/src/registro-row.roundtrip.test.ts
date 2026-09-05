@@ -1,11 +1,10 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS } from "@waitron/db";
+import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { buildAltaRecord, serializeEnvio } from "@waitron/verifactu";
 import type { AltaInput, Cabecera, EnvioRegistro, RegistroAlta } from "@waitron/verifactu";
 import { registrosFacturacion } from "./schema/registros.js";
-import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { fromRegistroRow, toRegistroRow, type RegistroRow } from "./registro-row.js";
 import { seedSale, seedTill, TEST_NIF, TEST_SISTEMA, type SeededTill } from "./testing/seed.js";
 
@@ -15,7 +14,7 @@ import { seedSale, seedTill, TEST_NIF, TEST_SISTEMA, type SeededTill } from "./t
 // concurrency (each case is its own single insert under a fresh tenant), so real Postgres would buy
 // nothing here and PGlite is the lighter target. The columns' immutability/REVOKE backstop and the
 // deployment-role/RLS behaviour are Slice 1's real-PG suites, not this file's.
-const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
+const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
 let till: SeededTill;
 

@@ -1,11 +1,11 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { captureError, CORE_MIGRATIONS, pgErrorCode } from "@waitron/db";
+import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { captureError, pgErrorCode } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { AppError } from "@waitron/shared";
 import { buildAltaRecord, computeHuella, formatDateTime } from "@waitron/verifactu";
 import { appendToChain, isUniqueViolation, lockChainHead } from "./chain.js";
-import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { currentSif } from "./registro-sif.js";
 import { altaFor, anulacionFor, seedSale, seedTill, type SeededTill } from "./testing/seed.js";
 
@@ -17,7 +17,7 @@ import { altaFor, anulacionFor, seedSale, seedTill, type SeededTill } from "./te
 //
 // Until 2026-07-31 this was a fresh PGlite per test closed by a single `afterAll` — one close for
 // however many instances the run opened, leaving every one but the last alive for the whole run.
-const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
+const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
 let till: SeededTill;
 

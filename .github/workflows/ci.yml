@@ -588,6 +588,8 @@ jobs:
       # a `test:shard` that silently ran nothing (a missing script, a filter that matched nothing)
       # writes no blob, so the upload FAILS the shard rather than reporting a green that tested nothing.
       - name: Upload the db coverage blob
+        # upload on failure too, so a flaky shard's blob names the exact test — 2026-09-05
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: db-blob-${{ matrix.shard }}
@@ -688,6 +690,8 @@ jobs:
       # `if-no-files-found: error` guards a shard that silently ran nothing: no blob → the upload fails
       # the shard, rather than a green that tested nothing (see test-heavy's upload step).
       - name: Upload the server coverage blob
+        # upload on failure too, so a flaky shard's blob names the exact test — 2026-09-05
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: server-blob-${{ matrix.shard }}

@@ -19,7 +19,7 @@ let node: SeededTill;
 let other: SeededTill;
 
 /**
- * Real PostgreSQL via a clone of the shared container's `core_fiscal` template — deliberately NOT
+ * Real PostgreSQL via a clone of the shared container's `manifest` template — deliberately NOT
  * `describe.skipIf(!dockerAvailable)` anywhere in this file. Docker-absence throws rather than
  * degrading to a skip: the throw now happens at the package globalSetup
  * (`src/testing/global-setup.ts`'s `dockerRequired`), which precedes every worker, instead of at a
@@ -32,7 +32,7 @@ let other: SeededTill;
  * Keyed by NODE (node-id rekey, 2026-08-03): the chain is per-node, so a busy node must never stall
  * a quiet one, and the head lock is on the per-node `cadenas` row.
  */
-const suite = useTemplateDb({ template: "core_fiscal" });
+const suite = useTemplateDb({ template: "manifest" });
 
 // No truncate-and-reseed here: registros_facturacion's append-only trigger
 // (registros_facturacion_block_truncate) fires on a CASCADEd TRUNCATE from `tenants` too, and

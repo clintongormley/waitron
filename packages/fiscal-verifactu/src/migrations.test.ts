@@ -9,6 +9,7 @@ import {
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
+import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { RECUPERACION_ENVIANDO_MS } from "./drain.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 
@@ -39,14 +40,15 @@ async function journalCount(db: Awaited<ReturnType<typeof emptyDb>>, table: stri
 }
 
 describe("migration composition across packages", () => {
-  it("applies core then fiscal against an empty database", async () => {
+  it("applies the full manifest (core → … → sync → fiscal) against an empty database", async () => {
     const db = await emptyDb();
-    await runMigrations(db, CORE_MIGRATIONS);
-    await runMigrations(db, FISCAL_MIGRATIONS);
+    for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
 
     const names = await tableNames(db);
-    // Core's tables and the module's tables coexist in one schema, created by two independent
-    // migration sets that know nothing of each other.
+    // Core's tables and the module's tables coexist in one schema, created by independent migration
+    // sets. Fiscal is no longer applied on top of core alone: SP-3a's 0014 capture migration calls
+    // sync's `sync_capture()`, so the whole manifest is migrated (sync before fiscal) — the
+    // production order (see ../test/migrations.ts).
     expect(names).toContain("sales");
     expect(names).toContain("tills");
     expect(names).toContain("registros_facturacion");
@@ -58,8 +60,7 @@ describe("migration composition across packages", () => {
 
   it("keeps the two journals separate", async () => {
     const db = await emptyDb();
-    await runMigrations(db, CORE_MIGRATIONS);
-    await runMigrations(db, FISCAL_MIGRATIONS);
+    for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
 
     // Two tables, both non-empty. One shared journal would make each package's next `generate`
     // read the other's entries as unknown and re-apply its own set from zero.
@@ -72,8 +73,7 @@ describe("migration composition across packages", () => {
 
   it("is idempotent — running both sets twice is a no-op", async () => {
     const db = await emptyDb();
-    await runMigrations(db, CORE_MIGRATIONS);
-    await runMigrations(db, FISCAL_MIGRATIONS);
+    for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
 
     const before = [
       await journalCount(db, CORE_MIGRATIONS.migrationsTable),
@@ -85,8 +85,7 @@ describe("migration composition across packages", () => {
     // guards for the trigger/policy objects, so a re-application would raise 42710
     // (duplicate_object) rather than pass quietly — which is the reason this test asserts on a
     // fresh run rather than on the counts alone.
-    await runMigrations(db, CORE_MIGRATIONS);
-    await runMigrations(db, FISCAL_MIGRATIONS);
+    for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
 
     expect([
       await journalCount(db, CORE_MIGRATIONS.migrationsTable),
@@ -102,7 +101,10 @@ describe("migration composition across packages", () => {
     // the wrong order tests nothing at all. The failure is real: `cadenas` (the first table in
     // fiscal's 0000 snapshot, alphabetically) declares a foreign key onto `tenants`, a table
     // `packages/db` creates — so applying the fiscal folder first fails on a missing relation
-    // before a single fiscal table finishes being created.
+    // before a single fiscal table finishes being created. (Fiscal now also depends on sync — 0014
+    // needs `sync_capture()` — but that trigger is the LAST statement in fiscal's set, so a
+    // fiscal-first run still trips on the missing `tenants` in 0000 long before it, which is the
+    // ordering failure pinned here.)
     //
     // `.rejects.toThrow(...)` does NOT work here: drizzle wraps the driver error in
     // `DrizzleQueryError`, whose OWN `.message` is `Failed query: <sql>\nparams: ...` — not the
@@ -124,8 +126,7 @@ describe("migration composition across packages", () => {
 describe("envio_flujo migration", () => {
   it("creates envio_flujo with a tenant PK and both value columns not-null", async () => {
     const db = await emptyDb();
-    await runMigrations(db, CORE_MIGRATIONS);
-    await runMigrations(db, FISCAL_MIGRATIONS);
+    for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
     const cols = await db.execute<{ column_name: string; is_nullable: string }>(sql`
       select column_name, is_nullable from information_schema.columns where table_name = 'envio_flujo'
     `);
@@ -146,8 +147,7 @@ describe("envio_flujo migration", () => {
     // envio_flujo's policy is the exact tenant_isolation shape the other mutable tables in this
     // package (cadenas, registro_sif, envios) already carry, not just present under some name.
     const db = await emptyDb();
-    await runMigrations(db, CORE_MIGRATIONS);
-    await runMigrations(db, FISCAL_MIGRATIONS);
+    for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
 
     const [policy] = (
       await db.execute<{
@@ -185,8 +185,7 @@ describe("envio_flujo migration", () => {
 describe("acks migration", () => {
   it("creates acks with tenant PK-less state CHECK and RLS", async () => {
     const db = await emptyDb();
-    await runMigrations(db, CORE_MIGRATIONS);
-    await runMigrations(db, FISCAL_MIGRATIONS);
+    for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
     const cols = await db.execute<{ column_name: string; is_nullable: string }>(sql`
       select column_name, is_nullable from information_schema.columns where table_name = 'acks'
     `);
@@ -206,8 +205,7 @@ describe("acks migration", () => {
     // Same by-value note as envio_flujo's policy test above: existence is not correctness, so
     // this reads qual/with_check from the catalog rather than merely asserting a row exists.
     const db = await emptyDb();
-    await runMigrations(db, CORE_MIGRATIONS);
-    await runMigrations(db, FISCAL_MIGRATIONS);
+    for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
 
     const [policy] = (
       await db.execute<{
@@ -242,8 +240,7 @@ describe("acks migration", () => {
 describe("envios.reconciled_resubmit_at migration", () => {
   it("adds envios.reconciled_resubmit_at (nullable)", async () => {
     const db = await emptyDb();
-    await runMigrations(db, CORE_MIGRATIONS);
-    await runMigrations(db, FISCAL_MIGRATIONS);
+    for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
     const cols = await db.execute<{ column_name: string; is_nullable: string }>(sql`
       select column_name, is_nullable from information_schema.columns
       where table_name = 'envios' and column_name = 'reconciled_resubmit_at'`);
@@ -255,8 +252,7 @@ describe("envios.reconciled_resubmit_at migration", () => {
 describe("registros_facturacion.entorno migration", () => {
   it("adds registros_facturacion.entorno (nullable)", async () => {
     const db = await emptyDb();
-    await runMigrations(db, CORE_MIGRATIONS);
-    await runMigrations(db, FISCAL_MIGRATIONS);
+    for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
     const cols = await db.execute<{ column_name: string; is_nullable: string }>(sql`
       select column_name, is_nullable from information_schema.columns
       where table_name = 'registros_facturacion' and column_name = 'entorno'`);
@@ -266,8 +262,7 @@ describe("registros_facturacion.entorno migration", () => {
 
   it("rejects any value outside 'production'/'preproduction'", async () => {
     const db = await emptyDb();
-    await runMigrations(db, CORE_MIGRATIONS);
-    await runMigrations(db, FISCAL_MIGRATIONS);
+    for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
     const error = await captureError(() =>
       db.execute(sql`
         insert into registros_facturacion (tenant_id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
@@ -289,8 +284,7 @@ describe("registros_facturacion.entorno migration", () => {
 describe("envios drainer enumeration seam (migration 0004)", () => {
   it("owns the cross-tenant enumeration with a SECURITY DEFINER function on a non-superuser, non-BYPASSRLS role", async () => {
     const db = await emptyDb();
-    await runMigrations(db, CORE_MIGRATIONS);
-    await runMigrations(db, FISCAL_MIGRATIONS);
+    for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
 
     // The whole guarantee (0004's own comment, mirroring sales_assert_tenders_cover): SECURITY
     // DEFINER alone would go fail-CLOSED here — FORCE ROW LEVEL SECURITY subjects even the owner to
@@ -337,8 +331,7 @@ describe("envios drainer enumeration seam (migration 0004)", () => {
 
   it("scopes the permissive enumeration policy to the drainer role, SELECT-only, USING(true)", async () => {
     const db = await emptyDb();
-    await runMigrations(db, CORE_MIGRATIONS);
-    await runMigrations(db, FISCAL_MIGRATIONS);
+    for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
 
     // Existence is not correctness (same note as envio_flujo's policy test above): read cmd/roles/
     // qual BY VALUE. This is the additive permissive policy the SECURITY DEFINER function sees rows
@@ -370,8 +363,7 @@ describe("envios drainer enumeration seam (migration 0004)", () => {
     // pendiente row due at p_now is enumerated; the same query one second BEFORE it comes due is not
     // — pinning the estado/proximo_intento_en predicate the function shares with tenantsWithWork.
     const db = await emptyDb();
-    await runMigrations(db, CORE_MIGRATIONS);
-    await runMigrations(db, FISCAL_MIGRATIONS);
+    for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
     const seeded = await seedPendingEnvios(db, { count: 1 });
 
     const due = await db.execute<{ tenant_id: string }>(
@@ -401,8 +393,7 @@ describe("envios drainer enumeration seam (migration 0004)", () => {
     // one stamped just PAST the threshold, one just WITHIN it. If either literal drifts from the
     // other, one of the two assertions below fails.
     const db = await emptyDb();
-    await runMigrations(db, CORE_MIGRATIONS);
-    await runMigrations(db, FISCAL_MIGRATIONS);
+    for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
 
     const now = new Date("2026-07-21T00:00:00Z");
 

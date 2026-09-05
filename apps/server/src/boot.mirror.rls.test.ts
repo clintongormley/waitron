@@ -8,12 +8,22 @@ import { setTimeout as delay } from "node:timers/promises";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
-import { setDeploymentMode, stampDeployment, writeMirrorConfig, type Database } from "@waitron/db";
+import {
+  readSingletonRole,
+  setDeploymentMode,
+  stampDeployment,
+  writeMirrorConfig,
+  type Database,
+} from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { enrolPeer } from "@waitron/sync";
+import { drain } from "@waitron/fiscal-verifactu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer } from "./boot.js";
+import { runPass, DRAIN_DUTY } from "./pass.js";
+import { singletonPass } from "./singleton-pass.js";
+import { seedFiscalRegistro } from "./testing/fiscal-fixtures.js";
 import { roleUrl } from "./testing/postgres.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
 import { sealMirrorToken } from "./mirror-token.js";
@@ -310,6 +320,110 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     }
     // The listener is genuinely gone after close() (workers + pools torn down).
     await expect(fetch(`${base}/sync-api/hello`)).rejects.toThrow();
+  }, 60_000);
+
+  it("runs the trivial empty pass on a mirror — the fiscal drain (AEAT submission) is never invoked", async () => {
+    // The first test proves the mirror's health-only pass RAN (`lastPassAt` advanced). This proves the
+    // stronger fiscal claim: that empty pass SUBMITS NOTHING. A mirror holds replicated `pendiente`
+    // `envios` (rows its primary generated) — if the singleton gate leaked, drain would pick them up,
+    // decrypt a certificate and file them to AEAT under a chain this node does not own, an unrecoverable
+    // fiscal error (CLAUDE.md §5). `startServer` builds the AEAT resolver internally from `mtlsFetch`
+    // (boot.ts ~1917), so there is NO `resolveClient` seam to inject through the full boot; per the task
+    // brief we DRIVE THE BOOT PASS PATH directly instead — the same `singletonPass(getRole, () =>
+    // runPass({ drain, reconcile, … }))` wiring boot.ts assembles (boot.ts ~1908) — with a reject-if-
+    // called `resolveClient` tripwire in place of the real transport (the pattern the fiscal suites use,
+    // e.g. split-bill.fiscal.test.ts). If drain ever runs, the tripwire fires; on a mirror it must not.
+
+    // A replicated pending envío this node must NOT submit (fresh FK closure + registro + a 'pendiente'
+    // `envios` row). `entorno` matches this box's stamp so the row is genuinely due for the environment
+    // the primary control below drains for — `resolveClient` is resolved BEFORE the entorno guard
+    // regardless (drain.ts:226), so the tripwire fires on the tenant either way.
+    const seeded = await seedFiscalRegistro(mirror.admin, {
+      envio: true,
+      cadena: true,
+      entorno: "preproduction",
+    });
+
+    let resolveClientCalled = false;
+    // The reject-if-called tripwire: drain resolves one of these per tenant with due work
+    // (drain.ts:226). Reaching it at all on a mirror is the failure this gate catches.
+    const tripwireResolveClient = (): Promise<never> => {
+      resolveClientCalled = true;
+      return Promise.reject(new Error("mirror must not contact AEAT"));
+    };
+    // Build the pass EXACTLY as boot.ts wires it: the singleton gate wrapping `runPass`, whose `drain`
+    // is the real `@waitron/fiscal-verifactu` drainer with the tripwire transport, and a trivial
+    // reconcile (the settlement duty is out of scope for this fiscal gate). `getRole` models boot.ts's
+    // `() => holders.singletonRole.current` — an in-memory holder a promotion flips (boot.ts ~1901).
+    const buildPass = (getRole: () => "primary" | "secondary") =>
+      singletonPass(getRole, (at) =>
+        runPass(
+          {
+            drain: (at2) =>
+              drain(
+                {
+                  db: mirror.admin,
+                  resolveClient: tripwireResolveClient,
+                  skipRetryMs: 300_000,
+                  environment: "preproduction",
+                },
+                at2,
+              ),
+            reconcile: () =>
+              Promise.resolve({
+                ran: [],
+                deferred: 0,
+                beyondHorizon: 0,
+                skipped: [],
+                nextDueAt: null,
+              }),
+            monotonicMs: () => performance.now(),
+            log: () => {},
+          },
+          at,
+        ),
+      );
+
+    // The mirror clone's REAL role, as `setDeploymentMode('mirror')` co-set it in beforeAll — this is a
+    // genuine mirror, not a role invented for the test.
+    const role = await readSingletonRole(mirror.admin);
+    expect(role).toBe("secondary");
+
+    // Drive the pass an hour ahead of wall-clock so the seeded envío is unambiguously DUE for the
+    // primary control below (`envios_tenants_with_work` gates on `proximo_intento_en <= now`, whose
+    // default is the CONTAINER's `now()` at insert — which can sit microseconds ahead of the host's
+    // `new Date()`, leaving the row not-yet-due and the tripwire silent for a clock-skew reason). The
+    // mirror direction ignores `now` (the gate short-circuits), so one instant serves both.
+    const drainAt = new Date(Date.now() + 3_600_000);
+
+    // The mirror pass: the singleton gate short-circuits to the trivial empty pass, so drain (and thus
+    // the AEAT transport) is never invoked. No rejection surfaces; the report has no duties at all.
+    const mirrorReport = await buildPass(() => role)(drainAt);
+    expect(resolveClientCalled).toBe(false);
+    expect(mirrorReport).toEqual({ nextDueAt: null, duties: [] });
+
+    // Belt-and-braces: the replicated envío is untouched — still 'pendiente', no submission side effect.
+    const afterMirror = await mirror.admin.execute<{ estado: string }>(
+      sql`select estado from envios where registro_id = ${seeded.registroId}`,
+    );
+    expect(afterMirror.rows[0]?.estado).toBe("pendiente");
+
+    // Prove-by-deletion, baked in as the other-direction control (CLAUDE.md §1): the SAME wiring with
+    // the node promoted to 'primary' DOES run the pass, drain reaches `resolveClient`, and the tripwire
+    // FIRES — so the mirror's clean pass above is the singleton gate working, not a drainer that never
+    // fires. (Documented RED confirmed in a scratch run before this control was added; see the report.)
+    const primaryReport = await buildPass(() => "primary")(drainAt);
+    expect(resolveClientCalled).toBe(true);
+    // drain contains the tripwire rejection per-tenant (drain.ts:228 → `skipped`), so the pass still
+    // completes with a drain duty entry rather than throwing — the drainer genuinely RAN on the primary.
+    expect(primaryReport.duties.some((d) => d.duty === DRAIN_DUTY)).toBe(true);
+
+    // The envío is STILL 'pendiente' even on the primary run: `resolveClient` throws before `drainTenant`
+    // (drain.ts:226-227), so nothing was ever submitted — the tripwire proves reachability, not filing.
+    const afterPrimary = await mirror.admin.execute<{ estado: string }>(
+      sql`select estado from envios where registro_id = ${seeded.registroId}`,
+    );
+    expect(afterPrimary.rows[0]?.estado).toBe("pendiente");
   }, 60_000);
 
   it("primary boot of the same identity DOES mount the sync source (control: the mirror's absence is real)", async () => {

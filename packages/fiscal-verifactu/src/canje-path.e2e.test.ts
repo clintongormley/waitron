@@ -27,8 +27,8 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
  * this record from a sale) is Slice 3, not built here; this slice isolates the storage round-trip
  * and drain serialisation by building the F3 record directly via `buildAltaRecord` → `toRegistroRow`.
  */
-// A clone of the shared container's `core_fiscal` template (CORE + FISCAL).
-const suite = useTemplateDb({ template: "core_fiscal" });
+// A clone of the shared container's `manifest` template (the full migration manifest).
+const suite = useTemplateDb({ template: "manifest" });
 
 let till: SeededTill;
 

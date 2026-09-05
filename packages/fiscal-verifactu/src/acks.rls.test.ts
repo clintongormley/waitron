@@ -14,10 +14,10 @@ const PROBE_ROLE = "acks_rls_probe";
 const PROBE_PASSWORD = "probe";
 const NOW = new Date("2026-07-21T00:01:00Z");
 
-// A clone of the `core_fiscal` template (CORE + FISCAL); the probe connection below authenticates as
+// A clone of the `manifest` template (the full migration manifest); the probe connection below authenticates as
 // `acks_rls_probe`, a cluster-wide role the package globalSetup creates in place of the per-file
 // `probeRole` this suite passed before the shared container.
-const suite = useTemplateDb({ template: "core_fiscal" });
+const suite = useTemplateDb({ template: "manifest" });
 
 /**
  * The acks read/write path under real row-level security. PGlite's default connection is a

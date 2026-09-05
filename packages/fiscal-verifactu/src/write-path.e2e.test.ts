@@ -2,16 +2,16 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
+import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleLine } from "@waitron/core";
 import { buildQrPayload, computeHuella } from "@waitron/verifactu";
 import type { RegistroAlta } from "@waitron/verifactu";
-import { CORE_MIGRATIONS, asAppUser, incidents, saleLines, sales, withTenant } from "@waitron/db";
+import { asAppUser, incidents, saleLines, sales, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { tillId as brandTillId } from "@waitron/shared";
 import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
-import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { fromRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
 import { cadenas } from "./schema/cadenas.js";
@@ -40,7 +40,7 @@ let seriesId: SeriesId;
  * hash, and a `pendiente` sidecar row exists. The fake writes to none of these tables at all, so
  * every one of these assertions would pass against a module that silently no-ops.
  */
-const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
+const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
   ({ tenantId, tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));

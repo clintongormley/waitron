@@ -30,8 +30,8 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
  * the ORIGINAL registro's exact stored identity, and it advances the same chain the original sits
  * on with its own `pendiente` sidecar — none of which a refusal-only test exercises.
  */
-// A clone of the shared container's `core_fiscal` template (CORE + FISCAL).
-const suite = useTemplateDb({ template: "core_fiscal" });
+// A clone of the shared container's `manifest` template (the full migration manifest).
+const suite = useTemplateDb({ template: "manifest" });
 
 let backend: VerifactuBackend;
 let till: SeededTill;

@@ -1,10 +1,10 @@
-import { CORE_MIGRATIONS, captureError, pgErrorCode } from "@waitron/db";
+import { captureError, pgErrorCode } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { FISCAL_MIGRATIONS } from "./migrations.js";
+import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
 
 /**
@@ -20,7 +20,7 @@ import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
  * deployment role or lock contention that would require real Postgres (CLAUDE.md §4).
  */
 const pg = usePgliteDb({
-  migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS],
+  migrations: TEST_MIGRATIONS,
   setup: seedTenantTillSif,
 });
 

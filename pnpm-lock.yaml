@@ -536,6 +536,9 @@ importers:
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
+      '@waitron/sync-enrolment':
+        specifier: workspace:*
+        version: link:../sync-enrolment
       '@waitron/verifactu':
         specifier: workspace:*
         version: link:../verifactu
@@ -555,6 +558,9 @@ importers:
       '@waitron/identity':
         specifier: workspace:*
         version: link:../identity
+      '@waitron/migrations':
+        specifier: workspace:*
+        version: link:../migrations
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10

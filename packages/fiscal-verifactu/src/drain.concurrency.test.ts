@@ -18,7 +18,7 @@ const DRAIN_PROBE_ROLE = "drain_probe";
 const DRAIN_PROBE_PASSWORD = "probe";
 
 /**
- * Real PostgreSQL via a clone of the shared container's `core_fiscal` template — deliberately NOT
+ * Real PostgreSQL via a clone of the shared container's `manifest` template — deliberately NOT
  * `describe.skipIf(!dockerAvailable)` anywhere in this file, for the same reason
  * `chain.concurrency.test.ts` gives: a concurrency suite that silently vanishes when Docker is absent
  * reports a green run that proves nothing about the ONE property this file exists to establish — that
@@ -32,7 +32,7 @@ const DRAIN_PROBE_PASSWORD = "probe";
  * The probe connections below authenticate as `drain_probe`, a cluster-wide role the globalSetup
  * creates in place of the per-file `probeRole` this suite passed before the shared container.
  */
-const suite = useTemplateDb({ template: "core_fiscal" });
+const suite = useTemplateDb({ template: "manifest" });
 
 // More than one row, but well within one envío (MAX_REGISTROS_POR_ENVIO = 1000) — this suite is
 // not about batching (drain.test.ts's own "1001-split" describe covers that), it is about whether

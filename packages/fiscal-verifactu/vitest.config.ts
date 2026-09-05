@@ -3,7 +3,7 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 export default defineConfig({
   test: {
     globals: true,
-    // globalSetup boots ONE shared Postgres container and migrates the `core_fiscal` template every
+    // globalSetup boots ONE shared Postgres container and migrates the `manifest` template every
     // real-PG suite clones (~26ms) instead of each file booting and migrating its own (~1.5s). See
     // src/testing/global-setup.ts. Because it precedes every worker, a Docker-absent run now fails
     // the whole package — the PGlite-only inmutabilidad.test.ts included (that file's header explains

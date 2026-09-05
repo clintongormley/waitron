@@ -13,11 +13,11 @@ import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixt
 const PROBE_ROLE = "rls_probe";
 const PROBE_PASSWORD = "probe";
 
-// A clone of the `core_fiscal` template (CORE + FISCAL); the probe connection below authenticates as
+// A clone of the `manifest` template (the full migration manifest); the probe connection below authenticates as
 // `rls_probe`, a cluster-wide role the package globalSetup creates once and shares with
 // rectificativa-columns.rls / canje-columns.rls, in place of the per-file `probeRole` this suite
 // passed before the shared container.
-const suite = useTemplateDb({ template: "core_fiscal" });
+const suite = useTemplateDb({ template: "manifest" });
 
 describe("pendingCount under real row-level security", () => {
   it("counts the tenant's pending records when run as an RLS-subject role", async () => {

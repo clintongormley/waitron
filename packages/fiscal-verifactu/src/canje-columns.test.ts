@@ -1,16 +1,9 @@
-import {
-  CORE_MIGRATIONS,
-  asAppUser,
-  captureError,
-  pgErrorCode,
-  pgErrorMessage,
-  withTenant,
-} from "@waitron/db";
+import { asAppUser, captureError, pgErrorCode, pgErrorMessage, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { FISCAL_MIGRATIONS } from "./migrations.js";
+import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
 
 /**
@@ -25,7 +18,7 @@ import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
  * `canje-columns.rls.test.ts` against a real container.
  */
 const pg = usePgliteDb({
-  migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS],
+  migrations: TEST_MIGRATIONS,
   setup: seedTenantTillSif,
 });
 

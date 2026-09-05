@@ -1,12 +1,11 @@
-import { CORE_MIGRATIONS } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { FISCAL_MIGRATIONS } from "./migrations.js";
+import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
 
 const pg = usePgliteDb({
-  migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS],
+  migrations: TEST_MIGRATIONS,
   setup: seedTenantTillSif,
 });
 

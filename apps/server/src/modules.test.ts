@@ -36,6 +36,6 @@ describe("MODULE_BY_TABLE", () => {
     expect([...MODULE_BY_TABLE.keys()].sort()).toEqual(
       ALL_SYNC_ENROLMENTS.map((e) => e.table).sort(),
     );
-    expect(MODULE_BY_TABLE.size).toBe(ALL_SYNC_ENROLMENTS.length); // 22, no duplicate table
+    expect(MODULE_BY_TABLE.size).toBe(ALL_SYNC_ENROLMENTS.length); // 28, no duplicate table
   });
 });

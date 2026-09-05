@@ -1,5 +1,4 @@
 import {
-  CORE_MIGRATIONS,
   asAppUser,
   captureError,
   createPgliteDb,
@@ -9,18 +8,21 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
+import { TEST_MIGRATIONS } from "../test/migrations.js";
 
-// IDENTITY_MIGRATIONS is applied between core and fiscal (manifest order: core, identity, …,
-// fiscal) so this tenant_id-keyed RLS scan also covers identity's `persons` and `sessions` — the
-// ONLY catalog guard that a missing FORCE ROW LEVEL SECURITY there would trip. A behavioural RLS
-// test cannot: the harness owns the tables as superuser, which FORCE does not constrain.
+// The FULL migration manifest is applied (was CORE + IDENTITY + FISCAL). SP-3a gave fiscal a capture
+// migration (`0014_fiscal_sync_capture.sql`) that installs `sync_capture()` triggers, and that
+// function comes from @waitron/sync's `0000_sync_outbox.sql`, so the fiscal set no longer migrates
+// without sync (and sync's own prerequisites). Migrating the whole manifest — rather than
+// hand-listing that chain, which goes stale (CLAUDE.md §2) — keeps this in production migration
+// order (fiscal last) AND widens the tenant_id-keyed FORCE-RLS catalog scan below to every
+// tenant-scoped table in the database, not just core/identity/fiscal's. A behavioural RLS test
+// cannot substitute: the harness owns the tables as superuser, which FORCE does not constrain.
 const pg = usePgliteDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, FISCAL_MIGRATIONS],
+  migrations: TEST_MIGRATIONS,
   setup: seedTenantTillSif,
 });
 
@@ -201,8 +203,8 @@ describe("row-level security on every tenant-scoped table in this package (and i
     expect(names).toContain("acks");
     expect(names).not.toContain("contadores_instalacion");
 
-    // identity's tenant-scoped tables, wired in above (IDENTITY_MIGRATIONS) so the FORCE-RLS scan
-    // covers them too. Asserting they are DISCOVERED keeps the coverage honest: if identity's
+    // identity's tenant-scoped tables, present via the full manifest migrated above, so the FORCE-RLS
+    // scan covers them too. Asserting they are DISCOVERED keeps the coverage honest: if identity's
     // migrations stopped creating them, the nonCompliant check below would go vacuously green here
     // rather than red, and the missing-FORCE guard would silently stop covering identity.
     expect(names).toContain("persons");
@@ -228,8 +230,7 @@ describe("row-level security on every tenant-scoped table in this package (and i
     // exactly the mistake this recipe warns about. A fresh database, not the suite's own `pg.db`:
     // this probe is scaffolding for the guard itself, not part of the product schema.
     const probeDb = await createPgliteDb();
-    await runMigrations(probeDb, CORE_MIGRATIONS);
-    await runMigrations(probeDb, FISCAL_MIGRATIONS);
+    for (const migrations of TEST_MIGRATIONS) await runMigrations(probeDb, migrations);
     await probeDb.execute(sql`
       create table cadenas_rls_probe (
         tenant_id uuid not null,

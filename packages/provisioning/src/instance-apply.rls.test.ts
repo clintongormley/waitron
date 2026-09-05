@@ -115,11 +115,11 @@ describe("applyInstance against a blank container", () => {
         "identity",
         "workforce",
         "workforce-es",
-        "fiscal",
         "payments",
         "scheduler",
         "credentials",
         "sync",
+        "fiscal",
       ]);
       expect(Object.keys(after.roles).sort()).toEqual([
         "waitron_app",
@@ -467,14 +467,14 @@ describe("applyInstance against a blank container", () => {
     if (last === undefined) throw new Error("the manifest is empty");
     // The journal table below is derived from the manifest; the SCHEMA probe further down is not,
     // and cannot be — `MigrationSet` carries `name`, `table` and `from` (manifest.ts:9-14) and no
-    // list of what each set creates, so there is nothing to derive `sync_log` from. This assertion
-    // is what keeps the hardcoded half honest: `sync_log` is created by
-    // `packages/sync/drizzle/0000_sync_outbox.sql`, which is the `sync` set (now last, after the
-    // commercial-lane outbox was added). Append a further set to the manifest and this fails here,
+    // list of what each set creates, so there is nothing to derive `registros_facturacion` from.
+    // This assertion is what keeps the hardcoded half honest: `registros_facturacion` is created by
+    // `packages/fiscal-verifactu/drizzle/0000_esquema_fiscal.sql`, which is the `fiscal` set (now
+    // last, since SP-3a: fiscal's capture triggers will call sync's `sync_capture()` SPI, so the
+    // `sync` set must migrate first). Append a further set to the manifest and this fails here,
     // loudly, instead of silently probing a table that belongs to a set which was never the one
-    // left empty. (`sync`'s migration attaches capture triggers to the enrolled db/payments tables,
-    // so it can only run once every earlier set has — which is exactly why it is last.)
-    expect(last.name).toBe("sync");
+    // left empty.
+    expect(last.name).toBe("fiscal");
 
     await admin.execute(sql.raw(`create database ${quoteIdent(database)}`));
     try {
@@ -511,7 +511,7 @@ describe("applyInstance against a blank container", () => {
         expect(state.inside?.migratedSets).toEqual(sets.map((set) => set.name));
         // And the set really is empty — no table of its own yet.
         const before = await target.execute<{ present: boolean }>(
-          sql`select to_regclass('public.sync_log') is not null as present`,
+          sql`select to_regclass('public.registros_facturacion') is not null as present`,
         );
         expect(before.rows[0]?.present).toBe(false);
 
@@ -524,7 +524,7 @@ describe("applyInstance against a blank container", () => {
         // Assert against the SCHEMA, not the journal: journal presence is the very signal being
         // shown to be insufficient, so re-reading it would prove nothing.
         const after = await target.execute<{ present: boolean }>(
-          sql`select to_regclass('public.sync_log') is not null as present`,
+          sql`select to_regclass('public.registros_facturacion') is not null as present`,
         );
         expect(after.rows[0]?.present).toBe(true);
       } finally {
