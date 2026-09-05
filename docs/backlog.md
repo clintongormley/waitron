@@ -66,7 +66,7 @@ believable demo restaurant: two menus (~44 products with per-dish images), a flo
 tables), staff on PIN 5555, and ~28 days of back-dated preproduction sales — English by default,
 Spanish via `WAITRON_SEED_LOCALE=es-ES`. ~25 fleshed-out screens on one enforced design system.
 
-### Whole-project design review (2026-09-05) — decisions taken, recommendations pending
+### Whole-project design review (2026-09-05) — decisions taken; execution in three parallel tracks
 
 A base-to-tip review of the code and every Track-2 spec, with the owner answering the review's
 questions. Landed from it: CLAUDE.md §1 comment rule + §6 model-selection trial (#233), the
@@ -109,33 +109,126 @@ conflict):**
   as modules from now**, and **no new table enters the core migration set without a stated reason**.
 - Comments carry invariants, not history (CLAUDE.md §1). Coverage bar is negotiable with a reason.
 
-**Recommendations still awaiting an owner call — each its own brainstorm when picked up:**
+**Execution — three parallel sessions (owner decision 2026-09-05).** The owner accepted the
+remaining recommendations for execution and asked for them to run as three independent sessions,
+each in its own worktree (`worktree.py new`), split so that no two tracks edit the same files at the
+same time. Track B here *is* Priorities' Track 2. Each item is still its own brainstorm → spec →
+plan → PR; items marked **[owner]** never land unattended.
 
-1. **Drop FORCE RLS + the multi-role set** (`sync_tailer`/`sync_retention`/the NOLOGIN function
-   roles), keeping `tenant_id` columns. Moves most real-PG suites onto PGlite. Also removes the
-   reason native logical replication was rejected — worth a one-day container prototype of PG16+
-   bidirectional replication (`origin = none`) before any further sync feature; do not rip out the
-   outbox until that prototype says so.
-2. **Warm standby + human promotion instead of active-active — DECIDED 2026-09-05** (owner decisions
-   above), on the same replication mechanism: tills talk to one box at a time. Removes the
-   `dining_tables` two-writer hazard (watermark upsert, no watermark column, 12 update sites), the
-   double-bill class and per-tab ownership routing. Trade accepted: a LAN partition idles the
-   secondary's tills until a human promotes. Carry into the till-reroute slice: the `dining_tables`
-   enrolment comment (`packages/db/src/enrolment.ts`) should say single-writer-by-construction and
-   drop its "mixed config/runtime" deferral; the config-conflict gate keeps only the fence-window case.
-3. **Till reroute is the first Track-2 slice** — nothing server-side in the failover arc is usable
-   until a till can reach the second box; sessions are origin-bound DB rows (PIN re-prompt v1).
-   Then the promotion runbook, then printer failover.
-4. **Fiscal-none module right after fiscal-verifactu** (tiny; proves the slot for the UK case);
-   the first UI-bearing module (bookings) after that, since fiscal never exercises cards/permissions.
-5. **Coverage split**: keep 98/98/98/95 on `verifactu`, `fiscal-verifactu`, `core`, `db`, `sync`,
-   `payments`; 90/85 elsewhere (71 files already carry `v8 ignore`).
-6. **Collapse identity concepts** while pre-production makes it free: `tills` vs `devices`
-   (already an SP-A.2 follow-up), and the node-role spread across `deployment.mode`,
-   `singleton_role`, membership standing and the boot-captured `fenced` flag.
-7. Smaller: squash the 111 core migrations before the first real venue; de-triplicate the three
-   alta builders in `fiscal-verifactu/backend.ts` (already under *Debt → Fiscal*); reconsider the
-   bespoke tunnel and backup container against off-the-shelf tools.
+**Track A — data layer** (sequential; owns `packages/*/drizzle/`, `packages/db` tenancy + test
+harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.test.ts`, every
+`vitest.config.ts`, CLAUDE.md §2–§4):
+
+1. **Coverage split** (an afternoon, land first so every later PR runs against the new bar): keep
+   98/98/98/95 on `verifactu`, `fiscal-verifactu`, `core`, `db`, `sync`, `payments`; 90/90/85/85
+   elsewhere (the four browser packages keep their documented 95/95/90/88 or take the new floor,
+   whichever is lower); update CLAUDE.md §2's thresholds paragraph in the same PR. Receipt: 71 files
+   already carry `v8 ignore`.
+2. **Native logical replication prototype** (one day, two `postgres:18-alpine` containers, no repo
+   code; output = a dated findings doc under `docs/superpowers/specs/`): real migrations WITHOUT RLS, a
+   non-superuser apply role that OWNS the subscriber's tables (the old "Stage 3b" `cannot SET ROLE`
+   failure was ownership, not RLS). Prove (a) `origin = none` stops the A→B→A echo, (b) a
+   `registros_facturacion` row lands byte-identical, (c) the append-only trigger still blocks a stray
+   UPDATE on the subscriber, (d) a one-sided column add errors loudly rather than dropping data, (e)
+   lag + slot retention with the subscriber down. State the failing case before each probe. **Decision
+   rule:** all of (a)–(d) pass → stop adding outbox features and write the swap spec (item 4); any
+   fail → record the receipt in the sync design and keep the outbox. Never rip the outbox out before
+   this reports.
+3. **Drop FORCE RLS + the multi-role set — [owner] at land** (one PR chain; the largest change on
+   this list; gated on item 2 only because the answer changes what the sync layer must be). Keep
+   `tenant_id` columns + composite FKs, the owner-vs-`app_user` split (the append-only guarantee rests
+   on the app never owning the tables), and `withTenant` as the transaction primitive with its
+   `app.tenant_id` set_config hollowed out. Drop every `ENABLE/FORCE ROW LEVEL SECURITY` + `CREATE
+   POLICY`, `current_tenant_id()`, the per-tenant `sync_log` fencing (the whole reason
+   `sync_tailer`/`sync_retention` exist), the NOLOGIN function roles, the RLS-only halves of
+   `asAppUser`/`ProbeRole` and of `fiscal-verifactu`'s `inmutabilidad` suite, and the 115
+   `*.rls.test.ts` suites (read each first — privilege facts move to plain grant tests). Do it as a
+   **new baseline migration set per module** — this is the migration squash (111 files → per-module
+   baselines; the hand-written immutability triggers + grants carried verbatim). Re-examine what
+   `instance-plan.ts` refuses (superuser still yes: the triggers must not be bypassable). **Receipt
+   before merge:** on `postgres:18-alpine` as `app_user`, `UPDATE registros_facturacion` fails
+   (`42501`) and `INSERT` succeeds. Measure real-PG test-file count (190 today) + full-suite wall
+   clock before/after.
+4. **Outbox → native replication swap spec** (only if item 2 passed): the schema-version gate
+   becomes "subscriptions error until the subscriber migrates" (the rolling-reboot model already
+   chosen); lanes, defer, retention, cursors become Postgres's job. Spec first; slices are their own
+   items.
+
+**Track B — failover** (sequential; = Priorities' Track 2; owns `apps/till`, `apps/server`'s boot /
+promote / till-session / read-only gate / box-* / rejoin, `packages/membership`, `packages/printing`,
+and the single config-conflict-gate trim in `packages/sync`):
+
+1. **Till reroute** — the first slice, because nothing server-side in the failover arc is usable
+   until a till can reach the second box. Brainstorm Route A (service worker + bearer token,
+   browser-only interim) vs Route B (native agent, stable local origin) FIRST — it changes the auth
+   model (distribution design §3). Then: static ordered server list cached on the till,
+   N-consecutive-failure detection with hysteresis, a manual "switch server" control, PIN re-prompt on
+   switch (v1; portable signed token later), idempotency key on settle/pay. Carry the warm-standby
+   cleanups: the `dining_tables` enrolment comment says single-writer-by-construction (drop the
+   "mixed config/runtime" deferral); the config-conflict gate keeps only the fence-window case; R3a's
+   two deferrals (till reads routed through the display-data node; selling gated on REBOOT completion,
+   not the PONR). Rewrite CLAUDE.md §5's "nothing blocks a sale" wording in the same change.
+2. **The local warm standby** — verify (run, not read) that the cloud-mirror adopt + R3b promotion
+   path serves a second LOCAL box pulling directly over the LAN with no relay; that box IS the deli's
+   standby under warm standby. Fix what the relay-shaped mirror config assumes. Wizard mode 4 (*Add a
+   node*) wraps this later.
+3. **Promotion runbook Slice 2** — the authenticated promote endpoint + break-glass mint + the real
+   runtime admin connection (the write today uses `migrationsDatabaseUrl`); then **re-admission** of a
+   rejoined, wiped-and-restored box as the standby (R3 follow-up (b)) and the resume-at-restore marker
+   (R3 follow-up (a)).
+4. **Printer failover** (`2026-08-26-failover-printing-design.md`).
+5. **Node-role collapse** — derive ONE `NodeRole` at boot from the membership document (today spread
+   across `deployment.mode`, `singleton_role`, membership standing and the boot-captured `fenced`
+   flag) and pick one rule: every role change is a restart, or the worker-lifecycle manager Slice 3
+   keeps deferring — not both; a small worker registry replaces `startServer`'s hand-rolled
+   AbortController-per-worker (`boot.ts`, 1,665 lines). **After Track A item 3 lands** — both edit
+   `boot.ts`'s role-pool wiring.
+6. **`tills` vs `devices` — [owner]** (SP-A.2 follow-up 2): own brainstorm + full fiscal trace; a new
+   H2 receipt for what an immutable record's `till_id` holds. After Track A's squash.
+
+**Track C — product / modules** (sequential; owns `packages/fiscal*`, the module framework packages,
+every NEW module package, `apps/dashboard` module screens, `apps/server/src/modules.ts`, and the
+control-plane docs):
+
+1. **Finish fiscal as a module:** SP-3b vocabulary, SP-3c gated-provisioning seam, SP-3d
+   backup/restore hook (= BR-4) — the queued slices under *Waitron module system*.
+2. **`fiscal-none` module** (tiny; the UK case; forces every chain/huella/`entorno` assumption
+   through the `FiscalBackend` seam — a better pluggability proof than TicketBAI). Put the two agreed
+   rules (new domains land as modules; no new core table without a stated reason) into CLAUDE.md §3
+   in this PR.
+3. **Bookings as the first UI-bearing module** (own package, own tables, own dashboard screen):
+   proves cards, permissions and i18n arriving with a module — fiscal never exercises them.
+4. **Control plane brainstorm — NEW (owner-added 2026-09-05).** With one tenant per database and a
+   dedicated cloud instance per tenant, the only multi-tenant service Waitron will run is a small
+   control plane: accounts (a customer of ours, a concept the schema does not have — a tenant is a
+   taxpayer, and one customer may own several), subscriptions, instances (which box/VM serves which
+   tenant, its version, its region once asesor Q16 answers), relay tokens for the tunnel, and version
+   rollout per tenant. Density comes from many isolated instances per host, never a shared database.
+   Pair it with item 5's tunnel question: the relay choice shapes what the control plane hands out.
+   Docs-only until designed; nothing here is on the sale path.
+5. **Reconsider two bespoke pieces against off-the-shelf** (brainstorm, not a mandate):
+   `@waitron/tunnel` (a blind byte-splice reverse tunnel whose relay does not exist yet — Tailscale /
+   cloudflared / frp) and the backup container `WBA1` + `artifact-cipher.ts` (whole-dump in memory,
+   restorable only by Waitron code — `pg_dump | age`, tar).
+6. **De-triplicate the three alta builders — [owner]** in `fiscal-verifactu/src/backend.ts`
+   (`recordSale` / `recordCorrection` / `recordSubstitution`; already under *Debt → Fiscal*): needs
+   the huella-invariance re-run across all three.
+
+**Coordination rules for the three sessions** (each paid for already, CLAUDE.md §2/§4):
+
+- **Serialise pushes and browser-mode test runs.** Never two pre-push hooks at once — Tracks B and
+  C both touch browser packages (real headless Chromium; two overlapping gates force-quit the machine
+  on 2026-08-30) and Track A's real-PG suites race on Docker ports. Before `git push` or a local
+  `test:coverage`, `pgrep -f .husky/pre-push` must print nothing; wait if it does.
+- **No new CORE migration in Tracks B/C until Track A's squash lands** (the module rule already
+  forbids it without a stated reason). Module-owned migrations (Track C) are regenerated on rebase
+  per CLAUDE.md §3's recipe; whoever lands second rebases.
+- **Shared files:** `apps/server/src/boot.ts` (A deletes role pools; B refactors workers → B5 waits
+  for A3), `packages/sync`'s apply gate (A's roles vs B's one-case trim → B does it after A3 or takes
+  the rebase), `CLAUDE.md` (A: §2–§4, B: §5, C: §3 — textual rebases), and this file (each track
+  edits its own sections plus this list; conflicts are textual).
+- **Comment thinning on touch only** (CLAUDE.md §1); no sweep in any track.
+- **Update this list as items land**, in the same PR.
 
 ### Layout designer & device profiles (NEW — owner-inserted 2026-09-02, spec approved)
 
@@ -1345,7 +1438,9 @@ option** for the cold-restore re-registration path.
 **Parked beneath the two tracks (distribution / failover):**
 
 - **Cloud trial on-ramp** — same-origin PWA pointed at a cloud instance; preproduction, shared demo
-  tenant. Gated on Waitron-cloud infra that does not exist yet.
+  tenant. Gated on Waitron-cloud infra that does not exist yet — which, since 2026-09-05, means a
+  per-tenant instance fleet plus the control plane (*Whole-project design review → Track C item 4*),
+  not a shared multi-tenant store.
 - **Identity-config flow-down — LANDED #195.** `persons` + `webauthn_credentials` now flow down the
   ordered lane (Group-E no-watermark upsert, capture triggers in `0007_sync_identity_capture.sql`,
   origin `nodeId` threaded through every identity-config writer incl. the till + me-api locale routes);
