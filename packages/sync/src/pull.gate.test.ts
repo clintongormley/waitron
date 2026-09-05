@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
+import { CORE_ENROLMENT } from "@waitron/db";
 import { encodeBatch } from "./wire.js";
 import { syncPullOnce, type HttpClient } from "./pull.js";
 import type { SyncLogRow } from "./apply.js";
@@ -123,6 +124,7 @@ describe("syncPullOnce applies a peer's batch and advances the cursor", () => {
         subscriberId,
         tenantId: b.tenantId,
         localEnvironment: "production",
+        enrolments: CORE_ENROLMENT,
         http,
         batchLimit: 500,
       };
@@ -183,6 +185,7 @@ describe("syncPullOnce applies a peer's batch and advances the cursor", () => {
         subscriberId,
         tenantId: b.tenantId,
         localEnvironment: "production",
+        enrolments: CORE_ENROLMENT,
         http,
         batchLimit: 500,
         lane: "fast" as const,
@@ -228,6 +231,7 @@ describe("syncPullOnce applies a peer's batch and advances the cursor", () => {
         subscriberId: uuid(),
         tenantId: uuid(),
         localEnvironment: "production",
+        enrolments: CORE_ENROLMENT,
         http,
         batchLimit: 500,
       });

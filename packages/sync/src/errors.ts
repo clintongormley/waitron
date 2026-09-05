@@ -2,7 +2,7 @@
 // a real module to augment rather than declaring a fresh ambient one — the same idiom
 // packages/credentials/src/errors.ts and packages/payments/src/errors.ts use.
 import "@waitron/shared";
-import type { SyncLane } from "./registry.js";
+import type { SyncLane } from "@waitron/sync-enrolment";
 
 /**
  * packages/sync's contribution to the shared error registry, by declaration merging — the

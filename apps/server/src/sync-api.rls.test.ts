@@ -8,7 +8,11 @@ import { decodeBatch, enrolPeer } from "@waitron/sync";
 import { generateNodeKeyPair } from "@waitron/membership";
 import type { Logger } from "./logger.js";
 import { mountSyncApi } from "./sync-api.js";
+import { ALL_MODULES } from "./modules.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+// The assembled module sync-enrolment set, injected into mountSyncApi/runSyncPull the way boot does
+// (SP-2a inversion): @waitron/sync no longer owns it.
+const SYNC_ENROLMENT = ALL_MODULES.flatMap((m) => m.sync ?? []);
 
 const log: Logger = () => {};
 const NODE_A = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -42,6 +46,7 @@ const deps = {
   tenantId: "t",
   nodeId: "n",
   environment: "production",
+  enrolments: SYNC_ENROLMENT,
 };
 
 describe("mountSyncApi peer auth + handshake", () => {
@@ -75,7 +80,13 @@ describe("mountSyncApi peer auth + handshake", () => {
       const app = new Hono();
       mountSyncApi(
         app,
-        { db: reader, tenantId: "t", nodeId: NODE_A, environment: "production" },
+        {
+          db: reader,
+          tenantId: "t",
+          nodeId: NODE_A,
+          environment: "production",
+          enrolments: SYNC_ENROLMENT,
+        },
         log,
       );
       const garbage = "00000000-0000-4000-8000-000000000000.deadbeef";
@@ -98,7 +109,17 @@ describe("mountSyncApi peer auth + handshake", () => {
     try {
       const peer = await enrolPeer(postgres.admin, { subscriberId: "helloPeer", name: "hello" });
       const app = new Hono();
-      mountSyncApi(app, { db: pool, tenantId: "t", nodeId: "n", environment: "production" }, log);
+      mountSyncApi(
+        app,
+        {
+          db: pool,
+          tenantId: "t",
+          nodeId: "n",
+          environment: "production",
+          enrolments: SYNC_ENROLMENT,
+        },
+        log,
+      );
       const missing = await app.request("/sync-api/hello", {});
       expect(missing.status).toBe(401); // /hello is behind the peer token too
       const res = await app.request("/sync-api/hello", {
@@ -130,7 +151,17 @@ describe("mountSyncApi peer auth + handshake", () => {
     try {
       const peer = await enrolPeer(postgres.admin, { subscriberId: "memPeer", name: "mem" });
       const app = new Hono();
-      mountSyncApi(app, { db: pool, tenantId: "t", nodeId: "n", environment: "production" }, log);
+      mountSyncApi(
+        app,
+        {
+          db: pool,
+          tenantId: "t",
+          nodeId: "n",
+          environment: "production",
+          enrolments: SYNC_ENROLMENT,
+        },
+        log,
+      );
 
       // Seeded via the owner/admin pool (writeNodeMembership is owner-role capable) → /hello serves
       // the WHOLE document, and { nodeId, environment } is still carried alongside.
@@ -215,7 +246,17 @@ describe("mountSyncApi peer auth + handshake", () => {
       const peer = await enrolPeer(postgres.admin, { subscriberId: "logPeer", name: "log" });
       const auth = { Authorization: `Bearer ${peer.token}` };
       const app = new Hono();
-      mountSyncApi(app, { db: reader, tenantId, nodeId: NODE_A, environment: "production" }, log);
+      mountSyncApi(
+        app,
+        {
+          db: reader,
+          tenantId,
+          nodeId: NODE_A,
+          environment: "production",
+          enrolments: SYNC_ENROLMENT,
+        },
+        log,
+      );
       const res = await app.request("/sync-api/log?after=0&limit=10", { headers: auth });
       expect(res.status).toBe(200);
       expect(res.headers.get("content-type")).toContain("application/x-ndjson");
@@ -349,7 +390,14 @@ describe("mountSyncApi peer auth + handshake", () => {
       const app = new Hono();
       mountSyncApi(
         app,
-        { db: reader, tenantId, nodeId: NODE_A, environment: "production", ownOriginOnly: true },
+        {
+          db: reader,
+          tenantId,
+          nodeId: NODE_A,
+          environment: "production",
+          enrolments: SYNC_ENROLMENT,
+          ownOriginOnly: true,
+        },
         log,
       );
       const auth = { Authorization: `Bearer ${peer.token}` };
@@ -389,7 +437,17 @@ describe("POST /sync-api/cursor — subscribers report their cursor to the sourc
     const pool = await postgres.pg.connectAs("sync_reader", "rp"); // a sync_tailer member
     try {
       const app = new Hono();
-      mountSyncApi(app, { db: pool, tenantId, nodeId: NODE_A, environment: "production" }, log);
+      mountSyncApi(
+        app,
+        {
+          db: pool,
+          tenantId,
+          nodeId: NODE_A,
+          environment: "production",
+          enrolments: SYNC_ENROLMENT,
+        },
+        log,
+      );
 
       // peerX presents its token but tries to move peerY's cursor via the (removed) body field.
       const res = await app.request("/sync-api/cursor", {
@@ -423,7 +481,13 @@ describe("POST /sync-api/cursor — subscribers report their cursor to the sourc
       const app = new Hono();
       mountSyncApi(
         app,
-        { db: reader, tenantId: "t", nodeId: NODE_A, environment: "production" },
+        {
+          db: reader,
+          tenantId: "t",
+          nodeId: NODE_A,
+          environment: "production",
+          enrolments: SYNC_ENROLMENT,
+        },
         log,
       );
       const res = await app.request("/sync-api/cursor", {
@@ -456,7 +520,13 @@ describe("POST /sync-api/cursor — subscribers report their cursor to the sourc
       const app = new Hono();
       mountSyncApi(
         app,
-        { db: reader, tenantId: "t", nodeId: NODE_A, environment: "production" },
+        {
+          db: reader,
+          tenantId: "t",
+          nodeId: NODE_A,
+          environment: "production",
+          enrolments: SYNC_ENROLMENT,
+        },
         log,
       );
       const cases: (BodyInit | undefined)[] = [
@@ -491,7 +561,13 @@ describe("POST /sync-api/cursor — subscribers report their cursor to the sourc
       const app = new Hono();
       mountSyncApi(
         app,
-        { db: reader, tenantId: "t", nodeId: NODE_A, environment: "production" },
+        {
+          db: reader,
+          tenantId: "t",
+          nodeId: NODE_A,
+          environment: "production",
+          enrolments: SYNC_ENROLMENT,
+        },
         log,
       );
       const res = await app.request("/sync-api/cursor", {

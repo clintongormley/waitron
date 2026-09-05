@@ -5,7 +5,7 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { recordSubscriberCursor } from "./cursor-report.js";
 import { evictSubscriber, lagFor, pruneSyncLog, runRetentionSweep } from "./retention.js";
-import type { SyncLane } from "./registry.js";
+import type { SyncLane } from "@waitron/sync-enrolment";
 
 // Real Postgres, not PGlite: the prune MUST run as a genuine non-superuser member of sync_retention
 // so that FORCE ROW LEVEL SECURITY is actually in force and the per-role permissive policy is what

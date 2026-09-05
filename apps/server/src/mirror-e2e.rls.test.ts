@@ -31,7 +31,11 @@ import { realSleep } from "./loop.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountSyncApi } from "./sync-api.js";
+import { ALL_MODULES } from "./modules.js";
 import { sealMirrorToken } from "./mirror-token.js";
+// The assembled module sync-enrolment set, injected into mountSyncApi/runSyncPull the way boot does
+// (SP-2a inversion): @waitron/sync no longer owns it.
+const SYNC_ENROLMENT = ALL_MODULES.flatMap((m) => m.sync ?? []);
 
 // C2a — the HEADLINE tunnel e2e (Task 6): a real booted mirror pulls a real primary's captured
 // sync_log THROUGH B's outbound tunnel, applies it under FORCE RLS as the non-superuser sync roles,
@@ -287,7 +291,13 @@ beforeAll(async () => {
   const app = new Hono();
   mountSyncApi(
     app,
-    { db: sourceReader, tenantId: TENANT, nodeId: PRIMARY_SYNC_NODE, environment: "preproduction" },
+    {
+      db: sourceReader,
+      tenantId: TENANT,
+      nodeId: PRIMARY_SYNC_NODE,
+      environment: "preproduction",
+      enrolments: SYNC_ENROLMENT,
+    },
     log,
   );
   httpsServer = createHttpsServer(

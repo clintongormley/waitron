@@ -9,7 +9,7 @@
 import { sql } from "drizzle-orm";
 import { type Database } from "@waitron/db";
 import { applyBatch, type ApplyBatchResult } from "./apply.js";
-import type { SyncLane } from "./registry.js";
+import type { EnrolledTable, SyncLane } from "@waitron/sync-enrolment";
 import { decodeBatch } from "./wire.js";
 // Side-effect import: keeps errors.ts's `declare module` augmentation reachable from a file in the
 // sync.* domain (the reachability rule), even though this module logs codes rather than throwing them.
@@ -45,6 +45,10 @@ export interface SyncPullDeps {
    * applyBatch opts. Optional, defaulting to 'ordered' (the wire + 0002 default), so an ordered worker
    * need not name it; boot passes both lanes explicitly (spec §4d). */
   lane?: SyncLane;
+  /** The assembled module enrolment set, injected by boot (SP-2a inversion): passed straight into the
+   * `applyBatch` opts so the apply loop builds its dispatch from the composition root's set, not a set
+   * `@waitron/sync` owns. */
+  enrolments: readonly EnrolledTable[];
 }
 
 /** {@link syncPullOnce}'s result: the applied/deferred counts of {@link ApplyBatchResult} plus
@@ -123,6 +127,7 @@ export async function syncPullOnce(deps: SyncPullDeps, peer: PullPeer): Promise<
     localEnvironment: deps.localEnvironment,
     sourceEnvironment,
     lane,
+    enrolments: deps.enrolments,
   });
   // Re-read the (subscriber, origin, lane) cursor: `advanced` is whether applyBatch moved THIS lane's
   // cursor this iteration. A full page that did NOT advance is all-parked — every row 23503-parked on

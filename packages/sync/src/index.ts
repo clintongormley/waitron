@@ -8,11 +8,13 @@
 // manifest.test.ts, which pins the journal-table name against this descriptor).
 export { SYNC_MIGRATIONS } from "./migrations.js";
 
-// The enrolment registry — the audit surface for "what crosses the wire" (the twenty-two enrolled
-// tables — 17 commercial+dining + 2 identity-config + 3 kitchen KDS — their apply mode, conflict key,
-// watermark and capture ops).
-export { ENROLLED, SYNC_LANES, tablesForLane } from "./registry.js";
-export type { CaptureOp, EnrolledTable, SyncLane, SyncMode } from "./registry.js";
+// The enrolment vocabulary — re-exported from the leaf `@waitron/sync-enrolment` so existing importers
+// of `@waitron/sync` keep resolving these. `@waitron/sync` no longer OWNS the enrolment data (there is
+// no central enrolment constant here any more): the assembled module set is injected by the composition
+// root (SP-2a inversion). The lane helper and types travel here; the per-table apply metadata is
+// declared by each owning package.
+export { SYNC_LANES, tablesForLane } from "@waitron/sync-enrolment";
+export type { CaptureOp, EnrolledTable, SyncLane, SyncMode } from "@waitron/sync-enrolment";
 
 // The producer-side disposal guard — a returned/fenced node proves LOCALLY that its own-origin
 // sync_log tail has fully drained onto the carrier (per-lane own high-water vs the carrier's reported

@@ -11,9 +11,13 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { enrolPeer, runSyncPull, type HttpClient } from "@waitron/sync";
 import { adoptMembership } from "./membership-adopt.js";
 import { mountSyncApi } from "./sync-api.js";
+import { ALL_MODULES } from "./modules.js";
 import { realSleep } from "./loop.js";
 import type { Logger } from "./logger.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+// The assembled module sync-enrolment set, injected into mountSyncApi/runSyncPull the way boot does
+// (SP-2a inversion): @waitron/sync no longer owns it.
+const SYNC_ENROLMENT = ALL_MODULES.flatMap((m) => m.sync ?? []);
 
 // The HONEST end-to-end consume proof (design §5): a document held on the SOURCE is advertised on its
 // peer-authenticated /sync-api/hello, the SUBSCRIBER's REAL runSyncPull (Task 1) drains that peer,
@@ -91,6 +95,7 @@ async function pullOneRound(localDb: Database, trustSet: TrustSet): Promise<Acce
     localEnvironment: "preproduction",
     http: httpClient,
     batchLimit: 500,
+    enrolments: SYNC_ENROLMENT,
     peers: [{ nodeId: SOURCE_NODE, url: "http://source.local", token: peerToken }],
     sleep: realSleep,
     signal: ac.signal,
@@ -135,7 +140,13 @@ beforeAll(async () => {
   sourceApp = new Hono();
   mountSyncApi(
     sourceApp,
-    { db: sourceReader, tenantId: TENANT, nodeId: SOURCE_NODE, environment: "preproduction" },
+    {
+      db: sourceReader,
+      tenantId: TENANT,
+      nodeId: SOURCE_NODE,
+      environment: "preproduction",
+      enrolments: SYNC_ENROLMENT,
+    },
     log,
   );
   httpClient = inProcessClient(sourceApp);

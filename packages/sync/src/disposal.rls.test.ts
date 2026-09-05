@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { readDrainProgress } from "./disposal.js";
-import { tablesForLane } from "./registry.js";
+import { tablesForLane, type EnrolledTable } from "@waitron/sync-enrolment";
 
 // Real Postgres, not PGlite (CLAUDE.md §4 — say WHY the heavier target when its usual justification
 // doesn't apply): this suite exercises no RLS, privilege, or concurrency — only the drain arithmetic —
@@ -16,8 +16,34 @@ const postgres = useTemplateDb({ template: "manifest" });
 const SELF = "11111111-1111-4111-8111-111111111111"; // the returned/fenced node's own origin
 const CARRIER = "carrier-node"; // the current serving-primary (subscriber_id is text)
 const TENANT = "22222222-2222-4222-8222-222222222222";
-const ORDERED_TABLE = tablesForLane("ordered")[0]; // a real ordered-lane table (e.g. products)
-const FAST_TABLE = tablesForLane("fast")[0]; // a real fast-lane table
+// A minimal injected enrolment set (SP-2a inversion): the disposal guard reads each lane's tables from
+// the composition root's set via `tablesForLane`, so this suite supplies one real ordered- and one real
+// fast-lane table. `readDrainProgress` only needs their names + lanes (sync_log.table_name is text, not
+// an FK), so the other EnrolledTable fields are representative.
+const ENROLMENTS: readonly EnrolledTable[] = [
+  {
+    table: "products",
+    mode: "watermark-upsert",
+    conflictKey: ["id"],
+    watermarkColumn: "updated_at",
+    captureOps: ["insert", "update"],
+    fkRank: 2,
+    lane: "ordered",
+    columns: ["id", "updated_at"],
+  },
+  {
+    table: "payments",
+    mode: "watermark-upsert",
+    conflictKey: ["id"],
+    watermarkColumn: "updated_at",
+    captureOps: ["insert", "update"],
+    fkRank: 3,
+    lane: "fast",
+    columns: ["id", "updated_at"],
+  },
+];
+const ORDERED_TABLE = tablesForLane(ENROLMENTS, "ordered")[0]; // a real ordered-lane table (products)
+const FAST_TABLE = tablesForLane(ENROLMENTS, "fast")[0]; // a real fast-lane table (payments)
 
 // Each test seeds a fresh slice of sync_log/sync_cursor and clears it after, so the shared container
 // stays order-independent (CLAUDE.md §4 — clean up in a finally / afterEach).
@@ -42,13 +68,21 @@ async function seedCarrierCursor(lane: string, seq: number): Promise<void> {
 
 describe("readDrainProgress", () => {
   it("is drained with a null tail when this node has produced no own-origin rows", async () => {
-    const p = await readDrainProgress(postgres.admin, { selfNodeId: SELF, carrierNodeId: CARRIER });
+    const p = await readDrainProgress(postgres.admin, {
+      selfNodeId: SELF,
+      carrierNodeId: CARRIER,
+      enrolments: ENROLMENTS,
+    });
     expect(p).toEqual({ drained: true, ownTailSeq: null, carrierAppliedSeq: null });
   });
 
   it("is NOT drained when the carrier has never reported a cursor for a lane that has own rows", async () => {
     await seedOwnRow(100, ORDERED_TABLE);
-    const p = await readDrainProgress(postgres.admin, { selfNodeId: SELF, carrierNodeId: CARRIER });
+    const p = await readDrainProgress(postgres.admin, {
+      selfNodeId: SELF,
+      carrierNodeId: CARRIER,
+      enrolments: ENROLMENTS,
+    });
     expect(p.drained).toBe(false);
     expect(p.ownTailSeq).toBe(100n);
     expect(p.carrierAppliedSeq).toBe(0n); // no cursor row → treated as applied-nothing
@@ -57,7 +91,11 @@ describe("readDrainProgress", () => {
   it("is NOT drained when the carrier's cursor lags this node's own tail on a lane", async () => {
     await seedOwnRow(100, ORDERED_TABLE);
     await seedCarrierCursor("ordered", 50);
-    const p = await readDrainProgress(postgres.admin, { selfNodeId: SELF, carrierNodeId: CARRIER });
+    const p = await readDrainProgress(postgres.admin, {
+      selfNodeId: SELF,
+      carrierNodeId: CARRIER,
+      enrolments: ENROLMENTS,
+    });
     expect(p.drained).toBe(false);
     expect(p.ownTailSeq).toBe(100n);
   });
@@ -67,7 +105,11 @@ describe("readDrainProgress", () => {
     await seedOwnRow(120, FAST_TABLE);
     await seedCarrierCursor("ordered", 50);
     await seedCarrierCursor("fast", 120);
-    const p = await readDrainProgress(postgres.admin, { selfNodeId: SELF, carrierNodeId: CARRIER });
+    const p = await readDrainProgress(postgres.admin, {
+      selfNodeId: SELF,
+      carrierNodeId: CARRIER,
+      enrolments: ENROLMENTS,
+    });
     expect(p.drained).toBe(true);
     expect(p.ownTailSeq).toBe(120n);
     expect(p.carrierAppliedSeq).toBe(50n); // the binding (min) constraint across own-carrying lanes
@@ -81,7 +123,11 @@ describe("readDrainProgress", () => {
     await seedOwnRow(50, FAST_TABLE);
     await seedCarrierCursor("ordered", 200);
     await seedCarrierCursor("fast", 50);
-    const p = await readDrainProgress(postgres.admin, { selfNodeId: SELF, carrierNodeId: CARRIER });
+    const p = await readDrainProgress(postgres.admin, {
+      selfNodeId: SELF,
+      carrierNodeId: CARRIER,
+      enrolments: ENROLMENTS,
+    });
     expect(p.drained).toBe(true);
     expect(p.ownTailSeq).toBe(200n); // from the earlier lane, not the last-iterated one
     expect(p.carrierAppliedSeq).toBe(50n); // min across own-carrying lanes
@@ -92,7 +138,11 @@ describe("readDrainProgress", () => {
     await seedOwnRow(120, FAST_TABLE); // fast behind
     await seedCarrierCursor("ordered", 50);
     await seedCarrierCursor("fast", 90);
-    const p = await readDrainProgress(postgres.admin, { selfNodeId: SELF, carrierNodeId: CARRIER });
+    const p = await readDrainProgress(postgres.admin, {
+      selfNodeId: SELF,
+      carrierNodeId: CARRIER,
+      enrolments: ENROLMENTS,
+    });
     expect(p.drained).toBe(false); // the fast lane is not drained even though ordered is
   });
 });

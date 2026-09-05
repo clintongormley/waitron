@@ -6,7 +6,7 @@
 // new grant. sync_cursor has no tenant_id and no RLS (0000:95-99), so no withTenant is needed.
 import { sql } from "drizzle-orm";
 import { type Database } from "@waitron/db";
-import type { SyncLane } from "./registry.js";
+import type { SyncLane } from "@waitron/sync-enrolment";
 
 export interface RecordSubscriberCursorArgs {
   /** The reporting subscriber's node id — the `subscriber_id` half of the key. */

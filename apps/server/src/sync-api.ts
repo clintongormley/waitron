@@ -7,6 +7,7 @@ import {
   readSyncLogSince,
   recordSubscriberCursor,
   tablesForLane,
+  type EnrolledTable,
   type SyncLane,
 } from "@waitron/sync";
 import { createErrorBoundary } from "./error-boundary.js";
@@ -81,6 +82,10 @@ export interface SyncApiDeps {
   tenantId: string; // the deli tenant the source reads under
   nodeId: string; // this node's origin id (config.till.nodeId), for /hello
   environment: string; // config.environment, for /hello + the peer handshake
+  /** The assembled module enrolment set (SP-2a inversion), injected by boot: `/sync-api/log` maps
+   * `?lane=` → `tablesForLane(deps.enrolments, lane)` SERVER-SIDE to bound the read to that lane's
+   * tables. `@waitron/sync` no longer owns this set. */
+  enrolments: readonly EnrolledTable[];
   /** When true, `/sync-api/log` serves ONLY this node's own origin (`deps.nodeId`), ignoring a
    * peer-supplied `?originId=`. The membership-rejoin R2 DRAIN source: a fenced (sell-only) node serves
    * its own tail so the carrier can drain it, and must NOT relay any other origin (design §6 step 3).
@@ -131,7 +136,7 @@ export function mountSyncApi(app: Hono, deps: SyncApiDeps, log: Logger): void {
       const originId = deps.ownOriginOnly === true ? deps.nodeId : c.req.query("originId");
       const after = afterSeq(c.req.query("after"));
       const limit = logLimit(c.req.query("limit"));
-      const tables = tablesForLane(laneParam(c.req.query("lane")));
+      const tables = tablesForLane(deps.enrolments, laneParam(c.req.query("lane")));
       const rows = await withTenant(deps.db, deps.tenantId, (tx) =>
         readSyncLogSince(tx, {
           afterSeq: after,
