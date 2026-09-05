@@ -20,7 +20,7 @@ REVOKE ALL ON "kitchen_stations" FROM app_user;--> statement-breakpoint
 GRANT SELECT, INSERT, UPDATE ON "kitchen_stations" TO app_user;--> statement-breakpoint
 
 -- Exactly one DEFAULT station per location — a PARTIAL unique drizzle-kit does not model. Named so the
--- deletion-proof in kitchen-stations.rls.test.ts can DROP it by name. Only is_default rows are indexed,
+-- deletion-proof in kitchen-stations.test.ts can DROP it by name. Only is_default rows are indexed,
 -- so any number of non-default stations, and one default per (tenant, location), coexist.
 CREATE UNIQUE INDEX "kitchen_stations_default_key"
   ON "kitchen_stations" ("tenant_id", "location_id")

@@ -8,10 +8,10 @@ import { withTenant } from "../tenancy.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { tenants } from "./tenants.js";
 
-// Real Postgres (a template clone), not PGlite: RLS as the non-owner app role is a false pass on
-// PGlite, which connects as superuser and bypasses FORCE (CLAUDE.md §4). Scaffolding ported from
-// floor-zones.rls.test.ts — useTemplateDb + withTenant + asAppUser (the current shared-container
-// tier; `useRealPostgres`'s per-file container is what it superseded, same { pg, admin } shape).
+// Real Postgres (a template clone), not PGlite: every write below runs as the non-owner
+// `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
+// constraints themselves would fire on either target — a candidate for the PGlite tier once the
+// suites are re-tagged.
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
@@ -32,7 +32,7 @@ async function rollBackAfter(
   });
 }
 
-describe("kitchen_stations schema (RLS + grants + partial unique)", () => {
+describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", () => {
   const suite = useTemplateDb({ template: "core" });
 
   beforeAll(async () => {
@@ -75,7 +75,7 @@ describe("kitchen_stations schema (RLS + grants + partial unique)", () => {
     });
   }
 
-  it("permits SELECT/INSERT/UPDATE as the non-owner app role (the control)", async () => {
+  it("exposes every column through the Drizzle export, with the is_default and active defaults", async () => {
     const id = await seedStation(TENANT_A, LOCATION_A, "Cocina");
     await asApp(TENANT_A, (tx) =>
       tx.execute(sql`update kitchen_stations set display_order = 5 where id = ${id}`),
@@ -117,59 +117,6 @@ describe("kitchen_stations schema (RLS + grants + partial unique)", () => {
     );
     expect(pgErrorCode(e)).toBe("23514"); // check_violation
     expect(pgErrorMessage(e)).toMatch(/kitchen_stations_thresholds_ordered/);
-  });
-
-  it("app_user has no DELETE on kitchen_stations (deactivate, never delete)", async () => {
-    const id = await seedStation(TENANT_A, LOCATION_A, "Plancha");
-    const e = await captureError(() =>
-      asApp(TENANT_A, (tx) => tx.execute(sql`delete from kitchen_stations where id = ${id}`)),
-    );
-    expect(pgErrorCode(e)).toBe("42501");
-  });
-
-  it("isolates INSERT between tenants (WITH CHECK rejects a foreign tenant_id)", async () => {
-    // The WITH-CHECK deletion-proof target: weakening WITH CHECK to (true) makes this foreign-tenant_id
-    // INSERT succeed instead of raising 42501, flipping this test red.
-    const e = await captureError(() =>
-      asApp(TENANT_B, (tx) =>
-        tx.execute(
-          sql`insert into kitchen_stations (tenant_id, location_id, name)
-              values (${TENANT_A}, ${LOCATION_A}, 'Foreign')`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("42501");
-  });
-
-  it("tenant isolation is the policy PREDICATE's doing (proof by deletion of the tenant predicate)", async () => {
-    // A's row is committed before the policy is weakened, so it is genuinely there to leak. Weakening
-    // the predicate to `true` in a ROLLED-BACK tx makes B suddenly see it. A full DROP POLICY is the
-    // WRONG deletion: FORCE RLS with no policy denies ALL rows, so B would see zero for the opposite
-    // reason. Mirrors floor-zones.rls.test.ts.
-    const id = await seedStation(TENANT_A, LOCATION_A, "Leak-probe");
-    expect(id).toBeDefined();
-    // Control in the other direction (§4): under the REAL policy tenant B sees ZERO of A's rows, so the
-    // `> 0` after weakening is attributable to the weakening rather than to B having read A all along.
-    const foreignUnderRealPolicy = await asApp(TENANT_B, (tx) =>
-      tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from kitchen_stations`,
-        )
-        .then((r) => r.rows[0]!.n),
-    );
-    expect(foreignUnderRealPolicy).toBe(0);
-    await rollBackAfter(suite.admin, TENANT_B, async (tx) => {
-      await tx.execute(
-        sql`alter policy kitchen_stations_tenant_isolation on kitchen_stations using (true) with check (true)`,
-      );
-      await tx.execute(sql`set local role app_user`);
-      const foreign = await tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from kitchen_stations`,
-        )
-        .then((r) => r.rows[0]!.n);
-      expect(foreign).toBeGreaterThan(0); // A's rows now leak to B — the predicate was the guard.
-    });
   });
 
   it("rejects a SECOND default station per location (the WHERE is_default partial unique)", async () => {

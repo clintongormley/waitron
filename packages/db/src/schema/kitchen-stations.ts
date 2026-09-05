@@ -25,7 +25,7 @@ import { locations, tenants } from "./tenants.js";
  *
  * "Exactly one default per location" is a PARTIAL unique — `UNIQUE (tenant_id, location_id) WHERE
  * is_default` — which drizzle-kit does not model, so it is hand-written in the --custom migration
- * alongside FORCE/policy/grants (the deletion-proof target of kitchen-stations.rls.test.ts).
+ * alongside FORCE/policy/grants (the deletion-proof target of kitchen-stations.test.ts).
  *
  * Deactivate, never hard-delete (`active`): a `ticket_items.station_id` snapshot may reference a row,
  * so the config CRUD flips `active = false` rather than DELETE — and `app_user` holds no DELETE here

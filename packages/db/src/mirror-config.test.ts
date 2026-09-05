@@ -7,9 +7,9 @@ import { captureError } from "./testing/errors.js";
 import { usePgliteDb } from "./testing/lifecycle.js";
 
 // PGlite, not real Postgres: the accessor round-trip is pure SQL logic (upsert/read of a
-// singleton), with no privilege or RLS behaviour to observe — every PGlite connection is a
-// superuser, so it is the right, lighter target here. The grant read-back that PGlite cannot show
-// authoritatively lives in mirror-config.rls.test.ts.
+// singleton), with no privilege behaviour to observe — every PGlite connection is a superuser, so it
+// is the right, lighter target here. That `app_user` holds SELECT on `mirror_config` and no write is
+// pinned by the privilege matrix (packages/fiscal-verifactu/src/privileges.expected.ts).
 
 // A fixed v4 UUID standing in for the primary's nodeId (the mirror's sync origin).
 const PRIMARY_NODE = "11111111-1111-4111-8111-111111111111";

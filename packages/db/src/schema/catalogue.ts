@@ -106,8 +106,8 @@ export const products = pgTable(
     // A path REFERENCE to the product photo (a content-addressed `<sha256>.<ext>` filename served by
     // apps/server's /media route), never bytes. Nullable: a product legitimately has no photo, and
     // null here just means "no picture" — unlike `allergens`' null, which is a load-bearing PENDING
-    // state. The table-level GRANT + tenant-isolation policy (0027) cover it with no change — proven
-    // in catalogue.rls.test.ts (design §5a).
+    // state. The table-level GRANT (0027) covers it with no change: a grant with no column list
+    // extends to a column added later (design §5a).
     image: text("image"),
     // Allergen declaration (EU 1169/2011 Annex II). NULL = not yet reviewed (a compliance gap the
     // till surfaces distinctly); {} = reviewed, contains none of the 14; else per-code presence +

@@ -23,9 +23,10 @@ import { usePgliteDb } from "./testing/lifecycle.js";
 
 // PGlite, not real Postgres: this proves the query/insert logic (a dormant node lands with its public
 // key + endorsement, the reserved series default to next_number 1, the endorsement round-trips and null
-// for a keyless node). PGlite connects as superuser and bypasses RLS, so it cannot show the GRANT
-// enforcement (that the *Tx writes need the owner role, the read rides app_user's SELECT) — that is the
-// concern of node-identity.rls.test.ts for the sibling public_key column, which this rides.
+// for a keyless node). PGlite connects as superuser, so it cannot show the GRANT enforcement (that the
+// *Tx writes need the owner role, the read rides app_user's SELECT); `nodes`' table grants are pinned
+// by the privilege matrix in packages/fiscal-verifactu, and its column ACLs by the dumped-ACL diff in
+// scripts/schema-equivalence.sh.
 
 const ENDORSEMENT: Endorsement = {
   nodeId: "22222222-2222-2222-2222-222222222222",

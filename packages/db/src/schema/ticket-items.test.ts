@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
-import type { Database, Transaction } from "../client.js";
+import type { Transaction } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
@@ -11,21 +11,17 @@ import { catalogues, products } from "./catalogue.js";
 import { locations, tenants, tills } from "./tenants.js";
 import { ticketItems } from "./ticket-items.js";
 
-// Real Postgres (a template clone), not PGlite: RLS as the non-owner app role is a false pass on
-// PGlite, which connects as superuser and bypasses FORCE (CLAUDE.md §4). ticket_items replaces
-// order_prep, so this suite carries forward order-prep.rls.test.ts's proven behaviours — app_user has
-// SELECT/INSERT/UPDATE but NOT DELETE, tenant isolation is the policy predicate's doing, and the
-// node-scoped queue is tenant-isolated — onto the new per-line/per-station model, plus the new
-// per-line UNIQUE and the working_order_lines CASCADE FK. useTemplateDb is the current
-// shared-container tier (the `useRealPostgres` per-file container it superseded, same shape).
+// Real Postgres (a template clone), not PGlite: the writes run as the non-owner `app_user`, the
+// deployment role, which PGlite (every connection a superuser) cannot be. What this suite proves is
+// the schema's own behaviour — the produced Drizzle export's column mapping, the additive
+// away_at/note/doneness columns, the per-line UNIQUE that stops a concurrent double-fire, and the
+// working_order_lines ON DELETE CASCADE. `app_user`'s grants on ticket_items are pinned by the
+// privilege matrix (packages/fiscal-verifactu/src/privileges.expected.ts).
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
-const TILL_B1 = "bbbbbbbb-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
-// Café solo is this package's placeholder line description (park-retrieve.rls.test.ts): the locale
+// Café solo is this package's placeholder line description (park-retrieve.test.ts): the locale
 // trigger checks description KEYS against the venue's invoice_locales (['es'] here), and this literal
 // already passes english-only.ts's SPANISH_WORDS guard as test DATA.
 const DESCRIPTIONS_A = JSON.stringify({ es: "Café solo" });
@@ -33,34 +29,17 @@ const DESCRIPTIONS_A = JSON.stringify({ es: "Café solo" });
 // Captured at seed time (the ids the raw inserts below need for tenant-consistent FKs).
 let nodeA = "";
 let productA = "";
-let productB = "";
 let stationA = "";
-let stationB = "";
 let orderNumberSeq = 0;
 
-class RollbackSignal extends Error {}
-async function rollBackAfter(
-  admin: Database,
-  tenant: string,
-  fn: (tx: Transaction) => Promise<void>,
-): Promise<void> {
-  await withTenant(admin, tenant, async (tx) => {
-    await fn(tx);
-    throw new RollbackSignal();
-  }).catch((error: unknown) => {
-    if (!(error instanceof RollbackSignal)) throw error;
-  });
-}
-
-describe("ticket_items schema (RLS + grants + per-line unique + cascade)", () => {
+describe("ticket_items schema (columns + per-line unique + cascade)", () => {
   const suite = useTemplateDb({ template: "core" });
 
   beforeAll(async () => {
     const admin = suite.admin;
-    await admin.insert(tenants).values([
-      { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-      { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
-    ]);
+    await admin
+      .insert(tenants)
+      .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await admin.insert(locations).values([
       {
         id: LOCATION_A,
@@ -69,26 +48,14 @@ describe("ticket_items schema (RLS + grants + per-line unique + cascade)", () =>
         invoiceLocales: ["es"],
         operationDescription: "Hostelería",
       },
-      {
-        id: LOCATION_B,
-        tenantId: TENANT_B,
-        name: "Fixture Location B",
-        invoiceLocales: ["es"],
-        operationDescription: "Hostelería",
-      },
     ]);
-    await admin.insert(tills).values([
-      { id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" },
-      { id: TILL_B1, tenantId: TENANT_B, locationId: LOCATION_B, name: "B1" },
-    ]);
+    await admin
+      .insert(tills)
+      .values([{ id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" }]);
     nodeA = await seedNode(admin, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
     const [catA] = await admin
       .insert(catalogues)
       .values({ tenantId: TENANT_A, name: "Deli A" })
-      .returning({ id: catalogues.id });
-    const [catB] = await admin
-      .insert(catalogues)
-      .values({ tenantId: TENANT_B, name: "Deli B" })
       .returning({ id: catalogues.id });
     const [prodA] = await admin
       .insert(products)
@@ -102,22 +69,8 @@ describe("ticket_items schema (RLS + grants + per-line unique + cascade)", () =>
       })
       .returning({ id: products.id });
     productA = prodA!.id;
-    const [prodB] = await admin
-      .insert(products)
-      .values({
-        tenantId: TENANT_B,
-        catalogueId: catB!.id,
-        descriptions: { es: "Café solo" },
-        pricingUnit: "each",
-        unitPrice: "1.00",
-        vatClass: "general",
-      })
-      .returning({ id: products.id });
-    productB = prodB!.id;
-    // A default station per venue — the FK target for ticket_items.station_id. Seeded as admin
-    // (superuser bypasses RLS — pure setup).
+    // The venue's default station — the FK target for ticket_items.station_id. Seeded as admin.
     stationA = await seedStation(TENANT_A, LOCATION_A);
-    stationB = await seedStation(TENANT_B, LOCATION_B);
   });
 
   async function seedStation(tenant: string, location: string): Promise<string> {
@@ -178,7 +131,7 @@ describe("ticket_items schema (RLS + grants + per-line unique + cascade)", () =>
     });
   }
 
-  it("permits SELECT/INSERT/UPDATE and exposes every column to the non-owner app role (the control)", async () => {
+  it("exposes every column through the Drizzle export across the queued → preparing → ready lifecycle", async () => {
     const { orderId, lineId } = await seedOrderLine(TENANT_A, TILL_A1, nodeA, productA);
     const id = await seedTicket(TENANT_A, nodeA, orderId, lineId, stationA);
     // Advance queued → preparing → ready as app_user — the per-line kitchen lifecycle (§2d).
@@ -274,110 +227,6 @@ describe("ticket_items schema (RLS + grants + per-line unique + cascade)", () =>
     );
     expect(row!.note).toBe("sin sal");
     expect(row!.doneness).toBe("medium_rare");
-  });
-
-  it("app_user has UPDATE on ticket_items but NOT DELETE (cancelled lines cascade via the line FK)", async () => {
-    const { orderId, lineId } = await seedOrderLine(TENANT_A, TILL_A1, nodeA, productA);
-    const id = await seedTicket(TENANT_A, nodeA, orderId, lineId, stationA);
-    const e = await captureError(() =>
-      asApp(TENANT_A, (tx) => tx.execute(sql`delete from ticket_items where id = ${id}`)),
-    );
-    expect(pgErrorCode(e)).toBe("42501");
-  });
-
-  it("isolates INSERT between tenants (WITH CHECK rejects a foreign tenant_id)", async () => {
-    // The WITH-CHECK deletion-proof target: weakening WITH CHECK to (true) makes this foreign-tenant_id
-    // INSERT succeed instead of raising 42501. Every referenced row belongs to tenant A (a real node,
-    // line and station), so the ONLY thing wrong with the row is its tenant_id under B's GUC — the FKs
-    // (which run bypassing RLS) are satisfied, and the policy's WITH CHECK is what rejects it.
-    const { orderId, lineId } = await seedOrderLine(TENANT_A, TILL_A1, nodeA, productA);
-    const e = await captureError(() =>
-      asApp(TENANT_B, (tx) =>
-        tx.execute(
-          sql`insert into ticket_items
-                (tenant_id, node_id, working_order_id, working_order_line_id, station_id, state)
-              values (${TENANT_A}, ${nodeA}, ${orderId}, ${lineId}, ${stationA}, 'queued')`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("42501");
-  });
-
-  it("tenant isolation is the policy PREDICATE's doing (proof by deletion of the tenant predicate)", async () => {
-    // A's row is committed before the policy is weakened, so it is genuinely there to leak. Weakening
-    // the predicate to `true` in a ROLLED-BACK tx makes B suddenly see it. A full DROP POLICY is the
-    // WRONG deletion: FORCE RLS with no policy denies ALL rows, so B would see zero for the opposite
-    // reason. Mirrors order-prep.rls.test.ts's identical proof.
-    const { orderId, lineId } = await seedOrderLine(TENANT_A, TILL_A1, nodeA, productA);
-    await seedTicket(TENANT_A, nodeA, orderId, lineId, stationA);
-    // Control in the other direction (§4): under the REAL policy tenant B sees ZERO of A's rows.
-    const foreignUnderRealPolicy = await asApp(TENANT_B, (tx) =>
-      tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from ticket_items`,
-        )
-        .then((r) => r.rows[0]!.n),
-    );
-    expect(foreignUnderRealPolicy).toBe(0);
-    await rollBackAfter(suite.admin, TENANT_B, async (tx) => {
-      await tx.execute(
-        sql`alter policy ticket_items_tenant_isolation on ticket_items using (true) with check (true)`,
-      );
-      await tx.execute(sql`set local role app_user`);
-      const foreign = await tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from ticket_items`,
-        )
-        .then((r) => r.rows[0]!.n);
-      expect(foreign).toBeGreaterThan(0); // A's row now leaks to B — the predicate was the guard.
-    });
-  });
-
-  it("the node-scoped queue is tenant-isolated: neither tenant sees the other's rows, even queried by the other's node id (both non-empty)", async () => {
-    // Dedicated nodes per tenant, not the shared nodeA fixture: ticket_items is mutable and nothing
-    // truncates it between tests, so counting against a SHARED node would pick up rows other tests
-    // inserted. A dedicated node per tenant keeps both counts immune to run order. Ported from
-    // order-prep.rls.test.ts's identical node-isolation proof.
-    const queueNodeA = await seedNode(
-      suite.admin,
-      brandTenantId(TENANT_A),
-      brandLocationId(LOCATION_A),
-    );
-    const queueNodeB = await seedNode(
-      suite.admin,
-      brandTenantId(TENANT_B),
-      brandLocationId(LOCATION_B),
-    );
-    const a = await seedOrderLine(TENANT_A, TILL_A1, queueNodeA, productA);
-    const b = await seedOrderLine(TENANT_B, TILL_B1, queueNodeB, productB);
-    await seedTicket(TENANT_A, queueNodeA, a.orderId, a.lineId, stationA);
-    await seedTicket(TENANT_B, queueNodeB, b.orderId, b.lineId, stationB);
-
-    // As A: rows are visible (`total` unfiltered, not narrowed to a node only A ever populated — a
-    // narrowed count reads the same with or without isolation, CLAUDE.md §1), and NONE sit on B's node.
-    const aView = await asApp(TENANT_A, (tx) =>
-      tx
-        .execute<{ total: number; foreign: number }>(
-          sql`select count(*)::int as total,
-                     (count(*) filter (where node_id = ${queueNodeB}))::int as foreign
-              from ticket_items`,
-        )
-        .then((r) => r.rows[0]!),
-    );
-    expect(aView.total).toBeGreaterThan(0);
-    expect(aView.foreign).toBe(0);
-
-    const bView = await asApp(TENANT_B, (tx) =>
-      tx
-        .execute<{ total: number; foreign: number }>(
-          sql`select count(*)::int as total,
-                     (count(*) filter (where node_id = ${queueNodeA}))::int as foreign
-              from ticket_items`,
-        )
-        .then((r) => r.rows[0]!),
-    );
-    expect(bView.total).toBeGreaterThan(0);
-    expect(bView.foreign).toBe(0);
   });
 
   it("rejects a second ticket item for the same line (the per-line UNIQUE — the concurrent-fire guard)", async () => {

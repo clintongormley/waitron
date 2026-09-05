@@ -30,9 +30,9 @@ import {
 import "./errors.js";
 
 // PGlite, not real Postgres: these are CONFIG verbs — plain inserts/by-id UPDATEs with no privilege or
-// concurrency dimension. The `till.configure` gate lives on the ROUTE (Task 7), and cross-tenant RLS +
-// the `WHERE is_default` partial-unique under `app_user` are already proven against real Postgres in
-// packages/db's kitchen-stations.rls.test.ts (Task 1). PGlite serialises every query onto one backend,
+// concurrency dimension. The `till.configure` gate lives on the ROUTE (Task 7), and the
+// `WHERE is_default` partial-unique is already proven against real Postgres in packages/db's
+// kitchen-stations.test.ts (Task 1). PGlite serialises every query onto one backend,
 // so it would be a FALSE PASS for a concurrency test — but there is no concurrency here, so it is the
 // correct lighter target (CLAUDE.md §4), the same choice tables.ts's FP-1/FP-2 config suite makes.
 const LOCALE = "es-ES";
@@ -315,8 +315,8 @@ describe("routing config", () => {
 
 // KDS-2 course config verbs — mirror the station-config suite above EXACTLY, minus the default concept
 // (kitchen_courses has no `is_default`; a null course simply fires earliest, spec §2b). Same lighter
-// PGlite target for the same reason (config verbs, no privilege/concurrency dimension — the RLS + grants
-// live in packages/db's kitchen-courses.rls.test.ts against real Postgres).
+// PGlite target for the same reason (config verbs, no privilege/concurrency dimension — the schema's own
+// defaults and course FKs live in packages/db's kitchen-courses.test.ts against real Postgres).
 describe("kitchen-course config", () => {
   it("creates/lists/updates/deactivates a course and orders by display_order then name", async () => {
     const cfg = await setupVenue();

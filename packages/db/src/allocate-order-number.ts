@@ -20,9 +20,9 @@ import { workingOrderCounters } from "./schema/working-order-counters.js";
  * the winner's uncommitted index tuple, then sees the conflict and takes DO
  * UPDATE to 2; once the row exists, concurrent allocators serialise on its row
  * lock and each re-evaluates `next_number + 1` against the previous committed
- * value. Distinct numbers, never a duplicate. Proven against real PostgreSQL in
- * allocate-order-number.rls.test.ts — PGlite serialises onto one backend and so
- * cannot observe this at all.
+ * value. Distinct numbers, never a duplicate. Proven against real PostgreSQL by
+ * the "under concurrency" suite at the bottom of allocate-order-number.test.ts —
+ * PGlite serialises onto one backend and so cannot observe this at all.
  *
  * Unlike allocate-number.ts, this returns `next_number` directly (1 on the
  * first call) rather than the pre-increment value: an order number is a plain

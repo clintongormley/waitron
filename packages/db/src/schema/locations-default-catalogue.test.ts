@@ -7,9 +7,9 @@ import { asAppUser } from "../testing/roles.js";
 import { withTenant } from "../tenancy.js";
 import { tenants } from "./tenants.js";
 
-// Real Postgres (a template clone), not PGlite: a foreign-key check bypasses RLS either way, but the
-// app role that performs the UPDATE only exists under real Postgres (PGlite is a superuser — CLAUDE.md
-// §4). Scaffolding mirrors location-catalogues.rls.test.ts. `locations.catalogue_id` (a location's
+// Real Postgres (a template clone), not PGlite: the app role that performs the UPDATE only exists
+// under real Postgres (PGlite is a superuser). The composite FK itself would fire on either target —
+// a candidate for the PGlite tier once the suites are re-tagged. `locations.catalogue_id` (a location's
 // DEFAULT menu) originally carried a single-column FK to catalogues(id) — global, not tenant-scoped —
 // so a cross-tenant catalogue could be set as a location's default (the app-layer guard in
 // catalogue-api.ts caught it at the route, but the DB accepted it). This suite pins the tenant-consistent

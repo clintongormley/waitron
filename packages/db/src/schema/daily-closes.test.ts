@@ -8,14 +8,14 @@ import { seedNode } from "../testing/seed.js";
 import { withTenant } from "../tenancy.js";
 import { locations, tenants } from "./tenants.js";
 
-// Real Postgres, not PGlite, and not describeEachTarget: the headline assertions here are that
-// `daily_closes` is append-only under the app role (42501 on UPDATE/DELETE via the withheld grant,
-// WT001 via the trigger backstop) and that FORCE ROW LEVEL SECURITY isolates one tenant's closes
-// from another's. PGlite connects as a superuser that bypasses FORCE ROW LEVEL SECURITY and can
-// DISABLE TRIGGER unconditionally, so a PGlite pass would be a false pass (CLAUDE.md §4). The
-// column-presence and constraint assertions would pass on either target; they ride along on the one
-// container this suite already needs for the immutability + RLS checks. Mirrors
-// park-retrieve.rls.test.ts (this package) and inmutabilidad.test.ts (fiscal-verifactu).
+// Real Postgres, not PGlite, and not describeEachTarget: the headline assertions are the two
+// append-only TRIGGERS (`daily_closes_immutable` and the BEFORE TRUNCATE statement trigger, both
+// WT001), each proven against a role that HAS been granted the privilege inside a rolled-back
+// transaction. PGlite connects as a superuser that can DISABLE TRIGGER unconditionally, so a PGlite
+// pass would be a false pass (CLAUDE.md §4). The column-presence and FK assertions would pass on
+// either target; they ride along on the one container this suite already needs. `app_user`'s own
+// withheld UPDATE/DELETE — the first layer, which fires before the trigger — is pinned by the
+// privilege matrix (packages/fiscal-verifactu/src/privileges.expected.ts).
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
@@ -73,12 +73,12 @@ function insertCloseSql(opts: {
 
 class RollbackSignal extends Error {}
 
-describe("frozen daily close schema under real row-level security", () => {
+describe("frozen daily close schema (append-only triggers, columns, composite FK)", () => {
   const suite = useTemplateDb({ template: "core" });
 
   // Scaffolding seeded once as the owner (superuser bypasses RLS — pure setup). Registered after the
   // helper's own hook, which vitest runs first; if it throws this one never runs, so `suite.admin`
-  // is never read unstarted (verified pattern, park-retrieve.rls.test.ts).
+  // is never read unstarted (verified pattern, park-retrieve.test.ts).
   beforeAll(async () => {
     const admin = suite.admin;
     await admin.insert(tenants).values([
@@ -105,10 +105,10 @@ describe("frozen daily close schema under real row-level security", () => {
     nodeB = await seedNode(admin, brandTenantId(TENANT_B), brandLocationId(LOCATION_B));
   });
 
-  it("lets the app role INSERT and read back a daily_closes row (columns present, grant + WITH CHECK)", async () => {
-    // The positive control. Without it, the rejection tests below would all pass against a role that
-    // simply has no access to the table at all — proving nothing about append-only-ness. It also
-    // proves the column list a close is written with and that the snapshot jsonb round-trips.
+  it("writes and reads back a daily_closes row (the column list, and the snapshot jsonb)", async () => {
+    // The positive control for the trigger rejections below: without a write that SUCCEEDS, a
+    // rejection could equally mean the role has no access to the table at all. It also pins the column
+    // list a close is written with and that the nested snapshot jsonb round-trips.
     const row = await withTenant(suite.admin, TENANT_A, async (tx) => {
       await asAppUser(tx);
       await tx.execute(
@@ -141,51 +141,13 @@ describe("frozen daily close schema under real row-level security", () => {
     expect(row?.node_variance).toBe("1.23");
   });
 
-  it("rejects UPDATE of a daily_closes row under the app role with insufficient_privilege", async () => {
-    // The grant is SELECT, INSERT only — no UPDATE — so this fails at privilege-check time (42501),
-    // BEFORE the append-only trigger is ever reached. Insert then update in one transaction: the
-    // update's throw rolls the insert back, so nothing accumulates.
-    const error = await captureError(() =>
-      withTenant(suite.admin, TENANT_A, async (tx) => {
-        await asAppUser(tx);
-        await tx.execute(
-          insertCloseSql({
-            tenantId: TENANT_A,
-            nodeId: nodeA,
-            businessDay: "2026-08-02",
-            sequenceNo: 2,
-          }),
-        );
-        await tx.execute(sql`update daily_closes set entry_hash = ${"B".repeat(64)}`);
-      }),
-    );
-    expect(pgErrorCode(error)).toBe("42501");
-  });
-
-  it("rejects DELETE of a daily_closes row under the app role with insufficient_privilege", async () => {
-    const error = await captureError(() =>
-      withTenant(suite.admin, TENANT_A, async (tx) => {
-        await asAppUser(tx);
-        await tx.execute(
-          insertCloseSql({
-            tenantId: TENANT_A,
-            nodeId: nodeA,
-            businessDay: "2026-08-03",
-            sequenceNo: 3,
-          }),
-        );
-        await tx.execute(sql`delete from daily_closes`);
-      }),
-    );
-    expect(pgErrorCode(error)).toBe("42501");
-  });
-
   it("rejects UPDATE of daily_closes by the append-only trigger even when the privilege is granted", async () => {
-    // The layered proof, and the one the recipe-by-deletion step targets. Revocation fires first, so
-    // the two tests above never reach the trigger — and a trigger nobody has seen fire is a comment,
+    // The layered proof. app_user's withheld UPDATE — the first layer, pinned by the privilege
+    // matrix in packages/fiscal-verifactu — refuses the statement at privilege-check time, so nothing
+    // that matrix covers ever reaches the trigger, and a trigger nobody has seen fire is a comment,
     // not a backstop. Grant UPDATE inside a transaction that rolls back, and watch the second layer
     // (daily_closes_immutable → reject_mutation() → WT001) catch it. Remove that trigger from the
-    // migration and THIS test goes red while the 42501 tests stay green.
+    // migration and THIS test goes red while the matrix stays green.
     await withTenant(suite.admin, TENANT_A, async (tx) => {
       await tx.execute(sql`grant update on daily_closes to app_user`);
       await tx.execute(sql`set local role app_user`);
@@ -223,67 +185,11 @@ describe("frozen daily close schema under real row-level security", () => {
     });
   });
 
-  it("lets the app role UPDATE daily_close_chain — it is the mutable head/counter", async () => {
-    // The chain head advances on every close (sequence_no+1, last_entry_hash = the new entry_hash),
-    // so it gets Part 4 of the recipe (tenant isolation) plus a SELECT/INSERT/UPDATE grant and NO
-    // append-only trigger — the same shape invoice_series and working_order_counters carry. Prove
-    // the UPDATE the head depends on actually succeeds under the app role.
-    const updated = await withTenant(suite.admin, TENANT_A, async (tx) => {
-      await asAppUser(tx);
-      await tx.execute(sql`
-        insert into daily_close_chain (tenant_id, node_id, sequence_no, last_entry_hash)
-        values (${TENANT_A}, ${nodeA}, 0, '')`);
-      await tx.execute(sql`
-        update daily_close_chain
-           set sequence_no = 1, last_entry_hash = ${"A".repeat(64)}
-         where tenant_id = ${TENANT_A} and node_id = ${nodeA}`);
-      const result = await tx.execute<{ sequence_no: number; last_entry_hash: string }>(sql`
-        select sequence_no, last_entry_hash from daily_close_chain
-         where tenant_id = ${TENANT_A} and node_id = ${nodeA}`);
-      return result.rows[0];
-    });
-    expect(updated?.sequence_no).toBe(1);
-    expect(updated?.last_entry_hash).toBe("A".repeat(64));
-  });
-
-  it("isolates one tenant's daily_closes from another under FORCE row-level security", async () => {
-    // Insert a close for tenant A, under A's GUC, as the app role. Tenant A then sees at least its
-    // own rows and tenant B — the SAME app role, the SAME SELECT grant — sees NONE of them. The only
-    // thing standing between B's query and A's rows is the isolation policy's USING clause
-    // (tenant_id = current_tenant_id()) evaluated against B's GUC. The positive read (A sees ≥1) is
-    // load-bearing: without it, B's 0 could equally mean "app_user has no access at all". FORCE
-    // itself is asserted structurally by the inmutabilidad guard (fiscal-verifactu), which reads
-    // relforcerowsecurity; this proves the POLICY works.
-    await withTenant(suite.admin, TENANT_A, async (tx) => {
-      await asAppUser(tx);
-      await tx.execute(
-        insertCloseSql({
-          tenantId: TENANT_A,
-          nodeId: nodeA,
-          businessDay: "2026-08-06",
-          sequenceNo: 6,
-        }),
-      );
-    });
-
-    const seenByA = await withTenant(suite.admin, TENANT_A, async (tx) => {
-      await asAppUser(tx);
-      return tx.execute<{ n: string }>(sql`select count(*)::text as n from daily_closes`);
-    });
-    expect(Number(seenByA.rows[0]?.n)).toBeGreaterThanOrEqual(1);
-
-    const seenByB = await withTenant(suite.admin, TENANT_B, async (tx) => {
-      await asAppUser(tx);
-      return tx.execute<{ n: string }>(sql`select count(*)::text as n from daily_closes`);
-    });
-    expect(seenByB.rows[0]?.n).toBe("0");
-  });
-
   it("gives daily_closes a composite (tenant_id, node_id) → nodes FK, tenant-consistent", async () => {
     // The FK is the composite (tenant_id, node_id) targeting nodes_tenant_id_key, not a bare node_id:
     // it is what stops a close naming a node of another tenant. A close for tenant A pointing at
-    // tenant B's node is refused 23503 (foreign_key_violation). Read as the owner so the FK, not the
-    // isolation policy, is unambiguously what bites.
+    // tenant B's node is refused 23503 (foreign_key_violation). Written as the owner so the FK is
+    // unambiguously what bites.
     const error = await captureError(() =>
       suite.admin.execute(
         insertCloseSql({

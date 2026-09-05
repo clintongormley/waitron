@@ -181,8 +181,10 @@ option and `f` for one holding a bare `C` on the same image.
 Two things that suite does **not** cover, so do not read it as covering them: it applies the
 migrations over the connection that just created the database, so it says nothing about a
 **different** role taking over migrating later (see "Practical recommendation" below); and it
-proves the membership and grant SHAPE, not that `waitron_app` can run a duty pass — `packages/db`'s
-`provisioner-role.rls.test.ts` is what proves the grant behaviour.
+proves the membership and grant SHAPE, not that `waitron_app` can run a duty pass. (`packages/db`'s
+`provisioner-role.rls.test.ts`, which used to prove the grant behaviour by connecting as a
+`tenant_provisioner`-only LOGIN role, was retired on 2026-09-06 with the RLS suites; the bucket
+itself goes in the drop-RLS chain's step 1, design §1.)
 
 Why any of this needed proving: `packages/db`'s own `0001_tenancy_rls.sql` and its siblings are
 hand-written, custom migrations that create six NOLOGIN support roles — `app_user`,

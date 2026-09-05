@@ -175,7 +175,7 @@ export const locations = pgTable(
     // (0078; 0077 first drops the original single-column FK) exactly like `location_catalogues`'s FKs —
     // deliberately NOT a single-column `.references()`
     // here — so a location cannot take another tenant's catalogue as its default (0028's single-column
-    // FK to catalogues(id) let it; proven in locations-default-catalogue.rls.test.ts). `catalogue_id` is
+    // FK to catalogues(id) let it; proven in locations-default-catalogue.test.ts). `catalogue_id` is
     // nullable, so a MATCH SIMPLE composite FK skips the check when it is NULL (no default). Declaring
     // the FK in the migration rather than the schema drops the tenants→catalogue import edge the
     // single-column thunk needed; `catalogue.ts` still imports `tenants` for its own tenant FK, so the

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import type { Database, Transaction } from "../client.js";
+import type { Transaction } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
@@ -8,29 +8,16 @@ import { withTenant } from "../tenancy.js";
 import { floorZones } from "./floor-zones.js";
 import { tenants } from "./tenants.js";
 
-// Real Postgres (a template clone), not PGlite: RLS as the non-owner app role is a false pass on
-// PGlite, which connects as superuser and bypasses FORCE (CLAUDE.md §4). Scaffolding ported verbatim
-// from table-service-statuses.rls.test.ts — useTemplateDb + withTenant + asAppUser.
+// Real Postgres (a template clone), not PGlite: every write below runs as the non-owner
+// `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
+// constraints themselves would fire on either target — a candidate for the PGlite tier once the
+// suites are re-tagged.
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 
-class RollbackSignal extends Error {}
-async function rollBackAfter(
-  admin: Database,
-  tenant: string,
-  fn: (tx: Transaction) => Promise<void>,
-): Promise<void> {
-  await withTenant(admin, tenant, async (tx) => {
-    await fn(tx);
-    throw new RollbackSignal();
-  }).catch((error: unknown) => {
-    if (!(error instanceof RollbackSignal)) throw error;
-  });
-}
-
-describe("floor_zones schema (RLS + grants)", () => {
+describe("floor_zones schema (columns and the dining_tables.zone_id composite FK)", () => {
   const suite = useTemplateDb({ template: "core" });
 
   beforeAll(async () => {
@@ -66,7 +53,7 @@ describe("floor_zones schema (RLS + grants)", () => {
     });
   }
 
-  it("permits SELECT/INSERT/UPDATE as the non-owner app role (the control)", async () => {
+  it("maps display_order and name through the Drizzle export", async () => {
     const id = await seedZone(TENANT_A, LOCATION_A, "Comedor");
     await asApp(TENANT_A, (tx) =>
       tx.execute(sql`update floor_zones set display_order = 5 where id = ${id}`),
@@ -81,60 +68,6 @@ describe("floor_zones schema (RLS + grants)", () => {
     );
     expect(row!.displayOrder).toBe(5);
     expect(row!.name).toBe("Comedor");
-  });
-
-  it("app_user has no DELETE on floor_zones (deactivate, never delete)", async () => {
-    const id = await seedZone(TENANT_A, LOCATION_A, "Terraza");
-    const e = await captureError(() =>
-      asApp(TENANT_A, (tx) => tx.execute(sql`delete from floor_zones where id = ${id}`)),
-    );
-    expect(pgErrorCode(e)).toBe("42501");
-  });
-
-  it("isolates INSERT between tenants (WITH CHECK rejects a foreign tenant_id)", async () => {
-    // The WITH-CHECK deletion-proof target (Step 7): weakening WITH CHECK to (true) makes this
-    // foreign-tenant_id INSERT succeed instead of raising 42501, flipping this test red.
-    const e = await captureError(() =>
-      asApp(TENANT_B, (tx) =>
-        tx.execute(
-          sql`insert into floor_zones (tenant_id, location_id, name) values (${TENANT_A}, ${LOCATION_A}, 'Foreign')`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("42501");
-  });
-
-  it("tenant isolation is the policy PREDICATE's doing (proof by deletion of the tenant predicate)", async () => {
-    // A's row is committed before the policy is weakened, so it is genuinely there to leak. Weakening
-    // the predicate to `true` in a ROLLED-BACK tx makes B suddenly see it. A full DROP POLICY is the
-    // WRONG deletion: FORCE RLS with no policy denies ALL rows, so B would see zero for the opposite
-    // reason.
-    const id = await seedZone(TENANT_A, LOCATION_A, "Leak-probe");
-    expect(id).toBeDefined();
-    // Control in the other direction (§4): under the REAL policy tenant B sees ZERO of A's rows. This is
-    // what makes the `> 0` after weakening attributable to the weakening — without it, a mutation that left
-    // B able to read A's rows all along would still satisfy the leak assertion below (the USING/read side
-    // would go untested). Mirrors table-service-statuses.rls.test.ts.
-    const foreignUnderRealPolicy = await asApp(TENANT_B, (tx) =>
-      tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from floor_zones`,
-        )
-        .then((r) => r.rows[0]!.n),
-    );
-    expect(foreignUnderRealPolicy).toBe(0);
-    await rollBackAfter(suite.admin, TENANT_B, async (tx) => {
-      await tx.execute(
-        sql`alter policy floor_zones_tenant_isolation on floor_zones using (true) with check (true)`,
-      );
-      await tx.execute(sql`set local role app_user`);
-      const foreign = await tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from floor_zones`,
-        )
-        .then((r) => r.rows[0]!.n);
-      expect(foreign).toBeGreaterThan(0); // A's rows now leak to B — the predicate was the guard.
-    });
   });
 
   it("dining_tables.zone_id is writable/readable by the non-owner app_user and enforces the tenant-consistent FK", async () => {

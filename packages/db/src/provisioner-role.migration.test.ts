@@ -8,11 +8,9 @@ import { captureError, pgErrorMessage } from "./testing/errors.js";
 /**
  * The `tenant_provisioner` migration's own `DO $$ ... $$` block
  * (`drizzle/0011_provisioner_role.sql`): the role it creates when there is nothing to refuse, and
- * its refusal paths. PGlite is the right target here, unlike `provisioner-role.rls.test.ts`'s own
- * suite: every case below is decided by the DO block reading `pg_roles` and running
- * `CREATE ROLE` / `RAISE EXCEPTION` against a fresh database — none of it needs a live connection
- * AS a non-superuser role, or RLS enforcement under one. Those two are that other file's job, on
- * real Postgres, for the reason its own header states.
+ * its refusal paths. PGlite is the right target: every case below is decided by the DO block reading
+ * `pg_roles` and running `CREATE ROLE` / `RAISE EXCEPTION` against a fresh database — none of it
+ * needs a live connection AS a non-superuser role.
  *
  * Mirrors `packages/credentials/src/migrations.test.ts`'s "refuses to reuse a pre-existing
  * credentials_enumerator role that has LOGIN" (:227-240) — the sibling guard this migration's own

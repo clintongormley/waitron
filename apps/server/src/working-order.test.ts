@@ -800,8 +800,8 @@ describe("abandonHeldOrder", () => {
 // KDS-1 Task 3 — fire → ticket items. `fireLines` resolves `product ?? category ?? default` and
 // SNAPSHOTS the station onto each ticket item; the three fire points (placeOrder, sendToPrep, and a
 // tab's round-send via addTabRound) funnel through it. PGlite proves the resolver, the snapshot rule
-// and the no-default refusal — plain SQL a single backend proves; RLS/node isolation of `ticket_items`
-// is real-Postgres's job (packages/db `ticket-items.rls.test.ts`). Every write runs through
+// and the no-default refusal — plain SQL a single backend proves; the `ticket_items` schema's own
+// columns, unique and cascade are real-Postgres's job (packages/db `ticket-items.test.ts`). Every write runs through
 // `withTenant` + `asAppUser`, so the tenant scope and grants are exercised, not bypassed.
 // ---------------------------------------------------------------------------------------------------
 

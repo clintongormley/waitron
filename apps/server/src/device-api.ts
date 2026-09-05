@@ -395,8 +395,8 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   app.get("/management-api/devices", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // No explicit tenant filter — isolation is entirely `withTenant` + `asAppUser` RLS (the
-      // differential proof is packages/db's devices.rls.test.ts). Newest enrolment first.
+      // No explicit tenant filter — isolation is entirely `withTenant` + `asAppUser` RLS.
+      // Newest enrolment first.
       const rows = await gated(sessionId, (tx) =>
         tx
           .select({

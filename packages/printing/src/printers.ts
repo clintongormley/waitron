@@ -98,7 +98,7 @@ const REQUIRED_FIELDS: Record<PrintTransport, readonly (keyof CreatePrinterInput
  * throws `printer.invalid_config` with a stable English `reason` (e.g. `network_tcp_missing_host`).
  * Everything else — tenant consistency of the `agent_id` binding, the transport CHECK — is enforced
  * by the DB (the composite FK + `printers_transport_fields_ck`), proven in packages/db's
- * printing.rls.test.ts, so this verb stays a thin insert.
+ * printing.test.ts, so this verb stays a thin insert.
  */
 export async function createPrinter(
   tx: Transaction,

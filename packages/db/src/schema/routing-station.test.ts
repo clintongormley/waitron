@@ -8,10 +8,11 @@ import { withTenant } from "../tenancy.js";
 import { catalogues, categories, products } from "./catalogue.js";
 import { locations, tenants } from "./tenants.js";
 
-// Real Postgres (a template clone), not PGlite: the hand-written (tenant_id, station_id) →
-// kitchen_stations FKs on categories/products, and that the app role can write the new station_id
-// columns, are what this proves — RLS/grant behaviour as the non-owner role is a false pass on
-// PGlite's superuser connection (CLAUDE.md §4). Mirrors catalogue.rls.test.ts / floor-zones.rls.test.ts.
+// Real Postgres (a template clone), not PGlite: what this proves is the hand-written
+// (tenant_id, station_id) → kitchen_stations FKs on categories/products, written and read as the
+// non-owner `app_user` — the deployment role, which PGlite (every connection a superuser) cannot be.
+// The FKs themselves would fire on either target — a candidate for the PGlite tier once the suites
+// are re-tagged.
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";

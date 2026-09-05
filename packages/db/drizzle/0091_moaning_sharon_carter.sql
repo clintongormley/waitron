@@ -9,10 +9,9 @@
 -- every row.
 --
 -- FORCE applies RLS to the table OWNER too, so a deployment connecting as the non-superuser migration
--- owner is still isolated. It does nothing against a superuser, so it is not the control the app_user
--- behavioural suite (tenant-themes.rls.test.ts) exercises — removing it leaves that suite green; the
--- guard that DOES catch a missing FORCE is fiscal-verifactu's `inmutabilidad` scan, which asserts
--- relforcerowsecurity on every tenant_id-bearing table.
+-- owner is still isolated. It does nothing against a superuser, so no suite that writes as app_user
+-- can catch a missing FORCE; the guard that DOES is fiscal-verifactu's `inmutabilidad` scan, which
+-- asserts relforcerowsecurity on every tenant_id-bearing table.
 --
 -- FOR ALL, not FOR SELECT: USING filters what is readable and WITH CHECK filters what is writable,
 -- both, so a tenant cannot INSERT/UPDATE a row it will never read back.

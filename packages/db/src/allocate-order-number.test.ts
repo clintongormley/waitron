@@ -1,11 +1,13 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { sql } from "drizzle-orm";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import { allocateOrderNumber } from "./allocate-order-number.js";
 import type { Database } from "./client.js";
 import { locations, tenants } from "./schema/tenants.js";
 import { describeEachTarget } from "./testing/harness.js";
+import { useTemplateDb } from "./testing/lifecycle.js";
 import { asAppUser } from "./testing/roles.js";
-import { seedNode } from "./testing/seed.js";
+import { seedNode, seedTenant } from "./testing/seed.js";
 import { withTenant } from "./tenancy.js";
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
@@ -80,5 +82,70 @@ describeEachTarget("allocateOrderNumber", (target) => {
     // text — the same trap allocate-number.test.ts guards for invoice numbers.
     const n = await withTenant(db, TENANT_A, (tx) => allocateOrderNumber(tx, TENANT_A, nodeA1));
     expect(typeof n).toBe("number");
+  });
+});
+
+// The number of concurrent allocators. Distinct backends (see the pid assertion below), so this is
+// also the connection count.
+const WRITERS = 20;
+
+// Real PostgreSQL only, in its own describe: `describeEachTarget` above would also run this on
+// PGlite, which serialises every query onto ONE backend, so the race never happens and the pass is
+// theatre (CLAUDE.md §4). A clone of the shared container's `core` template; Docker is required —
+// the package globalSetup fails loudly without it, never a silent skip.
+describe("allocateOrderNumber under concurrency", () => {
+  const suite = useTemplateDb({ template: "core" });
+
+  // The suite shares ONE cloned database (useTemplateDb does not reset between tests) and
+  // working_order_counters cannot be truncated back — its FK chain to `tenants` cascades into
+  // append-only fiscal tables whose BEFORE TRUNCATE trigger blocks the wipe. So mint a FRESH tenant +
+  // node (seedTenant uses a fresh NIF and a fresh uuid), leaving the rows independent of any other
+  // test's — the same approach chain.concurrency.test.ts takes for the same reason.
+  async function freshTenantNode(admin: Database): Promise<{ tenantId: string; nodeId: string }> {
+    const tenantId = await seedTenant(admin);
+    const [location] = await admin
+      .insert(locations)
+      .values({
+        tenantId,
+        name: "Fixture Location",
+        invoiceLocales: ["es"],
+        operationDescription: "Hostelería",
+      })
+      .returning({ id: locations.id });
+    const nodeId = await seedNode(admin, tenantId, brandLocationId(location!.id));
+    return { tenantId, nodeId };
+  }
+
+  it("hands out distinct numbers to concurrent allocators on distinct backends", async () => {
+    const { tenantId, nodeId } = await freshTenantNode(suite.admin);
+    const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
+    try {
+      // Load-bearing: distinct backend PROCESSES. On PGlite these collapse onto one and every
+      // assertion below is theatre — this is the guard that the concurrency is real, mirroring
+      // chain.concurrency.test.ts's own distinct-pid check.
+      const pids = await Promise.all(
+        dbs.map(async (db) => {
+          const { rows } = await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
+          return rows[0]?.pid;
+        }),
+      );
+      expect(new Set(pids).size).toBe(WRITERS);
+
+      // All WRITERS allocate the same (tenant, node) at once, each on its own backend, each as the
+      // app role. A read-then-write allocator would hand the same number out twice here.
+      const results = await Promise.all(
+        dbs.map((db) =>
+          withTenant(db, tenantId, async (tx) => {
+            await asAppUser(tx);
+            return allocateOrderNumber(tx, tenantId, nodeId);
+          }),
+        ),
+      );
+      expect(new Set(results).size).toBe(WRITERS);
+      expect(Math.min(...results)).toBe(1);
+      expect(Math.max(...results)).toBe(WRITERS);
+    } finally {
+      await Promise.all(dbs.map((db) => db.close()));
+    }
   });
 });

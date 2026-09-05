@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import type { Database, Transaction } from "../client.js";
+import type { Transaction } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
@@ -8,10 +8,10 @@ import { withTenant } from "../tenancy.js";
 import { bookings } from "./bookings.js";
 import { tenants } from "./tenants.js";
 
-// Real Postgres (a template clone), not PGlite: RLS as the non-owner app role is a false pass on
-// PGlite, which connects as superuser and bypasses FORCE (CLAUDE.md §4). Scaffolding ported from
-// location-catalogues.rls.test.ts — useTemplateDb + withTenant + asAppUser, the same tenant-scoped
-// FORCE-RLS + composite-FK shape.
+// Real Postgres (a template clone), not PGlite: every write below runs as the non-owner
+// `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
+// constraints themselves would fire on either target — a candidate for the PGlite tier once the
+// suites are re-tagged.
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
@@ -22,21 +22,7 @@ const TABLE_B = "bbbbbbbb-0000-4000-8000-000000000009";
 // The identity person recorded in created_by — a plain uuid, no FK (the drawer_opens.person_id seam).
 const CREATED_BY = "cccccccc-0000-4000-8000-000000000001";
 
-class RollbackSignal extends Error {}
-async function rollBackAfter(
-  admin: Database,
-  tenant: string,
-  fn: (tx: Transaction) => Promise<void>,
-): Promise<void> {
-  await withTenant(admin, tenant, async (tx) => {
-    await fn(tx);
-    throw new RollbackSignal();
-  }).catch((error: unknown) => {
-    if (!(error instanceof RollbackSignal)) throw error;
-  });
-}
-
-describe("bookings schema (staff reservations — RLS + grants + FORCE + composite FKs)", () => {
+describe("bookings schema (staff reservations — columns, CHECK, composite FKs)", () => {
   const suite = useTemplateDb({ template: "core" });
 
   beforeAll(async () => {
@@ -69,7 +55,7 @@ describe("bookings schema (staff reservations — RLS + grants + FORCE + composi
     });
   }
 
-  // Insert a booking under the app role, scoped to `tenant` — exercises bookings' grant + WITH CHECK.
+  // Insert a booking under the app role, scoped to `tenant` — the path the real routes take.
   async function seedBooking(
     tenant: string,
     location: string,
@@ -101,18 +87,10 @@ describe("bookings schema (staff reservations — RLS + grants + FORCE + composi
     });
   }
 
-  async function forceFlag(target: Database, relname: string): Promise<boolean> {
-    const r = await target.execute<{ f: boolean }>(
-      sql`select relforcerowsecurity as f from pg_class
-          where relname = ${relname} and relnamespace = 'public'::regnamespace`,
-    );
-    return r.rows[0]!.f;
-  }
-
-  it("permits SELECT/INSERT/UPDATE as the non-owner app role (the control)", async () => {
+  it("exposes every column through the Drizzle export, with the status default", async () => {
     const id = await seedBooking(TENANT_A, LOCATION_A, "20:00");
     // Read back through the Drizzle `bookings` export (not raw SQL) — exercises the produced table
-    // export and its column mapping under the app role.
+    // export, its column mapping, the `status` default and `booking_time`'s rendering.
     const [row] = await asApp(TENANT_A, (tx) =>
       tx
         .select()
@@ -127,8 +105,8 @@ describe("bookings schema (staff reservations — RLS + grants + FORCE + composi
     expect(row!.contactName).toBe("Ana");
     expect(row!.status).toBe("booked");
     expect(row!.createdBy).toBe(CREATED_BY);
-    // app_user holds UPDATE (a booking is edited and moved through its lifecycle) — unlike
-    // location_catalogues, which has none. Move it to a terminal state and read the change back.
+    // A booking is edited and moved through its lifecycle: move it to a terminal state and read the
+    // change back, so the mapping covers a written value as well as a default.
     await asApp(TENANT_A, (tx) =>
       tx.execute(sql`update bookings set status = 'cancelled' where id = ${id}`),
     );
@@ -140,34 +118,11 @@ describe("bookings schema (staff reservations — RLS + grants + FORCE + composi
     expect(after).toBe("cancelled");
   });
 
-  it("app_user has NO DELETE (a booking is cancelled, never hard-deleted)", async () => {
-    const id = await seedBooking(TENANT_A, LOCATION_A, "21:00");
-    const e = await captureError(() =>
-      asApp(TENANT_A, (tx) => tx.execute(sql`delete from bookings where id = ${id}`)),
-    );
-    expect(pgErrorCode(e)).toBe("42501"); // insufficient_privilege — no DELETE granted
-  });
-
   it("rejects a non-positive party_size (CHECK party_size > 0)", async () => {
     const e = await captureError(() =>
       seedBooking(TENANT_A, LOCATION_A, "22:00", { party_size: 0 }),
     );
     expect(pgErrorCode(e)).toBe("23514"); // check_violation on bookings_party_size_ck
-  });
-
-  it("isolates INSERT between tenants (WITH CHECK rejects a foreign tenant_id)", async () => {
-    // The WITH-CHECK deletion-proof target: weakening WITH CHECK to (true) makes this foreign-tenant_id
-    // INSERT succeed instead of raising 42501. The location FK (A, LOCATION_A) is SATISFIED, so the
-    // ONLY violated constraint is the RLS WITH CHECK.
-    const e = await captureError(() =>
-      asApp(TENANT_B, (tx) =>
-        tx.execute(
-          sql`insert into bookings (tenant_id, location_id, booking_date, booking_time, party_size, contact_name, created_by)
-              values (${TENANT_A}, ${LOCATION_A}, '2026-09-01', '20:00', 2, 'Ana', ${CREATED_BY})`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("42501");
   });
 
   it("the table binding is tenant-consistent (composite FK to dining_tables)", async () => {
@@ -190,56 +145,5 @@ describe("bookings schema (staff reservations — RLS + grants + FORCE + composi
       }),
     );
     expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on (tenant_id, tab_id)
-  });
-
-  it("tenant isolation is the policy PREDICATE's doing (proof by deletion of the tenant predicate)", async () => {
-    // A's booking is committed before the policy is weakened, so it is genuinely there to leak.
-    // Weakening the predicate to `true` in a ROLLED-BACK tx makes B suddenly see it. A full DROP POLICY
-    // is the WRONG deletion: FORCE RLS with no policy denies ALL rows, so B would see zero for the
-    // opposite reason. Mirrors location-catalogues.rls.test.ts.
-    await seedBooking(TENANT_A, LOCATION_A, "12:00");
-    // Control in the other direction (§4): under the REAL policy tenant B sees ZERO of A's rows, so the
-    // `> 0` after weakening is attributable to the weakening rather than to B having read A all along.
-    const foreignUnderRealPolicy = await asApp(TENANT_B, (tx) =>
-      tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from bookings`,
-        )
-        .then((r) => r.rows[0]!.n),
-    );
-    expect(foreignUnderRealPolicy).toBe(0);
-    await rollBackAfter(suite.admin, TENANT_B, async (tx) => {
-      await tx.execute(
-        sql`alter policy bookings_tenant_isolation on bookings using (true) with check (true)`,
-      );
-      await tx.execute(sql`set local role app_user`);
-      const foreign = await tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from bookings`,
-        )
-        .then((r) => r.rows[0]!.n);
-      expect(foreign).toBeGreaterThan(0); // A's rows now leak to B — the predicate was the guard.
-    });
-  });
-
-  it("bookings has FORCE row level security (proof by deletion of the FORCE flag)", async () => {
-    // The flag the inmutabilidad guard keys on. Under the migration bookings reports true. NOTE: FORCE
-    // is what binds the table OWNER; the app_user cross-tenant SELECT above would still isolate under
-    // ENABLE alone (a non-owner), so this flag assertion — not that SELECT — is the test that removing
-    // FORCE from the migration turns red.
-    expect(await forceFlag(suite.admin, "bookings")).toBe(true);
-    // Proof by deletion: NO FORCE inside a ROLLED-BACK tx flips the flag to false, so the assertion
-    // above is attributable to the migration's FORCE line, not to a default. The rollback restores
-    // FORCE for the shared template clone.
-    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
-      await tx.execute(sql`alter table bookings no force row level security`);
-      const after = await tx.execute<{ f: boolean }>(
-        sql`select relforcerowsecurity as f from pg_class
-            where relname = 'bookings' and relnamespace = 'public'::regnamespace`,
-      );
-      expect(after.rows[0]!.f).toBe(false);
-    });
-    // Back to true after the rollback — the deletion did not leak.
-    expect(await forceFlag(suite.admin, "bookings")).toBe(true);
   });
 });

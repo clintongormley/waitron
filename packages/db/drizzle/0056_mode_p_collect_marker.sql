@@ -19,7 +19,7 @@
 -- FROM). So the ONLY settled-state write it opens is the handover marker; the fiscal-relevant identity
 -- and `settled_at` fields stay frozen, and a re-stamp of an already-collected order (non-null → non-null)
 -- is NOT permitted (the OLD.collected_at IS NULL guard). Proven by deletion of the branch, both
--- directions, in orders.transition.rls.test.ts (the collected_at-stamp test fails without it; the
+-- directions, in orders.transition.test.ts (the collected_at-stamp test fails without it; the
 -- other-column and re-stamp rejections keep RAISEing P0001 with it).
 CREATE OR REPLACE FUNCTION working_orders_enforce_transition()
   RETURNS trigger

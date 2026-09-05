@@ -20,7 +20,7 @@
 --
 -- That is deliberate and it is NOT a widening: a login role that is a member of both buckets —
 -- what `apps/server/README.md`'s own `create role waitron_app … in role app_user` prescribes for
--- the deployment role, and what `provisioner-role.rls.test.ts` builds — has had exactly this
+-- the deployment role — has had exactly this
 -- surface all along. The membership only moves where it comes from. What must stay narrow is the
 -- grant BELOW: INSERT on `tenants`, and nothing else, is what this bucket adds on top.
 --
@@ -86,11 +86,12 @@ GRANT USAGE ON SCHEMA public TO tenant_provisioner;
 -- schema rather than an instruction a future tool or an operator at a psql prompt has to remember.
 -- The DO block's NOINHERIT branch is what keeps "default INHERIT" from being an assumption.
 --
--- Proven on PostgreSQL 18.4, and proven by deletion — `provisioner_only_login` in
--- `packages/db/src/provisioner-role.rls.test.ts` is that experiment, kept: a LOGIN role created
--- `in role tenant_provisioner` ALONE (its only direct membership, asserted from pg_auth_members)
--- inserts a tenant, reads it back, and inserts its location. Comment this GRANT out and the read
--- fails `permission denied for table tenants` (42501).
+-- Proven on PostgreSQL 18.4, and proven by deletion: a LOGIN role created `in role
+-- tenant_provisioner` ALONE (its only direct membership, read from pg_auth_members) inserts a tenant,
+-- reads it back, and inserts its location; commenting this GRANT out makes the read fail
+-- `permission denied for table tenants` (42501). That experiment lived in
+-- `packages/db/src/provisioner-role.rls.test.ts`, retired 2026-09-06 with the RLS suites — the
+-- `tenant_provisioner` bucket itself is scheduled to go with them (drop-RLS design §1).
 --
 -- Idempotency, narrowed to what was actually observed: re-running the GRANT AS THE SAME GRANTOR is
 -- a NOTICE, not an error — `NOTICE: role "tenant_provisioner" has already been granted membership

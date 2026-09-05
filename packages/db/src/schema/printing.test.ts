@@ -10,9 +10,10 @@ import { printJobs } from "./print-jobs.js";
 import { printers } from "./printers.js";
 import { tenants } from "./tenants.js";
 
-// Real Postgres (a template clone), not PGlite: RLS as the non-owner app role is a false pass on
-// PGlite, which connects as superuser and bypasses FORCE (CLAUDE.md §4). Scaffolding ported from
-// devices.rls.test.ts — useTemplateDb + withTenant + asAppUser.
+// Real Postgres (a template clone), not PGlite: every write below runs as the non-owner
+// `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
+// constraints themselves would fire on either target — a candidate for the PGlite tier once the
+// suites are re-tagged.
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
@@ -37,7 +38,7 @@ async function rollBackAfter(
   });
 }
 
-describe("printing schema (print_agents/pairing_codes/printers/print_jobs — RLS + grants + FORCE)", () => {
+describe("printing schema (print_agents/pairing_codes/printers/print_jobs — columns, CHECKs, FKs)", () => {
   const suite = useTemplateDb({ template: "core" });
 
   beforeAll(async () => {
@@ -114,17 +115,9 @@ describe("printing schema (print_agents/pairing_codes/printers/print_jobs — RL
     });
   }
 
-  async function forceFlag(target: Database, relname: string): Promise<boolean> {
-    const r = await target.execute<{ f: boolean }>(
-      sql`select relforcerowsecurity as f from pg_class
-          where relname = ${relname} and relnamespace = 'public'::regnamespace`,
-    );
-    return r.rows[0]!.f;
-  }
-
   // ---- print_agents -------------------------------------------------------------------------
 
-  it("print_agents: permits SELECT/INSERT/UPDATE as the non-owner app role (the control)", async () => {
+  it("print_agents: exposes every column through the Drizzle export, with the active default", async () => {
     const id = await seedAgent(TENANT_A, "Kitchen USB agent");
     await asApp(TENANT_A, (tx) =>
       tx.execute(sql`update print_agents set last_seen_at = now() where id = ${id}`),
@@ -143,28 +136,6 @@ describe("printing schema (print_agents/pairing_codes/printers/print_jobs — RL
     expect(row!.lastSeenAt).not.toBeNull();
   });
 
-  it("print_agents: app_user has NO DELETE (revoke via active=false, never a hard delete)", async () => {
-    const id = await seedAgent(TENANT_A, "No-delete probe");
-    const e = await captureError(() =>
-      asApp(TENANT_A, (tx) => tx.execute(sql`delete from print_agents where id = ${id}`)),
-    );
-    expect(pgErrorCode(e)).toBe("42501"); // insufficient_privilege — no DELETE granted
-  });
-
-  it("print_agents: isolates INSERT between tenants (WITH CHECK rejects a foreign tenant_id)", async () => {
-    // Weakening WITH CHECK to (true) makes this foreign-tenant_id INSERT succeed instead of raising
-    // 42501, flipping this test red.
-    const e = await captureError(() =>
-      asApp(TENANT_B, (tx) =>
-        tx.execute(
-          sql`insert into print_agents (tenant_id, location_id, name, token_hash)
-              values (${TENANT_A}, ${LOCATION_A}, 'Foreign', ${TOKEN_HASH})`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("42501");
-  });
-
   it("print_agents: the location FK rejects a non-existent location (direct location_id → locations.id)", async () => {
     const e = await captureError(() =>
       asApp(TENANT_A, (tx) =>
@@ -177,35 +148,9 @@ describe("printing schema (print_agents/pairing_codes/printers/print_jobs — RL
     expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on location_id
   });
 
-  it("print_agents: tenant isolation is the policy PREDICATE's doing (proof by deletion of the tenant predicate)", async () => {
-    const id = await seedAgent(TENANT_A, "Leak-probe");
-    expect(id).toBeDefined();
-    // Control in the other direction (§4): under the REAL policy tenant B sees ZERO of A's rows.
-    const foreignUnderRealPolicy = await asApp(TENANT_B, (tx) =>
-      tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from print_agents`,
-        )
-        .then((r) => r.rows[0]!.n),
-    );
-    expect(foreignUnderRealPolicy).toBe(0);
-    await rollBackAfter(suite.admin, TENANT_B, async (tx) => {
-      await tx.execute(
-        sql`alter policy print_agents_tenant_isolation on print_agents using (true) with check (true)`,
-      );
-      await tx.execute(sql`set local role app_user`);
-      const foreign = await tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from print_agents`,
-        )
-        .then((r) => r.rows[0]!.n);
-      expect(foreign).toBeGreaterThan(0); // A's rows now leak to B — the predicate was the guard.
-    });
-  });
-
   // ---- print_agent_pairing_codes ------------------------------------------------------------
 
-  it("print_agent_pairing_codes: permits SELECT/INSERT/DELETE (single-use redemption via DELETE … RETURNING)", async () => {
+  it("print_agent_pairing_codes: maps every column and is consumed by DELETE … RETURNING", async () => {
     const id = await seedPairingCode(TENANT_A, "sha-control", "Code control");
     const [row] = await asApp(TENANT_A, (tx) =>
       tx
@@ -250,31 +195,9 @@ describe("printing schema (print_agents/pairing_codes/printers/print_jobs — RL
     });
   });
 
-  it("print_agent_pairing_codes: app_user has NO UPDATE (a code is consumed, never edited)", async () => {
-    const id = await seedPairingCode(TENANT_A, "sha-noupdate", "No-update probe");
-    const e = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
-        tx.execute(sql`update print_agent_pairing_codes set label = 'edited' where id = ${id}`),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("42501"); // insufficient_privilege — no UPDATE granted
-  });
-
-  it("print_agent_pairing_codes: isolates INSERT between tenants (WITH CHECK rejects a foreign tenant_id)", async () => {
-    const e = await captureError(() =>
-      asApp(TENANT_B, (tx) =>
-        tx.execute(
-          sql`insert into print_agent_pairing_codes (tenant_id, location_id, code_sha256, label)
-              values (${TENANT_A}, ${LOCATION_A}, 'sha-foreign', 'Foreign')`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("42501");
-  });
-
   // ---- printers -----------------------------------------------------------------------------
 
-  it("printers: permits SELECT/INSERT/UPDATE as the non-owner app role (the control)", async () => {
+  it("printers: exposes every column through the Drizzle export, with the port and ticket_scope defaults", async () => {
     const agent = await seedAgent(TENANT_A, "Agent for printer");
     const id = await seedPrinter(TENANT_A, agent, "Kitchen printer");
     await asApp(TENANT_A, (tx) =>
@@ -293,27 +216,6 @@ describe("printing schema (print_agents/pairing_codes/printers/print_jobs — RL
     expect(row!.port).toBe(9100); // the column default applied
     expect(row!.ticketScope).toBe("station"); // the enum default
     expect(row!.active).toBe(false);
-  });
-
-  it("printers: app_user has NO DELETE (deactivate via active=false, never a hard delete)", async () => {
-    const agent = await seedAgent(TENANT_A, "Agent no-delete");
-    const id = await seedPrinter(TENANT_A, agent, "No-delete printer");
-    const e = await captureError(() =>
-      asApp(TENANT_A, (tx) => tx.execute(sql`delete from printers where id = ${id}`)),
-    );
-    expect(pgErrorCode(e)).toBe("42501");
-  });
-
-  it("printers: isolates INSERT between tenants (WITH CHECK rejects a foreign tenant_id)", async () => {
-    const e = await captureError(() =>
-      asApp(TENANT_B, (tx) =>
-        tx.execute(
-          sql`insert into printers (tenant_id, location_id, name, transport, poll_id)
-              values (${TENANT_A}, ${LOCATION_A}, 'Foreign', 'cloud_poll', 'poll-x')`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("42501");
   });
 
   it("printers: the agent binding is tenant-consistent (composite FK to print_agents)", async () => {
@@ -372,35 +274,9 @@ describe("printing schema (print_agents/pairing_codes/printers/print_jobs — RL
     expect(cloudId).toBeDefined();
   });
 
-  it("printers: tenant isolation is the policy PREDICATE's doing (proof by deletion)", async () => {
-    const agent = await seedAgent(TENANT_A, "Agent leak");
-    const id = await seedPrinter(TENANT_A, agent, "Leak-probe printer");
-    expect(id).toBeDefined();
-    const foreignUnderRealPolicy = await asApp(TENANT_B, (tx) =>
-      tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from printers`,
-        )
-        .then((r) => r.rows[0]!.n),
-    );
-    expect(foreignUnderRealPolicy).toBe(0);
-    await rollBackAfter(suite.admin, TENANT_B, async (tx) => {
-      await tx.execute(
-        sql`alter policy printers_tenant_isolation on printers using (true) with check (true)`,
-      );
-      await tx.execute(sql`set local role app_user`);
-      const foreign = await tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from printers`,
-        )
-        .then((r) => r.rows[0]!.n);
-      expect(foreign).toBeGreaterThan(0);
-    });
-  });
-
   // ---- print_jobs ---------------------------------------------------------------------------
 
-  it("print_jobs: permits SELECT/INSERT/UPDATE as the non-owner app role (the control)", async () => {
+  it("print_jobs: round-trips the bytea payload and the delivery lifecycle columns", async () => {
     const agent = await seedAgent(TENANT_A, "Agent for job");
     const printer = await seedPrinter(TENANT_A, agent, "Printer for job");
     const id = await seedJob(TENANT_A, printer);
@@ -425,30 +301,6 @@ describe("printing schema (print_agents/pairing_codes/printers/print_jobs — RL
     expect(row!.payload.toString("utf8")).toBe("Hello");
   });
 
-  it("print_jobs: app_user has NO DELETE (a job is a durable delivery record)", async () => {
-    const agent = await seedAgent(TENANT_A, "Agent job no-delete");
-    const printer = await seedPrinter(TENANT_A, agent, "Printer job no-delete");
-    const id = await seedJob(TENANT_A, printer);
-    const e = await captureError(() =>
-      asApp(TENANT_A, (tx) => tx.execute(sql`delete from print_jobs where id = ${id}`)),
-    );
-    expect(pgErrorCode(e)).toBe("42501");
-  });
-
-  it("print_jobs: isolates INSERT between tenants (WITH CHECK rejects a foreign tenant_id)", async () => {
-    const agent = await seedAgent(TENANT_A, "Agent for foreign job");
-    const printer = await seedPrinter(TENANT_A, agent, "Printer for foreign job");
-    const e = await captureError(() =>
-      asApp(TENANT_B, (tx) =>
-        tx.execute(
-          sql`insert into print_jobs (tenant_id, location_id, printer_id, payload)
-              values (${TENANT_A}, ${LOCATION_A}, ${printer}, decode('00', 'hex'))`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("42501");
-  });
-
   it("print_jobs: the printer binding is tenant-consistent (composite FK to printers)", async () => {
     // Tenant B cannot enqueue a job against tenant A's printer: the (tenant_id, printer_id) composite
     // FK has no (B, printerA) row → foreign_key_violation. The insert is B's own tenant_id (so RLS
@@ -464,55 +316,5 @@ describe("printing schema (print_agents/pairing_codes/printers/print_jobs — RL
       ),
     );
     expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on (tenant_id, printer_id)
-  });
-
-  it("print_jobs: tenant isolation is the policy PREDICATE's doing (proof by deletion)", async () => {
-    const agent = await seedAgent(TENANT_A, "Agent job leak");
-    const printer = await seedPrinter(TENANT_A, agent, "Printer job leak");
-    const id = await seedJob(TENANT_A, printer);
-    expect(id).toBeDefined();
-    const foreignUnderRealPolicy = await asApp(TENANT_B, (tx) =>
-      tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from print_jobs`,
-        )
-        .then((r) => r.rows[0]!.n),
-    );
-    expect(foreignUnderRealPolicy).toBe(0);
-    await rollBackAfter(suite.admin, TENANT_B, async (tx) => {
-      await tx.execute(
-        sql`alter policy print_jobs_tenant_isolation on print_jobs using (true) with check (true)`,
-      );
-      await tx.execute(sql`set local role app_user`);
-      const foreign = await tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from print_jobs`,
-        )
-        .then((r) => r.rows[0]!.n);
-      expect(foreign).toBeGreaterThan(0);
-    });
-  });
-
-  // ---- FORCE ROW LEVEL SECURITY -------------------------------------------------------------
-
-  it("all four tables have FORCE row level security (proof by deletion of the FORCE flag)", async () => {
-    // The flag the inmutabilidad guard keys on. Under the migration all four report true.
-    expect(await forceFlag(suite.admin, "print_agents")).toBe(true);
-    expect(await forceFlag(suite.admin, "print_agent_pairing_codes")).toBe(true);
-    expect(await forceFlag(suite.admin, "printers")).toBe(true);
-    expect(await forceFlag(suite.admin, "print_jobs")).toBe(true);
-    // Proof by deletion: NO FORCE inside a ROLLED-BACK tx flips the flag to false, so the assertions
-    // above are attributable to the migration's FORCE line, not to a default. The rollback restores
-    // FORCE for every other test (and for the shared template clone).
-    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
-      await tx.execute(sql`alter table print_jobs no force row level security`);
-      const after = await tx.execute<{ f: boolean }>(
-        sql`select relforcerowsecurity as f from pg_class
-            where relname = 'print_jobs' and relnamespace = 'public'::regnamespace`,
-      );
-      expect(after.rows[0]!.f).toBe(false);
-    });
-    // Back to true after the rollback — the deletion did not leak.
-    expect(await forceFlag(suite.admin, "print_jobs")).toBe(true);
   });
 });

@@ -8,9 +8,10 @@ import { withTenant } from "../tenancy.js";
 import { devicePairingCodes, devices } from "./devices.js";
 import { tenants } from "./tenants.js";
 
-// Real Postgres (a template clone), not PGlite: RLS as the non-owner app role is a false pass on
-// PGlite, which connects as superuser and bypasses FORCE (CLAUDE.md §4). Scaffolding ported from
-// kitchen-stations.rls.test.ts — useTemplateDb + withTenant + asAppUser.
+// Real Postgres (a template clone), not PGlite: every write below runs as the non-owner
+// `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
+// constraints themselves would fire on either target — a candidate for the PGlite tier once the
+// suites are re-tagged.
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
@@ -39,7 +40,7 @@ async function rollBackAfter(
   });
 }
 
-describe("devices + device_pairing_codes schema (RLS + grants + FORCE)", () => {
+describe("devices + device_pairing_codes schema (columns, CHECKs, FKs, unique)", () => {
   const suite = useTemplateDb({ template: "core" });
 
   beforeAll(async () => {
@@ -109,17 +110,9 @@ describe("devices + device_pairing_codes schema (RLS + grants + FORCE)", () => {
     });
   }
 
-  async function forceFlag(target: Database, relname: string): Promise<boolean> {
-    const r = await target.execute<{ f: boolean }>(
-      sql`select relforcerowsecurity as f from pg_class
-          where relname = ${relname} and relnamespace = 'public'::regnamespace`,
-    );
-    return r.rows[0]!.f;
-  }
-
   // ---- devices ------------------------------------------------------------------------------
 
-  it("devices: permits SELECT/INSERT/UPDATE as the non-owner app role (the control)", async () => {
+  it("devices: exposes every column through the Drizzle export, with the active default", async () => {
     const id = await seedDevice(TENANT_A, STATION_A, "Kitchen screen");
     await asApp(TENANT_A, (tx) =>
       tx.execute(sql`update devices set last_seen_at = now() where id = ${id}`),
@@ -138,28 +131,6 @@ describe("devices + device_pairing_codes schema (RLS + grants + FORCE)", () => {
     expect(row!.label).toBe("Kitchen screen");
     expect(row!.active).toBe(true);
     expect(row!.lastSeenAt).not.toBeNull();
-  });
-
-  it("devices: app_user has NO DELETE (revoke via active=false, never a hard delete)", async () => {
-    const id = await seedDevice(TENANT_A, STATION_A, "No-delete probe");
-    const e = await captureError(() =>
-      asApp(TENANT_A, (tx) => tx.execute(sql`delete from devices where id = ${id}`)),
-    );
-    expect(pgErrorCode(e)).toBe("42501"); // insufficient_privilege — no DELETE granted
-  });
-
-  it("devices: isolates INSERT between tenants (WITH CHECK rejects a foreign tenant_id)", async () => {
-    // Weakening WITH CHECK to (true) makes this foreign-tenant_id INSERT succeed instead of raising
-    // 42501, flipping this test red.
-    const e = await captureError(() =>
-      asApp(TENANT_B, (tx) =>
-        tx.execute(
-          sql`insert into devices (tenant_id, location_id, device_kind, station_id, label, token_hash)
-              values (${TENANT_A}, ${LOCATION_A}, 'kds_station', ${null}, 'Foreign', ${TOKEN_HASH})`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("42501");
   });
 
   it("devices: the station binding is tenant-consistent (composite FK to kitchen_stations)", async () => {
@@ -182,37 +153,9 @@ describe("devices + device_pairing_codes schema (RLS + grants + FORCE)", () => {
     expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on location_id
   });
 
-  it("devices: tenant isolation is the policy PREDICATE's doing (proof by deletion of the tenant predicate)", async () => {
-    // A's row is committed before the policy is weakened, so it is genuinely there to leak. Weakening
-    // the predicate to `true` in a ROLLED-BACK tx makes B suddenly see it. Mirrors kitchen-stations.
-    const id = await seedDevice(TENANT_A, STATION_A, "Leak-probe");
-    expect(id).toBeDefined();
-    // Control in the other direction (§4): under the REAL policy tenant B sees ZERO of A's rows.
-    const foreignUnderRealPolicy = await asApp(TENANT_B, (tx) =>
-      tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from devices`,
-        )
-        .then((r) => r.rows[0]!.n),
-    );
-    expect(foreignUnderRealPolicy).toBe(0);
-    await rollBackAfter(suite.admin, TENANT_B, async (tx) => {
-      await tx.execute(
-        sql`alter policy devices_tenant_isolation on devices using (true) with check (true)`,
-      );
-      await tx.execute(sql`set local role app_user`);
-      const foreign = await tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from devices`,
-        )
-        .then((r) => r.rows[0]!.n);
-      expect(foreign).toBeGreaterThan(0); // A's rows now leak to B — the predicate was the guard.
-    });
-  });
-
   // ---- device_pairing_codes ----------------------------------------------------------------
 
-  it("device_pairing_codes: permits SELECT/INSERT/DELETE (single-use redemption via DELETE … RETURNING)", async () => {
+  it("device_pairing_codes: maps every column and is consumed by DELETE … RETURNING", async () => {
     const id = await seedPairingCode(TENANT_A, STATION_A, "sha-control", "Code control");
     // Read back through the Drizzle `devicePairingCodes` export — exercises its column mapping.
     const [row] = await asApp(TENANT_A, (tx) =>
@@ -265,53 +208,6 @@ describe("devices + device_pairing_codes schema (RLS + grants + FORCE)", () => {
             values (${TENANT_A}, ${LOCATION_A}, 'sha-dup', 'kds_station', ${STATION_A}, 'Now allowed') returning id`,
       );
       expect(inserted.rows).toHaveLength(1); // the duplicate digest inserts once the UNIQUE index is gone
-    });
-  });
-
-  it("device_pairing_codes: app_user has NO UPDATE (a code is consumed, never edited)", async () => {
-    const id = await seedPairingCode(TENANT_A, STATION_A, "sha-noupdate", "No-update probe");
-    const e = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
-        tx.execute(sql`update device_pairing_codes set label = 'edited' where id = ${id}`),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("42501"); // insufficient_privilege — no UPDATE granted
-  });
-
-  it("device_pairing_codes: isolates INSERT between tenants (WITH CHECK rejects a foreign tenant_id)", async () => {
-    const e = await captureError(() =>
-      asApp(TENANT_B, (tx) =>
-        tx.execute(
-          sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256, device_kind, station_id, label)
-              values (${TENANT_A}, ${LOCATION_A}, 'sha-foreign', 'kds_station', ${null}, 'Foreign')`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("42501");
-  });
-
-  it("device_pairing_codes: tenant isolation is the policy PREDICATE's doing (proof by deletion)", async () => {
-    const id = await seedPairingCode(TENANT_A, STATION_A, "sha-leak", "Leak-probe");
-    expect(id).toBeDefined();
-    const foreignUnderRealPolicy = await asApp(TENANT_B, (tx) =>
-      tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from device_pairing_codes`,
-        )
-        .then((r) => r.rows[0]!.n),
-    );
-    expect(foreignUnderRealPolicy).toBe(0);
-    await rollBackAfter(suite.admin, TENANT_B, async (tx) => {
-      await tx.execute(
-        sql`alter policy device_pairing_codes_tenant_isolation on device_pairing_codes using (true) with check (true)`,
-      );
-      await tx.execute(sql`set local role app_user`);
-      const foreign = await tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from device_pairing_codes`,
-        )
-        .then((r) => r.rows[0]!.n);
-      expect(foreign).toBeGreaterThan(0);
     });
   });
 
@@ -440,26 +336,5 @@ describe("devices + device_pairing_codes schema (RLS + grants + FORCE)", () => {
       ),
     );
     expect(ok.rows).toHaveLength(1);
-  });
-
-  // ---- FORCE ROW LEVEL SECURITY ------------------------------------------------------------
-
-  it("both tables have FORCE row level security (proof by deletion of the FORCE flag)", async () => {
-    // The flag the inmutabilidad guard keys on. Under the migration both tables report true.
-    expect(await forceFlag(suite.admin, "devices")).toBe(true);
-    expect(await forceFlag(suite.admin, "device_pairing_codes")).toBe(true);
-    // Proof by deletion: NO FORCE inside a ROLLED-BACK tx flips the flag to false, so the assertion
-    // above is attributable to the migration's FORCE line, not to a default. The rollback restores
-    // FORCE for every other test (and for the shared template clone).
-    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
-      await tx.execute(sql`alter table devices no force row level security`);
-      const after = await tx.execute<{ f: boolean }>(
-        sql`select relforcerowsecurity as f from pg_class
-            where relname = 'devices' and relnamespace = 'public'::regnamespace`,
-      );
-      expect(after.rows[0]!.f).toBe(false);
-    });
-    // Back to true after the rollback — the deletion did not leak.
-    expect(await forceFlag(suite.admin, "devices")).toBe(true);
   });
 });

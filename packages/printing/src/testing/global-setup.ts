@@ -15,7 +15,7 @@ import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
  *
  * NO cluster `roles` are provided: the enrol/auth suites drive the real deployment role by switching
  * to it inside a superuser transaction (`withTenant` + `asAppUser`, i.e. `set local role app_user`),
- * exactly as packages/db's own printing.rls.test.ts does — they need no separate LOGIN probe role.
+ * exactly as packages/db's own printing.test.ts does — they need no separate LOGIN probe role.
  * `app_user` itself exists by the time any clone is used: CORE's `0001_tenancy_rls.sql` creates it.
  *
  * A globalSetup's return value is its globalTeardown, so returning `teardown` stops the container

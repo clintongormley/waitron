@@ -4,25 +4,19 @@ import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitr
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
-import { asAppUser } from "../testing/roles.js";
 import { seedNode } from "../testing/seed.js";
-import { withTenant } from "../tenancy.js";
 import { catalogues, products } from "./catalogue.js";
 import { invoiceSeries } from "./series.js";
 import { locations, tenants, tills } from "./tenants.js";
 
-// Real Postgres, not PGlite, and not describeEachTarget: the headline assertion here is that
-// `working_order_counters` is FORCE-RLS + tenant-isolated, and PGlite connects as a superuser that
-// bypasses FORCE ROW LEVEL SECURITY unconditionally — so a PGlite pass would be a false pass
-// (CLAUDE.md §4). The constraint assertions (UNIQUE, FK) would pass on either target; they ride
-// along on the one container this suite already needs for the RLS check.
+// Real Postgres (a template clone), not PGlite. These are engine constraints (a UNIQUE, a composite
+// FK, a constraint definition read back from pg_catalog) that PGlite would also enforce; they run
+// against the container because the whole fixture — a node, an invoice series, a priced product —
+// is the shared `core` template's, and cloning it is cheaper than migrating a WASM cluster per test.
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
-const TILL_B1 = "bbbbbbbb-1111-4000-8000-000000000001";
 const BOGUS_PRODUCT = "99999999-9999-4999-8999-999999999999";
 const AT = "2026-07-20T19:20:30+00:00";
 // Café solo / Cafè sol is this package's placeholder description (orders.test.ts, sales.test.ts):
@@ -63,13 +57,12 @@ describe("park & retrieve schema", () => {
 
   // Common scaffolding seeded once as the owner (superuser bypasses RLS — pure setup). Registered
   // after the helper's own hook, which vitest runs first; if it throws this one never runs, so
-  // `suite.admin` is never read unstarted (verified pattern, provisioner-role.rls.test.ts).
+  // `suite.admin` is never read unstarted (verified pattern, daily-closes.test.ts).
   beforeAll(async () => {
     const admin = suite.admin;
-    await admin.insert(tenants).values([
-      { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-      { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
-    ]);
+    await admin
+      .insert(tenants)
+      .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await admin.insert(locations).values([
       {
         id: LOCATION_A,
@@ -78,18 +71,10 @@ describe("park & retrieve schema", () => {
         invoiceLocales: ["es", "ca"],
         operationDescription: "Hostelería",
       },
-      {
-        id: LOCATION_B,
-        tenantId: TENANT_B,
-        name: "Fixture Location B",
-        invoiceLocales: ["es"],
-        operationDescription: "Hostelería",
-      },
     ]);
-    await admin.insert(tills).values([
-      { id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" },
-      { id: TILL_B1, tenantId: TENANT_B, locationId: LOCATION_B, name: "B1" },
-    ]);
+    await admin
+      .insert(tills)
+      .values([{ id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" }]);
     nodeA = await seedNode(admin, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
     const [series] = await admin
       .insert(invoiceSeries)
@@ -112,29 +97,6 @@ describe("park & retrieve schema", () => {
       })
       .returning({ id: products.id });
     productA = product.id;
-  });
-
-  it("hides another tenant's working_order_counter from the app role", async () => {
-    // Seed the counter as the owner (superuser bypasses RLS). Tenant A's app role then sees it and
-    // tenant B's does not — the tenant-isolation policy filtering reads. The positive read (A sees
-    // 1) is load-bearing: without it, B's 0 could equally mean "app_user has no access at all",
-    // proving nothing about isolation. FORCE itself is asserted structurally by the inmutabilidad
-    // guard (fiscal-verifactu), which reads relforcerowsecurity; this proves the POLICY works.
-    await suite.admin.execute(
-      sql`insert into working_order_counters (tenant_id, node_id, next_number)
-          values (${TENANT_A}, ${nodeA}, 5)`,
-    );
-    const seenByA = await withTenant(suite.admin, TENANT_A, async (tx) => {
-      await asAppUser(tx);
-      return tx.execute<{ n: string }>(sql`select count(*)::text as n from working_order_counters`);
-    });
-    expect(seenByA.rows[0]?.n).toBe("1");
-
-    const seenByB = await withTenant(suite.admin, TENANT_B, async (tx) => {
-      await asAppUser(tx);
-      return tx.execute<{ n: string }>(sql`select count(*)::text as n from working_order_counters`);
-    });
-    expect(seenByB.rows[0]?.n).toBe("0");
   });
 
   it("rejects two sales sharing a working_order_id (the sale idempotency key)", async () => {

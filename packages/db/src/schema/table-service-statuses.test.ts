@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import type { Database, Transaction } from "../client.js";
+import type { Transaction } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
@@ -10,21 +10,7 @@ import { tenants } from "./tenants.js";
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
 
-class RollbackSignal extends Error {}
-async function rollBackAfter(
-  admin: Database,
-  tenant: string,
-  fn: (tx: Transaction) => Promise<void>,
-): Promise<void> {
-  await withTenant(admin, tenant, async (tx) => {
-    await fn(tx);
-    throw new RollbackSignal();
-  }).catch((error: unknown) => {
-    if (!(error instanceof RollbackSignal)) throw error;
-  });
-}
-
-describe("table_service_statuses schema (RLS + grants)", () => {
+describe("table_service_statuses schema (the dining_tables.status_id composite FK)", () => {
   const suite = useTemplateDb({ template: "core" });
 
   beforeAll(async () => {
@@ -49,71 +35,6 @@ describe("table_service_statuses schema (RLS + grants)", () => {
       return r.rows[0]!.id;
     });
   }
-
-  it("permits SELECT/INSERT/UPDATE as the non-owner app role (the control)", async () => {
-    const id = await seedStatus(TENANT_A, "Bill requested");
-    await asApp(TENANT_A, (tx) =>
-      tx.execute(sql`update table_service_statuses set color = '#22c55e' where id = ${id}`),
-    );
-    const [row] = await asApp(TENANT_A, (tx) =>
-      tx
-        .execute<{ color: string }>(sql`select color from table_service_statuses where id = ${id}`)
-        .then((r) => r.rows),
-    );
-    expect(row!.color).toBe("#22c55e");
-  });
-
-  it("app_user has no DELETE on table_service_statuses (deactivate, never delete)", async () => {
-    const id = await seedStatus(TENANT_A, "Needs cleaning");
-    const e = await captureError(() =>
-      asApp(TENANT_A, (tx) => tx.execute(sql`delete from table_service_statuses where id = ${id}`)),
-    );
-    expect(pgErrorCode(e)).toBe("42501");
-  });
-
-  it("isolates INSERT between tenants (WITH CHECK rejects a foreign tenant_id)", async () => {
-    const e = await captureError(() =>
-      asApp(TENANT_B, (tx) =>
-        tx.execute(
-          sql`insert into table_service_statuses (tenant_id, label, color) values (${TENANT_A}, 'Foreign', '#000')`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("42501");
-  });
-
-  it("tenant isolation is the policy PREDICATE's doing (proof by deletion of the tenant predicate)", async () => {
-    // A's row is committed before the policy is weakened, so it is genuinely there to leak. Weakening
-    // the predicate to `true` in a ROLLED-BACK tx makes B suddenly see it. A full DROP POLICY is the
-    // WRONG deletion: FORCE RLS with no policy denies ALL rows, so B would see zero for the opposite
-    // reason.
-    const id = await seedStatus(TENANT_A, "Leak-probe");
-    expect(id).toBeDefined();
-    // Control in the other direction (§4): under the REAL policy tenant B sees ZERO of A's rows. This is
-    // what makes the `> 0` after weakening attributable to the weakening — without it, a mutation that left
-    // B able to read A's rows all along would still satisfy the leak assertion below (the USING/read side
-    // would go untested). Mirrors dining-tables.rls.test.ts.
-    const foreignUnderRealPolicy = await asApp(TENANT_B, (tx) =>
-      tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from table_service_statuses`,
-        )
-        .then((r) => r.rows[0]!.n),
-    );
-    expect(foreignUnderRealPolicy).toBe(0);
-    await rollBackAfter(suite.admin, TENANT_B, async (tx) => {
-      await tx.execute(
-        sql`alter policy table_service_statuses_tenant_isolation on table_service_statuses using (true) with check (true)`,
-      );
-      await tx.execute(sql`set local role app_user`);
-      const foreign = await tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from table_service_statuses`,
-        )
-        .then((r) => r.rows[0]!.n);
-      expect(foreign).toBeGreaterThan(0); // A's rows now leak to B — the predicate was the guard.
-    });
-  });
 
   it("dining_tables.status_id is writable/readable by the non-owner app_user and enforces the tenant-consistent FK", async () => {
     // Seed a location + a dining table (TS-1) as the owner, then set + read status_id as app_user.

@@ -5,7 +5,7 @@ import { captureError, pgErrorCode } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 
 // Real Postgres (a template clone), not PGlite: the tenant-consistent composite FKs are enforced by
-// the engine regardless of RLS, but the sibling suite (devices.rls.test.ts) already runs on real PG,
+// the engine regardless of the connected role, but the sibling suite (devices.test.ts) already runs on real PG,
 // so this stays on the same target for a single template. The composite FKs are hand-written in the
 // --custom migration (a bare uuid column carries no FK), the `devices.station_id` idiom. These tests
 // pin that a device's till/receipt-printer/device-profile binding cannot point at ANOTHER

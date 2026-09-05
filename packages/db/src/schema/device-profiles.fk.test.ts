@@ -4,9 +4,9 @@ import type { Database } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 
-// Real Postgres (a template clone), not PGlite: the tenant-consistent composite FK is enforced by the
-// engine regardless of RLS, but the sibling suite (device-profiles.rls.test.ts) already runs on real
-// PG, so this stays on the same target for a single template. The composite FK is hand-written in the
+// Real Postgres (a template clone), not PGlite: the tenant-consistent composite FK is enforced by
+// the engine regardless of the connected role, so this is a candidate for the PGlite tier once the
+// suites are re-tagged; it runs against the shared `core` template today. The composite FK is hand-written in the
 // --custom migration (0107) — a bare uuid column carries no FK, the `devices.station_id` idiom. These
 // tests pin that a profile's canvas_id cannot point at ANOTHER tenant's canvas, that a NULL canvas_id
 // is unconstrained (MATCH SIMPLE skips the check on any NULL column), and that a referenced canvas

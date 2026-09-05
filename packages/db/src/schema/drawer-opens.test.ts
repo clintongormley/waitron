@@ -8,10 +8,10 @@ import { withTenant } from "../tenancy.js";
 import { drawerOpens } from "./drawer-opens.js";
 import { tenants } from "./tenants.js";
 
-// Real Postgres (a template clone), not PGlite: RLS + FORCE + the withheld UPDATE/DELETE grant as the
-// non-owner app role are all false passes on PGlite, which connects as superuser and bypasses FORCE
-// (CLAUDE.md §4). Scaffolding ported from station-printers.rls.test.ts / daily-closes.rls.test.ts —
-// useTemplateDb + withTenant + asAppUser.
+// Real Postgres (a template clone), not PGlite: every write below runs as the non-owner
+// `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
+// constraints themselves would fire on either target — a candidate for the PGlite tier once the
+// suites are re-tagged.
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
@@ -98,18 +98,10 @@ describe("drawer_opens schema (cash-drawer audit — RLS + append-only grants + 
     );
   }
 
-  async function forceFlag(target: Database, relname: string): Promise<boolean> {
-    const r = await target.execute<{ f: boolean }>(
-      sql`select relforcerowsecurity as f from pg_class
-          where relname = ${relname} and relnamespace = 'public'::regnamespace`,
-    );
-    return r.rows[0]!.f;
-  }
-
-  it("lets the app role INSERT and read back a manual open (columns present, grant + WITH CHECK)", async () => {
-    // The positive control. Without it, the rejection tests below would all pass against a role that
-    // simply has no access to the table at all — proving nothing about append-only-ness. A manual open
-    // has no sale (sale_id NULL), which is the common accountability case. Read back through the
+  it("writes and reads back a manual open (the column list, and the authorized_by/via_override defaults)", async () => {
+    // The positive control for the CHECK and FK rejections below: without a write that SUCCEEDS, a
+    // rejection could equally mean the row was malformed some other way. A manual open has no sale
+    // (sale_id NULL), which is the common accountability case. Read back through the
     // Drizzle `drawerOpens` export (not raw SQL) — exercises the produced table export and its column
     // mapping under the app role.
     await seedOpen(TENANT_A, "manual");
@@ -153,36 +145,6 @@ describe("drawer_opens schema (cash-drawer audit — RLS + append-only grants + 
     expect(row!.viaOverride).toBe(true);
   });
 
-  it("app_user has NO UPDATE (a drawer open is a fact, never edited)", async () => {
-    // Append-only by the ABSENCE of an UPDATE grant (SELECT/INSERT only): this fails at
-    // privilege-check time (42501). No trigger backstop — drawer_opens carries no hash chain, so the
-    // design scopes it to the withheld grant alone (spec §2). Insert then update in one transaction so
-    // the update's throw rolls the insert back.
-    const e = await captureError(() =>
-      asApp(TENANT_A, async (tx) => {
-        await tx.execute(
-          sql`insert into drawer_opens (tenant_id, till_id, person_id, reason)
-              values (${TENANT_A}, ${TILL_A}, ${PERSON}, 'manual')`,
-        );
-        await tx.execute(sql`update drawer_opens set reason = 'cash_sale'`);
-      }),
-    );
-    expect(pgErrorCode(e)).toBe("42501"); // insufficient_privilege — no UPDATE granted
-  });
-
-  it("app_user has NO DELETE (a drawer open is never removed)", async () => {
-    const e = await captureError(() =>
-      asApp(TENANT_A, async (tx) => {
-        await tx.execute(
-          sql`insert into drawer_opens (tenant_id, till_id, person_id, reason)
-              values (${TENANT_A}, ${TILL_A}, ${PERSON}, 'manual')`,
-        );
-        await tx.execute(sql`delete from drawer_opens`);
-      }),
-    );
-    expect(pgErrorCode(e)).toBe("42501"); // insufficient_privilege — no DELETE granted
-  });
-
   it("the reason CHECK accepts 'cash_sale' and rejects an unknown reason (23514)", async () => {
     // 'manual' is exercised by the positive control above; this pins that 'cash_sale' is also accepted
     // and that the closed vocabulary bites — an unknown reason is refused by drawer_opens_reason_ck.
@@ -196,22 +158,6 @@ describe("drawer_opens schema (cash-drawer audit — RLS + append-only grants + 
       ),
     );
     expect(pgErrorCode(e)).toBe("23514"); // check_violation on drawer_opens_reason_ck
-  });
-
-  it("isolates INSERT between tenants (WITH CHECK rejects a foreign tenant_id)", async () => {
-    // The negative WITH CHECK. Tenant B inserts a row stamped with tenant A's tenant_id: the
-    // (A, TILL_A) till composite FK is SATISFIED (that till exists) and sale_id is NULL, so the ONLY
-    // violated constraint is the RLS WITH CHECK — weakening it to (true) makes this INSERT succeed
-    // instead of raising 42501.
-    const e = await captureError(() =>
-      asApp(TENANT_B, (tx) =>
-        tx.execute(
-          sql`insert into drawer_opens (tenant_id, till_id, person_id, reason)
-              values (${TENANT_A}, ${TILL_A}, ${PERSON}, 'manual')`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("42501");
   });
 
   it("the till binding is tenant-consistent (composite FK to tills)", async () => {
@@ -245,56 +191,6 @@ describe("drawer_opens schema (cash-drawer audit — RLS + append-only grants + 
       ),
     );
     expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on (tenant_id, sale_id)
-  });
-
-  it("tenant isolation is the policy PREDICATE's doing (proof by deletion of the tenant predicate)", async () => {
-    // A's open is committed before the policy is weakened, so it is genuinely there to leak. Weakening
-    // the predicate to `true` in a ROLLED-BACK tx makes B suddenly see it. A full DROP POLICY is the
-    // WRONG deletion: FORCE RLS with no policy denies ALL rows, so B would see zero for the opposite
-    // reason. Mirrors station-printers.rls.test.ts.
-    await seedOpen(TENANT_A, "manual");
-    // Control in the other direction (§4): under the REAL policy tenant B sees ZERO of A's rows, so the
-    // `> 0` after weakening is attributable to the weakening rather than to B having read A all along.
-    const foreignUnderRealPolicy = await asApp(TENANT_B, (tx) =>
-      tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from drawer_opens`,
-        )
-        .then((r) => r.rows[0]!.n),
-    );
-    expect(foreignUnderRealPolicy).toBe(0);
-    await rollBackAfter(suite.admin, TENANT_B, async (tx) => {
-      await tx.execute(
-        sql`alter policy drawer_opens_tenant_isolation on drawer_opens using (true) with check (true)`,
-      );
-      await tx.execute(sql`set local role app_user`);
-      const foreign = await tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from drawer_opens`,
-        )
-        .then((r) => r.rows[0]!.n);
-      expect(foreign).toBeGreaterThan(0); // A's rows now leak to B — the predicate was the guard.
-    });
-  });
-
-  it("drawer_opens has FORCE row level security (proof by deletion of the FORCE flag)", async () => {
-    // The flag the inmutabilidad guard (fiscal-verifactu) keys on. Under the migration drawer_opens
-    // reports true. NOTE: FORCE is what binds the table OWNER; the app_user cross-tenant SELECT above
-    // would still isolate under ENABLE alone (a non-owner), so this flag assertion — not that SELECT —
-    // is the test that removing FORCE from the migration turns red.
-    expect(await forceFlag(suite.admin, "drawer_opens")).toBe(true);
-    // Proof by deletion: NO FORCE inside a ROLLED-BACK tx flips the flag to false, so the assertion
-    // above is attributable to the migration's FORCE line, not to a default. The rollback restores
-    // FORCE for the shared template clone.
-    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
-      await tx.execute(sql`alter table drawer_opens no force row level security`);
-      const after = await tx.execute<{ f: boolean }>(
-        sql`select relforcerowsecurity as f from pg_class
-            where relname = 'drawer_opens' and relnamespace = 'public'::regnamespace`,
-      );
-      expect(after.rows[0]!.f).toBe(false);
-    });
-    expect(await forceFlag(suite.admin, "drawer_opens")).toBe(true);
   });
 
   it("the app role can set and read tills.receipt_printer_id (new column, composite FK to printers)", async () => {

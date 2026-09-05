@@ -34,8 +34,8 @@ import { decodeTicket } from "./testing/decode-ticket.js";
 import "./errors.js";
 
 // PGlite is the correct target: print-on-fire is a set of INSERT/SELECTs inside the caller's fire tx —
-// no privilege or concurrency dimension (station_printers' RLS + grants are proven against real Postgres
-// in Task 1's station-printers.rls.test.ts, enqueuePrintJob's outbox shape in packages/printing's
+// no privilege or concurrency dimension (station_printers' PK and FKs are proven against real Postgres
+// in Task 1's station-printers.test.ts, enqueuePrintJob's outbox shape in packages/printing's
 // outbox.test.ts). The load-bearing invariants HERE are logical: the order-scope dedupe, round
 // independence (ruling R-D), and never-block (no socket). PGlite is in-process WASM, so "no socket
 // opened" is a clean structural proof, exactly as outbox.test.ts relies on.

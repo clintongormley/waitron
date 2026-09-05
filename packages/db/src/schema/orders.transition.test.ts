@@ -14,17 +14,16 @@ import { locations, tenants, tills } from "./tenants.js";
 // `working_orders_enforce_transition` trigger's behaviour under the non-owner `app_user` role — the
 // deployment role a real venue runs as. A trigger is behavioural DDL that would fire on PGlite too,
 // so the state-machine assertions here would pass on either target; but PGlite runs EVERY connection
-// as a superuser, and this suite deliberately transitions rows as `app_user` under RLS so the pass
-// is evidence about the role that will actually run these statements. Keeping it real also lets it
-// ride the one container the sibling `park-retrieve.rls.test.ts` already needs for its FORCE-RLS
-// check (CLAUDE.md §4, mirroring that file's comment).
+// as a superuser, and this suite deliberately transitions rows as `app_user` so the pass is evidence
+// about the role that will actually run these statements. It rides the container tier the sibling
+// `park-retrieve.test.ts` already uses (CLAUDE.md §4).
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 // Café solo / Cafè sol is this package's placeholder line description (orders.test.ts, sales.test.ts,
-// park-retrieve.rls.test.ts): both literals pass english-only.ts's SPANISH_WORDS guard, and they
+// park-retrieve.test.ts): both literals pass english-only.ts's SPANISH_WORDS guard, and they
 // match LOCATION_A's configured invoice_locales (es, ca) so check_locales lets the draft line reach
 // require_open_parent — the trigger this suite's composition-freeze case exercises.
 const DESCRIPTIONS_A = JSON.stringify({ es: "Café solo", ca: "Cafè sol" });
@@ -76,7 +75,7 @@ describe("working_orders state machine (enforce_transition)", () => {
 
   // Common scaffolding seeded once as the owner (superuser bypasses RLS — pure setup). Registered
   // after the helper's own hook, which vitest runs first; if it throws this one never runs, so
-  // `suite.admin` is never read unstarted (verified pattern, park-retrieve.rls.test.ts).
+  // `suite.admin` is never read unstarted (verified pattern, park-retrieve.test.ts).
   beforeAll(async () => {
     const admin = suite.admin;
     await admin

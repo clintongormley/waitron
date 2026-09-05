@@ -27,9 +27,9 @@ import "./errors.js";
 
 // PGlite, not real Postgres, for the SEQUENTIAL crypto/round-trip properties here — generate a code,
 // enrol a device, verify the scrypt token, reject an unknown/consumed/expired code. None of these has a
-// privilege or concurrency dimension: the FORCE-RLS grants (SELECT/INSERT/DELETE on device_pairing_codes,
-// SELECT/INSERT/UPDATE on devices) are already proven against real Postgres in packages/db's
-// devices.rls.test.ts (Task 1), and the SINGLE-USE RACE — the one property PGlite would FALSE-PASS,
+// privilege or concurrency dimension: `app_user`'s grants on device_pairing_codes and devices are pinned
+// by the privilege matrix in packages/fiscal-verifactu, the schema's CHECKs and unique index by
+// packages/db's devices.test.ts, and the SINGLE-USE RACE — the one property PGlite would FALSE-PASS,
 // because it serialises every query onto one backend — lives in device.rls.test.ts against real Postgres
 // (CLAUDE.md §4). So PGlite is the correct lighter target for this file, the same choice kitchen.test.ts
 // makes for the station-config verbs.

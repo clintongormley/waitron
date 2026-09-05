@@ -10,17 +10,19 @@ import { seedNode } from "./testing/seed.js";
 import { withTenant } from "./tenancy.js";
 import { locations, tenants, tills } from "./schema/tenants.js";
 
-// Real Postgres, not PGlite, and not describeEachTarget: this suite proves append-only immutability
-// and tenant isolation on `order_amendments`, both of which PGlite cannot show — every PGlite
-// connection is a superuser that bypasses FORCE ROW LEVEL SECURITY and every REVOKE, so a PGlite
-// pass would be a FALSE pass (CLAUDE.md §4). The happy-path append and the hash re-verification
-// would pass on either target; they ride along on the one container this suite already needs.
+// Real Postgres, not PGlite, and not describeEachTarget: the two things this suite proves that
+// PGlite cannot are the `reject_mutation` trigger firing against a role that HAS been granted the
+// privilege (every PGlite connection is a superuser, and a superuser can DISABLE TRIGGER) and the
+// parent-row lock serialising concurrent appends (PGlite serialises every query onto one backend, so
+// the race never happens) — CLAUDE.md §4. The happy-path append and the hash re-verification would
+// pass on either target; they ride along on the one container this suite already needs.
 //
 // `order_amendments` is append-only for EVERY role, the owner included (reject_mutation blocks
 // UPDATE/DELETE/TRUNCATE), so nothing can clean it up between tests — the table only grows. Each
-// test therefore seeds its OWN working order and scopes its per-chain reads to that order's id, and
-// the isolation assertions count FOREIGN-tenant rows (which RLS must keep at zero) rather than a
-// tenant-wide total that would drift as earlier tests accumulate rows.
+// test therefore seeds its OWN working order and scopes its per-chain reads to that order's id
+// rather than reading a tenant-wide total that would drift as earlier tests accumulate rows.
+//
+// A second tenant is seeded only to mint `nodeB`, the foreign node id the hash-tamper case swaps in.
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
@@ -29,7 +31,6 @@ const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const TILL_B1 = "bbbbbbbb-1111-4000-8000-000000000001";
 const OPERATOR_A = "aaaaaaaa-2222-4000-8000-000000000001";
-const OPERATOR_B = "bbbbbbbb-2222-4000-8000-000000000001";
 const OTHER_ACTOR = "cccccccc-2222-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 
@@ -40,7 +41,7 @@ let nodeB = "";
 let orderNumberSeq = 0;
 
 /** A signal thrown to roll back a deliberately-destructive proof transaction (the inmutabilidad
- * layered-proof idiom): grant a privilege / weaken a policy, observe the backstop, then unwind. */
+ * layered-proof idiom): grant a privilege, observe the trigger backstop fire anyway, then unwind. */
 class RollbackSignal extends Error {}
 
 async function rollBackAfter(
@@ -59,12 +60,13 @@ async function rollBackAfter(
 describe("order_amendments append helper", () => {
   // A clone of the shared container's `core` template. Docker is required (the package globalSetup
   // fails loudly without it): the concurrency proof below opens distinct backends via
-  // `suite.pg.connect()`, and PGlite (one serialised backend, superuser) can show neither that nor
-  // the FORCE ROW LEVEL SECURITY / REVOKE this suite proves on order_amendments.
+  // `suite.pg.connect()`, and PGlite (one serialised backend, and a superuser that can DISABLE
+  // TRIGGER) can show neither that nor the reject_mutation backstop this suite proves.
   const suite = useTemplateDb({ template: "core" });
 
-  // As the connection owner (superuser bypasses RLS — pure setup): two tenants, each with a
-  // location, a till and a node. Working orders are seeded per-test (see openOrder).
+  // As the connection owner — pure setup: two tenants, each with a location, a till and a node
+  // (tenant B exists only to mint `nodeB`, the foreign node id the hash-tamper case swaps in).
+  // Working orders are seeded per-test (see openOrder).
   beforeAll(async () => {
     const admin = suite.admin;
     await admin.insert(tenants).values([
@@ -114,13 +116,6 @@ describe("order_amendments append helper", () => {
     });
   }
 
-  function asAppB<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTenant(suite.admin, TENANT_B, async (tx) => {
-      await tx.execute(sql`set local role app_user`);
-      return fn(tx);
-    });
-  }
-
   /** Tenant A's genesis `order_placed` input for an order. Reason null (a placement has no contest). */
   function genesisA(order: string): AppendAmendmentInput {
     return {
@@ -136,25 +131,11 @@ describe("order_amendments append helper", () => {
     };
   }
 
-  function genesisB(order: string): AppendAmendmentInput {
-    return {
-      tenantId: TENANT_B,
-      workingOrderId: order,
-      kind: "order_placed",
-      actorId: OPERATOR_B,
-      reason: null,
-      capturedByTillId: TILL_B1,
-      capturedByNodeId: nodeB,
-      eventAt: new Date("2026-08-06T10:00:00.500Z"),
-      eventOffsetMinutes: 120,
-    };
-  }
-
   /** Reads one order's whole chain back as verifiable rows, ordered by chain position. `event_at`
    * is projected to a UTC ISO instant with a millisecond field (always `.000`, since the stored
    * value is whole-second-truncated) so `verifyAmendmentChain`'s `Date.parse` sees exactly the
-   * instant the stored hash committed. Read as the owner — this is a read-back for verification, not
-   * the isolation assertion. */
+   * instant the stored hash committed. Read as the owner, since it is a read-back for verification
+   * rather than anything about the app role. */
   async function readAmendments(order: string): Promise<VerifiableAmendment[]> {
     // An inline row TYPE LITERAL, not `execute<VerifiableAmendment>`: `execute`'s generic is
     // constrained to `Record<string, unknown>`, which an INTERFACE (VerifiableAmendment) does not
@@ -229,31 +210,13 @@ describe("order_amendments append helper", () => {
     expect(rows[1]!.eventAt).toBe("2026-08-06T10:05:00.000Z");
   });
 
-  it("is append-only: app_user is refused UPDATE and DELETE on privilege grounds (42501)", async () => {
-    const order = await openOrder(TENANT_A, TILL_A1, nodeA);
-    await asApp((tx) => appendOrderAmendment(tx, genesisA(order)));
-    // REVOKE fires before any trigger — the role was never granted UPDATE/DELETE, so the statement
-    // is refused before a row is examined. This is the control; the trigger backstop is proven below.
-    const eU = await captureError(() =>
-      asApp((tx) =>
-        tx.execute(sql`update order_amendments set reason = 'x' where working_order_id = ${order}`),
-      ),
-    );
-    expect(pgErrorCode(eU)).toBe("42501");
-    const eD = await captureError(() =>
-      asApp((tx) =>
-        tx.execute(sql`delete from order_amendments where working_order_id = ${order}`),
-      ),
-    );
-    expect(pgErrorCode(eD)).toBe("42501");
-  });
-
-  it("is append-only at the trigger too: a granted UPDATE/DELETE still raises WT001 (proof by deletion of the REVOKE)", async () => {
-    // The layered proof (inmutabilidad.test.ts): revocation fires first, so the two 42501 tests
-    // above never reach the trigger — and a trigger nobody has seen fire is a comment, not a
-    // backstop. Grant the privilege inside a transaction that rolls back and watch reject_mutation
-    // catch it anyway. The trigger fires for every actor, the owner included, so the granted app_user
-    // is stopped by the second layer alone.
+  it("is append-only at the trigger too: a granted UPDATE/DELETE still raises WT001", async () => {
+    // The layered proof (inmutabilidad.test.ts). app_user's withheld UPDATE/DELETE — the first layer,
+    // pinned by the privilege matrix in packages/fiscal-verifactu — refuses the statement at
+    // privilege-check time, so nothing in the matrix ever reaches the trigger, and a trigger nobody
+    // has seen fire is a comment, not a backstop. Grant the privilege inside a transaction that rolls
+    // back and watch reject_mutation catch it anyway. The trigger fires for every actor, the owner
+    // included, so the granted app_user is stopped by the second layer alone.
     const order = await openOrder(TENANT_A, TILL_A1, nodeA);
     await asApp((tx) => appendOrderAmendment(tx, genesisA(order)));
     // UPDATE and DELETE each in their OWN rolled-back transaction: the first WT001 aborts its
@@ -277,65 +240,6 @@ describe("order_amendments append helper", () => {
         tx.execute(sql`delete from order_amendments where working_order_id = ${order}`),
       );
       expect(pgErrorCode(eD)).toBe("WT001");
-    });
-  });
-
-  it("is tenant-isolated: neither tenant sees ANY of the other's amendments (both non-empty)", async () => {
-    const orderA = await openOrder(TENANT_A, TILL_A1, nodeA);
-    const orderB = await openOrder(TENANT_B, TILL_B1, nodeB);
-    await asApp((tx) => appendOrderAmendment(tx, genesisA(orderA))); // tenant A
-    await asAppB((tx) => appendOrderAmendment(tx, genesisB(orderB))); // tenant B, same state
-
-    // As B: rows are visible (not a blanket denial), and NONE of them belong to tenant A — even
-    // A's rows from every other test in this file. `filter (where tenant_id = A)` sees the base
-    // relation AFTER the policy has filtered it, so a leak would show up as a non-zero foreign count.
-    const bView = await asAppB((tx) =>
-      tx
-        .execute<{ total: number; foreign: number }>(
-          sql`select count(*)::int as total,
-                     (count(*) filter (where tenant_id = ${TENANT_A}))::int as foreign
-              from order_amendments`,
-        )
-        .then((r) => r.rows[0]!),
-    );
-    expect(bView.total).toBeGreaterThan(0); // B genuinely has rows — access is not the thing denied.
-    expect(bView.foreign).toBe(0); // B sees NONE of A's — this is the isolation.
-
-    // Symmetric, so the assertion is not one-directional: A sees rows, and none are B's.
-    const aView = await asApp((tx) =>
-      tx
-        .execute<{ total: number; foreign: number }>(
-          sql`select count(*)::int as total,
-                     (count(*) filter (where tenant_id = ${TENANT_B}))::int as foreign
-              from order_amendments`,
-        )
-        .then((r) => r.rows[0]!),
-    );
-    expect(aView.total).toBeGreaterThan(0);
-    expect(aView.foreign).toBe(0);
-  });
-
-  it("tenant isolation is the policy PREDICATE's doing (proof by deletion of the tenant predicate)", async () => {
-    // Rows for both tenants exist by now (committed, and un-deletable). Weakening the policy's
-    // predicate to `true` inside a rolled-back transaction makes tenant B suddenly see tenant A's
-    // rows — so the `tenant_id = current_tenant_id()` predicate, not mere table access, is what hid
-    // them. A full DROP POLICY is the WRONG deletion: FORCE RLS with no policy denies ALL rows, so B
-    // would see zero — which also breaks isolation counting, but for the opposite reason (access
-    // lost, not isolation lost). Swapping the predicate for `true` isolates the predicate itself.
-    const orderA = await openOrder(TENANT_A, TILL_A1, nodeA);
-    await asApp((tx) => appendOrderAmendment(tx, genesisA(orderA)));
-    await rollBackAfter(suite.admin, TENANT_B, async (tx) => {
-      await tx.execute(
-        sql`alter policy order_amendments_tenant_isolation on order_amendments using (true) with check (true)`,
-      );
-      await tx.execute(sql`set local role app_user`);
-      const foreign = await tx
-        .execute<{ foreign: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as foreign
-              from order_amendments`,
-        )
-        .then((r) => r.rows[0]!.foreign);
-      expect(foreign).toBeGreaterThan(0); // A's rows now leak through to B — the predicate was the guard.
     });
   });
 

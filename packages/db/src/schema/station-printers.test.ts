@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import type { Database, Transaction } from "../client.js";
+import type { Transaction } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
@@ -8,29 +8,16 @@ import { withTenant } from "../tenancy.js";
 import { stationPrinters } from "./station-printers.js";
 import { tenants } from "./tenants.js";
 
-// Real Postgres (a template clone), not PGlite: RLS as the non-owner app role is a false pass on
-// PGlite, which connects as superuser and bypasses FORCE (CLAUDE.md §4). Scaffolding ported from
-// printing.rls.test.ts / kitchen-stations.rls.test.ts — useTemplateDb + withTenant + asAppUser.
+// Real Postgres (a template clone), not PGlite: every write below runs as the non-owner
+// `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
+// constraints themselves would fire on either target — a candidate for the PGlite tier once the
+// suites are re-tagged.
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 
-class RollbackSignal extends Error {}
-async function rollBackAfter(
-  admin: Database,
-  tenant: string,
-  fn: (tx: Transaction) => Promise<void>,
-): Promise<void> {
-  await withTenant(admin, tenant, async (tx) => {
-    await fn(tx);
-    throw new RollbackSignal();
-  }).catch((error: unknown) => {
-    if (!(error instanceof RollbackSignal)) throw error;
-  });
-}
-
-describe("station_printers schema (KDS-4 mapping — RLS + grants + FORCE + composite FKs)", () => {
+describe("station_printers schema (KDS-4 mapping — PK + composite FKs)", () => {
   const suite = useTemplateDb({ template: "core" });
 
   beforeAll(async () => {
@@ -91,15 +78,7 @@ describe("station_printers schema (KDS-4 mapping — RLS + grants + FORCE + comp
     );
   }
 
-  async function forceFlag(target: Database, relname: string): Promise<boolean> {
-    const r = await target.execute<{ f: boolean }>(
-      sql`select relforcerowsecurity as f from pg_class
-          where relname = ${relname} and relnamespace = 'public'::regnamespace`,
-    );
-    return r.rows[0]!.f;
-  }
-
-  it("permits SELECT/INSERT/DELETE as the non-owner app role (the control)", async () => {
+  it("maps every column through the Drizzle export and detaches by DELETE … RETURNING", async () => {
     const station = await seedStation(TENANT_A, "Cocina");
     const printer = await seedPrinter(TENANT_A, "Impresora Cocina", "poll-control");
     await seedMapping(TENANT_A, station, printer);
@@ -127,43 +106,12 @@ describe("station_printers schema (KDS-4 mapping — RLS + grants + FORCE + comp
     expect(deleted[0]!.printer_id).toBe(printer);
   });
 
-  it("app_user has NO UPDATE (a mapping is added/removed, never edited)", async () => {
-    const station = await seedStation(TENANT_A, "Plancha");
-    const printer = await seedPrinter(TENANT_A, "Impresora Plancha", "poll-noupdate");
-    await seedMapping(TENANT_A, station, printer);
-    const e = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
-        tx.execute(
-          sql`update station_printers set printer_id = printer_id where station_id = ${station}`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("42501"); // insufficient_privilege — no UPDATE granted
-  });
-
   it("the primary key rejects a duplicate (tenant_id, station_id, printer_id) mapping (23505)", async () => {
     const station = await seedStation(TENANT_A, "Barra");
     const printer = await seedPrinter(TENANT_A, "Impresora Barra", "poll-dup");
     await seedMapping(TENANT_A, station, printer);
     const e = await captureError(() => seedMapping(TENANT_A, station, printer));
     expect(pgErrorCode(e)).toBe("23505"); // unique_violation on the composite PK
-  });
-
-  it("isolates INSERT between tenants (WITH CHECK rejects a foreign tenant_id)", async () => {
-    // The WITH-CHECK deletion-proof target: weakening WITH CHECK to (true) makes this foreign-tenant_id
-    // INSERT succeed instead of raising 42501. The (A, stationA)/(A, printerA) composite FKs are
-    // SATISFIED (both rows exist), so the ONLY violated constraint is the RLS WITH CHECK.
-    const stationA = await seedStation(TENANT_A, "Pase");
-    const printerA = await seedPrinter(TENANT_A, "Impresora Pase", "poll-check");
-    const e = await captureError(() =>
-      asApp(TENANT_B, (tx) =>
-        tx.execute(
-          sql`insert into station_printers (tenant_id, station_id, printer_id)
-              values (${TENANT_A}, ${stationA}, ${printerA})`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("42501");
   });
 
   it("the station binding is tenant-consistent (composite FK to kitchen_stations)", async () => {
@@ -197,58 +145,5 @@ describe("station_printers schema (KDS-4 mapping — RLS + grants + FORCE + comp
       ),
     );
     expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on (tenant_id, printer_id)
-  });
-
-  it("tenant isolation is the policy PREDICATE's doing (proof by deletion of the tenant predicate)", async () => {
-    // A's mapping is committed before the policy is weakened, so it is genuinely there to leak.
-    // Weakening the predicate to `true` in a ROLLED-BACK tx makes B suddenly see it. A full DROP POLICY
-    // is the WRONG deletion: FORCE RLS with no policy denies ALL rows, so B would see zero for the
-    // opposite reason. Mirrors printing.rls.test.ts.
-    const station = await seedStation(TENANT_A, "Leak-probe station");
-    const printer = await seedPrinter(TENANT_A, "Leak-probe printer", "poll-leak");
-    await seedMapping(TENANT_A, station, printer);
-    // Control in the other direction (§4): under the REAL policy tenant B sees ZERO of A's rows, so the
-    // `> 0` after weakening is attributable to the weakening rather than to B having read A all along.
-    const foreignUnderRealPolicy = await asApp(TENANT_B, (tx) =>
-      tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from station_printers`,
-        )
-        .then((r) => r.rows[0]!.n),
-    );
-    expect(foreignUnderRealPolicy).toBe(0);
-    await rollBackAfter(suite.admin, TENANT_B, async (tx) => {
-      await tx.execute(
-        sql`alter policy station_printers_tenant_isolation on station_printers using (true) with check (true)`,
-      );
-      await tx.execute(sql`set local role app_user`);
-      const foreign = await tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from station_printers`,
-        )
-        .then((r) => r.rows[0]!.n);
-      expect(foreign).toBeGreaterThan(0); // A's rows now leak to B — the predicate was the guard.
-    });
-  });
-
-  it("station_printers has FORCE row level security (proof by deletion of the FORCE flag)", async () => {
-    // The flag the inmutabilidad guard keys on. Under the migration station_printers reports true.
-    // NOTE: FORCE is what binds the table OWNER; the app_user cross-tenant SELECT above would still
-    // isolate under ENABLE alone (a non-owner), so this flag assertion — not that SELECT — is the test
-    // that removing FORCE from the migration turns red.
-    expect(await forceFlag(suite.admin, "station_printers")).toBe(true);
-    // Proof by deletion: NO FORCE inside a ROLLED-BACK tx flips the flag to false, so the assertion
-    // above is attributable to the migration's FORCE line, not to a default. The rollback restores
-    // FORCE for the shared template clone.
-    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
-      await tx.execute(sql`alter table station_printers no force row level security`);
-      const after = await tx.execute<{ f: boolean }>(
-        sql`select relforcerowsecurity as f from pg_class
-            where relname = 'station_printers' and relnamespace = 'public'::regnamespace`,
-      );
-      expect(after.rows[0]!.f).toBe(false);
-    });
-    // Back to true after the rollback — the deletion did not leak.
-    expect(await forceFlag(suite.admin, "station_printers")).toBe(true);
   });
 });

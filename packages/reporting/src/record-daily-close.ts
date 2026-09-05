@@ -33,7 +33,7 @@ import type { DailyClose } from "./types.js";
  * same way (`insert … on conflict do nothing` then a locking re-select), and every later close finds
  * the row and locks it; a collision that survives the lock is a real bug, not something a retry fixes.
  * The immutability (append-only under the app role, FORCE RLS, the append-only trigger) is the table's
- * — `packages/db`'s 0033 migration and its `daily-closes.rls.test.ts` — not this function's.
+ * — `packages/db`'s 0033 migration and its `daily-closes.test.ts` — not this function's.
  */
 export async function recordDailyClose(
   tx: Transaction,

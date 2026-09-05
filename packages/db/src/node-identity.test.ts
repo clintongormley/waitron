@@ -9,9 +9,10 @@ import { seedNode, seedTenant } from "./testing/seed.js";
 import { usePgliteDb } from "./testing/lifecycle.js";
 
 // PGlite, not real Postgres: this proves the query + null-filter logic (the read skips a keyless row,
-// the write stamps the column). PGlite connects as superuser and bypasses RLS, so it cannot show the
-// GRANT enforcement — that the read rides the app role and the write is owner-only is asserted on
-// real Postgres in node-identity.rls.test.ts.
+// the write stamps the column). PGlite connects as superuser, so it cannot show the GRANT enforcement
+// — that `app_user` holds SELECT on `nodes` and no UPDATE is pinned by the privilege matrix
+// (packages/fiscal-verifactu/src/privileges.expected.ts), and the column-level ACL on `public_key` by
+// the dumped-ACL diff in scripts/schema-equivalence.sh.
 
 // There is deliberately no seedLocation helper (only seedTenant/seedNode exist — see seed.test.ts), so
 // build the location the node FKs first, exactly as seedNode's own suite does.
@@ -31,11 +32,10 @@ describe("membership trust-set accessors", () => {
   let tenantId: TenantId;
   let nodeId: NodeId;
 
-  // Clear `nodes` before each case, then seed a fresh tenant + node. `readMembershipTrustSet` scopes
-  // by tenant through RLS, but PGlite connects as superuser and bypasses RLS (that scoping is proven
-  // on real Postgres in node-identity.rls.test.ts), so here the read sees every `nodes` row regardless
-  // of tenant — a stamped row from a prior case would otherwise leak in. Deleting first makes each
-  // case order-independent (CLAUDE.md §4) rather than relying on execution order.
+  // Clear `nodes` before each case, then seed a fresh tenant + node. `readMembershipTrustSet` filters
+  // by its `tenantId` argument, and the read here sees every `nodes` row the fixture left behind, so a
+  // stamped row from a prior case would otherwise leak in. Deleting first makes each case
+  // order-independent (CLAUDE.md §4) rather than relying on execution order.
   beforeEach(async () => {
     await pg.db.execute(sql`delete from nodes`);
     tenantId = await seedTenant(pg.db);

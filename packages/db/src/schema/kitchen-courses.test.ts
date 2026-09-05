@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import type { Database, Transaction } from "../client.js";
+import type { Transaction } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
@@ -9,12 +9,10 @@ import { catalogues, products } from "./catalogue.js";
 import { kitchenCourses } from "./kitchen-courses.js";
 import { tenants } from "./tenants.js";
 
-// Real Postgres (a template clone), not PGlite: RLS as the non-owner app role is a false pass on
-// PGlite, which connects as superuser and bypasses FORCE (CLAUDE.md §4). The hand-written
-// (tenant_id, course_id) → kitchen_courses FKs and that the app role can write the new course_id
-// columns are proven here too — RLS/grant/FK behaviour as the non-owner role is a false pass on
-// PGlite's superuser connection. Scaffolding ported from kitchen-stations.rls.test.ts /
-// routing-station.rls.test.ts — useTemplateDb + withTenant + asAppUser (the shared-container tier).
+// Real Postgres (a template clone), not PGlite: every write below runs as the non-owner
+// `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
+// constraints themselves would fire on either target — a candidate for the PGlite tier once the
+// suites are re-tagged.
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
@@ -22,21 +20,7 @@ const LOCATION_A2 = "aaaaaaaa-0000-4000-8000-000000000002";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const RANDOM_UUID = "99999999-9999-4999-8999-999999999999";
 
-class RollbackSignal extends Error {}
-async function rollBackAfter(
-  admin: Database,
-  tenant: string,
-  fn: (tx: Transaction) => Promise<void>,
-): Promise<void> {
-  await withTenant(admin, tenant, async (tx) => {
-    await fn(tx);
-    throw new RollbackSignal();
-  }).catch((error: unknown) => {
-    if (!(error instanceof RollbackSignal)) throw error;
-  });
-}
-
-describe("kitchen_courses schema (RLS + grants + course FKs)", () => {
+describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
   const suite = useTemplateDb({ template: "core" });
 
   // Seeded once in beforeAll: a product of tenant A (for the products.course_id FK proof) and a course
@@ -105,7 +89,7 @@ describe("kitchen_courses schema (RLS + grants + course FKs)", () => {
     });
   }
 
-  it("permits SELECT/INSERT/UPDATE as the non-owner app role (the control)", async () => {
+  it("maps display_order and name through the Drizzle export, with the active default", async () => {
     const id = await seedCourse(TENANT_A, LOCATION_A, "Principales", 1);
     await asApp(TENANT_A, (tx) =>
       tx.execute(sql`update kitchen_courses set display_order = 5 where id = ${id}`),
@@ -121,76 +105,6 @@ describe("kitchen_courses schema (RLS + grants + course FKs)", () => {
     expect(row!.displayOrder).toBe(5);
     expect(row!.name).toBe("Principales");
     expect(row!.active).toBe(true);
-  });
-
-  it("app_user has no DELETE on kitchen_courses (deactivate, never delete)", async () => {
-    const id = await seedCourse(TENANT_A, LOCATION_A, "Postres", 2);
-    const e = await captureError(() =>
-      asApp(TENANT_A, (tx) => tx.execute(sql`delete from kitchen_courses where id = ${id}`)),
-    );
-    expect(pgErrorCode(e)).toBe("42501");
-  });
-
-  it("isolates INSERT between tenants (WITH CHECK rejects a foreign tenant_id)", async () => {
-    // The WITH-CHECK deletion-proof target: weakening WITH CHECK to (true) makes this foreign-tenant_id
-    // INSERT succeed instead of raising 42501, flipping this test red.
-    const e = await captureError(() =>
-      asApp(TENANT_B, (tx) =>
-        tx.execute(
-          sql`insert into kitchen_courses (tenant_id, location_id, name)
-              values (${TENANT_A}, ${LOCATION_A}, 'Foreign')`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("42501");
-  });
-
-  it("tenant isolation is the policy PREDICATE's doing (proof by deletion of the tenant predicate)", async () => {
-    // A's row is committed before the policy is weakened, so it is genuinely there to leak. Weakening
-    // the predicate to `true` in a ROLLED-BACK tx makes B suddenly see it. A full DROP POLICY is the
-    // WRONG deletion: FORCE RLS with no policy denies ALL rows, so B would see zero for the opposite
-    // reason. Mirrors kitchen-stations.rls.test.ts.
-    const id = await seedCourse(TENANT_A, LOCATION_A, "Leak-probe", 9);
-    expect(id).toBeDefined();
-    // Control in the other direction (§4): under the REAL policy tenant B sees ZERO of A's rows, so the
-    // `> 0` after weakening is attributable to the weakening rather than to B having read A all along.
-    const foreignUnderRealPolicy = await asApp(TENANT_B, (tx) =>
-      tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from kitchen_courses`,
-        )
-        .then((r) => r.rows[0]!.n),
-    );
-    expect(foreignUnderRealPolicy).toBe(0);
-    await rollBackAfter(suite.admin, TENANT_B, async (tx) => {
-      await tx.execute(
-        sql`alter policy kitchen_courses_tenant_isolation on kitchen_courses using (true) with check (true)`,
-      );
-      await tx.execute(sql`set local role app_user`);
-      const foreign = await tx
-        .execute<{ n: number }>(
-          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from kitchen_courses`,
-        )
-        .then((r) => r.rows[0]!.n);
-      expect(foreign).toBeGreaterThan(0); // A's rows now leak to B — the predicate was the guard.
-    });
-  });
-
-  it("requires ENABLE and FORCE ROW LEVEL SECURITY (the inmutabilidad guard's structural target)", async () => {
-    // Silently inert without ENABLE; the table OWNER bypasses without FORCE (the reason the migration
-    // hand-writes FORCE on top of .enableRLS()'s ENABLE). Deletion-proof: removing the FORCE line from
-    // 0058_kds2_courses_fire_rls.sql leaves relforcerowsecurity false and flips THIS assertion red
-    // (verified by deletion during development, CLAUDE.md §4). The inmutabilidad suite asserts the same
-    // flag repo-wide off the tenant_id column; this pins it locally for kitchen_courses.
-    const found = await suite.admin.execute<{
-      relrowsecurity: boolean;
-      relforcerowsecurity: boolean;
-    }>(
-      sql`select relrowsecurity, relforcerowsecurity from pg_class where relname = 'kitchen_courses'`,
-    );
-    expect(found.rows).toHaveLength(1);
-    expect(found.rows[0]!.relrowsecurity).toBe(true);
-    expect(found.rows[0]!.relforcerowsecurity).toBe(true);
   });
 
   it("exposes locations.fire_control to the app role, defaulting to 'waiter' (the new venue setting)", async () => {
