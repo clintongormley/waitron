@@ -371,6 +371,13 @@ with the owner's sign-off, and its PR carries the two-node suite's output.
 
 ## 14. Slices (each its own plan; order matters)
 
+> **2026-09-05, later the same day:** the owner chose to do item 3 and this swap *all at once*, so
+> these slices are now steps 2–5 of item 3's chain and their order is fixed there —
+> [2026-09-05-drop-rls-squash-and-outbox-deletion-design.md](2026-09-05-drop-rls-squash-and-outbox-deletion-design.md)
+> §3. S0 is item 3's step 1; S1 = step 2; S2 = step 3; S4 + S5 = step 4 (the one owner signature);
+> S6 + S7 = step 5; S3 has no separate seat — the fiscal module is classified in step 2 and its rows
+> first flow natively in step 4.
+
 - **S0 — schema, inside Track A item 3's baseline:** no `sync_*` tables or roles, no capture
   triggers, `ENABLE ALWAYS` on every append-only trigger, `track_commit_timestamp` and
   `max_slot_wal_keep_size` in the instance settings. Item 3 is regenerating every baseline anyway.

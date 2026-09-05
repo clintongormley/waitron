@@ -66,7 +66,8 @@ below). Two structures are known to be out of date and must not be built on:
    that does is parked behind A3. Track A therefore goes first and fast: coverage split (an
    afternoon) → prototype (a day) → A3 starts immediately; it is the long pole for everyone.
    **2026-09-05:** the split LANDED (#239), the prototype has reported (item 2), item 4's spec is
-   drafted and awaits owner review — A3 is next, and carries the swap's schema half (S0).
+   approved, and item 3's spec — one chain that also deletes the outbox (owner: "all at once") — is
+   drafted and awaits owner review. Step 1 of that chain is what lifts the no-new-table rule.
 2. **The module framework's UI seats** (cards, permissions, i18n arriving with a module) are
    unproven until Track C's `fiscal-none` + bookings-as-a-module land. New product domains wait for
    them and land as modules; polishing existing screens does not.
@@ -195,7 +196,22 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    `time_entries.ingest_seq` does not replicate; one superuser provisioning step for the `REPLICATION`
    role. **Cross-track (Track C):** module SP-2b's schema-version gate (LANDED #230) rests on
    "deliberate rejection of native logical replication"; item 4's spec retires it (its §5).
-3. **Drop FORCE RLS + the multi-role set — [owner] at land** (one PR chain; the largest change on
+3. **Drop FORCE RLS + the multi-role set, squash the migrations, delete the outbox — SPEC DRAFTED
+   2026-09-05, awaiting owner review:**
+   [drop-rls-squash-and-outbox-deletion-design](superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md).
+   Owner decisions: all at once (item 4's swap slices are steps 2–5 of this chain, since nothing is
+   deployed); ONE owner signature, on step 4 (where fiscal rows first flow natively and `ENABLE
+   ALWAYS` first matters) — the other four steps land as ordinary PRs. The chain: (1) baselines
+   regenerated to the end state with the outbox tables kept as plain tables, RLS and the seven
+   helper roles gone, `withTenant` hollowed, the 122 `*.rls.test.ts` read then replaced by per-module
+   grant suites, CLAUDE.md §2–§4 rewritten — with a mechanical proof (old migrations vs new
+   baselines, `pg_dump --schema-only`, normalised diff EMPTY) attached; (2) classification contract +
+   guards + two-node fixture; (3) provisioning of publications/subscriptions + the WireGuard key;
+   (4) promotion/return on `pg_replication_slots` + the outbox deleted [owner]; (5) status, alarms,
+   the standby-first migration check, the link on the box image (with Track B item 2). The
+   working-time chain's per-node rekey sits between 2 and 4. Measured for the brief: 212 real-PG
+   test files today (not 190). The original brief, kept for the receipts it names:
+   (one PR chain; the largest change on
    this list; gated on item 2 only because the answer changes what the sync layer must be). Keep
    `tenant_id` columns + composite FKs, the owner-vs-`app_user` split (the append-only guarantee rests
    on the app never owning the tables), and `withTenant` as the transaction primitive with its
@@ -210,7 +226,7 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    before merge:** on `postgres:18-alpine` as `app_user`, `UPDATE registros_facturacion` fails
    (`42501`) and `INSERT` succeeds. Measure real-PG test-file count (190 today) + full-suite wall
    clock before/after.
-4. **Outbox → native replication swap spec — DRAFTED 2026-09-05, awaiting owner review:**
+4. **Outbox → native replication swap spec — APPROVED 2026-09-05; its slices are steps 2–5 of item 3's chain:**
    [outbox-to-native-replication-swap-design](superpowers/specs/2026-09-05-outbox-to-native-replication-swap-design.md).
    Owner decisions in it: full replacement (no hybrid); no third-party overlay (WireGuard box ↔ its
    own cloud instance, SSH fallback — the same link Track B's relay decision retires the relay for); a
@@ -219,8 +235,8 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    like the fiscal chain (§4.4) — a prerequisite for S3/S4 and its own brainstorm + PR (workforce);
    the labour advisor is asked only whether a location's exported record may show per-node chains.
    Slices S0–S7 in §14; S0 (no `sync_*`, `ENABLE ALWAYS` on the append-only triggers,
-   `track_commit_timestamp`, `max_slot_wal_keep_size`) rides item 3's baseline. Next step once the
-   owner approves the spec: the implementation plan, then S1.
+   `track_commit_timestamp`, `max_slot_wal_keep_size`) rides item 3's baseline. Owner reviewed 2026-09-05 (§4.3 and §4.4
+   confirmed); the plan is written per step of item 3's chain.
 
 **Track B — failover** (sequential; = Priorities' Track 2; owns `apps/till`, `apps/server`'s boot /
 promote / till-session / read-only gate / box-* / rejoin, `packages/membership`, `packages/printing`,
