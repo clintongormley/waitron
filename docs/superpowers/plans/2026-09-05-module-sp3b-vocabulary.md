@@ -1459,10 +1459,101 @@ git commit -s -m "SP-3b: retire the receipts the vocabulary move falsified; seat
 
 ---
 
-### Task 5: Backlog row + the whole gate
+### Task 5: Polish from the Task 4 review, backlog row, the whole gate
 
 **Files:**
+- Modify: `CLAUDE.md` (§3 example list), `packages/module/src/module.ts` (seat doc wording), `packages/db/src/english-only.ts:31-36`, `packages/db/src/schema/purchase-invoices.ts:28-29`, `packages/db/src/schema/sales.ts:133-136`, `packages/workforce/src/errors.ts:108-110`, `vitest.config.ts:86-89` — comment wording and line-width tidy-ups on lines THIS branch added (never touch a pre-existing over-long line)
 - Modify: `docs/backlog.md` (the SP-3b bullet under *Waitron module system*, and the Track C item 1 line)
+
+- [ ] **Step 0: Seven one-line polishes (all comments; no behaviour)**
+
+1. `CLAUDE.md`, the §3 entry: `estado` is a BASE word, not fiscal's, and the sentence sits two lines after "a new fiscal term goes in the fiscal list". Replace the substring
+   ```
+   (`envios`, `estado`, `huella`, `secuencia`, `entorno`)
+   ```
+   with
+   ```
+   (`envios`, `huella`, `secuencia`, `entorno`)
+   ```
+2. `packages/module/src/module.ts`, the `vocabulary` seat's doc comment (added on this branch): `apps/server/src/modules.test.ts` also reads the seat, so "read only by" overclaims. Replace
+   ```ts
+   * lowercase ASCII, unaccented, singular and plural separately, nothing stemmed. Read only by the
+   * root english-only suite, which unions every declaration with the guard's base list and asserts
+   * the two are disjoint; no runtime consumer. Omit the seat rather than declare `[]`. */
+   ```
+   with
+   ```ts
+   * lowercase ASCII, unaccented, singular and plural separately, nothing stemmed. Interpreted only
+   * by the root english-only suite, which unions every declaration with the guard's base list and
+   * asserts the two are disjoint; no runtime consumer. Omit the seat rather than declare `[]`. */
+   ```
+3. `packages/db/src/english-only.ts:31-36` (the `//` block this branch added; line 33 is 101 columns). Replace the six lines with
+   ```ts
+   // There is no exempt-package list. A package is Spanish by design exactly when a module DECLARES
+   // vocabulary (`WaitronModule.vocabulary`, the seat the composition root wires in
+   // `apps/server/src/modules.ts`), and `vocabularyOwners` below derives that module's package from
+   // its `migrations.from`; the root suite asserts no owner is generic. `packages/verifactu` — the
+   // AEAT library, no descriptor of its own — is in no list at all, like `provisioning` and `tunnel`:
+   // not generic, never scanned.
+   ```
+4. `packages/db/src/schema/purchase-invoices.ts:28-29`. Replace
+   ```ts
+    * named `tax` for the same reason `sales.vat_breakdown` and `VatRateLine` do — `cuota` is the fiscal
+    * module's declared vocabulary, forbidden here.
+   ```
+   with
+   ```ts
+    * named `tax` for the same reason `sales.vat_breakdown` and `VatRateLine` do — `cuota` is the
+    * fiscal module's declared vocabulary, forbidden here.
+   ```
+5. `packages/db/src/schema/sales.ts:133-136`. Replace
+   ```ts
+       // names, because `destinatario`/`destinatarios` are the fiscal module's declared vocabulary and
+       // this package is scanned by the english-only guard; they mirror the module's `Counterparty` shape
+       // (packages/fiscal/src/backend.ts). All NULLABLE with no backfill (pre-production, no deployed
+       // data), and immutable table-wide like every other column here.
+   ```
+   with
+   ```ts
+       // names, because `destinatario`/`destinatarios` are the fiscal module's declared vocabulary
+       // and this package is scanned by the english-only guard; they mirror the module's
+       // `Counterparty` shape (packages/fiscal/src/backend.ts). All NULLABLE with no backfill
+       // (pre-production, no deployed data), and immutable table-wide like every other column here.
+   ```
+6. `packages/workforce/src/errors.ts:108-110`. Replace
+   ```ts
+        * English `absence` term (the Spanish `ausencia` is workforce-es's declared vocabulary, so the
+        * code stays English
+        * like the schema, following the domain-concept convention). */
+   ```
+   with
+   ```ts
+        * English `absence` term (the Spanish `ausencia` is workforce-es's declared vocabulary, so the
+        * code stays English like the schema, following the domain-concept convention). */
+   ```
+7. `vitest.config.ts:86-89`. Replace
+   ```ts
+         // vocabulary tests carry their own copy of the tokeniser instead). `packages/db`'s own
+         // config excludes it in the same
+         // change, so it is measured in exactly one place rather than in two or in none — the failure
+         // mode being the last of those, which no threshold anywhere would report.
+   ```
+   with
+   ```ts
+         // vocabulary tests carry their own copy of the tokeniser instead). `packages/db`'s own
+         // config excludes it in the same change, so it is measured in exactly one place rather than
+         // in two or in none — the failure mode being the last of those, which no threshold anywhere
+         // would report.
+   ```
+
+Then `awk 'length($0) > 100 { print FILENAME ":" FNR ": " length($0) }' <each of the seven files>` must print nothing for a line this branch added (pre-existing over-long lines elsewhere in those files are not yours — compare against `git diff 624fa5a0..HEAD -- <file>` if unsure). Then:
+
+```bash
+pnpm exec prettier --write CLAUDE.md vitest.config.ts packages/module/src/module.ts packages/db/src/english-only.ts packages/db/src/schema/purchase-invoices.ts packages/db/src/schema/sales.ts packages/workforce/src/errors.ts
+pnpm format:check
+git add CLAUDE.md vitest.config.ts packages/module/src/module.ts packages/db/src/english-only.ts packages/db/src/schema/purchase-invoices.ts packages/db/src/schema/sales.ts packages/workforce/src/errors.ts
+git commit -s -m "SP-3b: review polish — CLAUDE.md example list, seat doc wording, comment wraps"
+```
 
 - [ ] **Step 1: Backlog — SP-3b in flight**
 
