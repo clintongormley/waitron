@@ -1147,7 +1147,8 @@ side, nothing missing or added."
 
 **Files:**
 - Modify: `packages/module/src/module.ts:52` (seat doc)
-- Modify: `packages/db/src/index.ts:132` (barrel comment names `EXEMPT_PACKAGES`)
+- Modify: `packages/db/src/index.ts:132-143` (barrel comment names `EXEMPT_PACKAGES`; its closing sentence claims `vocabulary-scope.test.ts` reads this file's source text — false since Task 1)
+- Modify: `vitest.config.ts:86-88` (the same false claim, inside the reason `english-only.ts` stays under the root `coverage.include`)
 - Modify: `packages/provisioning/src/fiscal-modules.ts:22-25`
 - Modify: `packages/workforce/src/errors.ts:108`
 - Modify: `packages/workforce/src/schema/absences.ts:17-18`
@@ -1185,7 +1186,34 @@ to
 ```ts
 // english-only.ts's GENERIC_PACKAGES/SPANISH_WORDS/findSpanish/vocabularyOwners are deliberately
 ```
-(the rest of that block — the drizzle-kit `import.meta.dirname` reason — is unchanged and still true).
+Then read the rest of that block to its end (around line 143). The drizzle-kit `import.meta.dirname` reason stays — it is still true. Its closing sentence, which says `packages/fiscal-verifactu/src/vocabulary-scope.test.ts` reads this file's source text by relative path, is FALSE since Task 1: that test now reads only its own `schema/registros.ts` and `packages/fiscal`'s guard. Rewrite that sentence to:
+
+```ts
+// The package-local vocabulary tests (fiscal-verifactu, workforce-es) therefore carry their own
+// copy of the tokeniser rather than importing this file.
+```
+
+- [ ] **Step 2b: The same false claim in the root `vitest.config.ts`**
+
+In `vitest.config.ts`, inside the `coverage` comment, replace
+
+```ts
+      // whose suite is `scripts/english-only.test.ts`. The module stayed behind because two other
+      // files in the tree reach for it where it is: `packages/db/src/schema/series.test.ts`
+      // imports `findSpanish` from it, and `packages/fiscal-verifactu/src/vocabulary-scope.test.ts`
+      // reads its source text by relative path. `packages/db`'s own config excludes it in the same
+```
+
+with
+
+```ts
+      // whose suite is `scripts/english-only.test.ts`. The module stayed behind because
+      // `packages/db/src/schema/series.test.ts` imports `findSpanish` from it (the package-local
+      // vocabulary tests carry their own copy of the tokeniser instead). `packages/db`'s own
+      // config excludes it in the same
+```
+
+(the next line continues `// change, so it is measured in exactly one place …` unchanged; re-wrap only if a line exceeds 100 columns).
 
 - [ ] **Step 3: `packages/provisioning/src/fiscal-modules.ts`**
 
@@ -1302,10 +1330,11 @@ with
 
 Run:
 ```bash
-grep -rn "EXEMPT_PACKAGES" packages apps scripts CLAUDE.md || echo "no EXEMPT_PACKAGES references remain"
+grep -rn "EXEMPT_PACKAGES" packages apps scripts CLAUDE.md vitest.config.ts || echo "no EXEMPT_PACKAGES references remain"
 grep -rn "SPANISH_WORDS" packages apps --include='*.ts' | grep -v "packages/db/src/english-only.ts"
+grep -rn "reads its source text" packages apps scripts vitest.config.ts || echo "no source-text-read claims remain"
 ```
-Expected: the first prints the "no … remain" line. The second's every remaining hit must cite a BASE word (`venta`, `mesa`, `linea`) or the file itself; read each line — any hit naming a fiscal or labour word is a receipt you missed. Then:
+Expected: the first and third print their "no … remain" lines. The second's every remaining hit must cite a BASE word (`venta`, `mesa`, `linea`) or the file itself; read each line — any hit naming a fiscal or labour word is a receipt you missed. Then:
 
 ```bash
 pnpm lint && pnpm typecheck && pnpm format:check
@@ -1315,7 +1344,7 @@ Expected: exit 0 (CLAUDE.md is format-checked; if prettier objects, `pnpm exec p
 - [ ] **Step 11: Commit**
 
 ```bash
-git add packages/module/src/module.ts packages/db/src/index.ts packages/provisioning/src/fiscal-modules.ts packages/workforce/src/errors.ts packages/workforce/src/schema/absences.ts packages/workforce/src/schema/employments.ts packages/db/src/schema/sales.ts packages/db/src/schema/purchase-invoices.ts CLAUDE.md
+git add packages/module/src/module.ts packages/db/src/index.ts vitest.config.ts packages/provisioning/src/fiscal-modules.ts packages/workforce/src/errors.ts packages/workforce/src/schema/absences.ts packages/workforce/src/schema/employments.ts packages/db/src/schema/sales.ts packages/db/src/schema/purchase-invoices.ts CLAUDE.md
 git commit -s -m "SP-3b: retire the receipts the vocabulary move falsified; seat doc; CLAUDE.md §3"
 ```
 
