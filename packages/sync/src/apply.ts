@@ -65,14 +65,16 @@ export interface ApplyBatchOptions {
    * normal config down-flow is never broken by the gate (R-S7-2). */
   servingPrimaryId?: string;
   /** The SOURCE's per-module applied versions from /hello. Absent for a pre-SP-2b peer → the version
-   * gate is disabled (behaviour-preserving, spec §4). DECLARED here and threaded by the subscriber
-   * (SP-2b Task 3); the gate that COMPARES it against {@link ApplyBatchOptions.subscriberModuleVersions}
-   * is a later task, so this field is not yet consulted. */
+   * gate is disabled (behaviour-preserving, spec §4). Otherwise the gate compares it per module against
+   * {@link ApplyBatchOptions.subscriberModuleVersions} (resolving each row's module via
+   * {@link ApplyBatchOptions.moduleByTable}) and parks a row whose module the source migrated ahead of
+   * this subscriber — see {@link ApplyBatchResult.versionParked}. */
   sourceModuleVersions?: Record<string, number>;
-  /** THIS subscriber's own per-module applied versions (boot snapshot). DECLARED, not yet consulted. */
+  /** THIS subscriber's own per-module applied versions (boot snapshot), the lower side of the gate's
+   * per-module comparison against {@link ApplyBatchOptions.sourceModuleVersions}. */
   subscriberModuleVersions: Record<string, number>;
-  /** table → owning module, for resolving a row's module in the gate (spec §5). DECLARED, not yet
-   * consulted. */
+  /** table → owning module, used to resolve a row's module in the gate (spec §5). A row naming a table
+   * absent from this map is not version-parked (it falls through to the enrolment check). */
   moduleByTable: ReadonlyMap<string, string>;
 }
 
@@ -218,9 +220,6 @@ export async function applyBatch(
   let deferred = 0;
   let rejected = 0;
   let versionParked = 0;
-  // Seqs parked because their module's SOURCE version is ahead of this subscriber's, so each seq is
-  // counted once even though a version-park never re-enters a pass (it holds the same `deferred` set).
-  const versionParkedSeqs = new Set<bigint>();
   const parked: SyncLogRow[] = [];
   const gate: GateContext = { servingPrimaryId: opts.servingPrimaryId, lane };
 
@@ -277,9 +276,9 @@ export async function applyBatch(
     // `parked`: the retry pass cannot change a version verdict within one batch (spec §3) — the
     // subscriber's migrated version only moves on reboot.
     if (isVersionAhead(row)) {
-      if (!versionParkedSeqs.has(row.seq)) versionParked += 1; // count each seq once
-      versionParkedSeqs.add(row.seq);
-      bucket(row.originId).deferred.add(row.seq); // hold the cursor below it (reuse the machinery)
+      const b = bucket(row.originId);
+      if (!b.deferred.has(row.seq)) versionParked += 1; // per-origin dedup, matching settleOrPark
+      b.deferred.add(row.seq); // hold the cursor below it (reuse the machinery)
       continue;
     }
     const outcome = await tryApplyRow(subscriberDb, row, DISPATCH, gate);

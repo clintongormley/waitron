@@ -1439,7 +1439,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         lane,
         enrolments: ALL_SYNC_ENROLMENTS,
         // SP-2b: this subscriber's own per-module applied versions (boot snapshot) + the table→module
-        // map, threaded through applyBatch for the schema-version gate (the gate itself is a later task).
+        // map, threaded through applyBatch for the schema-version gate.
         moduleVersions: myModuleVersions,
         moduleByTable: MODULE_BY_TABLE,
         adoptMembership,

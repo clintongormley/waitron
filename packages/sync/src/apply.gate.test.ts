@@ -1744,10 +1744,8 @@ describe("the schema-version park gate (SP-2b, the anti-silent-corruption gate)"
     subscriber: Record<string, number>,
     moduleByTable: ReadonlyMap<string, string>,
   ) => ({
+    ...PROD,
     subscriberId,
-    localEnvironment: "production" as const,
-    sourceEnvironment: "production" as const,
-    enrolments: ENROLMENT,
     sourceModuleVersions: source,
     subscriberModuleVersions: subscriber,
     moduleByTable,

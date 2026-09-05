@@ -60,10 +60,10 @@ export interface SyncPullDeps {
    * down-flow is never broken (R-S7-2). Boot passes `() => liveServingPrimaryId`. */
   servingPrimaryId?: () => string | undefined;
   /** THIS subscriber's own per-module applied versions (boot snapshot), for the version gate (SP-2b).
-   * Threaded straight into the `applyBatch` opts; the gate that consumes it is a later task. */
+   * Threaded straight into the `applyBatch` opts as `subscriberModuleVersions`. */
   moduleVersions: Record<string, number>;
   /** table → owning module (from the composition root), for the version gate (SP-2b). Threaded into
-   * the `applyBatch` opts; the gate that consumes it is a later task. */
+   * the `applyBatch` opts. */
   moduleByTable: ReadonlyMap<string, string>;
 }
 
@@ -153,8 +153,8 @@ export async function syncPullOnce(deps: SyncPullDeps, peer: PullPeer): Promise<
     // getter for THIS batch — so a promotion/demotion since the last batch is honoured without a restart.
     // undefined leaves the gate inert (fail-safe); applyBatch decides per row (spec §7).
     servingPrimaryId: deps.servingPrimaryId?.(),
-    // SP-2b wiring (Task 3): the source's + this subscriber's per-module versions and the table→module
-    // map. The gate that COMPARES them is a later task, so applyBatch does not yet consult these.
+    // SP-2b: the source's + this subscriber's per-module versions and the table→module map, which the
+    // apply loop's version gate compares to park a row whose module the source migrated ahead of us.
     sourceModuleVersions: helloBody.moduleVersions,
     subscriberModuleVersions: deps.moduleVersions,
     moduleByTable: deps.moduleByTable,
