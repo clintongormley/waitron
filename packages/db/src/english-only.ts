@@ -28,11 +28,14 @@ export const GENERIC_PACKAGES = [
   "sync-enrolment",
 ] as const;
 
-/** Spanish by design: `verifactu`/`fiscal-verifactu` mirror AEAT's spec, XML and conformance
- * vectors; `workforce-es` is the Spain module for the registro de jornada, where the ET/RD-ley 8/2019
- * vocabulary (jornada, trabajador, conservación, Inspección) IS the domain language (sub-project 16,
- * mirroring the fiscal-verifactu precedent). */
-export const EXEMPT_PACKAGES = ["verifactu", "fiscal-verifactu", "workforce-es"] as const;
+/**
+ * There is no exempt-package list. A package is Spanish by design exactly when a module DECLARES
+ * vocabulary (`WaitronModule.vocabulary`, the seat the composition root wires in
+ * `apps/server/src/modules.ts`), and `vocabularyOwners` below derives that module's package from its
+ * `migrations.from`; the root suite asserts no owner is generic. `packages/verifactu` — the AEAT
+ * library, no descriptor of its own — is in no list at all, like `provisioning` and `tunnel`: not
+ * generic, never scanned.
+ */
 
 // -----------------------------------------------------------------------------------------------
 // Decision record: apps/* is OUT OF SCOPE for this guard. Prose, not another `as const` array,
@@ -70,7 +73,7 @@ export const EXEMPT_PACKAGES = ["verifactu", "fiscal-verifactu", "workforce-es"]
  * Files that exist to enumerate forbidden vocabulary in plain text, excluded by exact name from
  * the scan that vocabulary feeds — this file, plus `packages/fiscal`'s narrower one.
  *
- * `english-only.ts` contains the entire Spanish wordlist in plain text, so scanning it would fail
+ * `english-only.ts` contains the guard's base wordlist in plain text, so scanning it would fail
  * on the vocabulary it exists to define. Its suite carries the same wordlist in its fixtures and
  * was listed here for the same reason until 2026-08-01, when it moved to
  * `scripts/english-only.test.ts` — the repo-level Vitest project, so that a push touching neither
@@ -106,97 +109,20 @@ export const SELF = ["english-only.ts", "no-regime-vocabulary.test.ts"] as const
  */
 
 /**
- * Spanish vocabulary drawn from the spec, the findings and the naming
- * contract's module tables. Singular and plural are listed separately and
- * nothing is stemmed — stemming `series` to `serie` would fire on
- * `invoice_series`, which is in the naming contract.
+ * The guard's BASE list: generic Spanish a generic package might reach for, owned by no module.
+ * Every domain term lives on its module's `vocabulary` seat instead (`FISCAL_VOCABULARY` in
+ * packages/fiscal-verifactu, `WORKFORCE_ES_VOCABULARY` in packages/workforce-es); the root suite
+ * assembles the forbidden set with `forbiddenVocabulary` and asserts this list and the module
+ * declarations are DISJOINT — a word has one declaring home, so a fiscal term added here is a
+ * failing test, not a second copy. Add a term here only if no module owns it.
  *
- * Words identical in both languages are deliberately absent: total, base,
- * local/locale, error, real, id. All appear in the naming contract, and a
- * guard that fires on `sales.total` on day one is a guard that gets deleted on
- * day two. `nif` is absent for the same reason — an acronym for a legal
- * identifier, not vocabulary.
+ * Singular and plural are listed separately and nothing is stemmed — stemming `series` to `serie`
+ * would fire on `invoice_series`, which is in the naming contract. Words identical in both languages
+ * are deliberately absent: total, base, local/locale, error, real, id. All appear in the naming
+ * contract, and a guard that fires on `sales.total` on day one is a guard that gets deleted on day
+ * two. `nif` is absent for the same reason — an acronym for a legal identifier, not vocabulary.
  */
-export const SPANISH_WORDS = new Set([
-  // chain and record vocabulary — the naming contract's module tables
-  "registro",
-  "registros",
-  "huella",
-  "huellas",
-  "cadena",
-  "cadenas",
-  "encadenamiento",
-  "secuencia",
-  "secuencias",
-  "primer",
-  "primero",
-  // invoice vocabulary
-  "factura",
-  "facturas",
-  "facturacion",
-  "alta",
-  "altas",
-  "anulacion",
-  "anulaciones",
-  "rectificativa",
-  "rectificativas",
-  "desglose",
-  "desgloses",
-  "serie",
-  "numero",
-  "numeros",
-  "importe",
-  "importes",
-  "cuota",
-  "cuotas",
-  "impuesto",
-  "impuestos",
-  "iva",
-  // parties and identity
-  "obligado",
-  "obligados",
-  "emisor",
-  "emisores",
-  "destinatario",
-  "destinatarios",
-  "tercero",
-  "terceros",
-  "cliente",
-  "clientes",
-  "usuario",
-  "usuarios",
-  "empresa",
-  "empresas",
-  "nombre",
-  "nombres",
-  "razon",
-  "tributario",
-  "instalacion",
-  "informatico",
-  "informatica",
-  "sistema",
-  // submission vocabulary
-  "envio",
-  "envios",
-  "incidencia",
-  "incidencias",
-  "suministro",
-  "consulta",
-  "respuesta",
-  "cabecera",
-  "detalle",
-  "detalles",
-  "presentacion",
-  "expedicion",
-  "periodo",
-  "ejercicio",
-  "operacion",
-  "operaciones",
-  // time
-  "fecha",
-  "fechas",
-  "hora",
-  "huso",
+export const SPANISH_WORDS: ReadonlySet<string> = new Set([
   // POS vocabulary a generic package might reach for
   "venta",
   "ventas",
@@ -219,54 +145,8 @@ export const SPANISH_WORDS = new Set([
   "estados",
   "tipo",
   "tipos",
-  // deployment-environment vocabulary (packages/fiscal-verifactu's registros_facturacion.entorno)
-  "entorno",
-  "entornos",
   "descripcion",
   "descripciones",
-  // workforce / registro de jornada vocabulary (sub-project 16). The list above carried
-  // fiscal/POS terms but no labour terms, so packages/workforce — an English generic package — was
-  // guarded against Spanish invoice vocabulary but not against Spanish LABOUR vocabulary. These arm
-  // it before the first Spanish labour name can land (packages/workforce-es and the Slice 2/3
-  // tables), the same "in place before the package" posture `sourceFilesIn` documents below.
-  // Verified not to collide with any existing generic-package identifier by running the guard over
-  // all eleven generics with this list in place; a firing check lives in scripts/english-only.test.ts.
-  "jornada",
-  "jornadas",
-  "empleado",
-  "empleados",
-  "trabajador",
-  "trabajadores",
-  "trabajo",
-  "fichaje",
-  "fichajes",
-  "presencia",
-  "descanso",
-  "descansos",
-  "ausencia",
-  "ausencias",
-  "turno",
-  "turnos",
-  "horario",
-  "horarios",
-  "nocturnidad",
-  "festivo",
-  "festivos",
-  "vacaciones",
-  "permiso",
-  "permisos",
-  "baja",
-  "bajas",
-  "finiquito",
-  "contrato",
-  "contratos",
-  "salario",
-  "salarios",
-  "nomina",
-  "nominas",
-  "convenio",
-  "convenios",
-  "retribucion",
 ]);
 
 export interface Violation {
@@ -315,13 +195,17 @@ function tokenise(line: string): string[] {
     .filter(Boolean);
 }
 
-/** Every Spanish token in `source`, in order, with its line. */
-export function findSpanish(source: string): Violation[] {
+/**
+ * Every token of `words` in `source`, in order, with its line. `words` is REQUIRED with no default,
+ * so no caller can silently narrow to the base list: the root suite passes the assembled set
+ * (`forbiddenVocabulary`), a package-local caller passes whatever it can legitimately know.
+ */
+export function findSpanish(source: string, words: ReadonlySet<string>): Violation[] {
   const violations: Violation[] = [];
   const lines = blankBlockComments(source).split("\n");
   lines.forEach((line, index) => {
     for (const token of tokenise(dropLineComment(line))) {
-      if (SPANISH_WORDS.has(token)) {
+      if (words.has(token)) {
         violations.push({ line: index + 1, word: token, text: line.trim() });
       }
     }
@@ -344,4 +228,60 @@ export function sourceFilesIn(packageName: string): string[] {
     .filter((entry) => !SELF.some((name) => entry.endsWith(name)))
     .map((entry) => join(root, entry))
     .sort();
+}
+
+/**
+ * The two descriptor fields the guard reads. Structural on purpose: importing `WaitronModule` from
+ * `@waitron/module` would give packages/db a dev-only dependency cycle (module → migrations → db).
+ */
+export interface VocabularyDeclaration {
+  readonly name: string;
+  readonly migrations: { readonly from: string };
+  readonly vocabulary?: readonly string[];
+}
+
+export interface VocabularyOwner {
+  /** The descriptor's name — the SLOT for a swappable module (`fiscal`), not the package. */
+  readonly module: string;
+  /** `packages/<packageDir>`, derived from `migrations.from`. */
+  readonly packageDir: string;
+  readonly terms: readonly string[];
+}
+
+/** `../<pkg>/drizzle` — the shape every descriptor's `migrations.from` has (module-graph-honesty
+ * derives its package map from the same string). */
+const MIGRATIONS_FROM = /^\.\.\/([^/]+)\/drizzle$/;
+
+/**
+ * Every module that declares a `vocabulary`, with its package dir derived from `migrations.from`.
+ * A declaring module whose `from` has any other shape is refused loudly: the derivation would
+ * otherwise exempt nothing and scan nothing, silently. An empty declaration is returned as an owner
+ * with no terms so the suite can reject it by name.
+ */
+export function vocabularyOwners(modules: readonly VocabularyDeclaration[]): VocabularyOwner[] {
+  const owners: VocabularyOwner[] = [];
+  for (const module of modules) {
+    if (module.vocabulary === undefined) continue;
+    const match = MIGRATIONS_FROM.exec(module.migrations.from);
+    if (match === null) {
+      throw new Error(
+        `english-only: module ${module.name} declares vocabulary but its migrations.from ` +
+          `(${module.migrations.from}) is not ../<pkg>/drizzle`,
+      );
+    }
+    owners.push({ module: module.name, packageDir: match[1]!, terms: module.vocabulary });
+  }
+  return owners;
+}
+
+/** The forbidden set: `base` ∪ every module's declared terms. Returns a new set; `base` is untouched. */
+export function forbiddenVocabulary(
+  base: ReadonlySet<string>,
+  modules: readonly VocabularyDeclaration[],
+): Set<string> {
+  const words = new Set(base);
+  for (const owner of vocabularyOwners(modules)) {
+    for (const term of owner.terms) words.add(term);
+  }
+  return words;
 }

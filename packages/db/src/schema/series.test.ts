@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import type { Database } from "../client.js";
-import { findSpanish } from "../english-only.js";
+import { SPANISH_WORDS, findSpanish } from "../english-only.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
 import { asAppUser } from "../testing/roles.js";
 import { describeEachTarget } from "../testing/harness.js";
@@ -142,28 +142,28 @@ describeEachTarget("invoice_series schema", (target) => {
     expect(pgErrorMessage(error)).toMatch(/invoice_series_purpose_ck/);
   });
 
-  it("has no column relating a series to a chain", async () => {
-    // Findings §1: series is a numbering concern, the chain is a device
-    // concern. A column named for chain position here would be the first step
-    // towards per-series chaining, which AEAT art. 7.c) forbids outright.
+  it("has no column relating a series to a chain, and exactly the columns it has today", async () => {
+    // Findings §1: series is a numbering concern, the chain is a device concern. A column named for
+    // chain position here would be the first step towards per-series chaining, which AEAT art. 7.c)
+    // forbids outright.
     //
-    // The Spanish half of this check reuses english-only.ts's own
-    // `findSpanish` (Task 3) rather than a hand-picked regex of Spanish roots
-    // written out here: the words that check exists to police
-    // ("cadena", "secuencia", "huella", "registro" among them) are exactly
-    // the words that guard's own suite scans every file in this package for,
-    // this file included — writing them out again as a literal regex would
-    // fail this package's own English-only build. Reusing the canonical list
-    // also means it cannot drift from the one `english-only.test.ts` proves
-    // against real Spanish source.
+    // The chain terms are the regime-neutral English ones. Fiscal's own Spanish terms are fiscal's to
+    // declare (its module's `vocabulary` seat), not this package's to know — the tree guard
+    // (scripts/english-only.test.ts) catches a Spanish column NAME in this package's schema source
+    // with the assembled set, and `SPANISH_WORDS` here is only the base list this package can
+    // legitimately see. What the exact-column pin adds is the case neither reaches: a column added by
+    // hand-written SQL in drizzle/, which no source scan sees. A new column is a deliberate edit here.
     const cols = await rows<{ column_name: string }>(
       db,
       sql`select column_name from information_schema.columns where table_name = 'invoice_series'`,
     );
-    const offenders = cols
-      .map((c) => c.column_name)
-      .filter((n) => /chain/i.test(n) || findSpanish(n).length > 0);
+    const names = cols.map((c) => c.column_name).sort();
+    const offenders = names.filter(
+      (n) =>
+        /chain|hash|previous|link|sequence/i.test(n) || findSpanish(n, SPANISH_WORDS).length > 0,
+    );
     expect(offenders).toEqual([]);
+    expect(names).toEqual(["code", "id", "next_number", "node_id", "purpose", "tenant_id"]);
   });
 
   it("carries a NOT NULL node_id column referencing nodes", async () => {
