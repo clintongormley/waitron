@@ -309,7 +309,7 @@ All three decisions are now taken.
 every NEW module package, `apps/dashboard` module screens, `apps/server/src/modules.ts`, and the
 control-plane docs):
 
-1. **Finish fiscal as a module:** SP-3b vocabulary (in flight), SP-3c gated-provisioning seam, SP-3d
+1. **Finish fiscal as a module:** SP-3b vocabulary (landed #240), SP-3c gated-provisioning seam, SP-3d
    backup/restore hook (= BR-4) — the queued slices under *Waitron module system*.
 2. **`fiscal-none` module** (tiny; the UK case; forces every chain/huella/`entorno` assumption
    through the `FiscalBackend` seam — a better pluggability proof than TicketBAI). Put the two agreed
@@ -763,14 +763,29 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
       with condition-based-waiting (`fetchHealthOk` poll-until-200); ci.yml now uploads shard blobs on
       failure so a future flake names its exact test. Sibling `mirror-e2e.rls.test.ts:~381` remains a
       candidate if it recurs. See memory `test-server-e2e-timing-flakes`.
-  - **SP-3b — module-owned vocabulary — IN FLIGHT (spec + plan on `feat/module-sp3b-vocabulary`).**
-    Fiscal's and workforce-es's Spanish terms move out of the centralized `packages/db/src/english-only.ts`
-    into `FISCAL_VOCABULARY` / `WORKFORCE_ES_VOCABULARY`, declared on each descriptor's `vocabulary` seat;
-    the root suite assembles the forbidden set, derives each owner's package from `migrations.from`, and
-    asserts base ∩ modules = ∅. `EXEMPT_PACKAGES` deleted; `GENERIC_PACKAGES` stays explicit (measured:
-    a scan-everything flip would hit `provisioning` 155 times — a separate decision). No runtime change.
-    Spec: [sp-3b](superpowers/specs/2026-09-05-module-sp3b-vocabulary-design.md); plan:
+  - **SP-3b — module-owned vocabulary — LANDED #240 (2026-09-05).** Fiscal's and workforce-es's Spanish
+    terms live in `FISCAL_VOCABULARY` / `WORKFORCE_ES_VOCABULARY`, declared on each descriptor's
+    `vocabulary` seat; `packages/db/src/english-only.ts` keeps a 23-word base list and `findSpanish(source,
+    words)` takes its set; `@waitron/module` owns `packageDirOf` / `vocabularyOwners` / `forbiddenVocabulary`
+    (moved there by the simplify pass — no cycle in that direction, and `module-graph-honesty` reads the
+    same derivation); the root suite assembles the forbidden set, pins the derived owners, asserts base ∩
+    modules = ∅, and runs a per-owner positive control that excludes the declaration file (the whole-branch
+    review proved by mutation that it had been satisfied by `vocabulary.ts` itself). `EXEMPT_PACKAGES`
+    deleted; `GENERIC_PACKAGES` stays explicit (measured: a scan-everything flip would hit `provisioning` 155
+    times — a separate decision). No runtime change; the union was measured equal to the old list (135).
+    Copilot: approval recommended, 0 comments. Spec (with the simplify-pass implementation notes):
+    [sp-3b](superpowers/specs/2026-09-05-module-sp3b-vocabulary-design.md); plan (superseded in part):
     [sp-3b plan](superpowers/plans/2026-09-05-module-sp3b-vocabulary.md).
+    - *Left as ruled, not gaps:* six comments saying a package "is EXEMPT from the english-only guard"
+      state an effect that still holds by derivation; `estado`/`tipo` stay in the base list although fiscal
+      columns spell them (documented in the base list's doc). *Candidate, declined this time:*
+      `test.isolate: false` in the root vitest config — importing `ALL_MODULES` costs each root suite that
+      does it ~0.7 s (measured), paid twice because files do not share a module registry.
+    - *For SP-3c's brainstorm:* the seam is wider than `provisioning → registerSif`. The composition root
+      also calls `@waitron/fiscal-verifactu` directly in `reserved-identity.ts` (`writeReservedSif`),
+      `mirror-bundle.ts` (`reserveInstallationNumber`, `deriveReservedSeriesCodes`), `provision-till.ts`
+      (`registerSif`), `boot.ts` (`drain`) and `till-backend.ts` (`VerifactuBackend`). `fiscal-none` cannot
+      land until each is behind a module seat, so SP-3c decides which it covers and which `fiscal-none` does.
   - **SP-3c — module-owned gated provisioning.** Sever the direct `@waitron/provisioning →
     @waitron/fiscal-verifactu` import; route `registerSif` through the descriptor's `provisioningSeeds` seat
     and make `makeFiscalBackend`'s choice module-driven (Spain stays hardwired-but-clean via the existing
@@ -789,8 +804,9 @@ model depends on. **Ongoing flow-down and the enabled-set pull filter both stay 
 receipt each time: nothing is genuinely toggleable yet, so there is no live case to build either
 against) — both are built alongside the first genuinely-toggleable module. **SP-3a (fiscal-record sync
 lane) LANDED #238 (2026-09-05)** — H2's fiscal-record lane is delivered. Next module slices are
-**SP-3b (vocabulary) / SP-3c (gated-provisioning seam) / SP-3d (backup-restore hook = BR-4)**, all
-independent; **SP-4** waits for B3.2.
+**SP-3c (gated-provisioning seam) / SP-3d (backup-restore hook = BR-4)**, independent of each other —
+**SP-3b (vocabulary) LANDED #240 (2026-09-05)** — then `fiscal-none` (Track C item 2, which needs SP-3c's
+seam); **SP-4** waits for B3.2.
 
 ### Product work still open (beneath the two tracks)
 
