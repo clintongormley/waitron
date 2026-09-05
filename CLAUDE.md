@@ -150,6 +150,17 @@ vendor docs, pricing pages and browser-support tables. It applies identically, a
   mode. Both true: the API _push_ needs the device reachable, while offline mode belongs to the
   device's own standalone flow. Reading either alone gives a wrong design.
 
+### A comment carries the invariant, not the history
+
+Comments state what the code guarantees and the non-obvious reason it is written this way. They
+do not carry the receipt: the PR number, the review round that found the defect, the experiment
+that proved the claim. Those live in the commit message and the PR thread, and a comment may point
+at them in one line ("lock order pinned by #119"). Measured on 2026-09-05: comment lines are 43% to
+48% of every non-test line in `apps/server/src`, `packages/db/src`, `packages/core/src` and
+`packages/sync/src`, and nearly all of that is narrative — which doubles the tokens of every file
+read and goes stale exactly the way the section above documents. Thin a file's comments when you
+touch it; do not sweep the tree. (Owner decision, 2026-09-05, after the whole-project review.)
+
 ---
 
 ## 2. The gate
@@ -783,6 +794,28 @@ landed after the fix, so nothing ever hit that.)
 ---
 
 ## 6. Workflow
+
+**Model selection (trial from 2026-09-05, owner decision after the whole-project review):**
+
+- **The main session runs on Fable 5.1** (`/model claude-fable-5-1`). It owns brainstorming, the
+  spec, the plan, the plan review, and every review step in `/finish-branch`.
+- **Every IMPLEMENTATION subagent** — a task from a plan, a fix round, `/simplify`'s lens agents — is
+  dispatched with `model: "opus"` (Opus 5.1). State the model in the dispatch explicitly; never rely
+  on the default, which inherits the session's model.
+- **Every REVIEWER subagent** — subagent-driven-development's spec-compliance and code-quality
+  reviewers, `/finish-branch`'s run-it reviewer — omits `model`, so it inherits Fable. The
+  `/finish-branch` convention reviewer is the one exception: dispatch it as `opus`.
+- **Review the plan once before dispatching implementers**, against the spec and §1's receipt rule,
+  and fix the plan rather than the code.
+- **Skip subagent-driven-development's final whole-branch reviewer.** `/finish-branch` step 2 is that
+  pass — the same prompt, run after `simplify` on the cleaned tree. The per-task reviews still run.
+- **Reviewers state the experiment they ran, not the conclusion** (§1). A review that only read the
+  diff says so.
+
+The trial's yardstick is the till-reroute slice against the previous five PRs: fix rounds before
+land, Copilot findings no internal layer caught, and false claims found at whole-branch review. If
+none of the three drops, move Fable back to reviewer-only seats (`model: "fable"` from an Opus
+session) and delete this block.
 
 **Branches and merging:**
 
