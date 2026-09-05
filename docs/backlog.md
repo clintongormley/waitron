@@ -121,7 +121,7 @@ editor + rendering) is the sole remaining sub-project of this track.**
   superseding their original "mounted always" text. Design:
   [sp-c-dev-device-switcher](superpowers/specs/2026-09-03-sp-c-dev-device-switcher-design.md); plan:
   [sp-c plan](superpowers/plans/2026-09-03-sp-c-dev-device-switcher.md). No SP-C follow-ups deferred.
-- **SP-B — grid editor + rendering — B1 #204; B2 (#206+#207); B3 split into B3.1 (LANDED #209, 2026-09-04) + B3.2 (LANDED #213, 2026-09-04: Phase A profile→canvas rename + Phase B the canvas editor UI); B4 LANDED #218 (2026-09-04). SP-B B1–B4 build sequence complete. Editor-polish follow-on batch also LANDED (2026-09-05): fresh-display KDS enrol #221, pointer drag/move/resize #222, representative card silhouettes #223. Larger follow-ons still open below (visual theme editor, device profile, truly-real card renders, NFC pairing, community sharing).**
+- **SP-B — grid editor + rendering — B1 #204; B2 (#206+#207); B3 split into B3.1 (LANDED #209, 2026-09-04) + B3.2 (LANDED #213, 2026-09-04: Phase A profile→canvas rename + Phase B the canvas editor UI); B4 LANDED #218 (2026-09-04). SP-B B1–B4 build sequence complete. Editor-polish follow-on batch also LANDED (2026-09-05): fresh-display KDS enrol #221, pointer drag/move/resize #222, representative card silhouettes #223. Larger follow-ons still open below (visual theme editor, truly-real card renders, NFC pairing, community sharing; device profile LANDED #231).**
   The HA-Sections editor UI plus making screens render from grid profiles (wrap the bespoke
   floor/KDS/table-order screens as cards; phased). The schedule risk. Removes the old widget model
   (`WIDGET_TYPES`/`validateLayout`/`till_layouts`) once rendering swaps over. Design:
@@ -249,7 +249,7 @@ editor + rendering) is the sole remaining sub-project of this track.**
         larger initiative, not started.
       - **Visual theme editor** (also listed under Follow-ons below).
       - (Clone/duplicate already shipped in Phase B — no longer a follow-on.)
-    - **Deferred follow-on — device profile — LANDED (2026-09-05, `feat/device-profile`).** The
+    - **Deferred follow-on — device profile — LANDED #231 (2026-09-05).** The
       **skeleton + capabilities** slice of the future bundle. A first-class **`device_profiles`** table
       (`name` + a nullable `canvasId` FK + a validated `capabilities` jsonb array) with FORCE RLS +
       tenant-isolation + the composite `(tenant_id, canvas_id) → canvases` FK; the device now carries a
