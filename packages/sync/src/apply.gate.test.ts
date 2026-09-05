@@ -446,6 +446,9 @@ const PROD = {
   localEnvironment: "production",
   sourceEnvironment: "production",
   enrolments: ENROLMENT,
+  // SP-2b gate opts: inert here (sourceModuleVersions absent → gate disabled), so empty no-op values.
+  subscriberModuleVersions: {},
+  moduleByTable: new Map<string, string>(),
 } as const;
 
 describe("the commercial-lane apply loop", () => {
@@ -807,6 +810,8 @@ describe("the commercial-lane apply loop", () => {
           localEnvironment: "production",
           sourceEnvironment: "preproduction",
           enrolments: ENROLMENT,
+          subscriberModuleVersions: {},
+          moduleByTable: new Map<string, string>(),
         }),
       );
       expect(refusedA).toBeInstanceOf(AppError);
@@ -838,6 +843,8 @@ describe("the commercial-lane apply loop", () => {
           localEnvironment: "preproduction",
           sourceEnvironment: "production",
           enrolments: ENROLMENT,
+          subscriberModuleVersions: {},
+          moduleByTable: new Map<string, string>(),
         }),
       );
       expect(refusedB).toBeInstanceOf(AppError);
@@ -849,6 +856,8 @@ describe("the commercial-lane apply loop", () => {
         localEnvironment: "preproduction",
         sourceEnvironment: "preproduction",
         enrolments: ENROLMENT,
+        subscriberModuleVersions: {},
+        moduleByTable: new Map<string, string>(),
       });
       expect(matchedB.applied).toBe(1);
     } finally {
@@ -952,6 +961,8 @@ describe("the commercial-lane apply loop", () => {
           localEnvironment: "preproduction",
           sourceEnvironment: "preproduction",
           enrolments: ENROLMENT,
+          subscriberModuleVersions: {},
+          moduleByTable: new Map<string, string>(),
         }),
       );
       expect((err as Error).message).toContain("disagrees with the stamped");
@@ -1608,6 +1619,8 @@ describe("apply lands identity config under FORCE RLS (spec §3/§4)", () => {
         localEnvironment: "preproduction",
         sourceEnvironment: "preproduction",
         enrolments: ENROLMENT,
+        subscriberModuleVersions: {},
+        moduleByTable: new Map<string, string>(),
       });
       expect(first.applied).toBe(1);
       const landed = await scalar(
@@ -1622,6 +1635,8 @@ describe("apply lands identity config under FORCE RLS (spec §3/§4)", () => {
         localEnvironment: "preproduction",
         sourceEnvironment: "preproduction",
         enrolments: ENROLMENT,
+        subscriberModuleVersions: {},
+        moduleByTable: new Map<string, string>(),
       });
       expect(second.applied).toBe(0);
     } finally {
@@ -1664,6 +1679,8 @@ describe("apply lands identity config under FORCE RLS (spec §3/§4)", () => {
           localEnvironment: "preproduction",
           sourceEnvironment: "preproduction",
           enrolments: ENROLMENT,
+          subscriberModuleVersions: {},
+          moduleByTable: new Map<string, string>(),
         },
       );
       expect(del.applied).toBe(1);
@@ -1706,6 +1723,8 @@ describe("apply lands identity config under FORCE RLS (spec §3/§4)", () => {
           localEnvironment: "preproduction",
           sourceEnvironment: "preproduction",
           enrolments: ENROLMENT,
+          subscriberModuleVersions: {},
+          moduleByTable: new Map<string, string>(),
         }),
       );
       expect(pgErrorCode(err)).toBe("42501");

@@ -208,6 +208,8 @@ describe("headline e2e — the cloud pulls through the outbound tunnel and the r
         http,
         batchLimit: 500,
         enrolments: ALL_SYNC_ENROLMENTS,
+        moduleVersions: {},
+        moduleByTable: new Map<string, string>(),
       };
       const peer: PullPeer = { nodeId: NODE_A, url: peerUrl, token: sourcePeerToken };
 

@@ -64,6 +64,16 @@ export interface ApplyBatchOptions {
    * carrier / has no known serving-primary) the gate is INERT — every row applies as it does today, so
    * normal config down-flow is never broken by the gate (R-S7-2). */
   servingPrimaryId?: string;
+  /** The SOURCE's per-module applied versions from /hello. Absent for a pre-SP-2b peer → the version
+   * gate is disabled (behaviour-preserving, spec §4). DECLARED here and threaded by the subscriber
+   * (SP-2b Task 3); the gate that COMPARES it against {@link ApplyBatchOptions.subscriberModuleVersions}
+   * is a later task, so this field is not yet consulted. */
+  sourceModuleVersions?: Record<string, number>;
+  /** THIS subscriber's own per-module applied versions (boot snapshot). DECLARED, not yet consulted. */
+  subscriberModuleVersions: Record<string, number>;
+  /** table → owning module, for resolving a row's module in the gate (spec §5). DECLARED, not yet
+   * consulted. */
+  moduleByTable: ReadonlyMap<string, string>;
 }
 
 export interface ApplyBatchResult {

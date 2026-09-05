@@ -40,6 +40,10 @@ const dummyDeps: SyncPullDeps = {
   // pullOnce is injected in every test here, so applyBatch (the only consumer of `enrolments`) never
   // runs — an empty set is honest: the enrolment metadata is not exercised by these loop-control tests.
   enrolments: [],
+  // SP-2b version-gate wiring: the loop-control tests inject pullOnce, so these are never read; empty
+  // no-op values keep the deps shape valid.
+  moduleVersions: {},
+  moduleByTable: new Map(),
 };
 const noopLog = (): void => {};
 // dummyDeps.batchLimit is 500, so a FULL page is `fetched: 500` (the drain keeps going) and a SHORT
@@ -493,6 +497,10 @@ describe("membership gossip over /hello", () => {
     // These membership tests drive syncPullOnce with EMPTY log pages, so applyBatch always gets zero
     // rows — the enrolment set is never consulted (no row to dispatch), an empty set is honest.
     enrolments: [],
+    // SP-2b version-gate wiring: applyBatch gets zero rows here, so these are never consulted; empty
+    // no-op values keep the deps shape valid.
+    moduleVersions: {},
+    moduleByTable: new Map(),
   };
   const peer = peerA;
   const baseRunDeps = {

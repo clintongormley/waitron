@@ -183,6 +183,8 @@ describe("two-node sync end-to-end over a real HTTP wire", () => {
       http: sourceHttp("production"),
       batchLimit: 500,
       enrolments: ALL_SYNC_ENROLMENTS,
+      moduleVersions: {},
+      moduleByTable: new Map<string, string>(),
     };
     const peer = { nodeId: NODE_A, url: "", token: sourcePeerToken };
 
@@ -226,6 +228,8 @@ describe("two-node sync end-to-end over a real HTTP wire", () => {
       http: sourceHttp("production"),
       batchLimit: 500,
       enrolments: ALL_SYNC_ENROLMENTS,
+      moduleVersions: {},
+      moduleByTable: new Map<string, string>(),
     };
     const peer = { nodeId: NODE_A, url: "", token: sourcePeerToken };
     const err = await captureError(() => syncPullOnce(mismatched, peer));
@@ -265,6 +269,8 @@ describe("two-node sync end-to-end over a real HTTP wire", () => {
       http: sourceHttp("production"),
       batchLimit: 500,
       enrolments: ALL_SYNC_ENROLMENTS,
+      moduleVersions: {},
+      moduleByTable: new Map<string, string>(),
     };
     const peer = { nodeId: NODE_A, url: "", token: sourcePeerToken };
 

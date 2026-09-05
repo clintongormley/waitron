@@ -59,6 +59,12 @@ export interface SyncPullDeps {
    * serving-primary), leaves the gate inert and every row applies as it does today, so normal config
    * down-flow is never broken (R-S7-2). Boot passes `() => liveServingPrimaryId`. */
   servingPrimaryId?: () => string | undefined;
+  /** THIS subscriber's own per-module applied versions (boot snapshot), for the version gate (SP-2b).
+   * Threaded straight into the `applyBatch` opts; the gate that consumes it is a later task. */
+  moduleVersions: Record<string, number>;
+  /** table → owning module (from the composition root), for the version gate (SP-2b). Threaded into
+   * the `applyBatch` opts; the gate that consumes it is a later task. */
+  moduleByTable: ReadonlyMap<string, string>;
 }
 
 /** {@link syncPullOnce}'s result: the applied/deferred counts of {@link ApplyBatchResult} plus
@@ -122,7 +128,12 @@ export async function syncPullOnce(deps: SyncPullDeps, peer: PullPeer): Promise<
   if (hello.status !== 200) {
     throw new Error(`sync pull: peer /sync-api/hello responded ${hello.status}`);
   }
-  const helloBody = JSON.parse(await hello.text()) as { environment: string; membership?: unknown };
+  const helloBody = JSON.parse(await hello.text()) as {
+    environment: string;
+    membership?: unknown;
+    // The SOURCE's per-module applied versions (SP-2b Task 2); absent from a pre-SP-2b peer.
+    moduleVersions?: Record<string, number>;
+  };
   const sourceEnvironment = helloBody.environment;
 
   const before = await readCursor(deps.localDb, deps.subscriberId, peer.nodeId, lane);
@@ -142,6 +153,11 @@ export async function syncPullOnce(deps: SyncPullDeps, peer: PullPeer): Promise<
     // getter for THIS batch — so a promotion/demotion since the last batch is honoured without a restart.
     // undefined leaves the gate inert (fail-safe); applyBatch decides per row (spec §7).
     servingPrimaryId: deps.servingPrimaryId?.(),
+    // SP-2b wiring (Task 3): the source's + this subscriber's per-module versions and the table→module
+    // map. The gate that COMPARES them is a later task, so applyBatch does not yet consult these.
+    sourceModuleVersions: helloBody.moduleVersions,
+    subscriberModuleVersions: deps.moduleVersions,
+    moduleByTable: deps.moduleByTable,
   });
   // Re-read the (subscriber, origin, lane) cursor: `advanced` is whether applyBatch moved THIS lane's
   // cursor this iteration. A full page that did NOT advance is all-parked — every row 23503-parked on

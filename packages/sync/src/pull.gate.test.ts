@@ -125,6 +125,8 @@ describe("syncPullOnce applies a peer's batch and advances the cursor", () => {
         tenantId: b.tenantId,
         localEnvironment: "production",
         enrolments: CORE_ENROLMENT,
+        moduleVersions: {},
+        moduleByTable: new Map<string, string>(),
         http,
         batchLimit: 500,
       };
@@ -186,6 +188,8 @@ describe("syncPullOnce applies a peer's batch and advances the cursor", () => {
         tenantId: b.tenantId,
         localEnvironment: "production",
         enrolments: CORE_ENROLMENT,
+        moduleVersions: {},
+        moduleByTable: new Map<string, string>(),
         http,
         batchLimit: 500,
         lane: "fast" as const,
@@ -334,6 +338,8 @@ describe("syncPullOnce applies a peer's batch and advances the cursor", () => {
         tenantId: uuid(),
         localEnvironment: "production",
         enrolments: CORE_ENROLMENT,
+        moduleVersions: {},
+        moduleByTable: new Map<string, string>(),
         http,
         batchLimit: 500,
       });

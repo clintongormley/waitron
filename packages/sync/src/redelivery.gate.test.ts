@@ -131,6 +131,9 @@ const PROD = {
   localEnvironment: "production",
   sourceEnvironment: "production",
   enrolments: CORE_ENROLMENT,
+  // SP-2b gate opts: inert here (sourceModuleVersions absent → gate disabled), so empty no-op values.
+  subscriberModuleVersions: {},
+  moduleByTable: new Map<string, string>(),
 } as const;
 
 describe("redelivery does not wedge the stream: business BEFORE-triggers are gated on app.sync_apply", () => {

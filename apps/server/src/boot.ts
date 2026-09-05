@@ -26,7 +26,7 @@ import { drain } from "@waitron/fiscal-verifactu";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules, orderedMigrationSets, reconcile } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { ALL_MODULES, ALL_SYNC_ENROLMENTS } from "./modules.js";
+import { ALL_MODULES, ALL_SYNC_ENROLMENTS, MODULE_BY_TABLE } from "./modules.js";
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { parseEnvFile } from "./env-file.js";
@@ -1438,6 +1438,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         log,
         lane,
         enrolments: ALL_SYNC_ENROLMENTS,
+        // SP-2b: this subscriber's own per-module applied versions (boot snapshot) + the table→module
+        // map, threaded through applyBatch for the schema-version gate (the gate itself is a later task).
+        moduleVersions: myModuleVersions,
+        moduleByTable: MODULE_BY_TABLE,
         adoptMembership,
         // Membership Slice 7: the LIVE serving-primary id for the apply path's config-conflict gate,
         // passed as a getter read fresh per batch (see `liveServingPrimaryId` above). On the CARRIER
