@@ -11,11 +11,17 @@ import type { Transaction } from "@waitron/db";
 import { cadenas } from "./schema/cadenas.js";
 import { contadoresInstalacion, registroSif } from "./schema/sif.js";
 
-/** AEAT caps `IdSistemaInformatico` at two characters (`packages/verifactu`'s `ID_SISTEMA_LENGTH`). */
-const ID_SISTEMA_MAX_LENGTH = 2;
+/**
+ * AEAT caps `IdSistemaInformatico` at two characters (`packages/verifactu`'s `ID_SISTEMA_LENGTH`).
+ *
+ * Exported because the rule is defined once for the whole package: `registro_sif` carries no CHECK
+ * on the column, so EVERY write path into it must apply this bound itself. `./provisioning.ts`'s
+ * `parseReservedState` is the second such path (`writeReservedSif` below).
+ */
+export const ID_SISTEMA_MAX_LENGTH = 2;
 
 /**
- * Nothing downstream re-checks this: `registro_sif` carries no CHECK on the column and every
+ * The database does not enforce this: `registro_sif` carries no CHECK on the column, and every
  * registro copies the value onto a record that can only be superseded by re-registering onto a
  * fresh chain. So it is checked HERE, before the registration writes anything.
  */

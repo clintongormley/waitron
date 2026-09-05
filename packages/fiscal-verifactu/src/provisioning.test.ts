@@ -96,6 +96,13 @@ describe("FISCAL_PROVISIONING.standby", () => {
     ["not an object", "W1/2"],
     ["missing the nif", { idSistemaInformatico: "W1", numeroInstalacion: 2 }],
     ["an empty software id", { nif: "89890001K", idSistemaInformatico: "", numeroInstalacion: 2 }],
+    // The column carries no CHECK, so `establish` is the second write path that must apply
+    // `registerSif`'s own length bound — a 3-character id would otherwise land in the field the
+    // guard exists to protect.
+    [
+      "a software id over two characters",
+      { nif: "89890001K", idSistemaInformatico: "WTX", numeroInstalacion: 2 },
+    ],
     ["missing the number", { nif: "89890001K", idSistemaInformatico: "W1" }],
     [
       "a non-positive number",

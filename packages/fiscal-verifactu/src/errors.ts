@@ -53,12 +53,22 @@ declare module "@waitron/shared" {
     "sif.not_registered": { tenantId: string; nodeId: string };
 
     /** `IdSistemaInformatico` is empty or longer than AEAT's two-character cap
-     * (`packages/verifactu`'s `ID_SISTEMA_LENGTH`). Checked by `registerSif` because nothing
-     * downstream re-checks it: the column carries no CHECK and every registro copies the value. */
+     * (`packages/verifactu`'s `ID_SISTEMA_LENGTH`). Thrown by `registerSif`.
+     *
+     * `registro_sif.id_sistema_informatico` carries no CHECK and every registro copies the value,
+     * so the bound is a code-side invariant each write path must apply for itself. This module's
+     * provisioning contribution has two, and both do: `registerSif` (throwing this) and
+     * `FISCAL_PROVISIONING.standby.establish`, whose `parseReservedState` applies the same
+     * `ID_SISTEMA_MAX_LENGTH` and throws `sif.reservation_invalid` instead. `writeReservedSif` is
+     * the lower-level primitive under the second and does NOT check: a direct caller of it — today
+     * `apps/server/src/reserved-identity.ts`'s adopt path — carries the bound itself. */
     "sif.id_sistema_invalid": { value: string; maxLength: number };
 
     /** A standby's reserved SIF state arrived from the primary malformed (the mirror bundle is wire
-     * input). `reason` is our own English description, never the payload. */
+     * input) — a missing or non-string field, an installation number that is not a positive integer,
+     * or an `idSistemaInformatico` outside `ID_SISTEMA_MAX_LENGTH` (see `sif.id_sistema_invalid`
+     * above for why that bound is checked on every write path). `reason` is our own English
+     * description, never the payload. */
     "sif.reservation_invalid": { reason: string };
 
     /**

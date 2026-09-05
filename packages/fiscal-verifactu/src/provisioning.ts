@@ -6,6 +6,7 @@ import { AppError } from "@waitron/shared";
 import "./errors.js";
 import {
   currentSif,
+  ID_SISTEMA_MAX_LENGTH,
   registerSif,
   reserveInstallationNumber,
   writeReservedSif,
@@ -54,9 +55,17 @@ function parseReservedState(state: unknown): ReservedSifState {
   if (typeof nif !== "string" || nif.length === 0) {
     throw new AppError("sif.reservation_invalid", { reason: "nif is not a non-empty string" });
   }
-  if (typeof idSistemaInformatico !== "string" || idSistemaInformatico.length === 0) {
+  // The same length rule `registerSif` applies, because this is the OTHER write path into
+  // `registro_sif.id_sistema_informatico` and the column carries no CHECK. Refused as a malformed
+  // RESERVATION rather than as `sif.id_sistema_invalid`: the value arrived over the mirror bundle,
+  // so what failed is the primary's state, not a local argument.
+  if (
+    typeof idSistemaInformatico !== "string" ||
+    idSistemaInformatico.length === 0 ||
+    idSistemaInformatico.length > ID_SISTEMA_MAX_LENGTH
+  ) {
     throw new AppError("sif.reservation_invalid", {
-      reason: "idSistemaInformatico is not a non-empty string",
+      reason: `idSistemaInformatico is not a string of 1 to ${String(ID_SISTEMA_MAX_LENGTH)} characters`,
     });
   }
   if (!Number.isInteger(numeroInstalacion) || (numeroInstalacion as number) < 1) {
