@@ -36,3 +36,21 @@ export function evictNode(current: readonly MembershipNode[], nodeId: string): M
     n.nodeId === nodeId ? { ...n, standing: "evicted" } : n,
   );
 }
+
+/**
+ * The org chart after a node JOINS (adopt, till-reroute design §3.3): the node is appended as
+ * `serving-secondary` — the standing for "a member that is not primary"; under warm standby it still
+ * sells nothing, because a till obeys `GET /api/node`'s `acceptingSales`, never the standing — with its
+ * advertised `contactUrl`, the address tills route on. A node already listed keeps its standing and only
+ * has its `contactUrl` refreshed (a re-adopt after a wipe). Returns a new array; never mutates the input.
+ */
+export function withMember(
+  current: readonly MembershipNode[],
+  nodeId: string,
+  contactUrl: string,
+): MembershipNode[] {
+  if (current.some((n) => n.nodeId === nodeId)) {
+    return current.map((n): MembershipNode => (n.nodeId === nodeId ? { ...n, contactUrl } : n));
+  }
+  return [...current, { nodeId, contactUrl, standing: "serving-secondary" }];
+}

@@ -27,7 +27,7 @@ export { signDocumentBody, verifyMembershipDocument } from "./verify.js";
 
 export { buildNextMembershipDocument } from "./build.js";
 
-export { nextStandings, evictNode } from "./standings.js";
+export { nextStandings, evictNode, withMember } from "./standings.js";
 
 export { standingOf, isFencedStanding, servingPrimaryNodeId } from "./fence.js";
 
