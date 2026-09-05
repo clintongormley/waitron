@@ -2,8 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { Database } from "@waitron/db";
-import { withTenant } from "@waitron/db";
+import { captureError, pgErrorCode, withTenant, type Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { enrolPeer, syncPullOnce, type HttpClient } from "@waitron/sync";
 import type { Logger } from "./logger.js";
@@ -45,7 +44,11 @@ import {
 //      EQUALS the reserved one and gets a real 23505, proving the coexistence in the positive case rests
 //      on the node-keyed constraints and the distinct numero, not on luck.
 //
-// apps/server is english-only-EXEMPT (apps/* is out of scope), so the Spanish fiscal names ride verbatim.
+// This suite lives in apps/server, the composition root: it drives the apply lane through `mountSyncApi`
+// + the assembled `ALL_SYNC_ENROLMENTS`, which live only here, and `fiscal-verifactu` cannot import
+// `apps/server` (dependency inversion) — that, not english-only, is why it is here. Spanish fiscal names
+// ride verbatim because apps/* is english-only-exempt, a non-discriminating aside (packages/
+// fiscal-verifactu is exempt too).
 const log: Logger = () => {};
 
 const source = useTemplateDb({ template: "manifest" });
@@ -135,14 +138,6 @@ async function mirror<T>(query: Parameters<Database["execute"]>[0]): Promise<T |
   const r = await target.admin.execute<{ v: T }>(query);
   return r.rows[0]?.v;
 }
-
-const captureError = async (fn: () => Promise<unknown>) =>
-  fn()
-    .then(() => undefined)
-    .catch(
-      (e: unknown) =>
-        e as { code?: string; message?: string; cause?: { code?: string; message?: string } },
-    );
 
 beforeAll(async () => {
   await stampEnv(target.admin, "production");
@@ -403,11 +398,11 @@ describe("fiscal reserved-SIF (R2) apply gate — node-keyed identities coexist"
 
     // Apply — the collision is a unique_violation (23505), NOT a 23503 defer, so it propagates out of
     // syncPullOnce rather than being parked.
+    // captureError throws if syncPullOnce SUCCEEDS, so reaching the assertion proves it raised.
     const err = await captureError(() =>
       syncPullOnce(depsFor(ids.tenantId), { nodeId: ids.nodeId, url: "", token: sourcePeerToken }),
     );
-    expect(err, "colliding numero_instalacion did not raise").toBeDefined();
-    expect(err?.code ?? err?.cause?.code).toBe("23505");
+    expect(pgErrorCode(err)).toBe("23505");
 
     // The primary SIF never landed; the reserved SIF is intact (the apply transaction rolled back).
     expect(

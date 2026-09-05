@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { Database } from "@waitron/db";
+import { captureError, pgErrorCode, pgErrorMessage, type Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { enrolPeer, syncPullOnce, type HttpClient } from "@waitron/sync";
 import type { Logger } from "./logger.js";
@@ -33,8 +33,11 @@ import {
 //                   triggers are active even against a privilege-bypassing superuser (WT001) —
 //                   while the apply INSERT path (A) is unobstructed.
 //
-// This file lives in apps/server, which is english-only-EXEMPT (apps/* is out of scope), so the
-// Spanish fiscal table/column names appear verbatim.
+// This suite lives in apps/server, the composition root: it drives the apply lane through
+// `mountSyncApi` + the assembled `ALL_SYNC_ENROLMENTS`, which live only here, and `fiscal-verifactu`
+// cannot import `apps/server` (dependency inversion) — that, not english-only, is why it is here.
+// Spanish fiscal table/column names appear verbatim because apps/* is english-only-exempt, an aside
+// that does not discriminate (packages/fiscal-verifactu is exempt too).
 const log: Logger = () => {};
 
 const source = useTemplateDb({ template: "manifest" });
@@ -107,14 +110,6 @@ async function fullRow(db: Database, registroId: string): Promise<Record<string,
   );
   return r.rows[0]?.j ?? null;
 }
-
-const captureError = async (fn: () => Promise<unknown>) =>
-  fn()
-    .then(() => undefined)
-    .catch(
-      (e: unknown) =>
-        e as { code?: string; message?: string; cause?: { code?: string; message?: string } },
-    );
 
 beforeAll(async () => {
   await stampEnv(target.admin, "production");
@@ -240,19 +235,19 @@ describe("fiscal apply gate — verbatim replication of the immutable ledger", (
     expect(landed.rows[0]!.n).toBe(1);
 
     // Layer 1 — the apply role cannot mutate the ledger: no UPDATE / TRUNCATE grant → 42501.
+    // captureError throws if the statement SUCCEEDS, so reaching the assertion is itself the proof it
+    // was rejected (the message the old `.toBeDefined()` carried is now captureError's own throw text).
     const applierUpdate = await captureError(() =>
       targetApplier.execute(
         sql`update registros_facturacion set huella = ${"E".repeat(64)} where id = ${seeded.registroId}`,
       ),
     );
-    expect(applierUpdate, "applier UPDATE was not rejected").toBeDefined();
-    expect(applierUpdate?.code ?? applierUpdate?.cause?.code).toBe("42501");
+    expect(pgErrorCode(applierUpdate)).toBe("42501");
 
     const applierTruncate = await captureError(() =>
       targetApplier.execute(sql.raw(`truncate registros_facturacion cascade`)),
     );
-    expect(applierTruncate, "applier TRUNCATE was not rejected").toBeDefined();
-    expect(applierTruncate?.code ?? applierTruncate?.cause?.code).toBe("42501");
+    expect(pgErrorCode(applierTruncate)).toBe("42501");
 
     // Layer 2 — the triggers are ACTIVE on the mirror table. A superuser bypasses the grant but not the
     // trigger, so the statement reaches it and trips it (mirrors pg-restore.test.ts's positive control).
@@ -261,21 +256,13 @@ describe("fiscal apply gate — verbatim replication of the immutable ledger", (
         sql`update registros_facturacion set huella = ${"E".repeat(64)} where id = ${seeded.registroId}`,
       ),
     );
-    expect(
-      superUpdate,
-      "superuser UPDATE was not rejected — append-only trigger inactive",
-    ).toBeDefined();
-    expect(superUpdate?.code ?? superUpdate?.cause?.code).toBe("WT001");
-    expect(superUpdate?.cause?.message ?? superUpdate?.message).toMatch(/is append-only/i);
+    expect(pgErrorCode(superUpdate)).toBe("WT001"); // append-only trigger fired (not merely present)
+    expect(pgErrorMessage(superUpdate)).toMatch(/is append-only/i);
 
     const superTruncate = await captureError(() =>
       target.admin.execute(sql.raw(`truncate registros_facturacion cascade`)),
     );
-    expect(
-      superTruncate,
-      "superuser TRUNCATE was not rejected — block-truncate trigger inactive",
-    ).toBeDefined();
-    expect(superTruncate?.code ?? superTruncate?.cause?.code).toBe("WT001");
+    expect(pgErrorCode(superTruncate)).toBe("WT001"); // block-truncate trigger fired
 
     // The ledger row survived every rejected mutation (each statement rolled back).
     const survived = await target.admin.execute<{ huella: string; n: number }>(

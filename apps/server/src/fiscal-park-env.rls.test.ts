@@ -33,8 +33,12 @@ import {
 //      equal-version sweep that re-delivers and applies the identical registro, and from an incidental
 //      no-apply by an equal-version control that lands a registro with `versionParked === 0`.
 //
-// apps/server is english-only-EXEMPT (apps/* is out of scope), so the Spanish fiscal names appear
-// verbatim. This file reuses the Task 6-8 fiscal fixtures rather than re-seeding by hand.
+// This suite lives in apps/server, the composition root: it drives the apply lane through `mountSyncApi`
+// + the assembled `ALL_SYNC_ENROLMENTS`/`MODULE_BY_TABLE`, which live only here, and `fiscal-verifactu`
+// cannot import `apps/server` (dependency inversion) — that, not english-only, is why it is here.
+// Spanish fiscal names appear verbatim because apps/* is english-only-exempt, a non-discriminating aside
+// (packages/fiscal-verifactu is exempt too). This file reuses the Task 6-8 fiscal fixtures rather than
+// re-seeding by hand.
 const log: Logger = () => {};
 
 const source = useTemplateDb({ template: "manifest" });

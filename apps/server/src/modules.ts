@@ -23,9 +23,9 @@ import type { EnrolledTable } from "@waitron/sync";
  * There are four inter-module edges: `workforce → identity` (workforce FKs `persons`, which
  * identity owns), `sync → identity` + `sync → payments` (sync's capture triggers attach to
  * identity's `persons`/`webauthn_credentials` and payments' `payments`/`payment_refunds`/
- * `payment_policy`), and `fiscal → sync` (SP-3a: fiscal's capture triggers will call sync's
- * `sync_capture()` SPI, so sync's set must migrate first — the enrolment itself lands in a later
- * task). All ranges are `"*"` because every module is workspace-locked at version `0.0.0`.
+ * `payment_policy`), and `fiscal → sync` (SP-3a: fiscal's capture triggers call sync's
+ * `sync_capture()` SPI, so sync's set must migrate first). All ranges are `"*"` because every module
+ * is workspace-locked at version `0.0.0`.
  *
  * The `sync` seat is now POPULATED on `core`/`identity`/`payments` (SP-2a): each owning package
  * declares its own enrolment array (`CORE_ENROLMENT`/`IDENTITY_ENROLMENT`/`PAYMENTS_ENROLMENT`) and

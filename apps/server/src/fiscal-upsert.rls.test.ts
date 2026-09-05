@@ -39,7 +39,11 @@ import {
 // control (a stale image stamped with a HIGHER seq regresses the mirror, so the assertion catches it)
 // is a documented scratch run in the task report, not a committed assertion.
 //
-// apps/server is english-only-EXEMPT (apps/* is out of scope), so the Spanish fiscal names ride verbatim.
+// This suite lives in apps/server, the composition root: it drives the apply lane through `mountSyncApi`
+// + the assembled `ALL_SYNC_ENROLMENTS`, which live only here, and `fiscal-verifactu` cannot import
+// `apps/server` (dependency inversion) — that, not english-only, is why it is here. Spanish fiscal names
+// ride verbatim because apps/* is english-only-exempt, a non-discriminating aside (packages/
+// fiscal-verifactu is exempt too).
 const log: Logger = () => {};
 
 const source = useTemplateDb({ template: "manifest" });

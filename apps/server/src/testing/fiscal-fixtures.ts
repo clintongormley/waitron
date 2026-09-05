@@ -2,11 +2,14 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { withTenant, type Database, type Transaction } from "@waitron/db";
 
-// Shared fiscal seeding for the SP-3a apply-lane suites (fiscal-apply.rls.test.ts and Tasks 7-9).
-// Extracted and generalised from pg-restore.test.ts's `seedFiscalRegistro` + fiscal-capture.rls.test.ts's
-// `seedParents`/`insertRegistro`. Lives under apps/server/src/testing/ — coverage-excluded (this
-// package's vitest.config.ts `exclude`) and english-only-EXEMPT (apps/* is out of scope), so the
-// Spanish fiscal column names are used verbatim.
+// Shared fiscal seeding for the SP-3a fiscal-record-lane suites (fiscal-capture, fiscal-apply,
+// fiscal-upsert, fiscal-fk-defer, fiscal-park-env). Extracted and generalised from pg-restore.test.ts's
+// `seedFiscalRegistro` + fiscal-capture.rls.test.ts's `seedParents`/`insertRegistro`. It lives under
+// apps/server/src/testing/ because its consumers do: the apply-lane gates drive `mountSyncApi` +
+// `ALL_SYNC_ENROLMENTS`, which live only in the composition root and `fiscal-verifactu` cannot import.
+// Coverage-excluded (this package's vitest.config.ts `exclude`). Spanish fiscal column names are used
+// verbatim because apps/* is english-only-exempt — an aside that does not decide placement (packages/
+// fiscal-verifactu is exempt too).
 //
 // Column shapes are the current migrated schema (country/tax_id on tenants, vat_breakdown on sales,
 // node-keyed series/sif/registro), asserted against by fiscal-capture.rls.test.ts already.
@@ -55,8 +58,6 @@ export function freshFiscalIds(overrides: Partial<FiscalIds> = {}): FiscalIds {
 export interface SeedParentsOptions {
   /** Reuse a fixed FK closure (e.g. to seed the SAME parents on two databases). Unset → all random. */
   ids?: Partial<FiscalIds>;
-  /** tenants.tax_id (the obligado NIF). Default: deterministic-unique per call. */
-  taxId?: string;
   /** registro_sif.numero_instalacion. Default: deterministic-unique per call. */
   numeroInstalacion?: number;
   /**
@@ -100,7 +101,7 @@ export async function seedFiscalParents(
 ): Promise<FiscalIds> {
   const ids = freshFiscalIds(opts.ids);
   const n = seedSeq++;
-  const taxId = opts.taxId ?? `899${String(n).padStart(6, "0")}K`;
+  const taxId = `899${String(n).padStart(6, "0")}K`;
   const numeroInstalacion = opts.numeroInstalacion ?? n + 1;
 
   await db.execute(sql`
@@ -216,40 +217,29 @@ export async function captureFiscalRegistro(
 }
 
 export interface SeedFiscalRegistroOptions extends SeedParentsOptions, RegistroOptions {
-  /**
-   * When set, insert the registro AS THIS WRITER (via {@link captureFiscalRegistro}) so the capture
-   * trigger fires under this node's origin; parents are still seeded through `db`. When absent, the
-   * registro is inserted directly through `db` — the capture trigger still fires, but with no
-   * app.node_id set it lands under the all-zeros origin, which no origin-filtered pull targets. This
-   * is the shape Tasks 7-9 use to plant a full chain for a drain or reconcile test.
-   */
-  captureThrough?: Database;
   /** Also seed a `cadenas` chain-head row pointing at this registro (Tasks 7-9). */
   cadena?: boolean;
   /** Also seed an `envios` sidecar row for this registro. `true` → estado 'pendiente' (Tasks 7-9). */
   envio?: boolean | { estado?: string };
-  /** Also seed an `acks` row for this registro. `true` → state 'accepted' (Tasks 7-9). */
-  ack?: boolean | { state?: string };
 }
 
 /**
- * The all-in-one: seed the FK closure AND the registro (optionally its `cadenas`/`envios`/`acks`
- * companions) through `db`, returning the parent ids + the registro's id/huella/entorno/secuencia.
- * This is the fixture Tasks 7-9 consume for a ready-made fiscal chain. Task 6's apply suite composes
+ * The all-in-one: seed the FK closure AND the registro (optionally its `cadenas`/`envios` companions)
+ * through `db`, returning the parent ids + the registro's id/huella/entorno/secuencia. This is the
+ * fixture Tasks 7-9 consume for a ready-made fiscal chain. Task 6's apply suite composes
  * {@link seedFiscalParents} + {@link captureFiscalRegistro} directly instead, because it must seed the
  * SAME parents on two databases and capture the registro on only one of them.
  *
- * The companion rows are seeded through `db` regardless of `captureThrough` — they are FK children of
- * the registro; whether THEY capture is a later task's concern.
+ * The registro is inserted directly through `db` — the capture trigger still fires, but with no
+ * app.node_id set it lands under the all-zeros origin, which no origin-filtered pull targets. The
+ * companion rows are FK children of the registro, seeded through `db` too.
  */
 export async function seedFiscalRegistro(
   db: Database,
   opts: SeedFiscalRegistroOptions = {},
 ): Promise<SeededFiscalRegistro> {
   const ids = await seedFiscalParents(db, opts);
-  const registro = opts.captureThrough
-    ? await captureFiscalRegistro(opts.captureThrough, ids, opts)
-    : await insertFiscalRegistro(db, ids, opts);
+  const registro = await insertFiscalRegistro(db, ids, opts);
 
   if (opts.cadena) {
     await db.execute(sql`
@@ -262,12 +252,6 @@ export async function seedFiscalRegistro(
     await db.execute(sql`
       insert into envios (registro_id, tenant_id, estado)
       values (${registro.registroId}, ${ids.tenantId}, ${estado})`);
-  }
-  if (opts.ack) {
-    const state = typeof opts.ack === "object" ? (opts.ack.state ?? "accepted") : "accepted";
-    await db.execute(sql`
-      insert into acks (registro_id, tenant_id, submitted_at, csv, state)
-      values (${registro.registroId}, ${ids.tenantId}, '2026-07-20T19:25:00+01:00', 'CSV-XYZ', ${state})`);
   }
 
   return { ...ids, ...registro };

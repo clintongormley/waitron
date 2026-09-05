@@ -1,8 +1,8 @@
-import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Database, Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { insertFiscalRegistro, seedFiscalParents } from "./testing/fiscal-fixtures.js";
 
 // Real Postgres, not PGlite: this suite proves the six fiscal sync_capture triggers (SP-3a,
 // packages/fiscal-verifactu/drizzle/0014_fiscal_sync_capture.sql) fire under the genuine
@@ -18,8 +18,11 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 // whole migration manifest (fiscal last), so the clone carries the fiscal tables + their capture
 // triggers + sync_log/sync_capture.
 //
-// This file lives in apps/server, which is english-only-EXEMPT (apps/* is out of scope), so the
-// Spanish fiscal table/column names are used verbatim.
+// This suite lives in apps/server alongside the rest of the SP-3a fiscal-record-lane gates: its
+// apply-lane siblings import the composition root's `mountSyncApi`/`ALL_SYNC_ENROLMENTS`, which
+// `fiscal-verifactu` cannot import (dependency inversion), so the lane's suites are co-located here.
+// Spanish fiscal table/column names ride verbatim because apps/* is english-only-exempt — an aside
+// that does not decide placement (packages/fiscal-verifactu is exempt too).
 //
 // The deployment role app_login — a non-superuser, non-BYPASSRLS LOGIN member of app_user, so FORCE
 // RLS and the REVOKE ALL actually apply to it — is created once in src/testing/global-setup.ts and
@@ -28,111 +31,32 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 // read sync_log back (the app role holds no SELECT on it).
 const postgres = useTemplateDb({ template: "manifest" });
 
-// tenants carries a UNIQUE (country, tax_id) index, and the suite seeds several tenants into the one
-// shared clone, so each needs a distinct tax_id. A per-call counter keeps them unique; there is no
-// NIF format check at the DB layer (packages/db/src/schema/tenants.ts).
-let taxIdSeq = 0;
+// The FK-closure seeding and the registro INSERT are the shared apply-lane fixtures
+// (seedFiscalParents / insertFiscalRegistro in ./testing/fiscal-fixtures.ts, which were extracted from
+// this file): each seeds a fresh FK closure and inserts one registros_facturacion row against it,
+// stamping `entorno` so the verbatim-capture assertion can prove OUR-metadata column rides into
+// row_image unchanged (§5). Both stop SHORT of writing the registro as the app role — each test does
+// that itself via `asWriter`, so its own INSERT is what the capture trigger sees.
 
-/** The FK-parent ids one registros_facturacion row needs. Fresh per seed call so the tests, which
- * SHARE one cloned database (useTemplateDb is one clone per file), never collide on a fixed id. */
-interface Parents {
-  tenantId: string;
-  locationId: string;
-  tillId: string;
-  nodeId: string;
-  seriesId: string;
-  saleId: string;
-  sifId: string;
-}
+// The app writer (app_login: a non-superuser member of app_user, so FORCE RLS and the REVOKE ALL
+// genuinely apply to it). One connection is opened for the whole file and reused by `asWriter`,
+// matching the sibling apply-lane suites, rather than reconnecting per call.
+let writer: Database;
 
-/**
- * Seeds exactly the FK closure `registros_facturacion` needs — tenant, location, till, node,
- * invoice series, sale, registro_sif — as the superuser admin (RLS bypassed; this is setup, not the
- * thing under test). Column shapes mirror `apps/server/src/pg-restore.test.ts`'s
- * `seedFiscalRegistro` (the current migrated schema: country/tax_id on tenants, vat_breakdown on
- * sales, node-keyed series/sif). It deliberately stops SHORT of the registro itself: each test
- * writes that row AS THE APP ROLE, so its own INSERT is what the capture trigger sees.
- */
-async function seedParents(admin: Database): Promise<Parents> {
-  const p: Parents = {
-    tenantId: randomUUID(),
-    locationId: randomUUID(),
-    tillId: randomUUID(),
-    nodeId: randomUUID(),
-    seriesId: randomUUID(),
-    saleId: randomUUID(),
-    sifId: randomUUID(),
-  };
-  const taxId = `899${String(taxIdSeq++).padStart(6, "0")}K`;
-  await admin.execute(sql`
-    insert into tenants (id, country, tax_id, legal_name)
-    values (${p.tenantId}, 'ES', ${taxId}, 'Waitron SL')`);
-  await admin.execute(sql`
-    insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-    values (${p.locationId}, ${p.tenantId}, 'Local principal', array['es'], 'Venta en establecimiento')`);
-  await admin.execute(sql`
-    insert into tills (id, tenant_id, location_id, name)
-    values (${p.tillId}, ${p.tenantId}, ${p.locationId}, 'Caja 1')`);
-  await admin.execute(sql`
-    insert into nodes (id, tenant_id, location_id, name)
-    values (${p.nodeId}, ${p.tenantId}, ${p.locationId}, 'Node 1')`);
-  await admin.execute(sql`
-    insert into invoice_series (id, tenant_id, node_id, code)
-    values (${p.seriesId}, ${p.tenantId}, ${p.nodeId}, 'A')`);
-  await admin.execute(sql`
-    insert into sales (
-      id, tenant_id, till_id, node_id, series_id, invoice_number,
-      issued_at, issued_offset_minutes, total, vat_breakdown,
-      locale, invoice_locales, fiscal_backend, fiscal_state
-    ) values (
-      ${p.saleId}, ${p.tenantId}, ${p.tillId}, ${p.nodeId}, ${p.seriesId}, 1,
-      '2026-07-20T19:20:30+01:00', 60, '0.00', '[]'::jsonb,
-      'es', array['es'], 'verifactu', 'recorded'
-    )`);
-  // registro_sif carries a UNIQUE (nif, id_sistema_informatico, numero_instalacion); the shared
-  // clone holds several SIFs, so numero_instalacion counts up per seed to keep them distinct.
-  await admin.execute(sql`
-    insert into registro_sif (id, tenant_id, node_id, nif, id_sistema_informatico, numero_instalacion)
-    values (${p.sifId}, ${p.tenantId}, ${p.nodeId}, '89890001K', 'WAITRON01', ${taxIdSeq})`);
-  return p;
-}
+beforeAll(async () => {
+  writer = await postgres.pg.connectAs("app_login", "app_pw");
+});
+
+afterAll(async () => {
+  // Only this connectAs handle is closed here; the clone and its admin are owned by useTemplateDb
+  // (CLAUDE.md §4: never double-close a helper-owned connection).
+  if (writer !== undefined) await writer.close();
+});
 
 /**
- * Inserts one registros_facturacion row through `conn`, returning its id. `numSerie`/`secuencia`
- * vary so two registros can share a tenant without tripping registros_identidad_uq /
- * registros_tenant_node_secuencia_uq. `entorno` is set (pg-restore's seed omits it) so the
- * verbatim-capture assertion can prove OUR-metadata column rides into row_image unchanged — the
- * fiscal invariant that entorno is never hashed but IS carried on the immutable row (§5, schema/
- * registros.ts). The huella is the canonical 64-hex fixture (repeat('F', 64)).
- */
-async function insertRegistro(
-  conn: Database | Transaction,
-  p: Parents,
-  opts: { numSerie: string; secuencia: number; entorno: string },
-): Promise<string> {
-  const { rows } = await conn.execute<{ id: string }>(sql`
-    insert into registros_facturacion (
-      tenant_id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
-      id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
-      tipo_factura, descripcion_operacion, desglose, cuota_total, importe_total,
-      primer_registro, sistema_informatico,
-      fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, entorno
-    ) values (
-      ${p.tenantId}, ${p.tillId}, ${p.nodeId}, ${p.sifId}, ${p.saleId}, ${opts.secuencia}, 'alta',
-      '89890001K', ${opts.numSerie}, '2026-07-20', 'Waitron SL',
-      'F2', 'Venta en establecimiento', '[]'::jsonb, '12.35', '123.45',
-      true, '{}'::jsonb,
-      '2026-07-20T19:20:30+01:00', 60, '01', ${"F".repeat(64)}, ${opts.entorno}
-    ) returning id`);
-  return rows[0]!.id;
-}
-
-/**
- * Runs `fn` as the app writer (app_login) inside ONE transaction with the tenant + node GUCs bound
+ * Runs `fn` as the app writer inside ONE transaction with the tenant + node GUCs bound
  * transaction-locally, mirroring capture.gate.test.ts's `withTenantNode`. With `apply: true` it also
- * sets app.sync_apply='on' so the WHEN clause suppresses the capture (the echo path). The connection
- * is closed in `finally` (CLAUDE.md §4: guard every teardown — here the connection is always
- * assigned before the try, so an unconditional close is safe).
+ * sets app.sync_apply='on' so the WHEN clause suppresses the capture (the echo path).
  */
 async function asWriter(
   tenantId: string,
@@ -140,19 +64,14 @@ async function asWriter(
   fn: (tx: Transaction) => Promise<void>,
   opts: { apply?: boolean } = {},
 ): Promise<void> {
-  const w = await postgres.pg.connectAs("app_login", "app_pw");
-  try {
-    await w.transaction(async (tx) => {
-      await tx.execute(sql`select set_config('app.tenant_id', ${tenantId}, true)`);
-      await tx.execute(sql`select set_config('app.node_id', ${nodeId}, true)`);
-      if (opts.apply === true) {
-        await tx.execute(sql`select set_config('app.sync_apply', 'on', true)`);
-      }
-      await fn(tx);
-    });
-  } finally {
-    await w.close();
-  }
+  await writer.transaction(async (tx) => {
+    await tx.execute(sql`select set_config('app.tenant_id', ${tenantId}, true)`);
+    await tx.execute(sql`select set_config('app.node_id', ${nodeId}, true)`);
+    if (opts.apply === true) {
+      await tx.execute(sql`select set_config('app.sync_apply', 'on', true)`);
+    }
+    await fn(tx);
+  });
 }
 
 describe("fiscal sync capture — the six triggers of 0014", () => {
@@ -168,15 +87,15 @@ describe("fiscal sync capture — the six triggers of 0014", () => {
     // `drop trigger registros_facturacion_capture on registros_facturacion` executed before the
     // insert, this assertion fails at `n` = "0" — the trigger IS what makes capture happen despite
     // the REVOKE ALL, not some ambient default.
-    const p = await seedParents(postgres.admin);
+    const p = await seedFiscalParents(postgres.admin);
 
     let registroId = "";
     await asWriter(p.tenantId, p.nodeId, async (tx) => {
-      registroId = await insertRegistro(tx, p, {
+      ({ registroId } = await insertFiscalRegistro(tx, p, {
         numSerie: "A/1",
         secuencia: 1,
         entorno: "preproduction",
-      });
+      }));
     });
 
     const captured = await postgres.admin.execute<{
@@ -237,11 +156,11 @@ describe("fiscal sync capture — the six triggers of 0014", () => {
     // delete there are zero op='delete' rows for this tenant and the INSERT did produce an
     // op='insert' row (so the trigger is attached and fires); after, exactly one op='delete' row
     // carrying the deleted ack's registro_id and tenant, and the ack really is gone.
-    const p = await seedParents(postgres.admin);
+    const p = await seedFiscalParents(postgres.admin);
     // The registro the ack hangs off (acks.registro_id FK). Seeded as admin here — this test is about
     // the ACKS trigger, and the assertions scope to table_name='acks', so the registro's own capture
     // is irrelevant. The ack row itself is written AS THE APP ROLE, so its capture runs as the writer.
-    const registroId = await insertRegistro(postgres.admin, p, {
+    const { registroId } = await insertFiscalRegistro(postgres.admin, p, {
       numSerie: "A/1",
       secuencia: 1,
       entorno: "preproduction",
@@ -295,13 +214,13 @@ describe("fiscal sync capture — the six triggers of 0014", () => {
     // is re-captured, so a replicated row loops A→B→A. The control that proves the WHEN clause is the
     // MECHANISM (not merely present) is by DELETION: reinstall the trigger WITHOUT the WHEN clause and
     // show the identical apply-path write IS then captured (CLAUDE.md §1 prove-a-guard-by-deletion).
-    const guarded = await seedParents(postgres.admin);
+    const guarded = await seedFiscalParents(postgres.admin);
 
     await asWriter(
       guarded.tenantId,
       guarded.nodeId,
       async (tx) => {
-        await insertRegistro(tx, guarded, {
+        await insertFiscalRegistro(tx, guarded, {
           numSerie: "A/1",
           secuencia: 1,
           entorno: "preproduction",
@@ -328,12 +247,12 @@ describe("fiscal sync capture — the six triggers of 0014", () => {
       ),
     );
     try {
-      const unguarded = await seedParents(postgres.admin);
+      const unguarded = await seedFiscalParents(postgres.admin);
       await asWriter(
         unguarded.tenantId,
         unguarded.nodeId,
         async (tx) => {
-          await insertRegistro(tx, unguarded, {
+          await insertFiscalRegistro(tx, unguarded, {
             numSerie: "A/1",
             secuencia: 1,
             entorno: "preproduction",
