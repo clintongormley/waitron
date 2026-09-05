@@ -829,10 +829,9 @@ vs gated on an unbuilt foundation or an external dependency:
   (6) **rejoin — drain-then-restore** — **R1 (fence-on-rejoin) LANDED #214** (2026-09-04);
   **R2 (drain-as-source + disposal guard) LANDED #219** (2026-09-05); **R3 split** (2026-09-05) into
   **retire/evict (decommission) LANDED #224** (2026-09-05, no restore) and **wipe-and-restore
-  (rejoin-as-secondary) IMPLEMENTED on `feat/membership-rejoin-r3-wipe-restore`, PENDING LAND**
-  [fiscal-adjacent → owner sign-off before land]; (7) **conflict
+  (rejoin-as-secondary) LANDED #237** (2026-09-05; fiscal-adjacent, owner-signed-off at land); (7) **conflict
   surface** (config down-only + ops conflict log) **LANDED #229** (2026-09-05). Slice 6 rejoin arc
-  COMPLETE (fence R1 / drain R2 / retire-evict / conflict-surface / wipe-and-restore R3) pending R3 land.
+  COMPLETE (fence R1 / drain R2 / retire-evict / conflict-surface / wipe-and-restore R3).
   **Slice 6 R1 (fence-on-rejoin) LANDED #214** (2026-09-04): a returned/superseded node that holds or
   adopts a membership document marking it **sell-only/evicted** now boots **FENCED**. Two mechanisms
   cooperate: a **demote-only** `singleton_role → secondary` reconciliation at boot (owner-pool write,
@@ -883,9 +882,8 @@ vs gated on an unbuilt foundation or an external dependency:
     node whose tail reached only a *stale* survivor (fiscal-unrecoverable). **Carrier-side reaction to
     `evicted` (stop pulling) is out of scope** — the carrier learns via gossip and the box is then
     disposed (its pull just goes unreachable).
-  - **R3 (wipe-and-restore, spec §6 step 4) — the rejoin-as-secondary path — IMPLEMENTED on
-    `feat/membership-rejoin-r3-wipe-restore`, PENDING LAND** [fiscal-adjacent → owner sign-off before
-    land; no PR number yet — filled in at land]. Design:
+  - **R3 (wipe-and-restore, spec §6 step 4) — the rejoin-as-secondary path — LANDED #237**
+    (2026-09-05; fiscal-adjacent, owner-signed-off at land). Design:
     [membership-rejoin-r3-wipe-and-restore](superpowers/specs/2026-09-05-membership-rejoin-r3-wipe-and-restore-design.md).
     Drain (R2 ✓, reusing R2's lane-agnostic disposal guard, `readDrainProgress`) → discard the diverged
     DB → restore the current primary's baseline → reboot FENCED (sell-only), streaming the primary's
@@ -902,7 +900,19 @@ vs gated on an unbuilt foundation or an external dependency:
     auto-covers the fiscal chain with no R3 change once H2/SP-3 enrols it onto a lane. A real-PG e2e
     found + fixed a wiped-but-not-restored DR bug: `restoreFromArtifact` assumed its staging/media/state
     roots already existed; a rejoin left the DB wiped with nothing restored into it. Fixed by having
-    restore create those roots itself before its guard runs.
+    restore create those roots itself before its guard runs. The whole-branch review then hardened the
+    pre-wipe guard ladder to refuse before the irreversible wipe for a wrong recovery key / incompatible
+    artifact (validate-before-wipe), a `DATABASE_URL` vs `WAITRON_RESTORE_DATABASE_URL` target mismatch,
+    and a stale-carrier two-read window (read `node_membership` once); Copilot round closed
+    (0700 restore dirs, pool-close-on-refusal).
+    - **R3 follow-ups (deferred, owner-flagged):** (a) **automatic resume-at-restore** — a mid-flow
+      failure AFTER the wipe still needs operator recovery (data is safe: drained tail on the carrier +
+      the backup artifact); self-recovery needs a persisted wiped-state marker to tell a wiped-mid-restore
+      box from a never-provisioned one — an owner design call, not built. R3 only PREVENTS the preventable
+      pre-wipe failures. (b) **re-admission `sell-only → serving-secondary`** — the un-fence that makes the
+      rejoined box sell again; a separate primary-minted slice (no self-promotion — demote-never-promote).
+      (c) tiny: `restore.ts`'s "Exposed for R3" comments on the composable steps now describe a path R3
+      didn't take (it uses `validateArtifact`/`writeValidated`) — harmless, thin when next touched.
   - **Slice 7 (conflict surface) LANDED #229** (2026-09-05). Primary-wins for config-class rows: on the
     carrier draining a returned/fenced node, a config-class row whose `originId` is not the current
     serving-primary is REJECTED (not applied — the primary's config stands) and RECORDED to the new
