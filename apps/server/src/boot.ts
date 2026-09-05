@@ -763,7 +763,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
             establishIdentity: (tenantId, nodeId) =>
               establishNodeIdentity({ ownerDb, ring }, tenantId, nodeId),
             seedMembership: (tenantId, nodeId) =>
-              seedTermZeroMembership({ db: ownerDb, ring }, tenantId, nodeId),
+              seedTermZeroMembership(
+                { db: ownerDb, ring },
+                tenantId,
+                nodeId,
+                config.advertisedOrigin,
+              ),
             sealAeat: (tenantId, cert) => sealAeatCredential(ownerDb, ring, tenantId, cert),
             persistTrading,
             databaseUrl: config.databaseUrl,

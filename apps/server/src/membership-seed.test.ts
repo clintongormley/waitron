@@ -42,10 +42,12 @@ describe("seedTermZeroMembership", () => {
   }, 60_000);
 
   it("seeds a signed term-0 document naming this node serving-primary", async () => {
-    await seedTermZeroMembership({ db, ring: RING }, tenantId, nodeId);
+    await seedTermZeroMembership({ db, ring: RING }, tenantId, nodeId, "https://box.deli.test");
     const held = await readNodeMembership(db);
     expect(held?.body.term).toBe(0);
-    expect(held?.body.nodes).toEqual([{ nodeId, contactUrl: "", standing: "serving-primary" }]);
+    expect(held?.body.nodes).toEqual([
+      { nodeId, contactUrl: "https://box.deli.test", standing: "serving-primary" },
+    ]);
     const trust = await readMembershipTrustSet(db, tenantId);
     expect(verifyMembershipDocument(held!, trust).valid).toBe(true);
   });
