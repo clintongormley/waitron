@@ -146,6 +146,15 @@ box-death path) but unable to precede the native app. Until that lands, a single
 box-death options are a second box (most won't have) or `cloud_poll` (demoted), so **interim single-box
 venues have no till path to box-death printing** — an honest consequence of the native-app gate.
 
+> **Resolved 2026-09-05 (owner decision, Track B decision (i);
+> [`2026-09-05-till-reroute-route-decision.md`](2026-09-05-till-reroute-route-decision.md)).** The
+> native on-device agent is built from the start — headless, outbound-only, hardware only, printing
+> first — because the cloud-only minimum setup (a cloud server, phones as handhelds, any POS device,
+> a printer the venue already owns) needs it on the POS device. Routing stays in the till web app, so
+> the agent carries no browser traffic and the page never talks to it. The gate above is gone; the
+> till print agent is Track B item 5. Expected limit (unverified here): iOS background-execution
+> rules are likely to rule out an iPad as a host — verify before promising it.
+
 ## 5. Delivery guarantee — no job dropped silently
 
 The outbox already *tracks* outcomes — `queued → printing → done` (`delivered_at` set) or `failed`

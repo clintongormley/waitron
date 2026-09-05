@@ -71,7 +71,9 @@ below). Two structures are known to be out of date and must not be built on:
    them and land as modules; polishing existing screens does not.
 
 Three **decisions** shape UI work and cost nothing to take now (docs-only brainstorms, build later):
-Route A vs B for the till reroute (it decides the till's auth model); `tills` vs `devices` (device
+Route A vs B for the till reroute (it decides the till's auth model — **taken 2026-09-05**,
+[`2026-09-05-till-reroute-route-decision.md`](superpowers/specs/2026-09-05-till-reroute-route-decision.md));
+`tills` vs `devices` (device
 management and the till-enrol screen, [owner]); and the relay choice (ours or off-the-shelf, which
 shapes the control plane). **All three are Track B's first job** — its "decisions first" line below —
 taken before Track B builds anything; Track 1 and Track C consume them. **Track 1 therefore works areas 2–18 now
@@ -213,16 +215,23 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
 promote / till-session / read-only gate / box-* / rejoin, `packages/membership`, `packages/printing`,
 and the single config-conflict-gate trim in `packages/sync`):
 
-**Decisions first (docs-only brainstorms, before any build):** (i) Route A vs B (item 1's opening);
+**Decisions first (docs-only brainstorms, before any build):** (i) Route A vs B (item 1's opening) —
+**TAKEN 2026-09-05**: rerouting lives in the till web app for every device kind; the device
+credential stays an httpOnly cookie and reaches every host as a tenant-domain cookie (paid tier) or a
+primary-issued one-time ticket (LAN-only second box, post-MVP); the native agent is built from the
+start for hardware only (printing first) and never carries browser traffic
+([`2026-09-05-till-reroute-route-decision.md`](superpowers/specs/2026-09-05-till-reroute-route-decision.md));
 (ii) the relay choice — ours or off-the-shelf (item 2's opening, moved here from Track C; Track C's
 control plane consumes the answer); (iii) `tills` vs `devices` — the decision half of item 7, pulled
 forward because Track 1's area 19 waits on it; the build and its H2 receipt stay after Track A's
 squash. Record each in this file as it is taken.
 
 1. **Till reroute** — the first slice, because nothing server-side in the failover arc is usable
-   until a till can reach the second box. Brainstorm Route A (service worker + bearer token,
-   browser-only interim) vs Route B (native agent, stable local origin) FIRST — it changes the auth
-   model (distribution design §3). Then: static ordered server list cached on the till,
+   until a till can reach the second box. Route DECIDED 2026-09-05 (the decisions-first line above):
+   the auth model does not change — the device cookie stays httpOnly and gains a tenant-domain scope;
+   `devices`/`tills`/`device_profiles`/`canvases` must replicate first (config-class, no new table);
+   the promoted cloud serves tills on its public name; the app never talks to the local agent. Then:
+   static ordered server list cached on the till (the membership document's `contactUrl`s),
    N-consecutive-failure detection with hysteresis, a manual "switch server" control, PIN re-prompt on
    switch (v1; portable signed token later), idempotency key on settle/pay. Carry the warm-standby
    cleanups: the `dining_tables` enrolment comment says single-writer-by-construction (drop the

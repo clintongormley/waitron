@@ -143,7 +143,9 @@ made the cloud its own node.
   accepted, month-end AEAT `consultar` reconciles). H2 is sequenced after R3, its own owner-reviewed
   plan.
 - **The promoted cloud's reachability** (does it keep the tunnel, or serve tills directly) rides the
-  till-reroute slice.
+  till-reroute slice. _Decided 2026-09-05: it serves tills directly on its public name; the tunnel
+  stays the path to the box only
+  ([`2026-09-05-till-reroute-route-decision.md`](2026-09-05-till-reroute-route-decision.md))._
 
 ## 7. Interactions
 

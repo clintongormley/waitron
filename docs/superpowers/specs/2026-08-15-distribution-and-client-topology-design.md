@@ -185,6 +185,15 @@ The stable-local-endpoint indirection (§2) is what solves part 3. Two ways to p
 
 **Destination is B; A is a legitimate pre-native interim** if we accept token auth.
 
+> **Decided 2026-09-05 — neither as written**
+> ([`2026-09-05-till-reroute-route-decision.md`](2026-09-05-till-reroute-route-decision.md)).
+> Rerouting lives in the till web app's fetch layer for every device kind (handhelds are phones, so an
+> agent-based route would need a native app per phone OS). The device credential stays an httpOnly
+> cookie and reaches every host as a tenant-domain cookie on the paid tier — both hosts are subdomains
+> of a name we own, so the bearer-token downgrade Route A assumed never arises — or as a
+> primary-issued one-time ticket for a LAN-only second box. The native agent is built from the start
+> for hardware only and never carries the browser's traffic. Text above left as written.
+
 ### The in-flight request
 
 Thin-till write-through (failover spec §5) means the open order lives on the server and **replicates**,
