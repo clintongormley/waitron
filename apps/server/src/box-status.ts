@@ -172,26 +172,23 @@ export type BoxStatusDeps = {
 
 /**
  * Counts the append-only `sync_config_conflicts` ops rows (membership Slice 7) — config-class writes
- * primary-wins overrode while a carrier drained a returned node's tail (spec §7). Read under the app
- * role: the table grants SELECT to `app_user` (0009_sync_config_conflicts.sql) and carries no RLS and no
- * tenant_id, so `withTenant`'s GUC is inert here — it is used only to open the transaction `asAppUser`
- * (`set local role app_user`) needs, exactly as the route's chain read does; the app login is a member
- * of `app_user`, so `SET ROLE` is guaranteed regardless of whether it also inherits the grant. A plain
- * `count(*)` needs no index (Slice-7 minor: an index is deferred until a list/filter surface lands).
+ * primary-wins overrode while a carrier drained a returned node's tail (spec §7). Read through the
+ * `sync_tailer` role, NOT `app_user`: `row_image` is a jsonb copy of a rejected CONFIG row (tenant
+ * business data), so its SELECT is granted to the dedicated NOLOGIN `sync_tailer` reader only
+ * (0009_sync_config_conflicts.sql), the same isolation `sync_log` enforces (app_user INSERT-only). So
+ * `db` MUST be the sync_tailer pool (`lagPool`/`syncDb`, a sync_tailer member) and this MUST NOT
+ * `asAppUser` — a `SET ROLE app_user` would drop the sync_tailer membership's SELECT and be refused —
+ * mirroring the lag reader's "NO asAppUser here" note (boot.ts). The table carries no RLS and no
+ * tenant_id (0009), so no `withTenant` GUC is needed: a bare `count(*)` is the whole read. It needs no
+ * index (Slice-7 minor: an index is deferred until a list/filter surface lands).
  */
-export async function readConfigConflictCount(
-  db: Database,
-  tenantId: string,
-): Promise<{ count: number }> {
-  return withTenant(db, tenantId, async (tx) => {
-    await asAppUser(tx);
-    const r = await tx.execute<{ count: number }>(
-      sql`select count(*)::int as count from sync_config_conflicts`,
-    );
-    // `count(*)` is an aggregate with no GROUP BY, so it ALWAYS returns exactly one row (0 when empty) —
-    // hence `.rows[0]!` rather than a `?? 0` fallback that could never run.
-    return { count: r.rows[0]!.count };
-  });
+export async function readConfigConflictCount(db: Database): Promise<{ count: number }> {
+  const r = await db.execute<{ count: number }>(
+    sql`select count(*)::int as count from sync_config_conflicts`,
+  );
+  // `count(*)` is an aggregate with no GROUP BY, so it ALWAYS returns exactly one row (0 when empty) —
+  // hence `.rows[0]!` rather than a `?? 0` fallback that could never run.
+  return { count: r.rows[0]!.count };
 }
 
 /**

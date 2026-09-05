@@ -1715,13 +1715,16 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         backupWorker !== undefined
           ? () => readBackupStatus(backupBackends, backupConfig!.staleAfterMs, now())
           : undefined,
-      // The Slice-7 config-conflict count surface. Present iff sync is on (`syncDb !== undefined`) — the
-      // sync module is `toggleable`, so its `sync_config_conflicts` table exists only when the module is
-      // migrated; without sync no conflict can ever be recorded, so box-status reports configured:false
-      // (the same gate the replication lag reader uses). Reads on the app `db` pool (app_user holds
-      // SELECT, 0009) under the app role — see readConfigConflictCount.
+      // The Slice-7 config-conflict count surface. Present iff sync is on (`lagPool !== undefined`) —
+      // the sync module is `toggleable`, so its `sync_config_conflicts` table exists only when the
+      // module is migrated; without sync no conflict can ever be recorded, so box-status reports
+      // configured:false (the same gate the replication lag reader uses). Reads through `lagPool` (the
+      // sync_tailer pool), NOT the app `db` pool: `row_image` is tenant business data, so SELECT is
+      // granted to `sync_tailer` only (0009), the same isolation `sync_log` enforces — see
+      // readConfigConflictCount. No `withTenant`/`asAppUser` here (the table has no RLS/tenant_id, and
+      // asAppUser would drop the sync_tailer SELECT), mirroring the lag reader above.
       readConfigConflicts:
-        syncDb === undefined ? undefined : () => readConfigConflictCount(db, till.tenantId),
+        lagPool === undefined ? undefined : () => readConfigConflictCount(lagPool),
       // Report the effective mode the box is actually serving as — the same holder the read-only gate
       // and mirror-session middlewares read — so the status matches what the box enforces and tracks a
       // live promotion the same way, rather than issuing a fresh DB read of its own.

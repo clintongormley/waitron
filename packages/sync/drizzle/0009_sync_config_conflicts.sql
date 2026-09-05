@@ -28,7 +28,15 @@ CREATE TABLE sync_config_conflicts (
 );
 --> statement-breakpoint
 
--- app_user is the role the apply pool (localSyncDb = an app_user member) writes the record through, and
--- the role the box-status read surface reads through — so INSERT + SELECT to app_user. NO UPDATE/DELETE:
--- this is an append-only ops log (a rejected write is never edited or removed).
-GRANT INSERT, SELECT ON sync_config_conflicts TO app_user;
+-- row_image is a jsonb copy of a rejected CONFIG row = tenant business data, so this follows the SAME
+-- isolation sync_log enforces (0000_sync_outbox.sql:52-95): app_user only RECORDS a conflict (INSERT,
+-- through the apply pool localSyncDb, an app_user member), exactly as it only CAPTURES to sync_log; the
+-- ops READ surface (the box-status count) reads through the dedicated NOLOGIN sync_tailer role (created
+-- in 0000_sync_outbox.sql), NOT app_user — reading every tenant's row_image is sync_tailer's job.
+-- Granting SELECT to app_user would be a cross-tenant side-channel: this table has no tenant_id/RLS, so
+-- an app_user SELECT would read every tenant's rejected row verbatim. NO UPDATE/DELETE for either role:
+-- this is an append-only ops log (a rejected write is never edited or removed). recordConfigConflict's
+-- INSERT is inherited via the apply pool (app_user member); the count read goes via sync_tailer.
+GRANT INSERT ON sync_config_conflicts TO app_user;
+--> statement-breakpoint
+GRANT SELECT ON sync_config_conflicts TO sync_tailer;

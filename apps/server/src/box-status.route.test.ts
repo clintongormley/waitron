@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTenant, type Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -26,6 +26,20 @@ const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the seeded manager
 const MANAGER_EMAIL = "manager@x.com";
 
 const suite = useTemplateDb({ template: "manifest" });
+
+// The config-conflict count reader under test reads through the `sync_tailer` role — `row_image` is
+// tenant business data, so 0009 grants SELECT on `sync_config_conflicts` to `sync_tailer` only, NOT
+// `app_user` (the same isolation `sync_log` enforces; proven by `config-conflict.grants.test.ts`). So
+// the READER must be a sync_tailer connection, not the superuser `suite.admin` (which would bypass the
+// grant and hide a regression). `sync_reader` is a LOGIN member of `sync_tailer`, created once in the
+// shared-container global setup; seeding still runs as `suite.admin`. Guarded close (CLAUDE.md §4).
+let conflictsReaderDb: Database | undefined;
+beforeAll(async () => {
+  conflictsReaderDb = await suite.pg.connectAs("sync_reader", "rp");
+});
+afterAll(async () => {
+  if (conflictsReaderDb !== undefined) await conflictsReaderDb.close();
+});
 
 // Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
 // so the provisioned venue needs its own NIF — the same per-suite counter the sibling suites use.
@@ -121,9 +135,10 @@ function buildApp(
       readReplicationLag: undefined,
       readDisposal: undefined,
       readBackup: opts.readBackup,
-      // The Slice-7 config-conflict count reader, on the app pool (the manifest template carries the
-      // sync module, so sync_config_conflicts exists). Reads under the app role via readConfigConflictCount.
-      readConfigConflicts: () => readConfigConflictCount(suite.admin, tenantId),
+      // The Slice-7 config-conflict count reader, on the sync_tailer pool (the manifest template carries
+      // the sync module, so sync_config_conflicts exists). Reads through `sync_tailer` — the role that
+      // holds SELECT on the table (0009) — exactly as boot.ts wires it via `lagPool`.
+      readConfigConflicts: () => readConfigConflictCount(conflictsReaderDb!),
       readMode: () => "primary",
       readSingletonRole: () => "primary",
     },
