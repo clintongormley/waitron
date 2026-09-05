@@ -1,3 +1,5 @@
+import { realpath } from "node:fs/promises";
+import { resolve } from "node:path";
 import { AppError } from "@waitron/shared";
 import { resolveSafeEntryPath } from "./state-secrets.js";
 import "./errors.js";
@@ -15,26 +17,22 @@ import "./errors.js";
  * guard's `realpath` to succeed — the restore CLI creates it before validating any entry, matching
  * `unpackBundleToDir`'s own `mkdir(destDir)`-before-guard ordering.
  *
+ * `realDestRoot` lets a caller looping over many entries against the SAME `destRoot` (e.g.
+ * `restoreMedia`'s chunked writes) pass a `realpath(resolve(destRoot))` computed ONCE up front,
+ * rather than re-`realpath`ing the same root on every call. A single-entry caller omits it and this
+ * computes it inline — one `realpath` either way, so nothing regresses for that shape.
+ *
  * Throws `restore.unsafe_entry_path: { name }` for either layer — this caller's long-standing code
  * (CLAUDE.md §3), mapped from the shared guard's failure via the `onUnsafe` callback. Never writes
  * file contents — that stays the caller's job once this returns the safe path.
  */
-export async function assertSafeEntryName(name: string, destRoot: string): Promise<string> {
-  return resolveSafeEntryPath(name, destRoot, () => {
+export async function assertSafeEntryName(
+  name: string,
+  destRoot: string,
+  realDestRoot?: string,
+): Promise<string> {
+  const realRoot = realDestRoot ?? (await realpath(resolve(destRoot)));
+  return resolveSafeEntryPath(name, destRoot, realRoot, () => {
     throw new AppError("restore.unsafe_entry_path", { name });
   });
-}
-
-/**
- * Validates every entry `name` in an archive listing against `destRoot`, in order, failing on the
- * FIRST unsafe one — so a caller can gate a whole restore ("validate every entry before writing
- * any of them") with one call, rather than re-implementing the loop at each call site.
- */
-export async function assertSafeEntryNames(
-  names: readonly string[],
-  destRoot: string,
-): Promise<void> {
-  for (const name of names) {
-    await assertSafeEntryName(name, destRoot);
-  }
 }

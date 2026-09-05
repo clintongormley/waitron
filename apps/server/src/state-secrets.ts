@@ -57,6 +57,11 @@ export async function collectStateSecrets(stateDir: string): Promise<BundleFiles
  * whose real, on-disk parent is `/outside`. Only `realpath`ing the parent AFTER ensuring it exists
  * reveals that. `destRoot` must already exist (its callers create it before validating any entry).
  *
+ * `realDestRoot` is `realpath(resolve(destRoot))`, precomputed by the caller — a caller validating
+ * many entries against the same root (`unpackBundleToDir`'s loop, `restoreMedia`'s chunks) computes
+ * it ONCE rather than once per entry; a single-entry caller (`assertSafeEntryName`) just computes it
+ * inline before the one call, which costs nothing extra.
+ *
  * On EITHER layer failing it calls `onUnsafe`, which MUST throw — the callback is how each caller
  * maps the one shared check to its OWN long-standing error code (`unpackBundleToDir` throws
  * `recovery.bundle_invalid{unsafe_path}`, `assertSafeEntryName` throws `restore.unsafe_entry_path`),
@@ -67,6 +72,7 @@ export async function collectStateSecrets(stateDir: string): Promise<BundleFiles
 export async function resolveSafeEntryPath(
   name: string,
   destRoot: string,
+  realDestRoot: string,
   onUnsafe: () => never,
 ): Promise<string> {
   const root = resolve(destRoot);
@@ -78,9 +84,8 @@ export async function resolveSafeEntryPath(
   await mkdir(parent, { recursive: true, mode: 0o700 });
   // Lexical guard is blind to symlinks: `mkdir` on an existing `destRoot/tls -> /outside` symlink is
   // a no-op, so resolve the real parent and confirm it is still within destRoot before returning.
-  const realRoot = await realpath(root);
   const realParent = await realpath(parent);
-  if (realParent !== realRoot && !realParent.startsWith(realRoot + sep)) {
+  if (realParent !== realDestRoot && !realParent.startsWith(realDestRoot + sep)) {
     onUnsafe();
   }
   return target;
@@ -104,8 +109,9 @@ export async function unpackBundleToDir(files: BundleFiles, destDir: string): Pr
   // realpath() — which ENOENTs on a missing path. 0700 (subject to umask, dirs THIS call creates):
   // a secrets tool must not leave a world-readable dir that leaks filenames — matches box-secrets.ts.
   await mkdir(destDir, { recursive: true, mode: 0o700 });
+  const realDestRoot = await realpath(resolve(destDir));
   for (const [rel, contents] of Object.entries(files)) {
-    const target = await resolveSafeEntryPath(rel, destDir, () => {
+    const target = await resolveSafeEntryPath(rel, destDir, realDestRoot, () => {
       throw new AppError("recovery.bundle_invalid", { reason: "unsafe_path" });
     });
     await writeFileAtomic(target, contents, 0o600);

@@ -3,7 +3,7 @@ import { mkdir, readdir, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { describe, expect, it } from "vitest";
-import { assertSafeEntryName, assertSafeEntryNames } from "./restore-entry-guard.js";
+import { assertSafeEntryName } from "./restore-entry-guard.js";
 
 describe("assertSafeEntryName", () => {
   it("rejects a `../` traversal escape", async () => {
@@ -71,24 +71,5 @@ describe("assertSafeEntryName", () => {
     const target = await assertSafeEntryName("secrets/tls/ca.crt", dest);
     expect(target.startsWith(dest + sep)).toBe(true);
     expect(target).toBe(join(dest, "secrets", "tls", "ca.crt"));
-  });
-});
-
-describe("assertSafeEntryNames", () => {
-  it("rejects on the first unsafe name in the batch", async () => {
-    const dest = mkdtempSync(join(tmpdir(), "restore-guard-batch-bad-"));
-    await expect(
-      assertSafeEntryNames(["media/a.jpg", "../escape", "secrets/tls/ca.crt"], dest),
-    ).rejects.toMatchObject({
-      code: "restore.unsafe_entry_path",
-      params: { name: "../escape" },
-    });
-  });
-
-  it("resolves when every name in the batch is safe", async () => {
-    const dest = mkdtempSync(join(tmpdir(), "restore-guard-batch-ok-"));
-    await expect(
-      assertSafeEntryNames(["db.dump", "media/a.jpg", "secrets/tls/ca.crt"], dest),
-    ).resolves.toBeUndefined();
   });
 });

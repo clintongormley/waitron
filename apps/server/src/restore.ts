@@ -1,5 +1,5 @@
-import { rm } from "node:fs/promises";
-import { join } from "node:path";
+import { realpath, rm } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { AppError } from "@waitron/shared";
 import { expectedSchemaVersion } from "@waitron/migrations";
 import type { WaitronModule } from "@waitron/module";
@@ -209,6 +209,9 @@ export async function restoreMedia(args: {
   mediaDir: string;
   log: Logger;
 }): Promise<void> {
+  // realpath(mediaDir) is the SAME for every entry, so compute it once here rather than once per
+  // blob — `assertSafeEntryName`'s realDestRoot param exists for exactly this fan-out.
+  const realMediaDir = await realpath(resolve(args.mediaDir));
   // Write in bounded-concurrency CHUNKS rather than a sequential loop or one unbounded `Promise.all`
   // — the same fan-out `backup-sources.ts` uses on the read side (see `MEDIA_WRITE_CONCURRENCY`).
   // Each entry keeps its own `assertSafeEntryName` guard (the two-layer lexical+symlink check); a
@@ -221,6 +224,7 @@ export async function restoreMedia(args: {
         const target = await assertSafeEntryName(
           entry.name.slice(MEDIA_PREFIX.length),
           args.mediaDir,
+          realMediaDir,
         );
         await writeFileAtomic(target, entry.bytes, MEDIA_FILE_MODE);
       }),
