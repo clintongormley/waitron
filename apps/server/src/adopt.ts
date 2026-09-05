@@ -50,8 +50,9 @@ export interface AdoptDeps {
   ) => Promise<MirrorBundle>;
   /** This node's own advertised origin (`config.advertisedOrigin`), sent to the primary as the joining
    * node's `contactUrl`: the primary records it in the membership document so a till can route here
-   * after a failover (till-reroute design §3.3). May be `""` — a node that advertises nothing is still
-   * a member. */
+   * after a failover (till-reroute design §3.3). The ROUTE's contract accepts `""` (a node that
+   * advertises nothing is still a member), but this node never sends one: `config.advertisedOrigin`
+   * falls back to `managementOrigin`, and `bareOrigin` refuses `""`. */
   advertisedOrigin: string;
   /** Persists `trading.env` so the next boot enters the trading branch (the setup-api dep, bound to
    * `writeTradingEnv` in boot). */

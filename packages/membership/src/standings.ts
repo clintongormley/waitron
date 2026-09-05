@@ -4,8 +4,13 @@ import type { MembershipNode } from "./types.js";
  * The new org chart after a local-secondary promotion (design §6 R1): this node becomes serving-primary,
  * whichever node was serving-primary becomes sell-only (still a replication source until drained, so it
  * is demoted rather than evicted), and every other node is left exactly as it was (contactUrl preserved).
- * If this node is not yet listed, it is appended as serving-primary with an empty contactUrl — so a
- * promote against a held chart that omits the promoting node still names it correctly.
+ * If this node is not yet listed, it is appended as serving-primary with an empty contactUrl. That
+ * entry is ADDRESS-LESS by design and therefore unroutable — `routableServers` drops a node with an
+ * empty contactUrl, so no till would be told to dial it — which is sound only because a node reaches
+ * the chart before it can promote: adopt appends the joining node with its advertised origin
+ * (`withMember`, till-reroute §3.3). The append here is the fallback for a promote against a chart
+ * that somehow omits the promoting node: it names the node so the term is well-formed, and the node
+ * publishes its address by re-seeding.
  */
 export function nextStandings(
   current: readonly MembershipNode[],

@@ -137,4 +137,21 @@ describe("withMember", () => {
     expect(next).not.toBe(frozen);
     expect(frozen).toHaveLength(1);
   });
+
+  it("never mutates the input on the REFRESH path either", () => {
+    // The append case above cannot catch a refresh that writes `n.contactUrl = url` in place: it never
+    // touches an existing entry. This one refreshes a listed node through a deep-frozen input, so an
+    // in-place write throws (strict-mode ESM) rather than silently editing the caller's held chart —
+    // which for the adopt route is the document it just read and is about to re-mint from.
+    const frozen = Object.freeze([
+      Object.freeze({ nodeId: self, contactUrl: "https://box", standing: "serving-primary" }),
+      Object.freeze({ nodeId: other, contactUrl: "https://old", standing: "sell-only" }),
+    ] as MembershipNode[]);
+    const next = withMember(frozen, other, "https://new");
+    expect(next).not.toBe(frozen);
+    expect(frozen[1]).toEqual({ nodeId: other, contactUrl: "https://old", standing: "sell-only" });
+    expect(next[1]).toEqual({ nodeId: other, contactUrl: "https://new", standing: "sell-only" });
+    // The untouched entry is carried by REFERENCE, so nothing about it can be rewritten in the copy.
+    expect(next[0]).toBe(frozen[0]);
+  });
 });

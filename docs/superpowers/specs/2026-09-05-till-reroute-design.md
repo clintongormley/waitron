@@ -56,7 +56,11 @@ mount guards. Boot-captured on purpose: R3b's promotion persists the corrected s
 point of no return and takes effect on restart, so a promoted-not-yet-restarted process must answer
 `false` (the "selling gated on REBOOT completion" deferral). `term`/`standing` come from
 `readNodeMembership` per request (one whole-DB row; the probe runs every few seconds per till, which
-is the same order of load as `/health`). Lives in a new `node-api.ts`, mounted beside `healthApp`.
+is the same order of load as `/health`). Lives in a new `node-api.ts`, mounted in the TRADING branch
+beside `mountTillApi` — every trading boot (primary, mirror, fenced), never setup. Not beside
+`healthApp`, which is built before the setup/trading fork: a setup box has no node identity to answer
+with, and a box that answers nothing reads to a till as unreachable, which is the right answer for
+one.
 
 ### 3.2 The server list on the boot read
 
@@ -66,6 +70,14 @@ is the same order of load as `/health`). Lives in a new `node-api.ts`, mounted b
 node's own id, so the till knows which entry it is on).
 
 ### 3.3 Populating `contactUrl`
+
+_S1 landed 2026-09-06._ The term-0 document now carries the primary's advertised origin as its
+`contactUrl`, and the adopt handshake appends the joining node with the origin it advertised, so the
+"today" clauses below describe the pre-S1 state. `WAITRON_ADVERTISED_ORIGIN` is validated as a bare
+http(s) origin — and so, under its own name, is `WAITRON_MANAGEMENT_ORIGIN`, in EVERY environment
+rather than only checked for presence in production. Both throw `server.config_invalid` with
+`{ variable, reason: "not_an_origin" }`, so a deployment whose management origin carries a trailing
+slash or an explicit default port now fails to boot where it previously started.
 
 - New config `advertisedOrigin` (`WAITRON_ADVERTISED_ORIGIN`; scheme + host [+ port]; defaults to
   `managementOrigin`, the origin the dashboard is already served from). `isUnset` rule; refused if it
@@ -77,7 +89,7 @@ node's own id, so the till knows which entry it is on).
   its address. The adopt handshake carries the joining node's `advertisedOrigin`; the primary mints
   the next document with the node appended as `serving-secondary` (the existing standing for "a
   member that is not primary"; under warm standby it still sells nothing — `acceptingSales` is what
-  the till obeys, never the standing), `contactUrl` set. `nextStandings`/`evictStandings` already
+  the till obeys, never the standing), `contactUrl` set. `nextStandings`/`evictNode` already
   preserve `contactUrl` on every other node. This is the one `packages/membership` change (a
   `withMember` helper beside `nextStandings`). How the document reaches the other nodes is the
   swap's concern (`node_membership` is copied by the `state` publication); the till only needs it
