@@ -2,6 +2,7 @@ import {
   generateNodeKeyPair,
   signDocumentBody,
   type MembershipDocumentBody,
+  type MembershipNode,
   type NodeKeyPair,
   type SignedMembershipDocument,
 } from "@waitron/membership";
@@ -14,19 +15,23 @@ import {
  * package-internal (not on the barrel), so this is built from the exported `signDocumentBody` rather
  * than widening that package's surface.
  *
- * Pass `keyPair` when the caller also needs to build a `TrustSet` mapping `signerNodeId` to the same
- * public key (`{ [signerNodeId]: keyPair.publicKey }`) — generate the pair once at module scope, hand
- * it to every `signedMembershipDoc` call, and derive the trust set from it directly.
+ * `nodes` defaults to a single serving-primary entry for the signer; pass it when the suite is about
+ * the chart itself. Pass `keyPair` when the caller also needs to build a `TrustSet` mapping
+ * `signerNodeId` to the same public key (`{ [signerNodeId]: keyPair.publicKey }`) — generate the pair
+ * once at module scope, hand it to every `signedMembershipDoc` call, and derive the trust set from it
+ * directly.
  */
 export function signedMembershipDoc(
   term: number,
-  opts: { signerNodeId?: string; keyPair?: NodeKeyPair } = {},
+  opts: { signerNodeId?: string; keyPair?: NodeKeyPair; nodes?: readonly MembershipNode[] } = {},
 ): SignedMembershipDocument {
   const keyPair = opts.keyPair ?? generateNodeKeyPair();
   const signerNodeId = opts.signerNodeId ?? "A";
   const body: MembershipDocumentBody = {
     term,
-    nodes: [{ nodeId: signerNodeId, contactUrl: "https://a", standing: "serving-primary" }],
+    nodes: opts.nodes ?? [
+      { nodeId: signerNodeId, contactUrl: "https://a", standing: "serving-primary" },
+    ],
   };
   return {
     body,

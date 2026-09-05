@@ -378,15 +378,7 @@ describe("boot fence (real Postgres): a held sell-only membership doc fences a r
       const printJobs = await fetch(`${base}/print-api/agent/jobs`);
       expect(printJobs.status).toBe(404);
 
-      // The role probe (till-reroute design §3.1) IS mounted on a fenced node — a GET the read-only
-      // gate passes — and answers `acceptingSales: false`, so a polling till routes away from a box
-      // the venue has superseded. The failing cases this pins: a probe keyed on `mode` alone would
-      // answer TRUE here (a fenced node is `mode='primary'`, asserted above), and Case B below is the
-      // control — the SAME boot with a serving-primary self-doc answers true, so this false is the
-      // fence's doing and not a hardcoded literal. The flag is also CAPTURED, never re-read per
-      // request: `promote.ts` refreshes both holders in-process after its owner-role write, so a live
-      // read would flip a promoted node to true with no restart — and promotion takes effect on
-      // restart, so it must keep answering false until it comes back up.
+      // Fenced ⇒ acceptingSales:false; Case B is the control on the same identity.
       const probe = await fetch(`${base}/api/node`);
       expect(probe.status).toBe(200);
       expect(await probe.json()).toMatchObject({
@@ -438,9 +430,7 @@ describe("boot fence (real Postgres): a held sell-only membership doc fences a r
       expect(status.status).toBe(200);
       expect((await status.json()).disposal).toEqual({ applicable: false });
 
-      // The role-probe control for Case A: the same boot, unfenced, answers `acceptingSales: true`,
-      // with the held document's standing alongside it. Without this arm Case A's false would also
-      // be what a probe hardcoded to false prints.
+      // Unfenced ⇒ acceptingSales:true — the control for Case A's false.
       const probe = await fetch(`${base}/api/node`);
       expect(probe.status).toBe(200);
       expect(await probe.json()).toMatchObject({

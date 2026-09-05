@@ -1,13 +1,14 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import type { SignedMembershipDocument } from "@waitron/membership";
+import type { MembershipNode, SignedMembershipDocument } from "@waitron/membership";
 import { mountNodeApi } from "./node-api.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
 const NODE = "33333333-3333-4333-8333-333333333333";
 const OTHER = "44444444-4444-4444-8444-444444444444";
 
-function doc(nodes: SignedMembershipDocument["body"]["nodes"], term = 3): SignedMembershipDocument {
-  return { body: { term, nodes }, signerNodeId: NODE, signature: "sig", endorsements: [] };
+function doc(nodes: readonly MembershipNode[], term = 3): SignedMembershipDocument {
+  return signedMembershipDoc(term, { signerNodeId: NODE, nodes });
 }
 
 function mount(overrides: Partial<Parameters<typeof mountNodeApi>[1]> = {}): Hono {

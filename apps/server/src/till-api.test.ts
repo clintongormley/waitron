@@ -34,6 +34,7 @@ import { deviceFormFactor, enrolDevice, generatePairingCode } from "./device.js"
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE, requireSession } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import "./errors.js";
 
 // PGlite, not real Postgres: the session routes are LOGIC (login → cookie → logout), and the login
@@ -774,7 +775,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       // the explicit sibling is the empty set (the render axis then hides the capability cards).
       capabilities: [],
       // The node this till is talking to, and the venue's routable server list — empty here because
-      // this suite's deps hold no membership document (the two tests below drive both).
+      // this suite's deps hold no membership document (the server-list test below drives a real one).
       nodeId: cfg.nodeId,
       servers: [],
     });
@@ -786,21 +787,16 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
 
   it("GET /api/till lists the venue's servers from the membership document, primary first, evicted and address-less nodes excluded", async () => {
     const app = new Hono();
-    const document = {
-      body: {
-        term: 5,
-        nodes: [
-          { nodeId: "b", contactUrl: "https://cloud.deli.test", standing: "serving-secondary" },
-          { nodeId: "c", contactUrl: "https://old.deli.test", standing: "evicted" },
-          { nodeId: "d", contactUrl: "", standing: "sell-only" },
-          { nodeId: "e", contactUrl: "https://spare.deli.test", standing: "sell-only" },
-          { nodeId: cfg.nodeId, contactUrl: "https://box.deli.test", standing: "serving-primary" },
-        ],
-      },
+    const document = signedMembershipDoc(5, {
       signerNodeId: cfg.nodeId,
-      signature: "sig",
-      endorsements: [],
-    } as const;
+      nodes: [
+        { nodeId: "b", contactUrl: "https://cloud.deli.test", standing: "serving-secondary" },
+        { nodeId: "c", contactUrl: "https://old.deli.test", standing: "evicted" },
+        { nodeId: "d", contactUrl: "", standing: "sell-only" },
+        { nodeId: "e", contactUrl: "https://spare.deli.test", standing: "sell-only" },
+        { nodeId: cfg.nodeId, contactUrl: "https://box.deli.test", standing: "serving-primary" },
+      ],
+    });
     mountTillApi(
       app,
       { ...deps(suite.db), readMembership: () => Promise.resolve(document) },
@@ -815,14 +811,6 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       { nodeId: "b", url: "https://cloud.deli.test", standing: "serving-secondary" },
       { nodeId: "e", url: "https://spare.deli.test", standing: "sell-only" },
     ]);
-  });
-
-  it("GET /api/till answers servers: [] when no document is held", async () => {
-    const app = new Hono();
-    mountTillApi(app, deps(suite.db), collect([]));
-    const body = await (await app.request("/api/till")).json();
-    expect(body.servers).toEqual([]);
-    expect(body.nodeId).toBe(cfg.nodeId);
   });
 
   it("GET /api/till DECOUPLES the UI locale (venueLocale) from the receipt invoiceLocale (cfg.locale)", async () => {
