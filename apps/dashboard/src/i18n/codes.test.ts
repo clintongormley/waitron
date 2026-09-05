@@ -78,6 +78,21 @@ it("has a sentence for each roster/shift/convenio code (shift-planning slice 1)"
   }
 });
 
+it("has a sentence for each in-use delete code (device-profile follow-ons)", () => {
+  // The canvas / device-profile editors DELETE a row that another row still references (a profile
+  // pointing at a canvas, a device pointing at a profile) — the store translates the FK's 23001 into
+  // these, mapped to 409. Each must map to real copy in BOTH languages, never the raw wire code and
+  // never the GENERIC fallback (compared against ITS OWN language's generic). Proven by deletion: drop
+  // either from CODE_MESSAGES and both codeMessage calls return their language's generic → red.
+  const GENERIC_ES = "Algo salió mal, inténtalo de nuevo";
+  const GENERIC_EN = "Something went wrong, try again";
+  for (const code of ["canvas.in_use", "device_profile.in_use"]) {
+    expect(codeMessage(code, "es")).not.toBe(code);
+    expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
+    expect(codeMessage(code, "en")).not.toBe(GENERIC_EN);
+  }
+});
+
 describe("codeOf", () => {
   // codeOf is the companion to codeMessage: it pulls the wire CODE out of a rejected value (the
   // dashboard API client rejects with a bare `{ code }`, see api/client.ts), so the same body that

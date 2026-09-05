@@ -94,6 +94,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "A canvas with that name already exists",
     es: "Ya existe un lienzo con ese nombre",
   },
+  "canvas.in_use": {
+    en: "That canvas is still assigned to a device profile — reassign or remove the profile first",
+    es: "Ese lienzo todavía está asignado a un perfil de dispositivo. Reasígnalo o elimina el perfil primero",
+  },
   "canvas.invalid": {
     en: "The canvas isn't valid",
     es: "El lienzo no es válido",
@@ -109,6 +113,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "device_profile.name_taken": {
     en: "A device profile with that name already exists",
     es: "Ya existe un perfil de dispositivo con ese nombre",
+  },
+  "device_profile.in_use": {
+    en: "This profile is still assigned to a device — reassign or remove the device first",
+    es: "Este perfil todavía está asignado a un dispositivo. Reasígnalo o elimina el dispositivo primero",
   },
   "device_profile.invalid": {
     en: "The device profile isn't valid",

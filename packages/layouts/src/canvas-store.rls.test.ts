@@ -169,6 +169,35 @@ describe("layout canvas store under real row-level security", () => {
     expect(await rowCount(tenantId)).toBe(0);
   });
 
+  it("translates a delete of a profile-referenced canvas to canvas.in_use (23001 → 409), canvas survives", async () => {
+    // A device profile's composite FK device_profiles_canvas_fk → canvases(tenant_id, id) is ON DELETE
+    // RESTRICT, so deleting a canvas a profile still references trips a 23001 restrict_violation, which
+    // deleteCanvas now translates (via translateWriteError) into the domain canvas.in_use — a clean 409,
+    // not the raw DB error a 500 would surface. Proof-by-deletion: remove the try/catch in deleteCanvas
+    // and this fails with a raw 23001. RESTRICT means the canvas survives. Real Postgres only: PGlite's
+    // superuser bypasses nothing here (the FK still applies) but the sibling FK unit test already pins
+    // the raw behaviour; this pins the translation on the same real target as the rest of the suite.
+    const tenantId = await seedTenant(suite.admin);
+    const session = await seedSession(tenantId, "manager");
+    const { id } = await asApp(tenantId, (tx) =>
+      createCanvas(tx, {
+        managementSessionId: session,
+        tenantId,
+        name: "Referenced canvas",
+        definition: phoneCanvas("Bound"),
+      }),
+    );
+    // Seed a device profile that binds the canvas, as the superuser owner (RLS bypassed — setup).
+    await suite.admin.execute(sql`
+      insert into device_profiles (tenant_id, name, canvas_id)
+      values (${tenantId}, 'Binding profile', ${id})`);
+    const code = await codeOf(() =>
+      asApp(tenantId, (tx) => deleteCanvas(tx, { managementSessionId: session, tenantId, id })),
+    );
+    expect(code).toBe("canvas.in_use");
+    expect(await rowCount(tenantId)).toBe(1); // the canvas survived the refused delete (RESTRICT)
+  });
+
   it("throws canvas.not_found when updating an id the tenant does not own", async () => {
     // The write-path no-row guard: `.returning({ id })` comes back empty, so updateCanvas throws
     // rather than reporting a silent success. Proof-by-deletion: drop the `updated.length === 0` check

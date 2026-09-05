@@ -324,6 +324,41 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     });
   });
 
+  it("DELETE a profile a device still references → 409 device_profile.in_use, profile survives", async () => {
+    const app = mountApp(tenantId);
+    // Create a profile, then bind a device to it as the owner (RLS bypassed — setup), reusing the
+    // venue's provisioned location. The composite FK devices_device_profile_fk is ON DELETE RESTRICT, so
+    // the DELETE trips a 23001 the store translates to device_profile.in_use → the house 409.
+    const created = await app.request("/management-api/device-profiles", {
+      method: "POST",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({ name: uniqueName("Referenced"), canvasId: null, capabilities: [] }),
+    });
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as ProfileRow;
+
+    const location = await suite.admin.execute<{ id: string }>(
+      sql`select id from locations where tenant_id = ${tenantId} limit 1`,
+    );
+    await suite.admin.execute(sql`
+      insert into devices (tenant_id, location_id, device_kind, label, token_hash, device_profile_id)
+      values (${tenantId}, ${location.rows[0]!.id}, 'till', ${uniqueName("Bound device")}, 'scrypt$00$00', ${id})`);
+
+    const res = await app.request(`/management-api/device-profiles/${id}`, {
+      method: "DELETE",
+      headers: { cookie: managerCookie },
+    });
+    expect(res.status).toBe(409);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "device_profile.in_use" },
+    });
+    // The profile survived the refused delete (RESTRICT): GET still returns it.
+    const got = await app.request(`/management-api/device-profiles/${id}`, {
+      headers: { cookie: managerCookie },
+    });
+    expect(got.status).toBe(200);
+  });
+
   it("POST a duplicate name → 409 device_profile.name_taken", async () => {
     const app = mountApp(tenantId);
     const name = uniqueName("Twin");
