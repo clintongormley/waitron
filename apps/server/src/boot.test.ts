@@ -370,13 +370,25 @@ async function poll<T>(predicate: () => T | undefined): Promise<T | undefined> {
  * `poll`'s predicate is synchronous, so the async fetch loop lives here rather than inside it.
  */
 async function fetchHealthOk(url: string, init?: RequestInit): Promise<Response> {
+  let lastError: unknown;
   for (let i = 0; i < POLL_TRIES; i += 1) {
-    const r = await fetch(url, init);
-    if (r.status === 200) return r;
+    try {
+      const r = await fetch(url, init);
+      if (r.status === 200) return r;
+      // Release the socket for reuse: an unconsumed undici body pins the connection, and across
+      // POLL_TRIES that would starve the pool and reintroduce the very flake this helper removes.
+      await r.body?.cancel();
+    } catch (error) {
+      // A transient network error before the listener is up (ECONNREFUSED/ECONNRESET during
+      // startup) IS the not-ready condition we poll through — not a reason to fail fast.
+      lastError = error;
+    }
     await delay(POLL_INTERVAL_MS);
   }
   throw new Error(
-    `/health did not return 200 within the poll budget (${POLL_TRIES} x ${POLL_INTERVAL_MS}ms): ${url}`,
+    `/health did not return 200 within the poll budget (${POLL_TRIES} x ${POLL_INTERVAL_MS}ms): ${url}${
+      lastError === undefined ? "" : ` (last error: ${String(lastError)})`
+    }`,
   );
 }
 
