@@ -1490,8 +1490,14 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // pool to `backupConfig.databaseUrl` — the EXACT connection string `runBackupSweep` /
   // `realPgDump` dump with, no SET ROLE and no second role — so a green probe is evidence about the
   // real dump connection, not an adjacent one; on success that pool is HANDED to the worker as
-  // `backupDb` (its manifest reads run over the same validated privileged connection), and only on a
-  // FAILURE path is it closed here in the `finally`. It is FAIL-SAFE, NEVER fatal (CLAUDE.md §5 — nothing may
+  // `backupDb` for its manifest's journal reads too. The probe only checks fiscal-table readability
+  // (rolsuper/rolbypassrls), not the journal specifically — that read's receipt is `pg_dump` itself
+  // (see the `db` field doc on `BackupSweepDeps` in backup-sweep.ts): it dumps over this SAME
+  // connection and must read those ordinary journal tables for a complete dump, so a role able to
+  // dump them holds SELECT on them, and `buildManifest` fails the tick visibly (`backup.failed`)
+  // before `pg_dump` runs if it somehow does not. Only on a
+  // FAILURE path is the probe pool closed here in the `finally` instead of being handed off. It is
+  // FAIL-SAFE, NEVER fatal (CLAUDE.md §5 — nothing may
   // block a sale): a fenced role, an unreachable backup database, or ANY other probe error leaves
   // backup off (`backupWorker` stays undefined) and logs `backup.disabled_probe_failed` (with the
   // structured `errorCode` so a connection/network fault is distinguishable from an RLS fence — the

@@ -67,6 +67,13 @@ describe("collectModuleNonDbState", () => {
     });
   });
 
+  it("throws backup.source_unresolved for a source resolving to an empty string, rather than silently emitting nothing", async () => {
+    await expect(collectModuleNonDbState([CORE], { media: "" })).rejects.toMatchObject({
+      code: "backup.source_unresolved",
+      params: { source: "media" },
+    });
+  });
+
   it("tolerates a missing source dir as empty — a venue with no images is valid", async () => {
     const entries = await collectModuleNonDbState([CORE], { media: join(dir, "nope") });
     expect(entries).toEqual([]);

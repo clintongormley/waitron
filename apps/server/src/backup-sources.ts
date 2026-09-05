@@ -16,11 +16,14 @@ import "./errors.js";
  * of `config` itself, keeping it a pure fs+DI seam the way `backup-archive.ts` is pure in-memory.
  *
  * A module with no `backup`/`nonDbState` at all contributes nothing (most modules; only `core`
- * declares one today). A declared source with NO resolver entry is a fail-visible bug — a module
- * declaring state the composition root never wired up would otherwise vanish from the backup
- * silently — so it throws `backup.source_unresolved` rather than being skipped. A resolved
- * directory that does not exist on disk (ENOENT) is tolerated as empty: a fresh venue with no
- * product images yet is a valid, backup-worthy state, not an error.
+ * declares one today). A declared source with NO resolver entry, or one resolving to a falsy dir
+ * (`""`, most concretely) is a fail-visible bug — a module declaring state the composition root
+ * never wired up would otherwise vanish from the backup silently — so it throws
+ * `backup.source_unresolved` rather than being skipped. An empty string would otherwise pass an
+ * `undefined`-only guard, reach `readdir("")` → ENOENT, and be swallowed by the ENOENT-tolerant
+ * branch below, silently dropping that module's non-DB state. A resolved directory that does not
+ * exist on disk (ENOENT) is tolerated as empty: a fresh venue with no product images yet is a
+ * valid, backup-worthy state, not an error.
  *
  * Entries are sorted by name — first within each source dir (so archive order does not depend on
  * `readdir`'s unspecified order), and the returned list is emitted in that same per-source order
@@ -44,7 +47,7 @@ export async function collectModuleNonDbState(
         throw new AppError("backup.source_kind_unsupported", { kind: _never });
       }
       const dir = resolvers[ref.source];
-      if (dir === undefined) {
+      if (!dir) {
         throw new AppError("backup.source_unresolved", { source: ref.source });
       }
 
@@ -65,8 +68,12 @@ export async function collectModuleNonDbState(
         .filter((d) => d.isFile())
         .map((d) => d.name)
         .sort();
-      // Read the (already-sorted) files concurrently. `Array.map` preserves index order, so zipping
-      // the results back against `names` keeps the deterministic sorted archive order intact.
+      // Read the (already-sorted) files concurrently, with unbounded fan-out. `Array.map` preserves
+      // index order, so zipping the results back against `names` keeps the deterministic sorted
+      // archive order intact. Assumes a MODEST store: fine for a single-venue content-addressed media
+      // dir (dozens of blobs), but a store with thousands of files could hit EMFILE. Bounded-concurrency
+      // reads are a follow-on if media volume grows — tie it to the deferred incremental/dedup seam
+      // (design doc §4/§7: blobs are already content-addressed and dedupable).
       const blobs = await Promise.all(names.map((name) => readFile(join(dir, name))));
       names.forEach((name, i) => {
         entries.push({ name: `${ref.source}/${name}`, bytes: blobs[i]! });

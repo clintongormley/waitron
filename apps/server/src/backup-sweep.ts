@@ -58,7 +58,12 @@ export interface BackupSweepDeps {
   backends: StorageBackend[];
   /** A PRIVILEGED pool (superuser/BYPASSRLS — the same role the dump uses) for {@link buildManifest}:
    * `appliedSchemaVersion` reads each module's `__drizzle_migrations_*` journal, on which `app_user`
-   * holds NO SELECT, so the app pool would fail. NOT the app pool. */
+   * holds NO SELECT, so the app pool would fail. NOT the app pool. Whether THIS role can read the
+   * journal is not separately probed — the receipt is `pg_dump` itself: it runs over the SAME
+   * connection and must read those same ordinary, RLS-free journal tables for a complete dump, so a
+   * role able to dump them holds SELECT on them; if it somehow did not, `buildManifest` throws and
+   * fails the tick visibly (`backup.failed`) BEFORE `pg_dump` ever runs (see the FAIL-FAST note on
+   * {@link runOnce}), rather than shipping a corrupt or incomplete archive. */
   db: Database;
   /** The running composition's modules — their `backup.nonDbState` refs drive the media/etc. capture
    * and their names + applied schema versions populate the manifest. */
