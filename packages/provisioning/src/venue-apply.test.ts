@@ -519,9 +519,23 @@ describe("applyVenue", () => {
 
     it("refuses a plan naming a module the deps do not hold, or one without a seed", async () => {
       const plan = planVenue(request("B66666666"), [...ALL_MODULES, recorder]);
+      const refusal =
+        "applyVenue: seed-module names probe, which is not in deps.modules or declares no seed";
       await expect(applyVenue(plan, { db: suite.db, modules: ALL_MODULES })).rejects.toThrow(
-        "applyVenue: seed-module names probe, which is not in deps.modules or declares no seed",
+        refusal,
       );
+      // The guard's other half: the module IS held, but carries no seed to run. Only `deps.modules`
+      // is consulted, so a same-named descriptor without the seat is refused exactly as an absent
+      // one is — the plan alone never decides what runs.
+      const seedless: WaitronModule = {
+        name: recorder.name,
+        version: recorder.version,
+        tier: recorder.tier,
+        migrations: recorder.migrations,
+      };
+      await expect(
+        applyVenue(plan, { db: suite.db, modules: [...ALL_MODULES, seedless] }),
+      ).rejects.toThrow(refusal);
     });
   });
 });

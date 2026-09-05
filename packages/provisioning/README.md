@@ -42,8 +42,9 @@ absent and lets `@waitron/migrations` resolve each set from `packages/migrations
 series, then runs each composed module's provisioning seed (the fiscal module's registers the node as
 a SIF and starts its chain) — replacing the retired `apps/server/sql/bootstrap-tenant.sql` (removed
 2026-08-04, spec [`2026-08-04-locations-provisioning-design.md`](../../docs/superpowers/specs/2026-08-04-locations-provisioning-design.md)).
-`register-till` (`apps/server`) remains the standalone SIF-registration path — a reimaged node
-getting a fresh chain, or a node that otherwise has no `registro_sif` row.
+`register-till` (`apps/server`) remains the standalone path for an EXISTING node: it runs the same
+module seeds against one node — a reimaged node getting a fresh chain, or a node that otherwise has no
+fiscal identity.
 
 ```text
 usage: waitron-provision <command> [options]

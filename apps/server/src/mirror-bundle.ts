@@ -127,7 +127,7 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
   const environment = await readDeploymentEnvironment(deps.appDb);
   if (environment === null) throw new AppError("mirror.not_provisioned", {});
 
-  // SP-1d: the primary's enabled-module set, read FRESH at mint time rather than from boot — the
+  // The primary's enabled-module set, read FRESH at mint time rather than from boot — the
   // operator may have edited modules.json since the primary booted, and a malformed file surfaces its
   // `module.config_*` code HERE, before the reservation bumps any counter. It both decides which
   // modules reserve below and travels to the mirror as `moduleOverrides`.

@@ -2,7 +2,7 @@
  * The Spanish labour terms this module OWNS (module-system architecture §3; SP-3b spec §2–§3):
  * legitimate inside this package, forbidden in every generic package — in particular in
  * packages/workforce, the English generic package this Spain module sits over. Wired onto the
- * `workforce-es` descriptor's `vocabulary` seat by the composition root (`apps/server/src/modules.ts`)
+ * `workforce-es` descriptor's `vocabulary` seat by the composition list (`@waitron/composition`)
  * and interpreted only by the root english-only suite. Nothing at runtime consults it.
  *
  * Tokens, not words — the guard's tokeniser contract (`packages/db/src/english-only.ts`): lowercase

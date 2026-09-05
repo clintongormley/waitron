@@ -1,7 +1,7 @@
 /**
  * The Spanish terms this module OWNS (module-system architecture §3; SP-3b spec §2–§3): legitimate
  * inside this package, forbidden in every generic package. Declared here and wired onto the
- * `fiscal` descriptor's `vocabulary` seat by the composition root (`apps/server/src/modules.ts`);
+ * `fiscal` descriptor's `vocabulary` seat by the composition list (`@waitron/composition`);
  * interpreted only by the root english-only suite, which assembles the forbidden set from every
  * module's declaration. Nothing at runtime consults it.
  *

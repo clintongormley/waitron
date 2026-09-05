@@ -43,7 +43,10 @@ export function generateStandbyIdentity(): StandbyIdentity {
  *
  * `args.reserved` is WIRE input from the primary. The carrier never inspects `reserved.modules`: each
  * module validates its own state inside `establish` and throws there, which rolls this transaction back
- * — so a malformed reservation leaves no node row behind.
+ * — so a malformed reservation leaves no node row behind. Which modules establish is decided by THIS
+ * node's enabled set (`args.modules`), never by the bundle's key set: state for a module disabled here
+ * is ignored, and a module enabled here with no entry in the bundle is handed `undefined` and refuses
+ * inside its own `establish`.
  */
 export async function establishReservedStandbyIdentity(
   deps: { ownerDb: Database; ring: KeyRing },

@@ -457,9 +457,10 @@ async function nifOf(cfg: TillConfig): Promise<string> {
  * `setupVenue` provisions tenant B fully (tenant, node, series "A" at next_number 1, catalogue, till,
  * and its OWN SIF under its OWN nif); `registerSif` then RE-registers node B under `nif`, which also
  * resets node B's chain head so its first sale is a primer_registro. It mints a fresh installation
- * number under (`nif`, "W1") — "W1" is `WAITRON_ID_SISTEMA` (the id provisioning uses; not exported
- * from `@waitron/provisioning`, so inlined), and NONE of the SIF identity (IdSistemaInformatico /
- * NumeroInstalacion) enters `computeHuella` (huella.ts:45-58 hashes eight invoice fields only), so the
+ * number under (`nif`, "W1") — "W1" is `WAITRON_ID_SISTEMA` (`@waitron/fiscal-verifactu`, the id the
+ * fiscal seed registers under; inlined so the literal reads beside the tuple it keys), and NONE of
+ * the SIF identity (IdSistemaInformatico / NumeroInstalacion) enters `computeHuella`
+ * (huella.ts:45-58 hashes eight invoice fields only), so the
  * distinct installation numbers do not move the huella. The re-registration is LOAD-BEARING and proven
  * by deletion: remove it and tenant B keeps `setupVenue`'s own-nif SIF, so its filing carries a
  * DIFFERENT `IDEmisorFactura` and the two huellas diverge (verified: `D251…` vs the walk-up's `1E79…`)

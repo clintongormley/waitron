@@ -9,7 +9,7 @@ const contribution = (id: string): FiscalContribution => ({
   makeBackend: () => ({ id }) as unknown as FiscalBackend,
 });
 
-function module(name: string, fiscal?: FiscalContribution): WaitronModule {
+function descriptor(name: string, fiscal?: FiscalContribution): WaitronModule {
   return {
     name,
     version: "0.0.0",
@@ -19,9 +19,9 @@ function module(name: string, fiscal?: FiscalContribution): WaitronModule {
   };
 }
 
-const CORE = module("core");
-const A = module("a", contribution("a"));
-const B = module("b", contribution("b"));
+const CORE = descriptor("core");
+const A = descriptor("a", contribution("a"));
+const B = descriptor("b", contribution("b"));
 
 describe("fiscalSlot", () => {
   it("selects the one module declaring a fiscal contribution", () => {

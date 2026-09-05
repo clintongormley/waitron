@@ -278,7 +278,12 @@ export async function readFilingModule(
       .from(nodes)
       .where(eq(nodes.id, cfg.nodeId));
     /* v8 ignore start */
-    if (row === undefined) throw new Error(`readFilingModule: no node ${cfg.nodeId}`);
+    if (row === undefined) {
+      // Structurally unreachable: the till is stamped with its own node, so the row always exists
+      // and RLS returns it. A till pointed at a nonexistent node is a misconfiguration that fails
+      // loudly at boot rather than selecting a fiscal backend against a guessed regime.
+      throw new Error(`readFilingModule: no node ${cfg.nodeId}`);
+    }
     /* v8 ignore stop */
     return row.filingModule;
   });

@@ -23,15 +23,18 @@ export interface ProvisionDeps {
   /** The OWNER connection to the target database (`config.migrationsDatabaseUrl`) — the admin that
    * owns the tables, which `applyVenue` needs and which `stampDeployment` writes the singleton with. */
   ownerDb: Database;
-  /** The desired module set (from `<stateDir>/modules.json`). A `provision-only` module disabled here
-   * refuses provisioning (spec §4) — never mint an unrecoverable chain for a module that is off. */
+  /** The desired module set (from `<stateDir>/modules.json`). Two duties: a `provision-only` module
+   * disabled here refuses provisioning (spec §4) — never mint an unrecoverable chain for a module
+   * that is off — and the enabled set is what `planVenue`/`applyVenue` draw the per-node seeds from,
+   * so a disabled module's seed cannot run. */
   readonly moduleConfig: ModuleConfig;
 }
 
 /**
  * Stamp the deployment environment, then `applyVenue`, refusing a box that already holds THIS tenant.
- * Returns the five ids the trading boot needs (tenant/location/till/node/series). Does NOT persist
- * config or seal the AEAT cert — the caller does that (onboarding slice 2b).
+ * Returns the ids the trading boot needs (tenant/location/till/node/series) plus one report line per
+ * module seed that ran. Does NOT persist config or seal the AEAT cert — the caller does that
+ * (onboarding slice 2b).
  *
  * **Concurrency contract — callers MUST serialize concurrent provisions of the same tenant.** The
  * tenant-exists guard below (step 2) is NOT atomic with `applyVenue` (step 4): it reads in one
@@ -68,10 +71,10 @@ export async function provisionVenue(
   deps: ProvisionDeps,
   req: ProvisionRequest,
 ): Promise<VenueResult> {
-  // 0. SP-1b fiscal gate. A `provision-only` module (fiscal today) that modules.json disables must
-  // never be seeded — registerSif mints an unrecoverable chain (CLAUDE.md §5). SP-1b REFUSES rather
-  // than building a fiscal-less venue (that path touches the fiscal core and is SP-3). Generic: it
-  // names no module, it iterates the provision-only tier.
+  // 0. Provision-only gate. A `provision-only` module (fiscal today) that modules.json disables must
+  // never be seeded — the fiscal seed mints an unrecoverable chain (CLAUDE.md §5). The gate REFUSES
+  // rather than minting a venue without that module: a venue with no fiscal identity needs a fiscal
+  // module that seeds none, not a missing one. Generic: it names no module, it iterates the tier.
   const blocked = disabledProvisionOnly(ALL_MODULES, deps.moduleConfig);
   if (blocked.length > 0) {
     throw new AppError("module.provision_only_disabled", { module: blocked[0]! });
@@ -98,6 +101,6 @@ export async function provisionVenue(
   // 3. Stamp the environment (throws deployment.already_stamped on a changed value — let it propagate).
   await stampDeployment(deps.ownerDb, req.environment);
 
-  // 4. Mint the venue under one transaction and return the five ids.
+  // 4. Mint the venue and every enabled module's seed under one transaction.
   return applyVenue(plan, { db: deps.ownerDb, modules });
 }
