@@ -831,17 +831,16 @@ vs gated on an unbuilt foundation or an external dependency:
     node whose tail reached only a *stale* survivor (fiscal-unrecoverable). **Carrier-side reaction to
     `evicted` (stop pulling) is out of scope** — the carrier learns via gossip and the box is then
     disposed (its pull just goes unreachable).
-  - **R3 (wipe-and-restore, spec §6 step 4) — the rejoin-as-secondary path — GATED on a `pg_restore`
-    consumer.** Drain (R2 ✓) → discard the diverged DB → restore the current primary's baseline →
-    stream, returning as `serving-secondary`. The backup **producer** already exists — `pg-dump.ts` /
-    `backup-sweep.ts` take a whole-DB `pg_dump --format=custom` (restore-compatible, atomic
-    temp-then-rename), run with `row_security=off` so `sync_log`/`sync_cursor` are already captured (the
-    `sync_log`-in-backup half is largely satisfied). The **missing** piece is a `pg_restore` **consumer**:
-    nothing in the tree restores a baseline (`adopt.ts` streams a read-mirror; the recovery-bundle is
-    secret-files only), so R3 needs a `pg_restore` shell-out mirroring `pg-dump.ts` + a local-DB wipe +
-    re-enrol-as-streaming-secondary. Same gate as the promote-action cold-restore slice (Slice 4). Not
-    blocked on an external dependency — this is now **BR-3** of the backup & restore regime (BR-1
-    storage/fan-out/encryption LANDED #226; BR-3 is the `pg_restore` consumer that clears this gate). The
+  - **R3 (wipe-and-restore, spec §6 step 4) — the rejoin-as-secondary path — its `pg_restore` consumer
+    gate is CLEARED by BR-3 #232; the R3-specific composition remains.** Drain (R2 ✓) → discard the
+    diverged DB → restore the current primary's baseline → stream, returning as `serving-secondary`.
+    **BR-3 #232 shipped the `pg_restore` consumer** (+ decrypt/unpack/compatibility-gate/path-traversal
+    guards) and exposes composable steps; what R3 still builds on top is the **composition**: call BR-3's
+    `restoreDatabase`+`restoreMedia` (SKIP secrets to keep the rejoining node's OWN identity), do the
+    all-entries-guard upfront pass, wipe/pre-create the target DB, then re-enrol-as-streaming-secondary +
+    re-fence (R1 #214). Same producer as before (`pg-dump.ts`/`backup-sweep.ts`, `row_security=off`, so the
+    `sync_log`-in-backup half is satisfied). Same gate as the promote-action cold-restore slice (Slice 4),
+    also cleared by BR-3. The
     disposal guard measures the enrolled `sync_log` tail only — the per-node fiscal chain
     (`registros_facturacion`) is deliberately NOT in `sync_log` and does not replicate to the carrier, so
     `drained` is a statement about replicable app data, not the fiscal chain (unchanged by the restore).
@@ -957,7 +956,7 @@ vs gated on an unbuilt foundation or an external dependency:
   (on-device agent); and the **owner-gated fiscal H2** hash-chain sync lane — never landed without
   owner sign-off.
 
-### Backup & restore regime (BR-1 #226 + BR-2 #228 LANDED; BR-3 next, BR-4 gated on module-system SP-3)
+### Backup & restore regime (BR-1 #226 + BR-2 #228 + BR-3 #232 LANDED; only BR-4 remains, gated on module-system SP-3)
 
 A generic core backup/restore service (storage-media plugins + module hooks), decomposed BR-1..BR-4.
 Design: [backup-restore-regime](superpowers/specs/2026-09-04-backup-restore-regime-design.md); BR-1 plan:
@@ -991,14 +990,26 @@ Design: [backup-restore-regime](superpowers/specs/2026-09-04-backup-restore-regi
     Deferred edges (note-only): a working-backup boot success-path integration test; scope the flat
     `resolvers` map by module when a 2nd `nonDbState` module lands; `packArchive` pack-time `entries.length`
     bound.
-- **BR-3 — the restore consumer — NEXT.** `pg_restore` (a shell-out mirroring `pg-dump.ts`) + `unpackArchive`
-  → restore blobs into `mediaDir` + secrets into `stateDir` + the DB; the manifest compatibility gate
-  (refuse a newer schema version / wrong environment); the (empty-body in v1) module restore-hook
-  invocation. **Path-traversal guards on entry names are mandatory here.** **Clears the R3 rejoin +
-  promote-Slice-4 gate.**
-- **BR-4 — fiscal restore hook (fresh chain / disjoint series).** Lands with **fiscal-as-a-module
-  (module-system SP-3)**; unblocks promote-Slice-4 cold-DR trading-again-as-primary. Owner-gated (H2); the
-  hook interface ships in BR-2.
+- **BR-3 — the restore consumer — LANDED #232 (2026-09-05).** `decrypt` → `unpackArchive` → **compatibility
+  gate** (env + module schema-version vs the restoring binary) → **entry-name path-traversal guard**
+  (lexical + realpath, shared with `unpackBundleToDir`, all entries before any write) → `pg_restore`
+  (`--no-owner`, password via `PGPASSWORD` env not argv) into a fresh DB → restore media/secrets → invoke
+  module restore hooks (empty v1). Composable steps (`restoreDatabase`/`restoreMedia`/`restoreSecrets`/
+  `invokeRestoreHooks`) + full `restoreFromArtifact` + a `restore` CLI verb. **Fiscal-safe by construction:**
+  restores the ledger **verbatim**, mints **no** chain, makes the box **no** trade-readier — a real
+  in-container fiscal receipt proves a `registros_facturacion` row restores AND stays immutable (post-restore
+  UPDATE rejected, `WT001`). A review-caught **Critical** (a failed `pg_restore` leaked the admin password to
+  the terminal) was closed at the root + two sanitizing layers. **Owner-flagged at land (PR #232) for the
+  fiscal-adjacency.** **Clears the R3-rejoin `pg_restore` gate + promote-Slice-4.**
+  - *BR-3 carry-forwards:* **R3-rejoin composes** `restoreDatabase`+`restoreMedia` (skipping secrets to keep
+    its own identity) then re-fences (R1 #214). Deferred: a DROP-DATABASE/wipe primitive (v1 targets a
+    pre-created fresh DB); a manifest-shape coded refusal (fails safe under GCM auth today); generalizing
+    entry routing off declared source ids (a fail-visible `restore.unexpected_entry` reject is in; full
+    generalization when a 2nd non-DB `nonDbState` source lands).
+- **BR-4 — fiscal restore hook (fresh chain / disjoint series) — the ONLY remaining backup-regime slice,
+  GATED on module-system SP-3.** Lands with **fiscal-as-a-module (SP-3)** — not yet built (SP-2 landed on
+  main). Fills the empty v1 restore-hook seat BR-3 ships; unblocks promote-Slice-4 cold-DR
+  trading-again-as-primary. Owner-gated (H2).
 
 **Remaining, each its own design pass:**
 
