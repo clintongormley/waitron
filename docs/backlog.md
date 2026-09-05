@@ -79,7 +79,17 @@ conflict):**
 
 - **No database will ever hold two tenants** (a throwaway preproduction demo aside). The
   multi-tenant SaaS goal is gone; a box is single-tenant, on-prem or cloud. Supersedes cloud-storage
-  §9's "one shared cloud database".
+  §9's "one shared cloud database". **Confirmed and extended 2026-09-05 (owner decision): ONE TENANT
+  PER DATABASE everywhere, the cloud included.** A tenant is the obligado (`country` + `tax_id`, one
+  NIF; `packages/provisioning/src/tenant-id.ts` derives its id) holding all of its locations. The
+  cloud is a dedicated instance per tenant — the shape the built cloud mirror already has — as a warm
+  mirror today or, once asesor Q16 clears, as a primary; the shared multi-tenant cloud store
+  (cloud-storage §2/§9) is DROPPED, and with it the parked *multi-tenant transport* (whole-log reader
+  role). Density comes from many isolated instances per host, never from a shared database. The only
+  multi-tenant pieces are the stateless tunnel relay, a small control plane (accounts, subscriptions,
+  instances, relay tokens, rollout — not yet designed) and the preproduction trial demo. Consequence
+  for recommendation 1 below: the last consumer of FORCE RLS is gone; the replication prototype is
+  the only remaining gate on dropping it.
 - **The deli gets two boxes + cloud failover on day one** and must survive internet-down, box-down
   and printer-down. Redundancy is mandatory. **Active-active is SHELVED for the foreseeable future
   (owner decision 2026-09-05): the deli runs warm standby + human promotion.** The owner's reason:
@@ -658,7 +668,8 @@ for the projected remainder.
 - **Engage a fiscal advisor** — a parallel *human* task (long lead time), not a build; worth starting,
   blocks nothing. See *The advisor gap*.
 - **Sync completion beyond the landed lanes** (Track 2) — fiscal-lane / hash-chain sync (H2, **now SP-3
-  of the module system** above), multi-tenant transport, cloud-mirror C-remainder. See *Open threads → Sync*.
+  of the module system** above), cloud-mirror C-remainder (multi-tenant transport DROPPED 2026-09-05 —
+  one tenant per database). See *Open threads → Sync*.
 - **Reporting *fiscal* remainder** — modelo-303 filing boxes (rectificativas 40/41, prorrata 44,
   intra-community 32–39) + two pre-filing caveats: AEAT filing completeness (asesor-gated), not an owner
   takings view. See *Open threads → Reporting*.
@@ -1149,7 +1160,9 @@ Design: [backup-restore-regime](superpowers/specs/2026-09-04-backup-restore-regi
   config replication); and the **first-contact trust bootstrap** for an untrusted-network primary (gated
   on real hosting). Plan:
   [cloud-mirror-hardening](superpowers/plans/2026-08-29-cloud-mirror-hardening-followups.md).
-- **Multi-tenant transport** — a whole-log reader role.
+- ~~**Multi-tenant transport** — a whole-log reader role.~~ **DROPPED 2026-09-05** (one tenant per
+  database, cloud included — *Whole-project design review*): a source never serves more than one
+  tenant's log.
 - **Fiscal-lane / hash-chain sync (H2) → now SP-3 of the module system** (see the module-system section
   above). Enrol the six fiscal tables — `registros_facturacion` insert-only + `registro_sif`/`cadenas`/
   `envios`/`envio_flujo`/`acks` — onto the ordered lane; verbatim, immutability honoured on the subscriber;

@@ -38,6 +38,12 @@ get their own spec (§10).
 > §9. The shared store described here is unchanged; the text below is left as written, per `CLAUDE.md`
 > §6.
 
+> **Superseded 2026-09-05 (owner decision).** There is no shared multi-tenant store: **one tenant per
+> database everywhere, the cloud included.** Every cloud instance is a dedicated single-tenant server
+> (the built cloud mirror's shape), so the version-skew reason above never arises and §9's isolation
+> model has no consumer. Record: `docs/backlog.md` → *Whole-project design review (2026-09-05)*. Text
+> left as written.
+
 **This supersedes one row of `2026-07-18-pos-architecture-design.md` §5's topology table.** That table
 lists "Cloud SaaS, no local hardware | till → cloud" as a supported deployment; under this design it
 is not, because it would make the cloud a primary transactional store for those tenants and
@@ -353,6 +359,11 @@ art. 23 describes access. §10 records the gap.
    obligado?
 
 ## 9. Isolation
+
+> **Superseded 2026-09-05 (owner decision):** one tenant per database, cloud included — there is no
+> shared cloud database, so the RLS-scoped store below is not built. The per-table
+> immutability-by-grant point still applies to a dedicated mirror (SP-3a #238 verified it on
+> `postgres:18`). Text left as written.
 
 **One shared cloud database**, tenant-scoped by RLS — the model already built and exercised for
 exactly this shape. Two additions beyond reusing it:
