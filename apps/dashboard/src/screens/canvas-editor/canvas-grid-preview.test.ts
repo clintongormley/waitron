@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "../../widgets/test-helpers.js";
+import { t } from "../../i18n/t.js";
 import "./canvas-grid-preview.js";
 import type { CanvasGridPreview } from "./canvas-grid-preview.js";
 import type { TabDef } from "./card-contracts.js";
@@ -406,5 +407,130 @@ describe("canvas-grid-preview resize handle", () => {
     pointer(handle, "pointerup", hx + 400, hy);
     expect(moved).toBe(false);
     expect(resized).toBe(true);
+  });
+});
+
+// ── Representative card silhouettes ────────────────────────────────────────────────────────────────
+// Each tile draws a dashboard-local static silhouette of its card type (a mini grid, a few basket
+// lines, a big total, …) instead of a grey name box. The silhouette is DECORATIVE: the host wraps it
+// in an `aria-hidden`, `pointer-events: none` container so it never intercepts a drag/select and the
+// resize handle stays on top — the card-type name stays as the tile's accessible caption.
+describe("canvas-grid-preview card silhouettes", () => {
+  function tileEl(el: CanvasGridPreview, index: number): HTMLElement {
+    return el.shadowRoot!.querySelector<HTMLElement>(`[data-test=tile-${index}]`)!;
+  }
+
+  it("draws each card type's silhouette in the interactive canvas", async () => {
+    const { el } = await mountWidget<CanvasGridPreview>("canvas-grid-preview", {
+      tab,
+      interactive: true,
+    });
+    await el.updateComplete;
+    expect(tileEl(el, 0).querySelector('[data-preview="product-grid"]')).toBeTruthy();
+    expect(tileEl(el, 1).querySelector('[data-preview="basket"]')).toBeTruthy();
+  });
+
+  it("draws silhouettes in the inert thumbnail too", async () => {
+    const { el } = await mountWidget<CanvasGridPreview>("canvas-grid-preview", {
+      tab,
+      interactive: false,
+    });
+    await el.updateComplete;
+    expect(tileEl(el, 0).querySelector('[data-preview="product-grid"]')).toBeTruthy();
+    expect(tileEl(el, 1).querySelector('[data-preview="basket"]')).toBeTruthy();
+  });
+
+  it("keeps the card-type name as the tile's accessible caption alongside the silhouette", async () => {
+    const { el } = await mountWidget<CanvasGridPreview>("canvas-grid-preview", {
+      tab,
+      interactive: true,
+    });
+    await el.updateComplete;
+    // The visible caption text supplies the button's accessible name; the silhouette is aria-hidden.
+    // Locale-agnostic: assert against the resolved card name rather than a hardcoded English string
+    // (the dashboard defaults to es-ES).
+    expect(tileEl(el, 0).querySelector(".name")!.textContent!.trim()).toBe(
+      t("canvas_editor.card.product-grid"),
+    );
+  });
+
+  it("marks the silhouette decorative: aria-hidden and pointer-events:none so drag/select is never intercepted", async () => {
+    // Prove-by-deletion guard: without `pointer-events: none` on the preview wrapper the silhouette
+    // would swallow pointerdown/click meant for the draggable button; without `aria-hidden` its inner
+    // divs would leak into the button's accessible name and the axe sweep.
+    const { el } = await mountWidget<CanvasGridPreview>("canvas-grid-preview", {
+      tab,
+      interactive: true,
+    });
+    await el.updateComplete;
+    const preview = tileEl(el, 0).querySelector<HTMLElement>("[data-test=preview-0]")!;
+    expect(preview.getAttribute("aria-hidden")).toBe("true");
+    expect(getComputedStyle(preview).pointerEvents).toBe("none");
+  });
+
+  it("keeps the resize handle hittable above the silhouette", async () => {
+    const { el } = await mountWidget<CanvasGridPreview>("canvas-grid-preview", {
+      tab,
+      interactive: true,
+      selectedIndex: 0,
+    });
+    await el.updateComplete;
+    const handle = el.shadowRoot!.querySelector<HTMLElement>("[data-test=resize-handle]")!;
+    expect(handle).toBeTruthy();
+    expect(getComputedStyle(handle).pointerEvents).not.toBe("none");
+  });
+
+  it("renders the same memoized silhouette into TWO sibling tiles of the same type as independent, complete DOM subtrees", async () => {
+    // `cardPreview("product-grid")` returns ONE shared, memoized TemplateResult, committed into every
+    // product-grid tile. A TemplateResult is an immutable description, so Lit builds a fresh DOM
+    // subtree per ChildPart — two product-grid tiles must each get their OWN full silhouette, not one
+    // shared/moved node leaving the other empty. This pins that end-to-end (card-preview.test.ts only
+    // proves referential identity of the TemplateResult; the two-distinct-types fixture above never
+    // exercises the aliasing case). What it would catch: if memoization ever wrongly SHARED the built
+    // DOM across tiles, one of the two tiles would come up empty (0 cells) or the two would be the
+    // same node — either assertion below fails.
+    const twoSame: TabDef = {
+      ...tab,
+      cards: [
+        { type: "product-grid", colSpan: 6, rowSpan: 6, config: {} },
+        { type: "product-grid", colSpan: 6, rowSpan: 6, config: {} },
+        { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
+      ],
+    };
+    const { el } = await mountWidget<CanvasGridPreview>("canvas-grid-preview", {
+      tab: twoSame,
+      interactive: true,
+    });
+    await el.updateComplete;
+    const s0 = tileEl(el, 0).querySelector<HTMLElement>('[data-preview="product-grid"]');
+    const s1 = tileEl(el, 1).querySelector<HTMLElement>('[data-preview="product-grid"]');
+    expect(s0, "tile-0 has its own product-grid silhouette").toBeTruthy();
+    expect(s1, "tile-1 has its own product-grid silhouette").toBeTruthy();
+    // Each subtree is complete: the full six-cell mini grid, not a shared/emptied node.
+    expect(s0!.querySelectorAll(".cp-cell").length).toBe(6);
+    expect(s1!.querySelectorAll(".cp-cell").length).toBe(6);
+    // Two independent DOM nodes, even though one TemplateResult backs both tiles.
+    expect(s0).not.toBe(s1);
+  });
+
+  it("still emits move-card when a tile bearing a silhouette is dragged past a neighbour", async () => {
+    // Regression: the decorative silhouette must not break slice-2's drag-to-reorder.
+    const { el } = await mountWidget<CanvasGridPreview>("canvas-grid-preview", {
+      tab,
+      interactive: true,
+    });
+    await el.updateComplete;
+    let detail: { from: number; to: number } | null = null;
+    el.addEventListener("move-card", (e) => {
+      detail = (e as CustomEvent<{ from: number; to: number }>).detail;
+    });
+    const t0 = tileEl(el, 0);
+    const t1 = tileEl(el, 1);
+    const [x0, y0] = centre(t0);
+    const r1 = t1.getBoundingClientRect();
+    pointer(t0, "pointerdown", x0, y0);
+    pointer(t0, "pointermove", r1.right - 4, r1.top + r1.height / 2);
+    pointer(t0, "pointerup", r1.right - 4, r1.top + r1.height / 2);
+    expect(detail).toEqual({ from: 0, to: 1 });
   });
 });

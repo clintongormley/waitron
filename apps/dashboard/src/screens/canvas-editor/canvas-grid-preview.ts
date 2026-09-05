@@ -4,6 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import { t } from "../../i18n/t.js";
 import type { StringKey } from "../../i18n/strings.js";
 import { EDITOR_ROW_HEIGHT, type CardInstance, type TabDef } from "./card-contracts.js";
+import { cardPreview } from "./card-preview.js";
 
 /**
  * The shared placeholder-tile grid, drawn at the till renderer's geometry
@@ -29,8 +30,13 @@ import { EDITOR_ROW_HEIGHT, type CardInstance, type TabDef } from "./card-contra
  * The preview is a VIEW: it emits INTENTS and never mutates the tab — the screen owns all mutation
  * through its immutable draft helpers.
  *
- * Each cell is the card-host SEAM: v1 renders a placeholder (the localised card name + a `WxH` span
- * badge). The real card renderers slot in here later. Chrome is `--wt-*` tokens only.
+ * Each cell draws a REPRESENTATIVE silhouette of its card type ({@link cardPreview}) — a dashboard-local
+ * static shape (a mini product grid, a few basket lines, a big total, …), NOT the till's real
+ * data-bound widget and NOT a `@waitron/layouts`/`apps/till` runtime import (the #70 bundle rule). The
+ * silhouette is DECORATIVE: it sits in an `aria-hidden`, `pointer-events: none` wrapper so it never
+ * intercepts a drag/select and the screen reader skips it, while the localised card name stays as the
+ * tile's accessible caption (with a `WxH` span badge in the interactive editor). Chrome is `--wt-*`
+ * tokens only.
  */
 
 /** Pointer travel (px) before a press becomes a drag rather than a click. Below this a tile press is
@@ -150,11 +156,223 @@ export class CanvasGridPreview extends LitElement {
       button.tile.drop-after {
         box-shadow: inset calc(-1 * var(--wt-space-1)) 0 0 0 var(--wt-color-primary);
       }
+      .caption {
+        display: flex;
+        gap: var(--wt-space-2);
+        align-items: baseline;
+        width: 100%;
+        min-width: 0;
+      }
       .name {
         font-weight: var(--wt-font-weight-bold);
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .badge {
+        margin-left: auto;
         color: var(--wt-color-text-muted);
+      }
+      /* The decorative silhouette fills the tile below the caption. pointer-events:none keeps every
+         pointer gesture (drag/select) on the button beneath it, and the resize handle above it; the
+         wrapper is aria-hidden so the screen reader announces only the caption. */
+      .preview {
+        flex: 1 1 auto;
+        width: 100%;
+        min-height: 0;
+        overflow: hidden;
+        pointer-events: none;
+      }
+      .cp {
+        box-sizing: border-box;
+        width: 100%;
+        height: 100%;
+        min-height: var(--wt-space-6);
+      }
+      /* Shared silhouette shapes — flat token-driven fills, no data. */
+      .cp-cell,
+      .cp-chip,
+      .cp-ticket,
+      .cp-order-line,
+      .cp-header,
+      .cp-table,
+      .cp-expo-ticket,
+      .cp-pay,
+      .cp-toast,
+      .cp-bell,
+      .cp-amount,
+      .cp-line-name,
+      .cp-line-amount,
+      .cp-column-ticket,
+      .cp-expo-line {
+        display: block;
+        background: var(--wt-color-surface-raised);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-sm);
+      }
+      /* product-grid → a mini tile grid */
+      .cp-product-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        grid-auto-rows: 1fr;
+        gap: var(--wt-space-1);
+      }
+      /* basket → sample order lines (name bar + amount bar) */
+      .cp-basket {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--wt-space-1);
+      }
+      .cp-line {
+        display: flex;
+        gap: var(--wt-space-1);
+        align-items: center;
+        background: transparent;
+        border: none;
+        height: var(--wt-space-3);
+      }
+      .cp-line-name {
+        flex: 1 1 auto;
+        height: 100%;
+      }
+      .cp-line-amount {
+        flex: 0 0 20%;
+        height: 100%;
+      }
+      /* total → one big number */
+      .cp-total {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .cp-amount {
+        width: 60%;
+        height: var(--wt-space-5);
+      }
+      /* tender-pay → a couple of pay buttons (accent one) */
+      .cp-tender-pay {
+        display: flex;
+        gap: var(--wt-space-1);
+        align-items: stretch;
+      }
+      .cp-pay {
+        flex: 1 1 0;
+        min-height: var(--wt-space-5);
+      }
+      .cp-pay-primary {
+        background: var(--wt-color-primary);
+        border-color: var(--wt-color-primary);
+        color: var(--wt-color-on-primary);
+      }
+      /* held-orders → stacked chips */
+      .cp-held-orders {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--wt-space-1);
+      }
+      .cp-chip {
+        height: var(--wt-space-3);
+        border-radius: var(--wt-radius-full);
+      }
+      /* prep-queue → a rail of ticket rows */
+      .cp-prep-queue {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--wt-space-1);
+      }
+      .cp-ticket {
+        height: var(--wt-space-4);
+      }
+      /* notifications → a bell + a toast line */
+      .cp-notifications {
+        display: flex;
+        gap: var(--wt-space-2);
+        align-items: center;
+      }
+      .cp-bell {
+        flex: 0 0 auto;
+        width: var(--wt-space-4);
+        height: var(--wt-space-4);
+        border-radius: var(--wt-radius-full);
+      }
+      .cp-toast {
+        flex: 1 1 auto;
+        height: var(--wt-space-3);
+      }
+      /* floor-plan / table-layout-editor → a few table shapes */
+      .cp-floor-plan,
+      .cp-table-layout-editor {
+        display: flex;
+        flex-wrap: wrap;
+        align-content: center;
+        gap: var(--wt-space-2);
+      }
+      .cp-table {
+        position: relative;
+        width: var(--wt-space-5);
+        height: var(--wt-space-5);
+      }
+      .cp-table-round {
+        border-radius: var(--wt-radius-full);
+      }
+      .cp-edit-handle {
+        position: absolute;
+        right: calc(-1 * var(--wt-space-1));
+        bottom: calc(-1 * var(--wt-space-1));
+        width: var(--wt-space-2);
+        height: var(--wt-space-2);
+        background: var(--wt-color-primary);
+        border-radius: var(--wt-radius-sm);
+      }
+      /* kds-board → status columns of ticket cards */
+      .cp-kds-board {
+        display: flex;
+        gap: var(--wt-space-1);
+        align-items: stretch;
+      }
+      .cp-column {
+        flex: 1 1 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+        padding: var(--wt-space-1);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-sm);
+      }
+      .cp-column-ticket {
+        height: var(--wt-space-3);
+      }
+      /* expo → a row of order tickets */
+      .cp-expo {
+        display: flex;
+        gap: var(--wt-space-1);
+        align-items: stretch;
+      }
+      .cp-expo-ticket {
+        flex: 1 1 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+        padding: var(--wt-space-1);
+      }
+      .cp-expo-line {
+        height: var(--wt-space-2);
+      }
+      /* table-order → a header row plus its ordered lines */
+      .cp-table-order {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+      }
+      .cp-header {
+        height: var(--wt-space-4);
+      }
+      .cp-order-line {
+        height: var(--wt-space-2);
       }
       .resize-handle {
         position: absolute;
@@ -218,7 +436,17 @@ export class CanvasGridPreview extends LitElement {
     const name = t(`canvas_editor.card.${card.type}` as StringKey);
     const badge = `${card.colSpan}×${card.rowSpan}`;
     const style = `grid-column: span ${card.colSpan}; grid-row: span ${card.rowSpan}`;
-    const body = html`<span class="name">${name}</span><span class="badge">${badge}</span>`;
+    // The caption names the card (and, in the editor, its span) — it is the tile's accessible label.
+    // The silhouette below it is decorative (aria-hidden, pointer-events:none), so it fills the tile
+    // without ever intercepting a pointer gesture or leaking into the button's accessible name.
+    const caption = html`<span class="caption"
+      ><span class="name">${name}</span
+      >${this.interactive ? html`<span class="badge">${badge}</span>` : nothing}</span
+    >`;
+    const preview = html`<div class="preview" data-test="preview-${index}" aria-hidden="true">
+      ${cardPreview(card.type)}
+    </div>`;
+    const body = html`${caption}${preview}`;
     if (!this.interactive) {
       return html`<div class="tile" data-test="tile-${index}" style=${style}>${body}</div>`;
     }
