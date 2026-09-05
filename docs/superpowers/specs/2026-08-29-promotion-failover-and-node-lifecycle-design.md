@@ -334,6 +334,11 @@ split-brain #33 §8 makes human-driven on purpose. The cloud still appears in th
 
 ### 7.2 Sizing: plain Postgres on a VM — headroom, load-shedding, and resize
 
+> **Pointer (2026-09-05).** The MVP (`docs/backlog.md` → *Priorities → MVP for go-live*) lets a
+> cloud-only primary take its redundancy from a Postgres host that comes with redundancy (managed/HA
+> Postgres), relaxing the no-managed-database constraint below for THAT mode only; plain Postgres on
+> a VM stays the default and the only shape for a promoted standby. Text left as written.
+
 **Constraint (review Point 3): no proprietary/managed-database dependency.** The design must run on
 **basic Postgres on a VM available in any data centre** — no Neon, no Aurora Serverless, nothing that
 ties a venue to one provider. So the resize is a plain **stop → change instance size → relaunch** (a
@@ -370,6 +375,11 @@ promoted instance may occupy. A gate on offering cloud-primary / cloud-standalon
 this design.
 
 ### 7.4 Hot failover *for* a cloud primary — the topology is fractal (review Point 6)
+
+> **Pointer (2026-09-05).** For the MVP's cloud-only mode the owner allows two shapes: (a) one node on
+> a managed/HA Postgres host (infrastructure HA; needs an on-disk-state inventory + a singleton lease)
+> or (b) the second cloud node below. Active-active is shelved, so "active-active or primary + warm
+> standby" below reads warm standby only. `docs/backlog.md` → *Priorities → MVP for go-live*.
 
 The question the earlier draft missed: when the cloud **is** the primary, what is its Server-2? On-prem,
 Server 1 has Server 2 as a hot standby; a cloud primary needs the same. **Decision.** The topology is

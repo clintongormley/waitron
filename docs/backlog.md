@@ -55,6 +55,30 @@ beneath them.
   **Never land anything touching the unrepairable fiscal core (H2) without owner sign-off** —
   hash-chained records, never-reused invoice numbers.
 
+**MVP for go-live (owner decision 2026-09-05).** A primary server, on-prem OR in the cloud:
+
+- **On-prem primary + a redundant CLOUD server** for failover with human promotion. A second LOCAL
+  box is beyond the MVP (the earlier "two boxes + cloud" answer is the post-MVP target, not the
+  go-live bar). Internet-down: the primary keeps selling (CLAUDE.md §5) and the standby falls behind
+  until the link returns; box-down AND internet-down together means no failover — accepted for the
+  MVP.
+- **Cloud-only primary + redundancy**, from either **(a)** a Postgres host that comes with redundancy
+  (managed/HA Postgres — newly allowed; relaxes promotion-failover §7.2's "no managed-database
+  dependency" for this mode only) or **(b)** a second cloud server on the built mirror + promotion
+  mechanism (promotion-failover §7.4). (a) is infrastructure HA of ONE node and needs a design look
+  at what the server keeps on local disk (env files, media, the box-secret vault) plus a singleton
+  lease so two app processes never both submit; (b) is the built path applied cloud-to-cloud, no
+  tunnel.
+
+What the MVP needs that is NOT built (Track B/C order, *Whole-project design review*): real relay
+hosting (the tunnel is proven only against a local stand-in), a per-tenant cloud instance
+provisioning path, the authenticated promotion endpoint, till reroute to the promoted cloud, a
+printing path when the primary is dead or the server is cloud-only (a poll-the-cloud printer or a
+local relay, distribution §5), and the control plane. **Gate: asesor Q16** — where an invoice-issuing
+cloud SIF may lawfully run — gates the cloud-only mode AND a promoted cloud standby (it issues
+invoices from the cloud the moment it is promoted). It is a go-live blocker for both, not a
+"later topology" question (*The advisor gap*).
+
 **Prioritisation is by soundness, not the calendar** (2026-08-02): Waitron will be finished before the
 deli must trade, so 1-Jan-2027 ranks nothing above anything. Order by dependency, correctness, and
 de-risking the most-reused / most-uncertain foundations first.
@@ -103,7 +127,9 @@ conflict):**
   the sync design §12 / one-server-buy-list contradiction. Nothing is deleted for it: what exists
   stays on `main` under the warm-standby build, and branch **`shelved/active-active`** (= `main` at
   `c65d3cbe`, 2026-09-05) is the snapshot to return to. Dated pointers: sync design §12, server-as-SIF
-  §4 + §13, promotion-failover §8, distribution §3.
+  §4 + §13, promotion-failover §8, distribution §3. **MVP narrowing (same day):** the go-live bar is
+  one on-prem box + a cloud standby, or cloud-only + redundancy (*Priorities → MVP for go-live*); the
+  second local box is post-MVP.
 - **Modules are core to the product** (opt-in domains, third-party modules later). Fiscal must be
   swappable by jurisdiction (Veri\*Factu / TicketBAI / none). Two rules agreed: **new domains land
   as modules from now**, and **no new table enters the core migration set without a stated reason**.
@@ -168,22 +194,30 @@ and the single config-conflict-gate trim in `packages/sync`):
    "mixed config/runtime" deferral); the config-conflict gate keeps only the fence-window case; R3a's
    two deferrals (till reads routed through the display-data node; selling gated on REBOOT completion,
    not the PONR). Rewrite CLAUDE.md §5's "nothing blocks a sale" wording in the same change.
-2. **The local warm standby** — verify (run, not read) that the cloud-mirror adopt + R3b promotion
-   path serves a second LOCAL box pulling directly over the LAN with no relay; that box IS the deli's
-   standby under warm standby. Fix what the relay-shaped mirror config assumes. Wizard mode 4 (*Add a
-   node*) wraps this later.
+2. **The cloud standby, end to end (MVP)** — real relay hosting for `@waitron/tunnel` (proven only
+   against a local stand-in; decide with Track C item 5 whether the relay is ours or off-the-shelf), a
+   per-tenant cloud instance provisioning path, then prove by RUNNING: on-prem primary → adopt →
+   mirror → human promotion → tills reroute to the promoted cloud → the venue sells and files. A
+   second LOCAL box is post-MVP; when it comes, the same adopt path over the LAN with no relay is the
+   candidate (wizard mode 4 wraps it).
 3. **Promotion runbook Slice 2** — the authenticated promote endpoint + break-glass mint + the real
    runtime admin connection (the write today uses `migrationsDatabaseUrl`); then **re-admission** of a
    rejoined, wiped-and-restored box as the standby (R3 follow-up (b)) and the resume-at-restore marker
    (R3 follow-up (a)).
-4. **Printer failover** (`2026-08-26-failover-printing-design.md`).
-5. **Node-role collapse** — derive ONE `NodeRole` at boot from the membership document (today spread
+4. **Cloud-only redundancy (MVP) — brainstorm** (a) one node on a managed/HA Postgres host vs (b) a
+   second cloud node on the built mirror mechanism. (a) needs an inventory of what the server keeps
+   on local disk (`writeFileAtomic` env files, `mediaDir`, the box-secret vault, backup state) and a
+   singleton lease so a restarted or relocated app process never runs a second submitter; (b) is
+   Track B item 2 without the tunnel. Pick per deployment; both may ship.
+5. **Printer failover** (`2026-08-26-failover-printing-design.md`) — MVP-critical for cloud-only and
+   for a promoted cloud standby (a cloud server cannot reach a LAN printer).
+6. **Node-role collapse** — derive ONE `NodeRole` at boot from the membership document (today spread
    across `deployment.mode`, `singleton_role`, membership standing and the boot-captured `fenced`
    flag) and pick one rule: every role change is a restart, or the worker-lifecycle manager Slice 3
    keeps deferring — not both; a small worker registry replaces `startServer`'s hand-rolled
    AbortController-per-worker (`boot.ts`, 1,665 lines). **After Track A item 3 lands** — both edit
    `boot.ts`'s role-pool wiring.
-6. **`tills` vs `devices` — [owner]** (SP-A.2 follow-up 2): own brainstorm + full fiscal trace; a new
+7. **`tills` vs `devices` — [owner]** (SP-A.2 follow-up 2): own brainstorm + full fiscal trace; a new
    H2 receipt for what an immutable record's `till_id` holds. After Track A's squash.
 
 **Track C — product / modules** (sequential; owns `packages/fiscal*`, the module framework packages,
@@ -223,7 +257,7 @@ control-plane docs):
 - **No new CORE migration in Tracks B/C until Track A's squash lands** (the module rule already
   forbids it without a stated reason). Module-owned migrations (Track C) are regenerated on rebase
   per CLAUDE.md §3's recipe; whoever lands second rebases.
-- **Shared files:** `apps/server/src/boot.ts` (A deletes role pools; B refactors workers → B5 waits
+- **Shared files:** `apps/server/src/boot.ts` (A deletes role pools; B refactors workers → B6 waits
   for A3), `packages/sync`'s apply gate (A's roles vs B's one-case trim → B does it after A3 or takes
   the rebase), `CLAUDE.md` (A: §2–§4, B: §5, C: §3 — textual rebases), and this file (each track
   edits its own sections plus this list; conflicts are textual).
@@ -1180,7 +1214,8 @@ vs gated on an unbuilt foundation or an external dependency:
   the primary-only workers on promotion) + the C2a promote action — see the membership arc above.
 - **Hard-gated (leave until the gate clears):** break-glass secret mint (→ Slice 2); the **restore
   consumer** (backup regime BR-3 — clears R3 rejoin + promote Slice 4; BR-1 producer/encryption LANDED
-  #226); real cloud hosting/relay (cloud-mirror follow-ups, the T1 relay); the go-native decision
+  #226); real cloud hosting/relay (cloud-mirror follow-ups, the T1 relay — **MVP-critical since
+  2026-09-05, Track B item 2**); the go-native decision
   (on-device agent); and the **owner-gated fiscal H2** hash-chain sync lane — never landed without
   owner sign-off.
 
@@ -1554,6 +1589,10 @@ against *both* designs, drop/rewrite what they invalidated, and add the replacem
 1619/2012) hosting questions in
 [cloud-storage-model §8a](superpowers/specs/2026-07-31-cloud-storage-model-design.md), plus the new
 "cloud server issuing invoices operates the SIF abroad" question — *before* paying for answers.
+
+> **2026-09-05 — Q16 is now a go-live blocker, not a later-topology question.** The MVP (*Priorities →
+> MVP for go-live*) includes a cloud-only primary and a cloud standby that issues invoices from the
+> moment it is promoted; both are an active cloud SIF. Ask Q16 first.
 
 **What each open question checks against the code:**
 
