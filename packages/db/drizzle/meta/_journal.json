@@ -743,6 +743,20 @@
       "when": 1788553957548,
       "tag": "0105_wise_red_wolf",
       "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1788570829116,
+      "tag": "0106_redundant_winter_soldier",
+      "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1788570834759,
+      "tag": "0107_exotic_toxin",
+      "breakpoints": true
     }
   ]
 }
