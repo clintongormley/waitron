@@ -1791,45 +1791,6 @@ describe("DashboardApi — devices (device-identity-1)", () => {
     await expect(api.revokeDevice("nope")).rejects.toMatchObject({ code: "device.not_found" });
   });
 
-  it("reassignDevice POSTs { canvasId } to the device's assign-canvas route (204)", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.reassignDevice("d1", "p1")).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/devices/d1/assign-canvas", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ canvasId: "p1" }),
-    });
-  });
-
-  it("reassignDevice sends { canvasId: null } to clear the assignment", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.reassignDevice("d1", null)).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/devices/d1/assign-canvas", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ canvasId: null }),
-    });
-  });
-
-  it("reassignDevice rejects with { code } on a UUID-shaped unknown/foreign canvas (binding invalid)", async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValue(jsonResponse({ error: { code: "device.binding_invalid" } }, false, 400));
-    const api = new DashboardApi("", fetchImpl);
-    // A UUID-shaped id that names no canvas of this tenant is what actually reaches the FK and yields
-    // `device.binding_invalid` — a MALFORMED (non-UUID) id would be screened to `management.request_invalid`
-    // before it, so use a well-formed uuid here to match the real route contract.
-    await expect(
-      api.reassignDevice("d1", "11111111-1111-4111-8111-111111111111"),
-    ).rejects.toMatchObject({
-      code: "device.binding_invalid",
-    });
-  });
-
   it("reassignDeviceProfile POSTs { deviceProfileId } to the device's assign-device-profile route (204)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);

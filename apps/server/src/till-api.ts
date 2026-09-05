@@ -616,9 +616,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // Resolve the CALLING device (if any) BEFORE the boot transaction: `tryReadDevice` opens its OWN
       // `withTenant` tx (auth + `last_seen_at`), so it cannot nest inside the read below. EVERY request
       // resolves a canvas: a cookieless request (no device) gets the `till` form-factor default, and an
-      // ENROLLED device gets its assigned `canvasId` if set and resolvable, else the built-in default for
-      // its form factor (SP-B4, generalising SP-B1 / SP-A.2 §16.3). The counter therefore always has a
-      // canvas to render from.
+      // ENROLLED device gets the canvas its DEVICE PROFILE references if set and resolvable, else the
+      // built-in default for its form factor (SP-B4, generalising SP-B1 / SP-A.2 §16.3; the profile is
+      // the sole canvas binding since the Task 10 cutover). The counter therefore always has a canvas
+      // to render from.
       const device = await tryReadDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
       // ONE transaction reads the issuer identity and the authored receipt trim (`getReceipt`, its own
       // `tenant_receipts` row — SP-B4), plus the resolved canvas below: all run inside the same

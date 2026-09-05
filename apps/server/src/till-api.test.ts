@@ -160,7 +160,7 @@ const suite = usePgliteDb({
 // not survive to a later describe. No canvas needed: place/collect run `assertNotHandheld`, not the
 // capability firewall (`/api/pay`'s integrated-card path is proven in `till-api.rls.test.ts`).
 async function enrolSaleTillDevice(): Promise<void> {
-  tillDeviceCookie = await enrolTillDeviceCookie(suite.db, null);
+  tillDeviceCookie = await enrolTillDeviceCookie(suite.db);
 }
 
 /** A collecting logger for asserting the structured lines the routes emit. */
@@ -270,15 +270,14 @@ async function closeSession(db: Database, id: string): Promise<void> {
 }
 
 /** Enrol a REAL `till` device for the seeded tenant via the Task 3 mint→redeem path (the only way to
- * get a `${deviceId}.${token}` whose scrypt hash actually verifies), optionally bound to a `canvasId`
- * and/or a `deviceProfileId`. Runs the mint + redeem on the app role under the tenant — the production
+ * get a `${deviceId}.${token}` whose scrypt hash actually verifies), optionally bound to a
+ * `deviceProfileId`. Runs the mint + redeem on the app role under the tenant — the production
  * enrol path — and returns the `${DEVICE_COOKIE}=…` header value a booting device would carry. A `till`
- * is sale-capable, so it always carries the seeded `till_id` (SP-A.2 §16.4). After the Task 9 cutover,
- * `GET /api/till` resolves the canvas + capabilities THROUGH the device profile, so a canvas surfaces
- * only via a bound profile (the `canvasId` binding is transitional, dropped in Task 10). */
+ * is sale-capable, so it always carries the seeded `till_id` (SP-A.2 §16.4). After the Task 9/10 cutover,
+ * `GET /api/till` resolves the canvas + capabilities THROUGH the device profile — the profile is the
+ * SOLE canvas binding (the direct device→canvas link was dropped in Task 10). */
 async function enrolTillDeviceCookie(
   db: Database,
-  canvasId: string | null,
   deviceProfileId: string | null = null,
 ): Promise<string> {
   const { code } = await withTenant(db, cfg.tenantId, async (tx) => {
@@ -287,7 +286,6 @@ async function enrolTillDeviceCookie(
       kind: "till",
       stationId: null,
       tillId: cfg.tillId,
-      canvasId,
       deviceProfileId,
       label: "Counter till",
     });
@@ -950,7 +948,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       canvasId,
     );
     try {
-      const cookie = await enrolTillDeviceCookie(suite.db, null, deviceProfileId);
+      const cookie = await enrolTillDeviceCookie(suite.db, deviceProfileId);
       const app = new Hono();
       mountTillApi(app, deps(suite.db), collect([]));
 
@@ -986,7 +984,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       null,
     );
     try {
-      const cookie = await enrolTillDeviceCookie(suite.db, null, deviceProfileId);
+      const cookie = await enrolTillDeviceCookie(suite.db, deviceProfileId);
       const app = new Hono();
       mountTillApi(app, deps(suite.db), collect([]));
       const res = await app.request("/api/till", { headers: { cookie } });
@@ -1004,7 +1002,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     // The one behaviour change (§5.3): a no-profile device renders the form-factor default canvas with an
     // EMPTY capability set — the render axis then HIDES the capability cards, making render and firewall
     // agree. Enrol a `till` device with neither a canvas nor a profile.
-    const cookie = await enrolTillDeviceCookie(suite.db, null, null);
+    const cookie = await enrolTillDeviceCookie(suite.db, null);
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     try {

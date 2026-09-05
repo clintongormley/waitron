@@ -269,15 +269,20 @@ describe("bindingFkField", () => {
   it("maps each device-binding composite FK's constraint name to its input field", () => {
     expect(bindingFkField(fk("device_pairing_codes_till_fk"))).toBe("tillId");
     expect(bindingFkField(fk("device_pairing_codes_receipt_printer_fk"))).toBe("receiptPrinterId");
-    expect(bindingFkField(fk("device_pairing_codes_canvas_fk"))).toBe("canvasId");
-    // The twin FK on the `devices` table itself — tripped when an enrolled device is REASSIGNED to a
-    // layout canvas that names no row of this tenant (SP-B3.1's assign-canvas route).
-    expect(bindingFkField(fk("devices_canvas_fk"))).toBe("canvasId");
     // The device-profile composite FKs (device-profile design 2026-09-05): one on `device_pairing_codes`
     // (mint time) and its twin on `devices` (tripped when a device is REASSIGNED to a device profile that
-    // names no row of this tenant, via the assign-device-profile route). Both → `deviceProfileId`.
+    // names no row of this tenant, via the assign-device-profile route). Both → `deviceProfileId`. Since
+    // the Task 10 cutover this is the ONLY reassign binding — the direct device→canvas FK was dropped.
     expect(bindingFkField(fk("device_pairing_codes_device_profile_fk"))).toBe("deviceProfileId");
     expect(bindingFkField(fk("devices_device_profile_fk"))).toBe("deviceProfileId");
+  });
+
+  it("returns undefined for the dropped device→canvas composite FKs (Task 10 cutover)", () => {
+    // The direct device→canvas binding (and its `assign-canvas` route) was removed in the Task 10 cutover,
+    // so the old constraint names no longer map to a field — a 23503 on one would rethrow raw. (A bad
+    // profile canvas reference is now `device_profile.invalid`, translated in the device-profile store.)
+    expect(bindingFkField(fk("device_pairing_codes_canvas_fk"))).toBeUndefined();
+    expect(bindingFkField(fk("devices_canvas_fk"))).toBeUndefined();
   });
 
   it("finds the 23503 wrapped in a DrizzleQueryError-style cause chain", () => {

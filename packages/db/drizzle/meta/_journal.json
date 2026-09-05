@@ -771,6 +771,13 @@
       "when": 1788573131099,
       "tag": "0109_steady_gladiator",
       "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1788580602894,
+      "tag": "0110_drop_device_canvas_id",
+      "breakpoints": true
     }
   ]
 }

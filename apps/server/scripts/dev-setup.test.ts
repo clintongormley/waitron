@@ -270,7 +270,7 @@ describe("devSetup against real Postgres", () => {
     expect(second.env.WAITRON_TILL_LOCATION_ID).toBe(first.env.WAITRON_TILL_LOCATION_ID);
   });
 
-  it("mints a single-use `till` pairing code bound to the provisioned till", async () => {
+  it("mints a single-use `till` pairing code bound to the provisioned till, carrying the default profile", async () => {
     // SP-A.2 device unification: dev:setup mints a `till`-kind pairing code so the dev can enrol the
     // counter till (the sale routes now require a `waitron_device` cookie carrying a till_id). The code
     // is bound to the provisioned till via generatePairingCode's till gate — a `till` kind with a
@@ -284,12 +284,30 @@ describe("devSetup against real Postgres", () => {
     }
     // A plaintext code the operator reads into the pairing screen (never stored in plaintext).
     expect(result.code).toMatch(/^[0-9A-Z-]{4,}$/);
-    // Exactly one till-kind code row, bound to the provisioned till (read as the RLS-bypassing admin).
+    // Device-profile cutover (Task 10): the seeded tenant gets a DEFAULT device profile ("Counter",
+    // no bound canvas so it falls back to the form-factor default, the two `till` capabilities) so the
+    // enrolled counter till stays sale-capable — without a profile the /api/pay + /api/drawer firewall
+    // refuses pay/drawer and the render axis hides the capability cards (design §10). Read as the
+    // RLS-bypassing admin: exactly one such profile.
+    const { rows: profiles } = await suite.admin.execute<{
+      id: string;
+      canvas_id: string | null;
+      capabilities: string[];
+    }>(
+      sql`select id, canvas_id, capabilities from device_profiles
+          where tenant_id = ${first.env.WAITRON_TILL_TENANT_ID} and name = 'Counter'`,
+    );
+    expect(profiles).toHaveLength(1);
+    expect(profiles[0]!.canvas_id).toBeNull();
+    expect(profiles[0]!.capabilities).toEqual(["integrated-card-payment", "open-cash-drawer"]);
+    // Exactly one till-kind code row, bound to the provisioned till AND carrying the default profile so
+    // the enrolled device resolves its canvas + capabilities through it (read as the RLS-bypassing admin).
     const { rows } = await suite.admin.execute<{ n: number }>(
       sql`select count(*)::int as n from device_pairing_codes
           where tenant_id = ${first.env.WAITRON_TILL_TENANT_ID}
             and device_kind = 'till'
-            and till_id = ${first.env.WAITRON_TILL_TILL_ID}`,
+            and till_id = ${first.env.WAITRON_TILL_TILL_ID}
+            and device_profile_id = ${profiles[0]!.id}`,
     );
     expect(rows[0]!.n).toBe(1);
   });

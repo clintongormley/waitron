@@ -136,7 +136,6 @@ export class TillDevChooser extends LitElement {
   @state() private label = "";
   @state() private tillId = "";
   @state() private stationId = "";
-  @state() private canvasId = "";
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -162,8 +161,9 @@ export class TillDevChooser extends LitElement {
   }
 
   /** Mint a new device and adopt it. `tillId` rides only for a sale-capable kind (`till`/`handheld`),
-   * `stationId` only for a `kds_station`; `canvasId` rides whenever a canvas is picked. An
-   * empty selection omits its field (never sends `""`). A rejected `{ code }` shows inline. */
+   * `stationId` only for a `kds_station`. An empty selection omits its field (never sends `""`). A
+   * rejected `{ code }` shows inline. (Since the Task 10 cutover a device binds its canvas through a
+   * device profile, assigned on the dashboard — the dev mint no longer picks a canvas.) */
   async #mint(): Promise<void> {
     if (this.label === "" || this.minting) return;
     this.minting = true;
@@ -174,7 +174,6 @@ export class TillDevChooser extends LitElement {
     } else if (this.tillId !== "") {
       req.tillId = this.tillId;
     }
-    if (this.canvasId !== "") req.canvasId = this.canvasId;
     try {
       const res = await this.api.mintDevDevice(req);
       setDevDeviceId(res.deviceId);
@@ -231,15 +230,11 @@ export class TillDevChooser extends LitElement {
           : html`<ul>
               ${list.devices.map((device) => {
                 const till = list.tills.find((candidate) => candidate.id === device.tillId);
-                const canvas = list.canvases.find((candidate) => candidate.id === device.canvasId);
                 return html`<li data-device=${device.id}>
                   <span>
                     <strong>${device.label}</strong>
                     <span class="meta">
-                      ·
-                      ${device.kind}${till ? html` · ${till.name}` : nothing}${
-                        canvas ? html` · ${canvas.name}` : nothing
-                      }
+                      · ${device.kind}${till ? html` · ${till.name}` : nothing}
                     </span>
                   </span>
                   <wt-button
@@ -284,7 +279,6 @@ export class TillDevChooser extends LitElement {
           }}
         ></wt-input>
         ${this.kind === "kds_station" ? this.#stationField(list) : this.#tillField(list)}
-        ${this.#canvasField(list)}
         <wt-button
           data-mint-submit
           variant="primary"
@@ -325,21 +319,6 @@ export class TillDevChooser extends LitElement {
         ${list.stations.map(
           (station) => html`<option value=${station.id}>${station.name}</option>`,
         )}
-      </select>
-    </div>`;
-  }
-
-  #canvasField(list: DevDeviceList): TemplateResult {
-    return html`<div class="field">
-      <label for="mint-canvas">Layout canvas (optional)</label>
-      <select
-        id="mint-canvas"
-        data-mint-canvas
-        .value=${this.canvasId}
-        @change=${(e: Event) => (this.canvasId = (e.target as HTMLSelectElement).value)}
-      >
-        <option value="">—</option>
-        ${list.canvases.map((canvas) => html`<option value=${canvas.id}>${canvas.name}</option>`)}
       </select>
     </div>`;
   }

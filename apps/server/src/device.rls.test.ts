@@ -85,12 +85,13 @@ async function pairingCodeCount(cfg: TillConfig): Promise<number> {
   return rows[0]!.n;
 }
 
-/** Seed a layout canvas for the tenant (owner SQL, RLS bypassed for setup) — a real
- * `(tenant_id, id)` the device's composite `canvas` FK can point at. */
-async function seedCanvas(cfg: TillConfig): Promise<string> {
+/** Seed a device profile for the tenant (owner SQL, RLS bypassed for setup) — a real
+ * `(tenant_id, id)` the device's composite `device_profile` FK can point at. `canvas_id` is left NULL
+ * (the profile falls back to the form-factor default canvas), so no `canvases` row is needed. */
+async function seedDeviceProfile(cfg: TillConfig): Promise<string> {
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into canvases (tenant_id, name, definition)
-    values (${cfg.tenantId}, 'Perfil A', ${JSON.stringify({ formFactor: "tablet" })}::jsonb)
+    insert into device_profiles (tenant_id, name)
+    values (${cfg.tenantId}, 'Perfil A')
     returning id`);
   return rows[0]!.id;
 }
@@ -110,7 +111,7 @@ async function seedPrinter(cfg: TillConfig): Promise<string> {
  * check for the round-trip is that enrolDevice STAMPED every binding the code carried onto the device. */
 async function deviceBindings(deviceId: string): Promise<{
   till_id: string | null;
-  canvas_id: string | null;
+  device_profile_id: string | null;
   receipt_printer_id: string | null;
   has_cash_drawer: boolean;
   card_provider: string;
@@ -118,13 +119,13 @@ async function deviceBindings(deviceId: string): Promise<{
 }> {
   const { rows } = await suite.admin.execute<{
     till_id: string | null;
-    canvas_id: string | null;
+    device_profile_id: string | null;
     receipt_printer_id: string | null;
     has_cash_drawer: boolean;
     card_provider: string;
     card_reader_id: string | null;
   }>(sql`
-    select till_id, canvas_id, receipt_printer_id, has_cash_drawer, card_provider, card_reader_id
+    select till_id, device_profile_id, receipt_printer_id, has_cash_drawer, card_provider, card_reader_id
     from devices where id = ${deviceId}`);
   return rows[0]!;
 }
@@ -225,22 +226,23 @@ describe("device pairing-code digest collision (real Postgres)", () => {
   });
 });
 
-describe("device binding fields: canvas / till / hardware (real Postgres)", () => {
-  it("mints a till code carrying canvas+till+hardware, and enrolment stamps every binding on the device", async () => {
-    // The full round-trip (SP-A.2 §16): a manager mints a `till` code carrying the assigned canvas, the
-    // tills row it rings against and the static hardware binding; the screen redeems it and the enrolled
-    // `devices` row carries ALL of them. Real Postgres so the composite FKs (0095) validate against real
-    // (tenant_id, id) rows and the `name[]`/`text[]`-free binding columns round-trip through the
-    // production driver, beside the digest-collision proof above.
+describe("device binding fields: device profile / till / hardware (real Postgres)", () => {
+  it("mints a till code carrying profile+till+hardware, and enrolment stamps every binding on the device", async () => {
+    // The full round-trip (SP-A.2 §16, device-profile §5): a manager mints a `till` code carrying the
+    // assigned device profile, the tills row it rings against and the static hardware binding; the screen
+    // redeems it and the enrolled `devices` row carries ALL of them. Real Postgres so the composite FKs
+    // (0095/0109) validate against real (tenant_id, id) rows and the `name[]`/`text[]`-free binding columns
+    // round-trip through the production driver, beside the digest-collision proof above. (The direct
+    // device→canvas binding was dropped in the Task 10 cutover — a device binds a canvas via its profile.)
     const { cfg } = await setupStation();
-    const canvasId = await seedCanvas(cfg);
+    const profileId = await seedDeviceProfile(cfg);
     const printerId = await seedPrinter(cfg);
     const dev = await asApp(suite.admin, cfg, async (tx) => {
       const { code } = await generatePairingCode(tx, cfg, {
         kind: "till",
         stationId: null,
         tillId: cfg.tillId,
-        canvasId: canvasId,
+        deviceProfileId: profileId,
         receiptPrinterId: printerId,
         hasCashDrawer: true,
         cardProvider: "sumup",
@@ -254,7 +256,7 @@ describe("device binding fields: canvas / till / hardware (real Postgres)", () =
       kind: "till",
       stationId: null,
       tillId: cfg.tillId,
-      canvasId: canvasId,
+      deviceProfileId: profileId,
       receiptPrinterId: printerId,
       hasCashDrawer: true,
       cardProvider: "sumup",
@@ -265,7 +267,7 @@ describe("device binding fields: canvas / till / hardware (real Postgres)", () =
     // column NULL/default here and fails this — the stamping's deletion receipt.
     expect(await deviceBindings(dev.deviceId)).toMatchObject({
       till_id: cfg.tillId,
-      canvas_id: canvasId,
+      device_profile_id: profileId,
       receipt_printer_id: printerId,
       has_cash_drawer: true,
       card_provider: "sumup",
@@ -312,7 +314,7 @@ describe("device binding fields: canvas / till / hardware (real Postgres)", () =
     // by deletion: dropping the 23503 branch in generatePairingCode's catch lets each raw driver error
     // reach the caller as a NON-AppError (an opaque 500 in the route), so these rejects never fire.
     const { cfg } = await setupStation();
-    const canvasId = await seedCanvas(cfg);
+    const profileId = await seedDeviceProfile(cfg);
     const printerId = await seedPrinter(cfg);
     const missing = randomUUID();
 
@@ -329,31 +331,31 @@ describe("device binding fields: canvas / till / hardware (real Postgres)", () =
       ),
     ).rejects.toMatchObject({ code: "device.binding_invalid", params: { field: "tillId" } });
 
-    // A nonexistent canvas_id (valid till + printer, so only THIS FK fires).
+    // A nonexistent device_profile_id (valid till + printer, so only THIS FK fires).
     await expect(
       asApp(suite.admin, cfg, (tx) =>
         generatePairingCode(tx, cfg, {
           kind: "till",
           stationId: null,
           tillId: cfg.tillId,
-          canvasId: missing,
+          deviceProfileId: missing,
           receiptPrinterId: printerId,
           label: "x",
         }),
       ),
     ).rejects.toMatchObject({
       code: "device.binding_invalid",
-      params: { field: "canvasId" },
+      params: { field: "deviceProfileId" },
     });
 
-    // A nonexistent receipt_printer_id (valid till + canvas, so only THIS FK fires).
+    // A nonexistent receipt_printer_id (valid till + profile, so only THIS FK fires).
     await expect(
       asApp(suite.admin, cfg, (tx) =>
         generatePairingCode(tx, cfg, {
           kind: "till",
           stationId: null,
           tillId: cfg.tillId,
-          canvasId: canvasId,
+          deviceProfileId: profileId,
           receiptPrinterId: missing,
           label: "x",
         }),

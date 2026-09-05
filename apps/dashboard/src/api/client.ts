@@ -1920,19 +1920,6 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/devices/${id}/revoke`, "POST");
   }
 
-  /** `POST /management-api/devices/:id/assign-canvas` — reassign (or clear) a device's canvas
-   * (device.manage-gated): `canvasId` a tenant canvas's id, or `null` to fall back to the
-   * form-factor default. Answers an empty 204; an unknown device rejects `{ code: "device.not_found" }`.
-   * A UUID-shaped id that names no canvas of this tenant (unknown or foreign) reaches the composite FK
-   * and rejects `{ code: "device.binding_invalid" }`; a MALFORMED (non-UUID) id is screened earlier and
-   * rejects `{ code: "management.request_invalid" }`. The dashboard only ever sends a real canvas id or
-   * `null`, so those two rejects are defense-in-depth. */
-  reassignDevice(id: string, canvasId: string | null): Promise<void> {
-    return this.#request<void>(`/management-api/devices/${id}/assign-canvas`, "POST", {
-      canvasId,
-    });
-  }
-
   /** `POST /management-api/devices/:id/assign-device-profile` — reassign (or clear) a device's device
    * profile (device.manage-gated): `deviceProfileId` a tenant device profile's id, or `null` to fall back
    * to the form-factor default. Answers an empty 204; an unknown device rejects

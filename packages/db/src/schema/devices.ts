@@ -78,10 +78,6 @@ export const devices = pgTable(
     // (tenant_id, till_id) → tills(tenant_id, id) composite FK is hand-written in the --custom migration
     // (a bare column carries no FK), the `station_id` idiom. MATCH SIMPLE skips the check on a NULL.
     tillId: uuid("till_id"),
-    // The assigned layout CANVAS (SP-A.2 §16.3) — which reusable layout this device renders. Bare
-    // uuid, NULLABLE: the tenant-consistent (tenant_id, canvas_id) → canvases(tenant_id,
-    // id) composite FK is hand-written in the --custom migration. MATCH SIMPLE skips the check on a NULL.
-    canvasId: uuid("canvas_id"),
     // The assigned reusable DEVICE PROFILE (device-profile design 2026-09-05 §5.1) — the binding bundle
     // (name + canvas reference + capabilities) this device resolves against. Bare uuid, NULLABLE: the
     // tenant-consistent (tenant_id, device_profile_id) → device_profiles(tenant_id, id) composite FK is
@@ -167,11 +163,10 @@ export const devicePairingCodes = pgTable(
     // The bindings to stamp on the enrolled device, mirroring `devices` (SP-A.2 §16). Each is a bare
     // uuid/text with a hand-written composite FK (or none), the `station_id` idiom; a NULL is skipped by
     // MATCH SIMPLE. `till_id` — the tills row a sale-capable device rings against (§16.4); NULL for a
-    // kds_station. `canvas_id` — the assigned canvas (§16.3). The hardware trio
+    // kds_station. The hardware trio
     // (receipt_printer_id / has_cash_drawer / card_provider / card_reader_id) — the static hardware
     // binding (§16.3); credentials stay in the vault, never here.
     tillId: uuid("till_id"),
-    canvasId: uuid("canvas_id"),
     // `device_profile_id` — the reusable device profile to stamp on the enrolled device (device-profile
     // design 2026-09-05 §5.1). Bare uuid, NULLABLE: the tenant-consistent (tenant_id, device_profile_id)
     // → device_profiles(tenant_id, id) composite FK is hand-written --custom, the `station_id` idiom; a

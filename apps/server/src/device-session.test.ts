@@ -101,7 +101,6 @@ async function enrolDeviceFixture(): Promise<{
  * SP-A.2 fields are pinned alongside the pre-existing `deviceId`/`kind`/`stationId`. */
 const NO_BINDINGS = {
   tillId: null,
-  canvasId: null,
   deviceProfileId: null,
   receiptPrinterId: null,
   hasCashDrawer: false,
@@ -126,16 +125,16 @@ async function seedDeviceProfile(
   return prof.rows[0]!.id;
 }
 
-/** Enrol a REAL `till` device carrying a NON-NULL canvas + hardware binding (SP-A.2 §16) — a layout
- * canvas the manager authored, the seeded till, a cash drawer, and an integrated card reader. Proves
- * `tryReadDevice` carries every new binding column back off the row, not just the null defaults. The
- * canvas row is inserted on the admin connection (RLS bypassed) — pure setup, the `setupStation` shape;
- * `receiptPrinterId` is left null so the fixture needs no `printers` row (the composite FK skips a NULL). */
+/** Enrol a REAL `till` device carrying a NON-NULL profile + hardware binding (SP-A.2 §16, device-profile
+ * §5) — a device profile the manager authored (referencing a layout canvas), the seeded till, a cash
+ * drawer, and an integrated card reader. Proves `tryReadDevice` carries every binding column back off the
+ * row, not just the null defaults. The canvas + profile rows are inserted on the admin connection (RLS
+ * bypassed) — pure setup, the `setupStation` shape; `receiptPrinterId` is left null so the fixture needs
+ * no `printers` row (the composite FK skips a NULL). */
 async function enrolTillDeviceFixture(): Promise<{
   cfg: TillConfig;
   deviceId: string;
   token: string;
-  canvasId: string;
   deviceProfileId: string;
 }> {
   const { cfg } = await setupStation();
@@ -145,7 +144,9 @@ async function enrolTillDeviceFixture(): Promise<{
     returning id`);
   const canvasId = prof.rows[0]!.id;
   // The device profile carries the capabilities the firewall now reads (Task 9): both fenced flags, the
-  // values `DEFAULT_PROFILE_CAPABILITIES.till` seeds. Its canvas reference is the front-counter canvas.
+  // values `DEFAULT_PROFILE_CAPABILITIES.till` seeds. Its canvas reference is the front-counter canvas —
+  // the device binds that canvas SOLELY through this profile (the direct device→canvas link was dropped
+  // in the Task 10 cutover).
   const deviceProfileId = await seedDeviceProfile(
     cfg,
     "Counter",
@@ -154,12 +155,11 @@ async function enrolTillDeviceFixture(): Promise<{
   );
   const { code } = await asApp(suite.admin, cfg, (tx) =>
     // A `till` is sale-capable, so it REQUIRES a till_id (SP-A.2 §16.4) — the seeded till. It also
-    // carries the assigned canvas, the device profile, and the hardware trio (cash drawer + reader).
+    // carries the device profile and the hardware trio (cash drawer + reader).
     generatePairingCode(tx, cfg, {
       kind: "till",
       stationId: null,
       tillId: cfg.tillId,
-      canvasId,
       deviceProfileId,
       hasCashDrawer: true,
       cardProvider: "stripe_terminal",
@@ -168,7 +168,7 @@ async function enrolTillDeviceFixture(): Promise<{
     }),
   );
   const dev = await asApp(suite.admin, cfg, (tx) => enrolDevice(tx, cfg, { code }));
-  return { cfg, deviceId: dev.deviceId, token: dev.token, canvasId, deviceProfileId };
+  return { cfg, deviceId: dev.deviceId, token: dev.token, deviceProfileId };
 }
 
 /** Flip `active = false` on the superuser connection — the revocation a `device.manage` route performs.
@@ -298,12 +298,12 @@ async function enrolHandheldWithCanvasFixture(): Promise<{
   const deviceProfileId = await seedDeviceProfile(cfg, "Waiter", [], canvasId);
   const { code } = await asApp(suite.admin, cfg, (tx) =>
     // A handheld is sale-capable, so it REQUIRES a till_id (SP-A.2 §16.4) — the seeded till. It carries
-    // the phone-portrait canvas and a profile whose `capabilities: []` grant neither fenced flag.
+    // a profile that references the phone-portrait canvas and whose `capabilities: []` grant neither
+    // fenced flag (the canvas binds through the profile since the Task 10 cutover).
     generatePairingCode(tx, cfg, {
       kind: "handheld",
       stationId: null,
       tillId: cfg.tillId,
-      canvasId,
       deviceProfileId,
       label: "Waiter phone",
     }),
@@ -404,10 +404,11 @@ describe("requireDevice (real Postgres)", () => {
     expect(await lastSeenAt(deviceId)).not.toBeNull(); // the guard recorded the sighting
   });
 
-  it("carries the device's assigned canvas + profile + till + hardware bindings back on the binding (SP-A.2 §16, device-profile §5)", async () => {
-    const { cfg, deviceId, token, canvasId, deviceProfileId } = await enrolTillDeviceFixture();
-    // A `till` device with a NON-NULL canvas, profile, till and hardware binding surfaces every column
-    // verbatim — the fields the boot reads (`/api/device/me`, `/api/till`) later echo.
+  it("carries the device's assigned profile + till + hardware bindings back on the binding (SP-A.2 §16, device-profile §5)", async () => {
+    const { cfg, deviceId, token, deviceProfileId } = await enrolTillDeviceFixture();
+    // A `till` device with a NON-NULL profile, till and hardware binding surfaces every column
+    // verbatim — the fields the boot reads (`/api/device/me`, `/api/till`) later echo. The canvas is no
+    // longer a device field; it resolves THROUGH the profile at `/api/till` (Task 10 cutover).
     expect(await probe(cfg, `${deviceId}.${token}`)).toEqual({
       ok: true,
       binding: {
@@ -415,7 +416,6 @@ describe("requireDevice (real Postgres)", () => {
         kind: "till",
         stationId: null,
         tillId: cfg.tillId,
-        canvasId,
         deviceProfileId,
         receiptPrinterId: null,
         hasCashDrawer: true,

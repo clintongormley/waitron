@@ -76,23 +76,22 @@ export function readDeviceCookie(c: Context): string | null {
  * the single station it is bound to (NULL only for a future non-station kind). The device-authenticated
  * KDS routes (Task 5) scope every read/bump to this `stationId` — a device cannot name another's.
  *
- * SP-A.2 §16 widened this with the device's assigned CANVAS + TILL + static HARDWARE bindings, all read
- * straight off the row so the boot reads (`/api/device/me`, `/api/till`) can surface them and the client
- * can (SP-B) boot into its canvas. `tillId` — the `tills` row a sale-capable device rings against
- * (§16.4; NULL for a `kds_station`). `canvasId` — the assigned layout canvas (§16.3; NULL when
- * unassigned). The hardware trio — the per-device `receiptPrinterId` (NULL when none), `hasCashDrawer`,
- * `cardProvider` (config token, defaults `"none"`), and `cardReaderId` (NULL when none). None is a
- * credential; the reader's secrets stay in the vault, never on this row. */
+ * SP-A.2 §16 widened this with the device's assigned TILL + static HARDWARE bindings, all read
+ * straight off the row so the boot reads (`/api/device/me`, `/api/till`) can surface them. `tillId` —
+ * the `tills` row a sale-capable device rings against (§16.4; NULL for a `kds_station`). The hardware
+ * trio — the per-device `receiptPrinterId` (NULL when none), `hasCashDrawer`, `cardProvider` (config
+ * token, defaults `"none"`), and `cardReaderId` (NULL when none). None is a credential; the reader's
+ * secrets stay in the vault, never on this row. */
 export interface DeviceBinding {
   deviceId: string;
   kind: DeviceKind;
   stationId: string | null;
   tillId: string | null;
-  canvasId: string | null;
   // The assigned DEVICE PROFILE (device-profile design 2026-09-05 §5): the reusable bundle a device
-  // resolves its canvas AND capabilities THROUGH. NULL when unassigned ⇒ the capability firewall fails
+  // resolves its canvas AND capabilities THROUGH — the SOLE canvas binding since the Task 10 cutover
+  // dropped the direct device→canvas column. NULL when unassigned ⇒ the capability firewall fails
   // closed (no profile → no capabilities → refuse) and the render canvas falls back to the form-factor
-  // default with `capabilities: []`. Coexists with `canvasId` for now; Task 10 drops the canvas column.
+  // default with `capabilities: []` (`GET /api/till`).
   deviceProfileId: string | null;
   receiptPrinterId: string | null;
   hasCashDrawer: boolean;
@@ -113,7 +112,6 @@ function toDeviceBinding(deviceId: string, row: Omit<DeviceBinding, "deviceId">)
     kind: row.kind,
     stationId: row.stationId,
     tillId: row.tillId,
-    canvasId: row.canvasId,
     deviceProfileId: row.deviceProfileId,
     receiptPrinterId: row.receiptPrinterId,
     hasCashDrawer: row.hasCashDrawer,
@@ -169,7 +167,6 @@ export async function tryReadDevice(
             kind: devices.deviceKind,
             stationId: devices.stationId,
             tillId: devices.tillId,
-            canvasId: devices.canvasId,
             deviceProfileId: devices.deviceProfileId,
             receiptPrinterId: devices.receiptPrinterId,
             hasCashDrawer: devices.hasCashDrawer,
@@ -206,10 +203,9 @@ export async function tryReadDevice(
         tokenHash: devices.tokenHash,
         kind: devices.deviceKind,
         stationId: devices.stationId,
-        // The canvas/till/hardware bindings (SP-A.2 §16) surfaced on the binding — read here so the
+        // The profile/till/hardware bindings (SP-A.2 §16) surfaced on the binding — read here so the
         // boot reads echo them without a second query. All non-secret config, never credentials.
         tillId: devices.tillId,
-        canvasId: devices.canvasId,
         deviceProfileId: devices.deviceProfileId,
         receiptPrinterId: devices.receiptPrinterId,
         hasCashDrawer: devices.hasCashDrawer,
