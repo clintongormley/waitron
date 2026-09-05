@@ -172,7 +172,7 @@ plan → PR; items marked **[owner]** never land unattended.
 harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.test.ts`, every
 `vitest.config.ts`, CLAUDE.md §2–§4):
 
-1. **Coverage split — in flight 2026-09-05:** 98/98/98/95 kept on `verifactu`, `fiscal-verifactu`,
+1. **Coverage split — PR #239 open 2026-09-05:** 98/98/98/95 kept on `verifactu`, `fiscal-verifactu`,
    `core`, `db`, `sync`, `payments`; the 90/90/85/85 floor everywhere else (the four browser
    packages' 95/95/90/88 was above the floor on every axis, so they took the floor).
    The root project (the classifiers) keeps the high bar — a judgement call flagged at review.
