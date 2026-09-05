@@ -1221,6 +1221,24 @@ describe("Device API over real Postgres", () => {
       expect(body).not.toHaveProperty("canvases");
     });
 
+    it("includes the tenant's device profiles (id + name) as a mint option-source", async () => {
+      const venue = await setupVenue();
+      const app = mountDevApp(venue.cfg, true);
+      // Seed a profile so `deviceProfiles[]` is non-empty — the analogue of the removed canvas
+      // option-source: a device now binds a canvas + capabilities through a device profile.
+      const profileId = await seedDeviceProfile(venue.cfg);
+
+      const body = (await (await send(app, "GET", "/api/dev/devices")).json()) as {
+        deviceProfiles: Record<string, unknown>[];
+      };
+      expect(body.deviceProfiles.map((p) => p.id)).toContain(profileId);
+      const profile = body.deviceProfiles.find((p) => p.id === profileId)!;
+      expect(profile).toMatchObject({ id: profileId, name: expect.any(String) });
+      // Only the option-source fields ride — never the profile's canvas ref or capability set.
+      expect(profile).not.toHaveProperty("canvasId");
+      expect(profile).not.toHaveProperty("capabilities");
+    });
+
     it("lists only ACTIVE devices — a revoked device is omitted", async () => {
       const venue = await setupVenue();
       const app = mountDevApp(venue.cfg, true);
@@ -1312,6 +1330,46 @@ describe("Device API over real Postgres", () => {
       expect(res.status).toBe(400);
       expect((await res.json()) as { error: { code: string } }).toMatchObject({
         error: { code: "device.till_required" },
+      });
+    });
+
+    it("mints a device carrying the chosen deviceProfileId (forwarded to the reused verb)", async () => {
+      const venue = await setupVenue();
+      const app = mountDevApp(venue.cfg, true);
+      const profileId = await seedDeviceProfile(venue.cfg);
+
+      const res = await send(app, "POST", "/api/dev/devices", {
+        body: {
+          kind: "till",
+          label: "Dev till",
+          tillId: venue.cfg.tillId,
+          deviceProfileId: profileId,
+        },
+      });
+      expect(res.status).toBe(201);
+      const { deviceId } = (await res.json()) as { deviceId: string };
+      // The enrolled device carries the profile — the mint threaded it through generatePairingCode.
+      expect((await deviceBindings(deviceId)).device_profile_id).toBe(profileId);
+    });
+
+    it("a bad/foreign deviceProfileId → 400 device.binding_invalid (composite FK)", async () => {
+      const venue = await setupVenue();
+      const app = mountDevApp(venue.cfg, true);
+      // A well-formed UUID naming no device_profiles row of this tenant trips the pairing code's
+      // composite FK → device.binding_invalid naming the field, the SAME code+shape the management mint
+      // raises. (A REAL profile owned by another tenant takes the same path — the FK looks for
+      // (this_tenant, id) and misses.)
+      const res = await send(app, "POST", "/api/dev/devices", {
+        body: {
+          kind: "till",
+          label: "Dev till",
+          tillId: venue.cfg.tillId,
+          deviceProfileId: randomUUID(),
+        },
+      });
+      expect(res.status).toBe(400);
+      expect((await res.json()) as { error: { code: string; params: unknown } }).toMatchObject({
+        error: { code: "device.binding_invalid", params: { field: "deviceProfileId" } },
       });
     });
 

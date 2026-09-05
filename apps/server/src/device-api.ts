@@ -17,6 +17,7 @@ import { AppError } from "@waitron/shared";
 import { asAppUser, deviceKind, devices, ticketItems, tills, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
+import { listDeviceProfiles } from "@waitron/layouts";
 import { createErrorBoundary } from "./error-boundary.js";
 import { readJsonBody } from "./read-json-body.js";
 import { requireManagementSession } from "./management-session.js";
@@ -496,18 +497,23 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
               .from(devices)
               .where(eq(devices.active, true))
               .orderBy(desc(devices.enrolledAt));
-            // The option-sources for minting a new device (Task 5's `POST /api/dev/devices`): the tenant's
-            // tills (RLS-scoped, no explicit tenant filter) and its kitchen stations. (The canvas is no
-            // longer a device binding since the Task 10 cutover — it resolves through the device profile,
-            // assigned on the dashboard devices screen — so the dev mint no longer offers a canvas picker.)
+            // The option-sources for minting a new device (`POST /api/dev/devices`): the tenant's tills
+            // (RLS-scoped, no explicit tenant filter), its kitchen stations, and its device profiles.
+            // (Since the Task 10 cutover a device binds its canvas + capabilities through a device
+            // profile, so the dev mint offers a PROFILE picker where it used to offer a canvas one — the
+            // exact analogue, `listDeviceProfiles` in the SAME RLS-scoped tx the canvas list used.)
             const tillRows = await tx
               .select({ id: tills.id, name: tills.name, locationId: tills.locationId })
               .from(tills);
             const stations = await listStations(tx, deps.cfg);
+            const profiles = await listDeviceProfiles(tx, deps.cfg.tenantId);
             return {
               devices: deviceRows,
               tills: tillRows,
               stations,
+              // Only id+name — the mint form binds against the id and shows the name; the profile's
+              // canvas ref and capability set are dashboard concerns, not a dev-picker option.
+              deviceProfiles: profiles.map((profile) => ({ id: profile.id, name: profile.name })),
             };
           }),
         ),
@@ -523,6 +529,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           label?: unknown;
           stationId?: unknown;
           tillId?: unknown;
+          deviceProfileId?: unknown;
         }>(c);
         // The SAME field screens `POST /management-api/device-codes` uses, so validation cannot drift.
         const kind = requireEnum(body.kind, "kind", deviceKind.enumValues);
@@ -533,6 +540,10 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           ? requireBodyUuid(body.stationId, "stationId")
           : null;
         const tillId = optionalUuid(body.tillId, "tillId");
+        // The optional device profile to stamp on the minted device (device-profile design §5.1) —
+        // screened for SHAPE like `tillId`; a well-formed id naming no `device_profiles` row of this
+        // tenant is caught by the pairing code's composite FK → `device.binding_invalid`, in the verb.
+        const deviceProfileId = optionalUuid(body.deviceProfileId, "deviceProfileId");
         // Mint a code then immediately redeem it, in ONE tenant tx, reusing every binding rule
         // (`device.till_required` / `device.station_required` / `device.binding_invalid`). No cookie is
         // set: the dev override authenticates by id, so the tab adopts the device via sessionStorage.
@@ -542,6 +553,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
             kind,
             stationId,
             tillId,
+            deviceProfileId,
             label,
           });
           return enrolDevice(tx, deps.cfg, { code });

@@ -136,6 +136,9 @@ export class TillDevChooser extends LitElement {
   @state() private label = "";
   @state() private tillId = "";
   @state() private stationId = "";
+  /** The chosen device profile, or `""` for "no profile" (the leading option). Applies to any kind —
+   * the profile carries the canvas + capabilities binding, unlike the kind-specific till/station. */
+  @state() private profileId = "";
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -161,9 +164,10 @@ export class TillDevChooser extends LitElement {
   }
 
   /** Mint a new device and adopt it. `tillId` rides only for a sale-capable kind (`till`/`handheld`),
-   * `stationId` only for a `kds_station`. An empty selection omits its field (never sends `""`). A
-   * rejected `{ code }` shows inline. (Since the Task 10 cutover a device binds its canvas through a
-   * device profile, assigned on the dashboard — the dev mint no longer picks a canvas.) */
+   * `stationId` only for a `kds_station`, and `deviceProfileId` whenever a profile is picked. An empty
+   * selection omits its field (never sends `""`). A rejected `{ code }` shows inline. (Since the Task 10
+   * cutover a device binds its canvas + capabilities through a device profile — the dev mint picks the
+   * profile where it used to pick a canvas.) */
   async #mint(): Promise<void> {
     if (this.label === "" || this.minting) return;
     this.minting = true;
@@ -174,6 +178,7 @@ export class TillDevChooser extends LitElement {
     } else if (this.tillId !== "") {
       req.tillId = this.tillId;
     }
+    if (this.profileId !== "") req.deviceProfileId = this.profileId;
     try {
       const res = await this.api.mintDevDevice(req);
       setDevDeviceId(res.deviceId);
@@ -279,6 +284,7 @@ export class TillDevChooser extends LitElement {
           }}
         ></wt-input>
         ${this.kind === "kds_station" ? this.#stationField(list) : this.#tillField(list)}
+        ${this.#profileField(list)}
         <wt-button
           data-mint-submit
           variant="primary"
@@ -318,6 +324,23 @@ export class TillDevChooser extends LitElement {
         <option value="">—</option>
         ${list.stations.map(
           (station) => html`<option value=${station.id}>${station.name}</option>`,
+        )}
+      </select>
+    </div>`;
+  }
+
+  #profileField(list: DevDeviceList): TemplateResult {
+    return html`<div class="field">
+      <label for="mint-profile">Device profile (optional)</label>
+      <select
+        id="mint-profile"
+        data-mint-profile
+        .value=${this.profileId}
+        @change=${(e: Event) => (this.profileId = (e.target as HTMLSelectElement).value)}
+      >
+        <option value="">— no profile —</option>
+        ${list.deviceProfiles.map(
+          (profile) => html`<option value=${profile.id}>${profile.name}</option>`,
         )}
       </select>
     </div>`;

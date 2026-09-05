@@ -22,7 +22,7 @@ function stubApi(overrides: Partial<Record<DevVerbs, unknown>> = {}): TillApi {
 }
 
 function emptyList(): DevDeviceList {
-  return { devices: [], tills: [], stations: [] };
+  return { devices: [], tills: [], stations: [], deviceProfiles: [] };
 }
 
 /** Lets a pending API promise settle and the element re-render. */
@@ -80,6 +80,7 @@ describe("till-dev-chooser", () => {
       ],
       tills: [{ id: "t1", name: "Caja 1", locationId: "l1" }],
       stations: [{ id: "s1", name: "Pass", displayOrder: 1, isDefault: true, active: true }],
+      deviceProfiles: [],
     };
     const { el } = await mountWidget<TillDevChooser>("till-dev-chooser", {
       api: stubApi({ getDevDevices: vi.fn().mockResolvedValue(list) }),
@@ -115,6 +116,7 @@ describe("till-dev-chooser", () => {
       ],
       tills: [],
       stations: [],
+      deviceProfiles: [],
     };
     const { el } = await mountWidget<TillDevChooser>("till-dev-chooser", {
       api: stubApi({ getDevDevices: vi.fn().mockResolvedValue(list) }),
@@ -138,6 +140,7 @@ describe("till-dev-chooser", () => {
       devices: [],
       tills: [{ id: "t1", name: "Caja 1", locationId: "l1" }],
       stations: [],
+      deviceProfiles: [],
     };
     const { el } = await mountWidget<TillDevChooser>("till-dev-chooser", {
       api: stubApi({ getDevDevices: vi.fn().mockResolvedValue(list), mintDevDevice }),
@@ -168,6 +171,7 @@ describe("till-dev-chooser", () => {
       devices: [],
       tills: [],
       stations: [{ id: "s1", name: "Pass", displayOrder: 1, isDefault: true, active: true }],
+      deviceProfiles: [],
     };
     const { el } = await mountWidget<TillDevChooser>("till-dev-chooser", {
       api: stubApi({ getDevDevices: vi.fn().mockResolvedValue(list), mintDevDevice }),
@@ -188,6 +192,77 @@ describe("till-dev-chooser", () => {
     });
     expect(sessionStorage.getItem(DEV_DEVICE_STORAGE_KEY)).toBe("kds3");
     expect(navigate).toHaveBeenCalledWith("/");
+  });
+
+  it("renders the profile picker from deviceProfiles and mints with the chosen deviceProfileId", async () => {
+    const navigate = vi.fn();
+    const mintDevDevice = vi.fn().mockResolvedValue({
+      deviceId: "p1",
+      kind: "till",
+      stationId: null,
+      label: "Front",
+    } satisfies DevMintResult);
+    const list: DevDeviceList = {
+      devices: [],
+      tills: [],
+      stations: [],
+      deviceProfiles: [
+        { id: "pr1", name: "Front counter" },
+        { id: "pr2", name: "Kitchen pass" },
+      ],
+    };
+    const { el } = await mountWidget<TillDevChooser>("till-dev-chooser", {
+      api: stubApi({ getDevDevices: vi.fn().mockResolvedValue(list), mintDevDevice }),
+      navigate,
+    });
+    await flush(el);
+    // The select renders one option per profile (plus the leading "no profile" option).
+    const options = [...el.shadowRoot!.querySelectorAll("[data-mint-profile] option")].map((o) =>
+      o.textContent!.trim(),
+    );
+    expect(options).toEqual(expect.arrayContaining(["Front counter", "Kitchen pass"]));
+
+    typeInput(el, "[data-mint-label]", "Front");
+    pickSelect(el, "[data-mint-profile]", "pr2");
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-mint-submit]")!.click();
+    await flush(el);
+    expect(mintDevDevice).toHaveBeenCalledWith({
+      kind: "till",
+      label: "Front",
+      deviceProfileId: "pr2",
+    });
+    expect(sessionStorage.getItem(DEV_DEVICE_STORAGE_KEY)).toBe("p1");
+    expect(navigate).toHaveBeenCalledWith("/");
+  });
+
+  it("omits deviceProfileId when 'no profile' is left selected", async () => {
+    // `navigate` is stubbed so the successful mint's `navigate("/")` never fires the default
+    // `location.assign` — that would navigate the headless browser away and hang the runner.
+    const navigate = vi.fn();
+    const mintDevDevice = vi.fn().mockResolvedValue({
+      deviceId: "p2",
+      kind: "till",
+      stationId: null,
+      label: "Front",
+    } satisfies DevMintResult);
+    const list: DevDeviceList = {
+      devices: [],
+      tills: [],
+      stations: [],
+      deviceProfiles: [{ id: "pr1", name: "Front counter" }],
+    };
+    const { el } = await mountWidget<TillDevChooser>("till-dev-chooser", {
+      api: stubApi({ getDevDevices: vi.fn().mockResolvedValue(list), mintDevDevice }),
+      navigate,
+    });
+    await flush(el);
+    typeInput(el, "[data-mint-label]", "Front");
+    // The profile select is left on its leading "no profile" option (value "").
+    el.shadowRoot!.querySelector<HTMLElement>("[data-mint-submit]")!.click();
+    await flush(el);
+    // No deviceProfileId rides — an empty selection sends none, never `""`.
+    expect(mintDevDevice).toHaveBeenCalledWith({ kind: "till", label: "Front" });
   });
 
   it("renders a rejected mint code inline and does not navigate", async () => {

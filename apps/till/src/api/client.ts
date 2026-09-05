@@ -728,8 +728,9 @@ export interface DeviceStation {
  * of the server's dev-route shapes, deliberately NOT imported — the same bundle-decoupling rationale
  * as every other type in this file (see the file header). `kind` stays a plain `string` (not a
  * union): the chooser only surfaces the values the server sends, so a new device kind never breaks it.
- * (The dev mint no longer offers a canvas picker — the canvas resolves through the device profile since
- * the Task 10 cutover; a device profile is assigned on the dashboard devices screen.)
+ * (The dev mint binds a device PROFILE — the canvas + capabilities binding since the Task 10 cutover —
+ * where it used to bind a canvas; `deviceProfiles` is the profile option-source and {@link DevMintRequest}
+ * carries the chosen `deviceProfileId`.)
  */
 export interface DevDevice {
   id: string;
@@ -751,16 +752,25 @@ export interface DevStation {
   isDefault: boolean;
   active: boolean;
 }
+/** A mint option-source: one of the tenant's device profiles, `id` (bound) + `name` (shown). The
+ * profile's canvas ref + capability set stay server-side — a dev picker needs only the label. */
+export interface DevDeviceProfile {
+  id: string;
+  name: string;
+}
 export interface DevDeviceList {
   devices: DevDevice[];
   tills: DevTill[];
   stations: DevStation[];
+  deviceProfiles: DevDeviceProfile[];
 }
 export interface DevMintRequest {
   kind: string;
   label: string;
   tillId?: string;
   stationId?: string;
+  /** The device profile to stamp on the minted device; omitted when "no profile" is chosen. */
+  deviceProfileId?: string;
 }
 export interface DevMintResult {
   deviceId: string;
