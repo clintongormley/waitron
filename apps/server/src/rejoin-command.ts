@@ -115,6 +115,12 @@ export async function runRejoin(deps: {
     deps.out("DATABASE_URL must be set to the app pool for the pre-wipe membership read");
     return 1;
   }
+  // OPERATOR INVARIANT: `DATABASE_URL` (the db the guards inspect via `node_membership`) and
+  // `WAITRON_RESTORE_DATABASE_URL` (the db the wipe drops and the restore targets) MUST name the same
+  // database. The `not_fenced`/`not_drained` guards are meaningful only if the db they read is the one
+  // that then gets wiped and restored; point them at different databases and the guards vouch for a box
+  // that is not the one being rebuilt. Not enforced here at runtime — a cross-URL db-name check is an
+  // owner-decision follow-up, not part of R3.
 
   const syncDbUrl = deps.env.WAITRON_SYNC_DATABASE_URL;
   if (isUnset(syncDbUrl)) {

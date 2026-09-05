@@ -14,7 +14,7 @@ import { dropAndCreateDatabase } from "./db-wipe.js";
 // SUPERUSER connection pointed at the default `test` maintenance database — exactly the privileged,
 // maintenance-db-connected `admin` this test needs, and reusing it keeps this suite on the repo's
 // one-container-per-package rollout (#112–#123) rather than booting its own. The wipe only ever
-// drops throwaway TARGET databases built with `databaseUrl(uri, name)` — never the shared `test` db
+// drops throwaway TARGET databases built with `databaseUrl(adminUrl, name)` — never the shared `test` db
 // or any template — so the shared container is safe. Only `admin` (a raw connection this suite opens
 // itself, not a lifecycle-owned resource) needs a guarded teardown, per §4.
 describe("dropAndCreateDatabase (real Postgres)", () => {

@@ -80,7 +80,8 @@ type RestoreHook = (ctx: RestoreHookContext) => void | Promise<void>;
  * Restore one encrypted backup artifact onto a fresh box, in the fixed order the flow demands:
  * decrypt → unpack → read the manifest → refuse an incompatible target (the GATE) → validate EVERY
  * entry name against its destination root (the GUARD) → restore the database, then media, then
- * secrets → invoke each enabled module's restore hook → clean staging.
+ * secrets (SKIPPED when `skipSecrets` is set — R3 rejoin keeps its own identity) → invoke each enabled
+ * module's restore hook → clean staging.
  *
  * The GATE and the GUARD both run BEFORE any write, on purpose: `pg_restore` mutates the live
  * database irreversibly and media/secrets writes land permanently on disk, so a cross-environment or
@@ -149,10 +150,11 @@ export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
   // Restore creates its OWN destination roots before the guard realpath's them: the backup side
   // mkdir's its staging (backup-sweep.ts `runOnce`), so the restore side must mkdir its staging AND
   // its media/state destinations, or the guard's `realpath` ENOENTs on a fresh box — after `runRejoin`
-  // has already run the IRREVERSIBLE wipe, leaving the box wiped-but-not-restored. All three are
-  // proven necessary by deletion (restore.test.ts): the db.dump→stagingDir, media/*→mediaDir and
-  // secrets/*→stateDir guards each realpath their root, and the secret-guard loop runs even under
-  // `skipSecrets`. Recursive mkdir of an existing dir is a harmless no-op.
+  // has already run the IRREVERSIBLE wipe, leaving the box wiped-but-not-restored. stagingDir is proven
+  // by deletion in restore.test.ts (deleting all three mkdirs fails at the FIRST guard, stagingDir);
+  // media/state are established by the same guard-realpath shape — the up-front guard realpaths all
+  // three roots (db.dump→stagingDir, media/*→mediaDir, secrets/*→stateDir), the secret-guard loop
+  // running even under `skipSecrets`. Recursive mkdir of an existing dir is a harmless no-op.
   await mkdir(deps.stagingDir, { recursive: true });
   await mkdir(deps.mediaDir, { recursive: true });
   await mkdir(deps.stateDir, { recursive: true });

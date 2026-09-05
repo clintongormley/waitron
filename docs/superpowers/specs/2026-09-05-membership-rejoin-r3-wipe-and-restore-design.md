@@ -109,11 +109,16 @@ Only past the ladder:
 
 **Atomicity, stated honestly (CLAUDE.md §3 convention).** This is deliberately **not** one transaction —
 a `DROP DATABASE` cannot live inside one, and the media/secrets writes are filesystem steps. A failure
-mid-flow leaves the box with a wiped-or-half-restored database, recoverable by **re-running** the same
-command (the drained tail is safe on the carrier; the artifact is unchanged; the guards are idempotent).
-This matches `adoptFromPrimary`'s documented multi-step, idempotent-re-run posture
-([`apps/server/src/adopt.ts`](../../../apps/server/src/adopt.ts)) and is called out in the orchestrator's
-own header.
+after the wipe leaves the box wiped-but-not-restored, and this does **not** self-recover on a re-run:
+the guards read `node_membership` from the SAME database the wipe destroys, so a re-run of `waitron-rejoin`
+fails at connect (if the `CREATE DATABASE` never ran) or at `rejoin.not_fenced` (against the emptied db,
+which holds no membership). No data is lost — the drained tail is safe on the carrier and the artifact is
+unchanged — but an operator must complete the restore into the emptied database by hand. An automatic
+resume-at-restore (detect an emptied/wiped target and skip straight to restore) is a possible follow-up,
+deferred because distinguishing a wiped-mid-restore box from a never-provisioned one needs a persisted
+marker (owner's call at sign-off). This shares `adoptFromPrimary`'s documented multi-step, non-atomic
+posture ([`apps/server/src/adopt.ts`](../../../apps/server/src/adopt.ts)) and is called out in the
+orchestrator's own header.
 
 ## 5. Fiscal safety — delegated to the drain, no R3 machinery
 
