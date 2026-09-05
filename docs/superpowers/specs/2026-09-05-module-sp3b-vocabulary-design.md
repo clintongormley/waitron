@@ -120,8 +120,9 @@ forbidden already. The labour section moves as it is.
     readonly packageDir: string; // derived, e.g. "fiscal-verifactu"
     readonly terms: readonly string[];
   }
-  /** Every module declaring a non-empty vocabulary, with the package dir derived from
-   * `migrations.from` (`../<pkg>/drizzle`). Throws on a `from` of any other shape. */
+  /** Every module declaring a vocabulary (an empty declaration is returned too, so the suite can
+   * reject it by name), with the package dir derived from `migrations.from` (`../<pkg>/drizzle`).
+   * Throws on a `from` of any other shape. */
   export function vocabularyOwners(modules: readonly VocabularyDeclaration[]): VocabularyOwner[];
   /** base ∪ every owner's terms. */
   export function forbiddenVocabulary(base: ReadonlySet<string>, modules: readonly VocabularyDeclaration[]): Set<string>;
