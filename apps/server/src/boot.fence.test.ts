@@ -276,6 +276,7 @@ beforeAll(async () => {
       nodeId: PEER_SOURCE_NODE,
       environment: "production",
       enrolments: ALL_SYNC_ENROLMENTS,
+      moduleVersions: {},
     },
     () => {},
   );

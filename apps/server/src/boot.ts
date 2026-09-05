@@ -26,7 +26,7 @@ import { drain } from "@waitron/fiscal-verifactu";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules, orderedMigrationSets, reconcile } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { ALL_MODULES, ALL_SYNC_ENROLMENTS } from "./modules.js";
+import { ALL_MODULES, ALL_SYNC_ENROLMENTS, MODULE_BY_TABLE } from "./modules.js";
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { parseEnvFile } from "./env-file.js";
@@ -554,7 +554,8 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // the sync source (`mountSyncApi`), the pull loop (`runSyncPull`), and the disposal guard
   // (`readDrainProgress`) below — `@waitron/sync` no longer owns it (SP-2a inversion). Assembled from
   // ALL_MODULES, NOT the enabled set, to stay behaviour-preserving: the former central `ENROLLED` was
-  // unconditional; the enabled-set-aware pull is SP-2b (spec §6).
+  // unconditional; the enabled-set-aware pull is DEFERRED (spec §2/§7), built with the first
+  // genuinely-toggleable module.
   await applyMigrations(
     config.migrationsDatabaseUrl,
     migrationOptionsFor(orderedMigrationSets(setsToMigrate), config.migrationsRoot),
@@ -576,14 +577,27 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // `execute`, never inside a transaction — because `appliedSchemaVersion`'s 42P01 catch for a
   // never-migrated table poisons an enclosing transaction (spec §3); a fresh connection used
   // auto-commit satisfies that just as the pool would.
+  // SP-2b: hoisted to `startServer` scope so the sync mount/pull sites (~700 lines below) can inject
+  // it into the sync deps (the schema-version park gate). Populated ONLY in the trading-mode block
+  // below, under the SAME `config.till !== undefined` condition that guards those sites, so the sync
+  // wiring never sees it unassigned. The `= {}` default is what satisfies definite-assignment at the
+  // out-of-block reads (the `mountSyncApi` sites, SP-2b) — TS cannot correlate the two `config.till`
+  // conditionals, so it would otherwise demand it — while never actually advertising `{}`, because
+  // those reads only run when `config.till !== undefined`, the same condition that populated it.
+  let myModuleVersions: Record<string, number> = {};
   if (config.till !== undefined) {
     const driftProbe = await createPostgresDb(config.migrationsDatabaseUrl);
     try {
-      const versions = await schemaVersionsByModule(driftProbe, ALL_MODULES);
+      // SP-2b: one sweep of every module's applied schema version, keyed by name (main's
+      // `schemaVersionsByModule`, which BR-2's backup manifest shares — the driftProbe is an
+      // auto-commit pool, so its `Promise.all` reads are each isolated); the migrated Set is derived
+      // from it (version > 0). The Set handed to `reconcile` is byte-for-byte the one the former
+      // inline loop built.
+      myModuleVersions = await schemaVersionsByModule(driftProbe, ALL_MODULES);
       const migrated = new Set(
-        Object.entries(versions)
+        Object.entries(myModuleVersions)
           .filter(([, v]) => v > 0)
-          .map(([name]) => name),
+          .map(([n]) => n),
       );
       // `setsToMigrate` already holds `enabledModules(ALL_MODULES, moduleConfig)` in trading mode
       // (the branch above), so reuse it rather than recompute the same filter.
@@ -1315,6 +1329,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
           nodeId: till.nodeId,
           environment: config.environment,
           enrolments: ALL_SYNC_ENROLMENTS,
+          moduleVersions: myModuleVersions,
         },
         log,
       );
@@ -1335,6 +1350,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
           environment: config.environment,
           enrolments: ALL_SYNC_ENROLMENTS,
           ownOriginOnly: true,
+          moduleVersions: myModuleVersions,
         },
         log,
       );
@@ -1423,6 +1439,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         log,
         lane,
         enrolments: ALL_SYNC_ENROLMENTS,
+        // SP-2b: this subscriber's own per-module applied versions (boot snapshot) + the table→module
+        // map, threaded through applyBatch for the schema-version gate.
+        moduleVersions: myModuleVersions,
+        moduleByTable: MODULE_BY_TABLE,
         adoptMembership,
         // Membership Slice 7: the LIVE serving-primary id for the apply path's config-conflict gate,
         // passed as a getter read fresh per batch (see `liveServingPrimaryId` above). On the CARRIER

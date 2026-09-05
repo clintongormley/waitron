@@ -137,8 +137,9 @@ describe("readDrainProgress", () => {
   });
 
   it("does not throw when a lane is omitted entirely from the enrolment set (empty table list → `and false`)", async () => {
-    // SP-2b's enabled-set filtering can hand `readDrainProgress` a partial enrolment set that omits a
-    // whole lane. CORE_ENROLMENT is real and entirely ordered-lane, so `tablesForLane(_, "fast")` is
+    // A future (deferred) enabled-set filter (spec §2/§7) can hand `readDrainProgress` a partial
+    // enrolment set that omits a whole lane. CORE_ENROLMENT is real and entirely ordered-lane, so
+    // `tablesForLane(_, "fast")` is
     // `[]` here. Without the empty-lane guard the fast lane's subquery emits an invalid `in ()` and
     // Postgres throws a syntax error; with it, the fast lane is treated as no-own-rows and drops
     // through the `continue`. Seed one ordered-lane own row that is drained, and assert the call

@@ -64,6 +64,18 @@ export interface ApplyBatchOptions {
    * carrier / has no known serving-primary) the gate is INERT — every row applies as it does today, so
    * normal config down-flow is never broken by the gate (R-S7-2). */
   servingPrimaryId?: string;
+  /** The SOURCE's per-module applied versions from /hello. Absent for a pre-SP-2b peer → the version
+   * gate is disabled (behaviour-preserving, spec §4). Otherwise the gate compares it per module against
+   * {@link ApplyBatchOptions.subscriberModuleVersions} (resolving each row's module via
+   * {@link ApplyBatchOptions.moduleByTable}) and parks a row whose module the source migrated ahead of
+   * this subscriber — see {@link ApplyBatchResult.versionParked}. */
+  sourceModuleVersions?: Record<string, number>;
+  /** THIS subscriber's own per-module applied versions (boot snapshot), the lower side of the gate's
+   * per-module comparison against {@link ApplyBatchOptions.sourceModuleVersions}. */
+  subscriberModuleVersions: Record<string, number>;
+  /** table → owning module, used to resolve a row's module in the gate (spec §5). A row naming a table
+   * absent from this map is not version-parked (it falls through to the enrolment check). */
+  moduleByTable: ReadonlyMap<string, string>;
 }
 
 export interface ApplyBatchResult {
@@ -82,6 +94,12 @@ export interface ApplyBatchResult {
    * skipped before the gate, so it is neither re-applied nor re-recorded). Always 0 when the gate is
    * inert (`servingPrimaryId` undefined). */
   rejected: number;
+  /** Rows parked because the SOURCE's schema version for the row's module is ahead of THIS
+   * subscriber's — held below the cursor, redelivered after this node reboots and migrates (SP-2b).
+   * Distinct from `deferred` (23503 FK-park): a version-park is NOT self-healing within a batch (the
+   * subscriber's migrated version only changes on reboot), so it never enters the retry pass. Each
+   * parked seq is counted once. */
+  versionParked: number;
 }
 
 /** The reject gate's per-batch context, threaded into {@link tryApplyRow} so both the main pass and the
@@ -201,8 +219,26 @@ export async function applyBatch(
   let applied = 0;
   let deferred = 0;
   let rejected = 0;
+  let versionParked = 0;
   const parked: SyncLogRow[] = [];
   const gate: GateContext = { servingPrimaryId: opts.servingPrimaryId, lane };
+
+  // The version-park predicate (SP-2b, spec §4). A row whose owning module the SOURCE migrated ahead of
+  // THIS subscriber is parked BEFORE the apply attempt: `jsonb_populate_record` silently drops a JSON key
+  // with no matching column, so applying such a row into the older table would lose the newer column —
+  // silent cross-node corruption. Parking holds it below the cursor until this node reboots and migrates.
+  //  - source map absent (a pre-SP-2b peer served no `moduleVersions`) → gate DISABLED, behaviour-
+  //    preserving (spec §4 "robustness at the edges", mirrors the older-peer `membership` tolerance);
+  //  - an unknown table (not in `moduleByTable`) → false, so it falls through to the existing
+  //    `sync.table_not_enrolled` throw in `tryApplyRow` rather than being masked as a park;
+  //  - otherwise `(source[M] ?? 0) > (subscriber[M] ?? 0)` — a missing per-module version counts as 0,
+  //    NOT "skip the check" (spec §4): the subscriber being at 0 while the source is ahead still parks.
+  const isVersionAhead = (row: SyncLogRow): boolean => {
+    if (opts.sourceModuleVersions === undefined) return false;
+    const mod = opts.moduleByTable.get(row.table);
+    if (mod === undefined) return false;
+    return (opts.sourceModuleVersions[mod] ?? 0) > (opts.subscriberModuleVersions[mod] ?? 0);
+  };
 
   // Records a row's outcome against its origin's progress. Returns true if the row is now settled
   // (so a parked row can be removed from the retry queue), false if it is (still) parked. The single
@@ -230,6 +266,19 @@ export async function applyBatch(
     if (row.seq <= cur) {
       // Already applied in a prior batch: an idempotent no-op, never re-run (spec §3.2/§3.3).
       bucket(row.originId).settled.push(row.seq);
+      continue;
+    }
+    // Version gate (SP-2b) — AFTER the already-applied cursor-skip (never re-park a settled row) and
+    // BEFORE the apply attempt (so it precedes the config-conflict gate inside tryApplyRow: a
+    // version-ahead row must never be recorded/rejected under a schema this node has not yet migrated
+    // to). A version-ahead row is parked into the SAME `deferred` set the 23503 defer uses, so the
+    // cursor-hold + redelivery machinery holds the lane cursor below it for free. It is NOT pushed to
+    // `parked`: the retry pass cannot change a version verdict within one batch (spec §3) — the
+    // subscriber's migrated version only moves on reboot.
+    if (isVersionAhead(row)) {
+      const b = bucket(row.originId);
+      if (!b.deferred.has(row.seq)) versionParked += 1; // per-origin dedup, matching settleOrPark
+      b.deferred.add(row.seq); // hold the cursor below it (reuse the machinery)
       continue;
     }
     const outcome = await tryApplyRow(subscriberDb, row, DISPATCH, gate);
@@ -260,7 +309,7 @@ export async function applyBatch(
     if (high > start) await advanceCursor(subscriberDb, opts.subscriberId, originId, lane, high);
   }
 
-  return { applied, deferred, rejected };
+  return { applied, deferred, rejected, versionParked };
 }
 
 /** A `$1`-bearing statement split into the text before and after the single payload bind. */

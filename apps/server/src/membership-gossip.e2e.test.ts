@@ -93,6 +93,8 @@ async function pullOneRound(localDb: Database, trustSet: TrustSet): Promise<Acce
     http: httpClient,
     batchLimit: 500,
     enrolments: ALL_SYNC_ENROLMENTS,
+    moduleVersions: {},
+    moduleByTable: new Map<string, string>(),
     peers: [{ nodeId: SOURCE_NODE, url: "http://source.local", token: peerToken }],
     sleep: realSleep,
     signal: ac.signal,
@@ -143,6 +145,7 @@ beforeAll(async () => {
       nodeId: SOURCE_NODE,
       environment: "preproduction",
       enrolments: ALL_SYNC_ENROLMENTS,
+      moduleVersions: {},
     },
     log,
   );

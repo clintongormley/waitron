@@ -59,6 +59,12 @@ export interface SyncPullDeps {
    * serving-primary), leaves the gate inert and every row applies as it does today, so normal config
    * down-flow is never broken (R-S7-2). Boot passes `() => liveServingPrimaryId`. */
   servingPrimaryId?: () => string | undefined;
+  /** THIS subscriber's own per-module applied versions (boot snapshot), for the version gate (SP-2b).
+   * Threaded straight into the `applyBatch` opts as `subscriberModuleVersions`. */
+  moduleVersions: Record<string, number>;
+  /** table → owning module (from the composition root), for the version gate (SP-2b). Threaded into
+   * the `applyBatch` opts. */
+  moduleByTable: ReadonlyMap<string, string>;
 }
 
 /** {@link syncPullOnce}'s result: the applied/deferred counts of {@link ApplyBatchResult} plus
@@ -122,7 +128,12 @@ export async function syncPullOnce(deps: SyncPullDeps, peer: PullPeer): Promise<
   if (hello.status !== 200) {
     throw new Error(`sync pull: peer /sync-api/hello responded ${hello.status}`);
   }
-  const helloBody = JSON.parse(await hello.text()) as { environment: string; membership?: unknown };
+  const helloBody = JSON.parse(await hello.text()) as {
+    environment: string;
+    membership?: unknown;
+    // The SOURCE's per-module applied versions (SP-2b Task 2); absent from a pre-SP-2b peer.
+    moduleVersions?: Record<string, number>;
+  };
   const sourceEnvironment = helloBody.environment;
 
   const before = await readCursor(deps.localDb, deps.subscriberId, peer.nodeId, lane);
@@ -142,6 +153,11 @@ export async function syncPullOnce(deps: SyncPullDeps, peer: PullPeer): Promise<
     // getter for THIS batch — so a promotion/demotion since the last batch is honoured without a restart.
     // undefined leaves the gate inert (fail-safe); applyBatch decides per row (spec §7).
     servingPrimaryId: deps.servingPrimaryId?.(),
+    // SP-2b: the source's + this subscriber's per-module versions and the table→module map, which the
+    // apply loop's version gate compares to park a row whose module the source migrated ahead of us.
+    sourceModuleVersions: helloBody.moduleVersions,
+    subscriberModuleVersions: deps.moduleVersions,
+    moduleByTable: deps.moduleByTable,
   });
   // Re-read the (subscriber, origin, lane) cursor: `advanced` is whether applyBatch moved THIS lane's
   // cursor this iteration. A full page that did NOT advance is all-parked — every row 23503-parked on
@@ -284,6 +300,18 @@ export async function runSyncPull(deps: RunSyncPullDeps): Promise<void> {
             });
           }
           if (last.fetched < deps.batchLimit || !last.advanced) break;
+        }
+        // Operator visibility for a rolling migration (spec §3, §7.4 ruling 4): when the drained page
+        // version-parked rows — held because their owning module the SOURCE migrated ahead of THIS
+        // node — emit an INFO line naming the origin, lane and count, so an operator watching a rolling
+        // migration sees which node is behind. Best-effort like the membership/cursor logs below: it is
+        // transient skew signalling, never a pull failure, so it never grows backoff or breaks the loop.
+        if (last !== undefined && last.versionParked > 0) {
+          deps.log("info", "sync.version_parked", {
+            originId: peer.nodeId,
+            lane,
+            versionParked: last.versionParked,
+          });
         }
         // Best-effort membership adoption (spec §5): hand the peer's advertised document to the
         // injected callback. Its OWN try/catch — an adopt failure is a witness optimisation missing,

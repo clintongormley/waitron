@@ -40,6 +40,10 @@ const dummyDeps: SyncPullDeps = {
   // pullOnce is injected in every test here, so applyBatch (the only consumer of `enrolments`) never
   // runs — an empty set is honest: the enrolment metadata is not exercised by these loop-control tests.
   enrolments: [],
+  // SP-2b version-gate wiring: the loop-control tests inject pullOnce, so these are never read; empty
+  // no-op values keep the deps shape valid.
+  moduleVersions: {},
+  moduleByTable: new Map(),
 };
 const noopLog = (): void => {};
 // dummyDeps.batchLimit is 500, so a FULL page is `fetched: 500` (the drain keeps going) and a SHORT
@@ -52,6 +56,7 @@ const full = (applied: number): SyncPullResult => ({
   applied,
   deferred: 0,
   rejected: 0,
+  versionParked: 0,
   fetched: BATCH,
   advanced: true,
 });
@@ -62,6 +67,7 @@ const noopFull = (): SyncPullResult => ({
   applied: 0,
   deferred: 0,
   rejected: 0,
+  versionParked: 0,
   fetched: BATCH,
   advanced: true,
 });
@@ -71,6 +77,7 @@ const parkedFull = (): SyncPullResult => ({
   applied: 0,
   deferred: BATCH,
   rejected: 0,
+  versionParked: 0,
   fetched: BATCH,
   advanced: false,
 });
@@ -78,6 +85,7 @@ const short = (applied: number, fetched = 0): SyncPullResult => ({
   applied,
   deferred: 0,
   rejected: 0,
+  versionParked: 0,
   fetched,
   advanced: true,
 });
@@ -183,8 +191,8 @@ describe("runSyncPull loop control", () => {
     // A full page that rejected 2 rows and advanced (drain continues), then a short page that rejected 1
     // more (drain stops). Both must log; neither may grow backoff.
     const results: SyncPullResult[] = [
-      { applied: 3, deferred: 0, rejected: 2, fetched: BATCH, advanced: true },
-      { applied: 0, deferred: 0, rejected: 1, fetched: 0, advanced: true },
+      { applied: 3, deferred: 0, rejected: 2, versionParked: 0, fetched: BATCH, advanced: true },
+      { applied: 0, deferred: 0, rejected: 1, versionParked: 0, fetched: 0, advanced: true },
     ];
     let calls = 0;
     const pullOnce = async (): Promise<SyncPullResult> => results[calls++] ?? short(0);
@@ -238,6 +246,74 @@ describe("runSyncPull loop control", () => {
       },
     });
     expect(logs.some((l) => l.code === "sync.config_conflict_rejected")).toBe(false);
+  });
+
+  it("logs sync.version_parked at INFO when a drained page reports rows parked awaiting this node's migration", async () => {
+    // SP-2b (spec §7.4 ruling 4): the version gate parks a row whose owning module the SOURCE migrated
+    // ahead of THIS subscriber. `versionParked` is threaded out of applyBatch, but an operator watching
+    // a rolling migration needs a LOG line naming the origin and the count — not just the metric — so
+    // they see which node is behind. This asserts runSyncPull emits it after a drain when the count > 0.
+    const controller = new AbortController();
+    const logs: { level: string; code: string; params?: Record<string, unknown> }[] = [];
+    const log = (level: string, code: string, params?: Record<string, unknown>): void => {
+      logs.push({ level, code, params });
+    };
+    // A SHORT page (stops the drain) that reports 3 rows version-parked, so `last` carries the count.
+    const parked: SyncPullResult = {
+      applied: 0,
+      deferred: 0,
+      rejected: 0,
+      versionParked: 3,
+      fetched: 0,
+      advanced: true,
+    };
+    const pullOnce = async (): Promise<SyncPullResult> => parked;
+    const sleep = async (): Promise<void> => {
+      controller.abort(); // one round, then stop
+    };
+    await runSyncPull({
+      ...dummyDeps,
+      peers: [peerA],
+      pullOnce,
+      sleep,
+      signal: controller.signal,
+      minIdleMs: 100,
+      maxBackoffMs: 800,
+      log,
+    });
+    const parkedLogs = logs.filter((l) => l.code === "sync.version_parked");
+    expect(parkedLogs).toHaveLength(1);
+    expect(parkedLogs[0]!.level).toBe("info");
+    expect(parkedLogs[0]!.params).toMatchObject({
+      originId: peerA.nodeId,
+      lane: "ordered", // dummyDeps omits `lane`, so it defaults to 'ordered' (spec §4d)
+      versionParked: 3,
+    });
+  });
+
+  it("does NOT log sync.version_parked when a drained page reports zero parked rows (proves the >0 guard)", async () => {
+    // Negative control for the guard above: a healthy drain (versionParked 0) must emit no version_parked
+    // line, or an operator's rolling-migration alarm would fire on every ordinary pull.
+    const controller = new AbortController();
+    const logs: { code: string }[] = [];
+    const log = (_level: string, code: string): void => {
+      logs.push({ code });
+    };
+    const pullOnce = async (): Promise<SyncPullResult> => short(0); // versionParked: 0
+    const sleep = async (): Promise<void> => {
+      controller.abort();
+    };
+    await runSyncPull({
+      ...dummyDeps,
+      peers: [peerA],
+      pullOnce,
+      sleep,
+      signal: controller.signal,
+      minIdleMs: 100,
+      maxBackoffMs: 800,
+      log,
+    });
+    expect(logs.some((l) => l.code === "sync.version_parked")).toBe(false);
   });
 
   it("backs off exponentially on a transport error and logs sync.stream_stalled once at saturation", async () => {
@@ -493,6 +569,10 @@ describe("membership gossip over /hello", () => {
     // These membership tests drive syncPullOnce with EMPTY log pages, so applyBatch always gets zero
     // rows — the enrolment set is never consulted (no row to dispatch), an empty set is honest.
     enrolments: [],
+    // SP-2b version-gate wiring: applyBatch gets zero rows here, so these are never consulted; empty
+    // no-op values keep the deps shape valid.
+    moduleVersions: {},
+    moduleByTable: new Map(),
   };
   const peer = peerA;
   const baseRunDeps = {

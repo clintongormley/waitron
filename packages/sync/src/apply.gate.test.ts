@@ -446,6 +446,9 @@ const PROD = {
   localEnvironment: "production",
   sourceEnvironment: "production",
   enrolments: ENROLMENT,
+  // SP-2b gate opts: inert here (sourceModuleVersions absent → gate disabled), so empty no-op values.
+  subscriberModuleVersions: {},
+  moduleByTable: new Map<string, string>(),
 } as const;
 
 describe("the commercial-lane apply loop", () => {
@@ -476,7 +479,7 @@ describe("the commercial-lane apply loop", () => {
         ],
         { subscriberId, ...PROD },
       );
-      expect(first).toEqual({ applied: 1, deferred: 0, rejected: 0 });
+      expect(first).toEqual({ applied: 1, deferred: 0, rejected: 0, versionParked: 0 });
 
       // The SAME id at a HIGHER seq (so the seq cursor does not mask it — this isolates ON CONFLICT
       // DO NOTHING) carrying a DIFFERENT total.
@@ -494,7 +497,7 @@ describe("the commercial-lane apply loop", () => {
         ],
         { subscriberId, ...PROD },
       );
-      expect(repeat).toEqual({ applied: 0, deferred: 0, rejected: 0 });
+      expect(repeat).toEqual({ applied: 0, deferred: 0, rejected: 0, versionParked: 0 });
 
       expect(await saleTotal(saleId)).toBe("10.00"); // unchanged — the different bytes did NOT overwrite
       expect(await saleCount(saleId)).toBe("1"); // exactly one row, never a duplicate
@@ -694,7 +697,7 @@ describe("the commercial-lane apply loop", () => {
         ],
         opts,
       );
-      expect(inOrder).toEqual({ applied: 2, deferred: 0, rejected: 0 });
+      expect(inOrder).toEqual({ applied: 2, deferred: 0, rejected: 0, versionParked: 0 });
 
       // Control (the other direction): shuffle the child BELOW its parent — line at seq3, sale at
       // seq4. Applied ascending, the line hits its absent parent → 23503 → parked; the sale lands;
@@ -768,7 +771,7 @@ describe("the commercial-lane apply loop", () => {
         ],
         { subscriberId, ...PROD },
       );
-      expect(result).toEqual({ applied: 1, deferred: 1, rejected: 0 });
+      expect(result).toEqual({ applied: 1, deferred: 1, rejected: 0, versionParked: 0 });
       expect(await saleCount(goodSale.id as string)).toBe("1");
       expect(await saleLineCount(orphanLine.id as string)).toBe("0"); // never forced in
       const cursor = await postgres.admin.execute<{ seq: string }>(
@@ -807,6 +810,8 @@ describe("the commercial-lane apply loop", () => {
           localEnvironment: "production",
           sourceEnvironment: "preproduction",
           enrolments: ENROLMENT,
+          subscriberModuleVersions: {},
+          moduleByTable: new Map<string, string>(),
         }),
       );
       expect(refusedA).toBeInstanceOf(AppError);
@@ -838,6 +843,8 @@ describe("the commercial-lane apply loop", () => {
           localEnvironment: "preproduction",
           sourceEnvironment: "production",
           enrolments: ENROLMENT,
+          subscriberModuleVersions: {},
+          moduleByTable: new Map<string, string>(),
         }),
       );
       expect(refusedB).toBeInstanceOf(AppError);
@@ -849,6 +856,8 @@ describe("the commercial-lane apply loop", () => {
         localEnvironment: "preproduction",
         sourceEnvironment: "preproduction",
         enrolments: ENROLMENT,
+        subscriberModuleVersions: {},
+        moduleByTable: new Map<string, string>(),
       });
       expect(matchedB.applied).toBe(1);
     } finally {
@@ -952,6 +961,8 @@ describe("the commercial-lane apply loop", () => {
           localEnvironment: "preproduction",
           sourceEnvironment: "preproduction",
           enrolments: ENROLMENT,
+          subscriberModuleVersions: {},
+          moduleByTable: new Map<string, string>(),
         }),
       );
       expect((err as Error).message).toContain("disagrees with the stamped");
@@ -1234,7 +1245,7 @@ describe("C1 — the dining_tables FK-closure enrolment (the ordered-lane hard g
       ];
       const result = await applyBatch(applier, rows, { subscriberId, ...PROD });
 
-      expect(result).toEqual({ applied: 4, deferred: 0, rejected: 0 }); // all four landed, nothing parked
+      expect(result).toEqual({ applied: 4, deferred: 0, rejected: 0, versionParked: 0 }); // all four landed, nothing parked
       expect(await laneCursor(subscriberId, originId, "ordered")).toBe(4n); // cursor advanced past them
       // The delivery order is present AND still points at the mirrored table.
       const back = await scalar(
@@ -1270,7 +1281,7 @@ describe("C1 — the dining_tables FK-closure enrolment (the ordered-lane hard g
       ];
       const result = await applyBatch(applier, rows, { subscriberId, ...PROD });
 
-      expect(result).toEqual({ applied: 0, deferred: 1, rejected: 0 }); // parked on the absent FK parent
+      expect(result).toEqual({ applied: 0, deferred: 1, rejected: 0, versionParked: 0 }); // parked on the absent FK parent
       expect(await laneCursor(subscriberId, originId, "ordered")).toBe(0n); // cursor held below it
       expect(
         await scalar(
@@ -1308,7 +1319,7 @@ describe("C1 — the dining_tables FK-closure enrolment (the ordered-lane hard g
       ];
       const result = await applyBatch(applier, rows, { subscriberId, ...PROD });
 
-      expect(result).toEqual({ applied: 0, deferred: 1, rejected: 0 }); // parked on the absent floor_zones parent
+      expect(result).toEqual({ applied: 0, deferred: 1, rejected: 0, versionParked: 0 }); // parked on the absent floor_zones parent
       expect(await laneCursor(subscriberId, originId, "ordered")).toBe(0n); // cursor held below it
       expect(
         await scalar(
@@ -1402,7 +1413,7 @@ describe("C1 — the dining_tables FK-closure enrolment (the ordered-lane hard g
       const before = await syncLogCount();
       const result = await applyBatch(applier, rows, { subscriberId, ...PROD });
 
-      expect(result).toEqual({ applied: 2, deferred: 0, rejected: 0 }); // both landed, nothing parked (wedge-free)
+      expect(result).toEqual({ applied: 2, deferred: 0, rejected: 0, versionParked: 0 }); // both landed, nothing parked (wedge-free)
       expect(await woStatus(woId)).toBe("settled"); // the settle applied verbatim (transition gated off)
       // Converged to cleared: the local 0050 cascade (firing on the seq-1 settle apply) and the captured
       // seq-2 dining_tables UPDATE are the same idempotent status clear — this asserts convergence, not
@@ -1462,7 +1473,7 @@ describe("kitchen-sync enrolment (the ordered-lane gate)", () => {
       ];
       const result = await applyBatch(applier, rows, { subscriberId, ...PROD });
 
-      expect(result).toEqual({ applied: 3, deferred: 0, rejected: 0 }); // all three landed, nothing parked
+      expect(result).toEqual({ applied: 3, deferred: 0, rejected: 0, versionParked: 0 }); // all three landed, nothing parked
       expect(await laneCursor(subscriberId, originId, "ordered")).toBe(3n); // cursor advanced past them
       // The routed product is present AND still points at the mirrored station + course.
       const routed = await postgres.admin.execute<{ station: string; course: string }>(
@@ -1526,7 +1537,7 @@ describe("kitchen-sync enrolment (the ordered-lane gate)", () => {
       ];
       const result = await applyBatch(applier, rows, { subscriberId, ...PROD });
 
-      expect(result).toEqual({ applied: 3, deferred: 0, rejected: 0 }); // station, course and item all landed
+      expect(result).toEqual({ applied: 3, deferred: 0, rejected: 0, versionParked: 0 }); // station, course and item all landed
       expect(await laneCursor(subscriberId, originId, "ordered")).toBe(3n);
       expect(
         await scalar(
@@ -1563,7 +1574,7 @@ describe("kitchen-sync enrolment (the ordered-lane gate)", () => {
       ];
       const result = await applyBatch(applier, rows, { subscriberId, ...PROD });
 
-      expect(result).toEqual({ applied: 0, deferred: 1, rejected: 0 }); // parked on the absent kitchen_stations parent
+      expect(result).toEqual({ applied: 0, deferred: 1, rejected: 0, versionParked: 0 }); // parked on the absent kitchen_stations parent
       expect(await laneCursor(subscriberId, originId, "ordered")).toBe(0n); // cursor held below it
       expect(
         await scalar(
@@ -1608,6 +1619,8 @@ describe("apply lands identity config under FORCE RLS (spec §3/§4)", () => {
         localEnvironment: "preproduction",
         sourceEnvironment: "preproduction",
         enrolments: ENROLMENT,
+        subscriberModuleVersions: {},
+        moduleByTable: new Map<string, string>(),
       });
       expect(first.applied).toBe(1);
       const landed = await scalar(
@@ -1622,6 +1635,8 @@ describe("apply lands identity config under FORCE RLS (spec §3/§4)", () => {
         localEnvironment: "preproduction",
         sourceEnvironment: "preproduction",
         enrolments: ENROLMENT,
+        subscriberModuleVersions: {},
+        moduleByTable: new Map<string, string>(),
       });
       expect(second.applied).toBe(0);
     } finally {
@@ -1664,6 +1679,8 @@ describe("apply lands identity config under FORCE RLS (spec §3/§4)", () => {
           localEnvironment: "preproduction",
           sourceEnvironment: "preproduction",
           enrolments: ENROLMENT,
+          subscriberModuleVersions: {},
+          moduleByTable: new Map<string, string>(),
         },
       );
       expect(del.applied).toBe(1);
@@ -1706,9 +1723,401 @@ describe("apply lands identity config under FORCE RLS (spec §3/§4)", () => {
           localEnvironment: "preproduction",
           sourceEnvironment: "preproduction",
           enrolments: ENROLMENT,
+          subscriberModuleVersions: {},
+          moduleByTable: new Map<string, string>(),
         }),
       );
       expect(pgErrorCode(err)).toBe("42501");
+    } finally {
+      await applier.close();
+    }
+  });
+});
+
+describe("the schema-version park gate (SP-2b, the anti-silent-corruption gate)", () => {
+  // Builds the applyBatch opts for a version-gate scenario. `source` undefined models a pre-SP-2b peer
+  // that serves no moduleVersions map (gate disabled); a map with the row's module ahead of `subscriber`
+  // makes the gate fire. `moduleByTable` resolves a row's owning module. Everything else matches PROD.
+  const gateOpts = (
+    subscriberId: string,
+    source: Record<string, number> | undefined,
+    subscriber: Record<string, number>,
+    moduleByTable: ReadonlyMap<string, string>,
+  ) => ({
+    ...PROD,
+    subscriberId,
+    sourceModuleVersions: source,
+    subscriberModuleVersions: subscriber,
+    moduleByTable,
+  });
+
+  // `to_jsonb(sales) ? 'future_col'` — does the applied row carry the extra key? jsonb_populate_record
+  // drops any JSON key with no matching column, so a real applied row never carries it: this is how the
+  // silent-drop hazard is made visible (the source's rowImage carried it; the mirror row does not).
+  const hasFutureCol = (id: string) =>
+    scalar(sql`select (to_jsonb(s) ? 'future_col')::text as v from sales s where id = ${id}`);
+
+  it("parks a row whose module the SOURCE migrated ahead of us, holds the cursor, and lands it once we catch up", async () => {
+    // The core safety property. sales → module 'core'; the source is at core v2, this subscriber at v1,
+    // so the source's row may carry a column our table lacks (modelled by the extra `future_col` key,
+    // which jsonb_populate_record would silently drop — the corruption). The gate PARKS it instead:
+    // never applied, never dropped, held below the cursor until this node reboots+migrates.
+    await setEnv("production");
+    const b = await seedBase();
+    const seriesId = await seedSeries(b);
+    const originId = uuid();
+    const subscriberId = uuid();
+    const moduleByTable = new Map<string, string>([["sales", "core"]]);
+    const applier = await postgres.pg.connectAs("sync_applier", "ap");
+    try {
+      const img = saleImage(b, seriesId, 1, { future_col: "SENTINEL-would-be-dropped" });
+      const saleId = img.id as string;
+      const batch: SyncLogRow[] = [
+        {
+          seq: 1n,
+          originId,
+          table: "sales",
+          op: "insert",
+          tenantId: b.tenantId,
+          rowImage: wire(img),
+        },
+      ];
+
+      // Source ahead (core 2 > 1): PARKED. Nothing applied, nothing FK-deferred, cursor held below seq 1.
+      const parked = await applyBatch(
+        applier,
+        batch,
+        gateOpts(subscriberId, { core: 2 }, { core: 1 }, moduleByTable),
+      );
+      expect(parked).toEqual({ applied: 0, deferred: 0, rejected: 0, versionParked: 1 });
+      expect(await saleCount(saleId)).toBe("0"); // never applied — no silent drop
+      expect(await laneCursor(subscriberId, originId, "ordered")).toBe(0n); // held below the parked seq
+
+      // This subscriber reboots and migrates → its core version is now 2, equal to the source. Redeliver
+      // the SAME batch (at-least-once): the verdict flips, the row applies, the cursor advances.
+      const landed = await applyBatch(
+        applier,
+        batch,
+        gateOpts(subscriberId, { core: 2 }, { core: 2 }, moduleByTable),
+      );
+      expect(landed).toEqual({ applied: 1, deferred: 0, rejected: 0, versionParked: 0 });
+      expect(await saleCount(saleId)).toBe("1"); // landed after catch-up
+      expect(await laneCursor(subscriberId, originId, "ordered")).toBe(1n); // advanced past it
+    } finally {
+      await applier.close();
+    }
+  });
+
+  it("PROVE-BY-DELETION: with the gate disabled (a pre-SP-2b peer), the ahead-version row applies and the extra column is SILENTLY DROPPED", async () => {
+    // The corruption the gate closes, demonstrated directly. Same ahead-version row as above, but the
+    // source served NO moduleVersions map (an older peer) → the gate is disabled (isVersionAhead returns
+    // false when sourceModuleVersions is undefined). The row now APPLIES, and jsonb_populate_record drops
+    // its `future_col` key with no matching column — the exact silent cross-node corruption. The gate
+    // (previous test) is the only thing standing between this row and that drop.
+    await setEnv("production");
+    const b = await seedBase();
+    const seriesId = await seedSeries(b);
+    const originId = uuid();
+    const subscriberId = uuid();
+    const moduleByTable = new Map<string, string>([["sales", "core"]]);
+    const applier = await postgres.pg.connectAs("sync_applier", "ap");
+    try {
+      const img = saleImage(b, seriesId, 1, { future_col: "SENTINEL-silently-dropped" });
+      const saleId = img.id as string;
+      const rowImage = wire(img);
+      expect(rowImage).toContain("future_col"); // the SOURCE's row genuinely carries the newer column
+
+      // Gate disabled (source map absent): applies despite the version skew that WOULD have parked it.
+      const result = await applyBatch(
+        applier,
+        [{ seq: 1n, originId, table: "sales", op: "insert", tenantId: b.tenantId, rowImage }],
+        gateOpts(subscriberId, undefined, { core: 1 }, moduleByTable),
+      );
+      expect(result).toEqual({ applied: 1, deferred: 0, rejected: 0, versionParked: 0 });
+      expect(await saleCount(saleId)).toBe("1"); // it landed
+      expect(await hasFutureCol(saleId)).toBe("false"); // …but the newer column was SILENTLY DROPPED
+    } finally {
+      await applier.close();
+    }
+  });
+
+  it("older-peer tolerance: a source that serves no moduleVersions applies normally (behaviour-preserving)", async () => {
+    // The compatibility case in isolation (no schema skew): an older peer's ordinary row applies exactly
+    // as it did pre-SP-2b — the gate must never disturb a peer that predates it.
+    await setEnv("production");
+    const b = await seedBase();
+    const seriesId = await seedSeries(b);
+    const originId = uuid();
+    const subscriberId = uuid();
+    const moduleByTable = new Map<string, string>([["sales", "core"]]);
+    const applier = await postgres.pg.connectAs("sync_applier", "ap");
+    try {
+      const img = saleImage(b, seriesId, 1);
+      const result = await applyBatch(
+        applier,
+        [
+          {
+            seq: 1n,
+            originId,
+            table: "sales",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: wire(img),
+          },
+        ],
+        gateOpts(subscriberId, undefined, { core: 5 }, moduleByTable),
+      );
+      expect(result).toEqual({ applied: 1, deferred: 0, rejected: 0, versionParked: 0 });
+      expect(await laneCursor(subscriberId, originId, "ordered")).toBe(1n);
+    } finally {
+      await applier.close();
+    }
+  });
+
+  it("subscriber ahead or equal → no park (applying an older row into a newer/equal table is safe)", async () => {
+    // subscriber > source and subscriber == source both apply: the steady state after this node has
+    // migrated (jsonb_populate_record fills only the present columns; a newer column takes its default).
+    await setEnv("production");
+    const b = await seedBase();
+    const seriesId = await seedSeries(b);
+    const originId = uuid();
+    const subscriberId = uuid();
+    const moduleByTable = new Map<string, string>([["sales", "core"]]);
+    const applier = await postgres.pg.connectAs("sync_applier", "ap");
+    try {
+      // Subscriber AHEAD (core 2 > 1).
+      const ahead = saleImage(b, seriesId, 1);
+      const r1 = await applyBatch(
+        applier,
+        [
+          {
+            seq: 1n,
+            originId,
+            table: "sales",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: wire(ahead),
+          },
+        ],
+        gateOpts(subscriberId, { core: 1 }, { core: 2 }, moduleByTable),
+      );
+      expect(r1).toEqual({ applied: 1, deferred: 0, rejected: 0, versionParked: 0 });
+      expect(await saleCount(ahead.id as string)).toBe("1");
+
+      // EQUAL (core 1 == 1).
+      const equal = saleImage(b, seriesId, 2);
+      const r2 = await applyBatch(
+        applier,
+        [
+          {
+            seq: 2n,
+            originId,
+            table: "sales",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: wire(equal),
+          },
+        ],
+        gateOpts(subscriberId, { core: 1 }, { core: 1 }, moduleByTable),
+      );
+      expect(r2).toEqual({ applied: 1, deferred: 0, rejected: 0, versionParked: 0 });
+      expect(await saleCount(equal.id as string)).toBe("1");
+      expect(await laneCursor(subscriberId, originId, "ordered")).toBe(2n);
+    } finally {
+      await applier.close();
+    }
+  });
+
+  it("mixed batch: the ahead module parks while the equal module applies, and the cursor holds below the LOWEST parked seq", async () => {
+    // Cross-module cursor-safety. Two modules mapped arbitrarily (the gate consults ONLY moduleByTable +
+    // the version maps): working_orders → 'moduleB' (source ahead, v2 > v1 → parks) at the LOWER seq 1,
+    // sales → 'moduleA' (equal → applies) at the HIGHER seq 2. The applied higher-seq row must NOT drag
+    // the cursor past the parked lower-seq row — the cursor holds at 0, below seq 1.
+    await setEnv("production");
+    const b = await seedBase();
+    const seriesId = await seedSeries(b);
+    const originId = uuid();
+    const subscriberId = uuid();
+    const moduleByTable = new Map<string, string>([
+      ["working_orders", "moduleB"],
+      ["sales", "moduleA"],
+    ]);
+    const applier = await postgres.pg.connectAs("sync_applier", "ap");
+    try {
+      const order = workingOrderImage(b, 1); // moduleB, ahead → parks
+      const sale = saleImage(b, seriesId, 1); // moduleA, equal → applies
+      const rows: SyncLogRow[] = [
+        {
+          seq: 1n,
+          originId,
+          table: "working_orders",
+          op: "insert",
+          tenantId: b.tenantId,
+          rowImage: wire(order),
+        },
+        {
+          seq: 2n,
+          originId,
+          table: "sales",
+          op: "insert",
+          tenantId: b.tenantId,
+          rowImage: wire(sale),
+        },
+      ];
+      const result = await applyBatch(
+        applier,
+        rows,
+        gateOpts(
+          subscriberId,
+          { moduleA: 1, moduleB: 2 },
+          { moduleA: 1, moduleB: 1 },
+          moduleByTable,
+        ),
+      );
+      // One applied (the equal-module sale), one version-parked (the ahead-module order), no FK-defer.
+      expect(result).toEqual({ applied: 1, deferred: 0, rejected: 0, versionParked: 1 });
+      expect(await saleCount(sale.id as string)).toBe("1"); // the equal module landed
+      expect(
+        await scalar(
+          sql`select count(*)::int::text as v from working_orders where id = ${order.id as string}`,
+        ),
+      ).toBe("0"); // the ahead module parked — never applied
+      // The cursor is HELD at 0 below the parked seq 1, even though seq 2 applied above it. A shared-cursor
+      // bug would let the higher applied seq drag it to 2 and silently skip the parked seq 1 forever.
+      expect(await laneCursor(subscriberId, originId, "ordered")).toBe(0n);
+    } finally {
+      await applier.close();
+    }
+  });
+
+  it("a row whose table has no module mapping falls through the gate and applies (never masked as a park)", async () => {
+    // The unknown-table edge (spec §5): even with a version map served, a row whose table is absent from
+    // moduleByTable resolves to no module → isVersionAhead returns false → it is NOT parked. Because the
+    // table IS enrolled it applies normally (an UNENROLLED table would instead hit the pre-existing
+    // sync.table_not_enrolled throw — the gate must not mask that as a version-park).
+    await setEnv("production");
+    const b = await seedBase();
+    const seriesId = await seedSeries(b);
+    const originId = uuid();
+    const subscriberId = uuid();
+    const applier = await postgres.pg.connectAs("sync_applier", "ap");
+    try {
+      const img = saleImage(b, seriesId, 1);
+      const result = await applyBatch(
+        applier,
+        [
+          {
+            seq: 1n,
+            originId,
+            table: "sales",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: wire(img),
+          },
+        ],
+        // source ahead on 'core', but sales is NOT mapped to any module → the gate cannot resolve it.
+        gateOpts(subscriberId, { core: 2 }, { core: 1 }, new Map<string, string>()),
+      );
+      expect(result).toEqual({ applied: 1, deferred: 0, rejected: 0, versionParked: 0 });
+      expect(await saleCount(img.id as string)).toBe("1");
+      expect(await laneCursor(subscriberId, originId, "ordered")).toBe(1n);
+    } finally {
+      await applier.close();
+    }
+  });
+
+  it("a per-module version missing from one side counts as 0, not 'skip' (subscriber absent → parks; source absent → applies)", async () => {
+    // spec §4 "robustness at the edges", the `?? 0` fallbacks. Two rows, both mapped to modules, with the
+    // maps deliberately incomplete: 'ahead' — the SUBSCRIBER has no entry (0) while the source is ahead
+    // (1) → PARKS; 'behind' — the SOURCE has no entry (0) while the subscriber is at 1 → 0 never exceeds,
+    // so it APPLIES. A "missing means skip the check" bug would apply the first row (the corruption).
+    await setEnv("production");
+    const b = await seedBase();
+    const seriesId = await seedSeries(b);
+    const originId = uuid();
+    const subscriberId = uuid();
+    const moduleByTable = new Map<string, string>([
+      ["sales", "modAhead"],
+      ["working_orders", "modBehind"],
+    ]);
+    const applier = await postgres.pg.connectAs("sync_applier", "ap");
+    try {
+      const sale = saleImage(b, seriesId, 1); // modAhead: subscriber map omits it (→0) < source 1 → parks
+      const order = workingOrderImage(b, 1); // modBehind: source map omits it (→0), subscriber 1 → applies
+      const result = await applyBatch(
+        applier,
+        [
+          {
+            seq: 1n,
+            originId,
+            table: "sales",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: wire(sale),
+          },
+          {
+            seq: 2n,
+            originId,
+            table: "working_orders",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: wire(order),
+          },
+        ],
+        // source knows only modAhead; subscriber knows only modBehind.
+        gateOpts(subscriberId, { modAhead: 1 }, { modBehind: 1 }, moduleByTable),
+      );
+      expect(result).toEqual({ applied: 1, deferred: 0, rejected: 0, versionParked: 1 });
+      expect(await saleCount(sale.id as string)).toBe("0"); // subscriber-absent (0) < source 1 → parked
+      expect(
+        await scalar(
+          sql`select count(*)::int::text as v from working_orders where id = ${order.id as string}`,
+        ),
+      ).toBe("1"); // source-absent (0) never exceeds → applied
+      expect(await laneCursor(subscriberId, originId, "ordered")).toBe(0n); // held below the parked seq 1
+    } finally {
+      await applier.close();
+    }
+  });
+
+  it("the environment gate still precedes the version check: a mismatched environment is refused regardless of versions", async () => {
+    // Ordering guarantee (spec §3/§4): the whole-batch environment handshake runs FIRST, before any
+    // per-module version comparison. A source in the wrong environment is refused even when its versions
+    // would independently park the row — the env burn (CLAUDE.md §5) is caught ahead of everything.
+    await setEnv("production");
+    const b = await seedBase();
+    const seriesId = await seedSeries(b);
+    const moduleByTable = new Map<string, string>([["sales", "core"]]);
+    const applier = await postgres.pg.connectAs("sync_applier", "ap");
+    try {
+      const img = saleImage(b, seriesId, 1);
+      const err = await captureError(() =>
+        applyBatch(
+          applier,
+          [
+            {
+              seq: 1n,
+              originId: uuid(),
+              table: "sales",
+              op: "insert",
+              tenantId: b.tenantId,
+              rowImage: wire(img),
+            },
+          ],
+          {
+            subscriberId: uuid(),
+            localEnvironment: "production",
+            sourceEnvironment: "preproduction", // mismatch — must be refused before the version check
+            enrolments: ENROLMENT,
+            sourceModuleVersions: { core: 2 }, // versions WOULD park, but the env gate fires first
+            subscriberModuleVersions: { core: 1 },
+            moduleByTable,
+          },
+        ),
+      );
+      expect(err).toBeInstanceOf(AppError);
+      expect((err as AppError).code).toBe("sync.peer_environment_mismatch");
+      expect(await saleCount(img.id as string)).toBe("0"); // nothing applied — whole batch refused
     } finally {
       await applier.close();
     }
