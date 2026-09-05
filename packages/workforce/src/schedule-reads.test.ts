@@ -22,7 +22,7 @@ import {
 // scoping predicate is application-code (RLS is tenant-only, plan fact 3), so there is no privilege
 // set and no RLS decision to prove here. The app role's grants on shifts/shift_swaps/absences are
 // proven against real Postgres elsewhere (scheduling-planning.rls.test.ts); the ROUTE that passes the
-// session's personId is proven against real Postgres in schedule-api.rls.test.ts.
+// session's personId is proven against real Postgres in schedule-api.pg.test.ts.
 
 let tenantId: string;
 let locationId: string;

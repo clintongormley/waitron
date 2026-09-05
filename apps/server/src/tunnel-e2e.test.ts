@@ -32,7 +32,7 @@ import { tunnelHttpClient } from "./tunnel-http.js";
 // Two REAL manifest-migrated databases in the shared container (`source` = the box, `mirror` = the
 // cloud), each a `useTemplateDb` clone, are the minimum that proves a genuine cross-DB apply as the
 // non-superuser sync roles under FORCE RLS (PGlite would be a false pass, CLAUDE.md §4). What makes
-// THIS test more than `sync-e2e.rls.test.ts` is that the HTTP seam is not a Hono `app.request` — it is
+// THIS test more than `sync-e2e.test.ts` is that the HTTP seam is not a Hono `app.request` — it is
 // a real TLS connection over a real relay, so the byte-blindness of the relay is observable. See the
 // task-8 brief and design §5.
 const syncLog: Logger = () => {};

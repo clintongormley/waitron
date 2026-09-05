@@ -22,7 +22,7 @@
 -- SECURITY INVOKER (the plpgsql default; not stated): it runs as the CALLER (app_user), and the UPDATE
 -- is same-tenant (tenant_id = NEW.tenant_id), so the dining_tables tenant-isolation policy + the TS-1
 -- SELECT/INSERT/UPDATE grant permit it (proven under app_user, same-tenant, in
--- apps/server/src/clear-table-status.rls.test.ts). It clears ONLY status_id, never tab_id — TS-1 leaves
+-- apps/server/src/clear-table-status.test.ts). It clears ONLY status_id, never tab_id — TS-1 leaves
 -- a settled tab's back-pointer stale on purpose (the occupancy read counts a tab_id only while its order
 -- is open).
 --

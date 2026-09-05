@@ -30,8 +30,9 @@ import "./errors.js";
 
 // PGlite, not real Postgres: these routes are wiring — session guard + isUuid screen + STATUS mapping
 // over the commercial table/tab verbs, which are LOGIC (no privilege or concurrency behaviour to
-// prove here). The table/tab verbs' own real-PG proofs (RLS, the FOR UPDATE tab lock, the composite
-// FKs) live in their packages' `*.rls.test.ts`; they are not re-proven at the HTTP layer. The schema
+// prove here). The table/tab verbs' own real-PG proofs (the FOR UPDATE tab lock, the composite FKs)
+// live in `tabs.pg.test.ts`, `move-merge.pg.test.ts` and packages/db's schema suites; they are not
+// re-proven at the HTTP layer. The schema
 // is CORE_MIGRATIONS (dining_tables + tab_id/delivery_table_id land in 0043/0044/0046) +
 // IDENTITY_MIGRATIONS (the sessions/persons the login path needs).
 let cfg: TillConfig;

@@ -12,14 +12,14 @@ import "./errors.js";
 // which writes a Set-Cookie header and returns — no `deps.db`/`deps.cfg` read anywhere on that path.
 // `mountDeviceApi` itself never touches `db`/`cfg` at MOUNT time either (only inside the OTHER routes'
 // handlers, which this suite never calls), so an untyped stub satisfies the signature without a live
-// connection. Every other device route — the ones that DO touch the database, RLS and permissions — is
-// proven against real Postgres in `device-api.rls.test.ts` (CLAUDE.md §4: RLS/permission proofs need a
+// connection. Every other device route — the ones that DO touch the database and its permissions — is
+// proven against real Postgres in `device-api.pg.test.ts` (CLAUDE.md §4: a privilege proof needs a
 // non-superuser role, which neither PGlite nor a stub can show).
 const noopLog: Logger = () => {};
 
 // `devMode` is OPTIONAL so the omitted-flag case (production shape) is exercised too: the reset route
 // is DEV-ONLY, mounted only under `devMode === true` and 404 otherwise — the same fail-closed shape the
-// `GET`/`POST /api/dev/devices` tests prove in `device-api.rls.test.ts`.
+// `GET`/`POST /api/dev/devices` tests prove in `device-api.pg.test.ts`.
 function mountApp(devMode?: boolean): Hono {
   const app = new Hono();
   mountDeviceApi(

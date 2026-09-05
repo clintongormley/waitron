@@ -31,7 +31,7 @@ import { openTab } from "./working-order.js";
 import "./errors.js";
 
 // PGlite, not real Postgres: `transferLines`' own WRITE behaviour (split arithmetic, guards, price-lock,
-// the FOR UPDATE lock ordering) is proven in `transfer-lines.test.ts`/`transfer-lines.rls.test.ts`; this
+// the FOR UPDATE lock ordering) is proven in `transfer-lines.test.ts`/`transfer-lines.pg.test.ts`; this
 // suite proves only the HTTP surface — the session guard, the malformed-`:id`/`toTabId` screens, and the
 // STATUS mapping for the two new transfer codes — the same shape `till-api.move-merge.test.ts` proves for
 // move/join/merge, PGlite-adequate for the same reason (CLAUDE.md §4). Harness ported from

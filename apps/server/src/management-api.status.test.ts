@@ -13,7 +13,7 @@ import { ALL_MODULES } from "./modules.js";
 // Real Postgres, not PGlite: these routes wrap the service-status config CRUD, and each verb both
 // AUTHORIZES (`authorizeManager` reads persons + management_sessions under the app role's RLS) and
 // writes `table_service_statuses` under FORCE ROW LEVEL SECURITY — both false passes on PGlite's
-// superuser connection (CLAUDE.md §4). The same real-Postgres justification as `management-api.rls.test.ts`,
+// superuser connection (CLAUDE.md §4). The same real-Postgres justification as `management-api.pg.test.ts`,
 // whose harness (`applyVenue`/`planVenue` + password `login`) this file reuses.
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
@@ -427,7 +427,7 @@ describe("/management-api/service-statuses", () => {
   it("PATCH with a null / empty body → 204 no-op (never a 500), the status unchanged", async () => {
     // A `null` body coerces to `{}` (`?? {}`) and carries no mutable field: the route answers a 204
     // no-op WITHOUT reaching updateStatus's empty `.set()` (which Drizzle rejects → a 500). Mirrors the
-    // staff PATCH route's "null body → 204 no-op" (management-api.rls.test.ts).
+    // staff PATCH route's "null body → 204 no-op" (management-api.pg.test.ts).
     const { id } = (await (
       await request(
         "",
@@ -502,7 +502,7 @@ describe("/management-api/service-statuses", () => {
     // A staff person CAN log in but holds no `till.configure`, so each verb's `authorizeManager`
     // refuses it 403 — after the route's session guard + body/id screens, before any write. Deleting
     // the authorize call from a verb flips its case to a 2xx (proven by deletion in
-    // `service-statuses.rls.test.ts`); here the same 403 is exercised end-to-end over HTTP.
+    // `service-statuses.test.ts`); here the same 403 is exercised end-to-end over HTTP.
     const someId = randomUUID();
     const cases = [
       request(

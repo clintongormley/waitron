@@ -83,8 +83,8 @@ import "./errors.js";
 // `check_locales` trigger) hold on the rows it inserts — AND the READ behaviour of `listHeldOrders`
 // (the sum/count aggregate, the open-status and node filters, the ordering) and `getHeldOrder` (the
 // open-only lookup and its `working_order.not_found`). All of that is plain SQL a single backend
-// proves; none of it needs a genuine non-superuser role — RLS/cross-tenant isolation and the per-node
-// concurrency of `allocateOrderNumber` are proven against real Postgres in Task 7's `*.rls.test.ts`.
+// proves; none of it needs a genuine non-superuser role — the app role's grants and the per-node
+// concurrency of `allocateOrderNumber` are proven against real Postgres in `working-order.pg.test.ts`.
 // Every read and write still runs through `withTenant` + `asAppUser` (as `app_user`, so RLS is in
 // force even here) exactly as production does, so the tenant scope and the `check_locales` trigger
 // (which reads the location under the caller's own scope) are exercised, not bypassed.
@@ -288,7 +288,7 @@ describe("parkOrder", () => {
     // committed row on the SAME backend. It is NOT concurrency (two backends racing, which would need a
     // real non-superuser role to serialise): one connection replaying its own committed write is exactly
     // what a single backend proves. The CONCURRENT park backstop — two backends racing the same id — is
-    // proven separately against real Postgres in `working-order.rls.test.ts` ("parkOrder concurrent replay").
+    // proven separately against real Postgres in `working-order.pg.test.ts` ("parkOrder concurrent replay").
     const { cfg, cafeId } = await setupVenue();
     const id = randomUUID();
     const lines = [{ productId: cafeId, quantity: "2" }];
@@ -806,7 +806,7 @@ describe("abandonHeldOrder", () => {
 // ---------------------------------------------------------------------------------------------------
 
 /** The accountable operator a placing amendment is attributed to (a fixed fixture uuid — only ever
- *  stored, never joined; mirrors working-order.rls.test.ts's OPERATOR). */
+ *  stored, never joined; mirrors working-order.pg.test.ts's OPERATOR). */
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
 
 /** A trusted-clock stub: placeOrder reads only `now()` for its amendment's wall-clock. */
@@ -1210,7 +1210,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
 // order at one station together; `listStationQueue` groups a station's items by order, dropping
 // collected and abandoned orders. PGlite proves the transition logic, the whole-ticket fan-out and the
 // grouping/exclusion filters — plain SQL a single backend proves; the RLS/tenant-isolation + node
-// scoping are real-Postgres's job (working-order.rls.test.ts). Every write runs through
+// scoping are real-Postgres's job (working-order.pg.test.ts). Every write runs through
 // `withTenant` + `asAppUser`, so grants and RLS are in force, not bypassed.
 // ---------------------------------------------------------------------------------------------------
 
@@ -2012,7 +2012,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
 // the config/fire verbs use (`course.not_found` for an absent / foreign / retired course), and throws
 // `tab.line_not_found` for a `line_no` not on the tab. Non-fiscal: it touches only `working_order_lines`
 // (open tab) and `ticket_items` (kitchen), never a filed record. PGlite proves the update + the guards —
-// plain SQL a single backend proves; RLS/node isolation is real-Postgres's job (working-order.rls.test.ts).
+// plain SQL a single backend proves; RLS/node isolation is real-Postgres's job (working-order.pg.test.ts).
 // Every write runs through `withTenant` + `asAppUser`, so grants and RLS are in force, not bypassed.
 // ---------------------------------------------------------------------------------------------------
 describe("setLineCourse (A1: move a held line to another course)", () => {
@@ -2760,7 +2760,7 @@ describe("addTabRound hold-on-send (A3)", () => {
 // by course in display_order with per-course fired/away roll-ups. Unlike `listStationQueue` (one
 // station, no station name) it joins `kitchen_stations` to label each item's station. PGlite proves the
 // join, the collected/abandoned/fully-away exclusions, the course grouping and the roll-ups — plain SQL a
-// single backend proves; the node/tenant RLS scoping is real-Postgres's job (working-order.rls.test.ts).
+// single backend proves; the node/tenant RLS scoping is real-Postgres's job (working-order.pg.test.ts).
 // Every read/write runs through `withTenant` + `asAppUser`, so grants and RLS are in force, not bypassed.
 // ---------------------------------------------------------------------------------------------------
 describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
@@ -3010,7 +3010,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
 // course (dispatch what is plated), gated on the course EXISTING (`requireCourse` → course.not_found),
 // idempotent via `away_at IS NULL`. PGlite proves the set-based logic, the held-skip and the ready-only
 // dispatch — plain SQL a single backend proves; the RLS/node scoping is real-Postgres's job
-// (working-order.rls.test.ts, the folded-in listExpoQueue RLS test). Every write runs through
+// (working-order.pg.test.ts, the folded-in listExpoQueue RLS test). Every write runs through
 // `withTenant` + `asAppUser`, so grants and RLS are in force, not bypassed.
 // ---------------------------------------------------------------------------------------------------
 

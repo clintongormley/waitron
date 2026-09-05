@@ -48,7 +48,7 @@ function asApp<T>(db: Database, cfg: TillConfig, fn: (tx: Transaction) => Promis
 }
 
 /** A fresh tenant + venue + one station, seeded on the superuser admin connection (RLS bypassed for
- * setup), the station created through the app role — the `device.rls.test.ts` shape. Each test gets
+ * setup), the station created through the app role — the `device.pg.test.ts` shape. Each test gets
  * its OWN tenant so device state is order-independent across the shared clone (CLAUDE.md §4). */
 async function setupStation(): Promise<{ cfg: TillConfig; stationId: string }> {
   const admin = suite.admin;

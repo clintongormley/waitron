@@ -16,7 +16,7 @@ import "./errors.js";
 // `computeOverdueOrders` — end to end in-process, the way `report-api.overview.test.ts` proves the
 // overview route. Its own file/tenant (not that suite's) so a fired KITCHEN order here never touches
 // the overview suite's takings/open-tables fixtures. The differential RLS-isolation proof is the
-// real-Postgres suite (report-api.rls.test.ts), which PGlite cannot show (CLAUDE.md §4).
+// real-Postgres suite (report-api.pg.test.ts), which PGlite cannot show (CLAUDE.md §4).
 const noopLog: Logger = () => {};
 
 let tenantId: string;

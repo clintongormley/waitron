@@ -121,7 +121,7 @@ export const DEFAULTS = {
    * rather than all of it.
    *
    * Lives here rather than in the host because `DEFAULTS` is spread as a COMPLETE `SchedulerDeps`
-   * by four test call sites and `apps/server`'s own `pass.rls.test.ts`; a required field withheld
+   * by four test call sites and `apps/server`'s own `pass.pg.test.ts`; a required field withheld
    * from it would make this table silently incomplete.
    */
   skipRetryMs: 5 * 60 * 1000,

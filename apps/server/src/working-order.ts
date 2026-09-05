@@ -2163,7 +2163,7 @@ export async function joinTable(
  * Acquiring in that identical order is what PREVENTS a mergeTabs-vs-pay/settle/abandon DEADLOCK:
  * a concurrent merge and pay both take `working_orders` before `dining_tables`, so they cannot
  * cross-lock and trip a 40P01. THIS leg's order is load-bearing and proven — the concurrent merge/pay
- * race test (move-merge.rls.test.ts) asserts no 40P01, and by deletion the previous
+ * race test (move-merge.pg.test.ts) asserts no 40P01, and by deletion the previous
  * `dining_tables`-first order reproduces the 40P01 against the real trigger.
  *
  * The `dining_tables` leg's OWN ascending-id order is, by contrast, DEFENSIVE not proven load-bearing:
@@ -2171,7 +2171,7 @@ export async function joinTable(
  * backends seq-scan the two rows in identical heap order and serialise on the first regardless of the
  * `.orderBy`. The ascending-id discipline on that leg only future-proofs against a schema/plan change
  * that lets scan orders diverge; a same-verb race cannot prove it load-bearing (a §1 "both answers look
- * alike" measurement). The deterministic hazard control (move-merge.rls.test.ts) proves the general
+ * alike" measurement). The deterministic hazard control (move-merge.pg.test.ts) proves the general
  * inconsistent-order 40P01 hazard is real.
  *
  * ORDER MATTERS (Plan note 2): the re-point (step 2) precedes the abandon (step 3). The TS-2
@@ -2323,7 +2323,7 @@ function assertDistinctTransferLines(tabId: string, transfers: { lineNo: number 
  * - PROVEN: a transfer racing ANOTHER transfer on the same pair serialises without deadlock. Both acquire
  *   their two row locks lowest-id-first (the `.sort()` + `lockOpenTab` loop below), so the
  *   reverse-orientation race — A→B against B→A — cannot form a lock cycle; one backend simply waits on the
- *   lower id until the other commits. `transfer-lines.rls.test.ts` proves this on real Postgres by
+ *   lower id until the other commits. `transfer-lines.pg.test.ts` proves this on real Postgres by
  *   DELETION: strip the `.sort()` (each transfer then locks in its own direction) and that race raises
  *   `40P01 deadlock detected` in every looped iteration; restore it and the race goes green.
  * - PROVEN: this verb holds NO `dining_tables` lock. `lockOpenTab` locks the `working_orders` row ONLY —
@@ -2343,7 +2343,7 @@ function assertDistinctTransferLines(tabId: string, transfers: { lineNo: number 
  *
  * That ascending-id discipline is defensive and plan-level, and this PGlite suite cannot itself prove it:
  * `transfer-lines.test.ts` runs on a single backend that serialises every query, so a contention test on
- * it is a false pass — the real-Postgres race is `transfer-lines.rls.test.ts`'s job.
+ * it is a false pass — the real-Postgres race is `transfer-lines.pg.test.ts`'s job.
  *
  * `lockOpenTab` requires each tab to be an OPEN working order some `dining_tables.tab_id` points at,
  * else `tab.not_open`; an absent/foreign (RLS-hidden) tab matches no row → the same fail-closed
@@ -2657,7 +2657,7 @@ export async function splitOffCheck(
  * includes `tableId` while it is joined) — i.e. `working_orders` THEN `dining_tables`. Acquiring in that
  * SAME class order is what PREVENTS an unjoin-vs-pay/settle DEADLOCK: a concurrent unjoin and pay both
  * take `working_orders` before `dining_tables`, so they cannot cross-lock and trip a 40P01. This is
- * load-bearing and proven — the concurrent unjoin/pay race test (split-bill.rls.test.ts) asserts no
+ * load-bearing and proven — the concurrent unjoin/pay race test (split-bill.pg.test.ts) asserts no
  * 40P01, and by deletion the previous `dining_tables`-first order reproduces the 40P01 against the real
  * trigger. (The status check therefore fires BEFORE the `dining_tables` lock; in every tested scenario
  * only one guard fails at a time, so the thrown code is unchanged from the old order.)
@@ -3669,7 +3669,7 @@ export interface StationQueueGroup {
  * (`node_id = cfg.nodeId`) exactly as `listPrepQueue` was — the queue is one node's — so `cfg` is used
  * here (unlike the advance verbs). Runs on the CALLER's transaction under its tenant/app_user scope; RLS
  * confines the tenant. PGlite proves the join, the exclusions, the grouping and the ordering; the
- * node/tenant SCOPING is real-Postgres's job (working-order.rls.test.ts), the same split `listPrepQueue`
+ * node/tenant SCOPING is real-Postgres's job (working-order.pg.test.ts), the same split `listPrepQueue`
  * used (CLAUDE.md §4).
  *
  * On a mirror this `cfg.nodeId` filter is the mirror's OWN reserved id, not the origin whose replicated
@@ -4107,7 +4107,7 @@ export interface ExpoOrder {
  * NULLS FIRST (the null course fires earliest), then `line_no`/item id for a stable within-course order.
  * Runs on the CALLER's transaction under its tenant/`app_user` scope; RLS confines the tenant. PGlite
  * proves the join, the exclusions, the course grouping and the fired/away roll-ups — plain SQL a single
- * backend proves; the node/tenant RLS SCOPING is real-Postgres's job (working-order.rls.test.ts), the
+ * backend proves; the node/tenant RLS SCOPING is real-Postgres's job (working-order.pg.test.ts), the
  * same split `listStationQueue` uses (CLAUDE.md §4).
  *
  * Same mirror caveat as `listStationQueue`'s own `cfg.nodeId` filter above — see that comment.

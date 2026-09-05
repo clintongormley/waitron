@@ -26,9 +26,9 @@ import "./errors.js";
 // the purchase-invoice routes. It seeds sales + received invoices DIRECTLY as the PGlite superuser
 // (RLS bypassed — pure setup, the `modelo-303-demo.ts` seed idiom), never through the fiscal write
 // path: the route (and `computeVatReturn` beneath it) only READS the filed `sales.vat_breakdown` and
-// the purchase tables. The differential RLS-isolation proof and the gate-by-DELETION proof are the
-// real-Postgres suite (Task 2d), which PGlite cannot show because it connects as a superuser that
-// bypasses FORCE RLS (CLAUDE.md §4).
+// the purchase tables. The gate-by-DELETION proofs, run as the non-superuser app role, are the
+// real-Postgres suite (`report-api.pg.test.ts`); PGlite connects as a superuser holding every grant
+// (CLAUDE.md §4).
 const noopLog: Logger = () => {};
 
 let tenantId: string;

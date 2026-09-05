@@ -230,7 +230,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // `printer.manage`, then run `fn`. Every management route funnels its DB work through here so the gate
   // is applied identically and in exactly one place (the device-api / purchasing-api seam). Proven by
   // deletion: removing the `authorizeManager(...)` call makes a staff session succeed on every gated
-  // route (print-api.rls.test.ts records the RED/GREEN).
+  // route (print-api.pg.test.ts records the RED/GREEN).
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
       await asAppUser(tx);

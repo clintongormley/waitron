@@ -142,7 +142,7 @@ beforeEach(() => {
 
 /**
  * `startServer`'s only test subject. Everything else in this package tests one composed piece
- * (`pass.rls.test.ts` builds its own, separate wiring to prove the composed PASS runs as the
+ * (`pass.pg.test.ts` builds its own, separate wiring to prove the composed PASS runs as the
  * deployment role); nothing before this file called `startServer` itself, so the field mapping in
  * `boot.ts` — `config.scheduler.*` into `SchedulerDeps`, `minTickMs`/`maxTickMs`, `onPass` into
  * `recordPass`, the `settlementLagMs` conditional spread, the migrations-root default, and the
@@ -1853,7 +1853,7 @@ describe("startServer, against a real container as the deployment role", () => {
         // Real boot computes the per-module applied versions from the migrated DB (SP-2b) and /hello
         // echoes them; the exact numbers drift with every migration, so assert the map is genuinely
         // populated (`core` a real number) rather than pinning drift-prone values — the content is
-        // covered exactly in sync-api.rls.test.ts.
+        // covered exactly in sync-api.test.ts.
         moduleVersions: expect.objectContaining({ core: expect.any(Number) }),
       });
       // A tokenless request is refused — the fail-closed guard, not just the route, is live.
@@ -2466,7 +2466,7 @@ describe("startServer, against a real container as the deployment role", () => {
     // the past relative to `startServer`'s real wall clock (`boot.ts` hardcodes `new Date()`,
     // deliberately not injectable — see its own doc comment), so this tenant is due the instant the
     // first pass runs. Seeded against `suite.admin` (the container's own superuser default), matching
-    // `pass.rls.test.ts`'s identical convention for setup that must bypass RLS.
+    // `pass.pg.test.ts`'s identical convention for setup that must bypass RLS.
     const seeded = await seedPendingEnvios(suite.admin, { count: 1 });
 
     try {

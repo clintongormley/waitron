@@ -1205,7 +1205,7 @@ describe("catalogue operations", () => {
 
   // The trust-boundary guard the location-menu write routes use: is this catalogue VISIBLE to the
   // current tenant? A same-tenant id is true; an absent id is false. (The cross-tenant/RLS-hidden case
-  // is a superuser-blind PGlite can't show — proven in catalogue-api.rls.test.ts on real Postgres.)
+  // is a superuser-blind PGlite can't show — proven in catalogue-api.pg.test.ts on real Postgres.)
   it("catalogueExists is true for a tenant catalogue and false for an absent id", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Casa" });

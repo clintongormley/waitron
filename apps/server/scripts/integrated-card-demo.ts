@@ -3,7 +3,7 @@
 // split-transaction P1 (price/commit) → P2 (collect — the reader tap) → P3 (file+associate+settle)
 // flow, over a `StripeTerminalProvider` wired to `FakeStripe` (the deterministic reader double,
 // `@waitron/payments-stripe/src/testing/fake-stripe.js`). Modelled on `till-demo.ts` (self-migrating,
-// tsx-run, a real `VerifactuBackend`) and on `till-sale-integrated.rls.test.ts`'s `integratedDeps`
+// tsx-run, a real `VerifactuBackend`) and on `till-sale-integrated.pg.test.ts`'s `integratedDeps`
 // helper (the exact provider-construction shape this script mirrors), it:
 //
 //   1. connects to a FRESH postgres (via `DATABASE_URL`) and applies the core, identity, fiscal and
@@ -170,7 +170,7 @@ function systemClock(): TrustedClock {
 }
 
 /** Read the `payments` row this working order's card collect filed — the same owner-bypass join
- *  shape `till-demo.ts` and `till-sale-integrated.rls.test.ts`'s `paymentsFor` use. */
+ *  shape `till-demo.ts` and `till-sale-integrated.pg.test.ts`'s `paymentsFor` use. */
 async function paymentFor(
   db: Database,
   workingOrderId: string,
@@ -348,7 +348,7 @@ async function main(): Promise<void> {
       tenantId: cfg.tenantId,
       nodeId: cfg.nodeId,
       // Ignores its args and always returns the one configured reader — the exact shape
-      // `boot.ts`'s production wiring uses (`buildCardProvider`, `till-sale-integrated.rls.test.ts`'s
+      // `boot.ts`'s production wiring uses (`buildCardProvider`, `till-sale-integrated.pg.test.ts`'s
       // `integratedDeps`) — a real per-tenant resolver would look the reader id up from `cfg`.
       resolveReader: () => Promise.resolve(READER_ID),
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },

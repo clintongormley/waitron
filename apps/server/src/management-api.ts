@@ -114,7 +114,7 @@ export interface ManagementApiDeps {
    * node's origin id, threaded into every identity-config write's `withTenant` so that the `sync_log`
    * row the capture trigger records for each enrolled `persons`/`webauthn_credentials` INSERT/UPDATE
    * carries a real `origin_id` rather than the all-zero sentinel (design §4d(B); sync origin
-   * attribution — proven end-to-end by `sync-origin.rls.test.ts`). */
+   * attribution — proven end-to-end by `sync-origin.test.ts`). */
   cfg: { tenantId: string; nodeId: string };
   /**
    * The venue's own config — the tenant + LOCATION the floor-zone and table config routes (FP-1) scope
@@ -836,7 +836,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // `till.configure` via the explicit `authorizeManager`, NOT merely on holding a session —
   // `getReceipt` itself does NOT authorize (it is shared with the
   // unauthenticated till boot read), so this route carries its own gate. Proven by deletion in
-  // `management-api.rls.test.ts`: dropping this `authorizeManager` call flips the staff-role case from
+  // `management-api.pg.test.ts`: dropping this `authorizeManager` call flips the staff-role case from
   // 403 to 200.
   app.get("/management-api/receipt", (c) =>
     run(c, log, async () => {

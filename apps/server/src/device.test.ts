@@ -30,7 +30,7 @@ import "./errors.js";
 // privilege or concurrency dimension: `app_user`'s grants on device_pairing_codes and devices are pinned
 // by the privilege matrix in packages/fiscal-verifactu, the schema's CHECKs and unique index by
 // packages/db's devices.test.ts, and the SINGLE-USE RACE — the one property PGlite would FALSE-PASS,
-// because it serialises every query onto one backend — lives in device.rls.test.ts against real Postgres
+// because it serialises every query onto one backend — lives in device.pg.test.ts against real Postgres
 // (CLAUDE.md §4). So PGlite is the correct lighter target for this file, the same choice kitchen.test.ts
 // makes for the station-config verbs.
 const LOCALE = "es-ES";
@@ -261,7 +261,7 @@ describe("kindRequiresStation", () => {
 describe("bindingFkField", () => {
   // The 23503 → field accessor, exercised with CRAFTED errors (no DB) so every branch is covered: the
   // `tables.ts` `isZoneFkViolation` / `uniqueViolationConstraint` idiom. The end-to-end 23503 translation
-  // is proven against real Postgres in device.rls.test.ts; here we pin the constraint-name mapping and
+  // is proven against real Postgres in device.pg.test.ts; here we pin the constraint-name mapping and
   // the deliberate NON-matches (a different constraint, a different SQLSTATE, no constraint name).
   const fk = (constraint: string): Error =>
     Object.assign(new Error("fk"), { code: "23503", constraint });

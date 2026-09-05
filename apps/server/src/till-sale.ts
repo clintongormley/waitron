@@ -923,7 +923,7 @@ export async function payWorkingOrderIntegrated(
  * lock) is what hits the unique key. So, unlike `payWorkingOrder` (whose lock+file share one
  * transaction) this needs no internal re-lock of its own, but the 23505 path is real and reachable
  * rather than dead code: it is exercised end to end by "two concurrent pays for one parked order file
- * ONE sale; the loser replays (one sale/settlement)" (`apps/server/src/till-sale-integrated.rls.test.ts`),
+ * ONE sale; the loser replays (one sale/settlement)" (`apps/server/src/till-sale-integrated.pg.test.ts`),
  * which drives two real, concurrently-racing app-role connections and asserts `registroCount === 1`.
  * `readSettledTicket`
  * defaults `change` to "0.00": a replay hands back nothing (the winner settled the drawer at its sale).

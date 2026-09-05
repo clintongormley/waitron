@@ -65,7 +65,7 @@ let cervezaProduct: { id: string; catalogueId: string };
 // the authenticated enrolled device. This suite's single seeded tenant gets ONE enrolled `till` device
 // (bound to `cfg.tillId`) in setup; the happy-path place/sale calls carry its cookie so they reach the
 // route body rather than being refused `device.unauthorized`. (The device gate itself is proven over
-// real Postgres in `till-api.rls.test.ts`; here it is just the setup a place/cancel test needs.)
+// real Postgres in `till-api.pg.test.ts`; here it is just the setup a place/cancel test needs.)
 let tillDeviceCookie: string;
 
 const suite = usePgliteDb({
@@ -159,7 +159,7 @@ const suite = usePgliteDb({
 // fresh `till` device (bound to `cfg.tillId`) in a `beforeEach` — fresh EACH test because the
 // `GET /api/till` canvas tests `delete from devices` for the shared tenant, so a once-only device would
 // not survive to a later describe. No canvas needed: place/collect run `assertNotHandheld`, not the
-// capability firewall (`/api/pay`'s integrated-card path is proven in `till-api.rls.test.ts`).
+// capability firewall (`/api/pay`'s integrated-card path is proven in `till-api.pg.test.ts`).
 async function enrolSaleTillDevice(): Promise<void> {
   tillDeviceCookie = await enrolTillDeviceCookie(suite.db);
 }
@@ -173,7 +173,7 @@ function collect(
 
 /** The till's config for the seeded tenant. `nodeId` is the seeded node the working-order routes
  * write and filter by; `seriesId` is unused by these routes (the chained sale write is proven over
- * real Postgres in `till-api.rls.test.ts`), so it carries a fresh uuid; `locationId` is the seeded
+ * real Postgres in `till-api.pg.test.ts`), so it carries a fresh uuid; `locationId` is the seeded
  * one the sale/catalogue routes read. */
 function makeCfg(
   tenantId: TenantId,
@@ -198,7 +198,7 @@ function makeCfg(
 }
 
 /** The system wall clock, reported confident/anchored — the identical stub shape
- *  `working-order.rls.test.ts`/`till-api.rls.test.ts` use. Task 9's `place`/`cancel` routes call
+ *  `working-order.pg.test.ts`/`till-api.pg.test.ts` use. Task 9's `place`/`cancel` routes call
  *  `deps.clock.now()` unconditionally (the amendment's local wall-clock), even under `prepay` — this
  *  suite's cfg — where no fiscal doc is filed, so the stub can no longer be the inert `{}` the
  *  session-only routes got away with. */
@@ -1179,7 +1179,7 @@ describe("POST /api/sales (session-guarded sale)", () => {
 
     // The guard runs BEFORE the body is even read, so an unauthenticated sale is refused with the
     // same code a missing session yields everywhere else. The chained fiscal write (the happy path)
-    // and the idempotent replay are proven end-to-end over real Postgres in `till-api.rls.test.ts`,
+    // and the idempotent replay are proven end-to-end over real Postgres in `till-api.pg.test.ts`,
     // not here — PGlite runs as a superuser and cannot exercise the deployment role's chained write
     // (CLAUDE.md §4).
     const res = await app.request("/api/sales", {
@@ -1224,7 +1224,7 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
 
     // The guard runs BEFORE the body is even read, matching every other session-guarded route. The
     // capture/decline/empty-basket happy paths are proven end-to-end over real Postgres in
-    // `till-api.rls.test.ts` (PGlite runs as a superuser and cannot exercise the deployment role's
+    // `till-api.pg.test.ts` (PGlite runs as a superuser and cannot exercise the deployment role's
     // chained write or the provider's own FORCE RLS, CLAUDE.md §4).
     const res = await app.request("/api/pay", {
       method: "POST",
@@ -1551,7 +1551,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
 // only `deps.clock` is genuinely needed (see `systemClock` above), so these routes are testable
 // hermetically. `collectOrder`'s NON-fiscal path (a malformed id, refused before any dispatch) is
 // tested here too, for the same reason; its FISCAL happy path needs a real backend and lives in
-// `till-api.rls.test.ts`.
+// `till-api.pg.test.ts`.
 describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
   beforeEach(enrolSaleTillDevice);
   it("POST places an open order (open → placed), fires a ticket item at queued, and returns { id, status }", async () => {
@@ -1631,7 +1631,7 @@ describe("/api/working-orders/:id/prep (Mode-P send-to-prep, KDS-1 ticket model)
   // `sendToPrep` needs a SETTLED order, and settling one under this suite's `prepay` cfg means a real
   // fiscal write the stub `FiscalBackend` cannot make — so the SUCCESS path (a genuine Mode-P walk-up
   // settled via `POST /api/sales`, then sent to prep) and the DOUBLE-send collision (→
-  // `ticket.already_fired`) live in `till-api.rls.test.ts`. This suite proves, hermetically, the REFUSAL
+  // `ticket.already_fired`) live in `till-api.pg.test.ts`. This suite proves, hermetically, the REFUSAL
   // the route forwards and the malformed-id screen.
   it("POST on a still-OPEN (parked, unpaid) order is refused 409 working_order.not_settled, nothing fired", async () => {
     const app = new Hono();
@@ -1682,7 +1682,7 @@ describe("/api/working-orders/:id/prep (Mode-P send-to-prep, KDS-1 ticket model)
 // POST /api/ticket-items/:id/advance, POST /api/orders/:id/stations/:sid/advance. Hermetic (PGlite): the
 // station list, the per-station queue read, the per-line + whole-ticket bumps and the malformed-id
 // screens are plain logic a single backend proves; RLS/node isolation of `ticket_items` is
-// real-Postgres's job (`working-order.rls.test.ts`). `placeOrder`'s OWN fire seeds ticket items with no
+// real-Postgres's job (`working-order.pg.test.ts`). `placeOrder`'s OWN fire seeds ticket items with no
 // fiscal write under this suite's `prepay` cfg (only `invoice_first`/Mode T dispatch a fiscal doc).
 describe("KDS-1 station-display operate routes", () => {
   beforeEach(enrolSaleTillDevice);
@@ -1909,7 +1909,7 @@ describe("KDS-1 station-display operate routes", () => {
   });
 });
 
-describe("/api/working-orders/:id/collect (malformed id — the fiscal happy path is till-api.rls.test.ts)", () => {
+describe("/api/working-orders/:id/collect (malformed id — the fiscal happy path is till-api.pg.test.ts)", () => {
   it("POST with a malformed id is 409 working_order.not_placed BEFORE any fiscal dispatch, not an opaque 500", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));

@@ -30,8 +30,8 @@ import { joinTable, openTab, splitOffCheck, unjoinTable } from "./working-order.
 import "./errors.js";
 
 // PGlite is enough HERE: the check being table-less and the line partition are plain row state a single
-// backend proves. The FISCAL filing (exactly-one-registro per check, desglose, contiguity, RLS) is the
-// real-Postgres job of the split-bill fiscal suite (Tasks 2–4, CLAUDE.md §4).
+// backend proves. The FISCAL filing (exactly-one-registro per check, desglose, contiguity) is the
+// real-Postgres job of the split-bill fiscal suite (CLAUDE.md §4).
 const LOCALE = "es-ES";
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 let db: Database;

@@ -30,7 +30,7 @@ import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 // INSERT/UPDATE grant on node_membership — PGlite is a superuser and would not exercise that grant,
 // CLAUDE.md §4): `source` (serves /hello + /log + /cursor), `subscriber` (adopts under the fixture
 // trust set), and `untrusted` (the empty-trust-set control that must adopt nothing). Modelled on the
-// two-node shape of `mirror-e2e.rls.test.ts`, minus the tunnel — an in-process `HttpClient` routes
+// two-node shape of `mirror-e2e.test.ts`, minus the tunnel — an in-process `HttpClient` routes
 // every pull request straight to the source app's `request()`.
 const log: Logger = () => {};
 
@@ -125,7 +125,7 @@ beforeAll(async () => {
   // applyBatch refuses to apply a peer's rows into an UNSTAMPED database (CLAUDE.md §5 — a mirror must
   // be environment-stamped first), and runSyncPull drains through applyBatch before it ever reaches the
   // adopt callback. Stamp both puller databases `preproduction` to match the source's advertised
-  // environment, exactly as `mirror-e2e.rls.test.ts` stamps its booted mirrors. The source needs no
+  // environment, exactly as `mirror-e2e.test.ts` stamps its booted mirrors. The source needs no
   // stamp — it only SERVES its log + membership, advertising its environment from mountSyncApi's deps.
   await stampDeployment(subscriber.admin, "preproduction");
   await stampDeployment(untrusted.admin, "preproduction");

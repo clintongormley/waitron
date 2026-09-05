@@ -38,8 +38,8 @@ import "./errors.js";
 
 // PGlite, not real Postgres: this suite proves the WRITE behaviour of `transferLines` and
 // `moveTabLines` — the split arithmetic, the guards, the line renumbering, the price-lock — all plain
-// SQL a single backend proves. The concurrency race and the RLS cross-tenant isolation (which PGlite's
-// superuser single-backend connection CANNOT show) are `transfer-lines.rls.test.ts`'s real-Postgres job.
+// SQL a single backend proves. The concurrency race and the per-tab fiscal filing as the app role
+// (which PGlite's superuser single-backend connection CANNOT show) are `transfer-lines.pg.test.ts`'s job.
 const LOCALE = "es-ES";
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 let db: Database;

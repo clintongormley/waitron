@@ -15,10 +15,10 @@ import "./errors.js";
 // boundary, the body + id screens and the `recipe.manage` gate wiring — end to end in-process, the
 // same way `catalogue-api.test.ts` proves the catalogue routes. The ingredients/recipe_lines tables
 // live in CORE_MIGRATIONS and the management session/persons in IDENTITY_MIGRATIONS, and every DB
-// touch runs `withTenant` + `asAppUser` exactly as production does. The differential RLS isolation
-// proof and the gate-by-DELETION proof (removing `authorizeManager` turns the staff refusal
-// green→red) are the NEXT task's real-Postgres suite (`recipe-api.rls.test.ts`), which PGlite cannot
-// show because it connects as a superuser (CLAUDE.md §4).
+// touch runs `withTenant` + `asAppUser` exactly as production does. The gate-by-DELETION proof
+// (removing `authorizeManager` turns the staff refusal green→red), run as the non-superuser app role,
+// is the real-Postgres suite (`recipe-api.pg.test.ts`); PGlite connects as a superuser holding every
+// grant (CLAUDE.md §4).
 const noopLog: Logger = () => {};
 
 // This node's origin id — threaded into every recipe write's withTenant (a recipe write UPDATEs the

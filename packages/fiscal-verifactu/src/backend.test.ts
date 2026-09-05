@@ -520,7 +520,7 @@ describe("pendingCount", () => {
  * own `select … where sale_id = …` already do on PGlite. It has no privilege / RLS-as-deployment-role /
  * concurrency dimension, so the heavier target's justification does not apply. The REAL-Postgres
  * read-back of the registro (the app role reading it under RLS on a live replay) is exercised at the
- * integration layer by `apps/server`'s `working-order.rls.test.ts` / `till-api.rls.test.ts` replay
+ * integration layer by `apps/server`'s `working-order.pg.test.ts` / `till-api.pg.test.ts` replay
  * tests, which drive THIS method through the real backend.
  */
 describe("filedReceiptFor", () => {

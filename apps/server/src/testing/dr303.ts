@@ -1,7 +1,7 @@
 import type { Decimal } from "@waitron/shared";
 
 // The modelo 303 export route's DR303 box-27 verification WITNESS, shared by the PGlite
-// (`report-api.test.ts`) and real-Postgres (`report-api.rls.test.ts`) suites. It is an INDEPENDENT
+// (`report-api.test.ts`) and real-Postgres (`report-api.pg.test.ts`) suites. It is an INDEPENDENT
 // oracle — deliberately NOT the reporting serializer's own `formatNumericField` (nor any
 // `@waitron/reporting` import) — so a bug in that serializer cannot self-mask against a test that
 // reuses it. `modelo-303-demo.ts` keeps its OWN copy on purpose (a script is a different layer).

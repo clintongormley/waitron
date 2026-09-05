@@ -36,7 +36,7 @@ import type { Logger } from "./logger.js";
  * separate `products` UPDATEs — and a PATCH's allergen change fans out the same recompute over every
  * product that uses the ingredient — and `products` IS sync-enrolled (`products_capture`,
  * packages/sync/drizzle/0000_sync_outbox.sql:196). Without `nodeId`, that capture would record the
- * all-zero sentinel instead of this node (guarded by `sync-origin.rls.test.ts`). No card provider,
+ * all-zero sentinel instead of this node (guarded by `sync-origin.test.ts`). No card provider,
  * clock or media store either — these routes touch only the ingredient + recipe + product tables via
  * the headless `@waitron/recipes` ops.
  */

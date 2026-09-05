@@ -25,8 +25,8 @@ import "./errors.js";
 
 // PGlite, not real Postgres: the `POST /api/tables/:id/status` route is wiring — session guard +
 // isUuid screen + STATUS mapping over the operator `setTableStatus` verb, which is LOGIC (no privilege
-// or concurrency behaviour to prove here). The verb's own real-PG proofs (RLS, the reset trigger) live
-// in `set-table-status.test.ts` / the `*.rls.test.ts` suites; they are not re-proven at the HTTP layer.
+// or concurrency behaviour to prove here). The verb's own real-PG proofs (the reset trigger) live in
+// `set-table-status.test.ts` and `clear-table-status.test.ts`; they are not re-proven at the HTTP layer.
 let cfg: TillConfig;
 let ana: { id: string };
 // A persistent dining table and two statuses (one active, one inactive) seeded once. The inactive one

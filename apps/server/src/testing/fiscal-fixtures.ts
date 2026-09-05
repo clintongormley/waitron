@@ -4,7 +4,7 @@ import { withTenant, type Database, type Transaction } from "@waitron/db";
 
 // Shared fiscal seeding for the SP-3a fiscal-record-lane suites (fiscal-capture, fiscal-apply,
 // fiscal-upsert, fiscal-fk-defer, fiscal-park-env). Extracted and generalised from pg-restore.test.ts's
-// `seedFiscalRegistro` + fiscal-capture.rls.test.ts's `seedParents`/`insertRegistro`. It lives under
+// `seedFiscalRegistro` + fiscal-capture.test.ts's `seedParents`/`insertRegistro`. It lives under
 // apps/server/src/testing/ because its consumers do: the apply-lane gates drive `mountSyncApi` +
 // `ALL_SYNC_ENROLMENTS`, which live only in the composition root and `fiscal-verifactu` cannot import.
 // Coverage-excluded (this package's vitest.config.ts `exclude`). Spanish fiscal column names are used
@@ -12,7 +12,7 @@ import { withTenant, type Database, type Transaction } from "@waitron/db";
 // fiscal-verifactu is exempt too).
 //
 // Column shapes are the current migrated schema (country/tax_id on tenants, vat_breakdown on sales,
-// node-keyed series/sif/registro), asserted against by fiscal-capture.rls.test.ts already.
+// node-keyed series/sif/registro), asserted against by fiscal-capture.test.ts already.
 
 /** Deployment-environment stamp carried on a registro (never HASHED, but replicated verbatim). */
 export type Entorno = "production" | "preproduction";

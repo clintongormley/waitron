@@ -49,7 +49,7 @@ import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
  * that needs no container and lives in `packages/fiscal-verifactu/src/write-path.e2e.test.ts`
  * ("till_id is inert to the huella and the chain"), beside its `entorno`/`parent_line_id` precedents.
  *
- * Setup mirrors `till-api.rls.test.ts`: a provisioned venue + a seeded catalogue + a login person, a
+ * Setup mirrors `till-api.pg.test.ts`: a provisioned venue + a seeded catalogue + a login person, a
  * real `VerifactuBackend` and the system clock.
  */
 const LOCALE = "es-ES";
@@ -61,7 +61,7 @@ let clock: TrustedClock;
 
 const noopLog: Logger = () => {};
 
-/** The wall clock reported as already anchored — the identical stub shape `till-api.rls.test.ts`
+/** The wall clock reported as already anchored — the identical stub shape `till-api.pg.test.ts`
  *  documents. `recordSale` reads `now()` once and touches neither `anchor` nor `currentAnchor`. */
 function systemClock(): TrustedClock {
   return {
@@ -83,7 +83,7 @@ function systemClock(): TrustedClock {
 }
 
 // Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is
-// unique, so each provisioned venue needs its own NIF — the same local counter `till-api.rls.test.ts`
+// unique, so each provisioned venue needs its own NIF — the same local counter `till-api.pg.test.ts`
 // uses for the same reason.
 let nifCounter = 0;
 function nextNif(): string {

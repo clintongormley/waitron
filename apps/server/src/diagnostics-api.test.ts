@@ -26,7 +26,7 @@ const suite = useTemplateDb({ template: "manifest" });
 const noopLog: Logger = () => {};
 
 // Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF — the per-suite counter the sibling RLS suites use.
+// so each provisioned venue needs its own NIF — the per-suite counter the sibling real-Postgres suites use.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;

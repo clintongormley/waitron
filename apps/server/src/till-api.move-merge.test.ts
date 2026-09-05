@@ -26,7 +26,7 @@ import "./errors.js";
 
 // PGlite, not real Postgres: the move/join/merge verbs are table-service LOGIC (re-point `dining_tables`
 // rows, move lines, abandon a tab) whose privilege/RLS/concurrency behaviour is proven over real
-// Postgres in `working-order.rls.test.ts`; here we prove only the HTTP surface — the session guard, the
+// Postgres in `working-order.pg.test.ts`; here we prove only the HTTP surface — the session guard, the
 // malformed-`:id` screen, and the verb's status mapping — which fires at the boundary before/around a
 // single query, so a superuser PGlite backend is adequate (CLAUDE.md §4). Sessions/persons live in
 // identity, so the schema is CORE_MIGRATIONS + IDENTITY_MIGRATIONS. Harness ported from `till-api.test.ts`.

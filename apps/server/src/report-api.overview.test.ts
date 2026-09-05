@@ -18,7 +18,7 @@ import "./errors.js";
 // overview anchors on TODAY's business day (`currentBusinessDay`), and today's date falls inside the
 // modelo 303 suite's August 2026 período — a today-sale seeded into that suite's tenant would corrupt
 // its box-27 fixtures. A fresh tenant here keeps the two independent. The differential RLS-isolation +
-// the app-role-can-SELECT-dining_tables proofs are the real-Postgres suite (report-api.rls.test.ts),
+// the app-role-can-SELECT-dining_tables proofs are the real-Postgres suite (report-api.pg.test.ts),
 // which PGlite cannot show because every PGlite connection is a superuser that bypasses grants + FORCE
 // RLS (CLAUDE.md §4).
 const noopLog: Logger = () => {};

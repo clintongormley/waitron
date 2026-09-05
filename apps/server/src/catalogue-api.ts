@@ -66,7 +66,7 @@ export interface CatalogueApiDeps {
   /** `nodeId` is this node's origin id, threaded into every catalogue write's `withTenant` so the
    * enrolled `catalogues`/`categories`/`products` INSERT/UPDATE the capture trigger records carries a
    * real `sync_log.origin_id` rather than the all-zero sentinel (design §4d(B); sync origin
-   * attribution — proven end-to-end by `sync-origin.rls.test.ts`). */
+   * attribution — proven end-to-end by `sync-origin.test.ts`). */
   cfg: { tenantId: string; nodeId: string };
   mediaDir: string;
   maxUploadBytes: number;
@@ -325,7 +325,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   // composite FK — `locations.catalogue_id` → catalogues(tenant_id,id) (0078), `location_catalogues`
   // → (0074) — that 23503-rejects a cross-tenant id at the DATA layer independently of RLS. The guard's
   // job is the CLEAN, uniform error: without it both routes still refuse a cross-tenant id, but via the
-  // FK's opaque 500 (proven cross-tenant in catalogue-api.rls.test.ts: guard deleted → the PUT returns
+  // FK's opaque 500 (proven cross-tenant in catalogue-api.pg.test.ts: guard deleted → the PUT returns
   // 500, the default is never set). DELETE needs no guard: removing a non-member row is a no-op.
   app.get("/management-api/locations/:locationId/catalogues", (c) =>
     run(c, log, async () => {

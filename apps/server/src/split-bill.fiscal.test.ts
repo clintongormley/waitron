@@ -414,7 +414,7 @@ describe("split-bill: pay each check files its own registro", () => {
     // PROVEN LOAD-BEARING (this run): the count is 1, not 2 — the second pay filed nothing. The witness
     // that the replay is real is `second.invoiceNumber === first.invoiceNumber`: a genuine second filing
     // would draw the NEXT series number (A/2), so an off idempotency key would show BOTH as a differing
-    // invoice number AND as `forCheck.length === 2` here (the sibling `working-order.rls.test.ts` idempotent
+    // invoice number AND as `forCheck.length === 2` here (the sibling `working-order.pg.test.ts` idempotent
     // -replay test proves the same key by deletion — reverting it double-files).
     const forCheck = await asApp(cfg, (tx) =>
       tx
@@ -430,9 +430,10 @@ describe("split-bill: pay each check files its own registro", () => {
 // A split cannot cross a tenant boundary. `splitOffCheck`'s origin read is `working_orders WHERE id =
 // fromTabId` (the base .from() table, NO explicit tenant predicate), so isolation here is STRUCTURAL:
 // FORCE ROW LEVEL SECURITY hides the foreign tab and the read finds nothing → `tab.not_open`,
-// fail-closed. PGlite (superuser, RLS-bypassing) could not show this. Mirrors the landed sibling
-// `transfer-lines.rls.test.ts`'s "cross-tenant isolation" describe verbatim in shape — including its
-// exact `alter policy … using (true) with check (true)` deletion-proof dance.
+// fail-closed. PGlite (superuser, RLS-bypassing) could not show this. (Its model, the equivalent
+// describe in the transfer-lines real-Postgres suite, was retired with the other tenant-isolation
+// cases; this one is the drop-RLS chain's step 4 to remove — docs/superpowers/specs/
+// 2026-09-05-drop-rls-squash-and-outbox-deletion-design.md §4.)
 describe("split-bill cross-tenant isolation (FORCE RLS hides the foreign tab; the policy is the guard)", () => {
   it("a cross-tenant split is impossible — RLS hides the other tenant's tab (fail-closed)", async () => {
     const owner = await setupVenue(); // tenant X, with an open tab
@@ -462,7 +463,7 @@ describe("split-bill cross-tenant isolation (FORCE RLS hides the foreign tab; th
     // `true` inside a ROLLED-BACK transaction makes it APPEAR (count 1) — so the predicate, not mere table
     // access, hid it. The `alter policy` runs as the owner (superuser), before dropping to `app_user`.
     // Rolled back, so the policy is restored and no rows move. Copied verbatim in shape from
-    // transfer-lines.rls.test.ts:344-367.
+    // transfer-lines.pg.test.ts:344-367.
     const conn = await suite.pg.connect();
     try {
       await conn.execute(sql`begin`);

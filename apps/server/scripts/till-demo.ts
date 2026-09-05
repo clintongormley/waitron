@@ -1,7 +1,7 @@
 // Self-contained, human-checkable demonstration of the Counter POS till's walk-up sale — driven
 // through the till's OWN HTTP surface exactly as the browser does, both by CASH and by a manual CARD
 // tender (the "datáfono" case, sub-project 7 slice 3). Modelled on `catalogue-demo.ts`
-// (self-migrating, tsx-run, a real `VerifactuBackend`) and on `till-api.rls.test.ts` (which mounts
+// (self-migrating, tsx-run, a real `VerifactuBackend`) and on `till-api.pg.test.ts` (which mounts
 // `mountTillApi` on a `new Hono()` and drives it with `app.request(...)`), it:
 //
 //   1. connects to a FRESH postgres (via `DATABASE_URL`) and applies the core, identity and fiscal
@@ -18,7 +18,7 @@
 //      operator ran the card on a separate bank terminal — `recordManualCardPayment` makes no network
 //      call, `manual.ts:36-42`), then reads back the filed `tenders` row (`method = 'card'`) and the
 //      linked `payments` row (`provider = 'manual'`, `state = 'captured'`) directly from the database
-//      as the connection owner (bypassing RLS, the same read shape `working-order.rls.test.ts` uses),
+//      as the connection owner (bypassing RLS, the same read shape `working-order.pg.test.ts` uses),
 //      so a human can see the captured-payment ledger a card tender adds beside the tender itself.
 //
 // Like `catalogue-demo.ts` (and unlike `daily-close-demo.ts`'s in-memory PGlite) this uses a real
@@ -83,7 +83,7 @@ const noopLog: Logger = () => {};
 
 /**
  * The wall clock at the moment this process runs, reported as already confident and anchored — the
- * identical stub shape `catalogue-demo.ts`/`till-api.rls.test.ts` document. `recordSale` reads
+ * identical stub shape `catalogue-demo.ts`/`till-api.pg.test.ts` document. `recordSale` reads
  * `now()` once and touches neither `anchor` nor `currentAnchor`, so both are stubs.
  */
 function systemClock(): TrustedClock {
@@ -340,7 +340,7 @@ async function main(): Promise<void> {
     const cardTicket = (await cardSaleRes.json()) as TillSaleResult;
 
     // Read the filed `tenders` row back as the connection OWNER (bypasses RLS) — the same join shape
-    // `working-order.rls.test.ts`'s `tendersFor` uses: `tenders` links to `sales`, not directly to
+    // `working-order.pg.test.ts`'s `tendersFor` uses: `tenders` links to `sales`, not directly to
     // `working_orders`, so the join goes through `sales.working_order_id`.
     const { rows: cardTenders } = await db.execute<{ method: string; amount: string }>(sql`
       select t.method, t.amount

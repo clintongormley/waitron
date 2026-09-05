@@ -13,9 +13,9 @@ import "./errors.js";
 
 // PGlite, not real Postgres: the schedule routes are LOGIC (session → verb → JSON) over mutable
 // planning rows. Every DB touch runs through `withTenant` + `asAppUser` exactly as production does, but
-// RLS as the deployment role and — the crux — the "requester is the SESSION's personId, never the
+// the app role's grants and — the crux — the "requester is the SESSION's personId, never the
 // body's" identity property need a real non-superuser role to MEAN anything, so they are proven
-// against real Postgres in `schedule-api.rls.test.ts`. Here we prove the route mechanics: the happy
+// against real Postgres in `schedule-api.pg.test.ts`. Here we prove the route mechanics: the happy
 // paths, the request-shape 400s and the not-logged-in 401.
 
 const noopLog: Logger = () => {};

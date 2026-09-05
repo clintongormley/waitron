@@ -133,7 +133,7 @@ async function seedTillIdentity(admin: Database): Promise<void> {
 }
 
 beforeAll(async () => {
-  // The migrations root, built exactly as boot.test.ts / boot.mirror.rls.test.ts do: boot's
+  // The migrations root, built exactly as boot.test.ts / boot.mirror.test.ts do: boot's
   // from-source default (`apps/server/src/drizzle`) does not exist under source, so
   // `WAITRON_MIGRATIONS_DIR` must point `applyMigrations` at the real journal content per manifest set.
   const fromSource = migrationOptionsFor(manifestSets(), null);

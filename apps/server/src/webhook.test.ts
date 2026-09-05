@@ -43,7 +43,7 @@ function deps(db: Database): WebhookDeps {
     db,
     ring,
     // Value irrelevant on PGlite (superuser, no sync capture triggers here); the origin-capture guard
-    // lives in webhook.rls.test.ts against the full manifest. Required by WebhookDeps.
+    // lives in webhook.pg.test.ts against the full manifest. Required by WebhookDeps.
     nodeId: "11111111-1111-4111-8111-111111111111",
     environment: "preproduction",
     // The secret key is ignored by the HMAC double — verification depends only on the per-tenant

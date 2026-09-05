@@ -16,8 +16,8 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
  *    `startRealPostgres` runs. Cloned by the api / boot / sync suites (`useTemplateDb({ template:
  *    "manifest" })`).
  *  - `core` — CORE only, via the bare `runMigrationSets` those suites used directly. Cloned by
- *    `clear-table-status.rls.test.ts`.
- *  - `core_identity` — CORE + IDENTITY. Cloned by `service-statuses.rls.test.ts`.
+ *    `clear-table-status.test.ts`.
+ *  - `core_identity` — CORE + IDENTITY. Cloned by `service-statuses.test.ts`.
  *
  * The cluster roles are created ONCE here, idempotently, in place of the per-file `probeRole` /
  * `setup` role creation the converted suites used — a shared container is one cluster, so a role
@@ -64,7 +64,7 @@ export default async function ({ provide }: GlobalSetupContext) {
       { name: "sync_reader", password: "rp", inRole: "sync_tailer" },
       { name: "sync_applier", password: "ap", inRole: ["app_user", "sync_tailer"] },
       // `sync_pruner` is a `sync_retention` member — the operator/CLI role that holds
-      // SELECT/INSERT/UPDATE on sync_peers (0005_sync_peers.sql). mirror-bundle.rls.test.ts enrols the
+      // SELECT/INSERT/UPDATE on sync_peers (0005_sync_peers.sql). mirror-bundle.test.ts enrols the
       // mirror peer through it (enrolPeer inserts a sync_peers row), matching packages/sync's own harness.
       { name: "sync_pruner", password: "pp", inRole: "sync_retention" },
     ],

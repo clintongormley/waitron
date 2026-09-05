@@ -17,10 +17,10 @@ import "./errors.js";
 // id screens, the permission gate wiring and the image-upload mechanics — end to end in-process, the
 // same way `till-api.test.ts` proves the till routes. The catalogue tables live in CORE_MIGRATIONS and
 // the management session/persons in IDENTITY_MIGRATIONS, and every DB touch runs `withTenant` +
-// `asAppUser` exactly as production does. The *differential* RLS isolation proof and the
-// gate-by-DELETION proof (a manager of tenant A cannot see B; removing `authorizeManager` turns the
-// staff refusals green→red) are the NEXT task's real-Postgres suite (`catalogue-api.rls.test.ts`),
-// which PGlite cannot show because it connects as a superuser (CLAUDE.md §4).
+// `asAppUser` exactly as production does. The gate-by-DELETION proof (removing `authorizeManager`
+// turns the staff refusals green→red) and the option-group attach's tenant-consistent composite FK are
+// the real-Postgres suite (`catalogue-api.pg.test.ts`); PGlite connects as a superuser holding every
+// grant (CLAUDE.md §4).
 const noopLog: Logger = () => {};
 
 // A comfortable per-file limit for the handler-path tests (happy path, missing, unsupported): well
@@ -84,7 +84,7 @@ function mountApp(maxUploadBytes: number = HANDLER_LIMIT): Hono {
   mountCatalogueApi(
     app,
     // cfg.nodeId is required but this in-process suite asserts route mechanics, not the captured
-    // origin (that is sync-origin.rls.test.ts's job); any valid node id satisfies the type.
+    // origin (that is sync-origin.test.ts's job); any valid node id satisfies the type.
     {
       db: suite.db,
       cfg: { tenantId, nodeId: "11111111-1111-4111-8111-111111111111" },
@@ -839,7 +839,7 @@ describe("mountCatalogueApi — product request-shape screens", () => {
 describe("mountCatalogueApi — null request bodies map to the route's own 4xx, never a 500", () => {
   // A literal JSON `null` body parses to `null`; each write route coerces it with `?? {}` so a field
   // access is the route's documented 4xx (or, for PATCH, the empty-body 204) rather than a TypeError →
-  // opaque 500 — the same guard the management routes carry (management-api.rls.test.ts).
+  // opaque 500 — the same guard the management routes carry (management-api.pg.test.ts).
   it("POST /catalogues null body → 400 management.request_invalid", async () => {
     const res = await send(mountApp(), "POST", "/management-api/catalogues", { body: null });
     expect(res.status).toBe(400);
@@ -979,9 +979,10 @@ describe("mountCatalogueApi — image upload", () => {
 // ── Option groups + items authoring (Task 11) ────────────────────────────────────────────────────
 // Route mechanics for the modifier-authoring surface, proved in-process on PGlite like the rest of
 // this file: the group/item CRUD, the request-shape + id screens, the domain `options.group_invalid`
-// bounds check, and the product↔group attach carried on the product POST/PATCH body. The DIFFERENTIAL
-// RLS isolation + the `person.manage` gate-by-deletion for these routes are the real-Postgres suite's
-// job (catalogue-api.rls.test.ts), which PGlite cannot show (every PGlite connection is a superuser).
+// bounds check, and the product↔group attach carried on the product POST/PATCH body. The
+// `person.manage` gate-by-deletion and the attach's tenant-consistent composite FK are the
+// real-Postgres suite's job (catalogue-api.pg.test.ts), which PGlite cannot show (every PGlite
+// connection is a superuser holding every grant).
 
 interface OptionGroupShape {
   id: string;
