@@ -70,9 +70,10 @@ below). Two structures are known to be out of date and must not be built on:
    them and land as modules; polishing existing screens does not.
 
 Three **decisions** shape UI work and cost nothing to take now (docs-only brainstorms, build later):
-Route A vs B for the till reroute (it decides the till's auth model — Track B item 1); `tills` vs
-`devices` (device management and the till-enrol screen — Track B item 7, [owner]); and the relay
-choice (Track C item 5, which shapes the control plane). **Track 1 therefore works areas 2–18 now
+Route A vs B for the till reroute (it decides the till's auth model); `tills` vs `devices` (device
+management and the till-enrol screen, [owner]); and the relay choice (ours or off-the-shelf, which
+shapes the control plane). **All three are Track B's first job** — its "decisions first" line below —
+taken before Track B builds anything; Track 1 and Track C consume them. **Track 1 therefore works areas 2–18 now
 and leaves area 1 (setup wizard — its provisioning paths move under Track B item 2) and area 19
 (device management) until those decisions are recorded.** Everything else in the four tracks
 proceeds in parallel under the coordination rules in the design-review section (serialised pushes;
@@ -207,6 +208,12 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
 promote / till-session / read-only gate / box-* / rejoin, `packages/membership`, `packages/printing`,
 and the single config-conflict-gate trim in `packages/sync`):
 
+**Decisions first (docs-only brainstorms, before any build):** (i) Route A vs B (item 1's opening);
+(ii) the relay choice — ours or off-the-shelf (item 2's opening, moved here from Track C; Track C's
+control plane consumes the answer); (iii) `tills` vs `devices` — the decision half of item 7, pulled
+forward because Track 1's area 19 waits on it; the build and its H2 receipt stay after Track A's
+squash. Record each in this file as it is taken.
+
 1. **Till reroute** — the first slice, because nothing server-side in the failover arc is usable
    until a till can reach the second box. Brainstorm Route A (service worker + bearer token,
    browser-only interim) vs Route B (native agent, stable local origin) FIRST — it changes the auth
@@ -218,7 +225,8 @@ and the single config-conflict-gate trim in `packages/sync`):
    two deferrals (till reads routed through the display-data node; selling gated on REBOOT completion,
    not the PONR). Rewrite CLAUDE.md §5's "nothing blocks a sale" wording in the same change.
 2. **The cloud standby, end to end (MVP)** — real relay hosting for `@waitron/tunnel` (proven only
-   against a local stand-in; decide with Track C item 5 whether the relay is ours or off-the-shelf), a
+   against a local stand-in; FIRST decide whether the relay is ours or off-the-shelf — Tailscale /
+   cloudflared / frp — the "decisions first" line above), a
    per-tenant cloud instance provisioning path, then prove by RUNNING: on-prem primary → adopt →
    mirror → human promotion → tills reroute to the promoted cloud → the venue sells and files. A
    second LOCAL box is post-MVP; when it comes, the same adopt path over the LAN with no relay is the
@@ -240,8 +248,9 @@ and the single config-conflict-gate trim in `packages/sync`):
    keeps deferring — not both; a small worker registry replaces `startServer`'s hand-rolled
    AbortController-per-worker (`boot.ts`, 1,665 lines). **After Track A item 3 lands** — both edit
    `boot.ts`'s role-pool wiring.
-7. **`tills` vs `devices` — [owner]** (SP-A.2 follow-up 2): own brainstorm + full fiscal trace; a new
-   H2 receipt for what an immutable record's `till_id` holds. After Track A's squash.
+7. **`tills` vs `devices` — [owner]** (SP-A.2 follow-up 2): the brainstorm is taken up front (the
+   "decisions first" line above); the build — full fiscal trace, a new H2 receipt for what an
+   immutable record's `till_id` holds — after Track A's squash.
 
 **Track C — product / modules** (sequential; owns `packages/fiscal*`, the module framework packages,
 every NEW module package, `apps/dashboard` module screens, `apps/server/src/modules.ts`, and the
@@ -261,12 +270,11 @@ control-plane docs):
    taxpayer, and one customer may own several), subscriptions, instances (which box/VM serves which
    tenant, its version; region is Spain by decision), relay tokens for the tunnel, and version
    rollout per tenant. Density comes from many isolated instances per host, never a shared database.
-   Pair it with item 5's tunnel question: the relay choice shapes what the control plane hands out.
+   Consumes Track B's relay decision (what the control plane hands out depends on it).
    Docs-only until designed; nothing here is on the sale path.
-5. **Reconsider two bespoke pieces against off-the-shelf** (brainstorm, not a mandate):
-   `@waitron/tunnel` (a blind byte-splice reverse tunnel whose relay does not exist yet — Tailscale /
-   cloudflared / frp) and the backup container `WBA1` + `artifact-cipher.ts` (whole-dump in memory,
-   restorable only by Waitron code — `pg_dump | age`, tar).
+5. **Reconsider the backup container against off-the-shelf** (brainstorm, not a mandate): `WBA1` +
+   `artifact-cipher.ts` (whole-dump in memory, restorable only by Waitron code — `pg_dump | age`,
+   tar). The tunnel/relay half of this question moved to Track B's "decisions first" line.
 6. **De-triplicate the three alta builders — [owner]** in `fiscal-verifactu/src/backend.ts`
    (`recordSale` / `recordCorrection` / `recordSubstitution`; already under *Debt → Fiscal*): needs
    the huella-invariance re-run across all three.
