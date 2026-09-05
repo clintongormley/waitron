@@ -97,6 +97,9 @@ DATABASE_URL=<box database connection> node apps/server/dist/register-till.js \
     <tenantId> <nodeId> <idSistemaInformatico>
 ```
 
+> **2026-09-06 (SP-3c):** `register-till` now takes two arguments — `<tenantId> <nodeId>` — and runs
+> every module's seed; the software identifier is the fiscal package's own constant.
+
 (The connection string is read only from `DATABASE_URL`, never passed as an argument, so it stays out
 of shell history and process listings; the obligado's NIF is read from the tenant row, not supplied.)
 This runs `provisionNode` → `registerSif`.

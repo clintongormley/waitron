@@ -15,8 +15,8 @@ import { provisionNode } from "./provision-till.js";
 // database suites. That harness's own refusal message says a container is required because "PGlite
 // runs every connection as a superuser, so it cannot show whether this host works as the
 // non-superuser deployment role"; nothing here ever leaves the superuser connection, so the
-// justification does not apply. `registerSif` itself — the function under test, one layer down — is
-// covered exactly this way (`registro-sif.test.ts`, same two migration sets), as are this
+// justification does not apply. The fiscal seed one layer down — the caller of `registerSif` — is
+// covered exactly this way (`packages/fiscal-verifactu/src/provisioning.test.ts`), as are this
 // directory's `stripe-account.test.ts` and `aeat-transport.test.ts`. `vitest.config.ts` pins
 // `singleFork`, so a container here would be pure additive wall-clock on every run.
 //
