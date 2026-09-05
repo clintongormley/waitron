@@ -1899,6 +1899,12 @@ reason-(b) reference, `packages/payments` the reason-(a) one. Plan:
 
 ---
 
+**Dev stack from a worktree.** `apps/server/.env` is per-database (copy it from the main checkout;
+`worktree.py new` does not), and every `pnpm dev*` from a worktree needs `COMPOSE_PROJECT_NAME=waitron`
+or compose starts a second `db` named after the directory on the same port. Detail + the
+`dev:reset` rule: [ui-review.md](ui-review.md) → *Running the stack from a worktree*. Fold into
+CLAUDE.md §6 with the next PR that touches it (a root `CLAUDE.md` edit takes the normal PR flow).
+
 ## How to keep this file honest
 
 Update it in the change that makes it stale (CLAUDE.md §7). In particular:

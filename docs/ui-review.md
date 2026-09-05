@@ -11,6 +11,20 @@ walkthrough survives a context clear.
 <http://localhost:5191>, setup <http://localhost:5192>. Till PIN **5555**; dashboard
 **owner@demo.waitron.local / dashPass123**.
 
+**Running the stack from a worktree (cost a round trip on 2026-09-05).** The dev Postgres is ONE
+container for every checkout (`docker-compose.yml`, port 5432), and `apps/server/.env` is a
+per-DATABASE artefact (venue ids + the credentials key), not a per-checkout one — a fresh worktree has
+none, and `worktree.py new` does not copy it. Two rules: (1) copy `apps/server/.env` from the main
+checkout into the worktree; (2) run every `pnpm dev*` command from a worktree with
+`COMPOSE_PROJECT_NAME=waitron`, because compose names its project after the directory and would
+otherwise start a second `db` on the same port with its own empty volume (the stray
+`waitron-feat-onboarding-slice1b-setup-mode-boot_waitron-dev-db` volume is what that leaves behind).
+The server migrates the shared DB forward at boot, so switching worktrees is fine; a venue seeded
+before the code's seed data (e.g. before device profiles) makes `dev:setup` refuse — `pnpm dev:reset`
+(throwaway preproduction data) re-provisions, writes a new `.env` and prints a new pairing code, and
+that `.env` must then be copied to every other checkout. `/health` reports `ok:false` on the dev venue
+because the fiscal drain has no AEAT credentials; the till and API serve normally regardless.
+
 **Gotcha (cost ~an hour on 2026-09-01):** if the till shows a blank/error screen after login and
 `/api/products` returns 500, the `:8080` server is a **stale orphan** from a previous session that no
 longer matches the (re)seeded DB — it is not a `main` bug (the demo proves products serves fine).
