@@ -579,11 +579,17 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   if (config.till !== undefined) {
     const driftProbe = await createPostgresDb(config.migrationsDatabaseUrl);
     try {
-      const versions = await schemaVersionsByModule(driftProbe, ALL_MODULES);
+      // SP-2b: one sweep of every module's applied schema version, keyed by name (main's
+      // `schemaVersionsByModule`, which BR-2's backup manifest shares — the driftProbe is an
+      // auto-commit pool, so its `Promise.all` reads are each isolated); the migrated Set is derived
+      // from it (version > 0). `myModuleVersions` is kept in scope because later SP-2b tasks inject it
+      // into the sync deps (the schema-version park gate). The Set handed to `reconcile` is
+      // byte-for-byte the one the former inline loop built.
+      const myModuleVersions = await schemaVersionsByModule(driftProbe, ALL_MODULES);
       const migrated = new Set(
-        Object.entries(versions)
+        Object.entries(myModuleVersions)
           .filter(([, v]) => v > 0)
-          .map(([name]) => name),
+          .map(([n]) => n),
       );
       // `setsToMigrate` already holds `enabledModules(ALL_MODULES, moduleConfig)` in trading mode
       // (the branch above), so reuse it rather than recompute the same filter.

@@ -137,3 +137,10 @@ export const ALL_MODULES: readonly WaitronModule[] = [
 export const ALL_SYNC_ENROLMENTS: readonly EnrolledTable[] = ALL_MODULES.flatMap(
   (m) => m.sync ?? [],
 );
+
+/** table → owning-module name, built at the composition root (SP-2b). The apply gate resolves a
+ * sync_log row's module by table name; it is a side map rather than a field on EnrolledTable so
+ * SP-2a's enrolment type and its threading stay untouched (spec §5). */
+export const MODULE_BY_TABLE: ReadonlyMap<string, string> = new Map(
+  ALL_MODULES.flatMap((m) => (m.sync ?? []).map((e) => [e.table, m.name] as const)),
+);
