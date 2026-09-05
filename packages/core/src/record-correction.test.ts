@@ -145,7 +145,6 @@ function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
       kind: "immediate",
       tenders: [{ method: "card", amount: "16.31", tipAmount: "1.90", settledAt: BASE }],
     },
-    fiscalBackend: "fake",
     clock: steadyClock,
     ...overrides,
   };
@@ -184,7 +183,6 @@ function correctionInput(
         lineTotal: "-2.10",
       },
     ],
-    fiscalBackend: "fake",
     clock: steadyClock,
     // Default authorizer: the supervisor session opened in `beforeEach`. A supervisor holds
     // `sale.rectify`, so every green-path correction here is authorized on the operator's own role;

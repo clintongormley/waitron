@@ -164,7 +164,6 @@ async function ringSale(
         lineTotal: spec.base,
       },
     ],
-    fiscalBackend: "fake",
     clock: fixedClock(spec.at),
     settlement: {
       kind: "immediate",

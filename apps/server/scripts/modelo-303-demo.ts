@@ -511,7 +511,6 @@ async function main(): Promise<void> {
           },
         ],
         vatBreakdown: [{ rate: decimal(s.rate), base: decimal(s.base), tax: decimal(s.tax) }],
-        fiscalBackend: "fake",
         clock: clockAt(instant, offsetMinutes),
         settlement: { kind: "deferred" },
       };
@@ -554,7 +553,6 @@ async function main(): Promise<void> {
           lineTotal: RECTIFICATIVA.base,
         },
       ],
-      fiscalBackend: "fake",
       clock: clockAt(rect.instant, rect.offsetMinutes),
       authz: { sessionId: authorizerSession.id },
     };

@@ -140,7 +140,6 @@ function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
       kind: "immediate",
       tenders: [{ method: "card", amount: "16.31", tipAmount: "1.90", settledAt: BASE }],
     },
-    fiscalBackend: "fake",
     clock: steadyClock,
     ...overrides,
   };
@@ -186,6 +185,7 @@ async function countRows(table: string): Promise<number> {
  */
 function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>): FiscalBackend {
   return {
+    id: fake.id,
     registerNode: (tx, node, params) => fake.registerNode(tx, node, params),
     recordSale: (tx, sale) => fake.recordSale(tx, sale),
     filedReceiptFor: (tx, saleId) => fake.filedReceiptFor(tx, saleId),
@@ -434,6 +434,7 @@ describe("recordVoid — error propagation", () => {
     } as unknown as Transaction;
 
     const backend: FiscalBackend = {
+      id: "fake",
       registerNode: () => {
         throw new Error("not used by this test");
       },

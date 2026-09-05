@@ -139,7 +139,6 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
         lineTotal: "2.10",
       },
     ],
-    fiscalBackend: "fake",
     clock: steadyClock,
     settlement: { kind: "immediate", tenders: DEFAULT_TENDERS },
     ...overrides,
@@ -217,6 +216,7 @@ async function rows<T extends Record<string, unknown>>(
  */
 function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>): FiscalBackend {
   return {
+    id: fake.id,
     registerNode: (tx, node, params) => fake.registerNode(tx, node, params),
     recordSale: (tx, sale) => fake.recordSale(tx, sale),
     filedReceiptFor: (tx, saleId) => fake.filedReceiptFor(tx, saleId),
@@ -246,6 +246,16 @@ describe("recordSale — the happy path", () => {
     const { saleId } = await run(new FakeFiscalBackend(suite.db));
     const [row] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
     expect(row?.invoiceNumber).toBe(1);
+  });
+
+  it("writes the backend's own id into sales.fiscal_backend", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId } = await run(backend);
+    const [row] = await rows<{ fiscal_backend: string }>(
+      sql`select fiscal_backend from sales where id = ${saleId}`,
+    );
+    expect(backend.id).toBe("fake");
+    expect(row?.fiscal_backend).toBe(backend.id);
   });
 
   it("advances the series counter so the second sale gets the next number", async () => {

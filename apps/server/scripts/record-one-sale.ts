@@ -196,7 +196,6 @@ async function main(): Promise<void> {
           { method: "cash", amount: tenderAmount, tipAmount, settledAt: clock.now().instant },
         ],
       },
-      fiscalBackend: "verifactu",
       clock,
     };
 

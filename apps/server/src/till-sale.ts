@@ -606,7 +606,6 @@ async function fileImmediateSale(
     total: priced.total,
     lines: priced.lines,
     vatBreakdown: priced.vatBreakdown,
-    fiscalBackend: "verifactu",
     clock: deps.clock,
     operatorId,
     settlement: {
@@ -973,7 +972,6 @@ async function finalizeCapture(
           total: priced.total,
           lines: priced.lines,
           vatBreakdown: priced.vatBreakdown,
-          fiscalBackend: "verifactu",
           clock: deps.clock,
           operatorId,
           settlement: {
@@ -1146,7 +1144,6 @@ async function finalizeRecovery(
         total: priced.total,
         lines: priced.lines,
         vatBreakdown: priced.vatBreakdown,
-        fiscalBackend: "verifactu",
         clock: deps.clock,
         operatorId,
         settlement: {

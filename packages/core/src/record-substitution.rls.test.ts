@@ -38,6 +38,7 @@ const steadyClock: TrustedClock = {
  * error rather than the expected code, which is exactly the regression worth catching.
  */
 const unreachableBackend: FiscalBackend = {
+  id: "unreachable",
   registerNode: () => {
     throw new Error("backend must not be reached");
   },
@@ -95,7 +96,6 @@ function substitutionInput(
     ],
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
-    fiscalBackend: "fake",
     clock: steadyClock,
   };
 }

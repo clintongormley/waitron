@@ -163,7 +163,6 @@ async function main(): Promise<void> {
           lineTotal: "100.00",
         },
       ],
-      fiscalBackend: "fake",
       clock,
       settlement: {
         kind: "immediate",
@@ -194,7 +193,6 @@ async function main(): Promise<void> {
           lineTotal: "50.00",
         },
       ],
-      fiscalBackend: "fake",
       clock,
       settlement: { kind: "deferred" },
     };
@@ -244,7 +242,6 @@ async function main(): Promise<void> {
           lineTotal: "-5.00",
         },
       ],
-      fiscalBackend: "fake",
       clock,
       authz: { sessionId: authorizerSession.id },
     };

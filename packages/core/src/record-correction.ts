@@ -75,7 +75,6 @@ export interface RecordCorrectionInput {
    * supplies a second person's PIN). The authorizer it returns is recorded on `sales.authorized_by`.
    */
   authz: AuthzInput;
-  fiscalBackend: string;
   clock: TrustedClock;
 }
 
@@ -248,7 +247,7 @@ export async function recordCorrection(
       total: input.total,
       locale: original.locale,
       invoiceLocales: original.invoiceLocales,
-      fiscalBackend: input.fiscalBackend,
+      fiscalBackend: backend.id,
       fiscalState: "recorded",
       correctsSaleId: input.correctsSaleId,
       // Recorded at INSERT because `sales` is append-only for the app role (no UPDATE grant), so

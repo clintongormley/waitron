@@ -209,6 +209,10 @@ export interface ReconcileResult {
  * `push` in either method's place.
  */
 export interface FiscalBackend {
+  /** This backend's identifying string — what `sales.fiscal_backend` records, and the value the
+   * `backend` field of every `NodeRegistration`/`FiscalRecordRef` it returns carries. */
+  readonly id: string;
+
   registerNode(
     tx: Transaction,
     nodeId: NodeId,

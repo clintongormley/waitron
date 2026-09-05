@@ -208,7 +208,6 @@ async function main(): Promise<void> {
         lines: priced.lines,
         // The catalogue's gross-inclusive difference-method desglose, filed verbatim.
         vatBreakdown: priced.vatBreakdown,
-        fiscalBackend: "verifactu",
         clock,
         // Invoice-first: no tender, so the demo stays on the catalogue → pricing → fiscal seam and
         // needs no settlement wiring. The invoice is the fiscal event; payment is separate.

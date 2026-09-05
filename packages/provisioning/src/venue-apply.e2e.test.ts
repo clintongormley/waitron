@@ -129,7 +129,6 @@ function saleInput(ids: {
         },
       ],
     },
-    fiscalBackend: "verifactu",
     clock: steadyClock,
   };
 }

@@ -37,6 +37,7 @@ const steadyClock: TrustedClock = {
  * error rather than the expected code, which is exactly the regression worth catching.
  */
 const unreachableBackend: FiscalBackend = {
+  id: "unreachable",
   registerNode: () => {
     throw new Error("backend must not be reached");
   },
@@ -91,7 +92,6 @@ function correctionInput(
         lineTotal: "-1.00",
       },
     ],
-    fiscalBackend: "fake",
     clock: steadyClock,
     // Required by the type, but never reached: both tests in this suite reject at the sale-existence
     // or series guard, which run BEFORE `authorize` (record-correction.ts places the `sale.rectify`

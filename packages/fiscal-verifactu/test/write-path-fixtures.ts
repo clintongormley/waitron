@@ -102,7 +102,6 @@ export function saleInput(
       kind: "immediate",
       tenders: [{ method: "card", amount: "16.31", tipAmount: "1.90", settledAt: BASE }],
     },
-    fiscalBackend: "verifactu",
     clock: steadyClock,
     ...overrides,
   };
