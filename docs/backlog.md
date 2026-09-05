@@ -710,10 +710,10 @@ vs gated on an unbuilt foundation or an external dependency:
   split-identity-at-join **LANDED (R3a #210)**, cloud promotion **LANDED (R3b #211)** — Slice 5 COMPLETE
   (see the membership arc above; residuals: power-loss durability + till-reroute);
   (6) **rejoin — drain-then-restore** — **R1 (fence-on-rejoin) LANDED #214** (2026-09-04);
-  **R2 (drain-as-source + disposal guard) LANDED #219** (2026-09-05); **R3 now splits** (2026-09-05) —
-  the **retire/evict (decommission) path is UNBLOCKED** (buildable on R2's `drained` guard, no restore),
-  while **wipe-and-restore (rejoin-as-secondary) stays GATED on a `pg_restore` consumer** [fiscal-adjacent
-  → owner sign-off before land]; (7) **conflict
+  **R2 (drain-as-source + disposal guard) LANDED #219** (2026-09-05); **R3 split** (2026-09-05) into
+  **retire/evict (decommission) LANDED #224** (2026-09-05, no restore) and **wipe-and-restore
+  (rejoin-as-secondary) still GATED on a `pg_restore` consumer** [fiscal-adjacent → owner sign-off before
+  land]; (7) **conflict
   surface** (config down-only + ops conflict log). Slice 7 (conflict surface) remains.
   **Slice 6 R1 (fence-on-rejoin) LANDED #214** (2026-09-04): a returned/superseded node that holds or
   adopts a membership document marking it **sell-only/evicted** now boots **FENCED**. Two mechanisms
@@ -745,16 +745,26 @@ vs gated on an unbuilt foundation or an external dependency:
     **No migration** (serves/reads existing `sync_log`/`sync_cursor`/`node_membership`); the node stays
     **`sell-only`** — R2 mints no document. **Cloud-as-carrier is out of scope** (relay-vs-sink open
     item, parent §9).
-  - **Retire/evict — the decommission path — UNBLOCKED, buildable now on R2's `drained` guard.** A box
-    leaving for good: drain (R2 ✓) → mint the `sell-only`→`evicted` membership edit (`nextStandings`
-    gains its `evicted` producer) → physical disposal. It needs **no restore**, so it does NOT wait on
-    the backup regime — only the disposal guard (landed) plus a membership-document edit. Split out of
-    R3 (2026-09-05) so the unblocked half is separately pickup-able. Two R2-review facts it must hold:
-    (i) gate the retire action on the disposal guard's `drained` boolean, **never** on comparing
-    `carrierAppliedSeq >= ownTailSeq` — `ownTailSeq` is the cross-lane MAX and `carrierAppliedSeq` the
-    cross-lane MIN, so they legitimately differ while `drained:true`; (ii) a fenced node whose held doc
-    names NO carrier reports `disposal.applicable:false` — the same value a healthy serving node reports
-    — so the retire UX must distinguish "fenced, undrainable (no carrier)" from "N/A (serving)".
+  - **Retire/evict — the decommission path — LANDED #224** (2026-09-05). A box leaving for good: drain
+    (R2 ✓) → **self-evict** → physical disposal, no restore. A fully-drained fenced (`sell-only`) node
+    mints a `sell-only`→`evicted` membership document signed with its **OWN** identity key (a
+    self-demotion — safe under wire-protocol §5; the departing node's key is in every former peer's trust
+    set, so the carrier verifies + adopts it via the existing `/sync-api/hello` gossip, no carrier-side
+    code) and persists it term-guarded. App pool only (`evicted` flips no deployment axis). New
+    `evictNode` producer in `@waitron/membership` (the counterpart to `nextStandings`); `retireSelf` +
+    `POST /api/box/retire` (management-authenticated, let through the read-only gate on a fenced node by a
+    single named exemption, mirror-gated off) in `apps/server`. Ordered guards:
+    idempotent-evicted → `not_fenced` → `no_carrier` → `carrier_changed` → `not_drained` → mint → persist;
+    term-guarded persist → `node.retire_superseded` on a gossip-adopt race. **No migration.** The two
+    R2-review facts held: (i) gates on the disposal guard's `drained` **boolean**, never on comparing
+    `carrierAppliedSeq >= ownTailSeq` (MAX vs MIN, legitimately differ while `drained:true`); (ii)
+    `node.retire_no_carrier` (fenced, undrainable) is distinct from `node.retire_not_fenced` (N/A,
+    serving). **`node.retire_carrier_changed` guard (I1, whole-branch review):** a fenced node does NOT
+    restart on a carrier change, so `retireSelf` re-derives the current carrier from the fresh held chart
+    and refuses when it differs from the boot-captured carrier the drain reader keys on — never evicts a
+    node whose tail reached only a *stale* survivor (fiscal-unrecoverable). **Carrier-side reaction to
+    `evicted` (stop pulling) is out of scope** — the carrier learns via gossip and the box is then
+    disposed (its pull just goes unreachable).
   - **R3 (wipe-and-restore, spec §6 step 4) — the rejoin-as-secondary path — GATED on a `pg_restore`
     consumer.** Drain (R2 ✓) → discard the diverged DB → restore the current primary's baseline →
     stream, returning as `serving-secondary`. The backup **producer** already exists — `pg-dump.ts` /
@@ -779,9 +789,10 @@ vs gated on an unbuilt foundation or an external dependency:
     the now-known-superseded chain before the reboot lands. This is inherent to restart-based fencing —
     the same mechanism R3b promotion uses — and is consistent with spec §8.4; the node is **fully fenced
     on reboot**.
-  - **`nextStandings` still never emits `evicted`** — R1/R2 only react to `sell-only`; the eviction
-    producer lands with the **retire/evict path** (the unblocked half split out of R3; R2 built the
-    drain + guard + surface only).
+  - **The `evicted` producer landed with retire/evict (#224):** `evictNode` (`@waitron/membership`)
+    mints the `sell-only`→`evicted` edit, self-signed by the departing node at retire time. `nextStandings`
+    (the promotion producer) still never emits `evicted` — deliberately; it demotes the outgoing primary
+    to `sell-only`, and eviction is the separate decommission producer.
   - **Carry-forward for the promotion-runbook / promote-action slice (fiscal, flagged at R1 land by a
     finish-branch reviewer):** R1 reconciles a fenced node to `(mode='primary', singleton_role='secondary')`
     — the SAME axis pair as a healthy "local secondary" — so `promoteLocalSecondaryToPrimary` (which today
