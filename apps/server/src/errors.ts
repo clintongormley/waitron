@@ -1153,14 +1153,16 @@ declare module "@waitron/shared" {
      * never reaches this, and a 23503 on any OTHER constraint is rethrown raw rather than mislabelled.
      *
      * `field` carries the offending binding's FIELD NAME only — one of the string literals `"tillId"`,
-     * `"receiptPrinterId"`, `"canvasId"` — and NEVER the offending id value: a request-shape
+     * `"receiptPrinterId"`, `"canvasId"`, `"deviceProfileId"` — and NEVER the offending id value: a request-shape
      * fault names the field, not the value, the same no-leak, echo-the-name discipline
      * `management.request_invalid` and `setup.request_invalid` follow (grep `{ field: string }` in this
      * file for that family). `device.*` names the DOMAIN CONCEPT (device pairing), never the throwing
      * package (`tenant.not_found`'s note gives the rule). Mapped to HTTP 400 by `device-api.ts`'s local
      * STATUS map (a request naming a binding that does not exist), not here. Never renamed once shipped.
      */
-    "device.binding_invalid": { field: "tillId" | "receiptPrinterId" | "canvasId" };
+    "device.binding_invalid": {
+      field: "tillId" | "receiptPrinterId" | "canvasId" | "deviceProfileId";
+    };
     /**
      * A self-signed server certificate was asked for with no hostname to put on the leaf — the
      * `hostnames` list was empty. The box mints its own CA + server cert on first boot to serve

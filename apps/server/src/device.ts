@@ -155,11 +155,19 @@ const FOREIGN_KEY_VIOLATION = "23503";
  * composite `(tenant_id, canvas_id)` makes that check both tenant-isolated and atomic with the
  * UPDATE (no read-then-write race), so `assign-canvas` translates it here rather than pre-checking.
  */
-const BINDING_FK_FIELD: Record<string, "tillId" | "receiptPrinterId" | "canvasId"> = {
+const BINDING_FK_FIELD: Record<
+  string,
+  "tillId" | "receiptPrinterId" | "canvasId" | "deviceProfileId"
+> = {
   device_pairing_codes_till_fk: "tillId",
   device_pairing_codes_receipt_printer_fk: "receiptPrinterId",
   device_pairing_codes_canvas_fk: "canvasId",
   devices_canvas_fk: "canvasId",
+  // The device-profile composite FKs (device-profile design 2026-09-05 §5.1): one on
+  // `device_pairing_codes` (mint) and its twin on `devices` (a REASSIGN to a profile that names no row
+  // of this tenant, via the assign-device-profile route). Both name the `deviceProfileId` input field.
+  device_pairing_codes_device_profile_fk: "deviceProfileId",
+  devices_device_profile_fk: "deviceProfileId",
 };
 
 /**
@@ -176,7 +184,7 @@ const BINDING_FK_FIELD: Record<string, "tillId" | "receiptPrinterId" | "canvasId
  */
 export function bindingFkField(
   error: unknown,
-): "tillId" | "receiptPrinterId" | "canvasId" | undefined {
+): "tillId" | "receiptPrinterId" | "canvasId" | "deviceProfileId" | undefined {
   const constraint = pgErrorConstraint(error, FOREIGN_KEY_VIOLATION);
   return constraint === undefined ? undefined : BINDING_FK_FIELD[constraint];
 }
@@ -212,6 +220,10 @@ export async function generatePairingCode(
     // `cardReaderId`) — the static hardware binding (§16.3); credentials stay in the vault, never here.
     tillId?: string | null;
     canvasId?: string | null;
+    // The reusable device profile to stamp on the enrolled device (device-profile design 2026-09-05
+    // §5.1) — threaded exactly like `canvasId`. Optional (defaults null); a non-null id naming no
+    // `device_profiles` row of this tenant trips the composite FK → `device.binding_invalid`.
+    deviceProfileId?: string | null;
     receiptPrinterId?: string | null;
     hasCashDrawer?: boolean;
     cardProvider?: string;
@@ -267,6 +279,7 @@ export async function generatePairingCode(
       // SIMPLE); a non-null one that names no row of this tenant raises 23503, translated below.
       tillId,
       canvasId: input.canvasId ?? null,
+      deviceProfileId: input.deviceProfileId ?? null,
       receiptPrinterId: input.receiptPrinterId ?? null,
       hasCashDrawer: input.hasCashDrawer ?? false,
       cardProvider: input.cardProvider ?? "none",
@@ -335,6 +348,7 @@ export async function enrolDevice(
   token: string;
   tillId: string | null;
   canvasId: string | null;
+  deviceProfileId: string | null;
   receiptPrinterId: string | null;
   hasCashDrawer: boolean;
   cardProvider: string;
@@ -365,6 +379,7 @@ export async function enrolDevice(
       // §16) — fixed at mint time, so read back here rather than re-derived.
       tillId: devicePairingCodes.tillId,
       canvasId: devicePairingCodes.canvasId,
+      deviceProfileId: devicePairingCodes.deviceProfileId,
       receiptPrinterId: devicePairingCodes.receiptPrinterId,
       hasCashDrawer: devicePairingCodes.hasCashDrawer,
       cardProvider: devicePairingCodes.cardProvider,
@@ -389,6 +404,7 @@ export async function enrolDevice(
       // `till`/`canvas`/`printer` composite FKs on `devices` (0095) are the durable integrity backstop.
       tillId: row.tillId,
       canvasId: row.canvasId,
+      deviceProfileId: row.deviceProfileId,
       receiptPrinterId: row.receiptPrinterId,
       hasCashDrawer: row.hasCashDrawer,
       cardProvider: row.cardProvider,
@@ -405,6 +421,7 @@ export async function enrolDevice(
     token,
     tillId: row.tillId,
     canvasId: row.canvasId,
+    deviceProfileId: row.deviceProfileId,
     receiptPrinterId: row.receiptPrinterId,
     hasCashDrawer: row.hasCashDrawer,
     cardProvider: row.cardProvider,

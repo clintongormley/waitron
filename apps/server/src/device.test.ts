@@ -273,6 +273,11 @@ describe("bindingFkField", () => {
     // The twin FK on the `devices` table itself — tripped when an enrolled device is REASSIGNED to a
     // layout canvas that names no row of this tenant (SP-B3.1's assign-canvas route).
     expect(bindingFkField(fk("devices_canvas_fk"))).toBe("canvasId");
+    // The device-profile composite FKs (device-profile design 2026-09-05): one on `device_pairing_codes`
+    // (mint time) and its twin on `devices` (tripped when a device is REASSIGNED to a device profile that
+    // names no row of this tenant, via the assign-device-profile route). Both → `deviceProfileId`.
+    expect(bindingFkField(fk("device_pairing_codes_device_profile_fk"))).toBe("deviceProfileId");
+    expect(bindingFkField(fk("devices_device_profile_fk"))).toBe("deviceProfileId");
   });
 
   it("finds the 23503 wrapped in a DrizzleQueryError-style cause chain", () => {

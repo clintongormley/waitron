@@ -149,8 +149,9 @@ const run = createErrorBoundary(STATUS, "device.failed");
  *     is `device.forbidden_station`, 403).
  *  3. `device.manage`-GATED management routes (`POST /management-api/device-codes`, `GET
  *     /management-api/devices`, `POST /management-api/devices/:id/revoke`, `POST
- *     /management-api/devices/:id/assign-canvas`) — each calls `requireManagementSession` (401), then
- *     funnels its DB work through the local `gated` helper, which `authorizeManager`s `device.manage`
+ *     /management-api/devices/:id/assign-canvas`, `POST
+ *     /management-api/devices/:id/assign-device-profile`) — each calls `requireManagementSession` (401),
+ *     then funnels its DB work through the local `gated` helper, which `authorizeManager`s `device.manage`
  *     (403) before the op runs, in exactly one place.
  *  4. DEV-ONLY routes, mounted only under `devMode` (404 otherwise): the `?dev` switcher's device list
  *     and mint-and-adopt (`GET`/`POST /api/dev/devices`) and the cookie reset (`POST /api/device/reset`).
@@ -311,6 +312,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         stationId?: unknown;
         tillId?: unknown;
         canvasId?: unknown;
+        deviceProfileId?: unknown;
         receiptPrinterId?: unknown;
         hasCashDrawer?: unknown;
         cardProvider?: unknown;
@@ -349,6 +351,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       ): string | F => (v === undefined || v === null ? fallback : requireString(v, field));
       const tillId = optionalBindingUuid(body.tillId, "tillId");
       const canvasId = optionalBindingUuid(body.canvasId, "canvasId");
+      const deviceProfileId = optionalBindingUuid(body.deviceProfileId, "deviceProfileId");
       const receiptPrinterId = optionalBindingUuid(body.receiptPrinterId, "receiptPrinterId");
       const cardReaderId = optionalBindingString(body.cardReaderId, "cardReaderId", null);
       // `card_provider` defaults to `'none'` (no integrated card) and `has_cash_drawer` to false; a
@@ -369,6 +372,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           stationId,
           tillId,
           canvasId,
+          deviceProfileId,
           receiptPrinterId,
           hasCashDrawer,
           cardProvider,
@@ -393,6 +397,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
             kind: devices.deviceKind,
             stationId: devices.stationId,
             canvasId: devices.canvasId,
+            deviceProfileId: devices.deviceProfileId,
             label: devices.label,
             active: devices.active,
             lastSeenAt: devices.lastSeenAt,
@@ -461,6 +466,50 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       } catch (error) {
         if (bindingFkField(error) === "canvasId") {
           throw new AppError("device.binding_invalid", { field: "canvasId" });
+        }
+        throw error;
+      }
+      // 0 rows updated (unknown or RLS-hidden device id) → `device.not_found`, the revoke idiom.
+      if (updated.length === 0) throw new AppError("device.not_found", { deviceId: id });
+      return c.body(null, 204);
+    }),
+  );
+
+  // ── Reassign a device's device profile (device.manage) ────────────────────────────────────────
+  // The device-profile twin of assign-canvas above (device-profile design 2026-09-05 §5.1), threaded
+  // identically. ADDITIVE — the canvas route stays until a later task removes it.
+  app.post("/management-api/devices/:id/assign-device-profile", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = c.req.param("id");
+      // A malformed id names no device — a clean `device.not_found` (404), never a `22P02` 500. The
+      // same id screen the revoke/assign-canvas routes above run before `gated`.
+      if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
+      // Read via `readJsonBody` (empty/malformed/`null` → `{}`, never an opaque 500), then screen the
+      // target: an explicit `null` clears the binding, a present value must be a UUID SHAPE (a non-uuid
+      // would `22P02` at the bare-uuid column), else a clean `management.request_invalid` 400 naming the
+      // field — the shared `requireNullableBodyUuid` screen.
+      const body = await readJsonBody<{ deviceProfileId?: unknown }>(c);
+      const deviceProfileId = requireNullableBodyUuid(body.deviceProfileId, "deviceProfileId");
+      // A non-null target must be one of THIS tenant's own device profiles. As with assign-canvas, rather
+      // than a read-then-write pre-check (which leaves a delete-between-check-and-update race surfacing a
+      // raw FK 500), let the composite FK `devices_device_profile_fk (tenant_id, device_profile_id)` be
+      // the guard: tenant-isolated (a cross-tenant id looks for `(this_tenant, id)` and misses — never
+      // binds, never leaks) AND atomic with the UPDATE (no window). A 23503 on it → `device.binding_invalid`
+      // naming the field, the SAME code+shape the enrol path raises via the same `bindingFkField` helper.
+      // Any other error rethrows raw.
+      let updated: { id: string }[];
+      try {
+        updated = await gated(sessionId, (tx) =>
+          tx
+            .update(devices)
+            .set({ deviceProfileId })
+            .where(eq(devices.id, id))
+            .returning({ id: devices.id }),
+        );
+      } catch (error) {
+        if (bindingFkField(error) === "deviceProfileId") {
+          throw new AppError("device.binding_invalid", { field: "deviceProfileId" });
         }
         throw error;
       }

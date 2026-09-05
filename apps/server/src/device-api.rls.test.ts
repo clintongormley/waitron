@@ -270,6 +270,19 @@ async function seedCanvas(cfg: TillConfig): Promise<string> {
   return rows[0]!.id;
 }
 
+/** Seed a device profile for the venue (owner SQL) — a real `(tenant_id, id)` a device/pairing-code
+ *  device-profile binding can name (device-profile design 2026-09-05). Name is unique per tenant, so a
+ *  per-call counter keeps repeated seeds within one shared clone from colliding. */
+let deviceProfileCounter = 0;
+async function seedDeviceProfile(cfg: TillConfig): Promise<string> {
+  deviceProfileCounter += 1;
+  const { rows } = await suite.admin.execute<{ id: string }>(sql`
+    insert into device_profiles (tenant_id, name)
+    values (${cfg.tenantId}, ${`Profile ${deviceProfileCounter}`})
+    returning id`);
+  return rows[0]!.id;
+}
+
 /** Seed a `cloud_poll` printer for the venue (owner SQL) — needs only a poll id, so no print agent has
  *  to be seeded to satisfy the transport CHECK. A real `(tenant_id, id)` a device binding can name. */
 async function seedPrinter(cfg: TillConfig): Promise<string> {
@@ -283,7 +296,7 @@ async function seedPrinter(cfg: TillConfig): Promise<string> {
 /** The enrolled device row's binding columns, read as the superuser (RLS bypassed). */
 async function deviceBindings(deviceId: string): Promise<Record<string, unknown>> {
   const { rows } = await suite.admin.execute<Record<string, unknown>>(sql`
-    select till_id, canvas_id, receipt_printer_id, has_cash_drawer, card_provider, card_reader_id
+    select till_id, canvas_id, device_profile_id, receipt_printer_id, has_cash_drawer, card_provider, card_reader_id
     from devices where id = ${deviceId}`);
   return rows[0]!;
 }
@@ -340,6 +353,7 @@ async function enrolWithCode(
     stationId?: string;
     tillId?: string;
     canvasId?: string;
+    deviceProfileId?: string;
     label: string;
   },
 ): Promise<{ deviceId: string; jar: string }> {
@@ -1030,6 +1044,156 @@ describe("Device API over real Postgres", () => {
         error: { code: "device.not_found" },
       });
       expect((await deviceBindings(bDevice)).canvas_id).toBe(bCanvas);
+    });
+  });
+
+  // ── Reassign a device's device profile (device-profile design 2026-09-05) ────────────────────────────
+  // The device-profile binding threads through the SAME plumbing as the layout canvas above (mint stamps
+  // it, enrol copies it, GET exposes it, assign-device-profile reassigns it) and is ADDITIVE — the canvas
+  // paths stay untouched (removed in a later task).
+  describe("device-profile binding", () => {
+    it("a pairing code minted with a deviceProfileId enrols a device carrying it", async () => {
+      // Mint a `till` code carrying a device_profile_id, enrol, and read the device row back — the profile
+      // binding is stamped on the code and copied verbatim onto the device, exactly like the canvas one.
+      const venue = await setupVenue();
+      const app = mountApp(venue.cfg);
+      const profileId = await seedDeviceProfile(venue.cfg);
+
+      const { deviceId } = await enrolWithCode(app, venue.managerCookie, {
+        kind: "till",
+        tillId: venue.cfg.tillId,
+        deviceProfileId: profileId,
+        label: "Caja con perfil",
+      });
+      expect((await deviceBindings(deviceId)).device_profile_id).toBe(profileId);
+    });
+
+    it("a bad/foreign deviceProfileId at mint → 400 device.binding_invalid (composite FK)", async () => {
+      // A well-formed id that names no device_profiles row of THIS tenant trips the composite FK
+      // `device_pairing_codes_device_profile_fk` at the code INSERT → 23503 → `device.binding_invalid`
+      // naming `deviceProfileId`. A REAL profile owned by ANOTHER tenant takes the same path (the FK looks
+      // for `(thisTenant, id)` and misses), never a cross-tenant bind, never a leak.
+      const venue = await setupVenue();
+      const foreign = await setupVenue();
+      const app = mountApp(venue.cfg);
+      const foreignProfile = await seedDeviceProfile(foreign.cfg); // owned by another tenant
+
+      for (const badProfile of [randomUUID(), foreignProfile]) {
+        const res = await send(app, "POST", "/management-api/device-codes", {
+          cookie: venue.managerCookie,
+          body: {
+            kind: "till",
+            tillId: venue.cfg.tillId,
+            deviceProfileId: badProfile,
+            label: "Caja",
+          },
+        });
+        expect(res.status).toBe(400);
+        expect(
+          (await res.json()) as { error: { code: string; params: { field: string } } },
+        ).toMatchObject({
+          error: { code: "device.binding_invalid", params: { field: "deviceProfileId" } },
+        });
+      }
+    });
+
+    it("GET /management-api/devices exposes each device's deviceProfileId (a set one and a null one)", async () => {
+      const venue = await setupVenue();
+      const app = mountApp(venue.cfg);
+      const profileId = await seedDeviceProfile(venue.cfg);
+      const withProfile = await enrolWithCode(app, venue.managerCookie, {
+        kind: "till",
+        tillId: venue.cfg.tillId,
+        deviceProfileId: profileId,
+        label: "Caja con perfil",
+      });
+      const withoutProfile = await enrolAt(app, venue.managerCookie, venue.defaultStationId);
+
+      const res = await send(app, "GET", "/management-api/devices", {
+        cookie: venue.managerCookie,
+      });
+      expect(res.status).toBe(200);
+      const rows = (await res.json()) as { id: string; deviceProfileId: string | null }[];
+      expect(rows.find((r) => r.id === withProfile.deviceId)!.deviceProfileId).toBe(profileId);
+      expect(rows.find((r) => r.id === withoutProfile.deviceId)!.deviceProfileId).toBeNull();
+    });
+
+    it("POST …/assign-device-profile sets, then clears (null), a device's device profile", async () => {
+      const venue = await setupVenue();
+      const app = mountApp(venue.cfg);
+      const profileId = await seedDeviceProfile(venue.cfg);
+      const { deviceId } = await enrolAt(app, venue.managerCookie, venue.defaultStationId);
+
+      const assign = await send(
+        app,
+        "POST",
+        `/management-api/devices/${deviceId}/assign-device-profile`,
+        { cookie: venue.managerCookie, body: { deviceProfileId: profileId } },
+      );
+      expect(assign.status).toBe(204);
+      expect((await deviceBindings(deviceId)).device_profile_id).toBe(profileId);
+
+      // An explicit `null` clears the binding back to null.
+      const clear = await send(
+        app,
+        "POST",
+        `/management-api/devices/${deviceId}/assign-device-profile`,
+        { cookie: venue.managerCookie, body: { deviceProfileId: null } },
+      );
+      expect(clear.status).toBe(204);
+      expect((await deviceBindings(deviceId)).device_profile_id).toBeNull();
+    });
+
+    it("assign-device-profile rejects a nonexistent / cross-tenant profile → 400 device.binding_invalid, device untouched", async () => {
+      // The composite FK `devices_device_profile_fk (tenant_id, device_profile_id)` refuses a well-formed
+      // id that names no device profile of THIS tenant (unknown OR another tenant's), translated by
+      // `bindingFkField` to `device.binding_invalid`. The FK aborts the UPDATE atomically → device untouched.
+      const venue = await setupVenue();
+      const foreign = await setupVenue();
+      const app = mountApp(venue.cfg);
+      const foreignProfile = await seedDeviceProfile(foreign.cfg);
+      const { deviceId } = await enrolAt(app, venue.managerCookie, venue.defaultStationId);
+
+      for (const badProfile of [randomUUID(), foreignProfile]) {
+        const res = await send(
+          app,
+          "POST",
+          `/management-api/devices/${deviceId}/assign-device-profile`,
+          { cookie: venue.managerCookie, body: { deviceProfileId: badProfile } },
+        );
+        expect(res.status).toBe(400);
+        expect(
+          (await res.json()) as { error: { code: string; params: { field: string } } },
+        ).toMatchObject({
+          error: { code: "device.binding_invalid", params: { field: "deviceProfileId" } },
+        });
+        expect((await deviceBindings(deviceId)).device_profile_id).toBeNull();
+      }
+    });
+
+    it("assign-device-profile with an unknown or malformed device id → 404 device.not_found", async () => {
+      const venue = await setupVenue();
+      const app = mountApp(venue.cfg);
+      const profileId = await seedDeviceProfile(venue.cfg);
+      const unknown = randomUUID();
+      const res = await send(
+        app,
+        "POST",
+        `/management-api/devices/${unknown}/assign-device-profile`,
+        { cookie: venue.managerCookie, body: { deviceProfileId: profileId } },
+      );
+      expect(res.status).toBe(404);
+      expect(
+        (await res.json()) as { error: { code: string; params: { deviceId: string } } },
+      ).toMatchObject({ error: { code: "device.not_found", params: { deviceId: unknown } } });
+
+      const malformed = await send(
+        app,
+        "POST",
+        "/management-api/devices/not-a-uuid/assign-device-profile",
+        { cookie: venue.managerCookie, body: { deviceProfileId: null } },
+      );
+      expect(malformed.status).toBe(404);
     });
   });
 
