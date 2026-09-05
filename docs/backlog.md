@@ -774,7 +774,8 @@ vs gated on an unbuilt foundation or an external dependency:
     nothing in the tree restores a baseline (`adopt.ts` streams a read-mirror; the recovery-bundle is
     secret-files only), so R3 needs a `pg_restore` shell-out mirroring `pg-dump.ts` + a local-DB wipe +
     re-enrol-as-streaming-secondary. Same gate as the promote-action cold-restore slice (Slice 4). Not
-    blocked on an external dependency — unwritten work the backlog parks under the backup regime. The
+    blocked on an external dependency — this is now **BR-3** of the backup & restore regime (BR-1
+    storage/fan-out/encryption LANDED #226; BR-3 is the `pg_restore` consumer that clears this gate). The
     disposal guard measures the enrolled `sync_log` tail only — the per-node fiscal chain
     (`registros_facturacion`) is deliberately NOT in `sync_log` and does not replicate to the carrier, so
     `drained` is a statement about replicable app data, not the fiscal chain (unchanged by the restore).
@@ -865,10 +866,44 @@ vs gated on an unbuilt foundation or an external dependency:
   disjoint series now happens at cloud **adopt** (not a separate staging step), keyed to the standby's own
   dormant nodeId. What remains is **R3** activating it (switch the runtime node id, activate the SIF, start
   the primary-only workers on promotion) + the C2a promote action — see the membership arc above.
-- **Hard-gated (leave until the gate clears):** break-glass secret mint (→ Slice 2); backup regime
-  (→ Slice 4); real cloud hosting/relay (cloud-mirror follow-ups, the T1 relay); the go-native decision
+- **Hard-gated (leave until the gate clears):** break-glass secret mint (→ Slice 2); the **restore
+  consumer** (backup regime BR-3 — clears R3 rejoin + promote Slice 4; BR-1 producer/encryption LANDED
+  #226); real cloud hosting/relay (cloud-mirror follow-ups, the T1 relay); the go-native decision
   (on-device agent); and the **owner-gated fiscal H2** hash-chain sync lane — never landed without
   owner sign-off.
+
+### Backup & restore regime (BR-1 LANDED #226; BR-2/BR-3 next, BR-4 gated on module-system SP-3)
+
+A generic core backup/restore service (storage-media plugins + module hooks), decomposed BR-1..BR-4.
+Design: [backup-restore-regime](superpowers/specs/2026-09-04-backup-restore-regime-design.md); BR-1 plan:
+[br-1](superpowers/plans/2026-09-05-backup-restore-br1-storage-fanout-encryption.md).
+
+- **BR-1 — storage abstraction + fan-out + encryption — LANDED #226 (2026-09-05).** Grew the single-dir
+  `pg_dump` backup into a pluggable, multi-destination, **encrypted** backup: `StorageBackend` +
+  `LocalFsBackend` (atomic `put` via `writeFileAtomic`); an artifact cipher (AES-256-GCM over the dump,
+  operator recovery key `WAITRON_BACKUP_RECOVERY_KEY` — never the box key, so a backup survives box
+  destruction; version-selected **frozen** `KDF_BY_VERSION` + GCM-AAD-authenticated header, self-describing
+  so a future scrypt hardening never strands old artifacts); a destinations list (rejecting duplicate
+  ids/dirs, fail-closed); a fan-out orchestrator (dump→encrypt **once**→put to every destination in
+  parallel, best-effort per destination→prune each; staging under `<stateDir>/backup-staging`, 0600);
+  per-destination freshness on `GET /api/box/status`. No restore, no module contributions.
+  - *BR-1 deferrals (named, not gaps):* abort-aware **per-destination timeout** (v1 is `LocalFsBackend`-only;
+    a hanging destination isn't abandoned mid-tick — same between-ticks abort model as the sibling
+    sync/tunnel/retention workers; lands with the first network s3/sftp backend) · stale-`.tmp` sweep
+    (bounded, cosmetic) · **path-traversal containment guard on `StorageBackend` key** — unreachable in v1
+    (keys generated internally), **must land with BR-3's first manifest-driven `get(key)`**.
+- **BR-2 — manifest + module `backup` contribution — NEXT.** Add the `backup` contribution kind to the
+  `WaitronModule` contract (`{ nonDbState?, restore? }`, coordinated with the module-system session:
+  additive/open-set, sequence only around SP-2's centralized→per-package descriptor move — whoever lands
+  second carries the other's fields across); capture the content-addressed **media store** (core's
+  `nonDbState`) + `stateDir` secrets into the backup; write the per-backup manifest (module→schemaVersion,
+  environment) for the restore compatibility gate. Makes a backup **complete** (DB + media + secrets).
+- **BR-3 — the restore consumer.** `pg_restore` + blob/secret restore + the manifest compatibility gate +
+  the (empty-body in v1) module restore-hook invocation. **Clears the R3 rejoin + promote-Slice-4 gate.**
+  Carries in BR-1's deferred path-traversal guard (first external-key `get`).
+- **BR-4 — fiscal restore hook (fresh chain / disjoint series).** Lands with **fiscal-as-a-module
+  (module-system SP-3)**; unblocks promote-Slice-4 cold-DR trading-again-as-primary. Owner-gated (H2); the
+  hook interface ships in BR-2.
 
 **Remaining, each its own design pass:**
 
@@ -1143,7 +1178,7 @@ the re-gating of the singleton duties onto `isSingletonPrimary` (#168) are lande
   admin connection (gated on the break-glass mint; the write today uses `migrationsDatabaseUrl`,
   dev-correct only); **Slice 3** — mirror→primary + the worker-lifecycle manager that starts the
   primary-only workers on an in-process promotion (gated on reserved-SIF staging); **Slice 4** — cold
-  restore (gated on the backup regime); **Slice 5** — rejoin-as-secondary + the conflict watcher (gated
+  restore (gated on the backup regime's BR-3 restore consumer; BR-1 LANDED #226); **Slice 5** — rejoin-as-secondary + the conflict watcher (gated
   on the membership wire-protocol).
 - **Split-brain** — largely worked through by the 2026-08-29 spec (server-level fencing §3.5, per-tab
   single-writer ownership §8, bounded worst case §8.4). Remaining seams: the promoted-node side while
