@@ -66,6 +66,51 @@ believable demo restaurant: two menus (~44 products with per-dish images), a flo
 tables), staff on PIN 5555, and ~28 days of back-dated preproduction sales — English by default,
 Spanish via `WAITRON_SEED_LOCALE=es-ES`. ~25 fleshed-out screens on one enforced design system.
 
+### Whole-project design review (2026-09-05) — decisions taken, recommendations pending
+
+A base-to-tip review of the code and every Track-2 spec, with the owner answering the review's
+questions. Landed from it: CLAUDE.md §1 comment rule + §6 model-selection trial (#233), and the
+`/finish-branch` rewrite (run-it reviewer + convention reviewer; SDD's final whole-branch review
+dropped as a duplicate). **Owner decisions recorded (they supersede older spec text where they
+conflict):**
+
+- **No database will ever hold two tenants** (a throwaway preproduction demo aside). The
+  multi-tenant SaaS goal is gone; a box is single-tenant, on-prem or cloud. Supersedes cloud-storage
+  §9's "one shared cloud database".
+- **The deli gets two boxes + cloud failover on day one** and must survive internet-down, box-down
+  and printer-down. Redundancy is mandatory; *how* (active-active vs warm standby) is the open
+  recommendation below. Note the standing contradiction: sync design §12 records "true
+  active-active for the deli" while the deli hardware buy list carries one server.
+- **Modules are core to the product** (opt-in domains, third-party modules later). Fiscal must be
+  swappable by jurisdiction (Veri\*Factu / TicketBAI / none). Two rules agreed: **new domains land
+  as modules from now**, and **no new table enters the core migration set without a stated reason**.
+- Comments carry invariants, not history (CLAUDE.md §1). Coverage bar is negotiable with a reason.
+
+**Recommendations still awaiting an owner call — each its own brainstorm when picked up:**
+
+1. **Drop FORCE RLS + the multi-role set** (`sync_tailer`/`sync_retention`/the NOLOGIN function
+   roles), keeping `tenant_id` columns. Moves most real-PG suites onto PGlite. Also removes the
+   reason native logical replication was rejected — worth a one-day container prototype of PG16+
+   bidirectional replication (`origin = none`) before any further sync feature; do not rip out the
+   outbox until that prototype says so.
+2. **Warm standby + human promotion instead of active-active**, on the same replication mechanism:
+   tills talk to one box at a time. Removes the `dining_tables` two-writer hazard (watermark upsert,
+   no watermark column, 12 update sites), the double-bill class and per-tab ownership routing.
+   Trade: a LAN partition idles the secondary's tills until a human promotes.
+3. **Till reroute is the first Track-2 slice** — nothing server-side in the failover arc is usable
+   until a till can reach the second box; sessions are origin-bound DB rows (PIN re-prompt v1).
+   Then the promotion runbook, then printer failover.
+4. **Fiscal-none module right after fiscal-verifactu** (tiny; proves the slot for the UK case);
+   the first UI-bearing module (bookings) after that, since fiscal never exercises cards/permissions.
+5. **Coverage split**: keep 98/98/98/95 on `verifactu`, `fiscal-verifactu`, `core`, `db`, `sync`,
+   `payments`; 90/85 elsewhere (71 files already carry `v8 ignore`).
+6. **Collapse identity concepts** while pre-production makes it free: `tills` vs `devices`
+   (already an SP-A.2 follow-up), and the node-role spread across `deployment.mode`,
+   `singleton_role`, membership standing and the boot-captured `fenced` flag.
+7. Smaller: squash the 111 core migrations before the first real venue; de-triplicate the three
+   alta builders in `fiscal-verifactu/backend.ts` (already under *Debt → Fiscal*); reconsider the
+   bespoke tunnel and backup container against off-the-shelf tools.
+
 ### Layout designer & device profiles (NEW — owner-inserted 2026-09-02, spec approved)
 
 A visual, HA-Sections-style **layout designer** with reusable **layout profiles** (tabs → grid →
