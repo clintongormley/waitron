@@ -75,7 +75,19 @@ and container, but it is not a fiscal invariant.
      flag. **Fail-closed** (CLAUDE.md §5): a device that cannot be shown to hold it is refused.
   2. **Render axis** — a card declaring `requiredCapability` (`card-contract.ts:60,104`:
      `tender-pay` → `integrated-card-payment`, `kds-board` → `act-as-kds`) is **hidden** on a device
-     lacking the flag (`card-grid.ts:159`).
+     lacking the flag (`card-grid.ts:159`) — **except** `tender-pay`, which has a pre-existing
+     always-render cash carve-out (`card-grid.ts:157`, SP-B2.1 / #206) so the card itself always shows
+     for the cash path (its integrated-card option is separately gated). So of today's two capability
+     cards only `kds-board` is actually hidden by this axis.
+
+     > **Correction, 2026-09-05.** This bullet and §5.3 previously said a no-profile / absent-flag
+     > device HIDES both `tender-pay` and `kds-board`. That **overstated** the render effect:
+     > `card-grid.ts:157` short-circuits `#capable` to `true` for `tender-pay` (the cash path is
+     > sale-critical and never gated absent — SP-B2.1 / #206), so `tender-pay` **always renders**.
+     > Only `kds-board` — a capability card with **no** cash carve-out — is hidden. The server firewall
+     > still fail-closed refuses the underlying integrated-card and drawer operations regardless of what
+     > the grid drew (§2 reader 1), so the fiscal/cash paths are unchanged; only which *card* is drawn
+     > differed from the original prose.
 
   Capabilities are facts about the **box** (does it have a reader / a drawer / act as a kitchen
   screen), not about the layout — which is why they belong on the device profile, not the canvas.
@@ -224,10 +236,15 @@ that canvas's baked-in capabilities at the render axis (`till-app.ts:2129` reads
 `this.canvas?.capabilities`), so capability cards *show* on a default-canvas till even though the
 **server firewall already refuses** the underlying action for a device with no explicit canvas
 (`device-session.ts:369`). After this slice, capabilities at the render axis come from the **profile**,
-so a **no-profile** device renders the default canvas with `capabilities: []` and those cards are
-**hidden**. This makes render and firewall agree (a card whose action would be refused is no longer
-drawn) — strictly *more* correct, and the reason `dev:setup` must seed+assign a profile (§8) so the
-dev till still shows and can use its reader/drawer. Pin this with a test (§9).
+so a **no-profile** device renders the default canvas with `capabilities: []` and a capability card
+**without a cash carve-out is hidden** — today that is only `kds-board`. `tender-pay` is **not**
+hidden: `card-grid.ts:157` always renders it for the cash path (SP-B2.1 / #206), a pre-existing
+carve-out this slice does not touch (its integrated-card option remains separately gated, and the
+firewall still refuses `/api/pay` for a no-profile device). This makes render and firewall agree for
+the gated cards (a `kds-board` whose action would be refused is no longer drawn) — strictly *more*
+correct, and the reason `dev:setup` must seed+assign a profile (§8) so the dev till still shows and
+can use its reader/drawer. Pin this with a test (§9). See the dated correction under §2 — the original
+prose here overstated the change as hiding `tender-pay` too.
 
 ---
 
@@ -345,8 +362,10 @@ returns `deviceProfileId` (replacing `canvasId`).
 (name e.g. "Counter", `canvas_id = NULL` so it resolves the till default canvas, `capabilities =
 DEFAULT_PROFILE_CAPABILITIES.till = ["integrated-card-payment","open-cash-drawer"]`) and stamp its id
 on the minted `till` pairing code's `device_profile_id`. Without this the dev till enrols with no
-profile and — per §5.3 — both loses the reader/drawer capability (firewall refuses) and hides those
-cards, a regression on the dev flow. Update `dev-setup.test.ts` accordingly.
+profile and — per §5.3 — loses the reader/drawer capability (firewall refuses `/api/pay` and
+`/api/drawer/open`) and disables the card grid's integrated-card option, a regression on the dev
+flow. (`tender-pay` itself still renders for the cash path — the carve-out at `card-grid.ts:157`.)
+Update `dev-setup.test.ts` accordingly.
 
 ---
 
@@ -382,8 +401,9 @@ capabilities leaving the canvas removes no shipped code (capabilities threw none
   `/api/pay` + `/api/drawer/open` refusal is a security gate; a container+mutation receipt (the
   SP-A.2 §7 shape) shows a device without the flag is refused and one with it passes.
 - **Render axis**: a test pinning §5.3's behaviour change — a no-profile device renders the
-  form-factor default canvas with `capabilities: []` and hides `tender-pay`/`kds-board`; a
-  profile-carrying device shows them (prove by deletion of the profile-read).
+  form-factor default canvas with `capabilities: []` and hides `kds-board` (the only capability card
+  with no cash carve-out; `tender-pay` always renders per `card-grid.ts:157`); a profile-carrying
+  device that grants `act-as-kds` shows `kds-board` (prove by deletion of the profile-read).
 - **Resolution**: `/api/till` returns the profile's canvas (and the default when `canvas_id` NULL /
   no profile), and the explicit `capabilities` sibling.
 - **Enrolment**: a pairing code carrying `device_profile_id` enrols a device carrying it; a bad id →
