@@ -84,7 +84,8 @@ taken before Track B builds anything; Track 1 and Track C consume them. **Track 
 decision (iii) taken; it carries that build's no-migration half); area 1 (setup wizard — its
 provisioning paths move under Track B item 2) waits.** Everything else in the four tracks
 proceeds in parallel under the coordination rules in the design-review section (serialised pushes;
-whoever lands second rebases).
+whoever lands second rebases — only on a code-file overlap or a conflict; a PR that is merely `BEHIND`
+lands as is with `--admin`, CLAUDE.md §6).
 
 **MVP for go-live (owner decision 2026-09-05).** A primary server, on-prem OR in the cloud:
 
@@ -350,7 +351,10 @@ control-plane docs):
   `EADDRINUSE` and pass on retry (CLAUDE.md §4) — a flake, not a reason to serialise.
 - **No new CORE migration in Tracks B/C until Track A's squash lands** (the module rule already
   forbids it without a stated reason). Module-owned migrations (Track C) are regenerated on rebase
-  per CLAUDE.md §3's recipe; whoever lands second rebases.
+  per CLAUDE.md §3's recipe; whoever lands second rebases — only when its files overlap in code or
+  GitHub reports a conflict. A PR that is merely `BEHIND` (docs landed on `main`, or code in files it did
+  not touch) lands as is with `gh pr merge --squash --admin` and re-runs nothing (CLAUDE.md §6, owner
+  decision 2026-09-05, first used on #240 and #241).
 - **Shared files:** `apps/server/src/boot.ts` (A deletes role pools; B refactors workers → B6 waits
   for A3), `packages/sync`'s apply gate (A's roles vs B's one-case trim → B does it after A3 or takes
   the rebase), `CLAUDE.md` (A: §2–§4, B: §5, C: §3 — textual rebases), and this file (each track
