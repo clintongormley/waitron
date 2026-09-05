@@ -602,6 +602,21 @@ export interface Canvas {
   definition: unknown;
 }
 
+/** One `GET /management-api/device-profiles` row — a reusable device profile (SP device-profile
+ * feature): a named bundle of an assigned canvas (`canvasId`, `null` = fall back to the form-factor
+ * default) and a capability set (`integrated-card-payment`/`open-cash-drawer`/`act-as-kds`). The
+ * server answers `{ deviceProfiles: [...] }` for the list and the bare row elsewhere. `capabilities`
+ * crosses the boundary as `string[]` DELIBERATELY — the dashboard renders it against a LOCAL flag
+ * mirror rather than importing `@waitron/layouts`' `CapabilityFlag` (the #70 bundle rule the canvas /
+ * printing shapes follow); an unknown flag is a runtime shape error a view test catches, not a compile
+ * break. */
+export interface DeviceProfile {
+  id: string;
+  name: string;
+  canvasId: string | null;
+  capabilities: string[];
+}
+
 /** The venue's KDS fire-control mode (`locations.fire_control`) — `waiter` = the tab surfaces the
  * per-course fire; `kitchen` = the station display surfaces it; `expo` (KDS-3) = the expo/pass display
  * surfaces it. Mirrors the server's `FireControl`. */
@@ -1841,6 +1856,61 @@ export class DashboardApi {
   /** `DELETE /management-api/canvases/:id` — 204; a since-deleted id rejects `canvas.not_found`. */
   deleteCanvas(id: string): Promise<void> {
     return this.#request<void>(`/management-api/canvases/${id}`, "DELETE");
+  }
+
+  // ── Device profiles ──────────────────────────────────────────────────────────────────────────────
+  // The five verbs the Device-profiles screen drives, all `till.configure`-gated server-side (the
+  // management-api.ts device-profile routes). Mirrors the canvas CRUD above; the list unwraps
+  // `{ deviceProfiles: [...] }`, create/update return the stored row, delete answers 204.
+
+  /** `GET /management-api/device-profiles` — this tenant's device profiles. The server answers
+   * `{ deviceProfiles: [...] }`; this unwraps to the array. */
+  listDeviceProfiles(): Promise<DeviceProfile[]> {
+    return this.#request<{ deviceProfiles: DeviceProfile[] }>(
+      "/management-api/device-profiles",
+      "GET",
+    ).then((r) => r.deviceProfiles);
+  }
+
+  /** `GET /management-api/device-profiles/:id` — one profile, or `device_profile.not_found` (404). */
+  getDeviceProfile(id: string): Promise<DeviceProfile> {
+    return this.#request<DeviceProfile>(`/management-api/device-profiles/${id}`, "GET");
+  }
+
+  /** `POST /management-api/device-profiles` — create; returns the stored row at 201. A duplicate name
+   * rejects `device_profile.name_taken` (409); a bad capability set or canvas reference rejects
+   * `device_profile.invalid` (400). `canvasId` `null` = the form-factor default. */
+  createDeviceProfile(
+    name: string,
+    canvasId: string | null,
+    capabilities: string[],
+  ): Promise<DeviceProfile> {
+    return this.#request<DeviceProfile>("/management-api/device-profiles", "POST", {
+      name,
+      canvasId,
+      capabilities,
+    });
+  }
+
+  /** `PUT /management-api/device-profiles/:id` — full replace; returns the stored row (200). A
+   * since-deleted id rejects `device_profile.not_found` (404). */
+  updateDeviceProfile(
+    id: string,
+    name: string,
+    canvasId: string | null,
+    capabilities: string[],
+  ): Promise<DeviceProfile> {
+    return this.#request<DeviceProfile>(`/management-api/device-profiles/${id}`, "PUT", {
+      name,
+      canvasId,
+      capabilities,
+    });
+  }
+
+  /** `DELETE /management-api/device-profiles/:id` — 204; a since-deleted id rejects
+   * `device_profile.not_found`. */
+  deleteDeviceProfile(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/device-profiles/${id}`, "DELETE");
   }
 
   /** `POST /management-api/devices/:id/revoke` — revoke a device (flip `active = false`, instant): the

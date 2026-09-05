@@ -98,6 +98,29 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The canvas isn't valid",
     es: "El lienzo no es válido",
   },
+  // Device profiles — the server's device-profile create/update/get/delete rejections the screen
+  // RENDERS (it defines no new server codes, only maps these): a since-deleted profile, a name that
+  // collides with another profile in the tenant, and a body the store's validation refuses (an unknown
+  // capability flag or a canvas reference that names no tenant canvas).
+  "device_profile.not_found": {
+    en: "That device profile no longer exists",
+    es: "Ese perfil de dispositivo ya no existe",
+  },
+  "device_profile.name_taken": {
+    en: "A device profile with that name already exists",
+    es: "Ya existe un perfil de dispositivo con ese nombre",
+  },
+  "device_profile.invalid": {
+    en: "The device profile isn't valid",
+    es: "El perfil de dispositivo no es válido",
+  },
+  // Device-profiles editor CLIENT-side validation banner — the pseudo-code the empty-name guard
+  // returns. It lives here (not in the `t()` string table) so the ONE editor banner resolves it and
+  // the server's device_profile.* codes through the same codeMessage() call, with no per-key routing.
+  "device_profiles.err_no_name": {
+    en: "Enter a name for this device profile",
+    es: "Introduce un nombre para este perfil de dispositivo",
+  },
   // Canvas editor CLIENT-side validation banners (SP-B3.2) — the pseudo-codes the light client
   // validator (validate-canvas.ts) and the empty-name guard return. They live here (rather than in the
   // `t()` string table) so the ONE editor banner resolves both these and the server's `canvas.*` codes
