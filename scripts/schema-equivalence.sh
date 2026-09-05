@@ -11,9 +11,12 @@
 # otherwise. A non-empty diff is a defect in the baseline, never something to normalise away —
 # scripts/schema-equivalence.md is how to read one.
 #
-# --gate-new additionally fails the run when the NEW dump still CONTAINS one of the objects this
-# design deletes. Without it the normaliser removes those from both sides, so a baseline that kept
-# one would still diff clean; the per-module runs pass the flag, the two OLD-vs-OLD controls do not.
+# --gate-new reads the RAW dumps and refuses the run when the NEW one still CONTAINS an object the
+# design deletes (a policy, an RLS switch, current_tenant_id, a helper role, a seam function's
+# SECURITY DEFINER), when it is MISSING a seam function's EXECUTE ACL, or when the OLD one carries
+# an ENABLE ALWAYS TRIGGER. The normaliser removes all of those from both sides, so without the flag
+# a baseline that kept or lost one still diffs clean; the per-module runs pass the flag, the two
+# OLD-vs-OLD controls do not.
 set -eu
 
 usage() {
@@ -72,15 +75,22 @@ run() { # run <old|new> <root>: fresh container, migrate as waitron_migrator, du
   docker exec "$container" psql -U postgres -v ON_ERROR_STOP=1 -q \
     -c "CREATE ROLE waitron_migrator LOGIN CREATEROLE PASSWORD 'mig'" \
     -c "CREATE DATABASE waitron OWNER waitron_migrator" </dev/null
+  # The file list goes through a FILE, not a pipe: `sh` has no pipefail, so a failing `order` on the
+  # left of a pipe cannot abort the run and the loop's `exit 1` only leaves the subshell. Measured
+  # under /bin/sh — `set -eu; { echo a; echo b; exit 3; } | while read -r f; do echo "applied $f";
+  # done; echo CONTINUED` prints both files, then CONTINUED, rc 0; the same block redirected to a
+  # file exits 3 and never reaches the next command. The list also stays in OUT as a receipt of what
+  # was applied.
+  order "$root" >"$OUT/$name.files"
   # </dev/null on every docker exec: without it the exec eats this loop's stdin and only the first
   # file is applied (measured 2026-09-05).
-  order "$root" | while read -r f; do
+  while read -r f; do
     docker exec "$container" psql -U waitron_migrator -d waitron -v ON_ERROR_STOP=1 -q -1 \
       -f "/repo/$f" </dev/null || {
       echo "FAILED applying $f on $container" >&2
       exit 1
     }
-  done
+  done <"$OUT/$name.files"
   docker exec "$container" pg_dump -U postgres -d waitron --schema-only --no-owner \
     </dev/null >"$OUT/$name.sql"
   docker exec "$container" psql -U postgres -d waitron -Atc \
@@ -97,9 +107,10 @@ import re, sys
 
 out, gate_new = sys.argv[1], sys.argv[2] == "1"
 
-# The seven helper roles the design deletes (spec §1). sync_tailer and sync_retention fold into
-# app_user in step 1 — that their grants landed on app_user is checked by hand on the NEW container
-# (Task 6, `\dp sync_log`) — and the roles themselves go in step 4.
+# The seven helper roles the design deletes. §2 puts every statement NAMING one of them on the
+# normaliser's list, which is exactly why this proof cannot see where their privileges went: that
+# sync_tailer's and sync_retention's fold into app_user (§1's table) actually landed is invisible in
+# the diff and has to be checked on the NEW container directly.
 DELETED_ROLES = [
     "tenant_provisioner",
     "credentials_enumerator",
@@ -134,8 +145,27 @@ SEAM = [
     "sales_assert_tenders_cover",
     "sale_settlements_check_coverage",
 ]
-SEAM_RE = re.compile(r"CREATE FUNCTION public\.(?:" + "|".join(SEAM) + r")\(")
+SEAM_RE = re.compile(r"CREATE FUNCTION public\.(" + "|".join(SEAM) + r")\(")
 DEFINER = "SECURITY DEFINER clause"
+
+# The ONE strip beyond the delete/add lists above, and the reason is in schema-equivalence.md: the
+# old chain's `REVOKE EXECUTE … FROM PUBLIC` + `GRANT EXECUTE … TO app_user` on three of these
+# functions never took effect (each ran after `ALTER FUNCTION … OWNER TO <helper role>`, so the
+# migrator no longer owned the function), while the same statements in a baseline DO take effect.
+# The dumps therefore differ by exactly these ACLs on a CORRECT baseline. --gate-new is what checks
+# the NEW side kept them.
+SEAM_ACL_RE = re.compile(
+    r"^(?:GRANT|REVOKE)\b.*\bON FUNCTION public\.(?:" + "|".join(SEAM) + r")\(", re.M
+)
+SEAM_ACL = "seam function ACL (both sides)"
+
+# Only these three carry the REVOKE/GRANT pair in the old chain — packages/credentials/drizzle/
+# 0002_credentials_tenant_seam.sql:74-75, packages/fiscal-verifactu/drizzle/
+# 0004_envios_drainer_seam.sql:111-112, packages/payments/drizzle/
+# 0008_payments_webhook_resolver.sql:68-69. sales_assert_tenders_cover has an OWNER TO and no grant
+# (packages/db/drizzle/0005_sales.sql:279); sale_settlements_check_coverage has neither. A baseline
+# carrying the old SQL verbatim (spec §2) therefore grants on three, not five.
+SEAM_GRANTED = ["credential_tenants", "envios_tenants_with_work", "resolve_payment_tenant"]
 
 DOLLAR = re.compile(r"\$[A-Za-z_0-9]*\$")
 
@@ -212,6 +242,9 @@ def normalise(text, counts):
         if hit is not None:
             counts[hit] += 1
             continue
+        if SEAM_ACL_RE.search(stmt):
+            counts[SEAM_ACL] += 1
+            continue
         if SEAM_RE.search(stmt):
             stmt, stripped = re.subn(r"\s+SECURITY DEFINER\b", "", stmt)
             counts[DEFINER] += stripped
@@ -227,14 +260,15 @@ def normalise(text, counts):
 residue, raws = {}, {}
 for side in ("old", "new"):
     raws[side] = open(f"{out}/{side}.sql", encoding="utf-8").read()
-    counts = dict.fromkeys([label for label, _ in DROP] + [DEFINER, COLUMNS], 0)
+    counts = dict.fromkeys([label for label, _ in DROP] + [SEAM_ACL, DEFINER, COLUMNS], 0)
     normalised = normalise(raws[side], counts)
     open(f"{out}/{side}.normalised.sql", "w", encoding="utf-8").write(normalised)
     residue[side] = counts
 
 width = max(len(label) for label in residue["old"])
 lines = [
-    "normalisation counts (statements dropped; last two rows: clauses stripped, tables sorted)",
+    "normalisation counts (statements dropped; last three rows: seam ACL statements dropped from"
+    " both sides, SECURITY DEFINER clauses stripped, CREATE TABLEs sorted)",
     f"  {'':{width}}  OLD  NEW",
 ]
 for label in residue["old"]:
@@ -250,17 +284,49 @@ if missing:
 # --gate-new: read the RAW new dump, before normalisation, for the objects the design deletes. The
 # normaliser removes these from both sides, so without this a baseline that kept one diffs clean.
 if gate_new:
-    GATED = [("CREATE POLICY", r"^CREATE POLICY "), ("ROW LEVEL SECURITY", r"ROW LEVEL SECURITY"),
-             ("current_tenant_id", r"\bcurrent_tenant_id\b")]
+    GATED = [
+        ("CREATE POLICY", r"^CREATE POLICY "),
+        ("ROW LEVEL SECURITY", r"ROW LEVEL SECURITY"),
+        ("current_tenant_id", r"\bcurrent_tenant_id\b"),
+    ]
     GATED += [(f"role {r}", rf"\b{r}\b") for r in DELETED_ROLES]
-    found = []
+    problems = []
     for label, pat in GATED:
-        hits = [ln for ln in raws["new"].splitlines() if re.search(pat, ln) and not ln.startswith("--")]
+        hits = [
+            ln for ln in raws["new"].splitlines() if re.search(pat, ln) and not ln.startswith("--")
+        ]
         if hits:
-            found.append(f"  {label} — {len(hits)} line(s), first: {hits[0].strip()[:96]}")
-    if found:
-        sys.exit("--gate-new: the NEW dump still carries objects this design deletes:\n"
-                 + "\n".join(found))
+            problems.append(
+                f"  still present — {label}: {len(hits)} line(s), first: {hits[0].strip()[:84]}"
+            )
+    # A seam function that kept SECURITY DEFINER. Statement-level, because the clause and the name
+    # are on different lines — and gated at all because the normaliser strips the clause from both
+    # sides, so without this check such a baseline prints EQUIVALENT.
+    for stmt in split_statements(raws["new"]):
+        m = SEAM_RE.search(stmt)
+        if m and re.search(r"\bSECURITY DEFINER\b", stmt):
+            problems.append(f"  still present — SECURITY DEFINER on public.{m.group(1)}()")
+    # The residue table's other reader rule, made a gate: only the NEW side may add these.
+    if residue["old"]["ENABLE ALWAYS TRIGGER"]:
+        problems.append(
+            f"  unexpected — the OLD dump carries {residue['old']['ENABLE ALWAYS TRIGGER']}"
+            " ENABLE ALWAYS TRIGGER statement(s)"
+        )
+    # The seam ACLs the normaliser strips from both sides have to be checked here instead: in the
+    # baselines these statements finally take effect, and nothing else would notice if they were
+    # dropped on the way. Both halves of the old chain's pair are required, because a baseline that
+    # kept the GRANT and lost the REVOKE would leave PUBLIC's default EXECUTE in place — a widened
+    # privilege the diff cannot see. pg_dump emits each half only when it took effect (measured:
+    # a function the migrator still owns dumps `REVOKE ALL … FROM PUBLIC;` + `GRANT ALL … TO
+    # app_user;`, one handed to a helper role first dumps neither). Three functions, not five —
+    # see SEAM_GRANTED.
+    for fn in SEAM_GRANTED:
+        for verb, tail in (("GRANT", r"TO app_user"), ("REVOKE", r"FROM PUBLIC")):
+            pat = rf"^{verb}\b.*\bON FUNCTION public\.{fn}\(.*\b{tail}\b"
+            if not re.search(pat, raws["new"], re.M):
+                problems.append(f"  missing — {verb} … ON FUNCTION public.{fn}(…) {tail}")
+    if problems:
+        sys.exit("--gate-new refused the NEW dump:\n" + "\n".join(problems))
 PY
 
 echo "roles OLD: $(tr '\n' ' ' <"$OUT/old.roles")"
