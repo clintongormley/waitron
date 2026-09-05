@@ -389,7 +389,7 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
   domain package at all — a real improvement, but it touches `@waitron/identity`'s public surface and
   every `hashSecret` consumer, so it was out of scope for this schema-inversion slice. Small,
   unclaimed, do-anytime.
-- **SP-2b — schema-version handshake + park gate — built.** `/sync-api/hello` gains
+- **SP-2b — schema-version handshake + park gate — LANDED #230 (2026-09-05).** `/sync-api/hello` gains
   `moduleVersions: Record<string, number>`, a boot snapshot of each module's **applied** (not
   shipped) schema version. A subscriber compares its own applied version per module and **parks**
   (never applies, never drops) a row whose owning module the source has migrated ahead of it,
@@ -417,7 +417,7 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
   B3.2** (shares `@waitron/layouts` / `apps/till` card-grid).
 
 With SP-1a + SP-1b + SP-1c landed, SP-1d's adopt-bootstrap half landed (#220), SP-2a landed (#227),
-and **SP-2b built** — **SP-2 (the full sync inversion + schema-version gate) is complete.** SP-2a
+and **SP-2b landed (#230)** — **SP-2 (the full sync inversion + schema-version gate) is complete.** SP-2a
 unblocked SP-3 (H2's fiscal-record lane rides SP-2a's sync inversion) and delivered SP-1c's deferred
 graph-honesty guard; SP-2b closes the cross-node schema-skew hazard the rolling-reboot convergence
 model depends on. **Ongoing flow-down and the enabled-set pull filter both stay deferred** (same
