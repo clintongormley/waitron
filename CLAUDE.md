@@ -359,24 +359,29 @@ _Reference_.
   carries no sign-off and fails DCO (#160).
 - **Do not merge a PR automatically — wait for the user's approval.** Invoking `/land-branch` is that
   approval; nothing else is.
-- **Merging requires resolved conversations** (`mergeStateStatus: BLOCKED` with green checks). Read
-  them first — Copilot's single comment has repeatedly been the only real finding no other layer
-  caught, usually by checking sibling files. Resolve via the GraphQL `resolveReviewThread` mutation
-  with the id passed as a variable. Verify CI runs belong to the current head SHA
+- **Merging requires resolved conversations** (`mergeStateStatus: BLOCKED` with green checks). Copilot
+  is no longer requested here (2026-09-05): the second-model diff review is `codex review`, run by
+  `/finish-branch` before the PR exists, so its findings are triaged with the others and leave no
+  thread. Its lesson stands — Copilot's one reliable class was the sibling-file convention the branch
+  missed — so the convention reviewer's brief asks for siblings. A thread that does appear is resolved
+  via the GraphQL `resolveReviewThread` mutation with the id passed as a variable. Verify CI runs belong to the current head SHA
   (`gh run list --json databaseId,headSha`).
 - **After merging, delete the feature branch, local and remote, and verify the remote one is gone**
   (`git ls-remote --exit-code --heads origin <branch>` must fail) — it has repeatedly survived.
 - **An untracked file in the main checkout can block the post-merge `git pull --ff-only`.** Diff
   before deleting; the scratch copy was 113 lines behind what landed.
 
-**Model selection (trial from 2026-09-05, owner decision after the whole-project review):** the rule
-itself — Fable 5.1 main session and reviewer seats, `opus` implementers and `/simplify` lenses, skip
-subagent-driven-development's final whole-branch reviewer because `/finish-branch` step 2 is that
-pass — lives in the global `~/.claude/CLAUDE.md` so every repo shares it. What is waitron-specific is
-the yardstick: the till-reroute slice against the previous five PRs on fix rounds before land,
-Copilot findings no internal layer caught, and false claims found at whole-branch review. If none of
-the three drops, move Fable back to reviewer-only seats (`model: "fable"` from an Opus session) and
-retire the trial.
+**Model selection (owner decision 2026-09-05, revised the same evening for cost):** the rule lives in
+the global `~/.claude/CLAUDE.md` so every repo shares it — Fable 5.1 for the sessions the owner talks
+in and for two fresh-context seats (the plan-vs-spec review, `/finish-branch`'s run-it reviewer),
+Opus 5.1 for execution sessions and every other reviewer, and Codex for the implementer seat and the
+pre-PR diff review. Codex reads `AGENTS.md` (a symlink to this file) and `.codex/config.toml`, which
+names the model, raises the doc-size cap above this file's size, and opens the sandbox's network
+(the Docker socket and DNS are closed by default; measured 2026-09-05). What is waitron-specific is
+the yardstick: the till-reroute slices against the previous five PRs on fix rounds before land,
+diff-review findings no internal layer caught, false claims found at whole-branch review, and Codex
+tasks that needed a Claude fix round. The seat-by-seat Fable/Opus/Astra comparison that set the
+reviewer seats is `docs/superpowers/specs/2026-09-05-model-seats-experiment.md`.
 
 **Before a PR**, run the §2 gate yourself rather than relying on the hook, then `/finish-branch`.
 Both the hook and CI narrow to changed packages; the unfiltered `main` merge is the only run that
