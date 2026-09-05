@@ -1588,5 +1588,30 @@ declare module "@waitron/shared" {
     // A diagnostics verbosity request named a level outside {debug,info} or a ttl outside its bounds.
     // `reason` is a fixed enum string (never a raw input value) — the redaction discipline holds.
     "diagnostics.invalid_verbosity": { reason: "level" | "ttl" };
+    /**
+     * BR-3's restore compatibility gate (`restore-gate.ts`) refused: the backup manifest's
+     * `environment` differs from the restoring binary's own target environment. Refusing this here,
+     * before `pg_restore` touches anything, is what stops a preproduction dump landing on a
+     * production database (or the reverse) — CLAUDE.md §5's "one database per environment": a
+     * cross-environment restore would leave `invoice_series.next_number` inherited from the wrong
+     * series, a permanent hole once real sales resume. `backup`/`target` are both a
+     * `DeploymentEnvironment` string (`"production"`/`"preproduction"`), never a secret, so echoing
+     * both is what makes the refusal actionable. `restore.*` names the DOMAIN CONCEPT — restoring a
+     * backup onto a target — never the throwing package (`tenant.not_found`'s note gives the rule).
+     * Never renamed once shipped.
+     */
+    "restore.environment_mismatch": { backup: string; target: string };
+    /**
+     * BR-3's restore compatibility gate refused: for some module the manifest's applied schema
+     * version is NEWER than the restoring binary's own `expectedVersions` entry for that module —
+     * this binary's migrations don't go that far forward, so it cannot safely read (or later migrate)
+     * what the backup contains. A module the manifest lists that the target does not run at all (absent
+     * from `expectedVersions`) is a different case and is silently IGNORED, not refused — its tables
+     * restore inert. `module` is the module's own declared name, `backup`/`target` the two applied
+     * schema versions being compared, none of them secrets. `restore.*`, not `backup.*`: the backup
+     * artifact itself is fine, it is this restore attempt, onto this binary, that is refused. Never
+     * renamed once shipped.
+     */
+    "restore.schema_too_new": { module: string; backup: number; target: number };
   }
 }
