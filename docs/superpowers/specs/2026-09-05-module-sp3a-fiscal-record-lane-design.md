@@ -264,7 +264,7 @@ working and a broken implementation visibly **disagree** (CLAUDE.md §1).
    byte-identical (huella + four `anterior_*` + `entorno` preserved), idempotent on re-delivery via
    `ON CONFLICT (id) DO NOTHING`.
 2. **Immutability intact on the mirror.** Two layers, verified on `postgres:18-alpine` (Task 6): a stray
-   UPDATE/DELETE/TRUNCATE by the apply role (`sync_applier`, a non-superuser `app_user` member) is refused
+   UPDATE/TRUNCATE by the apply role (`sync_applier`, a non-superuser `app_user` member) is refused
    with `42501` — the grant is checked before the trigger ever fires — while the append-only `WT001` trigger
    fires only for a grant/RLS-bypassing superuser (an UPDATE, or a `TRUNCATE … CASCADE`; a plain `TRUNCATE`
    is refused earlier with `0A000` via the FK references). The insert-only apply path is unobstructed.
