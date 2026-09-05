@@ -30,6 +30,7 @@ const ENROLMENTS: readonly EnrolledTable[] = [
     captureOps: ["insert", "update"],
     fkRank: 2,
     lane: "ordered",
+    configClass: true,
     columns: ["id", "updated_at"],
   },
   {
@@ -40,6 +41,7 @@ const ENROLMENTS: readonly EnrolledTable[] = [
     captureOps: ["insert", "update"],
     fkRank: 3,
     lane: "fast",
+    configClass: false,
     columns: ["id", "updated_at"],
   },
 ];

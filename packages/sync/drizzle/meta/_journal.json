@@ -64,6 +64,13 @@
       "when": 1786492800008,
       "tag": "0008_enrol_kitchen",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786492800009,
+      "tag": "0009_sync_config_conflicts",
+      "breakpoints": true
     }
   ]
 }

@@ -25,6 +25,31 @@ describe("enrol", () => {
     expect(e.conflictKey).toEqual(["id"]);
     expect(e.lane).toBe("ordered");
   });
+
+  it("defaults configClass to false when the caller omits it (membership Slice 7)", () => {
+    const e = enrol(fixture, {
+      mode: "watermark-upsert",
+      conflictKey: ["id"],
+      watermarkColumn: null,
+      captureOps: ["insert", "update"],
+      fkRank: 0,
+      lane: "ordered",
+    });
+    expect(e.configClass).toBe(false);
+  });
+
+  it("carries configClass: true when the caller marks the table config-class (membership Slice 7)", () => {
+    const e = enrol(fixture, {
+      mode: "watermark-upsert",
+      conflictKey: ["id"],
+      watermarkColumn: null,
+      captureOps: ["insert", "update"],
+      fkRank: 0,
+      lane: "ordered",
+      configClass: true,
+    });
+    expect(e.configClass).toBe(true);
+  });
 });
 
 describe("tablesForLane", () => {

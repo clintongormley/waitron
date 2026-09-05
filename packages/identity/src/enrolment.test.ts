@@ -38,4 +38,8 @@ describe("IDENTITY_ENROLMENT", () => {
       if (e.watermarkColumn !== null) expect(e.columns).toContain(e.watermarkColumn);
     }
   });
+  it("both tables are config-class (membership Slice 7, R-S7-1)", () => {
+    expect(byName.get("persons")!.configClass).toBe(true);
+    expect(byName.get("webauthn_credentials")!.configClass).toBe(true);
+  });
 });

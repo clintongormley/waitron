@@ -29,6 +29,15 @@ export interface EnrolledTable {
   fkRank: number;
   lane: SyncLane;
   columns: string[];
+  /** `true` marks a primary-owned CONFIG-CLASS table whose writes flow DOWN-only from the current
+   * serving-primary (catalogues, categories, products, floor plan, kitchen setup, people, passkeys,
+   * payment policy — the venue's configuration, spec §7). Membership Slice 7's apply-path gate REJECTS
+   * such a row from any origin that is NOT the serving-primary (primary-wins), recording it to
+   * `sync_config_conflicts` instead of applying it — so a returned/fenced node's fence-window config
+   * edits never overwrite the survivor's. `false` (the default, and every commercial/runtime table) is
+   * unaffected by the gate. `dining_tables` is deliberately NOT config-class: it mixes single-writer
+   * runtime state (`tab_id`, `status_id`) with config, so per-field merge is deferred (R-S7-1). */
+  configClass: boolean;
 }
 
 /**
@@ -37,11 +46,17 @@ export interface EnrolledTable {
  * the old central `columnNamesFor`), so the owning package declares enrolment without `@waitron/sync`
  * ever seeing its schema (spec §2c).
  */
-export function enrol(table: Table, meta: Omit<EnrolledTable, "table" | "columns">): EnrolledTable {
+export function enrol(
+  table: Table,
+  meta: Omit<EnrolledTable, "table" | "columns" | "configClass"> & { configClass?: boolean },
+): EnrolledTable {
   return {
     table: getTableName(table),
     columns: Object.values(getTableColumns(table)).map((c) => c.name),
     ...meta,
+    // Resolved AFTER the spread so an omitted `configClass` (undefined) does not clobber the default:
+    // most callers never pass it, and only the 10 pure config tables pass `configClass: true` (R-S7-1).
+    configClass: meta.configClass ?? false,
   };
 }
 

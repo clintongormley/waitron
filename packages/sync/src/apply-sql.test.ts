@@ -20,6 +20,7 @@ const salesEntry: EnrolledTable = {
   captureOps: ["insert"],
   fkRank: 3,
   lane: "ordered",
+  configClass: false,
   columns: ["id", "tenant_id", "total"],
 };
 // Group B, and the one table whose conflict key is (tenant_id) not (id) — so tenant_id is the column
@@ -32,6 +33,7 @@ const policyEntry: EnrolledTable = {
   captureOps: ["insert", "update"],
   fkRank: 0,
   lane: "ordered",
+  configClass: true,
   columns: ["tenant_id", "offline_mode", "offline_amount_cap", "created_at", "updated_at"],
 };
 // Group C — watermark-upsert with a NULL watermark: the upsert is unconditional (no WHERE), and it is
@@ -44,6 +46,7 @@ const woEntry: EnrolledTable = {
   captureOps: ["insert", "update", "delete"],
   fkRank: 2,
   lane: "ordered",
+  configClass: false,
   columns: ["id", "tenant_id", "status"],
 };
 const woLinesEntry: EnrolledTable = { ...woEntry, table: "working_order_lines", fkRank: 3 };
@@ -56,6 +59,7 @@ const productsEntry: EnrolledTable = {
   captureOps: ["insert", "update"],
   fkRank: 2,
   lane: "ordered",
+  configClass: true,
   columns: ["id", "tenant_id", "descriptions", "unit_price", "active", "updated_at"],
 };
 // Identity config: mutable, NULL watermark → unconditional Group-C upsert; webauthn_credentials is
@@ -68,6 +72,7 @@ const personsEntry: EnrolledTable = {
   captureOps: ["insert", "update"],
   fkRank: 0,
   lane: "ordered",
+  configClass: true,
   columns: ["id", "tenant_id", "display_name", "pin_hash", "role", "status"],
 };
 const credsEntry: EnrolledTable = {
@@ -78,6 +83,7 @@ const credsEntry: EnrolledTable = {
   captureOps: ["insert", "update", "delete"],
   fkRank: 1,
   lane: "ordered",
+  configClass: true,
   columns: ["id", "tenant_id", "person_id", "credential_id", "public_key", "counter"],
 };
 // The C1 table-service floor closure: watermark-upsert with NULL watermark, NO delete captured.
@@ -89,6 +95,7 @@ const diningEntry: EnrolledTable = {
   captureOps: ["insert", "update"],
   fkRank: 1,
   lane: "ordered",
+  configClass: false,
   columns: ["id", "tenant_id", "label", "status_id"],
 };
 

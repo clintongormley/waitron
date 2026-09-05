@@ -49,4 +49,9 @@ describe("PAYMENTS_ENROLMENT", () => {
       if (e.watermarkColumn !== null) expect(e.columns).toContain(e.watermarkColumn);
     }
   });
+  it("only payment_policy is config-class; payments/payment_refunds are runtime (membership Slice 7)", () => {
+    expect(byName.get("payment_policy")!.configClass).toBe(true);
+    expect(byName.get("payments")!.configClass).toBe(false);
+    expect(byName.get("payment_refunds")!.configClass).toBe(false);
+  });
 });
