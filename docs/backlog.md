@@ -175,6 +175,7 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
 1. **Coverage split — PR open 2026-09-05:** 98/98/98/95 kept on `verifactu`, `fiscal-verifactu`,
    `core`, `db`, `sync`, `payments`; the 90/90/85/85 floor everywhere else (the four browser
    packages' 95/95/90/88 was above the floor on every axis, so they took the floor).
+   The root project (the classifiers) keeps the high bar — a judgement call flagged at review.
    `scripts/coverage-thresholds.test.ts` pins which package holds which bar; CLAUDE.md §2 updated.
 2. **Native logical replication prototype — DONE 2026-09-05: all of (a)–(d) PASS, (e) measured.**
    Findings: [native-replication-post-rls-prototype-findings](superpowers/specs/2026-09-05-native-replication-post-rls-prototype-findings.md)

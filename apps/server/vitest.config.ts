@@ -33,9 +33,9 @@ export default defineConfig({
       // signal-handler latch, exercised only by a manual end-to-end boot, not by anything hermetic.
       // `scripts/**` and `src/testing/**` are build/test tooling, not this package's own behaviour.
       //
-      // `src/boot.ts` is deliberately NOT here: `boot.test.ts` covers it against a real container as
-      // the deployment role. A branch that is genuinely unreachable through `startServer`'s public
-      // surface carries its own `v8 ignore` comment in place, never a file-level exclusion here.
+      // `src/boot.ts` is deliberately NOT here: a branch that is genuinely unreachable through
+      // `startServer`'s public surface carries its own `v8 ignore` comment in place, never a
+      // file-level exclusion.
       exclude: [...coverageConfigDefaults.exclude, "scripts/**", "src/testing/**", "src/bin.ts"],
       thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
     },

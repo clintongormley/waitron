@@ -75,9 +75,6 @@ export default defineConfig({
       // src/widgets/test-helpers.ts is test-only mount/cleanup/axe support, mirroring
       // packages/ui's exclusion of its src/test-helpers.ts and a11y-helpers.ts.
       exclude: [...coverageConfigDefaults.exclude, "src/main.ts", "src/widgets/test-helpers.ts"],
-      // The workspace floor (CLAUDE.md §2; pinned by scripts/coverage-thresholds.test.ts). Global, not
-      // `perFile`: a browser package is a handful of files, where one hard-to-reach branch swings a
-      // per-file percentage far more than the aggregate.
       thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
     },
   },

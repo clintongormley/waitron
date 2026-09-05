@@ -85,10 +85,12 @@ what it ran.
 
 **Coverage thresholds** are split (owner decision 2026-09-05): `statements 98 / lines 98 /
 functions 98 / branches 95` in `verifactu`, `fiscal-verifactu`, `core`, `db`, `sync` and `payments`
-— the packages whose defects are fiscally or structurally unrecoverable — and the `90/90/85/85`
-floor everywhere else, browser packages included. Which package holds which bar is pinned by
-`scripts/coverage-thresholds.test.ts` (root project); moving a package between the two bars is an
-edit to that list, with the reason in the commit.
+— the fiscal core and the data-layer foundations — and the `90/90/85/85` floor in every other
+package, browser packages included. The six are the owner's list, not a rule that derives them
+(`apps/server` holds the AEAT transport and sits at the floor). The root project keeps the high
+bar: it measures the classifiers that decide what CI and the hook run. Which package holds which
+bar is pinned by `scripts/coverage-thresholds.test.ts`; moving one is an edit to that list, with
+the reason in the commit.
 
 Traps, each of which cost a round trip:
 
