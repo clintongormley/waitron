@@ -554,7 +554,8 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // the sync source (`mountSyncApi`), the pull loop (`runSyncPull`), and the disposal guard
   // (`readDrainProgress`) below — `@waitron/sync` no longer owns it (SP-2a inversion). Assembled from
   // ALL_MODULES, NOT the enabled set, to stay behaviour-preserving: the former central `ENROLLED` was
-  // unconditional; the enabled-set-aware pull is SP-2b (spec §6).
+  // unconditional; the enabled-set-aware pull is DEFERRED (spec §2/§7), built with the first
+  // genuinely-toggleable module.
   await applyMigrations(
     config.migrationsDatabaseUrl,
     migrationOptionsFor(orderedMigrationSets(setsToMigrate), config.migrationsRoot),

@@ -301,6 +301,18 @@ export async function runSyncPull(deps: RunSyncPullDeps): Promise<void> {
           }
           if (last.fetched < deps.batchLimit || !last.advanced) break;
         }
+        // Operator visibility for a rolling migration (spec §3, §7.4 ruling 4): when the drained page
+        // version-parked rows — held because their owning module the SOURCE migrated ahead of THIS
+        // node — emit an INFO line naming the origin, lane and count, so an operator watching a rolling
+        // migration sees which node is behind. Best-effort like the membership/cursor logs below: it is
+        // transient skew signalling, never a pull failure, so it never grows backoff or breaks the loop.
+        if (last !== undefined && last.versionParked > 0) {
+          deps.log("info", "sync.version_parked", {
+            originId: peer.nodeId,
+            lane,
+            versionParked: last.versionParked,
+          });
+        }
         // Best-effort membership adoption (spec §5): hand the peer's advertised document to the
         // injected callback. Its OWN try/catch — an adopt failure is a witness optimisation missing,
         // never a pull failure, so it is logged and swallowed here and must NEVER grow the peer's

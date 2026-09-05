@@ -47,8 +47,9 @@ export async function readDrainProgress(
     // subqueries in ONE round-trip per lane. `max(seq)` always yields one row (max_seq null when there
     // are no matching rows); the cursor subquery is null when the carrier has drained nothing on this
     // lane. `tablesForLane` returns `[]` for a lane a partial enrolment set omits — the full 22-table
-    // set boot injects today (assembled from ALL_MODULES) never does, but SP-2b's enabled-set filtering
-    // can, so the empty-lane case is guarded with `and false` (mirroring readSyncLogSince in source.ts)
+    // set boot injects today (assembled from ALL_MODULES) never does, but a future (deferred)
+    // enabled-set filter (spec §2/§7) can, so the empty-lane case is guarded with `and false`
+    // (mirroring readSyncLogSince in source.ts)
     // rather than emitting an invalid `in ()`. An omitted lane thus contributes no own rows → `max_seq`
     // null → the `continue` below treats it as nothing to drain, which is the correct semantics.
     const tablesClause = tables.length === 0 ? sql`and false` : sql`and table_name in ${tables}`;

@@ -248,6 +248,74 @@ describe("runSyncPull loop control", () => {
     expect(logs.some((l) => l.code === "sync.config_conflict_rejected")).toBe(false);
   });
 
+  it("logs sync.version_parked at INFO when a drained page reports rows parked awaiting this node's migration", async () => {
+    // SP-2b (spec §7.4 ruling 4): the version gate parks a row whose owning module the SOURCE migrated
+    // ahead of THIS subscriber. `versionParked` is threaded out of applyBatch, but an operator watching
+    // a rolling migration needs a LOG line naming the origin and the count — not just the metric — so
+    // they see which node is behind. This asserts runSyncPull emits it after a drain when the count > 0.
+    const controller = new AbortController();
+    const logs: { level: string; code: string; params?: Record<string, unknown> }[] = [];
+    const log = (level: string, code: string, params?: Record<string, unknown>): void => {
+      logs.push({ level, code, params });
+    };
+    // A SHORT page (stops the drain) that reports 3 rows version-parked, so `last` carries the count.
+    const parked: SyncPullResult = {
+      applied: 0,
+      deferred: 0,
+      rejected: 0,
+      versionParked: 3,
+      fetched: 0,
+      advanced: true,
+    };
+    const pullOnce = async (): Promise<SyncPullResult> => parked;
+    const sleep = async (): Promise<void> => {
+      controller.abort(); // one round, then stop
+    };
+    await runSyncPull({
+      ...dummyDeps,
+      peers: [peerA],
+      pullOnce,
+      sleep,
+      signal: controller.signal,
+      minIdleMs: 100,
+      maxBackoffMs: 800,
+      log,
+    });
+    const parkedLogs = logs.filter((l) => l.code === "sync.version_parked");
+    expect(parkedLogs).toHaveLength(1);
+    expect(parkedLogs[0]!.level).toBe("info");
+    expect(parkedLogs[0]!.params).toMatchObject({
+      originId: peerA.nodeId,
+      lane: "ordered", // dummyDeps omits `lane`, so it defaults to 'ordered' (spec §4d)
+      versionParked: 3,
+    });
+  });
+
+  it("does NOT log sync.version_parked when a drained page reports zero parked rows (proves the >0 guard)", async () => {
+    // Negative control for the guard above: a healthy drain (versionParked 0) must emit no version_parked
+    // line, or an operator's rolling-migration alarm would fire on every ordinary pull.
+    const controller = new AbortController();
+    const logs: { code: string }[] = [];
+    const log = (_level: string, code: string): void => {
+      logs.push({ code });
+    };
+    const pullOnce = async (): Promise<SyncPullResult> => short(0); // versionParked: 0
+    const sleep = async (): Promise<void> => {
+      controller.abort();
+    };
+    await runSyncPull({
+      ...dummyDeps,
+      peers: [peerA],
+      pullOnce,
+      sleep,
+      signal: controller.signal,
+      minIdleMs: 100,
+      maxBackoffMs: 800,
+      log,
+    });
+    expect(logs.some((l) => l.code === "sync.version_parked")).toBe(false);
+  });
+
   it("backs off exponentially on a transport error and logs sync.stream_stalled once at saturation", async () => {
     const controller = new AbortController();
     const sleeps: number[] = [];

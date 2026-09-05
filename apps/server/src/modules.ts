@@ -133,7 +133,8 @@ export const ALL_MODULES: readonly WaitronModule[] = [
 /** The composition root's assembled sync-enrolment set — every module's declared enrolment, in
  * ALL_MODULES order (SP-2a inversion). `@waitron/sync` no longer owns this; boot injects it into
  * mountSyncApi/runSyncPull/readDrainProgress, and the tests use the same reference. Assembled from
- * ALL_MODULES (not the enabled set) — the enabled-set-aware pull is SP-2b. */
+ * ALL_MODULES (not the enabled set) — the enabled-set-aware pull is DEFERRED (spec §2/§7), built
+ * with the first genuinely-toggleable module. */
 export const ALL_SYNC_ENROLMENTS: readonly EnrolledTable[] = ALL_MODULES.flatMap(
   (m) => m.sync ?? [],
 );
