@@ -17,7 +17,7 @@ import { contadoresInstalacion, registroSif } from "./schema/sif.js";
  * Exported because the rule is defined once for the whole package: `registro_sif` carries no CHECK
  * on the column, so every write path into it must apply this bound itself. `registerSif` below
  * does; so does `./provisioning.ts`'s `parseReservedState`. `writeReservedSif` does not — it is a
- * primitive its callers validate for.
+ * primitive its callers must validate for.
  */
 export const ID_SISTEMA_MAX_LENGTH = 2;
 
