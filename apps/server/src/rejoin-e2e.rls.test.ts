@@ -314,7 +314,9 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  for (const pg of targets) await pg.stop().catch(() => {});
+  for (const pg of targets) {
+    if (pg !== undefined) await pg.stop().catch(() => {});
+  }
   if (baselinePg !== undefined) await baselinePg.stop().catch(() => {});
   if (scratchRoot !== undefined) await rm(scratchRoot, { recursive: true, force: true });
 });
