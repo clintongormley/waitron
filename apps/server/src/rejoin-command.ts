@@ -317,6 +317,11 @@ export async function runRejoin(deps: {
     log,
   };
 
+  // Whether `closePreWipe` has run. On the success path the orchestrator closes the two pre-wipe pools
+  // before the wipe (below); on a guard/validate REFUSAL it throws before `closePreWipe`, so the
+  // `finally` after the rejoin call closes them instead. The flag makes that close idempotent — never
+  // double-closing pools the success path already closed (a `Database.close()` after the FORCE drop).
+  let poolsClosed = false;
   const rejoinDeps: RejoinDeps = {
     held,
     nodeId: cfg.nodeId,
@@ -324,7 +329,10 @@ export async function runRejoin(deps: {
     // Close BOTH pre-wipe pools. `Database` is closed with `.close()`, NEVER `.driver.end()`
     // (`.driver` is a string tag, not a pool) — client.ts. The orchestrator awaits this after the last
     // guard and after `validate`, before the wipe.
-    closePreWipe: () => Promise.all([appDb.close(), syncDb.close()]).then(() => {}),
+    closePreWipe: () =>
+      Promise.all([appDb.close(), syncDb.close()]).then(() => {
+        poolsClosed = true;
+      }),
     wipeDatabase: async () => {
       const admin = await connect(maintenanceUrl);
       try {
@@ -364,5 +372,10 @@ export async function runRejoin(deps: {
     // target, a full disk) or an unrelated throw could carry the admin connection string. This is the
     // independent second layer behind `pg-restore.ts`'s own password-stripping.
     return failGeneric();
+  } finally {
+    // A guard or `validate` refusal throws before `closePreWipe` ran, so the two pre-wipe pools are
+    // still open — close them here (harmless via `.catch` if a pool is already gone). Skipped when the
+    // success/wipe path already closed them (`poolsClosed`), so we never double-close across the wipe.
+    if (!poolsClosed) await Promise.all([appDb.close(), syncDb.close()]).catch(() => {});
   }
 }

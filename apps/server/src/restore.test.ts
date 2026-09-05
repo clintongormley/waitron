@@ -137,6 +137,10 @@ describe("restoreFromArtifact", () => {
     expect(await readFile(join(newMedia, "abc123.jpg"))).toEqual(MEDIA); // media dir was created
     expect(await readFile(join(newState, "secrets.env"), "utf8")).toBe(SECRET); // state dir was created
     await expect(stat(join(newStaging, "db.dump"))).rejects.toMatchObject({ code: "ENOENT" }); // cleaned
+    // stagingDir (whole-DB plaintext dump) and stateDir (secrets) are created 0700 — a group/world
+    // -readable dir would expose the 0600 files inside by traversal (mediaDir is public, default mode).
+    expect((await stat(newStaging)).mode & 0o777).toBe(0o700);
+    expect((await stat(newState)).mode & 0o777).toBe(0o700);
   });
 
   it("skips secrets when skipSecrets is true (keeps own identity), still restores db+media", async () => {

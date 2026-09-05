@@ -170,9 +170,14 @@ export async function validateArtifact(deps: RestoreDeps): Promise<ValidatedArti
   // three roots (db.dump→stagingDir, media/*→mediaDir, secrets/*→stateDir), the secret-guard loop
   // running even under `skipSecrets`. Recursive mkdir of an existing dir is a harmless no-op. These
   // are directory creations, not artifact writes — no restored content lands until `writeValidated`.
-  await mkdir(deps.stagingDir, { recursive: true });
+  // stagingDir (whole-DB plaintext dump) and stateDir (secrets) are created 0700, the same mode
+  // `state-secrets.ts` uses for secret-bearing dirs — a world/group-readable dir would expose the
+  // 0600 files inside it by traversal. `mode` applies only when the dir is CREATED here; an existing
+  // dir keeps the operator's perms (mkdir does not tighten one). mediaDir is public content served at
+  // `/media/*` (0644 files), so it takes the default mode like `local-fs-backend.ts`.
+  await mkdir(deps.stagingDir, { recursive: true, mode: 0o700 });
   await mkdir(deps.mediaDir, { recursive: true });
-  await mkdir(deps.stateDir, { recursive: true });
+  await mkdir(deps.stateDir, { recursive: true, mode: 0o700 });
 
   // GUARD — every entry against ITS destination root, before ANY write. The db.dump goes to
   // stagingDir, media/* to mediaDir, secrets/* to stateDir; each is guarded against the root it

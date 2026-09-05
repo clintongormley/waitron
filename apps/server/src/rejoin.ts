@@ -49,8 +49,8 @@ export interface RejoinResult {
  * Rejoin a fenced, fully-drained returned ex-primary as a clean secondary (spec §4): WIPE the local
  * database and RESTORE the carrier's baseline, discarding the stale local state. Ordered guards —
  * `not_fenced` → `no_carrier` → `not_drained` — refuse LOUD before anything irreversible, the same
- * "abort-before-write" discipline `retire.ts` uses; none of `closePreWipe`/`wipeDatabase`/`restore`
- * runs if any guard rejects.
+ * "abort-before-write" discipline `retire.ts` uses; none of
+ * `validate`/`closePreWipe`/`wipeDatabase`/`write` runs if any guard rejects.
  *
  * There is deliberately NO `carrier_changed` guard (unlike `retireSelf`): retire's drain reader is
  * bound at BOOT and can go stale against a later failover, but the caller reads the held document once

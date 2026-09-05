@@ -220,6 +220,30 @@ describe("waitron-rejoin rejoin", () => {
     expect(out.join("\n")).toContain("rejoin.not_drained");
   });
 
+  it("closes both pre-wipe pools when a guard/validate rejects (no connection leak)", async () => {
+    // On the refusal path the orchestrator throws BEFORE `closePreWipe`, so `runRejoin`'s `finally`
+    // must close `appDb`/`syncDb` (the wipe never ran, so no maintenance conn is opened either).
+    // Proven by deletion: remove that `finally` and both close spies drop to 0.
+    const opened: Database[] = [];
+    const connect = async (): Promise<Database> => {
+      const db = fakeDb();
+      opened.push(db);
+      return db;
+    };
+    const { code } = await run(
+      {},
+      {
+        connect,
+        rejoin: async () => {
+          throw new AppError("rejoin.not_fenced", {});
+        },
+      },
+    );
+    expect(code).toBe(1);
+    expect(opened).toHaveLength(2); // appDb + syncDb; the wipe's maintenance conn is never opened
+    for (const db of opened) expect(db.close).toHaveBeenCalledTimes(1);
+  });
+
   it("reports a restore.* gate code by code and returns 1", async () => {
     const { code, out } = await run(
       {},
