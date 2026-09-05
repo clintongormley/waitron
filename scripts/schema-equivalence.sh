@@ -2,7 +2,7 @@
 # Schema-equivalence proof for the migration squash
 # (docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md §2).
 #
-#   scripts/schema-equivalence.sh <OLD_ROOT> <NEW_ROOT> <OUT_DIR>
+#   scripts/schema-equivalence.sh <OLD_ROOT> <NEW_ROOT> <OUT_DIR> [--gate-new]
 #
 # Applies every migration set of OLD_ROOT to one postgres:18-alpine container and every migration
 # set of NEW_ROOT to another, as a non-superuser owner role (the shape the provisioner produces),
@@ -10,12 +10,23 @@
 # adds, and diffs. Exit 0 and "EQUIVALENT" on an empty normalised diff; exit 1 and the diff
 # otherwise. A non-empty diff is a defect in the baseline, never something to normalise away —
 # scripts/schema-equivalence.md is how to read one.
+#
+# --gate-new additionally fails the run when the NEW dump still CONTAINS one of the objects this
+# design deletes. Without it the normaliser removes those from both sides, so a baseline that kept
+# one would still diff clean; the per-module runs pass the flag, the two OLD-vs-OLD controls do not.
 set -eu
 
-[ $# -eq 3 ] || {
-  echo "usage: $0 <OLD_ROOT> <NEW_ROOT> <OUT_DIR>" >&2
+usage() {
+  echo "usage: $0 <OLD_ROOT> <NEW_ROOT> <OUT_DIR> [--gate-new]" >&2
   exit 2
 }
+[ $# -ge 3 ] && [ $# -le 4 ] || usage
+GATE_NEW=0
+case ${4:-} in
+  "") ;;
+  --gate-new) GATE_NEW=1 ;;
+  *) usage ;;
+esac
 
 # docker refuses a relative bind-mount source, and both roots are mounted read-only at /repo.
 OLD_ROOT=$(cd "$1" && pwd)
@@ -81,10 +92,10 @@ run() { # run <old|new> <root>: fresh container, migrate as waitron_migrator, du
 run old "$OLD_ROOT"
 run new "$NEW_ROOT"
 
-python3 - "$OUT" <<'PY'
+python3 - "$OUT" "$GATE_NEW" <<'PY'
 import re, sys
 
-out = sys.argv[1]
+out, gate_new = sys.argv[1], sys.argv[2] == "1"
 
 # The seven helper roles the design deletes (spec §1). sync_tailer and sync_retention fold into
 # app_user in step 1 — that their grants landed on app_user is checked by hand on the NEW container
@@ -166,6 +177,34 @@ def split_statements(text):
     return stmts
 
 
+TABLE_RE = re.compile(r"^(CREATE TABLE [^\n]*\(\n)(.*?)(\n\);)", re.M | re.S)
+COLUMNS = "CREATE TABLE columns sorted"
+
+
+def sort_table_columns(stmt, counts):
+    """Sort the column definitions inside a CREATE TABLE block. The ONE representational
+    normalisation: the old chain accretes columns with ALTER TABLE and a baseline declares them in
+    schema-file order, so pg_dump's attnum order differs while the table does not. pg_dump's inline
+    CHECK constraints follow the columns in NAME order, not creation order — measured on
+    PostgreSQL 18.6, a table created with `CONSTRAINT z_chk` inline and `a_chk` added afterwards
+    dumps a_chk first — so they are already canonical and the trailing run is left alone.
+    """
+
+    def one(m):
+        head, body, tail = m.group(1), m.group(2), m.group(3)
+        entries = [line.rstrip().rstrip(",") for line in body.split("\n")]
+        cut = next(
+            (i for i, e in enumerate(entries) if e.lstrip().startswith("CONSTRAINT ")), len(entries)
+        )
+        if cut < 2:
+            return m.group(0)
+        entries = sorted(entries[:cut]) + entries[cut:]
+        counts[COLUMNS] += 1
+        return head + ",\n".join(entries) + tail
+
+    return TABLE_RE.sub(one, stmt)
+
+
 def normalise(text, counts):
     kept = []
     for stmt in split_statements(text):
@@ -176,7 +215,7 @@ def normalise(text, counts):
         if SEAM_RE.search(stmt):
             stmt, stripped = re.subn(r"\s+SECURITY DEFINER\b", "", stmt)
             counts[DEFINER] += stripped
-        kept.append(stmt)
+        kept.append(sort_table_columns(stmt, counts))
     text = "".join(kept)
     text = re.sub(r"^--.*$", "", text, flags=re.M)  # pg_dump's per-object headers
     text = re.sub(r"^\\(un)?restrict\b.*$", "", text, flags=re.M)  # random token, new every dump
@@ -185,25 +224,43 @@ def normalise(text, counts):
     return text.strip() + "\n"
 
 
-residue = {}
+residue, raws = {}, {}
 for side in ("old", "new"):
-    raw = open(f"{out}/{side}.sql", encoding="utf-8").read()
-    counts = dict.fromkeys([label for label, _ in DROP] + [DEFINER], 0)
-    open(f"{out}/{side}.normalised.sql", "w", encoding="utf-8").write(normalise(raw, counts))
+    raws[side] = open(f"{out}/{side}.sql", encoding="utf-8").read()
+    counts = dict.fromkeys([label for label, _ in DROP] + [DEFINER, COLUMNS], 0)
+    normalised = normalise(raws[side], counts)
+    open(f"{out}/{side}.normalised.sql", "w", encoding="utf-8").write(normalised)
     residue[side] = counts
-    if side == "new":
-        missing = [fn for fn in SEAM if f"CREATE FUNCTION public.{fn}(" not in raw]
-        if missing:
-            sys.exit("seam functions missing from NEW: " + ", ".join(missing))
 
 width = max(len(label) for label in residue["old"])
-lines = ["normalised away (statements, except the last row: clauses)",
-         f"  {'':{width}}  OLD  NEW"]
+lines = [
+    "normalisation counts (statements dropped; last two rows: clauses stripped, tables sorted)",
+    f"  {'':{width}}  OLD  NEW",
+]
 for label in residue["old"]:
     lines.append(f"  {label:{width}}  {residue['old'][label]:>3}  {residue['new'][label]:>3}")
 report = "\n".join(lines) + "\n"
 open(f"{out}/normalisation.txt", "w", encoding="utf-8").write(report)
 sys.stdout.write(report)
+
+missing = [fn for fn in SEAM if f"CREATE FUNCTION public.{fn}(" not in raws["new"]]
+if missing:
+    sys.exit("seam functions missing from NEW: " + ", ".join(missing))
+
+# --gate-new: read the RAW new dump, before normalisation, for the objects the design deletes. The
+# normaliser removes these from both sides, so without this a baseline that kept one diffs clean.
+if gate_new:
+    GATED = [("CREATE POLICY", r"^CREATE POLICY "), ("ROW LEVEL SECURITY", r"ROW LEVEL SECURITY"),
+             ("current_tenant_id", r"\bcurrent_tenant_id\b")]
+    GATED += [(f"role {r}", rf"\b{r}\b") for r in DELETED_ROLES]
+    found = []
+    for label, pat in GATED:
+        hits = [ln for ln in raws["new"].splitlines() if re.search(pat, ln) and not ln.startswith("--")]
+        if hits:
+            found.append(f"  {label} — {len(hits)} line(s), first: {hits[0].strip()[:96]}")
+    if found:
+        sys.exit("--gate-new: the NEW dump still carries objects this design deletes:\n"
+                 + "\n".join(found))
 PY
 
 echo "roles OLD: $(tr '\n' ' ' <"$OUT/old.roles")"
