@@ -1,6 +1,5 @@
 import { fileURLToPath } from "node:url";
 import { mkdirSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import type { Hono } from "hono";
@@ -1490,6 +1489,18 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // secondary) the config is simply not consulted (the `isSingletonPrimary` gate), matching retention/tunnel.
   const backupConfig = loadBackupConfig(env);
   const backupController = new AbortController();
+  // Build the `StorageBackend`s ONCE, here in boot scope, so the sweep worker below and the
+  // box-status freshness reader further down share the SAME array — one `buildBackend` per configured
+  // destination, not two divergent lists. Empty when backup is off (`backupConfig === undefined`), in
+  // which case the sweep block is skipped and the reader is never wired (`backupWorker` stays
+  // undefined), so the empty array is never read.
+  const backupBackends = backupConfig?.destinations.map(buildBackend) ?? [];
+  // The pre-encryption dump is staged under `<stateDir>/backup-staging`, NOT an OS tmp dir: it must
+  // never sit (even briefly) inside a directory a destination's `list("waitron-")` scan walks, or a
+  // stray plaintext dump could be read back as if it were a stored artifact — and under stateDir it
+  // lives on the box's persistent volume beside its other state, not on a tmpfs that may be wiped
+  // mid-dump. `runBackupSweep` re-creates it (recursively) each tick, so a wiped dir self-heals.
+  const backupStagingDir = join(config.stateDir, "backup-staging");
   let backupWorker: Promise<void> | undefined;
   if (isSingletonPrimary && backupConfig !== undefined) {
     let probeDb: Database | undefined;
@@ -1497,21 +1508,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       probeDb = await createPostgresDb(backupConfig.databaseUrl);
       await assertBackupCanReadFiscal(probeDb);
       backupWorker = runBackupSweep({
-        // INTERIM (BR-1 Task 5): `runBackupSweep` now fans an ENCRYPTED artifact out to a list of
-        // `StorageBackend`s, but boot still wires only `destinations[0]` — real multi-destination
-        // fan-out (mapping every configured destination through `buildBackend`, plus a dedicated
-        // staging-dir config knob and the box-status multi-destination freshness reader) is Task 6's
-        // job (plan: "Wire boot", boot.ts:1437-1467). `destinations[0]` is always present here —
-        // `loadBackupConfig` returns `undefined`, and this block never runs, when `destinations` is
-        // empty — and is the `WAITRON_BACKUP_DIR` "primary" entry whenever that convenience is set,
-        // matching today's single-destination behaviour exactly (now encrypted, where it was not
-        // before Task 5).
-        backends: [buildBackend(backupConfig.destinations[0])],
-        // A plain OS tmp dir, not `destinations[0].dir`: the pre-encryption dump must never sit
-        // (even briefly) inside a directory a `StorageBackend.list("waitron-")` scan also walks, or a
-        // stray plaintext dump could be picked up as if it were a stored artifact. No dedicated
-        // `WAITRON_BACKUP_STAGING_DIR` config exists yet — Task 6's call.
-        stagingDir: join(tmpdir(), "waitron-backup-staging"),
+        // The full fan-out: the same encrypted artifact is `put` to EVERY configured destination each
+        // tick (`WAITRON_BACKUP_DIR`'s "primary" entry plus any in `WAITRON_BACKUP_DESTINATIONS`).
+        backends: backupBackends,
+        stagingDir: backupStagingDir,
         databaseUrl: backupConfig.databaseUrl,
         recoveryKey: backupConfig.recoveryKey,
         intervalMs: backupConfig.intervalMs,
@@ -1625,10 +1625,13 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // The backup freshness reader (Task 6): present only when the RLS probe above ENABLED backup, so
       // `configured:false` covers both "no backup env" and "backup env set but the role is fenced /
       // unreachable" — the box-status surface reports the effective state, not merely the config. Reads
-      // the SAME dir `runBackupSweep` writes into, scanning for the newest dump per request; `now` is the
-      // live wall-clock factory (`() => new Date()`) established at boot, CALLED per box-status request so
-      // `ageSeconds` is measured against request time. `backupConfig!` is safe: `backupWorker` is only ever assigned when `backupConfig`
-      // was defined (the probe block above runs under `backupConfig !== undefined`).
+      // freshness PER destination off the SAME `backupBackends` the sweep writes to, each via
+      // `list("waitron-")` (which matches the encrypted `.dump.enc` artifacts the sweep produces); `now`
+      // is the live wall-clock factory (`() => new Date()`) established at boot, CALLED per box-status
+      // request so `ageSeconds` is measured against request time. `backupConfig!` is safe: `backupWorker`
+      // is only ever assigned when `backupConfig` was defined (the probe block above runs under
+      // `backupConfig !== undefined`), and when it is defined `backupBackends` is that config's mapped
+      // destinations.
       // The producer-side disposal guard (membership rejoin R2, design §5.1): wraps the shared
       // `readFenceDrainProgress` (above) with the carrier id for the wire shape. Absent (undefined) on a
       // serving node → box-status reports disposal.applicable:false. The `carrierNodeId !== undefined`
@@ -1640,16 +1643,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
           : undefined,
       readBackup:
         backupWorker !== undefined
-          ? // INTERIM (BR-1 Task 5), WORSE THAN BEFORE: this still reads `destinations[0].dir` for
-            // `waitron-*.dump` (`DUMP_FILE_NAME`, pg-dump.ts), but the sweep above now writes
-            // `waitron-*.dump.enc` there (via `buildBackend`'s `LocalFsBackend`) — a suffix
-            // `DUMP_FILE_NAME` does not match. So as of Task 5 this ALWAYS reports
-            // `{ lastBackupAt: null, stale: true }` even while backups are landing successfully; it is
-            // no longer merely "single-destination only", it is silently wrong for that one
-            // destination too. `readBackupStatus` needs a per-destination-backend freshness reader
-            // (list "waitron-" newest-first, same as `pruneBackend`) — Task 6's job.
-            () =>
-              readBackupStatus(backupConfig!.destinations[0].dir, backupConfig!.staleAfterMs, now())
+          ? () => readBackupStatus(backupBackends, backupConfig!.staleAfterMs, now())
           : undefined,
       // Report the effective mode the box is actually serving as — the same holder the read-only gate
       // and mirror-session middlewares read — so the status matches what the box enforces and tracks a

@@ -18,12 +18,13 @@ export type PgDumpRunner = (args: {
 
 /**
  * Dump via `inner` to a `<outFile>.partial` temp name, then atomically `rename` it onto `outFile` only
- * on success. This is the guard that stops a TRUNCATED dump from surfacing as a fresh, recovery-ready
- * backup: a dump killed mid-write — the routine shutdown path (`backupController.abort()` → SIGTERM to
- * `pg_dump`) or a full disk — would otherwise leave a partial `waitron-*.dump` with a fresh mtime that
- * `readBackupStatus` reports as `lastBackupAt`/`stale:false`, a dangerously wrong "recovery-ready"
- * signal since backup IS the cold-recovery path (CLAUDE.md §5). The `.partial` suffix does NOT match
- * `DUMP_FILE_NAME`, so `readBackupStatus`/`pruneOldDumps` never count the temp file; `rename` is atomic
+ * on success. This is the guard that stops a TRUNCATED dump from being encrypted and fanned out as a
+ * fresh, recovery-ready backup: a dump killed mid-write — the routine shutdown path
+ * (`backupController.abort()` → SIGTERM to `pg_dump`) or a full disk — leaves only the `.partial`, so
+ * the sweep's `readFile(staged)` (backup-sweep.ts) either reads a COMPLETE dump or fails with ENOENT
+ * and never encrypts a truncated one, which would be a dangerously wrong "recovery-ready" artifact
+ * since backup IS the cold-recovery path (CLAUDE.md §5). The `.partial` suffix does NOT match
+ * `DUMP_FILE_NAME`, so `pruneOldDumps` never counts the temp file; `rename` is atomic
  * within a directory, so the final name only ever appears fully written. On any failure the leftover
  * `.partial` is removed best-effort (so partials don't accumulate) and the error is re-thrown so
  * `runBackupSweep` logs `backup.failed`. `inner` is injectable so this temp-then-rename logic is
@@ -75,14 +76,16 @@ export function dumpFileName(now: Date): string {
 }
 
 /** Matches the `waitron-<stamp>.dump` filenames `dumpFileName` emits — the single source of truth for
- * that convention, shared by `pruneOldDumps` here and `readBackupStatus` (backup-status.ts). */
+ * the STAGING dump-name convention, used by `pruneOldDumps` here. (Freshness is read off the storage
+ * backends instead, via `list("waitron-")`, which prefix-matches the encrypted `.dump.enc` artifacts —
+ * see `readBackupStatus`, backup-status.ts.) */
 export const DUMP_FILE_NAME = /^waitron-.*\.dump$/;
 
 /** Keep the newest `retain` `waitron-*.dump` files in `dir` and unlink the rest. Newest-first is a
  * descending NAME sort, which equals age order because `dumpFileName` is sortable. Non-matching files
  * are ignored, and a missing `dir` is tolerated (returns without error). A candidate that is not a
  * regular file (e.g. a directory named like a dump) is skipped rather than unlinked — the same
- * `isFile()` guard `readBackupStatus` applies — so a `waitron-*.dump` DIR never throws EISDIR/EPERM
+ * `isFile()` guard `LocalFsBackend.list` applies — so a `waitron-*.dump` DIR never throws EISDIR/EPERM
  * every tick. */
 export async function pruneOldDumps(dir: string, retain: number): Promise<void> {
   let entries: string[];
