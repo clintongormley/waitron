@@ -895,7 +895,7 @@ vs gated on an unbuilt foundation or an external dependency:
   (on-device agent); and the **owner-gated fiscal H2** hash-chain sync lane — never landed without
   owner sign-off.
 
-### Backup & restore regime (BR-1 LANDED #226; BR-2/BR-3 next, BR-4 gated on module-system SP-3)
+### Backup & restore regime (BR-1 #226 + BR-2 #228 LANDED; BR-3 next, BR-4 gated on module-system SP-3)
 
 A generic core backup/restore service (storage-media plugins + module hooks), decomposed BR-1..BR-4.
 Design: [backup-restore-regime](superpowers/specs/2026-09-04-backup-restore-regime-design.md); BR-1 plan:
@@ -915,15 +915,25 @@ Design: [backup-restore-regime](superpowers/specs/2026-09-04-backup-restore-regi
     sync/tunnel/retention workers; lands with the first network s3/sftp backend) · stale-`.tmp` sweep
     (bounded, cosmetic) · **path-traversal containment guard on `StorageBackend` key** — unreachable in v1
     (keys generated internally), **must land with BR-3's first manifest-driven `get(key)`**.
-- **BR-2 — manifest + module `backup` contribution — NEXT.** Add the `backup` contribution kind to the
-  `WaitronModule` contract (`{ nonDbState?, restore? }`, coordinated with the module-system session:
-  additive/open-set, sequence only around SP-2's centralized→per-package descriptor move — whoever lands
-  second carries the other's fields across); capture the content-addressed **media store** (core's
-  `nonDbState`) + `stateDir` secrets into the backup; write the per-backup manifest (module→schemaVersion,
-  environment) for the restore compatibility gate. Makes a backup **complete** (DB + media + secrets).
-- **BR-3 — the restore consumer.** `pg_restore` + blob/secret restore + the manifest compatibility gate +
-  the (empty-body in v1) module restore-hook invocation. **Clears the R3 rejoin + promote-Slice-4 gate.**
-  Carries in BR-1's deferred path-traversal guard (first external-key `get`).
+- **BR-2 — manifest + module `backup` contribution — LANDED #228 (2026-09-05).** A backup is now a single
+  encrypted **archive** `waitron-<ts>.backup.enc` = `encryptArtifact(packArchive([manifest.json, db.dump,
+  media/…, secrets/…]))`. Shipped: the `backup` contribution kind on `WaitronModule` (`{ nonDbState?,
+  restore? }`, open-set; `core` declares the content-addressed media store); `packArchive`/`unpackArchive`
+  (bounds-checked container); `buildManifest` (module→migrated-schema-version + environment, via a shared
+  `schemaVersionsByModule` also used by boot's drift probe, read over the **privileged** backup pool);
+  `collectModuleNonDbState`; the orchestrator collects manifest+secrets+media **before** the dump
+  (fail-fast, no wasted dump) and encrypts once. Rebased cleanly onto **SP-2** (`core` carries both `sync`
+  and `backup`). `restore` stays a seat (BR-3/BR-4).
+  - *BR-2 carry-forwards:* **BR-3 must add path-traversal guards on archive entry NAMES at unpack-to-disk
+    time** (like `unpackBundleToDir`/`state-secrets.ts`), plus BR-1's deferred `StorageBackend`-key guard.
+    Deferred edges (note-only): a working-backup boot success-path integration test; scope the flat
+    `resolvers` map by module when a 2nd `nonDbState` module lands; `packArchive` pack-time `entries.length`
+    bound.
+- **BR-3 — the restore consumer — NEXT.** `pg_restore` (a shell-out mirroring `pg-dump.ts`) + `unpackArchive`
+  → restore blobs into `mediaDir` + secrets into `stateDir` + the DB; the manifest compatibility gate
+  (refuse a newer schema version / wrong environment); the (empty-body in v1) module restore-hook
+  invocation. **Path-traversal guards on entry names are mandatory here.** **Clears the R3 rejoin +
+  promote-Slice-4 gate.**
 - **BR-4 — fiscal restore hook (fresh chain / disjoint series).** Lands with **fiscal-as-a-module
   (module-system SP-3)**; unblocks promote-Slice-4 cold-DR trading-again-as-primary. Owner-gated (H2); the
   hook interface ships in BR-2.
