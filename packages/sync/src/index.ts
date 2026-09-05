@@ -1,9 +1,11 @@
 // The entire public surface of @waitron/sync. Re-exports only — no logic here.
 //
 // Task 2 adds the outbox migration descriptor; Task 3 adds the static per-table apply SQL (built
-// from an injected enrolment set since the SP-2a inversion — the enrolment registry itself now lives
-// in each owning package, re-exported here from @waitron/sync-enrolment). The apply loop and
-// retention helpers land in later tasks
+// from an injected enrolment set since the SP-2a inversion — the per-table registry entries
+// themselves now live in each owning package's own `enrolment.ts`, assembled only by the composition
+// root; only the generic vocabulary — the types and the `enrol`/`tablesForLane` helpers — is
+// re-exported here from `@waitron/sync-enrolment`, see below). The apply loop and retention helpers
+// land in later tasks
 // (docs/superpowers/plans/2026-08-08-sync-slice1-commercial-outbox-plan.md, Tasks 4/6).
 
 // The commercial-lane sync outbox migration set, consumed by @waitron/migrations' manifest (and its
