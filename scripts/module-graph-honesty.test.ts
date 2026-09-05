@@ -38,8 +38,10 @@ import { ALL_MODULES } from "../apps/server/src/modules.js";
  *   - It is a regex over comment- and string-stripped text, NOT a SQL parser. `stripSql` blanks
  *     slash-star blocks, `--` line comments, and `'…'` string literals (preserving line numbers), so a
  *     `references`/`create trigger` mention in any of those is ignored — pinned by the detector's
- *     negative controls below. But a `CREATE TRIGGER` whose `ON <table>` is separated from the trigger
- *     name by content the `.*?` cannot span cleanly, or a table named with unusual quoting the
+ *     negative controls below. Both trigger forms are matched — plain `CREATE TRIGGER` AND
+ *     `CREATE CONSTRAINT TRIGGER` (core's deferrable coverage checks). But a trigger whose
+ *     `ON <table>` is separated from the trigger name by content the `.*?` cannot span cleanly, or a
+ *     table named with unusual quoting the
  *     `"?(?:public"?\.)?"?(\w+)"?` shape does not cover, could be missed. The defence against that is
  *     not a proof of totality — it is the vacuous-pass anchor, which asserts the scan actually FOUND
  *     the three known real edges (`sync→identity`, `sync→payments`, `workforce→identity`) in the
@@ -65,15 +67,19 @@ const PACKAGES_DIR = join(REPO_ROOT, "packages");
 const CREATE_TABLE = /\bcreate\s+table\s+(?:if\s+not\s+exists\s+)?"?(?:public"?\.)?"?(\w+)"?/gi;
 /** `REFERENCES ["public".]"<table>"` — the FK edge; both `"public"."t"` and bare `"t"` spellings. */
 const REFERENCES = /\breferences\s+"?(?:public"?\.)?"?(\w+)"?/gi;
-/** `CREATE TRIGGER <name> … ON ["public".]"<table>"` — the capture/immutability trigger edge. The
+/** `CREATE [CONSTRAINT] TRIGGER <name> … ON ["public".]"<table>"` — the trigger edge, in both the
+ * plain `CREATE TRIGGER` form (sync's capture triggers, the immutability triggers) and the
+ * `CREATE CONSTRAINT TRIGGER` form (core's deferrable coverage checks, e.g. `0005_sales.sql`). The
  * `s` (dotAll) flag lets `.*?` span the multi-line triggers the tree writes (name on line 1, `ON`
- * clause on line 2); `\bon\b` first-matches the real ON clause because no keyword between it and the
- * trigger name (`AFTER`/`INSERT`/`UPDATE`/`DELETE`/`OR`/`BEFORE`/`TRUNCATE`) is the word "on". */
-const CREATE_TRIGGER = /\bcreate\s+trigger\s+\S+\s+.*?\bon\s+"?(?:public"?\.)?"?(\w+)"?/gis;
+ * clause on a later line); `\bon\b` first-matches the real ON clause because no keyword between it and
+ * the trigger name (`AFTER`/`INSERT`/`UPDATE`/`DELETE`/`OR`/`BEFORE`/`TRUNCATE`/`CONSTRAINT`/
+ * `DEFERRABLE`) is the word "on". */
+const CREATE_TRIGGER =
+  /\bcreate\s+(?:constraint\s+)?trigger\s+\S+\s+.*?\bon\s+"?(?:public"?\.)?"?(\w+)"?/gis;
 
 const EDGE_KINDS = [
   ["FK reference", REFERENCES],
-  ["capture trigger", CREATE_TRIGGER],
+  ["trigger", CREATE_TRIGGER],
 ] as const;
 
 /** Blank block comments, `--` line comments, and `'…'` string literals to whitespace, preserving
@@ -195,6 +201,23 @@ describe("the detector itself", () => {
     expect([...edgesFor(sql, "alpha", OWNER)]).toEqual(["beta"]);
   });
 
+  // The CONSTRAINT-trigger form is a distinct spelling PostgreSQL accepts and the tree uses (core's
+  // deferrable coverage checks); it must be caught too, or the guard has a silent gap in the very
+  // edge-kind it exists to check.
+  it("flags a cross-module CREATE CONSTRAINT TRIGGER", () => {
+    const sql = `create constraint trigger gadgets_check after insert on gadgets\n  deferrable initially deferred\n  for each row execute function gadgets_check();`;
+    expect([...edgesFor(sql, "alpha", OWNER)]).toEqual(["beta"]);
+  });
+
+  // The real spelling, not a synthetic one: mirrors `packages/db/drizzle/0005_sales.sql:310`. Pins
+  // that the regex matches the tree's ACTUAL constraint-trigger DDL. Owner here is a different module
+  // than the file's, so it must surface as a cross-module edge.
+  it("matches the real CREATE CONSTRAINT TRIGGER spelling from 0005_sales.sql", () => {
+    const sql = `CREATE CONSTRAINT TRIGGER sales_check_tender_coverage\n  AFTER INSERT ON sales\n  DEFERRABLE INITIALLY DEFERRED\n  FOR EACH ROW EXECUTE FUNCTION sales_check_tender_coverage();`;
+    const owner = new Map([["sales", "core"]]);
+    expect([...edgesFor(sql, "sync", owner)]).toEqual(["core"]);
+  });
+
   it("ignores a same-module reference", () => {
     const sql = `alter table "widgets" add constraint self_fk foreign key ("p") references "widgets"("id");`;
     expect([...edgesFor(sql, "alpha", OWNER)]).toEqual([]);
@@ -216,7 +239,7 @@ describe("the detector itself", () => {
     const sql = `references "gadgets"("id");\ncreate trigger t after insert on gadgets for each row execute function f();`;
     expect(edgeDetails(sql, "alpha", OWNER)).toEqual([
       { dep: "beta", kind: "FK reference", table: "gadgets" },
-      { dep: "beta", kind: "capture trigger", table: "gadgets" },
+      { dep: "beta", kind: "trigger", table: "gadgets" },
     ]);
   });
 });
