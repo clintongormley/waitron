@@ -737,7 +737,8 @@ vs gated on an unbuilt foundation or an external dependency:
   **retire/evict (decommission) LANDED #224** (2026-09-05, no restore) and **wipe-and-restore
   (rejoin-as-secondary) still GATED on a `pg_restore` consumer** [fiscal-adjacent → owner sign-off before
   land]; (7) **conflict
-  surface** (config down-only + ops conflict log). Slice 7 (conflict surface) remains.
+  surface** (config down-only + ops conflict log) **LANDED #229** (2026-09-05). Slice 6 rejoin arc is now
+  COMPLETE bar wipe-and-restore (still gated on `pg_restore`).
   **Slice 6 R1 (fence-on-rejoin) LANDED #214** (2026-09-04): a returned/superseded node that holds or
   adopts a membership document marking it **sell-only/evicted** now boots **FENCED**. Two mechanisms
   cooperate: a **demote-only** `singleton_role → secondary` reconciliation at boot (owner-pool write,
@@ -802,7 +803,26 @@ vs gated on an unbuilt foundation or an external dependency:
     disposal guard measures the enrolled `sync_log` tail only — the per-node fiscal chain
     (`registros_facturacion`) is deliberately NOT in `sync_log` and does not replicate to the carrier, so
     `drained` is a statement about replicable app data, not the fiscal chain (unchanged by the restore).
-  - **Slice 7 (conflict surface)** — ops conflict-log + primary-wins config; **not started**.
+  - **Slice 7 (conflict surface) LANDED #229** (2026-09-05). Primary-wins for config-class rows: on the
+    carrier draining a returned/fenced node, a config-class row whose `originId` is not the current
+    serving-primary is REJECTED (not applied — the primary's config stands) and RECORDED to the new
+    append-only ops table `sync_config_conflicts` (whole-DB, NO tenant_id/RLS — `sync_cursor` precedent;
+    SELECT to the NOLOGIN `sync_tailer` only, INSERT to app_user, so app_user never reads a cross-tenant
+    `row_image`). Built on the post-#227 **inverted** enrolment model: config-class is a per-table
+    `EnrolledTable.configClass` set in each package's own `enrol()` (exactly the 10 pure-config tables;
+    `dining_tables` excluded as mixed config/runtime), and the apply gate reads it off the injected
+    dispatch entry. The gate reads a **live** serving-primary (per-batch getter updated in
+    `adoptMembership`), so a promotion without a restart does not leave it stale. Surfaced as a count on
+    box-status (via the `sync_tailer` pool). Note the branch was reset + reworked onto the inverted model
+    after #227 (SP-2a) landed mid-build. **Documented residuals** (bounded, fail-safe, deferred to the
+    interactive-merge/ops path, spec §7/§9): (i) a runtime child FK-referencing a fence-window config
+    parent parks on 23503 → that origin's drain stalls → retire refuses (child never dropped, no fiscal
+    data loss); (ii) a clean primary→primary handover with config still pending in the old primary's
+    outbox rejects those rows after gossip flips the serving-primary (recorded, not lost); (iii) the
+    conflict count is cumulative/unclearable until the ops-resolve path lands; (iv) a duplicate conflict
+    row can be recorded on a crash+redelivery (append-only log, tolerable); (v) no index on
+    `sync_config_conflicts` (a `count(*)` needs none). **The interactive per-field merge + an ops-resolve
+    (clear/review) surface are the natural follow-on** (§9 item 2).
   - **Bounded residual (accepted, spec §8.4):** on the first boot after returning, the node runs as
     its **stale-held-doc primary** until the pull delivers the superseding doc and restarts it (≈ one
     pull interval). Deliberately **not** boot-into-read-only-until-confirmed — that would black out a
