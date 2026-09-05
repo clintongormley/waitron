@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FISCAL_VOCABULARY } from "@waitron/fiscal-verifactu";
 import { manifestSets } from "@waitron/migrations";
 import { orderedMigrationSets } from "@waitron/module";
+import { WORKFORCE_ES_VOCABULARY } from "@waitron/workforce-es";
 import { ALL_MODULES, ALL_SYNC_ENROLMENTS, MODULE_BY_TABLE } from "./modules.js";
 
 describe("ALL_MODULES is the migration source of truth", () => {
@@ -45,5 +46,13 @@ describe("ALL_MODULES vocabulary seat (SP-3b)", () => {
   it("fiscal declares the fiscal module's own vocabulary, by reference", () => {
     const fiscal = ALL_MODULES.find((m) => m.name === "fiscal");
     expect(fiscal?.vocabulary).toBe(FISCAL_VOCABULARY);
+  });
+  it("workforce-es declares the Spain labour module's own vocabulary, by reference", () => {
+    const wfes = ALL_MODULES.find((m) => m.name === "workforce-es");
+    expect(wfes?.vocabulary).toBe(WORKFORCE_ES_VOCABULARY);
+  });
+  it("no other module declares vocabulary — the generic modules are English", () => {
+    const owners = ALL_MODULES.filter((m) => m.vocabulary !== undefined).map((m) => m.name);
+    expect(owners).toEqual(["workforce-es", "fiscal"]);
   });
 });

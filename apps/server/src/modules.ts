@@ -4,6 +4,7 @@ import { IDENTITY_ENROLMENT } from "@waitron/identity";
 import type { WaitronModule } from "@waitron/module";
 import { PAYMENTS_ENROLMENT } from "@waitron/payments";
 import type { EnrolledTable } from "@waitron/sync";
+import { WORKFORCE_ES_VOCABULARY } from "@waitron/workforce-es";
 
 /**
  * Every Waitron module, in the composition list's order — which IS the migration order for this
@@ -27,11 +28,15 @@ import type { EnrolledTable } from "@waitron/sync";
  * `sync_capture()` SPI, so sync's set must migrate first). All ranges are `"*"` because every module
  * is workspace-locked at version `0.0.0`.
  *
- * The `sync` seat is now POPULATED on `core`/`identity`/`payments` (SP-2a): each owning package
- * declares its own enrolment array (`CORE_ENROLMENT`/`IDENTITY_ENROLMENT`/`PAYMENTS_ENROLMENT`) and
- * the composition root injects it here, so `@waitron/sync` imports no domain schema. Every OTHER
- * descriptor carries no `sync` — nothing else enrols. `cards` and the remaining seats are still
- * declared on the contract but stay empty until their own slices land.
+ * The `sync` seat is POPULATED on `core`/`identity`/`payments`/`fiscal` (SP-2a, SP-3a): each owning
+ * package declares its own enrolment array and the composition root injects it here, so
+ * `@waitron/sync` imports no domain schema. The `vocabulary` seat is POPULATED on `fiscal` and
+ * `workforce-es` (SP-3b): each Spanish-by-design package exports the terms it owns
+ * (`FISCAL_VOCABULARY`/`WORKFORCE_ES_VOCABULARY`) and the root english-only suite assembles the
+ * forbidden set from these declarations, deriving each owner's package dir from `migrations.from`.
+ * Every OTHER descriptor carries neither — nothing else enrols, and the generic modules are English.
+ * `cards` and the remaining seats are still declared on the contract but stay empty until their own
+ * slices land.
  */
 export const ALL_MODULES: readonly WaitronModule[] = [
   {
@@ -77,6 +82,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       table: "__drizzle_migrations_workforce_es",
       from: "../workforce-es/drizzle",
     },
+    vocabulary: WORKFORCE_ES_VOCABULARY,
   },
   {
     name: "payments",
