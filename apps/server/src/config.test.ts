@@ -406,12 +406,10 @@ describe("loadConfig", () => {
     });
   });
 
-  // The CHOSEN value is what gets published as `contactUrl`, so the bare-origin rule applies to it
-  // whichever variable supplied it: falling back to a `managementOrigin` carrying a trailing slash
-  // would advertise a broken address to every till, and `managementOrigin` itself is only ever
-  // checked for PRESENCE. The error names `WAITRON_MANAGEMENT_ORIGIN` — the line the operator has to
-  // fix — not the variable they left unset.
-  it("refuses a WAITRON_MANAGEMENT_ORIGIN fallback that is not a bare origin, naming that variable", async () => {
+  // `managementOrigin` is itself a bare origin: WebAuthn compares a ceremony's `Origin` header to it
+  // byte-for-byte, and it is what `advertisedOrigin` falls back to. So it is validated under its own
+  // name, whether or not the fallback is taken.
+  it("refuses a WAITRON_MANAGEMENT_ORIGIN that is not a bare origin, naming that variable", async () => {
     const error = await captureError(() =>
       Promise.resolve(
         loadConfig(
@@ -429,21 +427,30 @@ describe("loadConfig", () => {
     });
   });
 
-  // The other direction, so the case above cannot pass by refusing every fallback: a bare
-  // WAITRON_ADVERTISED_ORIGIN is honoured even when the management origin it would have fallen back
-  // to is itself unusable — the unchosen variable is never validated.
-  it("does not validate WAITRON_MANAGEMENT_ORIGIN when WAITRON_ADVERTISED_ORIGIN supplies the value", () => {
-    const config = loadConfig(
-      {
-        ...MIN_ENV,
-        WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com/",
-        WAITRON_ADVERTISED_ORIGIN: "https://box.deli.waitron.app",
-      },
-      ROOT,
-      MEDIA_ROOT,
-      STATE_ROOT,
+  // The case above validates the value `advertisedOrigin` FELL BACK to; this one proves the check is
+  // on `managementOrigin` in its own right, not on whatever ended up advertised — a bare
+  // WAITRON_ADVERTISED_ORIGIN does not excuse a malformed management origin, because that value is
+  // still the WebAuthn expected-origin the dashboard's ceremonies are compared against.
+  it("refuses a malformed WAITRON_MANAGEMENT_ORIGIN even when WAITRON_ADVERTISED_ORIGIN is set and bare", async () => {
+    const error = await captureError(() =>
+      Promise.resolve(
+        loadConfig(
+          {
+            ...MIN_ENV,
+            WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com/",
+            WAITRON_ADVERTISED_ORIGIN: "https://box.deli.waitron.app",
+          },
+          ROOT,
+          MEDIA_ROOT,
+          STATE_ROOT,
+        ),
+      ),
     );
-    expect(config.advertisedOrigin).toBe("https://box.deli.waitron.app");
+    expect(codeOf(error)).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_MANAGEMENT_ORIGIN",
+      reason: "not_an_origin",
+    });
   });
 
   it("falls back to DATABASE_URL when WAITRON_MIGRATIONS_DATABASE_URL is set but empty", () => {

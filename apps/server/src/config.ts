@@ -139,15 +139,9 @@ export interface ServerConfig {
   managementOrigin: string;
   /**
    * The origin tills route on for THIS node (till-reroute design §3.3): what the node publishes as
-   * its `contactUrl` in the membership document, and what the CORS allow-list treats as "self". A
-   * BARE http(s) origin — `scheme://host[:port]`, no path, query or fragment — because a till
-   * concatenates request paths onto it, fetches it over http(s), and a browser's `Origin` header is
-   * compared against it byte-for-byte. From `WAITRON_ADVERTISED_ORIGIN`; unset or empty (the
-   * `isUnset` rule) → `managementOrigin`, the origin this box already serves the dashboard from.
-   * The CHOSEN value is refused at boot with `server.config_invalid` unless it is a bare http(s)
-   * origin — whichever of the two variables supplied it, so a malformed `managementOrigin` cannot
-   * reach a till through the fallback (the error names the variable that supplied it). The dev
-   * default `http://localhost:5191` is bare, so dev and test hosts setting neither are unaffected.
+   * its `contactUrl` in the membership document, and what the CORS allow-list treats as "self". From
+   * `WAITRON_ADVERTISED_ORIGIN`; unset or empty (the `isUnset` rule) → `managementOrigin`. Both
+   * variables are validated as bare http(s) origins (`bareOrigin`), each under its own name.
    */
   advertisedOrigin: string;
   /**
@@ -277,39 +271,17 @@ function requiredInProduction(
   return isUnset(raw) ? devDefault : raw;
 }
 
-/**
- * The chosen origin: `variable`'s value, or `fallback` when it is unset or empty (the `isUnset` rule
- * every optional variable here follows). Whichever of the two supplied the value, it must be a BARE
- * http(s) origin — `scheme://host[:port]`, no path, query or fragment — or this throws. Validating
- * the CHOSEN value rather than only the explicit one matters because `fallback` reaches callers that
- * never checked it for shape (`managementOrigin` is only ever checked for presence), and the error
- * names the variable that actually supplied the bad value, which is the line an operator has to fix.
- *
- * `new URL(value).origin === value` is most of the check but not all of it, in both directions:
- *  - It refuses more than a bad scheme. A path, query or fragment survives into `value` but not into
- *    the parsed `origin`; and `host:port` with no scheme PARSES, as a non-special scheme whose origin
- *    is the literal string `"null"` — so that case is caught by the comparison, not the `catch`.
- *  - It accepts more than http(s). `ftp:`, `ws:` and `wss:` are WHATWG special schemes and round-trip
- *    byte-for-byte, so the protocol is checked explicitly: a till fetches over http(s) and nothing
- *    else, and a `contactUrl` it cannot fetch is worse than a boot failure.
- */
-function bareOrigin(
-  env: Env,
-  variable: string,
-  fallback: string,
-  fallbackVariable: string,
-): string {
-  const raw = env[variable];
-  const value = isUnset(raw) ? fallback : raw;
-  const source = isUnset(raw) ? fallbackVariable : variable;
-  let parsed: URL;
-  try {
-    parsed = new URL(value);
-  } catch {
-    throw new AppError("server.config_invalid", { variable: source, reason: "not_an_origin" });
-  }
-  if (parsed.origin !== value || (parsed.protocol !== "http:" && parsed.protocol !== "https:")) {
-    throw new AppError("server.config_invalid", { variable: source, reason: "not_an_origin" });
+/** A bare http(s) origin (`scheme://host[:port]`, nothing else): a till concatenates paths onto it and
+ * a browser's `Origin` header is compared to it byte-for-byte. `host:port` with no scheme parses as a
+ * non-special scheme whose origin is the literal "null", so the round-trip comparison catches it. */
+function bareOrigin(value: string, variable: string): string {
+  const parsed = URL.parse(value);
+  if (
+    parsed === null ||
+    parsed.origin !== value ||
+    (parsed.protocol !== "http:" && parsed.protocol !== "https:")
+  ) {
+    throw new AppError("server.config_invalid", { variable, reason: "not_an_origin" });
   }
   return value;
 }
@@ -724,11 +696,9 @@ export function loadConfig(
     environment,
     DEFAULT_MANAGEMENT_RP_ID,
   );
-  const managementOrigin = requiredInProduction(
-    env,
+  const managementOrigin = bareOrigin(
+    requiredInProduction(env, "WAITRON_MANAGEMENT_ORIGIN", environment, DEFAULT_MANAGEMENT_ORIGIN),
     "WAITRON_MANAGEMENT_ORIGIN",
-    environment,
-    DEFAULT_MANAGEMENT_ORIGIN,
   );
   return {
     databaseUrl,
@@ -781,14 +751,12 @@ export function loadConfig(
     managementRpId,
     managementOrigin,
     // The origin tills route on for this node — defaulting to the origin the dashboard is already
-    // served from, so a box that configures nothing still advertises a reachable address. The chosen
-    // value is refused unless it is a bare http(s) origin, whichever variable supplied it.
-    advertisedOrigin: bareOrigin(
-      env,
-      "WAITRON_ADVERTISED_ORIGIN",
-      managementOrigin,
-      "WAITRON_MANAGEMENT_ORIGIN",
-    ),
+    // served from, so a box that configures nothing still advertises a reachable address. Both
+    // variables are validated as bare origins under their own names, so neither can reach a till
+    // malformed.
+    advertisedOrigin: isUnset(env.WAITRON_ADVERTISED_ORIGIN)
+      ? managementOrigin
+      : bareOrigin(env.WAITRON_ADVERTISED_ORIGIN, "WAITRON_ADVERTISED_ORIGIN"),
     // The built front-end dirs the box serves same-origin (slice 1a). Absent OR empty → undefined
     // (the same `isUnset` rule `settlementLagMs` above and every other optional here follow): dev
     // leaves them unset and uses the Vite dev servers, so `boot.ts` mounts nothing. Stored verbatim
