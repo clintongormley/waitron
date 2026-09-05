@@ -25,6 +25,19 @@ describe("checkRestoreCompatibility", () => {
     ).toThrowError(expect.objectContaining({ code: "restore.environment_mismatch" }));
   });
 
+  it("refuses a newer backup even when the target's expected version is 0 (pins `!== undefined`)", () => {
+    // A truthiness regression — `if (targetVersion && backupVersion > targetVersion)` — would treat a
+    // target expecting version 0 (a module with no migrations applied yet) as "not run" and let a
+    // newer backup through. The guard is `targetVersion !== undefined`, so a target at 0 is still a
+    // module the target runs, and backup 1 > 0 must refuse.
+    expect(() =>
+      checkRestoreCompatibility(
+        { manifestVersion: 1, createdAt: "x", environment: "preproduction", modules: { core: 1 } },
+        { environment: "preproduction", expectedVersions: { core: 0 } },
+      ),
+    ).toThrowError(expect.objectContaining({ code: "restore.schema_too_new" }));
+  });
+
   it("accepts equal/older and ignores unknown modules", () => {
     expect(() =>
       checkRestoreCompatibility(

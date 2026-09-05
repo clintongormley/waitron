@@ -201,6 +201,29 @@ describe("waitron-restore restore", () => {
     expect(received?.environment).toBe("production");
   });
 
+  it("returns 1 (never rejects raw) on an invalid WAITRON_ENV", async () => {
+    // `deploymentEnvironment` throws `server.config_invalid` for a WAITRON_ENV that is not
+    // production/preproduction/dev. That resolution used to sit OUTSIDE the try wrapping the restore,
+    // so a bad value rejected RAW out of runRestore — contradicting bin-restore.ts's "never rejects
+    // raw" note (its `.then(process.exit)` has no `.catch`). It must now RETURN 1 with a coded
+    // message, not throw. The assertion is `.resolves` — a raw throw here fails the test outright.
+    const dir = mkdtempSync(join(tmpdir(), "restore-command-bad-env-"));
+    const artifactPath = await makeArtifact(dir);
+    const out: string[] = [];
+    await expect(
+      runRestore({
+        argv: ["restore", artifactPath],
+        env: {
+          WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
+          WAITRON_RESTORE_DATABASE_URL: DATABASE_URL,
+          WAITRON_ENV: "garbage",
+        },
+        out: (line) => out.push(line),
+      }),
+    ).resolves.toBe(1);
+    expect(out).toEqual([expect.stringContaining("server.config_invalid")]);
+  });
+
   it("collapses a decrypt-phase AppError into one non-leaking message and returns 1", async () => {
     const dir = mkdtempSync(join(tmpdir(), "restore-command-badkey-"));
     const artifactPath = await makeArtifact(dir);

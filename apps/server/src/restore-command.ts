@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { AppError } from "@waitron/shared";
 import { DEFAULT_MEDIA_ROOT, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT } from "./boot.js";
-import { deploymentEnvironment } from "./config.js";
+import { deploymentEnvironment, type DeploymentEnvironment } from "./config.js";
 import { isUnset } from "./env-value.js";
 import { createLogger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
@@ -57,7 +57,7 @@ const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
  * never touches a database. `bin-restore.ts` is a thin wrapper that supplies
  * `process.argv`/`process.env` and exits on the returned code. Returns a process exit code: 0 on
  * success, 1 on an expected disaster-recovery failure (missing recovery key, empty target connection,
- * an unreadable artifact file, or ANY error out of the orchestrator — a `restore.*`/`recovery.*`/
+ * an unreadable artifact file, an invalid `WAITRON_ENV`, or ANY error out of the orchestrator — a `restore.*`/`recovery.*`/
  * `backup.*` `AppError` (a decrypt, gate or guard failure) is reported by code, and literally anything
  * else is reported with a generic `restore failed`), 2 on a usage error.
  *
@@ -113,6 +113,21 @@ export async function runRestore(deps: {
   // carries, exactly the reasoning `config.ts`'s `resolvedStateDir` documents for `logDir`.
   const resolvedStateDir = isUnset(stateDir) ? DEFAULT_STATE_ROOT : resolve(stateDir);
 
+  // Resolve the target environment BEFORE building `restoreDeps`, and CATCH its one possible throw.
+  // `deploymentEnvironment` raises `server.config_invalid` for a `WAITRON_ENV` that is neither
+  // production/preproduction/dev — that is its ONLY throw. It used to be evaluated inline in the
+  // `restoreDeps` literal below, OUTSIDE the try that wraps the restore, so a bad value rejected RAW
+  // out of runRestore — past `bin-restore.ts`'s catch-less `.then(process.exit)` and contradicting
+  // that file's "runRestore never rejects with a raw error" note. Reporting it here by code and
+  // returning exit 1 — as every other bad env var above does — restores that guarantee.
+  let environment: DeploymentEnvironment;
+  try {
+    environment = deploymentEnvironment(deps.env);
+  } catch (err) {
+    deps.out(`restore failed: ${(err as AppError).code}`);
+    return 1;
+  }
+
   const restoreDeps: RestoreDeps = {
     artifact,
     recoveryKey,
@@ -122,7 +137,7 @@ export async function runRestore(deps: {
     stagingDir: join(resolvedStateDir, "restore-staging"),
     migrationsRoot: isUnset(migrationsDir) ? DEFAULT_MIGRATIONS_ROOT : migrationsDir,
     modules: ALL_MODULES,
-    environment: deploymentEnvironment(deps.env),
+    environment,
     log: createLogger(
       (line) => deps.out(line.trimEnd()),
       () => new Date(),

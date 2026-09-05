@@ -165,6 +165,22 @@ describe("restoreFromArtifact", () => {
     });
     expect(runRestore).not.toHaveBeenCalled();
   });
+
+  it("rejects an unrecognised top-level entry (fail-visible) BEFORE any restore or write", async () => {
+    // A future second non-DB source id would pack `<source>/...` blobs the orchestrator does not
+    // route. Today it must fail LOUD rather than silently drop the entry (CLAUDE.md §5) — proven
+    // here with a `documents/x` entry alongside a valid `db.dump`.
+    const artifact = buildArtifact([
+      { name: "db.dump", bytes: DUMP },
+      { name: "documents/x", bytes: Buffer.from("orphan") },
+    ]);
+    await expect(restoreFromArtifact(deps({ artifact }))).rejects.toMatchObject({
+      code: "restore.unexpected_entry",
+      params: { name: "documents/x" },
+    });
+    expect(runRestore).not.toHaveBeenCalled();
+    await expect(stat(join(mediaDir, "abc123.jpg"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
 });
 
 describe("restore steps (R3 composition)", () => {

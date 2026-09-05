@@ -1643,5 +1643,20 @@ declare module "@waitron/shared" {
      * renamed once shipped.
      */
     "restore.archive_incomplete": { missing: string };
+    /**
+     * BR-3's restore orchestrator (`restore.ts`) found a top-level archive entry it does not know how
+     * to route — one that is neither `manifest.json` nor `db.dump`, and whose top-level segment is
+     * neither `media/` nor `secrets/`. BR-2 emits exactly those four shapes today, so this never
+     * fires now; it fails LOUD the day a second non-DB source id starts emitting `<source>/...` blobs
+     * and the restore consumer has not been taught to route them — silently DROPPING an unrecognised
+     * entry would lose that data on the one path (cold recovery) that must not (CLAUDE.md §5). The
+     * fix when it fires is to update the restore consumer to route the new entry, never to widen this
+     * to accept it. `name` is the archive's own entry name — attacker-influenced but not a secret, so
+     * echoing it is what makes the refusal actionable, the same as `restore.unsafe_entry_path`'s
+     * `name`. `restore.*`, not `server.*`: a fact about this restore's own archive, not the process
+     * (`tenant.not_found`'s note gives the rule), beside the other `restore.*` codes above. Never
+     * renamed once shipped.
+     */
+    "restore.unexpected_entry": { name: string };
   }
 }

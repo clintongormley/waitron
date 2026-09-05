@@ -78,6 +78,7 @@ type RestoreHook = (ctx: RestoreHookContext) => void | Promise<void>;
  * This restores the fiscal ledger VERBATIM. It mints NO fresh chain, no installation number, and
  * makes the box no trade-readier — the restore hooks are the only extension seat and none exists in
  * v1. Throws `restore.archive_incomplete` for a missing `manifest.json`/`db.dump`,
+ * `restore.unexpected_entry` for a top-level entry it cannot route,
  * `restore.environment_mismatch`/`restore.schema_too_new` from the gate, or
  * `restore.unsafe_entry_path` from the guard.
  */
@@ -107,6 +108,24 @@ export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
 
   const mediaEntries = entries.filter((e) => e.name.startsWith(MEDIA_PREFIX));
   const secretEntries = entries.filter((e) => e.name.startsWith(SECRETS_PREFIX));
+
+  // FAIL-VISIBLE — every entry must route somewhere, before ANY write. This orchestrator handles
+  // exactly `manifest.json`, `db.dump`, `media/*` and `secrets/*`; an entry matching none of those
+  // would otherwise be SILENTLY dropped. BR-2 emits only those four shapes today, so nothing drops
+  // now — but the day a second non-DB source id starts packing `<source>/...` blobs, a silent drop
+  // would lose that data on the cold-recovery path that must not lose it (CLAUDE.md §5), so refuse
+  // it LOUD here rather than proceed to a half-restore. Widening the routing to accept a new source
+  // is later work; this reject is the tripwire that forces it.
+  for (const entry of entries) {
+    if (
+      entry.name !== MANIFEST_NAME &&
+      entry.name !== DB_DUMP_NAME &&
+      !entry.name.startsWith(MEDIA_PREFIX) &&
+      !entry.name.startsWith(SECRETS_PREFIX)
+    ) {
+      throw new AppError("restore.unexpected_entry", { name: entry.name });
+    }
+  }
 
   // GUARD — every entry against ITS destination root, before ANY write. The db.dump goes to
   // stagingDir, media/* to mediaDir, secrets/* to stateDir; each is guarded against the root it

@@ -103,9 +103,11 @@ describe("pgRestoreWith", () => {
 // and a BEFORE TRUNCATE block trigger (packages/fiscal-verifactu/drizzle/0001_registros_inmutables.sql)
 // — without the restore tripping those triggers. It is proven, not asserted (CLAUDE.md §5): seed one
 // real fiscal row, `pg_dump --format=custom`, restore into a FRESH database, and assert the row
-// landed, no `reject_mutation` (SQLSTATE WT001) fired anywhere in the restore output, and the two
-// triggers are present on the restored table. The trigger is UPDATE/DELETE-only, so the COPY-insert
-// a custom-format restore uses never fires it — this run is the receipt for that.
+// landed, no `reject_mutation` fired anywhere in the restore output, the two triggers are present on
+// the restored table, and — the POSITIVE control — an UPDATE of the restored row is REJECTED by the
+// append-only trigger (SQLSTATE WT001), proving it is ACTIVE on the restored table, not merely
+// present. The trigger is UPDATE/DELETE-only, so the COPY-insert a custom-format restore uses never
+// fires it — this run is the receipt for that.
 //
 // pg_dump / pg_restore / createdb are pg18 CLIENT binaries the HOST does not carry, so — exactly like
 // backup-sweep.test.ts's realPgDump smoke — they run INSIDE the shared container via `docker exec`
@@ -270,10 +272,13 @@ describe("realPgRestore restores the immutable fiscal ledger (real container, do
       ]);
       const restoreOutput = `${stdout}\n${stderr}`;
 
-      // 6a. The immutability guard NEVER fired during the restore. `reject_mutation()` raises SQLSTATE
-      // WT001 (0001_registros_inmutables.sql); its absence is the direct proof the COPY-insert did not
-      // trip the append-only trigger, and pg_restore prints ignored errors here rather than throwing.
-      expect(restoreOutput).not.toContain("WT001");
+      // 6a. The immutability guard NEVER fired during the restore. `reject_mutation()` (raised by the
+      // append-only trigger, 0001_registros_inmutables.sql) would print its function name and an
+      // "errors ignored on restore" tail into pg_restore's output; their absence is the direct proof
+      // the COPY-insert did not trip the trigger, and pg_restore prints ignored errors here rather
+      // than throwing. (No `not.toContain("WT001")`: the SQLSTATE is not printed at pg_restore's
+      // default libpq verbosity, so that assertion could never fire — dropped as vacuous. The
+      // positive UPDATE control in 6b is what proves the trigger is ACTIVE, not merely un-tripped.)
       expect(restoreOutput).not.toContain("reject_mutation");
       expect(restoreOutput).not.toMatch(/errors ignored on restore/i);
 
@@ -302,6 +307,31 @@ describe("realPgRestore restores the immutable fiscal ledger (real container, do
         const names = triggers.rows.map((t) => t.tgname);
         expect(names).toContain("registros_facturacion_enforce_immutability");
         expect(names).toContain("registros_facturacion_block_truncate");
+
+        // POSITIVE CONTROL — the restored ledger is IMMUTABLE, not merely trigger-adorned. An UPDATE
+        // of the restored row must be REJECTED by the append-only trigger (`reject_mutation`, SQLSTATE
+        // WT001, message `table ... is append-only`). We connect as the container SUPERUSER, who
+        // bypasses the table's REVOKE ALL but NOT the trigger — so the statement reaches the trigger
+        // and trips it. This proves the guard fires on the RESTORED table, closing the gap the removed
+        // vacuous 6a assertion left (trigger present ≠ trigger active).
+        // `db.execute` wraps a driver error in a `DrizzleQueryError` whose real SQLSTATE + text live
+        // on `.cause` (mirrors @waitron/db's `pgErrorCode`/`pgErrorMessage`, which this package cannot
+        // import — `errors.js` is not in `@waitron/db`'s enumerated exports map).
+        const blocked = await fresh
+          .execute(
+            sql`update registros_facturacion set huella = repeat('E', 64) where sale_id = ${F.saleId}`,
+          )
+          .then(() => undefined)
+          .catch(
+            (e: unknown) =>
+              e as { code?: string; message?: string; cause?: { code?: string; message?: string } },
+          );
+        expect(
+          blocked,
+          "the restored ledger accepted an UPDATE — immutability trigger inactive",
+        ).toBeDefined();
+        expect(blocked?.code ?? blocked?.cause?.code).toBe("WT001");
+        expect(blocked?.cause?.message ?? blocked?.message).toMatch(/is append-only/i);
       } finally {
         await fresh.close();
       }

@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { readdir, symlink } from "node:fs/promises";
+import { mkdir, readdir, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -43,6 +43,20 @@ describe("assertSafeEntryName", () => {
     });
     // Sanity check only (see comment above) — not the proof.
     expect(await readdir(outside)).toEqual([]);
+  });
+
+  it("rejects a sibling dir that shares a name prefix with destRoot (the sep boundary)", async () => {
+    // destRoot ends in the segment `b`; `../bad/x` resolves to `<parent>/bad/x`, a SIBLING of destRoot
+    // that shares the `b` prefix. A regression dropping the trailing `sep` — `target.startsWith(root)`
+    // instead of `target.startsWith(root + sep)` — would ACCEPT it (`<parent>/bad/x` does start with
+    // `<parent>/b`). With the `+ sep` boundary it is rejected. Pins `/a/b` vs `/a/bad`.
+    const parent = mkdtempSync(join(tmpdir(), "restore-guard-sibling-"));
+    const dest = join(parent, "b");
+    await mkdir(dest, { recursive: true });
+    await expect(assertSafeEntryName("../bad/x", dest)).rejects.toMatchObject({
+      code: "restore.unsafe_entry_path",
+      params: { name: "../bad/x" },
+    });
   });
 
   it("passes a normal media entry and returns a path under the root", async () => {
