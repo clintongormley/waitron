@@ -16,9 +16,12 @@ const execFileAsync = promisify(execFile);
 // SHAPE — --no-owner, --dbname <connstring>, the dump file last — is asserted without a binary.
 // ---------------------------------------------------------------------------------------------
 describe("pgRestoreWith", () => {
-  it("shells out to pg_restore with --no-owner, --dbname <url>, the file last", async () => {
-    const calls: { file: string; args: readonly string[]; options: { signal?: AbortSignal } }[] =
-      [];
+  it("shells out to pg_restore with --no-owner, --dbname <url WITHOUT the password>, the file last", async () => {
+    const calls: {
+      file: string;
+      args: readonly string[];
+      options: { signal?: AbortSignal; env?: NodeJS.ProcessEnv };
+    }[] = [];
     const fakeExec: ExecFileFn = async (file, args, options) => {
       calls.push({ file, args, options });
     };
@@ -26,7 +29,7 @@ describe("pgRestoreWith", () => {
     const signal = new AbortController().signal;
 
     await runner({
-      databaseUrl: "postgresql://u:p@h:5432/fresh",
+      databaseUrl: "postgresql://u:s3cr3t-password@h:5432/fresh",
       inFile: "/tmp/waitron.dump",
       signal,
     });
@@ -34,19 +37,54 @@ describe("pgRestoreWith", () => {
     expect(calls).toEqual([
       {
         file: "pg_restore",
-        args: ["--no-owner", "--dbname", "postgresql://u:p@h:5432/fresh", "/tmp/waitron.dump"],
-        options: { signal },
+        // The password is GONE from argv — this is the whole point (execFile's argv is what a
+        // rejected/non-zero-exit error's `.message` embeds verbatim, and it is also visible via
+        // `ps`/`/proc` for the process's lifetime). User/host/port/dbname all survive intact.
+        args: ["--no-owner", "--dbname", "postgresql://u@h:5432/fresh", "/tmp/waitron.dump"],
+        options: { signal, env: { ...process.env, PGPASSWORD: "s3cr3t-password" } },
       },
     ]);
+    // Belt-and-braces: the password string appears NOWHERE in argv, only in the env.
+    expect(calls[0]!.args.join(" ")).not.toContain("s3cr3t-password");
+  });
+
+  it("passes process.env through unchanged when the URL carries no password", async () => {
+    const calls: { options: { signal?: AbortSignal; env?: NodeJS.ProcessEnv } }[] = [];
+    const fakeExec: ExecFileFn = async (_file, _args, options) => {
+      calls.push({ options });
+    };
+    await pgRestoreWith(fakeExec)({ databaseUrl: "postgresql://u@h/fresh", inFile: "/tmp/y.dump" });
+    // No PGPASSWORD is fabricated when there was nothing to carry — the exact same `process.env`
+    // reference is threaded through, not a copy.
+    expect(calls[0]?.options.env).toBe(process.env);
   });
 
   it("threads no signal when the caller omits one", async () => {
-    const calls: { options: { signal?: AbortSignal } }[] = [];
+    const calls: { options: { signal?: AbortSignal; env?: NodeJS.ProcessEnv } }[] = [];
     const fakeExec: ExecFileFn = async (_file, _args, options) => {
       calls.push({ options });
     };
     await pgRestoreWith(fakeExec)({ databaseUrl: "postgresql://x/y", inFile: "/tmp/y.dump" });
-    expect(calls[0]?.options).toEqual({ signal: undefined });
+    expect(calls[0]?.options.signal).toBeUndefined();
+  });
+
+  it("keeps query params and a percent-encoded password intact through the split", async () => {
+    const calls: { args: readonly string[]; options: { env?: NodeJS.ProcessEnv } }[] = [];
+    const fakeExec: ExecFileFn = async (_file, args, options) => {
+      calls.push({ args, options });
+    };
+    await pgRestoreWith(fakeExec)({
+      databaseUrl: "postgresql://u:p%40ss@h:5432/fresh?sslmode=require",
+      inFile: "/tmp/z.dump",
+    });
+    expect(calls[0]?.args).toEqual([
+      "--no-owner",
+      "--dbname",
+      "postgresql://u@h:5432/fresh?sslmode=require",
+      "/tmp/z.dump",
+    ]);
+    // Decoded, not the raw percent-encoded form — PGPASSWORD must be the literal password.
+    expect(calls[0]?.options.env?.PGPASSWORD).toBe("p@ss");
   });
 
   it("rejects when the underlying exec rejects (a failed restore surfaces)", async () => {

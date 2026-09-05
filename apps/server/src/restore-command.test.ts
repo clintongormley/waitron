@@ -242,24 +242,56 @@ describe("waitron-restore restore", () => {
     expect(out).toEqual([expect.stringContaining("restore.environment_mismatch")]);
   });
 
-  it("rethrows an AppError outside restore/recovery/backup namespaces rather than swallowing it", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "restore-command-rethrow-"));
+  it("reports an AppError outside restore/recovery/backup namespaces generically, never rethrown", async () => {
+    // An AppError from some OTHER domain (here: a config error) is still an error `runRestore` must
+    // not let propagate raw — `bin-restore.ts`'s `.then(process.exit)` has no `.catch`, so an
+    // uncaught rejection here would dump straight to stderr instead of a controlled exit code.
+    const dir = mkdtempSync(join(tmpdir(), "restore-command-other-apperror-"));
     const artifactPath = await makeArtifact(dir);
-    await expect(
-      runRestore({
-        argv: ["restore", artifactPath],
-        env: {
-          WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
-          WAITRON_RESTORE_DATABASE_URL: DATABASE_URL,
-        },
-        out: () => {},
-        restore: async () => {
-          throw new AppError("server.config_invalid", {
-            variable: "x",
-            reason: "not_a_deployment_environment",
-          });
-        },
-      }),
-    ).rejects.toMatchObject({ code: "server.config_invalid" });
+    const out: string[] = [];
+    const code = await runRestore({
+      argv: ["restore", artifactPath],
+      env: {
+        WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
+        WAITRON_RESTORE_DATABASE_URL: DATABASE_URL,
+      },
+      out: (line) => out.push(line),
+      restore: async () => {
+        throw new AppError("server.config_invalid", {
+          variable: "x",
+          reason: "not_a_deployment_environment",
+        });
+      },
+    });
+    expect(code).toBe(1);
+    expect(out).toEqual(["restore failed"]);
+  });
+
+  it("never echoes a raw error's .message — a failed pg_restore's message can carry the admin password", async () => {
+    // The exact shape a failed `pg_restore` rejects with: `promisify(execFile)` builds its
+    // `.message` from the argv it ran, and (before `pg-restore.ts`'s own fix) that argv used to
+    // carry the WHOLE connection string, password included. This is `runRestore`'s independent,
+    // second layer of defence: even if some other bug anywhere in the orchestrator's chain threw a
+    // raw error carrying a secret in its message, it must never reach `out`.
+    const dir = mkdtempSync(join(tmpdir(), "restore-command-no-message-leak-"));
+    const artifactPath = await makeArtifact(dir);
+    const leakedConnectionString = "postgres://admin:S3CR3T-ADMIN-PASSWORD@db-host:5432/fresh";
+    const out: string[] = [];
+    const code = await runRestore({
+      argv: ["restore", artifactPath],
+      env: {
+        WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
+        WAITRON_RESTORE_DATABASE_URL: DATABASE_URL,
+      },
+      out: (line) => out.push(line),
+      restore: async () => {
+        throw new Error(`Command failed: pg_restore --dbname ${leakedConnectionString} ...`);
+      },
+    });
+    expect(code).toBe(1);
+    const printed = out.join("\n");
+    expect(printed).not.toContain("S3CR3T-ADMIN-PASSWORD");
+    expect(printed).not.toContain(leakedConnectionString);
+    expect(out).toEqual(["restore failed"]);
   });
 });

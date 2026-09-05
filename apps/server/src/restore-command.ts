@@ -57,8 +57,18 @@ const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
  * never touches a database. `bin-restore.ts` is a thin wrapper that supplies
  * `process.argv`/`process.env` and exits on the returned code. Returns a process exit code: 0 on
  * success, 1 on an expected disaster-recovery failure (missing recovery key, empty target connection,
- * an unreadable artifact file, or a `restore.*`/`recovery.*`/`backup.*` `AppError` from the
- * orchestrator — a decrypt, gate or guard failure), 2 on a usage error.
+ * an unreadable artifact file, or ANY error out of the orchestrator — a `restore.*`/`recovery.*`/
+ * `backup.*` `AppError` (a decrypt, gate or guard failure) is reported by code, and literally anything
+ * else is reported with a generic `restore failed`), 2 on a usage error.
+ *
+ * The orchestrator's error is NEVER rethrown and its `.message` is NEVER printed, unlike
+ * `runRecoveryUnpack`'s posture of rethrowing an unrecognised error: a failed `pg_restore` (bad
+ * perms, a non-fresh target, a full disk — all plausible real outcomes, not edge cases) rejects with
+ * an error built from its own argv by Node's `promisify(execFile)`, and `pg-restore.ts`'s
+ * `stripPassword` keeps the admin connection's password out of that argv — but this function is the
+ * SECOND, independent layer: it must not echo a raw message even if some other, unrelated bug
+ * upstream throws one carrying a secret, because `bin-restore.ts`'s `.then(process.exit)` has no
+ * `.catch` of its own — an uncaught rejection here would print the raw message straight to stderr.
  */
 export async function runRestore(deps: {
   argv: string[];
@@ -137,9 +147,18 @@ export async function runRestore(deps: {
         return 1;
       }
     }
-    // Anything else (an unexpected bug) propagates so it is not silently swallowed — same posture
-    // `runRecoveryUnpack` takes for a caught error outside its own two known codes.
-    throw err;
+    // Anything else — an AppError outside those three namespaces, or a non-AppError entirely —
+    // NEVER propagates raw and NEVER echoes `err.message`/`String(err)`. A failed `pg_restore`
+    // (bad perms, a non-fresh target, a full disk — all plausible real outcomes) rejects with an
+    // error whose `.message` is built from its own argv by `promisify(execFile)`; `pg-restore.ts`
+    // now keeps the password out of that argv (the root fix), but this is the load-bearing SECOND
+    // layer — an unrelated bug anywhere else in `restoreFromArtifact`'s chain that throws a raw
+    // driver/fs error carrying `databaseUrl` (or anything else sensitive) in its message must not
+    // reach an operator's terminal either. Unlike `runRecoveryUnpack` (which rethrows anything
+    // outside its two known codes, since none of its failure modes can embed a secret), a rethrow
+    // here would let `bin-restore.ts`'s uncaught rejection print the raw message to stderr.
+    deps.out("restore failed");
+    return 1;
   }
 
   deps.out(`restored ${artifactPath}`);
