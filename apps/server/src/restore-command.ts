@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { AppError } from "@waitron/shared";
 import { DEFAULT_MEDIA_ROOT, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT } from "./boot.js";
-import { deploymentEnvironment, type DeploymentEnvironment } from "./config.js";
+import { deploymentEnvironment, resolveConfigDir, type DeploymentEnvironment } from "./config.js";
 import { isUnset } from "./env-value.js";
 import { createLogger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
@@ -82,6 +82,14 @@ export async function runRestore(deps: {
     return 2;
   }
 
+  // Report an `AppError` code to the operator and return the exit-1 code, the shape both the
+  // WAITRON_ENV-resolution catch and the orchestrator catch below share (never echoing a raw
+  // `.message` — no secret rides in a code).
+  const reportCode = (code: string): number => {
+    deps.out(`restore failed: ${code}`);
+    return 1;
+  };
+
   const recoveryKey = deps.env.WAITRON_BACKUP_RECOVERY_KEY;
   if (isUnset(recoveryKey)) {
     deps.out("WAITRON_BACKUP_RECOVERY_KEY must be set to the backup's recovery key");
@@ -111,7 +119,7 @@ export async function runRestore(deps: {
   const migrationsDir = deps.env.WAITRON_MIGRATIONS_DIR;
   // Computed once so `stagingDir` below joins onto the SAME resolved root the returned `stateDir`
   // carries, exactly the reasoning `config.ts`'s `resolvedStateDir` documents for `logDir`.
-  const resolvedStateDir = isUnset(stateDir) ? DEFAULT_STATE_ROOT : resolve(stateDir);
+  const resolvedStateDir = resolveConfigDir(stateDir, DEFAULT_STATE_ROOT);
 
   // Resolve the target environment BEFORE building `restoreDeps`, and CATCH its one possible throw.
   // `deploymentEnvironment` raises `server.config_invalid` for a `WAITRON_ENV` that is neither
@@ -124,15 +132,14 @@ export async function runRestore(deps: {
   try {
     environment = deploymentEnvironment(deps.env);
   } catch (err) {
-    deps.out(`restore failed: ${(err as AppError).code}`);
-    return 1;
+    return reportCode((err as AppError).code);
   }
 
   const restoreDeps: RestoreDeps = {
     artifact,
     recoveryKey,
     databaseUrl,
-    mediaDir: isUnset(mediaDir) ? DEFAULT_MEDIA_ROOT : resolve(mediaDir),
+    mediaDir: resolveConfigDir(mediaDir, DEFAULT_MEDIA_ROOT),
     stateDir: resolvedStateDir,
     stagingDir: join(resolvedStateDir, "restore-staging"),
     migrationsRoot: isUnset(migrationsDir) ? DEFAULT_MIGRATIONS_ROOT : migrationsDir,
@@ -158,8 +165,7 @@ export async function runRestore(deps: {
         err.code.startsWith("recovery.") ||
         err.code.startsWith("backup.")
       ) {
-        deps.out(`restore failed: ${err.code}`);
-        return 1;
+        return reportCode(err.code);
       }
     }
     // Anything else — an AppError outside those three namespaces, or a non-AppError entirely —

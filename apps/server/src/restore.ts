@@ -27,6 +27,11 @@ const SECRETS_PREFIX = "secrets/";
  * the 0600 the secret writers use. The staged dump IS sensitive (whole-DB plaintext), so it is 0600. */
 const MEDIA_FILE_MODE = 0o644;
 const STAGED_DUMP_MODE = 0o600;
+/** How many media blobs `restoreMedia` writes at once — the WRITE-direction twin of
+ * `backup-sources.ts`'s `CONCURRENCY`, bounding open file descriptors so a restore of a large
+ * content-addressed store (thousands of blobs) cannot exhaust them (EMFILE). Writes are to distinct
+ * files, so chunk order does not matter (unlike the read side, which sorts for a deterministic archive). */
+const MEDIA_WRITE_CONCURRENCY = 64;
 
 /**
  * Everything BR-3's restore orchestrator needs to turn one encrypted backup artifact back into a
@@ -87,13 +92,29 @@ export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
   const plaintext = decryptArtifact(deps.artifact, deps.recoveryKey);
   const entries = unpackArchive(plaintext);
 
-  const manifestEntry = entries.find((e) => e.name === MANIFEST_NAME);
+  // ONE pass classifies every entry into its bucket: the manifest, the db dump, media/* blobs,
+  // secrets/* files, and the FIRST entry that routes nowhere. `??=` keeps first-wins for the two
+  // singletons (matching the old `.find`) and for `firstUnexpected` (matching the old loop, which
+  // threw on its first unrouted entry). The presence/unexpected checks below then run in the exact
+  // same precedence as before — manifest missing → db.dump missing → gate → unexpected → guard.
+  let manifestEntry: ArchiveEntry | undefined;
+  let dumpEntry: ArchiveEntry | undefined;
+  const mediaEntries: ArchiveEntry[] = [];
+  const secretEntries: ArchiveEntry[] = [];
+  let firstUnexpected: ArchiveEntry | undefined;
+  for (const entry of entries) {
+    if (entry.name === MANIFEST_NAME) manifestEntry ??= entry;
+    else if (entry.name === DB_DUMP_NAME) dumpEntry ??= entry;
+    else if (entry.name.startsWith(MEDIA_PREFIX)) mediaEntries.push(entry);
+    else if (entry.name.startsWith(SECRETS_PREFIX)) secretEntries.push(entry);
+    else firstUnexpected ??= entry;
+  }
+
   if (manifestEntry === undefined) {
     throw new AppError("restore.archive_incomplete", { missing: MANIFEST_NAME });
   }
   const manifest = JSON.parse(Buffer.from(manifestEntry.bytes).toString("utf8")) as BackupManifest;
 
-  const dumpEntry = entries.find((e) => e.name === DB_DUMP_NAME);
   if (dumpEntry === undefined) {
     throw new AppError("restore.archive_incomplete", { missing: DB_DUMP_NAME });
   }
@@ -106,25 +127,15 @@ export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
   );
   checkRestoreCompatibility(manifest, { environment: deps.environment, expectedVersions });
 
-  const mediaEntries = entries.filter((e) => e.name.startsWith(MEDIA_PREFIX));
-  const secretEntries = entries.filter((e) => e.name.startsWith(SECRETS_PREFIX));
-
   // FAIL-VISIBLE — every entry must route somewhere, before ANY write. This orchestrator handles
   // exactly `manifest.json`, `db.dump`, `media/*` and `secrets/*`; an entry matching none of those
-  // would otherwise be SILENTLY dropped. BR-2 emits only those four shapes today, so nothing drops
-  // now — but the day a second non-DB source id starts packing `<source>/...` blobs, a silent drop
-  // would lose that data on the cold-recovery path that must not lose it (CLAUDE.md §5), so refuse
-  // it LOUD here rather than proceed to a half-restore. Widening the routing to accept a new source
-  // is later work; this reject is the tripwire that forces it.
-  for (const entry of entries) {
-    if (
-      entry.name !== MANIFEST_NAME &&
-      entry.name !== DB_DUMP_NAME &&
-      !entry.name.startsWith(MEDIA_PREFIX) &&
-      !entry.name.startsWith(SECRETS_PREFIX)
-    ) {
-      throw new AppError("restore.unexpected_entry", { name: entry.name });
-    }
+  // (captured as `firstUnexpected` above) would otherwise be SILENTLY dropped. BR-2 emits only those
+  // four shapes today, so nothing drops now — but the day a second non-DB source id starts packing
+  // `<source>/...` blobs, a silent drop would lose that data on the cold-recovery path that must not
+  // lose it (CLAUDE.md §5), so refuse it LOUD here rather than proceed to a half-restore. Widening
+  // the routing to accept a new source is later work; this reject is the tripwire that forces it.
+  if (firstUnexpected !== undefined) {
+    throw new AppError("restore.unexpected_entry", { name: firstUnexpected.name });
   }
 
   // GUARD — every entry against ITS destination root, before ANY write. The db.dump goes to
@@ -198,9 +209,22 @@ export async function restoreMedia(args: {
   mediaDir: string;
   log: Logger;
 }): Promise<void> {
-  for (const entry of args.entries) {
-    const target = await assertSafeEntryName(entry.name.slice(MEDIA_PREFIX.length), args.mediaDir);
-    await writeFileAtomic(target, entry.bytes, MEDIA_FILE_MODE);
+  // Write in bounded-concurrency CHUNKS rather than a sequential loop or one unbounded `Promise.all`
+  // — the same fan-out `backup-sources.ts` uses on the read side (see `MEDIA_WRITE_CONCURRENCY`).
+  // Each entry keeps its own `assertSafeEntryName` guard (the two-layer lexical+symlink check); a
+  // single unsafe name rejects its chunk's `Promise.all` and so the whole call. Distinct target
+  // files mean write order is irrelevant.
+  for (let i = 0; i < args.entries.length; i += MEDIA_WRITE_CONCURRENCY) {
+    const chunk = args.entries.slice(i, i + MEDIA_WRITE_CONCURRENCY);
+    await Promise.all(
+      chunk.map(async (entry) => {
+        const target = await assertSafeEntryName(
+          entry.name.slice(MEDIA_PREFIX.length),
+          args.mediaDir,
+        );
+        await writeFileAtomic(target, entry.bytes, MEDIA_FILE_MODE);
+      }),
+    );
   }
   args.log("info", "restore.media.done", { count: args.entries.length });
 }

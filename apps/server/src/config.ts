@@ -233,6 +233,18 @@ function required(env: Env, variable: string): string {
 }
 
 /**
+ * Resolve a directory-valued config variable the ONE way `loadConfig` here and `runRestore`
+ * (`restore-command.ts`) both need: an unset OR empty `raw` (`isUnset`) falls back to `fallback`,
+ * and a genuinely-set value is made absolute via `resolve` — never `resolve("")`, which is cwd (the
+ * "empty value is a valid value" trap, CLAUDE.md §3). Shared so the two callers' `mediaDir`/`stateDir`
+ * handling cannot drift. NOT used for `migrationsRoot`, which is deliberately stored VERBATIM (no
+ * `resolve`) in both callers — see its own `isUnset` fallback in `loadConfig`.
+ */
+export function resolveConfigDir(raw: string | undefined, fallback: string): string {
+  return isUnset(raw) ? fallback : resolve(raw);
+}
+
+/**
  * A variable that is OPTIONAL in preproduction/dev — falling back to `devDefault`, a loopback value
  * safe only on localhost — but REQUIRED in production. Shipping the loopback default to a real
  * deployment is a silent misconfiguration that surfaces far downstream: a passkey RP ID / origin left
@@ -625,7 +637,7 @@ export function loadConfig(
   // The effective (absolute) state dir, computed once so `logDir`'s default reads the SAME value the
   // returned `stateDir` field carries — `join(stateDir, "logs")` must sit under whatever state root
   // actually won (the resolved override, or the boot-computed default), never a second derivation.
-  const resolvedStateDir = isUnset(stateDir) ? defaultStateRoot : resolve(stateDir);
+  const resolvedStateDir = resolveConfigDir(stateDir, defaultStateRoot);
   const databaseUrl = required(env, "DATABASE_URL");
   const migrationsDatabaseUrl = env.WAITRON_MIGRATIONS_DATABASE_URL;
   const httpHost = env.WAITRON_HTTP_HOST;
@@ -674,7 +686,7 @@ export function loadConfig(
     // `resolve` is applied ONLY to a genuinely-set value: an unset OR empty `WAITRON_MEDIA_DIR`
     // takes `defaultMediaRoot`, never `resolve("")` — which is cwd, the "empty value is a valid
     // value" trap (CLAUDE.md §3). Same `isUnset` fallback `migrationsRoot` above uses.
-    mediaDir: isUnset(mediaDir) ? defaultMediaRoot : resolve(mediaDir),
+    mediaDir: resolveConfigDir(mediaDir, defaultMediaRoot),
     // Same isUnset fallback + resolve-only-a-real-value shape mediaDir uses (CLAUDE.md §3): an unset
     // OR empty WAITRON_STATE_DIR takes `defaultStateRoot`, never `resolve("")` (which is cwd).
     stateDir: resolvedStateDir,

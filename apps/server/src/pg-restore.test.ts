@@ -7,6 +7,7 @@ import { databaseUrl } from "@waitron/db/testing/postgres.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { type ExecFileFn, type PgRestoreRunner, pgRestoreWith } from "./pg-restore.js";
+import { locateSharedContainer } from "./testing/locate-shared-container.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -200,32 +201,11 @@ describe("realPgRestore restores the immutable fiscal ledger (real container, do
     const uri = new URL(suite.pg.uri);
 
     // 2. Locate the shared container by its published host port + the harness label.
-    let containerId: string;
-    try {
-      const { stdout } = await execFileAsync("docker", [
-        "ps",
-        "--filter",
-        `publish=${uri.port}`,
-        "--filter",
-        "label=com.waitron.reapable",
-        "--format",
-        "{{.ID}}",
-      ]);
-      containerId = stdout.trim().split("\n")[0]!.trim();
-    } catch (err) {
-      console.warn(
-        `[pg-restore fiscal receipt SKIPPED] could not run \`docker ps\` to locate the test container: ${String(err)}. ` +
-          `realPgRestore restoring the immutable fiscal ledger is UNPROVEN in this run.`,
-      );
-      return;
-    }
-    if (containerId === "") {
-      console.warn(
-        `[pg-restore fiscal receipt SKIPPED] no running container published on port ${uri.port} with label ` +
-          `com.waitron.reapable. realPgRestore restoring the immutable fiscal ledger is UNPROVEN in this run.`,
-      );
-      return;
-    }
+    const containerId = await locateSharedContainer(uri, {
+      tag: "pg-restore fiscal receipt",
+      unproven: "realPgRestore restoring the immutable fiscal ledger is UNPROVEN in this run.",
+    });
+    if (containerId === undefined) return;
 
     // Inside the container the server listens on localhost:5432; creds come from the suite uri.
     const cloneDb = uri.pathname.replace(/^\//, "");

@@ -49,28 +49,38 @@ const FULL_ENTRIES: ArchiveEntry[] = [
   { name: "secrets/secrets.env", bytes: Buffer.from(SECRET) },
 ];
 
+// Shared per-test temp dirs for the two describe blocks below. `useTempDirs` is called inside each
+// describe body, so the beforeEach/afterEach it registers bind to THAT suite; the blocks differ only
+// in the mkdtemp prefix. Module-level so bare `mediaDir`/`stateDir`/`stagingDir` references in both
+// blocks resolve here — the tempdir setup lives in one place, not two byte-identical copies.
+let mediaDir: string;
+let stateDir: string;
+let stagingDir: string;
+
+function useTempDirs(prefix: string): void {
+  beforeEach(async () => {
+    mediaDir = await mkdtemp(join(tmpdir(), `${prefix}media-`));
+    stateDir = await mkdtemp(join(tmpdir(), `${prefix}state-`));
+    stagingDir = await mkdtemp(join(tmpdir(), `${prefix}staging-`));
+  });
+  afterEach(async () => {
+    for (const dir of [mediaDir, stateDir, stagingDir]) {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+}
+
 describe("restoreFromArtifact", () => {
-  let mediaDir: string;
-  let stateDir: string;
-  let stagingDir: string;
+  useTempDirs("waitron-restore-");
   let restored: { databaseUrl: string; inFile: string; bytes: Uint8Array } | undefined;
   let runRestore: PgRestoreRunner;
 
-  beforeEach(async () => {
-    mediaDir = await mkdtemp(join(tmpdir(), "waitron-restore-media-"));
-    stateDir = await mkdtemp(join(tmpdir(), "waitron-restore-state-"));
-    stagingDir = await mkdtemp(join(tmpdir(), "waitron-restore-staging-"));
+  beforeEach(() => {
     restored = undefined;
     runRestore = vi.fn(async ({ databaseUrl, inFile }) => {
       // Read the staged file AT restore time — the orchestrator cleans staging afterwards.
       restored = { databaseUrl, inFile, bytes: await readFile(inFile) };
     });
-  });
-
-  afterEach(async () => {
-    for (const dir of [mediaDir, stateDir, stagingDir]) {
-      await rm(dir, { recursive: true, force: true });
-    }
   });
 
   function deps(overrides: Partial<Parameters<typeof restoreFromArtifact>[0]> = {}) {
@@ -184,21 +194,7 @@ describe("restoreFromArtifact", () => {
 });
 
 describe("restore steps (R3 composition)", () => {
-  let mediaDir: string;
-  let stateDir: string;
-  let stagingDir: string;
-
-  beforeEach(async () => {
-    mediaDir = await mkdtemp(join(tmpdir(), "waitron-step-media-"));
-    stateDir = await mkdtemp(join(tmpdir(), "waitron-step-state-"));
-    stagingDir = await mkdtemp(join(tmpdir(), "waitron-step-staging-"));
-  });
-
-  afterEach(async () => {
-    for (const dir of [mediaDir, stateDir, stagingDir]) {
-      await rm(dir, { recursive: true, force: true });
-    }
-  });
+  useTempDirs("waitron-step-");
 
   it("restoreDatabase stages the dump and feeds it to the runner", async () => {
     let seen: Uint8Array | undefined;
