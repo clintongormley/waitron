@@ -75,16 +75,10 @@ export default defineConfig({
       // src/widgets/test-helpers.ts is test-only mount/cleanup/axe support, mirroring
       // packages/ui's exclusion of its src/test-helpers.ts and a11y-helpers.ts.
       exclude: [...coverageConfigDefaults.exclude, "src/main.ts", "src/widgets/test-helpers.ts"],
-      // Thresholds match packages/ui — the workspace's other browser (Chromium/Playwright)
-      // package — rather than the 98/98/98/95 the pure-Node packages carry. A browser app
-      // is a small number of files where per-percent swings are coarse, so functions and
-      // branches get more slack than statements and lines. Global, not `perFile`.
-      thresholds: {
-        statements: 95,
-        lines: 95,
-        functions: 90,
-        branches: 88,
-      },
+      // The workspace floor (CLAUDE.md §2; pinned by scripts/coverage-thresholds.test.ts). Global, not
+      // `perFile`: a browser package is a handful of files, where one hard-to-reach branch swings a
+      // per-file percentage far more than the aggregate.
+      thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
     },
   },
 });

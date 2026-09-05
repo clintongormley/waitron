@@ -83,9 +83,12 @@ narrower: `pnpm reap`, `pnpm install --frozen-lockfile`, `format:check`, then `t
 and `bundle-smoke`, which nothing local runs. A green from any one of the three is evidence about
 what it ran.
 
-**Coverage thresholds** are `statements 98 / lines 98 / functions 98 / branches 95` in every package
-except the four browser packages (`packages/ui`, `apps/till`, `apps/dashboard`, `apps/setup`), which
-carry `95/95/90/88` with a documented reason in their own config.
+**Coverage thresholds** are split (owner decision 2026-09-05): `statements 98 / lines 98 /
+functions 98 / branches 95` in `verifactu`, `fiscal-verifactu`, `core`, `db`, `sync` and `payments`
+— the packages whose defects are fiscally or structurally unrecoverable — and the `90/90/85/85`
+floor everywhere else, browser packages included. Which package holds which bar is pinned by
+`scripts/coverage-thresholds.test.ts` (root project); moving a package between the two bars is an
+edit to that list, with the reason in the commit.
 
 Traps, each of which cost a round trip:
 

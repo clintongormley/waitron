@@ -510,7 +510,7 @@ jobs:
   # exits 1 ("No test files found") even with the thresholds suppressed (verified on vitest 3.2.7).
   #
   # Sharding one package collides with the per-package coverage gate: each shard runs ~1/3 of the files
-  # and so sees only PARTIAL coverage, which would fail the 98/98/98/95 thresholds on every shard. So
+  # and so sees only PARTIAL coverage, which would fail the package's thresholds on every shard. So
   # the shards COLLECT coverage without ENFORCING it — `test:shard` (packages/db/package.json) is
   # `test:coverage` plus `--reporter=blob` and the four thresholds overridden to 0 — and emit a `blob`
   # report; `test-heavy-merge` below downloads all three blobs, merges them with
@@ -598,7 +598,7 @@ jobs:
           retention-days: 1
 
   # The coverage GATE for packages/db. The three test-heavy shards each emit a PARTIAL-coverage blob;
-  # this job merges them and enforces the real 98/98/98/95 thresholds on the TOTAL. It runs no tests and
+  # this job merges them and enforces the package's real thresholds on the TOTAL. It runs no tests and
   # boots no container — `vitest --merge-reports` (in `test:merge`) replays results and coverage from
   # the blobs — so it carries neither REQUIRE_DOCKER nor a Docker env, only an install, the artifact
   # download and the merge. It gates on the SAME `heavy` output as its shards, so it skips exactly when
@@ -700,7 +700,7 @@ jobs:
           retention-days: 1
 
   # The coverage GATE for apps/server — the mirror of test-heavy-merge. The three test-server shards
-  # each emit a PARTIAL-coverage blob; this job merges them and enforces the real 98/98/98/95 thresholds
+  # each emit a PARTIAL-coverage blob; this job merges them and enforces the package's real thresholds
   # on the TOTAL. No tests, no container — `vitest --merge-reports` replays from the blobs. It gates on
   # the SAME `server` output as its shards. `ci` names both this job and the test-server matrix.
   test-server-merge:

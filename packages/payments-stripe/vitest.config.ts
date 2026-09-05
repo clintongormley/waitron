@@ -52,7 +52,7 @@ export default defineConfig({
         // file from `vitest.config.ts`).
         "vitest.sandbox.config.ts",
       ],
-      thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
+      thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
     },
   },
 });
