@@ -4,10 +4,19 @@ import { validateCapabilities, DEFAULT_PROFILE_CAPABILITIES } from "./device-pro
 import { FORM_FACTORS, CAPABILITY_FLAGS } from "./canvas.js";
 
 describe("validateCapabilities", () => {
-  it("accepts a valid flag array and dedupes order-independently", () => {
-    expect(validateCapabilities(["open-cash-drawer", "integrated-card-payment"])).toEqual(
-      expect.arrayContaining(["open-cash-drawer", "integrated-card-payment"]),
-    );
+  it("accepts a valid flag array unchanged", () => {
+    expect(validateCapabilities(["open-cash-drawer", "integrated-card-payment"])).toEqual([
+      "open-cash-drawer",
+      "integrated-card-payment",
+    ]);
+  });
+  it("dedupes, keeping FIRST-SEEN order (exact output, not a superset)", () => {
+    // A duplicate in the input must collapse to one, and the surviving order is first-seen — pinned
+    // with an order-sensitive `toEqual` on the exact array, since `validateCapabilities` is the
+    // security-relevant fail-closed gate driving the /api/pay + /api/drawer firewall.
+    expect(
+      validateCapabilities(["open-cash-drawer", "integrated-card-payment", "open-cash-drawer"]),
+    ).toEqual(["open-cash-drawer", "integrated-card-payment"]);
   });
   it("accepts an empty array", () => {
     expect(validateCapabilities([])).toEqual([]);
