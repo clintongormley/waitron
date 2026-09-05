@@ -309,6 +309,18 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       expect(heldOrders.status).toBe(401);
       expect(await heldOrders.json()).toEqual({ error: { code: "session.required", params: {} } });
 
+      // The role probe (till-reroute design §3.1) IS mounted on a mirror — it is a GET, so the
+      // read-only gate passes it — and answers `acceptingSales: false`, which is what steers a
+      // polling till away from this box. The flag is captured ONCE at boot from the same
+      // holders/fenced decision the mount guards above take. The failing case that pins "captured,
+      // not live": `promote.ts` calls `refreshDeploymentHolders` in-process after its owner-role
+      // write, so a route re-reading the holders per request would flip to true with no restart —
+      // and promotion takes effect on RESTART, so a promoted-but-not-yet-restarted node must keep
+      // answering false. The primary control is the boot below (true on the same identity).
+      const probe = await fetch(`${base}/api/node`);
+      expect(probe.status).toBe(200);
+      expect(await probe.json()).toMatchObject({ acceptingSales: false });
+
       // The mirror's health-only pass ran: recordPass advanced lastPassAt (its "work" is the pull
       // worker, not fiscal duties). setDeploymentMode('mirror') co-set singleton_role='secondary'
       // above, so singletonPass (singleton-pass.ts) resolves this node as a non-singleton and runs
@@ -481,6 +493,16 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       expect(printJobs.status).not.toBe(404);
       const deviceStation = await fetch(`${base}/api/device/station`);
       expect(deviceStation.status).not.toBe(404);
+
+      // The role-probe control (till-reroute §3.1): the same identity booted as a PRIMARY answers
+      // `acceptingSales: true`, so the mirror's false above is the mode's doing and not a probe
+      // hardcoded to false. Both boots are unfenced, so `mode` is the only axis that differs.
+      const probe = await fetch(`${base}/api/node`);
+      expect(probe.status).toBe(200);
+      expect(await probe.json()).toMatchObject({
+        nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+        acceptingSales: true,
+      });
     } finally {
       await server.close();
     }
