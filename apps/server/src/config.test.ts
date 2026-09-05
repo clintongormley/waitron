@@ -373,13 +373,24 @@ describe("loadConfig", () => {
   });
 
   // A `contactUrl` a till concatenates paths onto, and a CORS allow-list entry compared against a
-  // browser's `Origin` header, are both bare origins — anything carrying a path, or missing a scheme,
-  // is refused loudly at boot rather than silently published to every till.
+  // browser's `Origin` header, are both bare http(s) origins — anything carrying a path, missing a
+  // scheme, or carrying a scheme a till never fetches over is refused loudly at boot rather than
+  // silently published to every till.
   it.each([
-    // No scheme: `new URL` cannot parse it at all.
+    // No scheme at all: `new URL` cannot parse it.
     "box.deli.waitron.app",
+    // Host and port with no scheme: this DOES parse, as the non-special scheme
+    // `box.deli.waitron.app:` whose origin is the literal string "null" — refused by the
+    // origin comparison, never by the parse. The likeliest operator typo of the three.
+    "box.deli.waitron.app:8443",
     // A path: the parsed origin drops it, so it differs from the input.
     "https://box.deli.waitron.app/till",
+    // A trailing slash is a path (`/`): same mismatch, and the likeliest way to copy an origin out
+    // of a browser's address bar wrong.
+    "https://box.deli.waitron.app/",
+    // A WHATWG special scheme that round-trips byte-for-byte, so only the explicit http(s) check
+    // refuses it. A till fetches over http(s); a `ws://` contactUrl is unusable to it.
+    "ws://box.deli.waitron.app",
     // Not a URL in any reading.
     "not a url",
   ])("refuses WAITRON_ADVERTISED_ORIGIN=%s, which is not a bare origin", async (bad) => {
@@ -393,6 +404,46 @@ describe("loadConfig", () => {
       variable: "WAITRON_ADVERTISED_ORIGIN",
       reason: "not_an_origin",
     });
+  });
+
+  // The CHOSEN value is what gets published as `contactUrl`, so the bare-origin rule applies to it
+  // whichever variable supplied it: falling back to a `managementOrigin` carrying a trailing slash
+  // would advertise a broken address to every till, and `managementOrigin` itself is only ever
+  // checked for PRESENCE. The error names `WAITRON_MANAGEMENT_ORIGIN` — the line the operator has to
+  // fix — not the variable they left unset.
+  it("refuses a WAITRON_MANAGEMENT_ORIGIN fallback that is not a bare origin, naming that variable", async () => {
+    const error = await captureError(() =>
+      Promise.resolve(
+        loadConfig(
+          { ...MIN_ENV, WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com/" },
+          ROOT,
+          MEDIA_ROOT,
+          STATE_ROOT,
+        ),
+      ),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_MANAGEMENT_ORIGIN",
+      reason: "not_an_origin",
+    });
+  });
+
+  // The other direction, so the case above cannot pass by refusing every fallback: a bare
+  // WAITRON_ADVERTISED_ORIGIN is honoured even when the management origin it would have fallen back
+  // to is itself unusable — the unchosen variable is never validated.
+  it("does not validate WAITRON_MANAGEMENT_ORIGIN when WAITRON_ADVERTISED_ORIGIN supplies the value", () => {
+    const config = loadConfig(
+      {
+        ...MIN_ENV,
+        WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com/",
+        WAITRON_ADVERTISED_ORIGIN: "https://box.deli.waitron.app",
+      },
+      ROOT,
+      MEDIA_ROOT,
+      STATE_ROOT,
+    );
+    expect(config.advertisedOrigin).toBe("https://box.deli.waitron.app");
   });
 
   it("falls back to DATABASE_URL when WAITRON_MIGRATIONS_DATABASE_URL is set but empty", () => {
