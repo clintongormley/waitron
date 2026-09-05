@@ -40,8 +40,10 @@ stack). The front-end vite servers can stay up.
 - ✅ **done** — reviewed, and any corrections have landed
 
 **Sequencing (2026-09-05, from `backlog.md` → *Priorities → Sequencing*):** work areas 2–18 now.
-Leave area 1 (setup wizard) until the cloud-standby provisioning path lands (Track B item 2) and
-area 19 (device management) until the `tills` vs `devices` decision is recorded (Track B item 7). A
+Leave area 1 (setup wizard) until the cloud-standby provisioning path lands (Track B item 2). Area 19
+(device management) opened 2026-09-05: the `tills` vs `devices` decision is recorded
+(`superpowers/specs/2026-09-05-register-and-device-model-decision.md`; keep both — register = the
+drawer, device = the screen) and area 19 carries that build's no-migration half (its §4). A
 correction that needs a **new table** is parked until the FORCE RLS removal + migration squash lands
 (Track A item 3); everything else is polish and proceeds.
 

@@ -75,12 +75,13 @@ Three **decisions** shape UI work and cost nothing to take now (docs-only brains
 Route A vs B for the till reroute (it decides the till's auth model — **taken 2026-09-05**,
 [`2026-09-05-till-reroute-route-decision.md`](superpowers/specs/2026-09-05-till-reroute-route-decision.md));
 `tills` vs `devices` (device
-management and the till-enrol screen, [owner]); and the relay choice (ours or off-the-shelf, which
+management and the till-enrol screen, [owner] — **taken 2026-09-05**, keep both: register = the
+drawer, device = the screen, [`2026-09-05-register-and-device-model-decision.md`](superpowers/specs/2026-09-05-register-and-device-model-decision.md)); and the relay choice (ours or off-the-shelf, which
 shapes the control plane — **taken 2026-09-05**, neither:
 [`2026-09-05-relay-decision.md`](superpowers/specs/2026-09-05-relay-decision.md)). **All three are Track B's first job** — its "decisions first" line below —
-taken before Track B builds anything; Track 1 and Track C consume them. **Track 1 therefore works areas 2–18 now
-and leaves area 1 (setup wizard — its provisioning paths move under Track B item 2) and area 19
-(device management) until those decisions are recorded.** Everything else in the four tracks
+taken before Track B builds anything; Track 1 and Track C consume them. **Track 1 therefore works areas 2–18 and, since 2026-09-05, area 19 (device management —
+decision (iii) taken; it carries that build's no-migration half); area 1 (setup wizard — its
+provisioning paths move under Track B item 2) waits.** Everything else in the four tracks
 proceeds in parallel under the coordination rules in the design-review section (serialised pushes;
 whoever lands second rebases).
 
@@ -235,9 +236,11 @@ start for hardware only (printing first) and never carries browser traffic
 **TAKEN 2026-09-05: no relay.** Replication rides the box↔own-cloud-instance WireGuard link (owner
 decision, Track A session); remote access is the instance forwarding the box's name down the link
 without terminating TLS; `@waitron/tunnel` + its wiring are retired with item 2's build
-([`2026-09-05-relay-decision.md`](superpowers/specs/2026-09-05-relay-decision.md)); (iii) `tills` vs `devices` — the decision half of item 7, pulled
-forward because Track 1's area 19 waits on it; the build and its H2 receipt stay after Track A's
-squash. Record each in this file as it is taken.
+([`2026-09-05-relay-decision.md`](superpowers/specs/2026-09-05-relay-decision.md)); (iii) `tills` vs `devices` — **TAKEN 2026-09-05: keep both.** Register (`tills`; UI
+"register"/"caja") = the drawer counted at close, device = the screen; several devices ring into one
+register; enrolling a till-kind device creates its register; `till_id`'s meaning is unchanged, so NO
+new H2 receipt ([`2026-09-05-register-and-device-model-decision.md`](superpowers/specs/2026-09-05-register-and-device-model-decision.md)).
+All three decisions are now taken.
 
 1. **Till reroute** — the first slice, because nothing server-side in the failover arc is usable
    until a till can reach the second box. Route DECIDED 2026-09-05 (the decisions-first line above):
@@ -276,9 +279,12 @@ squash. Record each in this file as it is taken.
    keeps deferring — not both; a small worker registry replaces `startServer`'s hand-rolled
    AbortController-per-worker (`boot.ts`, 1,665 lines). **After Track A item 3 lands** — both edit
    `boot.ts`'s role-pool wiring.
-7. **`tills` vs `devices` — [owner]** (SP-A.2 follow-up 2): the brainstorm is taken up front (the
-   "decisions first" line above); the build — full fiscal trace, a new H2 receipt for what an
-   immutable record's `till_id` holds — after Track A's squash.
+7. **Register/device model — DECIDED 2026-09-05** (SP-A.2 follow-up 2; keep both —
+   [`2026-09-05-register-and-device-model-decision.md`](superpowers/specs/2026-09-05-register-and-device-model-decision.md) §4). The build splits: the
+   no-migration half (register create + auto-create at till enrol, handheld picker, register/device
+   wording, shift login keyed to the device's register) goes to Track 1 area 19 now; one meaning per
+   hardware-binding column waits for Track A's squash. No new H2 receipt: what an immutable record's
+   `till_id` holds is unchanged.
 
 **Track C — product / modules** (sequential; owns `packages/fiscal*`, the module framework packages,
 every NEW module package, `apps/dashboard` module screens, `apps/server/src/modules.ts`, and the
@@ -364,7 +370,8 @@ editor + rendering) is the sole remaining sub-project of this track.**
        (chain/series keyed on the NODE, `series.ts:19`), BUT `tills` is referenced by ~7 tables + provisioning
        + the sync/replication bundle, and changing what an immutable record's `till_id` holds needs a new H2
        receipt — a real initiative, not a cleanup. Needs its own brainstorm + full fiscal trace; capture the
-       "a moved till is a new register" philosophy there.
+       "a moved till is a new register" philosophy there. _Decided 2026-09-05: keep `tills` as the register;
+       the philosophy is rule 3 of [`2026-09-05-register-and-device-model-decision.md`](superpowers/specs/2026-09-05-register-and-device-model-decision.md)._
 - **SP-C — dev per-tab device switcher — LANDED #201 (2026-09-03).** Shipped: a third `WAITRON_ENV=dev`
   value that maps to `environment=preproduction` for all fiscal/AEAT/Stripe/DB-stamp code (no migration,
   fiscal enum untouched) and additionally sets a new `config.devMode`; a dev-override header
