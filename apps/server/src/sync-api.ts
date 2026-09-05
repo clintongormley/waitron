@@ -87,7 +87,7 @@ export interface SyncApiDeps {
    * tables. `@waitron/sync` no longer owns this set. */
   enrolments: readonly EnrolledTable[];
   /** Each module's applied schema version, advertised on `/hello` for the subscriber's version gate
-   * (SP-2b). A boot snapshot from `moduleAppliedVersions()`: a subscriber parks a sync row whose
+   * (SP-2b). A boot snapshot from `schemaVersionsByModule()`: a subscriber parks a sync row whose
    * owning module the source has migrated ahead of it. */
   moduleVersions: Record<string, number>;
   /** When true, `/sync-api/log` serves ONLY this node's own origin (`deps.nodeId`), ignoring a

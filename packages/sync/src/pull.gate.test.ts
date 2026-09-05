@@ -298,6 +298,11 @@ describe("syncPullOnce applies a peer's batch and advances the cursor", () => {
         http,
         batchLimit: 500,
         servingPrimaryId: () => servingPrimary, // the GETTER read fresh per batch
+        // The SP-2b version gate is INERT here: an empty `moduleByTable` means every row resolves to
+        // an unknown module, so `isVersionAhead` is always false — this test exercises the
+        // config-conflict gate, not the version-park gate.
+        moduleVersions: {},
+        moduleByTable: new Map<string, string>(),
       };
       const peer = { nodeId: NODE_RETURNED, url: "http://peer/", token: "tok" };
 

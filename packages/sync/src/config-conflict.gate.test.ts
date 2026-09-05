@@ -176,6 +176,10 @@ const PROD = {
   localEnvironment: "production",
   sourceEnvironment: "production",
   enrolments: CORE_ENROLMENT,
+  // The SP-2b version gate is INERT here (no `sourceModuleVersions`, so `isVersionAhead` is always
+  // false): these tests exercise the config-conflict gate, not the version-park gate.
+  subscriberModuleVersions: {},
+  moduleByTable: new Map<string, string>(),
 } as const;
 
 describe("Slice 7 — the config-conflict apply gate (primary-wins)", () => {

@@ -1789,7 +1789,7 @@ describe("the schema-version park gate (SP-2b, the anti-silent-corruption gate)"
         batch,
         gateOpts(subscriberId, { core: 2 }, { core: 1 }, moduleByTable),
       );
-      expect(parked).toEqual({ applied: 0, deferred: 0, versionParked: 1 });
+      expect(parked).toEqual({ applied: 0, deferred: 0, rejected: 0, versionParked: 1 });
       expect(await saleCount(saleId)).toBe("0"); // never applied — no silent drop
       expect(await laneCursor(subscriberId, originId, "ordered")).toBe(0n); // held below the parked seq
 
@@ -1800,7 +1800,7 @@ describe("the schema-version park gate (SP-2b, the anti-silent-corruption gate)"
         batch,
         gateOpts(subscriberId, { core: 2 }, { core: 2 }, moduleByTable),
       );
-      expect(landed).toEqual({ applied: 1, deferred: 0, versionParked: 0 });
+      expect(landed).toEqual({ applied: 1, deferred: 0, rejected: 0, versionParked: 0 });
       expect(await saleCount(saleId)).toBe("1"); // landed after catch-up
       expect(await laneCursor(subscriberId, originId, "ordered")).toBe(1n); // advanced past it
     } finally {
@@ -1833,7 +1833,7 @@ describe("the schema-version park gate (SP-2b, the anti-silent-corruption gate)"
         [{ seq: 1n, originId, table: "sales", op: "insert", tenantId: b.tenantId, rowImage }],
         gateOpts(subscriberId, undefined, { core: 1 }, moduleByTable),
       );
-      expect(result).toEqual({ applied: 1, deferred: 0, versionParked: 0 });
+      expect(result).toEqual({ applied: 1, deferred: 0, rejected: 0, versionParked: 0 });
       expect(await saleCount(saleId)).toBe("1"); // it landed
       expect(await hasFutureCol(saleId)).toBe("false"); // …but the newer column was SILENTLY DROPPED
     } finally {
@@ -1867,7 +1867,7 @@ describe("the schema-version park gate (SP-2b, the anti-silent-corruption gate)"
         ],
         gateOpts(subscriberId, undefined, { core: 5 }, moduleByTable),
       );
-      expect(result).toEqual({ applied: 1, deferred: 0, versionParked: 0 });
+      expect(result).toEqual({ applied: 1, deferred: 0, rejected: 0, versionParked: 0 });
       expect(await laneCursor(subscriberId, originId, "ordered")).toBe(1n);
     } finally {
       await applier.close();
@@ -1901,7 +1901,7 @@ describe("the schema-version park gate (SP-2b, the anti-silent-corruption gate)"
         ],
         gateOpts(subscriberId, { core: 1 }, { core: 2 }, moduleByTable),
       );
-      expect(r1).toEqual({ applied: 1, deferred: 0, versionParked: 0 });
+      expect(r1).toEqual({ applied: 1, deferred: 0, rejected: 0, versionParked: 0 });
       expect(await saleCount(ahead.id as string)).toBe("1");
 
       // EQUAL (core 1 == 1).
@@ -1920,7 +1920,7 @@ describe("the schema-version park gate (SP-2b, the anti-silent-corruption gate)"
         ],
         gateOpts(subscriberId, { core: 1 }, { core: 1 }, moduleByTable),
       );
-      expect(r2).toEqual({ applied: 1, deferred: 0, versionParked: 0 });
+      expect(r2).toEqual({ applied: 1, deferred: 0, rejected: 0, versionParked: 0 });
       expect(await saleCount(equal.id as string)).toBe("1");
       expect(await laneCursor(subscriberId, originId, "ordered")).toBe(2n);
     } finally {
@@ -1975,7 +1975,7 @@ describe("the schema-version park gate (SP-2b, the anti-silent-corruption gate)"
         ),
       );
       // One applied (the equal-module sale), one version-parked (the ahead-module order), no FK-defer.
-      expect(result).toEqual({ applied: 1, deferred: 0, versionParked: 1 });
+      expect(result).toEqual({ applied: 1, deferred: 0, rejected: 0, versionParked: 1 });
       expect(await saleCount(sale.id as string)).toBe("1"); // the equal module landed
       expect(
         await scalar(
@@ -2018,7 +2018,7 @@ describe("the schema-version park gate (SP-2b, the anti-silent-corruption gate)"
         // source ahead on 'core', but sales is NOT mapped to any module → the gate cannot resolve it.
         gateOpts(subscriberId, { core: 2 }, { core: 1 }, new Map<string, string>()),
       );
-      expect(result).toEqual({ applied: 1, deferred: 0, versionParked: 0 });
+      expect(result).toEqual({ applied: 1, deferred: 0, rejected: 0, versionParked: 0 });
       expect(await saleCount(img.id as string)).toBe("1");
       expect(await laneCursor(subscriberId, originId, "ordered")).toBe(1n);
     } finally {
@@ -2067,7 +2067,7 @@ describe("the schema-version park gate (SP-2b, the anti-silent-corruption gate)"
         // source knows only modAhead; subscriber knows only modBehind.
         gateOpts(subscriberId, { modAhead: 1 }, { modBehind: 1 }, moduleByTable),
       );
-      expect(result).toEqual({ applied: 1, deferred: 0, versionParked: 1 });
+      expect(result).toEqual({ applied: 1, deferred: 0, rejected: 0, versionParked: 1 });
       expect(await saleCount(sale.id as string)).toBe("0"); // subscriber-absent (0) < source 1 → parked
       expect(
         await scalar(
