@@ -373,10 +373,12 @@ the provisioning e2e use them); the guard (§9) is what stops the composition ro
 **Root-project import-boundary guard — `scripts/module-seams.test.ts` (new).** Reads text like
 `module-graph-honesty` and says so in its header. Asserts:
 
-1. No non-test file under `packages/provisioning/src` except `bin.ts` imports `@waitron/composition` or
-   any package a descriptor's `migrations.from` names (derived through `packageDirOf`, so the module
-   set is the list's, never a hand-copied one), and `packages/provisioning/package.json` lists no such
-   package under `dependencies`.
+1. No non-test file under `packages/provisioning/src` except `bin.ts` imports a REGIME package
+   (`@waitron/fiscal-verifactu`, `@waitron/verifactu`) or `@waitron/composition`, and
+   `packages/provisioning/package.json` lists no regime package under `dependencies`. The boundary
+   is the swappable slot, not "any module": provisioning legitimately imports `@waitron/identity`
+   (`seed-admin`, `startManagementSession`) and `@waitron/layouts` (device profiles), neither of
+   which is a slot another package could fill.
 2. No non-test file under `apps/server/src` (excluding `src/testing/`) except `modules.ts` imports
    `@waitron/fiscal-verifactu` or `@waitron/verifactu`, **with an explicit allowlist** —
    `boot.ts` (`drain`), `aeat-transport.ts`, `aeat-credential.ts` — each entry carrying the deferral
