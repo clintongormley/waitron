@@ -37,6 +37,9 @@ const dummyDeps: SyncPullDeps = {
   localEnvironment: "production",
   http: throwingHttp,
   batchLimit: 500,
+  // pullOnce is injected in every test here, so applyBatch (the only consumer of `enrolments`) never
+  // runs — an empty set is honest: the enrolment metadata is not exercised by these loop-control tests.
+  enrolments: [],
 };
 const noopLog = (): void => {};
 // dummyDeps.batchLimit is 500, so a FULL page is `fetched: 500` (the drain keeps going) and a SHORT
@@ -413,6 +416,9 @@ describe("membership gossip over /hello", () => {
     localEnvironment: "production",
     http: throwingHttp, // overridden per test with a real hello+log stub
     batchLimit: 500,
+    // These membership tests drive syncPullOnce with EMPTY log pages, so applyBatch always gets zero
+    // rows — the enrolment set is never consulted (no row to dispatch), an empty set is honest.
+    enrolments: [],
   };
   const peer = peerA;
   const baseRunDeps = {

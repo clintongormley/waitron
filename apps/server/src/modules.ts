@@ -1,4 +1,8 @@
+import { CORE_ENROLMENT } from "@waitron/db";
+import { IDENTITY_ENROLMENT } from "@waitron/identity";
 import type { WaitronModule } from "@waitron/module";
+import { PAYMENTS_ENROLMENT } from "@waitron/payments";
+import type { EnrolledTable } from "@waitron/sync";
 
 /**
  * Every Waitron module, in the composition list's order — which IS the migration order for this
@@ -19,8 +23,13 @@ import type { WaitronModule } from "@waitron/module";
  * identity owns), and `sync → identity` + `sync → payments` (sync's capture triggers attach to
  * identity's `persons`/`webauthn_credentials` and payments' `payments`/`payment_refunds`/
  * `payment_policy`). All ranges are `"*"` because every module is workspace-locked at version
- * `0.0.0`. `sync` (as a domain seat), `cards` and the other seats are declared on the contract but
- * stay empty until their own slices land.
+ * `0.0.0`.
+ *
+ * The `sync` seat is now POPULATED on `core`/`identity`/`payments` (SP-2a): each owning package
+ * declares its own enrolment array (`CORE_ENROLMENT`/`IDENTITY_ENROLMENT`/`PAYMENTS_ENROLMENT`) and
+ * the composition root injects it here, so `@waitron/sync` imports no domain schema. Every OTHER
+ * descriptor carries no `sync` — nothing else enrols. `cards` and the remaining seats are still
+ * declared on the contract but stay empty until their own slices land.
  */
 export const ALL_MODULES: readonly WaitronModule[] = [
   {
@@ -28,6 +37,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     version: "0.0.0",
     tier: "mandatory",
     migrations: { name: "core", table: "__drizzle_migrations_db", from: "../db/drizzle" },
+    sync: CORE_ENROLMENT,
   },
   {
     name: "identity",
@@ -39,6 +49,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       table: "__drizzle_migrations_identity",
       from: "../identity/drizzle",
     },
+    sync: IDENTITY_ENROLMENT,
   },
   {
     name: "workforce",
@@ -83,6 +94,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       table: "__drizzle_migrations_payments",
       from: "../payments/drizzle",
     },
+    sync: PAYMENTS_ENROLMENT,
   },
   {
     name: "scheduler",
@@ -114,3 +126,11 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     migrations: { name: "sync", table: "__drizzle_migrations_sync", from: "../sync/drizzle" },
   },
 ];
+
+/** The composition root's assembled sync-enrolment set — every module's declared enrolment, in
+ * ALL_MODULES order (SP-2a inversion). `@waitron/sync` no longer owns this; boot injects it into
+ * mountSyncApi/runSyncPull/readDrainProgress, and the tests use the same reference. Assembled from
+ * ALL_MODULES (not the enabled set) — the enabled-set-aware pull is SP-2b. */
+export const ALL_SYNC_ENROLMENTS: readonly EnrolledTable[] = ALL_MODULES.flatMap(
+  (m) => m.sync ?? [],
+);

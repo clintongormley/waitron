@@ -32,6 +32,7 @@ import { enrolPeer } from "@waitron/sync";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer } from "./boot.js";
 import { mountSyncApi } from "./sync-api.js";
+import { ALL_SYNC_ENROLMENTS } from "./modules.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
 import { roleUrl } from "./testing/postgres.js";
@@ -274,6 +275,7 @@ beforeAll(async () => {
       tenantId: TILL_ENV.WAITRON_TILL_TENANT_ID,
       nodeId: PEER_SOURCE_NODE,
       environment: "production",
+      enrolments: ALL_SYNC_ENROLMENTS,
     },
     () => {},
   );

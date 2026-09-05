@@ -1,31 +1,25 @@
 {
-  "name": "@waitron/payments",
+  "name": "@waitron/sync-enrolment",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
-    "db:generate": "drizzle-kit generate",
-    "db:generate:custom": "drizzle-kit generate --custom"
+    "lint": "eslint ."
   },
   "dependencies": {
-    "@waitron/db": "workspace:*",
-    "@waitron/shared": "workspace:*",
-    "@waitron/sync-enrolment": "workspace:*",
     "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.4",
     "@types/node": "^24.0.0",
     "@vitest/coverage-v8": "^3.0.0",
-    "@waitron/core": "workspace:*",
-    "@waitron/fiscal": "workspace:*",
-    "drizzle-kit": "^0.31.10",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }

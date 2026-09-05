@@ -1,5 +1,6 @@
 // The entire public surface of @waitron/identity. Re-exports only — no logic here.
 export { IDENTITY_MIGRATIONS } from "./migrations.js";
+export { IDENTITY_ENROLMENT } from "./enrolment.js";
 export { authorize } from "./authorize.js";
 export type { Authorization, AuthzInput, Override } from "./authorize.js";
 export { endSession, loginWithPin } from "./login.js";

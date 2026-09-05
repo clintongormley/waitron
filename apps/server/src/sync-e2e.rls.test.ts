@@ -7,6 +7,7 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { enrolPeer, syncPullOnce, type HttpClient } from "@waitron/sync";
 import type { Logger } from "./logger.js";
 import { mountSyncApi } from "./sync-api.js";
+import { ALL_SYNC_ENROLMENTS } from "./modules.js";
 
 // Two-node end-to-end (design §5, §7). TWO manifest-migrated databases in the shared container, each
 // a `useTemplateDb` clone of the `manifest` template — `source` and `target` — are the minimum that
@@ -99,7 +100,17 @@ async function captureSaleOnSource(saleId: string, invoiceNumber: number): Promi
 /** The HTTP seam: a real Hono app.request against a mounted source, advertising `environment` on /hello. */
 function sourceHttp(environment: "production" | "preproduction"): HttpClient {
   const app = new Hono();
-  mountSyncApi(app, { db: sourceReader, tenantId: TENANT, nodeId: NODE_A, environment }, log);
+  mountSyncApi(
+    app,
+    {
+      db: sourceReader,
+      tenantId: TENANT,
+      nodeId: NODE_A,
+      environment,
+      enrolments: ALL_SYNC_ENROLMENTS,
+    },
+    log,
+  );
   return (url, init) => Promise.resolve(app.request(url, { headers: init.headers }));
 }
 
@@ -170,6 +181,7 @@ describe("two-node sync end-to-end over a real HTTP wire", () => {
       localEnvironment: "production",
       http: sourceHttp("production"),
       batchLimit: 500,
+      enrolments: ALL_SYNC_ENROLMENTS,
     };
     const peer = { nodeId: NODE_A, url: "", token: sourcePeerToken };
 
@@ -212,6 +224,7 @@ describe("two-node sync end-to-end over a real HTTP wire", () => {
       localEnvironment: "preproduction",
       http: sourceHttp("production"),
       batchLimit: 500,
+      enrolments: ALL_SYNC_ENROLMENTS,
     };
     const peer = { nodeId: NODE_A, url: "", token: sourcePeerToken };
     const err = await captureError(() => syncPullOnce(mismatched, peer));
@@ -250,6 +263,7 @@ describe("two-node sync end-to-end over a real HTTP wire", () => {
       localEnvironment: "production",
       http: sourceHttp("production"),
       batchLimit: 500,
+      enrolments: ALL_SYNC_ENROLMENTS,
     };
     const peer = { nodeId: NODE_A, url: "", token: sourcePeerToken };
 

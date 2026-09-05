@@ -2,10 +2,87 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import { captureError, pgErrorCode } from "@waitron/db";
+import { captureError, pgErrorCode, CORE_ENROLMENT } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
+import { IDENTITY_ENROLMENT } from "@waitron/identity";
+import type { EnrolledTable } from "@waitron/sync-enrolment";
 import { applyBatch, type SyncLogRow } from "./apply.js";
+
+// The apply loop consumes an INJECTED enrolment set (SP-2a inversion) — `@waitron/sync` no longer owns
+// it. The 17 core-owned tables come from `CORE_ENROLMENT` (`@waitron/db`), and identity's two tables
+// (persons/webauthn_credentials) from `IDENTITY_ENROLMENT` — `@waitron/sync` KEEPS its `@waitron/identity`
+// dep (peers.ts's scrypt helpers), so importing its enrolment re-adds no coupling. Only the three payments
+// tables stay hand-built: `@waitron/payments` was deliberately DROPPED from `@waitron/sync`'s deps by the
+// inversion, so importing `PAYMENTS_ENROLMENT` would re-add exactly the coupling the slice removed. These
+// three entries are hand-copied to mirror `PAYMENTS_ENROLMENT`, but nothing here ties the hand-copy back to
+// the payments schema: `@waitron/payments` is intentionally not a dependency of `@waitron/sync`, so this
+// fixture cannot import the schema to self-check, and a payments-schema change would leave this copy stale
+// with no guard here to catch it — it must be kept in sync by hand. The authoritative, schema-pinned copy is
+// `PAYMENTS_ENROLMENT` in `@waitron/payments`'s own `enrolment.test.ts` (which checks `columns` against
+// `getTableColumns` of the real tables); this fixture is a manual mirror of it, not a guarded one.
+const NON_CORE_ENROLMENT: readonly EnrolledTable[] = [
+  {
+    table: "payments",
+    mode: "watermark-upsert",
+    conflictKey: ["id"],
+    watermarkColumn: "updated_at",
+    captureOps: ["insert", "update"],
+    fkRank: 3,
+    lane: "fast",
+    columns: [
+      "id",
+      "tenant_id",
+      "working_order_id",
+      "sale_id",
+      "node_id",
+      "provider",
+      "payment_ref",
+      "external_ref",
+      "amount",
+      "state",
+      "settled_at",
+      "reconcile_remediated_at",
+      "created_at",
+      "updated_at",
+    ],
+  },
+  {
+    table: "payment_refunds",
+    mode: "insert-only",
+    conflictKey: ["id"],
+    watermarkColumn: null,
+    captureOps: ["insert"],
+    fkRank: 4,
+    lane: "fast",
+    columns: [
+      "id",
+      "tenant_id",
+      "payment_id",
+      "provider",
+      "payment_ref",
+      "amount",
+      "state",
+      "authorized_by",
+      "created_at",
+    ],
+  },
+  {
+    table: "payment_policy",
+    mode: "watermark-upsert",
+    conflictKey: ["tenant_id"],
+    watermarkColumn: "updated_at",
+    captureOps: ["insert", "update"],
+    fkRank: 0,
+    lane: "ordered",
+    columns: ["tenant_id", "offline_mode", "offline_amount_cap", "created_at", "updated_at"],
+  },
+  // persons + webauthn_credentials, from the kept @waitron/identity dep (mirrors the ...CORE_ENROLMENT spread).
+  ...IDENTITY_ENROLMENT,
+];
+// The full 22-table set the composition root would assemble, built ONCE at module scope so the apply
+// loop's dispatch WeakMap (keyed on the array reference) builds its map a single time across this suite.
+const ENROLMENT: readonly EnrolledTable[] = [...CORE_ENROLMENT, ...NON_CORE_ENROLMENT];
 
 // Real Postgres, not PGlite: this suite proves the apply loop under a genuine non-superuser,
 // non-BYPASSRLS role, so FORCE ROW LEVEL SECURITY's WITH CHECK actually fences each write to its
@@ -362,7 +439,11 @@ async function laneCursor(subscriberId: string, originId: string, lane: string):
   return r.rows[0]?.seq ? BigInt(r.rows[0].seq) : 0n;
 }
 
-const PROD = { localEnvironment: "production", sourceEnvironment: "production" } as const;
+const PROD = {
+  localEnvironment: "production",
+  sourceEnvironment: "production",
+  enrolments: ENROLMENT,
+} as const;
 
 describe("the commercial-lane apply loop", () => {
   it("append-only INSERT is idempotent: a re-delivery carrying different bytes is a no-op", async () => {
@@ -722,6 +803,7 @@ describe("the commercial-lane apply loop", () => {
           subscriberId: sub1,
           localEnvironment: "production",
           sourceEnvironment: "preproduction",
+          enrolments: ENROLMENT,
         }),
       );
       expect(refusedA).toBeInstanceOf(AppError);
@@ -752,6 +834,7 @@ describe("the commercial-lane apply loop", () => {
           subscriberId: sub2,
           localEnvironment: "preproduction",
           sourceEnvironment: "production",
+          enrolments: ENROLMENT,
         }),
       );
       expect(refusedB).toBeInstanceOf(AppError);
@@ -762,6 +845,7 @@ describe("the commercial-lane apply loop", () => {
         subscriberId: sub2,
         localEnvironment: "preproduction",
         sourceEnvironment: "preproduction",
+        enrolments: ENROLMENT,
       });
       expect(matchedB.applied).toBe(1);
     } finally {
@@ -864,6 +948,7 @@ describe("the commercial-lane apply loop", () => {
           subscriberId: uuid(),
           localEnvironment: "preproduction",
           sourceEnvironment: "preproduction",
+          enrolments: ENROLMENT,
         }),
       );
       expect((err as Error).message).toContain("disagrees with the stamped");
@@ -1039,7 +1124,7 @@ describe("the fast and ordered lanes advance independent cursors (spec §4e)", (
   });
 
   it("a fast payments row whose ordered working_orders parent is absent parks, holds the fast cursor, and lands on redelivery", async () => {
-    // payments.working_order_id is NOT NULL → working_orders (packages/payments/src/schema/payments.ts),
+    // payments.working_order_id is NOT NULL → working_orders (payments' schema, payments.ts),
     // and working_orders is an ORDERED-lane table. So a fast payments row can arrive before its parent.
     // The pre-existing 23503 park (apply.ts's tryApplyRow + the retry pass) holds the fast cursor below
     // it; the in-batch retry cannot land it (the parent is never in a fast batch); a later fast pull
@@ -1096,7 +1181,8 @@ describe("the fast and ordered lanes advance independent cursors (spec §4e)", (
 
 describe("C1 — the dining_tables FK-closure enrolment (the ordered-lane hard gate)", () => {
   it("a counter-delivery working_order applies with no park once its dining_tables closure is enrolled", async () => {
-    // Failing case (proven by deletion): comment out the dining_tables entry in ENROLLED and re-run —
+    // Failing case (proven by deletion): drop the dining_tables entry from the injected enrolment set
+    // (CORE_ENROLMENT, in @waitron/db) and re-run —
     // applyBatch throws sync.table_not_enrolled on the dining_tables row (DISPATCH has no entry), so the
     // whole batch fails. Restore → this passes. That is the C1 gate made a test.
     await setEnv("production");
@@ -1166,7 +1252,7 @@ describe("C1 — the dining_tables FK-closure enrolment (the ordered-lane hard g
     try {
       // A dining_table that is NEVER applied: this models an ABSENT FK PARENT (the 23503 park path),
       // NOT the literal "not enrolled" case — that is the inline proven-by-deletion above, which
-      // throws sync.table_not_enrolled when dining_tables is dropped from ENROLLED.
+      // throws sync.table_not_enrolled when dining_tables is dropped from the injected enrolment set.
       const missingTableId = uuid();
       const order = workingOrderImage(b, 2, { delivery_table_id: missingTableId });
       const rows: SyncLogRow[] = [
@@ -1330,8 +1416,9 @@ describe("C1 — the dining_tables FK-closure enrolment (the ordered-lane hard g
 
 describe("kitchen-sync enrolment (the ordered-lane gate)", () => {
   it("a routed products row applies with no park once its kitchen closure is enrolled", async () => {
-    // Failing case (proven by deletion): comment out the kitchen_stations (or kitchen_courses) entry in
-    // ENROLLED and re-run — applyBatch throws sync.table_not_enrolled on that kitchen row (DISPATCH has
+    // Failing case (proven by deletion): drop the kitchen_stations (or kitchen_courses) entry from the
+    // injected enrolment set (CORE_ENROLMENT) and re-run — applyBatch throws sync.table_not_enrolled on
+    // that kitchen row (DISPATCH has
     // no entry), so the whole batch fails. Restore → this passes. That is spec §1's hard gate made a
     // test: a menu whose products are routed to a station/course would stall the ordered lane if the
     // kitchen parents were not enrolled.
@@ -1517,6 +1604,7 @@ describe("apply lands identity config under FORCE RLS (spec §3/§4)", () => {
         subscriberId,
         localEnvironment: "preproduction",
         sourceEnvironment: "preproduction",
+        enrolments: ENROLMENT,
       });
       expect(first.applied).toBe(1);
       const landed = await scalar(
@@ -1530,6 +1618,7 @@ describe("apply lands identity config under FORCE RLS (spec §3/§4)", () => {
         subscriberId,
         localEnvironment: "preproduction",
         sourceEnvironment: "preproduction",
+        enrolments: ENROLMENT,
       });
       expect(second.applied).toBe(0);
     } finally {
@@ -1567,7 +1656,12 @@ describe("apply lands identity config under FORCE RLS (spec §3/§4)", () => {
             rowImage: cred.rows[0]!.img,
           },
         ],
-        { subscriberId, localEnvironment: "preproduction", sourceEnvironment: "preproduction" },
+        {
+          subscriberId,
+          localEnvironment: "preproduction",
+          sourceEnvironment: "preproduction",
+          enrolments: ENROLMENT,
+        },
       );
       expect(del.applied).toBe(1);
       const remaining = await scalar(
@@ -1608,6 +1702,7 @@ describe("apply lands identity config under FORCE RLS (spec §3/§4)", () => {
           subscriberId: uuid(),
           localEnvironment: "preproduction",
           sourceEnvironment: "preproduction",
+          enrolments: ENROLMENT,
         }),
       );
       expect(pgErrorCode(err)).toBe("42501");

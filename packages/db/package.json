@@ -27,6 +27,7 @@
     "@electric-sql/pglite": "^0.5.4",
     "@waitron/membership": "workspace:*",
     "@waitron/shared": "workspace:*",
+    "@waitron/sync-enrolment": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "pg": "^8.22.0"
   },

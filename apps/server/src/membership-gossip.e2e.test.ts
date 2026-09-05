@@ -11,6 +11,7 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { enrolPeer, runSyncPull, type HttpClient } from "@waitron/sync";
 import { adoptMembership } from "./membership-adopt.js";
 import { mountSyncApi } from "./sync-api.js";
+import { ALL_SYNC_ENROLMENTS } from "./modules.js";
 import { realSleep } from "./loop.js";
 import type { Logger } from "./logger.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
@@ -91,6 +92,7 @@ async function pullOneRound(localDb: Database, trustSet: TrustSet): Promise<Acce
     localEnvironment: "preproduction",
     http: httpClient,
     batchLimit: 500,
+    enrolments: ALL_SYNC_ENROLMENTS,
     peers: [{ nodeId: SOURCE_NODE, url: "http://source.local", token: peerToken }],
     sleep: realSleep,
     signal: ac.signal,
@@ -135,7 +137,13 @@ beforeAll(async () => {
   sourceApp = new Hono();
   mountSyncApi(
     sourceApp,
-    { db: sourceReader, tenantId: TENANT, nodeId: SOURCE_NODE, environment: "preproduction" },
+    {
+      db: sourceReader,
+      tenantId: TENANT,
+      nodeId: SOURCE_NODE,
+      environment: "preproduction",
+      enrolments: ALL_SYNC_ENROLMENTS,
+    },
     log,
   );
   httpClient = inProcessClient(sourceApp);

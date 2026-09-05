@@ -5,7 +5,7 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { readSyncLogSince } from "./source.js";
 
-// NOTE: `catalogues` is an ENROLLED table, so seedBase's own catalogue INSERT (as admin, no node id)
+// NOTE: `catalogues` is an enrolled table, so seedBase's own catalogue INSERT (as admin, no node id)
 // captures a sync_log row with the all-zero origin BEFORE any products write — exactly why
 // origin.gate.test.ts filters by table_name. The tests below account for that noise: they locate the
 // `products` row explicitly, and the RLS control uses a bare `seedTenant` tenant (tenants is NOT
@@ -59,11 +59,12 @@ async function captureAProductWrite(b: Base, price: string): Promise<void> {
   }
 }
 
-/** An app_login write into `payment_policy` (an ORDERED-lane table — registry.ts:162 — used here purely
+/** An app_login write into `payment_policy` (an ORDERED-lane table — payments' PAYMENTS_ENROLMENT —
+ * used here purely
  * as a distinct `table_name`, NOT for its lane: readSyncLogSince's `tables` filter is lane-agnostic, it
  * groups by table_name; watermark table, standalone PK tenant_id, no FK parent needed beyond the tenant)
  * under withTenant{nodeId: NODE_A}, so sync_capture writes one payment_policy row to sync_log. Columns per
- * packages/payments/src/schema/payment-policy.ts: tenant_id, offline_mode (text, NOT NULL, CHECK in
+ * payments' payment-policy schema: tenant_id, offline_mode (text, NOT NULL, CHECK in
  * ('accept_offline','cash_only')), offline_amount_cap (numeric, NOT NULL, CHECK >= 0); created_at/updated_at
  * default. Same INSERT shape as packages/payments/test/seed.ts:136. Used to prove readSyncLogSince's
  * `tables` filter separates two arbitrary table_name groups. */

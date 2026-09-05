@@ -54,6 +54,7 @@ export type {
 export { MANUAL_PROVIDER, recordManualCardPayment, recordManualRefund } from "./manual.js";
 export type { ManualCardPaymentParams, ManualCardPaymentResult } from "./manual.js";
 export { PAYMENTS_MIGRATIONS } from "./migrations.js";
+export { PAYMENTS_ENROLMENT } from "./enrolment.js";
 export { getPaymentPolicy, resolveOfflineDecision } from "./policy.js";
 export type { PaymentPolicyRow } from "./policy.js";
 export { DEFAULT_SETTLEMENT_LAG_MS, classify, reconcilePayments } from "./reconcile.js";

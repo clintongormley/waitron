@@ -47,7 +47,7 @@ import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 import { writeModuleConfig, readModuleConfig } from "./module-config.js";
 import { parseModuleConfig, isEnabled } from "@waitron/module";
-import { ALL_MODULES } from "./modules.js";
+import { ALL_MODULES, ALL_SYNC_ENROLMENTS } from "./modules.js";
 import {
   adoptFromPrimary,
   type AdoptCredential,
@@ -429,6 +429,7 @@ beforeAll(async () => {
       tenantId: designated.tenantId,
       nodeId: designated.nodeId,
       environment: "preproduction",
+      enrolments: ALL_SYNC_ENROLMENTS,
     },
     log,
   );

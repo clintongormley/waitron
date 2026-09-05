@@ -2,7 +2,7 @@
 // a real module to augment rather than declaring a fresh ambient one — the same idiom
 // packages/credentials/src/errors.ts and packages/payments/src/errors.ts use.
 import "@waitron/shared";
-import type { SyncLane } from "./registry.js";
+import type { SyncLane } from "@waitron/sync-enrolment";
 
 /**
  * packages/sync's contribution to the shared error registry, by declaration merging — the
@@ -22,7 +22,7 @@ declare module "@waitron/shared" {
      * reverse (design §10, and the one-database-per-environment invariant in CLAUDE.md §5).
      * Environment NAMES only. */
     "sync.peer_environment_mismatch": { local: string; peer: string };
-    /** A captured row named a table the enrolment registry does not carry, so there is no apply
+    /** A captured row named a table the injected enrolment set does not carry, so there is no apply
      * statement for it. `table` is that table name, taken from `sync_log.table_name` — a schema
      * identifier, never row data. */
     "sync.table_not_enrolled": { table: string };

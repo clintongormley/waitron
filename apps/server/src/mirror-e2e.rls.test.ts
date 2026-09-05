@@ -31,6 +31,7 @@ import { realSleep } from "./loop.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountSyncApi } from "./sync-api.js";
+import { ALL_SYNC_ENROLMENTS } from "./modules.js";
 import { sealMirrorToken } from "./mirror-token.js";
 
 // C2a — the HEADLINE tunnel e2e (Task 6): a real booted mirror pulls a real primary's captured
@@ -287,7 +288,13 @@ beforeAll(async () => {
   const app = new Hono();
   mountSyncApi(
     app,
-    { db: sourceReader, tenantId: TENANT, nodeId: PRIMARY_SYNC_NODE, environment: "preproduction" },
+    {
+      db: sourceReader,
+      tenantId: TENANT,
+      nodeId: PRIMARY_SYNC_NODE,
+      environment: "preproduction",
+      enrolments: ALL_SYNC_ENROLMENTS,
+    },
     log,
   );
   httpsServer = createHttpsServer(

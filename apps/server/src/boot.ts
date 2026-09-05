@@ -26,7 +26,7 @@ import { drain } from "@waitron/fiscal-verifactu";
 import { appliedSchemaVersion, applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules, orderedMigrationSets, reconcile } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { ALL_MODULES } from "./modules.js";
+import { ALL_MODULES, ALL_SYNC_ENROLMENTS } from "./modules.js";
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { parseEnvFile } from "./env-file.js";
@@ -549,6 +549,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   const moduleConfig = await readModuleConfig(config.stateDir);
   const setsToMigrate =
     config.till === undefined ? ALL_MODULES : enabledModules(ALL_MODULES, moduleConfig);
+  // `ALL_SYNC_ENROLMENTS` (from ./modules.js) is the assembled module sync-enrolment set, injected into
+  // the sync source (`mountSyncApi`), the pull loop (`runSyncPull`), and the disposal guard
+  // (`readDrainProgress`) below — `@waitron/sync` no longer owns it (SP-2a inversion). Assembled from
+  // ALL_MODULES, NOT the enabled set, to stay behaviour-preserving: the former central `ENROLLED` was
+  // unconditional; the enabled-set-aware pull is SP-2b (spec §6).
   await applyMigrations(
     config.migrationsDatabaseUrl,
     migrationOptionsFor(orderedMigrationSets(setsToMigrate), config.migrationsRoot),
@@ -1306,6 +1311,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
           tenantId: till.tenantId,
           nodeId: till.nodeId,
           environment: config.environment,
+          enrolments: ALL_SYNC_ENROLMENTS,
         },
         log,
       );
@@ -1324,6 +1330,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
           tenantId: till.tenantId,
           nodeId: till.nodeId,
           environment: config.environment,
+          enrolments: ALL_SYNC_ENROLMENTS,
           ownOriginOnly: true,
         },
         log,
@@ -1394,6 +1401,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         maxBackoffMs: config.maxTickMs,
         log,
         lane,
+        enrolments: ALL_SYNC_ENROLMENTS,
         adoptMembership,
       });
     // The ORDERED lane at the existing idle interval (config.minTickMs) and the FAST payments lane at
@@ -1606,7 +1614,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     lagPool !== undefined && fenced && carrierNodeId !== undefined
       ? () =>
           withTenant(lagPool, till.tenantId, (tx) =>
-            readDrainProgress(tx, { selfNodeId: till.nodeId, carrierNodeId }),
+            readDrainProgress(tx, {
+              selfNodeId: till.nodeId,
+              carrierNodeId,
+              enrolments: ALL_SYNC_ENROLMENTS,
+            }),
           )
       : undefined;
   mountBoxStatusApi(

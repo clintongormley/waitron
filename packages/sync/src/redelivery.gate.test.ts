@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { captureError, pgErrorCode, pgErrorMessage } from "@waitron/db";
+import { captureError, pgErrorCode, pgErrorMessage, CORE_ENROLMENT } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { applyBatch } from "./apply.js";
@@ -127,7 +127,11 @@ function workingOrderImage(b: Base, id: string, over: Image = {}): Image {
   };
 }
 
-const PROD = { localEnvironment: "production", sourceEnvironment: "production" } as const;
+const PROD = {
+  localEnvironment: "production",
+  sourceEnvironment: "production",
+  enrolments: CORE_ENROLMENT,
+} as const;
 
 describe("redelivery does not wedge the stream: business BEFORE-triggers are gated on app.sync_apply", () => {
   it("a redelivered tender after its settlement is a clean no-op, and WITHOUT the gate raises WT002", async () => {

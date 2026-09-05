@@ -1,18 +1,24 @@
 // The entire public surface of @waitron/sync. Re-exports only — no logic here.
 //
-// Task 2 adds the outbox migration descriptor; Task 3 adds the enrolment registry and the static
-// per-table apply SQL. The apply loop and retention helpers land in later tasks
+// Task 2 adds the outbox migration descriptor; Task 3 adds the static per-table apply SQL (built
+// from an injected enrolment set since the SP-2a inversion — the per-table registry entries
+// themselves now live in each owning package's own `enrolment.ts`, assembled only by the composition
+// root; only the generic vocabulary — the types and the `SYNC_LANES`/`tablesForLane` helpers — is
+// re-exported here from `@waitron/sync-enrolment`, see below). The apply loop and retention helpers
+// land in later tasks
 // (docs/superpowers/plans/2026-08-08-sync-slice1-commercial-outbox-plan.md, Tasks 4/6).
 
 // The commercial-lane sync outbox migration set, consumed by @waitron/migrations' manifest (and its
 // manifest.test.ts, which pins the journal-table name against this descriptor).
 export { SYNC_MIGRATIONS } from "./migrations.js";
 
-// The enrolment registry — the audit surface for "what crosses the wire" (the twenty-two enrolled
-// tables — 17 commercial+dining + 2 identity-config + 3 kitchen KDS — their apply mode, conflict key,
-// watermark and capture ops).
-export { ENROLLED, SYNC_LANES, tablesForLane } from "./registry.js";
-export type { CaptureOp, EnrolledTable, SyncLane, SyncMode } from "./registry.js";
+// The enrolment vocabulary — re-exported from the leaf `@waitron/sync-enrolment` so existing importers
+// of `@waitron/sync` keep resolving these. `@waitron/sync` no longer OWNS the enrolment data (there is
+// no central enrolment constant here any more): the assembled module set is injected by the composition
+// root (SP-2a inversion). The lane helper and types travel here; the per-table apply metadata is
+// declared by each owning package.
+export { SYNC_LANES, tablesForLane } from "@waitron/sync-enrolment";
+export type { CaptureOp, EnrolledTable, SyncLane, SyncMode } from "@waitron/sync-enrolment";
 
 // The producer-side disposal guard — a returned/fenced node proves LOCALLY that its own-origin
 // sync_log tail has fully drained onto the carrier (per-lane own high-water vs the carrier's reported
@@ -20,7 +26,8 @@ export type { CaptureOp, EnrolledTable, SyncLane, SyncMode } from "./registry.js
 export { readDrainProgress } from "./disposal.js";
 export type { DrainProgress, DrainProgressArgs } from "./disposal.js";
 
-// The static per-table apply SQL, built once from the registry + live schema (never from row data).
+// The static per-table apply SQL, built once per injected enrolment set from each entry's columns
+// (never from row data).
 export { applyStatementFor, deleteStatementFor } from "./apply-sql.js";
 
 // The apply loop — take a peer's captured sync_log rows and write each into the local mirror as the

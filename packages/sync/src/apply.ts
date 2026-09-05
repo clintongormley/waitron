@@ -13,7 +13,7 @@
 import { sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { pgErrorCode, readDeploymentEnvironment, withTenant, type Database } from "@waitron/db";
-import { ENROLLED, type EnrolledTable, type SyncLane } from "./registry.js";
+import { type EnrolledTable, type SyncLane } from "@waitron/sync-enrolment";
 import { applyStatementFor, deleteStatementFor } from "./apply-sql.js";
 // Side-effect import: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable
 // from a file that throws `sync.*` codes (packages/shared/src/errors.ts reachability rule).
@@ -52,6 +52,11 @@ export interface ApplyBatchOptions {
    * rows read, skipped against, and advanced. Optional, defaulting to `"ordered"` (the 0002 column
    * default and the wire's ordered-clamp), so an ordered-lane caller need not name it. */
   lane?: SyncLane;
+  /** The assembled module enrolment set, injected by the composition root (spec §2e): every enrolled
+   * table's apply metadata, from which the per-set dispatch map is built once (memoised on the array
+   * reference — see {@link dispatchFor}). A row naming a table absent from this set is a hard
+   * `sync.table_not_enrolled`. `@waitron/sync` no longer owns this data (SP-2a inversion). */
+  enrolments: readonly EnrolledTable[];
 }
 
 export interface ApplyBatchResult {
@@ -144,6 +149,11 @@ export async function applyBatch(
     });
   }
 
+  // The per-table apply plumbing for THIS injected enrolment set, built once (memoised on the array
+  // reference), then threaded into every tryApplyRow call — it is no longer a module-level constant now
+  // that the enrolment data is injected rather than owned here (SP-2a inversion).
+  const DISPATCH = dispatchFor(opts.enrolments);
+
   // 2. Ascending seq is the apply order. `seq` values are distinct integers (a Postgres identity
   //    column), so the sign of their exact bigint difference is a total order; `Number` preserves
   //    that sign (never collapsing a non-zero difference to 0), giving a branchless comparator.
@@ -194,7 +204,7 @@ export async function applyBatch(
       bucket(row.originId).settled.push(row.seq);
       continue;
     }
-    const outcome = await tryApplyRow(subscriberDb, row);
+    const outcome = await tryApplyRow(subscriberDb, row, DISPATCH);
     if (!settleOrPark(row, outcome)) parked.push(row);
   }
 
@@ -203,7 +213,7 @@ export async function applyBatch(
   while (parked.length > 0 && madeProgress) {
     madeProgress = false;
     for (let i = parked.length - 1; i >= 0; i -= 1) {
-      const outcome = await tryApplyRow(subscriberDb, parked[i]!);
+      const outcome = await tryApplyRow(subscriberDb, parked[i]!, DISPATCH);
       if (settleOrPark(parked[i]!, outcome)) {
         parked.splice(i, 1);
         madeProgress = true;
@@ -232,11 +242,11 @@ interface StatementParts {
 }
 
 /**
- * One enrolled table's apply plumbing, precomputed ONCE at module load. `applyParts` is the
- * insert/update statement already split at the `$1` payload marker with the affected-row RETURNING
+ * One enrolled table's apply plumbing, precomputed ONCE per injected enrolment set. `applyParts` is
+ * the insert/update statement already split at the `$1` payload marker with the affected-row RETURNING
  * folded into its tail, so the per-row hot path is a Map lookup and a string interleave rather than a
- * rebuild. That matters for the watermark form, whose statement re-derives the column list from the
- * Drizzle schema (apply-sql.ts) — wasteful to recompute for every row of a batch.
+ * rebuild. That matters for the watermark form, whose statement walks the enrolled column list
+ * (apply-sql.ts) — wasteful to recompute for every row of a batch.
  */
 interface Dispatch {
   entry: EnrolledTable;
@@ -246,8 +256,9 @@ interface Dispatch {
 /**
  * Splits a statement at its single `$1` payload marker and folds in the affected-row `returning 1 as
  * applied`, so a no-op leaves `.rows` empty and a real change returns one row. The `row_image` then
- * binds as that one `$1` (cast `::jsonb`); every identifier around it is a literal from the fixed
- * registry (apply-sql.ts), never runtime-derived, so the CLAUDE.md §3 escaping question does not arise.
+ * binds as that one `$1` (cast `::jsonb`); every identifier around it comes from the injected
+ * enrolment set (apply-sql.ts), never runtime-derived, so the CLAUDE.md §3 escaping question does not
+ * arise.
  */
 function splitStatement(statement: string): StatementParts {
   const marker = statement.indexOf("$1");
@@ -257,26 +268,42 @@ function splitStatement(statement: string): StatementParts {
   };
 }
 
-// The dispatch table, built once from ENROLLED: 22 entries cover every row of any batch. The delete
-// statement is NOT precomputed — deleteStatementFor is a cheap pure-string helper with no column
-// derivation, and only DELETE-capable rows ever delete (Group C's working_orders/working_order_lines
-// and Group E's webauthn_credentials) — so it is built per delete row in applyOneRow.
-const DISPATCH: ReadonlyMap<string, Dispatch> = new Map(
-  ENROLLED.map((entry) => [
-    entry.table,
-    { entry, applyParts: splitStatement(applyStatementFor(entry)) },
-  ]),
-);
+// The dispatch table for one injected enrolment set, built once and memoised on the array reference
+// (a WeakMap keyed by the set), so a stable set — boot assembles it once — builds its 22-entry map a
+// single time across every batch, exactly the "build once" property the old module-level constant had.
+// A different array reference (a test fixture) gets its own map. The delete statement is NOT
+// precomputed — deleteStatementFor is a cheap pure-string helper, and only DELETE-capable rows ever
+// delete (Group C's working_orders/working_order_lines and Group E's webauthn_credentials) — so it is
+// built per delete row in applyOneRow.
+const DISPATCH_CACHE = new WeakMap<readonly EnrolledTable[], ReadonlyMap<string, Dispatch>>();
+
+function dispatchFor(enrolments: readonly EnrolledTable[]): ReadonlyMap<string, Dispatch> {
+  let d = DISPATCH_CACHE.get(enrolments);
+  if (d === undefined) {
+    d = new Map(
+      enrolments.map((entry) => [
+        entry.table,
+        { entry, applyParts: splitStatement(applyStatementFor(entry)) },
+      ]),
+    );
+    DISPATCH_CACHE.set(enrolments, d);
+  }
+  return d;
+}
 
 /**
  * Applies one row, returning the affected-row count, or the sentinel `"deferred"` when the write
  * raised `23503 foreign_key_violation` (the only error parked; anything else — a cross-tenant
  * `WITH CHECK` 42501, a check violation — propagates, since it is not an ordering problem a later
- * seq can fix). A row naming a table the registry does not carry has no apply statement, so that is
- * a hard `sync.table_not_enrolled` rather than a silent skip.
+ * seq can fix). A row naming a table the injected enrolment set does not carry has no apply statement,
+ * so that is a hard `sync.table_not_enrolled` rather than a silent skip.
  */
-async function tryApplyRow(db: Database, row: SyncLogRow): Promise<number | "deferred"> {
-  const dispatch = DISPATCH.get(row.table);
+async function tryApplyRow(
+  db: Database,
+  row: SyncLogRow,
+  dispatchMap: ReadonlyMap<string, Dispatch>,
+): Promise<number | "deferred"> {
+  const dispatch = dispatchMap.get(row.table);
   if (dispatch === undefined) throw new AppError("sync.table_not_enrolled", { table: row.table });
   try {
     return await applyOneRow(db, row, dispatch);
