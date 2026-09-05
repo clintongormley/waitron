@@ -2,7 +2,7 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq } from "drizzle-orm";
 import { AppError, SUPPORTED_LOCALES } from "@waitron/shared";
-import { asAppUser, locations, tenants, withTenant } from "@waitron/db";
+import { asAppUser, locations, readNodeMembership, tenants, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
   authorize,
@@ -18,7 +18,7 @@ import { getReceipt, getCanvas, getCanvasForFormFactor, getDeviceProfile } from 
 import type { CanvasDef, CapabilityFlag } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
-import { routableServers, type SignedMembershipDocument } from "@waitron/membership";
+import { routableServers } from "@waitron/membership";
 import { createErrorBoundary } from "./error-boundary.js";
 import { readJsonBody } from "./read-json-body.js";
 import type { Logger } from "./logger.js";
@@ -142,12 +142,6 @@ export interface TillApiDeps {
    * as `venueDefault`. DISTINCT from the fiscal `cfg.locale`/`cfg.invoiceLocales`, which are unchanged.
    */
   venueLocale: string;
-  /**
-   * The held membership document — the source of the venue's server list `GET /api/till` hands the
-   * till to route on (till-reroute design §3.2). `null` when this node holds none. A whole-DB
-   * singleton row with no tenant scope, so the read runs OUTSIDE the boot `withTenant` block.
-   */
-  readMembership: () => Promise<SignedMembershipDocument | null>;
 }
 
 /**
@@ -630,8 +624,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const device = await tryReadDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
       // The venue's server list (till-reroute §3.2). Read HERE, outside the boot transaction below:
       // `node_membership` is a whole-DB singleton row with no `tenant_id`, so it has no place under
-      // `withTenant`'s tenant scope.
-      const held = await deps.readMembership();
+      // `withTenant`'s tenant scope. Read straight off `deps.db`, like every other read in this file.
+      const held = await readNodeMembership(deps.db);
       // ONE transaction reads the issuer identity and the authored receipt trim (`getReceipt`, its own
       // `tenant_receipts` row — SP-B4), plus the resolved canvas below: all run inside the same
       // `withTenant` + `asAppUser` block (RLS scopes each to this till's tenant), never a second

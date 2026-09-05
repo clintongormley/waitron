@@ -189,7 +189,6 @@ function apiDeps(cfg: TillConfig): TillApiDeps {
     cfg,
     secureCookies: false,
     venueLocale: cfg.locale,
-    readMembership: () => Promise.resolve(null),
   };
 }
 

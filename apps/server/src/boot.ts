@@ -1117,9 +1117,6 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // The session cookie is `Secure` only when TLS is configured. Hoisted to ONE binding so the till
   // and management mounts below both read the same value — a shared local, not a duplicated literal.
   const secureCookies = config.tls !== undefined;
-  // The whole-DB membership singleton row both the till mount and the role probe below read, hoisted
-  // to one binding for the same reason `secureCookies` is.
-  const readMembership = () => readNodeMembership(db);
   mountTillApi(
     app,
     {
@@ -1131,7 +1128,6 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       cardProvider,
       venueLocale,
       devMode: config.devMode,
-      readMembership,
     },
     log,
   );
@@ -1140,12 +1136,18 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // node is the answer that steers a till away, so those boots must answer it too. `!fencedOrMirror` is
   // redundant while `deployment_role_valid_ck` rejects (mirror, primary) and the fence above demotes the
   // singleton axis; kept so the probe refuses if either stops.
-  mountNodeApi(app, {
-    nodeId: till.nodeId,
-    acceptingSales: isSingletonPrimary && !fencedOrMirror,
-    environment: config.environment,
-    readMembership,
-  });
+  mountNodeApi(
+    app,
+    {
+      nodeId: till.nodeId,
+      acceptingSales: isSingletonPrimary && !fencedOrMirror,
+      environment: config.environment,
+      // These deps carry no `db`, so the whole-DB membership read is injected rather than taken off a
+      // handle — the one place in this boot that still binds it.
+      readMembership: () => readNodeMembership(db),
+    },
+    log,
+  );
   // The operational agent/device groups — NOT mounted under mirror mode, and NOT on a FENCED node.
   // Unlike the dashboard read
   // surface below (management/catalogue/report/recipe/schedule/purchasing/workforce/me), whose writes

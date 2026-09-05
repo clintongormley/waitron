@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import type { MembershipNode, SignedMembershipDocument } from "@waitron/membership";
 import { mountNodeApi } from "./node-api.js";
+import type { Logger, LogLevel } from "./logger.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
 const NODE = "33333333-3333-4333-8333-333333333333";
@@ -11,18 +12,31 @@ function doc(nodes: readonly MembershipNode[], term = 3): SignedMembershipDocume
   return signedMembershipDoc(term, { signerNodeId: NODE, nodes });
 }
 
-function mount(overrides: Partial<Parameters<typeof mountNodeApi>[1]> = {}): Hono {
+function collect(
+  lines: { level: LogLevel; event: string; fields: Record<string, unknown> }[],
+): Logger {
+  return (level, event, fields) => lines.push({ level, event, fields: fields ?? {} });
+}
+
+function mount(
+  overrides: Partial<Parameters<typeof mountNodeApi>[1]> = {},
+  log: Logger = collect([]),
+): Hono {
   const app = new Hono();
-  mountNodeApi(app, {
-    nodeId: NODE,
-    acceptingSales: true,
-    environment: "preproduction",
-    readMembership: () =>
-      Promise.resolve(
-        doc([{ nodeId: NODE, contactUrl: "https://box.deli.test", standing: "serving-primary" }]),
-      ),
-    ...overrides,
-  });
+  mountNodeApi(
+    app,
+    {
+      nodeId: NODE,
+      acceptingSales: true,
+      environment: "preproduction",
+      readMembership: () =>
+        Promise.resolve(
+          doc([{ nodeId: NODE, contactUrl: "https://box.deli.test", standing: "serving-primary" }]),
+        ),
+      ...overrides,
+    },
+    log,
+  );
   return app;
 }
 
@@ -52,6 +66,28 @@ describe("GET /api/node", () => {
         Promise.resolve(doc([{ nodeId: OTHER, contactUrl: "", standing: "serving-primary" }])),
     }).request("/api/node");
     expect(await unlisted.json()).toMatchObject({ term: 3, standing: null });
+  });
+
+  it("answers the opaque server.internal 500 and logs under node.failed when the read throws", async () => {
+    // The probe's ONE failure mode is the membership read. Without the boundary this reached Hono's
+    // default handler: a 500 with no `{ error: { code } }` envelope and no log line at all, on the one
+    // route a till polls every few seconds. The response code is `server.internal` — `node.failed` is
+    // the boundary's LOG tag, not a wire code — and the driver's message never reaches either.
+    const lines: { level: LogLevel; event: string; fields: Record<string, unknown> }[] = [];
+    const res = await mount(
+      { readMembership: () => Promise.reject(new Error("connection terminated: pw=hunter2")) },
+      collect(lines),
+    ).request("/api/node");
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: { code: "server.internal" } });
+    expect(lines).toEqual([
+      {
+        level: "error",
+        event: "node.failed",
+        fields: { errorCode: "unknown", requestId: undefined },
+      },
+    ]);
+    expect(JSON.stringify(lines)).not.toContain("hunter2");
   });
 
   it("sends no-store so a probe is never cached", async () => {

@@ -122,7 +122,6 @@ function deps(db: Database): TillApiDeps {
     // FALSE so the Set-Cookie is issued over the non-TLS `app.request`.
     secureCookies: false,
     venueLocale: "es-ES",
-    readMembership: () => Promise.resolve(null),
   };
 }
 

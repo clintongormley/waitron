@@ -137,7 +137,6 @@ function deps(db: Database): TillApiDeps {
     cfg,
     secureCookies: false,
     venueLocale: "es-ES",
-    readMembership: () => Promise.resolve(null),
   };
 }
 
@@ -328,7 +327,6 @@ describe("GET /api/statuses", () => {
         cfg: cfgB,
         secureCookies: false,
         venueLocale: "es-ES",
-        readMembership: () => Promise.resolve(null),
       },
       collect([]),
     );

@@ -242,7 +242,6 @@ async function main(): Promise<void> {
         cfg,
         secureCookies: false,
         venueLocale: cfg.locale,
-        readMembership: () => Promise.resolve(null),
       },
       noopLog,
     );
