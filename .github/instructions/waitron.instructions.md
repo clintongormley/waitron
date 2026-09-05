@@ -100,5 +100,6 @@ list in `packages/db/src/english-only.ts` plus each Spanish module's own `vocabu
 `packages/fiscal/src/no-regime-vocabulary.test.ts` for regime words such as "chain"/"hash" written
 in English), not left to review discipline. A PR introducing a Spanish identifier into a generic
 package, an English regime term into `packages/fiscal`, one that adds a module's word to the base
-list instead of the module's declaration, or one that lists a Spanish package in `GENERIC_PACKAGES`
-to make a scan pass, is a design question to raise, not a nit to wave through.
+list instead of the module's declaration, or one that drops a generic package from
+`GENERIC_PACKAGES` (and its pin) to make a scan pass, is a design question to raise, not a nit to
+wave through.

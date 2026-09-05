@@ -156,7 +156,9 @@ runtime values only because the root project is not typechecked (CLAUDE.md §2).
    repeats a token, and `base ∩ modules = ∅` (§2).
 3. **Positive control per owner, proven by deletion.** The owner's own terms fire on the owner's own
    `src/` (measured 2026-09-05: `registros.ts` yields `registro`/`registros`/`facturacion`/`huella`/
-   `secuencia`; `convenio-config.ts` yields `convenio`×19 and `registro-jornada.ts` `jornada`×9).
+   `secuencia`; `convenio-config.ts` holds `convenio`×19 and `registro-jornada.ts` `jornada`×9 as
+   raw case-insensitive occurrences, 7 and 4 after the guard's own comment stripping and
+   tokenising).
    This replaces "the wordlist is not decorative", which scanned `packages/verifactu` — a library
    that now sits in no list. The declaration file (`vocabulary.ts`) is excluded from this scan —
    every declared term is a literal there and would satisfy any anchor.

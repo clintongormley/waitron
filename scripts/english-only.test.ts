@@ -52,6 +52,7 @@ const FIXTURE: ReadonlySet<string> = new Set([
   "mesa",
   "empleado",
   "fichaje",
+  "descripcion",
 ]);
 
 /**
@@ -236,12 +237,16 @@ describe("findSpanish", () => {
   it("does not flag words shared by both languages", () => {
     // total, base, local, error, real: identical in Spanish and English, and all five appear in the
     // naming contract. Flagging them would make the guard fire on `sales.total` on its first day.
-    expect(findSpanish("const { total, base, locale, error } = row;", FIXTURE)).toEqual([]);
+    // On the ASSEMBLED set: the claim is that no module declares one of these, not that the
+    // tokeniser skips a word nobody listed.
+    expect(findSpanish("const { total, base, locale, error } = row;", FORBIDDEN)).toEqual([]);
   });
 
   it("does not flag NIF", () => {
     // tenants.nif is in the naming contract: a legal identifier and an acronym, not vocabulary.
-    expect(findSpanish('nif: text("nif").notNull(),', FIXTURE)).toEqual([]);
+    // On the ASSEMBLED set: the claim is that no module declares `nif`, not that the tokeniser
+    // skips a word nobody listed.
+    expect(findSpanish('nif: text("nif").notNull(),', FORBIDDEN)).toEqual([]);
   });
 
   it("ignores Spanish inside line and block comments", () => {
