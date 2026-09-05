@@ -19,8 +19,8 @@
 **Decides:** the enrolment-contract type and where it lives (a leaf, §2); that each domain package owns
 its **enrolment** (not yet its whole `WaitronModule` descriptor — the dependency graph forbids that for
 `core`, §2); that `@waitron/sync` consumes an **injected** enrolment set assembled by the composition
-root and drops its `@waitron/identity`/`@waitron/payments` dependencies; and the shape of the
-graph-honesty guard (§4).
+root, imports no domain schema, and drops its `@waitron/payments` dependency (keeping `@waitron/identity`
+only for a non-schema crypto helper — §2e); and the shape of the graph-honesty guard (§4).
 
 ---
 
@@ -180,10 +180,20 @@ Today `@waitron/sync` builds its dispatch at import time from the static `ENROLL
   it constructs the sync pull loop / apply / source (`sync-api.ts`, the pull wiring). This is the DI seam
   the architecture §4 names — swapping a module changes only what the composition root registers, nothing
   in `@waitron/sync`.
-- **`@waitron/sync` drops `@waitron/identity` and `@waitron/payments` from its `package.json`.** It keeps
-  `@waitron/db` (it still uses `withTenant`, `apply.ts`). **This dependency deletion is the observable
-  proof of the inversion** and is asserted by a test (§5): `@waitron/sync`'s manifest names neither domain
-  package.
+- **`@waitron/sync` drops `@waitron/payments` and every `/src/schema` deep import.** (Corrected
+  2026-09-05, during SP-2a Task 6: the first draft claimed it drops **both** `@waitron/identity` and
+  `@waitron/payments` "entirely" — a claim that outran its evidence. `packages/sync/src/peers.ts:11`
+  imports `hashSecret`/`verifySecret` from `@waitron/identity` — pure scrypt helpers from
+  `identity/src/secret-hash.ts`, `node:crypto` only, a pre-existing #144 coupling that is **not** domain
+  schema. So `@waitron/identity` **stays** as a dependency, for that crypto helper alone; `@waitron/payments`
+  drops cleanly because `apply-sql.ts`'s schema deep-import was its only use.) It keeps `@waitron/db` (it
+  still uses `withTenant`, `apply.ts`). **The observable proof of the inversion** is therefore: `@waitron/sync`
+  imports **no domain schema** — no `@waitron/*/src/schema` deep import remains anywhere in `packages/sync/src`
+  — and `@waitron/payments` is gone from its `package.json`; the single surviving `@waitron/identity` import
+  is the `peers.ts` crypto helper, asserted by a test (§5). **Deferred follow-up:** relocating those scrypt
+  helpers to a leaf (`@waitron/shared`) so `@waitron/sync` depends on no domain package at all is a genuine
+  improvement, but it touches `@waitron/identity`'s public surface and every `hashSecret` consumer, so it is
+  its own change, out of scope for this schema-inversion slice.
 
 The `WaitronModule.sync` field (today `sync?: unknown`, `packages/module/src/module.ts:37`) is tightened to
 `readonly sync?: readonly EnrolledTable[]`, importing the type from `@waitron/sync-enrolment` — the first

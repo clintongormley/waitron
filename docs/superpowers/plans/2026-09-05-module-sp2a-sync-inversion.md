@@ -4,7 +4,7 @@
 
 **Goal:** Invert `@waitron/sync` so it imports no domain schema — each domain package declares its own sync enrolment, the composition root injects the assembled set, and a new guard proves the module dependency graph is honest. Behaviour-preserving.
 
-**Architecture:** A new leaf package `@waitron/sync-enrolment` holds the enrolment-contract type (`EnrolledTable`, gaining a derived `columns` field) plus an `enrol()` builder and `tablesForLane()`. `@waitron/db`, `@waitron/identity` and `@waitron/payments` each export their own enrolment array. `apps/server` assembles `ALL_MODULES.flatMap(m => m.sync ?? [])` and injects it into the sync source (`mountSyncApi`) and the pull loop (`runSyncPull`); `@waitron/sync` drops its central `ENROLLED`/`SYNC_SCHEMA_TABLES` and its `@waitron/identity`/`@waitron/payments` dependencies. The change is staged additive-then-flip (two encodings held equal by a pin, then the source of truth flips), mirroring SP-1a.
+**Architecture:** A new leaf package `@waitron/sync-enrolment` holds the enrolment-contract type (`EnrolledTable`, gaining a derived `columns` field) plus an `enrol()` builder and `tablesForLane()`. `@waitron/db`, `@waitron/identity` and `@waitron/payments` each export their own enrolment array. `apps/server` assembles `ALL_MODULES.flatMap(m => m.sync ?? [])` and injects it into the sync source (`mountSyncApi`) and the pull loop (`runSyncPull`); `@waitron/sync` drops its central `ENROLLED`/`SYNC_SCHEMA_TABLES`, every domain-schema import, and its `@waitron/payments` dependency (it keeps `@waitron/identity` for one non-schema scrypt helper `peers.ts` uses — a pre-existing #144 coupling, corrected from the spec's first draft, §2e). The change is staged additive-then-flip (two encodings held equal by a pin, then the source of truth flips), mirroring SP-1a.
 
 **Tech Stack:** TypeScript, pnpm workspaces, Drizzle ORM, Vitest (unit + real-Postgres via Testcontainers), Hono (sync HTTP surface).
 
@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **Behaviour-preserving.** The same 22 tables are captured and applied identically; nothing on the wire, in the DB, or in a migration changes. No new migration, no grant change, no new error code. (spec §1, §8)
-- **No domain schema in a generic package.** `@waitron/sync` must import no `@waitron/db`-schema table, and must not import `@waitron/identity` or `@waitron/payments` at all after the flip. `@waitron/sync-enrolment` is a scanned generic package — English identifiers only. (spec §2, §8)
+- **No domain SCHEMA in a generic package.** `@waitron/sync` must import no domain schema — no `@waitron/*/src/schema` deep import anywhere in `packages/sync/src` after the flip. It drops `@waitron/payments` entirely; it KEEPS `@waitron/identity` ONLY for the pre-existing `peers.ts` scrypt helper (`hashSecret`/`verifySecret`, not schema — #144). `@waitron/sync-enrolment` is a scanned generic package — English identifiers only. (spec §2, §2e, §8)
 - **The enrolment contract type is a leaf** (`@waitron/sync-enrolment`), depending only on `@waitron/shared` and `drizzle-orm`. `@waitron/db`/`@waitron/identity`/`@waitron/payments` cannot import `@waitron/module` or `@waitron/sync` (dependency cycles); they import the leaf. (spec §2a)
 - **`columns` is always derived, never hand-written** — via `enrol(drizzleTable, meta)`, which reads `getTableColumns(table)`. (spec §2c)
 - **Capture triggers, wire, cursor, apply loop, environment gate — unchanged.** Only the source-of-truth for the enrolment metadata moves. (spec §1)
@@ -52,7 +52,7 @@
 - `packages/sync/src/apply.ts` — `applyBatch` consumes injected enrolments (memoised dispatch).
 - `packages/sync/src/pull.ts` — `SyncPullDeps.enrolments`; thread into `applyBatch`.
 - `packages/sync/src/source.ts`, `disposal.ts`, `index.ts` — repoint `./registry.js` imports to the leaf.
-- `packages/sync/package.json` — drop `@waitron/identity` + `@waitron/payments`; add `@waitron/sync-enrolment`.
+- `packages/sync/package.json` — drop `@waitron/payments` (keep `@waitron/identity` — `peers.ts` crypto); add `@waitron/sync-enrolment`.
 - `apps/server/src/sync-api.ts` — `SyncApiDeps.enrolments`; `tablesForLane(deps.enrolments, …)`.
 - `apps/server/src/boot.ts` — assemble the enrolment set; pass into `mountSyncApi` (×2) and `runSyncPull`.
 - `packages/sync/src/registry.test.ts`, `apply-sql.test.ts`, and the DB-backed gate tests that build batches — rewritten to the injected-enrolment shape (Task 6).
@@ -546,7 +546,7 @@ This is the atomic inversion: `@waitron/sync` stops owning enrolment data and st
   - `SyncApiDeps` gains `enrolments: readonly EnrolledTable[]`.
   - `@waitron/sync` barrel re-exports `EnrolledTable`/`SyncMode`/`CaptureOp`/`SyncLane`/`SYNC_LANES`/`tablesForLane` from the leaf (so existing importers of `@waitron/sync` keep resolving) but no longer exports `ENROLLED`.
 
-- [ ] **Step 1: Point `@waitron/sync` at the leaf; drop domain deps.** In `packages/sync/package.json`: remove `@waitron/identity` and `@waitron/payments` from `dependencies`; add `"@waitron/sync-enrolment": "workspace:*"`. `pnpm install`. (Do not run tests yet — the package will not typecheck until the steps below land; this step just fixes the manifest.)
+- [ ] **Step 1: Point `@waitron/sync` at the leaf; drop the payments dep.** In `packages/sync/package.json`: remove `@waitron/payments` from `dependencies`; add `"@waitron/sync-enrolment": "workspace:*"`. **KEEP `@waitron/identity`** — `packages/sync/src/peers.ts:11` imports `hashSecret`/`verifySecret` from it (scrypt helpers, `node:crypto`, not schema — a pre-existing #144 coupling; corrected from the plan's first draft, §2e). `pnpm install`. (Do not run tests yet — the package will not typecheck until the steps below land; this step just fixes the manifest.)
 
 - [ ] **Step 2: Invert `apply-sql.ts`.** Replace the three domain imports + `SYNC_SCHEMA_TABLES` + `columnNamesFor` with `entry.columns`, and preserve the loud-failure assertion (a watermark entry with no columns is a bug, not silent broken SQL). New head of `apply-sql.ts`:
 ```ts
@@ -640,16 +640,16 @@ const syncEnrolments = ALL_MODULES.flatMap((m) => m.sync ?? []);
 
 - [ ] **Step 8: Fix the `apps/server` sync tests** that construct `runSyncPull`/`mountSyncApi` deps to pass `enrolments` (e.g. `enrolments: ALL_MODULES.flatMap((m) => m.sync ?? [])`, or a fixture). Grep: `grep -rln "runSyncPull\|mountSyncApi" apps/server/src` and add the field to each deps object the tests build. Update `sync-enrolment-parity.test.ts` (Task 5): `ENROLLED` is gone, so pin the assembled set against a **frozen inline 22-table snapshot** (copy the shared-field values from the deleted `registry.test.ts` `SPEC`) — the behaviour-preserving oracle now lives here.
 
-- [ ] **Step 9: Verify inversion + green.** Add an assertion (in `apps/server/src/sync-enrolment-parity.test.ts` or a small `packages/sync` manifest test) that `@waitron/sync`'s `package.json` names neither `@waitron/identity` nor `@waitron/payments`:
+- [ ] **Step 9: Verify inversion + green.** The observable proof of the inversion is that `@waitron/sync` imports **no domain schema** and no longer depends on `@waitron/payments`. Add an assertion (in `apps/server/src/sync-enrolment-parity.test.ts` or a small `packages/sync` manifest test) that `@waitron/sync`'s `package.json` does NOT name `@waitron/payments`, AND that no file under `packages/sync/src` deep-imports a domain schema (`/src/schema`). Do NOT assert `@waitron/identity` is absent — it stays for the `peers.ts` scrypt helper (§2e):
 ```ts
 import { readFileSync } from "node:fs";
-it("@waitron/sync imports no domain package (inversion proof)", () => {
+it("@waitron/sync drops the payments dep (schema-inversion proof)", () => {
   const deps = JSON.parse(readFileSync(new URL("../../sync/package.json", import.meta.url), "utf8")).dependencies;
-  expect(deps["@waitron/identity"]).toBeUndefined();
   expect(deps["@waitron/payments"]).toBeUndefined();
+  // @waitron/identity intentionally REMAINS — peers.ts uses hashSecret/verifySecret (crypto, not schema, #144).
 });
 ```
-(Adjust the relative path to the runner's cwd.) Then run, green: `pnpm --filter @waitron/sync test:coverage`, `pnpm --filter @waitron/server test:coverage`, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`.
+Also assert no domain-schema import remains (a small text scan of `packages/sync/src/*.ts` for `/src/schema` → none), which is the real inversion invariant. (Adjust the relative paths to the runner's cwd.) Then run, green: `pnpm --filter @waitron/sync test:coverage`, `pnpm --filter @waitron/server test:coverage`, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`.
 
 - [ ] **Step 10: Commit.**
 ```bash
@@ -762,4 +762,4 @@ git commit -s -m "docs(backlog): SP-2a sync inversion in flight; flow-down defer
 - [ ] Root guards: `pnpm vitest run scripts/english-only.test.ts scripts/errors-reachable.test.ts scripts/module-graph-honesty.test.ts` — green.
 - [ ] `pnpm --filter @waitron/fiscal-verifactu test inmutabilidad` — the tenant-scoped table set did not move.
 - [ ] `pnpm reap` (Ryuk disabled locally leaks containers on interruption — CLAUDE.md §4).
-- [ ] Grep proof of inversion: `grep -rn "@waitron/payments\|@waitron/identity\|src/schema" packages/sync/src` returns nothing; `grep -rn "ENROLLED\|SYNC_SCHEMA_TABLES" packages/sync` returns nothing.
+- [ ] Grep proof of inversion: `grep -rn "src/schema" packages/sync/src` returns nothing (no domain-schema deep import), and `grep -rn "@waitron/payments" packages/sync/src` returns nothing but comments. The only surviving `@waitron/identity` reference is `peers.ts`'s `hashSecret`/`verifySecret` crypto import (§2e — intentional, not schema). `grep -rn "ENROLLED\|SYNC_SCHEMA_TABLES" packages/sync` returns nothing.
