@@ -17,8 +17,9 @@ import {
  */
 export const FISCAL_ENROLMENT: readonly EnrolledTable[] = [
   // The immutable ledger. INSERT-ONLY, grant-enforced: app_user holds only SELECT,INSERT
-  // (0001_registros_inmutables.sql), so ON CONFLICT (id) DO NOTHING never issues the UPDATE the
-  // append-only BEFORE UPDATE OR DELETE trigger (WT001) would reject. Replicated verbatim — huella,
+  // (0001_registros_inmutables.sql), so ON CONFLICT (id) DO NOTHING issues no UPDATE — and a stray one
+  // would be refused by the grant (42501) before the append-only BEFORE UPDATE OR DELETE trigger fires
+  // (WT001 is the backstop for a privilege-bypassing superuser). Replicated verbatim — huella,
   // the four anterior_* pointers and entorno copy as opaque bytes; nothing recomputes a hash.
   enrol(registrosFacturacion, {
     mode: "insert-only",

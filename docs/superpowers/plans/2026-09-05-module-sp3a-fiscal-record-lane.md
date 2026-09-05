@@ -536,7 +536,7 @@ const deps = {
 };
 ```
 
-Test A (verbatim): seed a registro on `source`, `await syncPullOnce(deps, peer)`, then read the row on `target.admin` and assert `huella`, all four `anterior_*`, and `entorno` are byte-identical to the source row (compare full `select *`). Test B (idempotent): a second `syncPullOnce` (re-delivering the same seq) leaves exactly one row — `ON CONFLICT (id) DO NOTHING`. Test C (immutability on mirror): a direct `update registros_facturacion set huella=… ` on `target` as `sync_applier` throws `WT001`, and a `truncate` throws the block trigger — while the apply path (Test A) is unobstructed.
+Test A (verbatim): seed a registro on `source`, `await syncPullOnce(deps, peer)`, then read the row on `target.admin` and assert `huella`, all four `anterior_*`, and `entorno` are byte-identical to the source row (compare full `select *`). Test B (idempotent): a second `syncPullOnce` (re-delivering the same seq) leaves exactly one row — `ON CONFLICT (id) DO NOTHING`. Test C (immutability on mirror): a stray `update`/`truncate` of `registros_facturacion` on `target` by the apply role (`sync_applier`, a non-superuser `app_user` member) is refused with `42501` — the grant is checked before the trigger ever fires — while the append-only `WT001` trigger fires only for a grant/RLS-bypassing superuser (an UPDATE, or a `TRUNCATE … CASCADE`; a plain `TRUNCATE` is refused earlier with `0A000` via the FK references) — while the apply path (Test A) is unobstructed.
 
 - [ ] **Step 3: Run, watch pass.** `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server test fiscal-apply` → PASS.
 

@@ -77,6 +77,8 @@ The spec fixes the model; these two sub-decisions are the plan's, taken from the
 
 **Why real Postgres:** `reserveInstallationNumber`'s whole point is the atomic counter bump under contention, which PGlite serialises and cannot exercise (registro-sif.ts:50-57 explains the same for `registerSif`). Mirror the existing `chain.concurrency.test.ts` pattern (clone of the shared container's `core_fiscal` template).
 
+> (2026-09-05: SP-3a renamed the fiscal shared-container template `core_fiscal` → `manifest` — it now migrates the whole manifest, not just core+fiscal. The `core_fiscal` mentions here and at the code comment below now read `manifest`.)
+
 - [ ] **Step 1: Write the failing test**
 
 ```ts

@@ -283,8 +283,10 @@ working and a broken implementation visibly **disagree** (CLAUDE.md §1).
    `entorno` guard is the second rail).
 7. **Environment handshake.** A mismatched-environment peer is refused before any fiscal row applies,
    proven in **both** directions.
-8. **`capture.gate` extended** to the six fiscal triggers: byte-identical `to_jsonb` capture, and the echo
-   guard suppresses an apply-path write from re-entering `sync_log`.
+8. **Fiscal capture guarded** by a new `apps/server/src/fiscal-capture.rls.test.ts` suite: two explicit
+   trigger tests (a `registros_facturacion` insert and an `acks` DELETE, each capturing byte-identical
+   `to_jsonb`) plus an echo-guard test proving an apply-path write does not re-enter `sync_log`. The other
+   four fiscal triggers are exercised via the apply-lane suites, not re-tested here.
 9. **`inmutabilidad` re-run** after enrolment confirms the six fiscal tables (and `sync_log`) keep FORCE
    RLS (`pnpm --filter @waitron/fiscal-verifactu test inmutabilidad`, CLAUDE.md §3).
 10. **Fiscal module-version park** (§7): a subscriber behind the source's fiscal schema version parks the

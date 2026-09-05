@@ -115,6 +115,9 @@ tenant-scoped, non-fiscal tables"*
 The reserved identity is a one-time establishment at the join handshake, so it rides the adopt bundle.
 (The primary's *historical* records reaching the mirror is a different problem — H2, §7.)
 
+(2026-09-05: SP-3a enrols the six fiscal tables on the ordered lane; this "not replicated" statement is
+superseded — see [`2026-09-05-module-sp3a-fiscal-record-lane-design.md`](2026-09-05-module-sp3a-fiscal-record-lane-design.md).)
+
 ## 5. The three promotion paths, and what each needs
 
 | Path | Has its own live SIF already? | Needs reservation? | Status |
