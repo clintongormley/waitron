@@ -15,6 +15,8 @@ import {
   restoreFromArtifact,
   restoreMedia,
   restoreSecrets,
+  validateArtifact,
+  writeValidated,
 } from "./restore.js";
 
 const KEY = "correct horse battery staple";
@@ -118,6 +120,40 @@ describe("restoreFromArtifact", () => {
     await expect(stat(join(stagingDir, "db.dump"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("creates its own destination roots (staging/media/state) when they do not yet exist", async () => {
+    // A fresh/returning box may not carry `<stateDir>/restore-staging`, its media store, or its
+    // state dir. Restore must create each before the guard `realpath`s it — otherwise the guard
+    // ENOENTs, and via `runRejoin` that happens AFTER the irreversible wipe (wiped-but-not-restored).
+    // Point all three roots at not-yet-existing subpaths and assert the restore SUCCEEDS. Proven by
+    // deletion: remove the three `mkdir`s in restore.ts and this fails with ENOENT from `realpath`.
+    const newStaging = join(stagingDir, "restore-staging");
+    const newMedia = join(mediaDir, "media-store");
+    const newState = join(stateDir, "state-store");
+    await restoreFromArtifact(
+      deps({ stagingDir: newStaging, mediaDir: newMedia, stateDir: newState }),
+    );
+
+    expect(runRestore).toHaveBeenCalledTimes(1); // db restored — staging dir was created
+    expect(await readFile(join(newMedia, "abc123.jpg"))).toEqual(MEDIA); // media dir was created
+    expect(await readFile(join(newState, "secrets.env"), "utf8")).toBe(SECRET); // state dir was created
+    await expect(stat(join(newStaging, "db.dump"))).rejects.toMatchObject({ code: "ENOENT" }); // cleaned
+    // stagingDir (whole-DB plaintext dump) and stateDir (secrets) are created 0700 — a group/world
+    // -readable dir would expose the 0600 files inside by traversal (mediaDir is public, default mode).
+    expect((await stat(newStaging)).mode & 0o777).toBe(0o700);
+    expect((await stat(newState)).mode & 0o777).toBe(0o700);
+  });
+
+  it("skips secrets when skipSecrets is true (keeps own identity), still restores db+media", async () => {
+    await restoreFromArtifact(deps({ skipSecrets: true }));
+    // db restored (pg_restore fake called) and media restored …
+    expect(runRestore).toHaveBeenCalledTimes(1);
+    expect(await readFile(join(mediaDir, "abc123.jpg"))).toEqual(MEDIA);
+    // … but the secret was NOT written — the node keeps its own identity
+    await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
+    // staging still cleaned
+    await expect(stat(join(stagingDir, "db.dump"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("cleans staging even when pg_restore throws", async () => {
     const boom: PgRestoreRunner = vi.fn(async () => {
       throw new Error("pg_restore failed");
@@ -190,6 +226,84 @@ describe("restoreFromArtifact", () => {
     });
     expect(runRestore).not.toHaveBeenCalled();
     await expect(stat(join(mediaDir, "abc123.jpg"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+});
+
+describe("validateArtifact / writeValidated (R3 validate-before-wipe split)", () => {
+  useTempDirs("waitron-validate-");
+  let runRestore: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    runRestore = vi.fn(async () => {});
+  });
+
+  function deps(overrides: Partial<Parameters<typeof validateArtifact>[0]> = {}) {
+    return {
+      artifact: buildArtifact(FULL_ENTRIES),
+      recoveryKey: KEY,
+      databaseUrl: "postgres://admin@localhost/fresh",
+      mediaDir,
+      stateDir,
+      stagingDir,
+      migrationsRoot: null as string | null,
+      modules: ALL_MODULES,
+      environment: "preproduction" as const,
+      runRestore: runRestore as unknown as PgRestoreRunner,
+      log: noopLog,
+      ...overrides,
+    };
+  }
+
+  it("validateArtifact throws on a wrong recovery key and writes NOTHING", async () => {
+    // The commonest DR operator error. `validateArtifact` decrypts and must reject before any write —
+    // so R3 can run it BEFORE the irreversible wipe. No db restore, no media written.
+    await expect(validateArtifact(deps({ recoveryKey: "the-wrong-key" }))).rejects.toMatchObject({
+      code: "recovery.passphrase_invalid",
+    });
+    expect(runRestore).not.toHaveBeenCalled();
+    await expect(stat(join(mediaDir, "abc123.jpg"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("validateArtifact throws on an incompatible manifest (gate) and writes NOTHING", async () => {
+    const artifact = buildArtifact(FULL_ENTRIES, { ...MANIFEST, environment: "production" });
+    await expect(validateArtifact(deps({ artifact }))).rejects.toMatchObject({
+      code: "restore.environment_mismatch",
+    });
+    expect(runRestore).not.toHaveBeenCalled();
+    await expect(stat(join(mediaDir, "abc123.jpg"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("validateArtifact throws on a traversal entry (guard) and writes NOTHING", async () => {
+    const evil: ArchiveEntry[] = [
+      { name: "db.dump", bytes: DUMP },
+      { name: "media/../../evil.jpg", bytes: MEDIA },
+    ];
+    await expect(validateArtifact(deps({ artifact: buildArtifact(evil) }))).rejects.toMatchObject({
+      code: "restore.unsafe_entry_path",
+    });
+    expect(runRestore).not.toHaveBeenCalled();
+    await expect(stat(join(mediaDir, "abc123.jpg"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("validateArtifact returns the classified pieces and writeValidated then writes them", async () => {
+    // The two halves compose to exactly restoreFromArtifact's behaviour: validate returns the pieces,
+    // write consumes them. writeValidated is the ONLY writer — the gate/guard live solely in validate,
+    // so the security pass is single-sourced.
+    let staged: Uint8Array | undefined;
+    const capturing = vi.fn(async ({ inFile }: { inFile: string }) => {
+      staged = await readFile(inFile);
+    }) as unknown as PgRestoreRunner;
+
+    const validated = await validateArtifact(deps());
+    expect(validated.dumpEntry.bytes).toEqual(DUMP);
+    expect(validated.mediaEntries.map((e) => e.name)).toEqual(["media/abc123.jpg"]);
+    expect(validated.secretEntries.map((e) => e.name)).toEqual(["secrets/secrets.env"]);
+
+    await writeValidated(validated, deps({ runRestore: capturing }));
+    expect(staged).toEqual(DUMP);
+    expect(await readFile(join(mediaDir, "abc123.jpg"))).toEqual(MEDIA);
+    expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toBe(SECRET);
+    await expect(stat(join(stagingDir, "db.dump"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
 

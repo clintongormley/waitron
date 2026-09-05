@@ -1,4 +1,4 @@
-import { realpath, rm } from "node:fs/promises";
+import { mkdir, realpath, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { AppError } from "@waitron/shared";
 import { expectedSchemaVersion } from "@waitron/migrations";
@@ -53,6 +53,14 @@ export interface RestoreDeps {
   readonly modules: readonly WaitronModule[];
   readonly environment: DeploymentEnvironment;
   readonly runRestore?: PgRestoreRunner;
+  /**
+   * Skip restoring `secrets/*` into `stateDir`. Default `false` (the disaster-recovery CLI restores
+   * everything). R3 rejoin sets `true`: a returning node keeps its OWN identity (its identity keypair
+   * / box key in `stateDir`), so it restores the primary's DB and media but NOT the primary's secrets
+   * (spec §4.4). The whole up-front pass — decrypt, unpack, compatibility gate, traversal guard — still
+   * runs; only the `restoreSecrets` write is elided, keeping that gate+guard a single source of truth.
+   */
+  readonly skipSecrets?: boolean;
   readonly log: Logger;
 }
 
@@ -69,26 +77,41 @@ export interface RestoreHookContext {
 type RestoreHook = (ctx: RestoreHookContext) => void | Promise<void>;
 
 /**
- * Restore one encrypted backup artifact onto a fresh box, in the fixed order the flow demands:
- * decrypt → unpack → read the manifest → refuse an incompatible target (the GATE) → validate EVERY
- * entry name against its destination root (the GUARD) → restore the database, then media, then
- * secrets → invoke each enabled module's restore hook → clean staging.
+ * The classified, validated pieces of one backup artifact — the output of {@link validateArtifact}
+ * and the input to {@link writeValidated}. Everything the destructive write phase needs, decided
+ * entirely from the in-memory artifact bytes: an artifact that produces one of these has passed the
+ * compatibility GATE and the traversal GUARD, so a returned value is safe to write. R3 rejoin threads
+ * it across the wipe (validate BEFORE the irreversible `DROP DATABASE`, write AFTER), so a bad key or
+ * a rejected manifest/entry refuses with the database still intact.
+ */
+export interface ValidatedArtifact {
+  readonly manifest: BackupManifest;
+  readonly dumpEntry: ArchiveEntry;
+  readonly mediaEntries: readonly ArchiveEntry[];
+  readonly secretEntries: readonly ArchiveEntry[];
+}
+
+/**
+ * The whole up-front, WRITE-FREE pass of a restore: decrypt → unpack → classify entries → refuse an
+ * incompatible target (the GATE) → refuse an unroutable entry → mkdir the destination roots → validate
+ * EVERY entry name against its destination root (the GUARD). Returns the classified pieces; writes
+ * NOTHING to the database and no artifact content to disk (it only `mkdir`s the destination roots the
+ * guard must `realpath`). Every rejection here — a wrong recovery key, a cross-environment or
+ * schema-too-new manifest, a crafted entry name — is decidable from the artifact bytes alone.
  *
- * The GATE and the GUARD both run BEFORE any write, on purpose: `pg_restore` mutates the live
- * database irreversibly and media/secrets writes land permanently on disk, so a cross-environment or
- * schema-too-new manifest, or a single crafted-but-authentic entry name, must abort the whole
- * restore before the first byte is written — never after a half-restore (CLAUDE.md §5: a backup IS
- * the cold-recovery path, so a partial one must not masquerade as recovery-ready).
+ * The GATE and the GUARD live HERE, before any write, on purpose: `pg_restore` mutates the live
+ * database irreversibly and media/secrets writes land permanently on disk, so an incompatible manifest
+ * or a single crafted-but-authentic entry name must abort before the first byte is written — never
+ * after a half-restore (CLAUDE.md §5). R3 rejoin runs this BEFORE its irreversible wipe so the same
+ * rejections refuse the whole operation while the old database is still intact.
  *
- * This restores the fiscal ledger VERBATIM. It mints NO fresh chain, no installation number, and
- * makes the box no trade-readier — the restore hooks are the only extension seat and none exists in
- * v1. Throws `restore.archive_incomplete` for a missing `manifest.json`/`db.dump`,
+ * Throws `restore.archive_incomplete` for a missing `manifest.json`/`db.dump`,
  * `restore.unexpected_entry` for a top-level entry it cannot route,
  * `restore.environment_mismatch`/`restore.schema_too_new` from the gate, or
- * `restore.unsafe_entry_path` from the guard.
+ * `restore.unsafe_entry_path` from the guard (plus `recovery.passphrase_invalid`/`backup.*` from
+ * decrypt/unpack).
  */
-export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
-  const { log } = deps;
+export async function validateArtifact(deps: RestoreDeps): Promise<ValidatedArtifact> {
   const plaintext = decryptArtifact(deps.artifact, deps.recoveryKey);
   const entries = unpackArchive(plaintext);
 
@@ -138,6 +161,24 @@ export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
     throw new AppError("restore.unexpected_entry", { name: firstUnexpected.name });
   }
 
+  // Restore creates its OWN destination roots before the guard realpath's them: the backup side
+  // mkdir's its staging (backup-sweep.ts `runOnce`), so the restore side must mkdir its staging AND
+  // its media/state destinations, or the guard's `realpath` ENOENTs on a fresh box — after `runRejoin`
+  // has already run the IRREVERSIBLE wipe, leaving the box wiped-but-not-restored. stagingDir is proven
+  // by deletion in restore.test.ts (deleting all three mkdirs fails at the FIRST guard, stagingDir);
+  // media/state are established by the same guard-realpath shape — the up-front guard realpaths all
+  // three roots (db.dump→stagingDir, media/*→mediaDir, secrets/*→stateDir), the secret-guard loop
+  // running even under `skipSecrets`. Recursive mkdir of an existing dir is a harmless no-op. These
+  // are directory creations, not artifact writes — no restored content lands until `writeValidated`.
+  // stagingDir (whole-DB plaintext dump) and stateDir (secrets) are created 0700, the same mode
+  // `state-secrets.ts` uses for secret-bearing dirs — a world/group-readable dir would expose the
+  // 0600 files inside it by traversal. `mode` applies only when the dir is CREATED here; an existing
+  // dir keeps the operator's perms (mkdir does not tighten one). mediaDir is public content served at
+  // `/media/*` (0644 files), so it takes the default mode like `local-fs-backend.ts`.
+  await mkdir(deps.stagingDir, { recursive: true, mode: 0o700 });
+  await mkdir(deps.mediaDir, { recursive: true });
+  await mkdir(deps.stateDir, { recursive: true, mode: 0o700 });
+
   // GUARD — every entry against ITS destination root, before ANY write. The db.dump goes to
   // stagingDir, media/* to mediaDir, secrets/* to stateDir; each is guarded against the root it
   // will actually be written under, with the same prefix-stripping the writes use, so the guard
@@ -150,17 +191,35 @@ export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
     await assertSafeEntryName(entry.name.slice(SECRETS_PREFIX.length), deps.stateDir);
   }
 
+  return { manifest, dumpEntry, mediaEntries, secretEntries };
+}
+
+/**
+ * The destructive write phase of a restore, driven by an already-{@link validateArtifact validated}
+ * artifact: restore the database, then media, then secrets (SKIPPED when `skipSecrets` is set — R3
+ * rejoin keeps its own identity) → invoke each enabled module's restore hook → clean staging. Assumes
+ * the GATE and GUARD have already passed (its input is a `ValidatedArtifact`, which only
+ * `validateArtifact` produces), so it re-runs neither — the security pass stays a single source of
+ * truth. Restores the fiscal ledger VERBATIM: mints NO fresh chain and makes the box no trade-readier.
+ */
+export async function writeValidated(
+  validated: ValidatedArtifact,
+  deps: RestoreDeps,
+): Promise<void> {
+  const { log } = deps;
   const staged = join(deps.stagingDir, DB_DUMP_NAME);
   try {
     await restoreDatabase({
-      dumpBytes: dumpEntry.bytes,
+      dumpBytes: validated.dumpEntry.bytes,
       stagingDir: deps.stagingDir,
       databaseUrl: deps.databaseUrl,
       runRestore: deps.runRestore ?? realPgRestore,
       log,
     });
-    await restoreMedia({ entries: mediaEntries, mediaDir: deps.mediaDir, log });
-    await restoreSecrets({ entries: secretEntries, stateDir: deps.stateDir, log });
+    await restoreMedia({ entries: validated.mediaEntries, mediaDir: deps.mediaDir, log });
+    if (!deps.skipSecrets) {
+      await restoreSecrets({ entries: validated.secretEntries, stateDir: deps.stateDir, log });
+    }
     await invokeRestoreHooks({
       modules: deps.modules,
       mediaDir: deps.mediaDir,
@@ -173,6 +232,26 @@ export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
     // the guard/gate meant it was never staged.
     await rm(staged, { force: true });
   }
+}
+
+/**
+ * Restore one encrypted backup artifact onto a fresh box: the write-free {@link validateArtifact} pass
+ * (decrypt → unpack → GATE → GUARD) then the destructive {@link writeValidated} phase (db → media →
+ * secrets → hooks → staging cleanup). External behaviour is exactly the two composed — the gate/guard
+ * still run before any write. R3 rejoin instead calls the two halves separately, validating BEFORE its
+ * irreversible wipe and writing after, so this stays the single-shot path for the disaster-recovery
+ * CLI.
+ *
+ * This restores the fiscal ledger VERBATIM. It mints NO fresh chain, no installation number, and
+ * makes the box no trade-readier — the restore hooks are the only extension seat and none exists in
+ * v1. Throws `restore.archive_incomplete` for a missing `manifest.json`/`db.dump`,
+ * `restore.unexpected_entry` for a top-level entry it cannot route,
+ * `restore.environment_mismatch`/`restore.schema_too_new` from the gate, or
+ * `restore.unsafe_entry_path` from the guard.
+ */
+export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
+  const validated = await validateArtifact(deps);
+  await writeValidated(validated, deps);
 }
 
 /**
