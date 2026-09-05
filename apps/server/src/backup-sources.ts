@@ -34,6 +34,15 @@ export async function collectModuleNonDbState(
   const entries: ArchiveEntry[] = [];
   for (const mod of modules) {
     for (const ref of mod.backup?.nonDbState ?? []) {
+      if (ref.kind !== "content-addressed-dir") {
+        // Exhaustiveness guard. `NonDbSource.kind` is a closed union with one member today; the
+        // capture below (read the resolved dir's flat files) is correct only for
+        // `"content-addressed-dir"`. A future kind added to the type without a branch here would
+        // otherwise be given flat-dir treatment silently — so the `never` binding fails the build
+        // until a branch is added, and the throw fails the backup visibly at runtime meanwhile.
+        const _never: never = ref.kind;
+        throw new AppError("backup.source_kind_unsupported", { kind: _never });
+      }
       const dir = resolvers[ref.source];
       if (dir === undefined) {
         throw new AppError("backup.source_unresolved", { source: ref.source });

@@ -152,27 +152,41 @@ describe("runOnce (fan-out)", () => {
     expect(JSON.parse(entries.get("manifest.json")!.toString())).toEqual(FIXED_MANIFEST);
   });
 
-  it("fail-visible: a throwing manifest build ships NO partial archive", async () => {
+  it("fail-visible: a throwing manifest build ships NO partial archive and never dumps", async () => {
     const a = new FakeBackend("a");
     const boom = new Error("journal unreadable");
     const failingManifest: ManifestBuilder = async () => {
       throw boom;
     };
-    await expect(runOnce({ ...deps([a]), buildManifest: failingManifest })).rejects.toBe(boom);
+    const runDump = vi.fn(async ({ outFile }: { outFile: string }) => {
+      await writeFile(outFile, "DUMP-BYTES");
+    });
+    await expect(runOnce({ ...deps([a]), buildManifest: failingManifest, runDump })).rejects.toBe(
+      boom,
+    );
     // The throw happens before the first `put`, so nothing lands anywhere.
     expect(a.objects.size).toBe(0);
+    // Fail-fast: the manifest is collected BEFORE the expensive dump, so the dump never ran.
+    expect(runDump).not.toHaveBeenCalled();
   });
 
-  it("fail-visible: an incomplete state dir (missing a recovery file) ships NO partial archive", async () => {
+  it("fail-visible: an incomplete state dir (missing a recovery file) ships NO partial archive and never dumps", async () => {
     const a = new FakeBackend("a");
     const incompleteState = await makeStateDir("secrets.env"); // omit the vault key
+    const runDump = vi.fn(async ({ outFile }: { outFile: string }) => {
+      await writeFile(outFile, "DUMP-BYTES");
+    });
     try {
-      await expect(runOnce({ ...deps([a]), stateDir: incompleteState })).rejects.toMatchObject({
+      await expect(
+        runOnce({ ...deps([a]), stateDir: incompleteState, runDump }),
+      ).rejects.toMatchObject({
         code: "recovery.state_incomplete",
         params: { missing: "secrets.env" },
       });
       // collectStateSecrets throws before the fan-out — no partial archive is written.
       expect(a.objects.size).toBe(0);
+      // Fail-fast: the secrets read happens BEFORE the expensive dump, so the dump never ran.
+      expect(runDump).not.toHaveBeenCalled();
     } finally {
       await rm(incompleteState, { recursive: true, force: true });
     }

@@ -109,6 +109,18 @@ describe("collectModuleNonDbState", () => {
     });
   });
 
+  it("throws backup.source_kind_unsupported for an unknown source kind", async () => {
+    // A future NonDbSource kind added to the type without a capture branch must fail visibly rather
+    // than be given flat-dir treatment. Cast a bogus kind past the closed union to simulate that.
+    const bogus = moduleWithBackup({
+      nonDbState: [{ kind: "gcs-bucket", source: "media" } as unknown as never],
+    });
+    await expect(collectModuleNonDbState([bogus], { media: dir })).rejects.toMatchObject({
+      code: "backup.source_kind_unsupported",
+      params: { kind: "gcs-bucket" },
+    });
+  });
+
   it("does not read subdirectories as files (content-addressed dirs are flat)", async () => {
     await writeFile(join(dir, "flat.jpg"), Buffer.from("flat"));
     await mkdir(join(dir, "nested"));

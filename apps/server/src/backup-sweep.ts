@@ -100,29 +100,27 @@ export interface BackupSweepDeps {
  * and prune each backend to `retain`. Exported (rather than kept internal to `runBackupSweep`) so a
  * single tick can be unit-tested directly, without driving the loop's sleep/abort machinery.
  *
- * FAIL-VISIBLE: the manifest, the media capture, and the secrets read all happen BEFORE the first
- * `put`, so a throw in any of them (an unreadable journal, a missing recovery file →
- * `recovery.state_incomplete`) propagates out of `runOnce` to the tick's `backup.failed` and NO
- * partial archive is fanned out — an incomplete backup must never masquerade as a recovery-ready one
- * (CLAUDE.md §5, backup IS the cold-recovery path).
+ * FAIL-FAST: the manifest, the media capture, and the secrets read all happen BEFORE the expensive
+ * `pg_dump`, so a throw in any of them (an unreadable journal, a missing recovery file →
+ * `recovery.state_incomplete`) fails the tick WITHOUT re-dumping the whole DB every tick only to
+ * throw. It is also fail-visible: the throw propagates out of `runOnce` to the tick's `backup.failed`
+ * and NO partial archive is fanned out — an incomplete backup must never masquerade as a
+ * recovery-ready one (CLAUDE.md §5, backup IS the cold-recovery path).
  */
 export async function runOnce(deps: Omit<BackupSweepDeps, "intervalMs" | "sleep">): Promise<void> {
   const runDump = deps.runDump ?? realPgDump;
   const buildBackupManifest = deps.buildManifest ?? buildManifest;
   const stamp = (deps.now ?? (() => new Date()))();
-  await mkdir(deps.stagingDir, { recursive: true });
   const dumpName = dumpFileName(stamp);
   const staged = join(deps.stagingDir, dumpName);
+  // The staged file only comes into existence once `runDump` runs; the fail-fast collection below
+  // can throw before that, so the `finally` guards its cleanup on this flag.
+  let dumped = false;
   try {
-    await runDump({ databaseUrl: deps.databaseUrl, outFile: staged, signal: deps.signal });
-    // The staged file is the whole-DB plaintext dump. Lock it to 0600 (owner-only) the moment it
-    // exists, matching the restrictive perms the encrypted artifact already gets on disk
-    // (`LocalFsBackend.put` writes 0o600) — pg_dump's own umask can leave it group/other-readable.
-    await chmod(staged, 0o600);
-    const dumpBytes = await readFile(staged);
-    // Assemble the archive entries in a deterministic order: index first, then the dump, then the
-    // module non-DB state (`media/<sha>`), then the secrets (`secrets/<path>`). Any throw here (see
-    // the FAIL-VISIBLE note above) escapes before the fan-out below.
+    // Collect the cheap, throw-prone pieces FIRST — the manifest, the module non-DB state
+    // (`media/<sha>`), and the state secrets (`secrets/<path>`). A misconfigured box fails here
+    // before the whole-DB dump is wasted (see the FAIL-FAST note above). This changes only the
+    // COLLECTION order; the packed ENTRY order below is unchanged.
     const manifest = await buildBackupManifest({
       db: deps.db,
       modules: deps.modules,
@@ -130,10 +128,23 @@ export async function runOnce(deps: Omit<BackupSweepDeps, "intervalMs" | "sleep"
       now: stamp,
     });
     const secrets = await collectStateSecrets(deps.stateDir);
+    const nonDbState = await collectModuleNonDbState(deps.modules, deps.resolvers);
+
+    // Cheap collection passed — now take the expensive dump into the staging file.
+    await mkdir(deps.stagingDir, { recursive: true });
+    await runDump({ databaseUrl: deps.databaseUrl, outFile: staged, signal: deps.signal });
+    dumped = true;
+    // The staged file is the whole-DB plaintext dump. Lock it to 0600 (owner-only) the moment it
+    // exists, matching the restrictive perms the encrypted artifact already gets on disk
+    // (`LocalFsBackend.put` writes 0o600) — pg_dump's own umask can leave it group/other-readable.
+    await chmod(staged, 0o600);
+    const dumpBytes = await readFile(staged);
+    // Pack the archive in its fixed ENTRY order: index first, then the dump, then the module non-DB
+    // state (`media/<sha>`), then the secrets (`secrets/<path>`).
     const entries: ArchiveEntry[] = [
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
       { name: "db.dump", bytes: dumpBytes },
-      ...(await collectModuleNonDbState(deps.modules, deps.resolvers)),
+      ...nonDbState,
       ...Object.entries(secrets).map(([path, contents]) => ({
         name: `secrets/${path}`,
         bytes: Buffer.from(contents),
@@ -166,7 +177,9 @@ export async function runOnce(deps: Omit<BackupSweepDeps, "intervalMs" | "sleep"
       }),
     );
   } finally {
-    await rm(staged, { force: true });
+    // Only the dump creates the staged file; a fail-fast tick that threw before it never staged
+    // anything, so guard the cleanup on `dumped` rather than issuing a spurious `rm`.
+    if (dumped) await rm(staged, { force: true });
   }
 }
 

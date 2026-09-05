@@ -1550,6 +1550,14 @@ declare module "@waitron/shared" {
      */
     "backup.source_unresolved": { source: string };
     /**
+     * A module declared a `backup.nonDbState` source whose `kind` `collectModuleNonDbState` has no
+     * branch for. `NonDbSource.kind` is a closed union (only `"content-addressed-dir"` today); a
+     * future member added to the type without a capture branch here would otherwise be silently
+     * given flat-dir treatment. The exhaustiveness guard fails the backup loudly instead. `kind` is
+     * the module's own declared discriminant, not a secret, so echoing it names the missing branch.
+     */
+    "backup.source_kind_unsupported": { kind: string };
+    /**
      * The operator-supplied `primaryUrl` a mirror was pointed at is not a URL the mirror may fetch from
      * (sync cloud-mirror hardening) — it fails to parse, uses a scheme other than http/https, or names a
      * host the SSRF policy refuses (a private/link-local/CGNAT/metadata literal IP over ANY scheme, or a
