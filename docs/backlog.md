@@ -65,6 +65,7 @@ below). Two structures are known to be out of date and must not be built on:
    core or module — until Track A item 3 lands.** UI corrections are polish and need none; anything
    that does is parked behind A3. Track A therefore goes first and fast: coverage split (an
    afternoon) → prototype (a day) → A3 starts immediately; it is the long pole for everyone.
+   **2026-09-05:** the split is PR #239 and the prototype has reported (item 2) — A3 is next.
 2. **The module framework's UI seats** (cards, permissions, i18n arriving with a module) are
    unproven until Track C's `fiscal-none` + bookings-as-a-module land. New product domains wait for
    them and land as modules; polishing existing screens does not.
@@ -136,8 +137,8 @@ conflict):**
   role). Density comes from many isolated instances per host, never from a shared database. The only
   multi-tenant pieces are the stateless tunnel relay, a small control plane (accounts, subscriptions,
   instances, relay tokens, rollout — not yet designed) and the preproduction trial demo. Consequence
-  for recommendation 1 below: the last consumer of FORCE RLS is gone; the replication prototype is
-  the only remaining gate on dropping it.
+  for recommendation 1 below: the last consumer of FORCE RLS is gone; the replication prototype was
+  the only remaining gate on dropping it — **cleared 2026-09-05** (Track A item 2).
 - **The deli gets two boxes + cloud failover on day one** and must survive internet-down, box-down
   and printer-down. Redundancy is mandatory. **Active-active is SHELVED for the foreseeable future
   (owner decision 2026-09-05): the deli runs warm standby + human promotion.** The owner's reason:
@@ -174,16 +175,20 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    elsewhere (the four browser packages keep their documented 95/95/90/88 or take the new floor,
    whichever is lower); update CLAUDE.md §2's thresholds paragraph in the same PR. Receipt: 71 files
    already carry `v8 ignore`.
-2. **Native logical replication prototype** (one day, two `postgres:18-alpine` containers, no repo
-   code; output = a dated findings doc under `docs/superpowers/specs/`): real migrations WITHOUT RLS, a
-   non-superuser apply role that OWNS the subscriber's tables (the old "Stage 3b" `cannot SET ROLE`
-   failure was ownership, not RLS). Prove (a) `origin = none` stops the A→B→A echo, (b) a
-   `registros_facturacion` row lands byte-identical, (c) the append-only trigger still blocks a stray
-   UPDATE on the subscriber, (d) a one-sided column add errors loudly rather than dropping data, (e)
-   lag + slot retention with the subscriber down. State the failing case before each probe. **Decision
-   rule:** all of (a)–(d) pass → stop adding outbox features and write the swap spec (item 4); any
-   fail → record the receipt in the sync design and keep the outbox. Never rip the outbox out before
-   this reports.
+2. **Native logical replication prototype — DONE 2026-09-05: all of (a)–(d) PASS, (e) measured.**
+   Findings: [native-replication-post-rls-prototype-findings](superpowers/specs/2026-09-05-native-replication-post-rls-prototype-findings.md)
+   — real migrations applied as a non-superuser OWNER (`rolsuper = f`), RLS stripped, two
+   `postgres:18-alpine` nodes bidirectional with `origin = none`. Both 2026-08-02 gates (RLS refusing
+   the apply worker; the non-owner `SET ROLE`) are gone on that schema. **Decision rule applied: stop
+   adding outbox features; item 4 is next.** Nine findings the swap spec must carry, the two that
+   change code: `ENABLE ALWAYS` on the immutability triggers (the apply worker skips `tgenabled = O`
+   triggers and copied a corrupted publisher's UPDATE silently until it was set), and a bounded
+   `max_slot_wal_keep_size` (a dead standby otherwise fills the primary's disk — the one failure that
+   would stop sales). Also: `FOR ALL TABLES` is superuser-only, so each module publishes an explicit
+   table list; additive DDL is subscriber-first and the missing-column stall is loud and self-heals;
+   `time_entries.ingest_seq` does not replicate; one superuser provisioning step for the `REPLICATION`
+   role. **Cross-track (Track C):** module SP-2b's schema-version gate rests on "deliberate rejection
+   of native logical replication" — read the findings before building it.
 3. **Drop FORCE RLS + the multi-role set — [owner] at land** (one PR chain; the largest change on
    this list; gated on item 2 only because the answer changes what the sync layer must be). Keep
    `tenant_id` columns + composite FKs, the owner-vs-`app_user` split (the append-only guarantee rests

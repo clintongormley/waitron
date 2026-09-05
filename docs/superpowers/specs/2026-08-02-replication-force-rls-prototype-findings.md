@@ -1,5 +1,11 @@
 # Prototype: logical replication vs FORCE RLS under the non-superuser deployment role
 
+> **2026-09-05:** superseded in part. Both gates below — RLS refusing the apply worker, and Stage 3b's
+> non-owner `SET ROLE` failure — are properties of the FORCE-RLS, migrate-as-superuser schema that Track A
+> item 3 removes. A second prototype on the post-RLS schema, applied by a non-superuser OWNER, passed every
+> probe: [2026-09-05-native-replication-post-rls-prototype-findings.md](2026-09-05-native-replication-post-rls-prototype-findings.md).
+> The receipts below stand for the schema as it was.
+
 **Date:** 2026-08-02
 **Server:** `PostgreSQL 18.4` (`postgres:18-alpine`, the repo harness image), two instances on a
 Docker network (`pgA` publisher, `pgB` subscriber), `wal_level=logical`.

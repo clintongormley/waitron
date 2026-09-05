@@ -1,5 +1,11 @@
 # The application-level cross-server sync layer
 
+> **2026-09-05:** the premise that native logical replication is categorically blocked (Stage 3b, §12's
+> option (a)) was re-tested on the post-RLS schema under a non-superuser owner and PASSED every probe —
+> [2026-09-05-native-replication-post-rls-prototype-findings.md](2026-09-05-native-replication-post-rls-prototype-findings.md).
+> The outbox → native swap spec (Track A item 4) is this design's successor; this file stays the record
+> of what is built today.
+
 **Date:** 2026-08-02
 **Status:** reviewed with the product owner (2026-08-02); §12 decisions 2/3/5 settled (explicit
 `server_id` on the commercial tables, a `payments` fast lane, true active-active for the deli). Not
