@@ -139,7 +139,7 @@ describe("provisionVenue", () => {
       expect((id as string).length).toBeGreaterThan(0);
     }
     expect(result.seriesIds).toHaveLength(2);
-    expect(result.sif).toBeDefined();
+    expect(result.seeded.map((s) => s.module)).toEqual(["fiscal"]);
 
     // The box is now stamped for the requested environment.
     expect(await readDeploymentEnvironment(db)).toBe("preproduction");

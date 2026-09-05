@@ -18,7 +18,7 @@ export { applyVenue } from "./venue-apply.js";
 export type { VenueApplyDeps, VenueResult } from "./venue-apply.js";
 export { adoptVenue } from "./venue-adopt.js";
 export type { AdoptResult, AdoptVenueDeps, AdoptVenueRows, VenueRow } from "./venue-adopt.js";
-export { resolveFiscalModules } from "./fiscal-modules.js";
+export { FISCAL_TERRITORIES, resolveFiscalModules } from "./fiscal-modules.js";
 export type { FiscalModules } from "./fiscal-modules.js";
 export { obligadoTenantId } from "./tenant-id.js";
 import "./errors.js";

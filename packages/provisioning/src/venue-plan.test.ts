@@ -1,7 +1,27 @@
 import { describe, expect, it } from "vitest";
+import type { WaitronModule } from "@waitron/module";
 import { isAppError } from "@waitron/shared";
 import { obligadoTenantId } from "./tenant-id.js";
 import { describeVenueAction, planVenue, type VenueRequest } from "./venue-plan.js";
+
+// planVenue is generic over the module list now, so these tests build their own: a seedless module
+// and a seeding one, which is all the planner reads.
+function fakeModule(name: string, seed?: { summary: string }): WaitronModule {
+  return {
+    name,
+    version: "0.0.0",
+    tier: "toggleable",
+    migrations: { name, table: `__drizzle_migrations_${name}`, from: `../${name}/drizzle` },
+    ...(seed === undefined
+      ? {}
+      : { provisioning: { seed: { summary: seed.summary, run: async () => "done" } } }),
+  };
+}
+
+const MODULES: readonly WaitronModule[] = [
+  fakeModule("core"),
+  fakeModule("probe", { summary: "seed the probe" }),
+];
 
 function request(overrides: Partial<VenueRequest> = {}): VenueRequest {
   return {
@@ -30,8 +50,8 @@ function request(overrides: Partial<VenueRequest> = {}): VenueRequest {
 }
 
 describe("planVenue", () => {
-  it("emits ensure-tenant → seed-admin → seed-device-profiles → location → till → node → register-sif → two series, in order", () => {
-    const actions = planVenue(request());
+  it("emits ensure-tenant → seed-admin → seed-device-profiles → location → till → node → two series → module seeds, in order", () => {
+    const actions = planVenue(request(), MODULES);
     expect(actions.map((a) => a.kind)).toEqual([
       "ensure-tenant",
       "seed-admin",
@@ -39,9 +59,9 @@ describe("planVenue", () => {
       "create-location",
       "create-till",
       "create-node",
-      "register-sif",
       "create-series",
       "create-series",
+      "seed-module",
     ]);
   });
 
@@ -49,13 +69,13 @@ describe("planVenue", () => {
     // The profiles are authored under an admin management session (seed-admin runs first), so
     // seed-device-profiles is emitted immediately after seed-admin. Non-fiscal — it touches no
     // series/SIF/chain — so its position relative to create-till onward does not matter.
-    const actions = planVenue(request());
+    const actions = planVenue(request(), MODULES);
     expect(actions[1]?.kind).toBe("seed-admin");
     expect(actions[2]?.kind).toBe("seed-device-profiles");
   });
 
   it("resolves the starter profiles' names from the venue's primary invoice locale (es → Spanish)", () => {
-    const action = planVenue(request()).find((a) => a.kind === "seed-device-profiles");
+    const action = planVenue(request(), MODULES).find((a) => a.kind === "seed-device-profiles");
     // es-ES venue → the Spanish names, each carrying its form-factor default capabilities.
     expect(action).toEqual({
       kind: "seed-device-profiles",
@@ -70,6 +90,7 @@ describe("planVenue", () => {
   it("resolves the starter profiles' names in English for an en venue", () => {
     const action = planVenue(
       request({ location: { ...request().location, invoiceLocales: ["en-GB"] } }),
+      MODULES,
     ).find((a) => a.kind === "seed-device-profiles");
     expect(action?.kind === "seed-device-profiles" && action.profiles.map((p) => p.name)).toEqual([
       "Counter",
@@ -82,7 +103,7 @@ describe("planVenue", () => {
     // The admin needs only the tenant scope, so it is emitted right after ensure-tenant and before
     // the location. The pinHash flows straight through from the request — planVenue never sees a
     // plaintext PIN (it is hashed at the CLI boundary).
-    const actions = planVenue(request());
+    const actions = planVenue(request(), MODULES);
     expect(actions[0]?.kind).toBe("ensure-tenant");
     expect(actions[1]).toEqual({
       kind: "seed-admin",
@@ -93,7 +114,7 @@ describe("planVenue", () => {
   });
 
   it("derives the deterministic tenant id and stamps the resolved modules on the node", () => {
-    const actions = planVenue(request());
+    const actions = planVenue(request(), MODULES);
     const tenant = actions.find((a) => a.kind === "ensure-tenant");
     const node = actions.find((a) => a.kind === "create-node");
     expect(tenant).toMatchObject({
@@ -105,7 +126,7 @@ describe("planVenue", () => {
   });
 
   it("emits a standard series and a rectificative series with the requested codes", () => {
-    const series = planVenue(request()).filter((a) => a.kind === "create-series");
+    const series = planVenue(request(), MODULES).filter((a) => a.kind === "create-series");
     expect(series).toEqual([
       { kind: "create-series", code: "A", purpose: "standard" },
       { kind: "create-series", code: "R", purpose: "rectificative" },
@@ -114,7 +135,10 @@ describe("planVenue", () => {
 
   it("REFUSES an unimplemented territory (spec D4 input half) before emitting anything", () => {
     try {
-      planVenue(request({ location: { ...request().location, fiscalTerritory: "ES-PV-bizkaia" } }));
+      planVenue(
+        request({ location: { ...request().location, fiscalTerritory: "ES-PV-bizkaia" } }),
+        MODULES,
+      );
       expect.unreachable("should have refused");
     } catch (error) {
       expect(isAppError(error) && error.code).toBe("fiscal.regime_not_implemented");
@@ -123,7 +147,7 @@ describe("planVenue", () => {
 
   it("refuses fewer than one invoice locale, echoing the count", () => {
     try {
-      planVenue(request({ location: { ...request().location, invoiceLocales: [] } }));
+      planVenue(request({ location: { ...request().location, invoiceLocales: [] } }), MODULES);
       expect.unreachable("should have refused an empty locale list");
     } catch (error) {
       expect(isAppError(error)).toBe(true);
@@ -136,7 +160,10 @@ describe("planVenue", () => {
 
   it("refuses more than two invoice locales, echoing the count", () => {
     try {
-      planVenue(request({ location: { ...request().location, invoiceLocales: ["a", "b", "c"] } }));
+      planVenue(
+        request({ location: { ...request().location, invoiceLocales: ["a", "b", "c"] } }),
+        MODULES,
+      );
       expect.unreachable("should have refused three locales");
     } catch (error) {
       expect(isAppError(error)).toBe(true);
@@ -152,7 +179,7 @@ describe("planVenue", () => {
     // silently drop the second and leave the venue with ONE series and no way to issue corrections.
     // Rejected in the pure planner, like the other D4 input refusals.
     try {
-      planVenue(request({ seriesCode: "A", rectificativeSeriesCode: "A" }));
+      planVenue(request({ seriesCode: "A", rectificativeSeriesCode: "A" }), MODULES);
       expect.unreachable("should have refused equal series codes");
     } catch (error) {
       expect(isAppError(error) && error.code).toBe("provisioning.duplicate_series_code");
@@ -166,7 +193,7 @@ describe("planVenue", () => {
     // hash-chained record. Spec §8 assumes a location is in the tenant's country; refused in the pure
     // planner before any admin connection is spent, echoing both operator-typed values.
     try {
-      planVenue(request({ country: "PT" }));
+      planVenue(request({ country: "PT" }), MODULES);
       expect.unreachable("should have refused an ES territory under a PT country");
     } catch (error) {
       expect(isAppError(error)).toBe(true);
@@ -187,6 +214,7 @@ describe("planVenue", () => {
           country: "PT",
           location: { ...request().location, fiscalTerritory: "FR-common" },
         }),
+        MODULES,
       );
       expect.unreachable("should have refused an unimplemented territory");
     } catch (error) {
@@ -203,10 +231,10 @@ describe("planVenue", () => {
     // (§5). (Internal whitespace is deliberately NOT normalized; see the tenant-id primitive's test.)
     // Proven by deletion: strip planVenue's normalization and the id-equality / stored-value
     // assertions below go red.
-    const canonicalTenant = planVenue(request({ country: "ES", taxId: "B12345678" })).find(
+    const canonicalTenant = planVenue(request({ country: "ES", taxId: "B12345678" }), MODULES).find(
       (a) => a.kind === "ensure-tenant",
     );
-    const messyTenant = planVenue(request({ country: "es", taxId: " b12345678 " })).find(
+    const messyTenant = planVenue(request({ country: "es", taxId: " b12345678 " }), MODULES).find(
       (a) => a.kind === "ensure-tenant",
     );
     // The stored unique-index row is canonical (so applyVenue's ON CONFLICT (country, tax_id) fires)...
@@ -223,6 +251,7 @@ describe("planVenue", () => {
     // refuse the coherent combination on case alone.
     const actions = planVenue(
       request({ country: "es", location: { ...request().location, fiscalTerritory: "ES-common" } }),
+      MODULES,
     );
     expect(actions.map((a) => a.kind)).toEqual([
       "ensure-tenant",
@@ -231,16 +260,40 @@ describe("planVenue", () => {
       "create-location",
       "create-till",
       "create-node",
-      "register-sif",
       "create-series",
       "create-series",
+      "seed-module",
     ]);
+  });
+
+  it("emits one seed-module per module declaring a seed, last, in list order, carrying its summary", () => {
+    const seeds = planVenue(request(), [
+      fakeModule("b", { summary: "seed b" }),
+      fakeModule("core"),
+      fakeModule("a", { summary: "seed a" }),
+    ]).filter((a) => a.kind === "seed-module");
+    expect(seeds).toEqual([
+      { kind: "seed-module", module: "b", summary: "seed b" },
+      { kind: "seed-module", module: "a", summary: "seed a" },
+    ]);
+  });
+
+  it("emits no seed-module for a list with no seeds", () => {
+    expect(planVenue(request(), [fakeModule("core")]).some((a) => a.kind === "seed-module")).toBe(
+      false,
+    );
   });
 });
 
 describe("describeVenueAction", () => {
+  it("describes a seed-module action by module and summary", () => {
+    expect(
+      describeVenueAction({ kind: "seed-module", module: "probe", summary: "seed the probe" }),
+    ).toBe("seed module probe: seed the probe");
+  });
+
   it("renders each planned action as a line an operator can check", () => {
-    const lines = planVenue(request()).map((action) => describeVenueAction(action));
+    const lines = planVenue(request(), MODULES).map((action) => describeVenueAction(action));
     expect(lines).toEqual([
       "ensure tenant ES/B12345678 (Deli SL)",
       "seed admin Owner",
@@ -248,9 +301,9 @@ describe("describeVenueAction", () => {
       "create location Mostrador in ES-common (es-ES)",
       "create till Caja 1",
       "create node Mostrador filing=verifactu tax=iva",
-      "register the node as a SIF (id_sistema W1)",
       "create standard series A",
       "create rectificative series R",
+      "seed module probe: seed the probe",
     ]);
   });
 

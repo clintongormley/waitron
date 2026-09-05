@@ -251,28 +251,6 @@ declare module "@waitron/shared" {
      * `provisioning.duplicate_series_code` above — neither is a secret, and a refusal that withheld
      * them could not be acted on. */
     "provisioning.territory_country_mismatch": { country: string; fiscalTerritory: string };
-    /** Waitron's own AEAT software identifier — `WAITRON_ID_SISTEMA`, a product constant rather
-     * than operator input — is empty or longer than its ≤ 2-char limit (FAQ §4). Thrown by
-     * `assertUsableIdSistema` (`fiscal-modules.ts`), which `planVenue` calls before it builds the
-     * `register-sif` action, so a wrong value is a programming error caught on the production path
-     * before it can reach `registro_sif.id_sistema_informatico` and, through that, every registro a
-     * node files, where it could only be superseded by re-registration, never corrected.
-     *
-     * `provisioning.*` was originally forced rather than chosen: `sif.id_sistema_invalid` was
-     * registered in `apps/server/src/errors.ts`, which a package cannot import, so throwing it here
-     * failed `tsc` with TS2345. That obstacle is GONE — SP-3c moved the code into
-     * `packages/fiscal-verifactu/src/errors.ts`, a dependency of this package, and throwing it here
-     * now type-checks (measured by substituting the throw and running this package's `typecheck`).
-     * The code survives only as an un-converged duplicate. It is not a NODE-provisioning code in the
-     * sense the header above warns against: it validates Waitron's own global product constant, not
-     * any one node's SIF row. Converging the two length rules onto a single code is a noted
-     * follow-up (see the doc comment on `WAITRON_ID_SISTEMA`).
-     *
-     * `value` and `maxLength` mirror `sif.id_sistema_invalid` exactly so that follow-up changes only
-     * the prefix. `value` IS echoed — the same format-check family as
-     * `provisioning.invalid_identifier` above, `shared.invalid_id` and `server.config_invalid`: a
-     * product id or an operator's typo, never a secret. */
-    "provisioning.id_sistema_invalid": { value: string; maxLength: number };
     /** The CSPRNG returned the wrong number of bytes. `byteLength` is a size, never material. */
     "provisioning.key_generation_failed": { byteLength: number };
     /** A role this tool would use already exists carrying SUPERUSER or BYPASSRLS. Refused rather

@@ -38,8 +38,9 @@ absent and lets `@waitron/migrations` resolve each set from `packages/migrations
 | `status`   | the same admin connection; reads only                      | any time            |
 | `venue`    | the owner-admin connection to a stamped, migrated database | once per venue      |
 
-`venue` creates a tenant, a location, a till, a node registered as a SIF, and its standard and
-rectificative invoice series — replacing the retired `apps/server/sql/bootstrap-tenant.sql` (removed
+`venue` creates a tenant, a location, a till, a node and its standard and rectificative invoice
+series, then runs each composed module's provisioning seed (the fiscal module's registers the node as
+a SIF and starts its chain) — replacing the retired `apps/server/sql/bootstrap-tenant.sql` (removed
 2026-08-04, spec [`2026-08-04-locations-provisioning-design.md`](../../docs/superpowers/specs/2026-08-04-locations-provisioning-design.md)).
 `register-till` (`apps/server`) remains the standalone SIF-registration path — a reimaged node
 getting a fresh chain, or a node that otherwise has no `registro_sif` row.
@@ -197,7 +198,8 @@ It is also the tool to reach for after a failed `instance`: it names which roles
 ### `venue`
 
 Stands a sellable venue up in one transaction: a tenant, an **admin person**, a location, a till, a
-node registered as a Veri\*Factu SIF, and a standard plus a rectificative invoice series. It replaced
+node, a standard plus a rectificative invoice series, and then every composed module's provisioning
+seed — the fiscal module's registers the node as a Veri\*Factu SIF and starts its chain. It replaced
 the retired `apps/server/sql/bootstrap-tenant.sql`.
 
 Unlike `instance`, which talks to the cluster admin, `venue` connects to the **target database as the
@@ -229,9 +231,11 @@ not idle — the C2b mirror-bundle adoption route authenticates the admin **by i
 (a server-to-server flow carrying the id, not the email form), regardless of whether it has an email.
 
 It reads what would be created, prints the plan headed by `Cluster: <user>@<host>:<port>`, asks for
-confirmation (`--yes` skips it), applies, then prints the new `tenant`, `node` and `SIF` ids (with the
-SIF's installation number). The SIF's `id_sistema_informatico` is **not** an option — it is the
-`WAITRON_ID_SISTEMA` product constant (`W1`), which identifies Waitron's software, not the venue.
+confirmation (`--yes` skips it), applies, then prints the new `tenant` and `node` ids and one
+`seeded:` line per module seed that ran (the fiscal module's names its SIF id and installation
+number). The SIF's `id_sistema_informatico` is **not** an option — it is the `WAITRON_ID_SISTEMA`
+product constant (`W1`, owned by `packages/fiscal-verifactu`), which identifies Waitron's software,
+not the venue.
 
 `--territory` currently accepts only `ES-common` (common-territory Spain, Veri\*Factu with IVA); any
 other value is refused with `fiscal.regime_not_implemented`. The pure `planVenue` also refuses a

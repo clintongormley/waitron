@@ -918,15 +918,15 @@ importers:
 
   packages/provisioning:
     dependencies:
+      '@waitron/composition':
+        specifier: workspace:*
+        version: link:../composition
       '@waitron/db':
         specifier: workspace:*
         version: link:../db
       '@waitron/fiscal':
         specifier: workspace:*
         version: link:../fiscal
-      '@waitron/fiscal-verifactu':
-        specifier: workspace:*
-        version: link:../fiscal-verifactu
       '@waitron/identity':
         specifier: workspace:*
         version: link:../identity
@@ -936,6 +936,9 @@ importers:
       '@waitron/migrations':
         specifier: workspace:*
         version: link:../migrations
+      '@waitron/module':
+        specifier: workspace:*
+        version: link:../module
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
@@ -952,6 +955,9 @@ importers:
       '@waitron/core':
         specifier: workspace:*
         version: link:../core
+      '@waitron/fiscal-verifactu':
+        specifier: workspace:*
+        version: link:../fiscal-verifactu
       '@waitron/verifactu':
         specifier: workspace:*
         version: link:../verifactu

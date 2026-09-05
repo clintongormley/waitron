@@ -41,6 +41,7 @@ import {
 } from "@waitron/db";
 import { IDENTITY_MIGRATIONS, hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
+import { ALL_MODULES } from "../src/modules.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -104,35 +105,38 @@ async function main(): Promise<void> {
     // connection owner (this superuser owns the tables it just migrated) — applyVenue inserts the
     // tenant and registers the SIF, neither of which the app role may do.
     const venue = await applyVenue(
-      planVenue({
-        country: "ES",
-        taxId: "50000000K",
-        legalName: "Deli Demo SL",
-        location: {
-          name: "Sala principal",
-          fiscalTerritory: "ES-common",
-          invoiceLocales: [LOCALE],
-          operationDescription: "Venta en establecimiento",
-          addressLine1: "Calle Mayor 1",
-          addressLine2: null,
-          postalCode: "28013",
-          city: "Madrid",
-          province: "Madrid",
-          timeZone: "Europe/Madrid",
-          dayCutover: "05:00",
+      planVenue(
+        {
+          country: "ES",
+          taxId: "50000000K",
+          legalName: "Deli Demo SL",
+          location: {
+            name: "Sala principal",
+            fiscalTerritory: "ES-common",
+            invoiceLocales: [LOCALE],
+            operationDescription: "Venta en establecimiento",
+            addressLine1: "Calle Mayor 1",
+            addressLine2: null,
+            postalCode: "28013",
+            city: "Madrid",
+            province: "Madrid",
+            timeZone: "Europe/Madrid",
+            dayCutover: "05:00",
+          },
+          tillName: "Caja 1",
+          seriesCode: "A",
+          rectificativeSeriesCode: "R",
+          // The initial admin (PIN "1234"), hashed at this boundary — a plaintext PIN never enters the
+          // plan or any action.
+          admin: {
+            displayName: "Administradora",
+            pinHash: hashPin("1234"),
+            passwordHash: hashPassword("dashPass123"),
+          },
         },
-        tillName: "Caja 1",
-        seriesCode: "A",
-        rectificativeSeriesCode: "R",
-        // The initial admin (PIN "1234"), hashed at this boundary — a plaintext PIN never enters the
-        // plan or any action.
-        admin: {
-          displayName: "Administradora",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
-        },
-      }),
-      { db },
+        ALL_MODULES,
+      ),
+      { db, modules: ALL_MODULES },
     );
 
     const tenantId = brandTenantId(venue.tenantId);

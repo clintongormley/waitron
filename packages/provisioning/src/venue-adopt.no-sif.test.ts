@@ -44,9 +44,9 @@ describe("adoptVenue — the unrepairable-chain guardrail", () => {
   // chain for the same venue (CLAUDE.md §5, spec §5). Those rows arrive on the mirror through SYNC,
   // never from provisioning — so after adopt these three tables must be empty.
   //
-  // PROVEN BY DELETION (CLAUDE.md §4): temporarily calling `registerSifForNode(tx, …)` inside
-  // `adoptVenue` makes this fail with `registro_sif` count = 1; removing it makes it pass. Recorded
-  // in the task report.
+  // PROVEN BY DELETION (CLAUDE.md §4): temporarily running the fiscal module's provisioning seed
+  // (`FISCAL_PROVISIONING.seed.run`, the same one `applyVenue` runs for a fresh node) inside
+  // `adoptVenue` makes this fail with `registro_sif` count = 1; removing it makes it pass.
   it("writes NO registro_sif / cadenas / contadores_instalacion row", async () => {
     const { rows, designated } = makeRows();
     await adoptVenue(rows, designated, { db: suite.db });

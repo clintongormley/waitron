@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
+import { ALL_MODULES } from "@waitron/composition";
 import { createPostgresDb, readDeploymentEnvironment } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
 import { formatAppError, runCli } from "./cli.js";
@@ -60,6 +61,7 @@ async function main(): Promise<number> {
       readState: readInstanceState,
       apply: applyInstance,
       applyVenue,
+      modules: ALL_MODULES,
       readEnvironment: readDeploymentEnvironment,
     });
   } catch (error) {

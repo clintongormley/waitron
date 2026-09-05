@@ -1,6 +1,5 @@
 import { AppError } from "@waitron/shared";
 import "@waitron/fiscal"; // side-effect: registers fiscal.regime_not_implemented on ErrorParams
-import "./errors.js"; // side-effect: registers provisioning.id_sistema_invalid on ErrorParams
 
 /**
  * A territory's fiscal module set: a filing module (Veri*Factu / TicketBAI / …) and a tax module
@@ -32,41 +31,13 @@ const REGISTRY: Record<string, FiscalModules> = {
   "ES-common": Object.freeze({ filing: "verifactu", tax: "iva" }),
 };
 
+/** The territories the registry resolves — exported so a guard can enumerate the real set. */
+export const FISCAL_TERRITORIES: readonly string[] = Object.keys(REGISTRY);
+
 export function resolveFiscalModules(territory: string): FiscalModules {
   const modules = REGISTRY[territory];
   if (modules === undefined) {
     throw new AppError("fiscal.regime_not_implemented", { territory });
   }
   return modules;
-}
-
-/**
- * Waitron's own AEAT-registered software identifier — a product constant, ≤ 2 chars (FAQ §4), not
- * operator input. It reaches `registro_sif.id_sistema_informatico` via `registerSif` and, through
- * that, `IdSistemaInformatico` on every registro the node files. Config, not a CLI argument, per
- * spec D5 / ground-truth #2. `apps/server/src/provision-till.ts` still takes it as an argument
- * (register-till.ts's shim), duplicating the length rule — converging the two is a noted follow-up.
- *
- * SP-3c gave `packages/fiscal-verifactu` its own `WAITRON_ID_SISTEMA` for the module's provisioning
- * seat. The two must hold the same value: they mint installation numbers against the SAME
- * (NIF, IdSIF) counter, and a divergence would split one obligado's counter in two. Converging onto
- * that one is part of the same follow-up.
- */
-export const WAITRON_ID_SISTEMA = "W1";
-const ID_SISTEMA_MAX_LENGTH = 2;
-
-/** Validates the product constant (a programming error if wrong, not operator error).
- *
- * Throws `provisioning.id_sistema_invalid`, still a distinct code from
- * `sif.id_sistema_invalid`. The scope obstacle that FORCED the split is gone — that code now lives
- * in `packages/fiscal-verifactu/src/errors.ts`, which this package depends on, so throwing it here
- * type-checks. Converging the two is the remaining step, not a blocked one; see the code's doc
- * comment in `errors.ts`. */
-export function assertUsableIdSistema(value: string): void {
-  if (value.length === 0 || value.length > ID_SISTEMA_MAX_LENGTH) {
-    throw new AppError("provisioning.id_sistema_invalid", {
-      value,
-      maxLength: ID_SISTEMA_MAX_LENGTH,
-    });
-  }
 }

@@ -1,10 +1,7 @@
 import { AppError } from "@waitron/shared";
 import { DEFAULT_DEVICE_PROFILES, defaultProfileName, type CapabilityFlag } from "@waitron/layouts";
-import {
-  WAITRON_ID_SISTEMA,
-  assertUsableIdSistema,
-  resolveFiscalModules,
-} from "./fiscal-modules.js";
+import type { WaitronModule } from "@waitron/module";
+import { resolveFiscalModules } from "./fiscal-modules.js";
 import { obligadoTenantId } from "./tenant-id.js";
 import "@waitron/fiscal"; // side-effect: registers fiscal.regime_not_implemented on ErrorParams
 import "./errors.js"; // side-effect: registers provisioning.invalid_locales on ErrorParams
@@ -71,8 +68,10 @@ export type VenueAction =
     }
   | { kind: "create-till"; name: string }
   | { kind: "create-node"; name: string; filingModule: string; taxModule: string }
-  | { kind: "register-sif"; idSistemaInformatico: string }
-  | { kind: "create-series"; code: string; purpose: "standard" | "rectificative" };
+  | { kind: "create-series"; code: string; purpose: "standard" | "rectificative" }
+  /** Runs `modules[module].provisioning.seed` inside the venue transaction, after every core row.
+   * `summary` is the seed's own one-line description, so the plan summary reads without the list. */
+  | { kind: "seed-module"; module: string; summary: string };
 
 /**
  * Pure: request → the flat action list applyVenue runs, or a throw. Every refusal that can be made
@@ -84,7 +83,7 @@ export type VenueAction =
  * node the following actions reference). Only the tenant id is here, and it is DERIVED — so a
  * re-run reuses the same obligado under RLS without a tax_id lookup (spec D8).
  */
-export function planVenue(request: VenueRequest): VenueAction[] {
+export function planVenue(request: VenueRequest, modules: readonly WaitronModule[]): VenueAction[] {
   // Canonicalize the fiscal identity ONCE, at the top, and use these values for BOTH the derived id
   // AND the stored `tenants (country, tax_id)` row. This is the functional fix for the §5 footgun:
   // both provisioning paths go through here — the wizard (setup-api → provisionVenue) emits a
@@ -111,7 +110,7 @@ export function planVenue(request: VenueRequest): VenueAction[] {
   if (request.seriesCode === request.rectificativeSeriesCode) {
     throw new AppError("provisioning.duplicate_series_code", { code: request.seriesCode });
   }
-  const modules = resolveFiscalModules(request.location.fiscalTerritory); // throws for unimplemented
+  const fiscal = resolveFiscalModules(request.location.fiscalTerritory); // throws for unimplemented
   // The territory must belong to the tenant's country. Fiscal territories are country-prefixed
   // (`ES-common`, `ES-PV-bizkaia`, …), and applyVenue writes tax_id into `registro_sif.nif` (a
   // Spanish-NIF field), so `country=PT` + `ES-common` would file under a non-NIF identity — a
@@ -126,14 +125,6 @@ export function planVenue(request: VenueRequest): VenueAction[] {
     });
   }
   const tenantId = obligadoTenantId(country, taxId);
-
-  // Defence-in-depth on an unrecoverable fiscal field. WAITRON_ID_SISTEMA is carried by the
-  // register-sif action below and reaches `registro_sif.id_sistema_informatico` via applyVenue →
-  // registerSif, where a wrong value could only be superseded by re-registration, never corrected.
-  // The constant is "W1", so this never throws in normal operation; the guard is against a future
-  // bad edit to the constant (throws provisioning.id_sistema_invalid — unit-tested in
-  // fiscal-modules.test.ts), caught here on the production path before any DB connection is spent.
-  assertUsableIdSistema(WAITRON_ID_SISTEMA);
 
   return [
     {
@@ -182,12 +173,17 @@ export function planVenue(request: VenueRequest): VenueAction[] {
     {
       kind: "create-node",
       name: request.location.name,
-      filingModule: modules.filing,
-      taxModule: modules.tax,
+      filingModule: fiscal.filing,
+      taxModule: fiscal.tax,
     },
-    { kind: "register-sif", idSistemaInformatico: WAITRON_ID_SISTEMA },
     { kind: "create-series", code: request.seriesCode, purpose: "standard" },
     { kind: "create-series", code: request.rectificativeSeriesCode, purpose: "rectificative" },
+    // Module seeds run LAST, once every core row exists, one per declaring module in list order.
+    ...modules.flatMap((m) =>
+      m.provisioning?.seed === undefined
+        ? []
+        : [{ kind: "seed-module", module: m.name, summary: m.provisioning.seed.summary } as const],
+    ),
   ];
 }
 
@@ -208,9 +204,9 @@ export function describeVenueAction(action: VenueAction): string {
       return `create till ${action.name}`;
     case "create-node":
       return `create node ${action.name} filing=${action.filingModule} tax=${action.taxModule}`;
-    case "register-sif":
-      return `register the node as a SIF (id_sistema ${action.idSistemaInformatico})`;
     case "create-series":
       return `create ${action.purpose} series ${action.code}`;
+    case "seed-module":
+      return `seed module ${action.module}: ${action.summary}`;
   }
 }

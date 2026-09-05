@@ -39,6 +39,7 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { DEFAULT_DEVICE_PROFILES, defaultProfileName, listDeviceProfiles } from "@waitron/layouts";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyVenue, planVenue } from "@waitron/provisioning";
+import { ALL_MODULES } from "../src/modules.js";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -317,33 +318,36 @@ async function provisionVenue(
   locationId: string;
 }> {
   const venue = await applyVenue(
-    planVenue({
-      country: "ES",
-      taxId: "50000000K",
-      legalName: "Waitron Dev SL",
-      location: {
-        name: "Sala principal",
-        fiscalTerritory: "ES-common",
-        invoiceLocales: [SEED_INVOICE_LOCALE[seedLocale]],
-        operationDescription: "Venta en establecimiento",
-        addressLine1: "Calle Mayor 1",
-        addressLine2: null,
-        postalCode: "28013",
-        city: "Madrid",
-        province: "Madrid",
-        timeZone: "Europe/Madrid",
-        dayCutover: "05:00",
+    planVenue(
+      {
+        country: "ES",
+        taxId: "50000000K",
+        legalName: "Waitron Dev SL",
+        location: {
+          name: "Sala principal",
+          fiscalTerritory: "ES-common",
+          invoiceLocales: [SEED_INVOICE_LOCALE[seedLocale]],
+          operationDescription: "Venta en establecimiento",
+          addressLine1: "Calle Mayor 1",
+          addressLine2: null,
+          postalCode: "28013",
+          city: "Madrid",
+          province: "Madrid",
+          timeZone: "Europe/Madrid",
+          dayCutover: "05:00",
+        },
+        tillName: "Caja 1",
+        seriesCode: "A",
+        rectificativeSeriesCode: "R",
+        admin: {
+          displayName: "Administradora",
+          pinHash: hashPin(ADMIN_PIN),
+          passwordHash: hashPassword(ADMIN_PASSWORD),
+        },
       },
-      tillName: "Caja 1",
-      seriesCode: "A",
-      rectificativeSeriesCode: "R",
-      admin: {
-        displayName: "Administradora",
-        pinHash: hashPin(ADMIN_PIN),
-        passwordHash: hashPassword(ADMIN_PASSWORD),
-      },
-    }),
-    { db },
+      ALL_MODULES,
+    ),
+    { db, modules: ALL_MODULES },
   );
 
   // planVenue emits the standard series first, then the rectificative one — seriesIds[0] is the

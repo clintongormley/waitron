@@ -8,7 +8,7 @@ import {
   type VenueResult,
 } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
-import { disabledProvisionOnly, type ModuleConfig } from "@waitron/module";
+import { disabledProvisionOnly, enabledModules, type ModuleConfig } from "@waitron/module";
 import { ALL_MODULES } from "./modules.js";
 import "./errors.js";
 
@@ -60,8 +60,9 @@ export interface ProvisionDeps {
  *  3. `stampDeployment` — idempotent for the SAME environment; a CHANGED value throws
  *     `deployment.already_stamped`, the DB-level guard that a preproduction box can never become
  *     production (CLAUDE.md §5). Let it propagate — it is the correct fiscal refusal.
- *  4. `applyVenue` — the single `withTenant` transaction that mints tenant/location/till/node/SIF/series
- *     and seeds the admin, returning the five ids.
+ *  4. `applyVenue` — the single `withTenant` transaction that mints tenant/location/till/node/series,
+ *     seeds the admin, runs every enabled module's seed (fiscal's registers the SIF), and returns
+ *     the ids.
  */
 export async function provisionVenue(
   deps: ProvisionDeps,
@@ -75,9 +76,13 @@ export async function provisionVenue(
   if (blocked.length > 0) {
     throw new AppError("module.provision_only_disabled", { module: blocked[0]! });
   }
+  // The set whose seeds this box runs: a disabled module contributes no seed-module action and,
+  // because the plan and the apply are built from the SAME list, none can be named that the runner
+  // does not hold.
+  const modules = enabledModules(ALL_MODULES, deps.moduleConfig);
 
   // 1. Pure validation — throws before touching the database.
-  const plan = planVenue(req.venue);
+  const plan = planVenue(req.venue, modules);
   const tenantId = obligadoTenantId(req.venue.country, req.venue.taxId);
 
   // 2. Double-provision guard. `current_tenant_id()` reads the `app.tenant_id` GUC withTenant sets,
@@ -94,5 +99,5 @@ export async function provisionVenue(
   await stampDeployment(deps.ownerDb, req.environment);
 
   // 4. Mint the venue under one transaction and return the five ids.
-  return applyVenue(plan, { db: deps.ownerDb });
+  return applyVenue(plan, { db: deps.ownerDb, modules });
 }

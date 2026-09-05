@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { ALL_MODULES } from "@waitron/composition";
 import { createPostgresDb, withTenant, type Database } from "@waitron/db";
 import { applyInstance, withDatabase } from "./instance-apply.js";
 import { planInstance } from "./instance-plan.js";
@@ -137,8 +138,14 @@ describe("who may INSERT a node under FORCE RLS", () => {
     // real database — closing the gap PGlite (a superuser that bypasses RLS) cannot. A fresh
     // obligado, distinct from this suite's B00000000 seed, so ensure-tenant creates rather than
     // reuses.
-    const result = await applyVenue(planVenue(venueRequest("B12345678")), { db: owner });
-    expect(result.sif.numeroInstalacion).toBeGreaterThanOrEqual(1);
+    const result = await applyVenue(planVenue(venueRequest("B12345678"), ALL_MODULES), {
+      db: owner,
+      modules: ALL_MODULES,
+    });
+    // The fiscal module's seed ran inside the venue transaction and reported its SIF line.
+    expect(result.seeded).toEqual([
+      { module: "fiscal", report: expect.stringMatching(/^SIF .* \(installation \d+\)$/) },
+    ]);
 
     // FORCE RLS is REAL for the owner here, and reading back must happen INSIDE the tenant scope:
     // the USING policy `tenant_id = current_tenant_id()` hides every row from a session with no GUC
@@ -162,7 +169,7 @@ describe("who may INSERT a node under FORCE RLS", () => {
       const node = await tx.execute<{ filing_module: string; tax_module: string }>(sql`
         select filing_module, tax_module from nodes where id = ${result.nodeId}`);
       const sif = await tx.execute<{ nif: string }>(sql`
-        select nif from registro_sif where id = ${result.sif.id}`);
+        select nif from registro_sif where node_id = ${result.nodeId} and revocado_en is null`);
       // The starter device profiles, read back under the same scope. This is the ONE place the store's
       // createDeviceProfile (which opens an admin management session and validates capabilities) runs
       // as the non-superuser OWNER under real FORCE RLS on device_profiles / management_sessions —

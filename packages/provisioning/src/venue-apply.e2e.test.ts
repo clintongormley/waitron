@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import { ALL_MODULES } from "@waitron/composition";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
@@ -23,12 +24,10 @@ import { applyVenue } from "./venue-apply.js";
  * provisioned by the REAL `applyVenue` can immediately chain a sale through the real Veri*Factu
  * backend, with nothing seeded by hand between the two.
  *
- * Lives in `@waitron/provisioning`, NOT in `packages/fiscal-verifactu` (the brief's fallback), on a
- * hard constraint: provisioning already depends on `@waitron/fiscal-verifactu` (for `registerSif`),
- * so a fiscal-verifactu test importing `applyVenue` would be a dependency CYCLE. Nothing depends on
- * `@waitron/provisioning`, and neither `@waitron/core` nor `@waitron/verifactu` does, so hosting the
- * e2e here — with those two as devDependencies — keeps the graph acyclic and the dependency
- * direction correct (provisioning sits above the fiscal/core stack).
+ * Lives in `@waitron/provisioning` because a venue that can sell is this package's success criterion.
+ * `@waitron/fiscal-verifactu` is a devDependency here — this test's real backend, and the real seed it
+ * reaches through `ALL_MODULES`. This package's production code no longer imports it at all: the
+ * runner takes the module list as an argument and calls whatever seed the list carries.
  *
  * PGlite's default connection is a SUPERUSER, so it bypasses RLS; that is fine here for the same
  * reason as `venue-apply.test.ts` — the FORCE-RLS privilege path is proven by the container suite.
@@ -135,7 +134,10 @@ function saleInput(ids: {
 
 describe("a venue provisioned by applyVenue is immediately sellable", () => {
   it("chains a real sale through the Veri*Factu backend against the provisioned node", async () => {
-    const venue = await applyVenue(planVenue(request()), { db: suite.db });
+    const venue = await applyVenue(planVenue(request(), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
 
     const backend = new VerifactuBackend({
       deploymentEnvironment: "preproduction",
@@ -190,7 +192,10 @@ describe("the provisioned admin authenticates by id with its password", () => {
     // `loginManagerById` — the same path the C2b mirror-bundle route uses to adopt from the primary.
     // A distinct obligado (B33333333) so this test's admin is its own (the PGlite suite shares one
     // database).
-    const venue = await applyVenue(planVenue(request("B33333333")), { db: suite.db });
+    const venue = await applyVenue(planVenue(request("B33333333"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
 
     // The admin's id is generated at seed time, so fetch it by tenant + role rather than assume one.
     const admin = await suite.db.execute<{ id: string }>(sql`
@@ -234,7 +239,10 @@ describe("the onboarding-provisioned admin authenticates by email", () => {
     // setup-api boundary produces. A distinct obligado (B44444444) so this admin is its own in the
     // shared PGlite database.
     const adminEmail = "owner@venue.example";
-    const venue = await applyVenue(planVenue(request("B44444444", adminEmail)), { db: suite.db });
+    const venue = await applyVenue(planVenue(request("B44444444", adminEmail), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
 
     // The admin's id is generated at seed time; fetch it so we can prove the email login resolves the
     // SAME provisioned admin, not just some person.
