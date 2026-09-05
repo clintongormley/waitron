@@ -169,8 +169,11 @@ import { quoteIdent } from "@waitron/provisioning";
  * Utility statements take no placeholders (CLAUDE.md §3), so the name reaches each statement as text,
  * escaped by `quoteIdent` — the same defence `instance-apply.ts` uses for `create database`.
  * NOT a transaction (CREATE/DROP DATABASE cannot run in one — `instance-apply.ts:52`); the two
- * statements run autocommit in order. A crash between them leaves the db dropped-not-created, which the
- * idempotent re-run of the R3 flow recovers (the CREATE simply succeeds on the next pass).
+ * statements run autocommit in order. A crash between them leaves the db dropped-not-created. NOTE
+ * (superseded during implementation — see the shipped `db-wipe.ts` header + design §4): a bare re-run
+ * of the R3 flow does NOT self-recover, because the R3 guards read `node_membership` from the very db
+ * this wipes, so a re-run fails at connect or at `rejoin.not_fenced`. No data is lost (the drained
+ * tail is on the carrier; the artifact is unchanged) — the box needs operator recovery.
  */
 export async function dropAndCreateDatabase(args: {
   admin: Database;
@@ -471,7 +474,7 @@ git commit -s -m "feat(server): waitron-rejoin CLI (wipe-and-restore rejoin-as-s
 Prove the whole flow on a real container: a "diverged" DB + a baseline artifact → the DB matches the baseline, media restored, **own-identity secrets untouched**, staging cleaned, **fiscal immutability survives** (the BR-3 receipt shape, re-pinned).
 
 **Files:**
-- Test: `apps/server/src/rejoin.e2e.rls.test.ts`
+- Test: `apps/server/src/rejoin-e2e.rls.test.ts`
 
 **Interfaces:**
 - Consumes: `runRejoin` (Task 4) OR `rejoinAsSecondary` wired to the real `dropAndCreateDatabase`+`restoreFromArtifact`; BR-3's artifact-building helpers (`packArchive`/`encryptArtifact`/`buildManifest`); `createPostgresDb`; the fiscal schema migrations.
@@ -508,7 +511,7 @@ describe("R3 rejoin-as-secondary (real Postgres, end to end)", () => {
 - [ ] **Step 4: Commit**
 
 ```bash
-git add apps/server/src/rejoin.e2e.rls.test.ts
+git add apps/server/src/rejoin-e2e.rls.test.ts
 git commit -s -m "test(server): R3 rejoin end-to-end — restore baseline, keep identity, fiscal immutability holds"
 ```
 
