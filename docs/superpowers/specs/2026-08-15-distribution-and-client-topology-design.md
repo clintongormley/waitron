@@ -145,6 +145,12 @@ Because selling is active-active, **any** live server can take the sale on its o
 spec §7–§8), and **the till does not route on it.** So the routing problem shrinks to: *find the
 first reachable server in the cached list, and keep the browser's world stable while switching.*
 
+> **Pointer (2026-09-05).** Active-active is shelved (owner decision). The till still needs *a* live
+> server rather than "the primary" — but under warm standby that is the one serving box, and the
+> standby serves no sales until a human promotes it. The static ordered list, N-failure detection and
+> manual switch below stand; "any live server can take the sale" does not. `docs/backlog.md` →
+> *Whole-project design review (2026-09-05)*.
+
 ### Four parts; only the third is hard
 
 1. **Detect** the current server is gone — reuse the existing `GET /health` route as a probe every

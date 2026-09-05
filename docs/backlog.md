@@ -81,9 +81,19 @@ conflict):**
   multi-tenant SaaS goal is gone; a box is single-tenant, on-prem or cloud. Supersedes cloud-storage
   §9's "one shared cloud database".
 - **The deli gets two boxes + cloud failover on day one** and must survive internet-down, box-down
-  and printer-down. Redundancy is mandatory; *how* (active-active vs warm standby) is the open
-  recommendation below. Note the standing contradiction: sync design §12 records "true
-  active-active for the deli" while the deli hardware buy list carries one server.
+  and printer-down. Redundancy is mandatory. **Active-active is SHELVED for the foreseeable future
+  (owner decision 2026-09-05): the deli runs warm standby + human promotion.** The owner's reason:
+  active-active would have to cover orders, kitchen progress and every other live-service surface,
+  not just selling. The same-day assessment found the operational half unbuilt — no join path that
+  produces a second *selling* box in a venue (the only join is the read-only cloud-mirror adopt), the
+  sync source mounted only on the singleton primary (`apps/server/src/boot.ts`, `mountSyncApi` gate)
+  so a selling secondary's rows would never leave the box, no till reroute, no open-tab handoff, and
+  `dining_tables` as a two-writer row — while the node-keyed fiscal half (own chain/series per node,
+  verbatim fiscal replication, one submitter) is built and is what warm standby reuses. This resolves
+  the sync design §12 / one-server-buy-list contradiction. Nothing is deleted for it: what exists
+  stays on `main` under the warm-standby build, and branch **`shelved/active-active`** (= `main` at
+  `c65d3cbe`, 2026-09-05) is the snapshot to return to. Dated pointers: sync design §12, server-as-SIF
+  §4 + §13, promotion-failover §8, distribution §3.
 - **Modules are core to the product** (opt-in domains, third-party modules later). Fiscal must be
   swappable by jurisdiction (Veri\*Factu / TicketBAI / none). Two rules agreed: **new domains land
   as modules from now**, and **no new table enters the core migration set without a stated reason**.
@@ -96,10 +106,13 @@ conflict):**
    reason native logical replication was rejected — worth a one-day container prototype of PG16+
    bidirectional replication (`origin = none`) before any further sync feature; do not rip out the
    outbox until that prototype says so.
-2. **Warm standby + human promotion instead of active-active**, on the same replication mechanism:
-   tills talk to one box at a time. Removes the `dining_tables` two-writer hazard (watermark upsert,
-   no watermark column, 12 update sites), the double-bill class and per-tab ownership routing.
-   Trade: a LAN partition idles the secondary's tills until a human promotes.
+2. **Warm standby + human promotion instead of active-active — DECIDED 2026-09-05** (owner decisions
+   above), on the same replication mechanism: tills talk to one box at a time. Removes the
+   `dining_tables` two-writer hazard (watermark upsert, no watermark column, 12 update sites), the
+   double-bill class and per-tab ownership routing. Trade accepted: a LAN partition idles the
+   secondary's tills until a human promotes. Carry into the till-reroute slice: the `dining_tables`
+   enrolment comment (`packages/db/src/enrolment.ts`) should say single-writer-by-construction and
+   drop its "mixed config/runtime" deferral; the config-conflict gate keeps only the fence-window case.
 3. **Till reroute is the first Track-2 slice** — nothing server-side in the failover arc is usable
    until a till can reach the second box; sessions are origin-bound DB rows (PIN re-prompt v1).
    Then the promotion runbook, then printer failover.
@@ -1342,8 +1355,8 @@ option** for the cold-restore re-registration path.
 - **On-device agent** (own spec/spike) — the enabler for a till to host a print agent (a single-box
   venue's only box-death printing path); **requires a native app**, so **parked behind the go-native
   decision**.
-- **The reroute** — the till reaches any live server (selling is active-active) behind a stable local
-  origin.
+- **The reroute** — the till reaches the serving box and fails over to the promoted standby (warm
+  standby since 2026-09-05; selling is no longer active-active) behind a stable local origin.
 
 *Minor debt (from #143):* two QR libraries coexist — `qrcode` (`apps/server`) vs `apps/till`'s
 fiscal-pinned `qrcode-generator` — unify into `packages/shared` later; and a generalized top-level boot

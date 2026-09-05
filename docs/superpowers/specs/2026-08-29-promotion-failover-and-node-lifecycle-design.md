@@ -397,6 +397,12 @@ cloud; the cloud does not get a special HA mechanism, it gets a second cloud nod
 
 ## 8. Sale failover between boxes without blurring the single-writer partition
 
+> **Pointer (2026-09-05).** Active-active is shelved (owner decision; `docs/backlog.md` →
+> *Whole-project design review (2026-09-05)*). Under warm standby tills talk to ONE box at a time, so
+> per-tab ownership routing (§8.1), lazy return (§8.2) and the partitioned-not-dead double-bill (§8.4)
+> are not scheduled; §8.3 (settlement is a single atomic birth on one chain) still holds and is what
+> promotion relies on. Text below left as written.
+
 Load between the two local boxes balances by **ownership of a sale, not a per-request balancer.** The
 write-partition is keyed by the owning node, so if a single logical entity had some writes routed to A
 and some to B it would straddle two owners and need conflict resolution — the thing banned near

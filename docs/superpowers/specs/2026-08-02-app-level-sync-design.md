@@ -698,6 +698,13 @@ out unless `REPLICATION` is later judged acceptable.
 - **(5) Deli deployment → TRUE ACTIVE-ACTIVE** (not warm-standby). Both local servers sell and issue
   concurrently, with automatic partition-tolerance and no promotion step — so the full bidirectional
   sync machinery in this spec is in scope for the deli, not just a one-way standby.
+  > **Superseded 2026-09-05 (owner decision).** Active-active is shelved for the foreseeable future;
+  > the deli runs **warm standby + human promotion**. Reason: active-active would have to extend to
+  > orders, kitchen progress and the rest of live service, not only selling. The machinery above
+  > stays as built (a standby is one direction of it, and the rejoin drain is the other); the pieces
+  > never built — a second selling box's join path, a healthy secondary sourcing its own outbox,
+  > per-tab ownership, double-bill detection — are not scheduled. Snapshot branch
+  > `shelved/active-active`. Record: `docs/backlog.md` → *Whole-project design review (2026-09-05)*.
 
 **Still open (deferred — not this spec's to answer now):**
 

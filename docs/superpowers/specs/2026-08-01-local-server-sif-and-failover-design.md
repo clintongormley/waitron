@@ -174,6 +174,13 @@ promotion** is a valid, simpler point on the same spectrum — reserving true ac
 multi-till venues. The rest of this spec assumes active-active; the failover mechanics in §8 work
 either way.
 
+> **Pointer (2026-09-05).** The owner took the simpler point: the deli runs **warm standby + human
+> promotion**, and true active-active is shelved for the foreseeable future — it would have to extend
+> to orders, kitchen progress and the rest of live service, not only selling. §3's two-SIFs-per-venue
+> model still stands (the standby holds its own reserved identity and promotes onto its own chain);
+> what is dropped is *concurrent* selling. Snapshot branch `shelved/active-active`; record in
+> `docs/backlog.md` → *Whole-project design review (2026-09-05)*.
+
 ---
 
 ## 5. The till writes through
@@ -599,7 +606,8 @@ normal fetching and were extracted locally with `pdftotext -layout`.
   Everything else on the AEAT side is closed on primary source (§12).
 - **Warm-standby vs true active-active per venue** (§4). The deli may not need bidirectional
   replication; a warm complete-copy standby with instant promotion is a valid simpler point. Decide
-  per deployment; the failover mechanics (§8) work either way.
+  per deployment; the failover mechanics (§8) work either way. → **Resolved 2026-09-05: warm standby
+  for the deli; active-active shelved (§4 pointer).**
 - **NO VERI\*FACTU mode changes the certificate story** (§6). That mode requires a qualified-cert
   *signature at chain time*, so the "only the submitter holds a secret" split collapses — a chaining
   server would need the signing certificate. Non-Veri\*Factu is deferred, but the submitter role and
