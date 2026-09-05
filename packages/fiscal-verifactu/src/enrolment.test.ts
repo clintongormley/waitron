@@ -33,7 +33,7 @@ describe("FISCAL_ENROLMENT", () => {
   it("makes acks the one fiscal table that deletes", () => {
     expect(byTable.get("acks")!.captureOps).toEqual(["insert", "update", "delete"]);
     // the other four mutable tables update but never delete
-    for (const t of ["registro_sif", "envios", "envio_flujo"]) {
+    for (const t of ["registro_sif", "envios", "envio_flujo", "cadenas"]) {
       expect(byTable.get(t)!.captureOps).toEqual(["insert", "update"]);
     }
   });

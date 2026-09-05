@@ -192,7 +192,7 @@ describe("fiscal apply gate — verbatim replication of the immutable ledger", (
     // re-fetches and re-applies the identical seq — the exact ON CONFLICT (id) DO NOTHING path.
     await targetApplier.execute(
       sql`update sync_cursor set last_applied_seq = 0
-          where subscriber_id = ${SUBSCRIBER} and origin_id = ${ids.nodeId}::uuid`,
+          where subscriber_id = ${SUBSCRIBER} and origin_id = ${ids.nodeId}::uuid and lane = 'ordered'`,
     );
     const second = await syncPullOnce(depsFor(ids.tenantId), peer);
     expect(second.applied).toBe(0); // re-delivery applied nothing

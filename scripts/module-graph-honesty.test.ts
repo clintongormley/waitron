@@ -95,7 +95,7 @@ const CREATE_FUNCTION = /\bcreate\s+(?:or\s+replace\s+)?function\s+"?(?:public"?
  * (RLS helper calls, shared trigger functions) beyond SP-3a's scope. Limitation stated, not papered
  * over (CLAUDE.md §1) — extend to other SPIs when one appears. */
 const EXECUTE_SYNC_CAPTURE =
-  /\bexecute\s+(?:function|procedure)\s+"?(?:public"?\.)?"?(sync_capture)"?/gi;
+  /\bexecute\s+(?:function|procedure)\s+"?(?:public"?\.)?"?(sync_capture)"?(?!\w)/gi;
 
 const EDGE_KINDS = [
   ["FK reference", REFERENCES],
@@ -309,6 +309,15 @@ describe("the detector itself", () => {
   it("ignores a sync_capture mention inside a comment", () => {
     const funcOwner = new Map([["sync_capture", "sync"]]);
     const sql = `-- execute function sync_capture() — describing the old shape\ncreate table foo (id uuid);`;
+    expect([...spiEdgesFor(sql, "fiscal", funcOwner)]).toEqual([]);
+  });
+
+  // Boundary control: a DIFFERENT function whose name merely STARTS with `sync_capture` must not fake
+  // the SPI edge. Without the trailing `(?!\w)` in EXECUTE_SYNC_CAPTURE the capture group would prefix-
+  // match `sync_capture` inside `sync_capture_extra` and surface a spurious cross-module edge.
+  it("ignores a call to a different function named like sync_capture", () => {
+    const funcOwner = new Map([["sync_capture", "sync"]]);
+    const sql = `create trigger foo_capture after insert on foo\n  for each row execute function sync_capture_extra();`;
     expect([...spiEdgesFor(sql, "fiscal", funcOwner)]).toEqual([]);
   });
 });

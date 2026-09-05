@@ -127,7 +127,7 @@ async function captureWrite(
 async function rewindCursor(originId: string): Promise<void> {
   await targetApplier.execute(
     sql`update sync_cursor set last_applied_seq = 0
-        where subscriber_id = ${SUBSCRIBER} and origin_id = ${originId}::uuid`,
+        where subscriber_id = ${SUBSCRIBER} and origin_id = ${originId}::uuid and lane = 'ordered'`,
   );
 }
 
