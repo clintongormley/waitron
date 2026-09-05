@@ -21,9 +21,9 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
 import {
   asAppUser,
+  persistNodeMembershipIfNewer,
   readNodeMembership,
   withTenant,
-  writeNodeMembership,
   type Database,
 } from "@waitron/db";
 import { withMember } from "@waitron/membership";
@@ -72,6 +72,10 @@ export interface MirrorBundleApiDeps {
  * is NOT folded into `password.invalid`. A registered code absent here defaults to 400 via `run` —
  * which is where a structurally-unreachable `mirror.not_provisioned` (a trading primary is always
  * stamped) would land if `assembleMirrorBundle` ever threw it.
+ *
+ * The one NON-client entry is `membership.write_contended` (503): the org-chart write lost its term
+ * race on every attempt, which is a transient server-side condition the caller retries, not a fault in
+ * its request. The boundary permits a 5xx in a status map (`setup-api.ts` maps a 502 the same way).
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "password.invalid": 401,
@@ -81,6 +85,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "mirror.no_relay": 400,
   "mirror.standby_invalid": 400,
+  "membership.write_contended": 503,
 };
 
 /**
@@ -188,23 +193,51 @@ export function mountMirrorBundleApi(
       // out for a node the chart omits (till-reroute design §3.3) — a till reroutes by `contactUrl`,
       // which must be published before the failover that needs it. Deliberately OUTSIDE assembly's own
       // `withTenant` transactions (CLAUDE.md §3), which have already bumped the standby's installation
-      // counter. `writeNodeMembership` is a plain upsert with no term guard, so adopts must stay
-      // serial: concurrent ones would both mint N+1 and the second would drop the first's node. A
-      // concurrent-adopt slice needs read-mint-write retried on `persistNodeMembershipIfNewer`.
-      const held = await readNodeMembership(deps.appDb);
-      const document = await mintNextMembershipDocument(
-        { db: deps.appDb, ring: deps.ring },
-        {
-          tenantId: deps.designated.tenantId,
-          heldDocument: held,
-          nodes: withMember(held?.body.nodes ?? [], standby.nodeId, standbyContactUrl),
-          signerNodeId: deps.designated.nodeId,
-        },
-      );
-      await writeNodeMembership(deps.appDb, document);
+      // counter. Read-mint-write behind `persistNodeMembershipIfNewer`'s term guard: two adopts that
+      // both mint term N+1 cannot silently drop one, because the loser's write is refused and it
+      // re-reads the winner's chart before minting again. Exhausting the bound is a hard 503, NEVER a
+      // 200 handing out a bundle for a node the chart omits.
+      await appendStandbyToChart(deps, standby.nodeId, standbyContactUrl);
 
       // The token appears once, here, and is never logged.
       return c.json(bundle);
     }),
   );
+}
+
+/**
+ * How many read-mint-write rounds the org-chart append takes before it gives up. A request loses a
+ * round only to another adopt that actually COMMITTED a newer term, so the bound is the number of
+ * concurrent adopts a single primary is expected to serve at once — and `MAX_NODES` (8, the size
+ * every verifier refuses a document past) is the natural ceiling on how many distinct standbys a
+ * chart can hold. Measured on real Postgres, 8 concurrent adopts through this route: 1-7 rounds per
+ * request, 8 of 8 standbys listed.
+ */
+const MAX_CHART_WRITE_ROUNDS = 8;
+
+/**
+ * Appends (or refreshes) one standby in the venue's org chart, retried against the term guard.
+ * `persistNodeMembershipIfNewer` returns `false` when a concurrent adopt already committed a term at
+ * least as high, which means THIS mint was built on a stale chart and dropping it is the whole defect
+ * this loop exists to prevent — so the round is discarded and the chart re-read, never forced.
+ */
+async function appendStandbyToChart(
+  deps: MirrorBundleApiDeps,
+  standbyNodeId: string,
+  standbyContactUrl: string,
+): Promise<void> {
+  for (let round = 1; round <= MAX_CHART_WRITE_ROUNDS; round += 1) {
+    const held = await readNodeMembership(deps.appDb);
+    const document = await mintNextMembershipDocument(
+      { db: deps.appDb, ring: deps.ring },
+      {
+        tenantId: deps.designated.tenantId,
+        heldDocument: held,
+        nodes: withMember(held?.body.nodes ?? [], standbyNodeId, standbyContactUrl),
+        signerNodeId: deps.designated.nodeId,
+      },
+    );
+    if (await persistNodeMembershipIfNewer(deps.appDb, document)) return;
+  }
+  throw new AppError("membership.write_contended", { attempts: MAX_CHART_WRITE_ROUNDS });
 }

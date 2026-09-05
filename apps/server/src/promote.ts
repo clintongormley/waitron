@@ -51,8 +51,8 @@ export interface PromoteDeps {
    * the new document commit together, or neither does). That shared transaction is why the write runs here,
    * NOT a privilege gap: `app_user` DOES hold INSERT/UPDATE on `node_membership` (migration 0097), but the
    * plain-upsert accessor (`writeNodeMembership`/`writeNodeMembershipTx`) is reserved for the owner/promote
-   * paths by convention (the runtime adoption path uses the term-guarded `persistNodeMembershipIfNewer` —
-   * see `node-membership.ts`).
+   * paths by convention: every APP-POOL write — gossip adoption, retire, the adopt handshake's org-chart
+   * append — uses the term-guarded `persistNodeMembershipIfNewer` instead (see `node-membership.ts`).
    */
   readonly ownerDb: Database;
   readonly holders: DeploymentHolders;

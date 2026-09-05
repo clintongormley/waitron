@@ -1541,6 +1541,22 @@ declare module "@waitron/shared" {
      * once shipped.
      */
     "mirror.bundle_fetch_failed": Record<string, never>;
+    /**
+     * The venue's membership document could not be written because every read-mint-write round lost
+     * its term race — a concurrent writer committed a term at least as high each time, so this mint
+     * was built on a chart that is already stale. Thrown by the mirror-bundle adopt handshake
+     * (`mirror-bundle-api.ts`), which retries against `persistNodeMembershipIfNewer`'s term guard and
+     * refuses rather than force a write that would drop the winner's node from the chart.
+     *
+     * Reported as HTTP 503 by the bundle route's local STATUS map (the declare-here / status-in-route
+     * split): TRANSIENT and server-side, so the caller retries the whole adopt — not a fault in the
+     * request, which is why it is not a 4xx. `attempts` is the round bound the loop exhausted, a
+     * constant of this process; it names no row, no node and no address, so the no-leak discipline
+     * `mirror.no_relay` follows is kept. `membership.*` names the DOMAIN CONCEPT — the org chart —
+     * never the throwing package (`tenant.not_found`'s note above gives the rule), and sits beside
+     * `membership.key_invalid` in @waitron/membership. Never renamed once shipped.
+     */
+    "membership.write_contended": { attempts: number };
     /** The recovery-bundle download request carried no `passphrase` string (or an empty one). A
      * client error — the operator must supply the passphrase the bundle will be encrypted under. */
     "recovery.passphrase_required": Record<string, never>;

@@ -10,6 +10,7 @@ import {
   readNodeMembership,
   stampDeployment,
   withTenant,
+  writeNodeMembership,
   type Database,
 } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
@@ -26,6 +27,7 @@ import type { Logger } from "./logger.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
 // Real Postgres, not PGlite: the endpoint authenticates + authorizes as `app_user` under FORCE RLS
 // (the dashboard login shape) and mints the token as a `sync_retention` member — neither is observable
@@ -247,12 +249,32 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
     const app = mountApp(designated, "https://relay.example:9000/");
     const standbyNodeId = crypto.randomUUID();
 
-    // `node_membership` is a whole-database singleton, so the term this mint bumps is whatever the
-    // shared template already holds — read it rather than assume 0.
-    const before = await readNodeMembership(suite.admin);
     // The "everyone else survives" assertions below are only worth anything over a NON-EMPTY held
-    // chart, which the sibling test above leaves behind. Pinned so a reordering fails loudly here
-    // rather than turning those loops vacuous.
+    // chart, so this test seeds its own rather than inherit whatever a sibling left behind (CLAUDE.md
+    // §4: order-independent). `node_membership` is a whole-database singleton whose term carries
+    // across the shared template, so the seed is minted one past the held term rather than at 0.
+    const seedTerm = ((await readNodeMembership(suite.admin))?.body.term ?? -1) + 1;
+    await writeNodeMembership(
+      suite.admin,
+      signedMembershipDoc(seedTerm, {
+        signerNodeId: designated.nodeId,
+        nodes: [
+          {
+            nodeId: designated.nodeId,
+            contactUrl: "https://box.deli.test",
+            standing: "serving-primary",
+          },
+          {
+            nodeId: crypto.randomUUID(),
+            contactUrl: "https://spare.deli.test",
+            standing: "sell-only",
+          },
+        ],
+      }),
+    );
+    const before = await readNodeMembership(suite.admin);
+    // Non-vacuity: the seed above is what makes the survival loops mean anything, so a seed that
+    // silently wrote nothing fails loudly here rather than turning them into no-ops.
     expect(before?.body.nodes.length ?? 0).toBeGreaterThan(0);
 
     const res = await post(app, {
@@ -309,6 +331,42 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
     ]);
     for (const node of before?.body.nodes ?? []) {
       expect(afterReadopt?.body.nodes).toContainEqual(node);
+    }
+  });
+
+  it("lists EVERY standby under concurrent adopts — the term guard is retried, not last-writer-wins", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+    // Eight adopts fired at once at ONE primary — two operators, or one retrying operator with two
+    // tabs. Under the unguarded plain upsert this measured 3 of 8 listed with all eight answered 200:
+    // five standbys were handed a bundle (reserved number, endorsement, sync token) and left out of
+    // the chart, which is exactly the failure the route exists to prevent.
+    const standbyNodeIds = Array.from({ length: 8 }, () => crypto.randomUUID());
+    const responses = await Promise.all(
+      standbyNodeIds.map((standbyNodeId) =>
+        post(app, {
+          personId: adminPersonId,
+          password: ADMIN_PASSWORD,
+          standbyNodeId,
+          standbyPublicKey: STANDBY_PUB,
+          standbyContactUrl: `https://cloud-${standbyNodeId}.deli.test`,
+        }),
+      ),
+    );
+    // Every request either lists its node or FAILS — a 200 for a node the chart omits is the defect.
+    expect(responses.map((r) => r.status)).toEqual(Array.from({ length: 8 }, () => 200));
+
+    const after = await readNodeMembership(suite.admin);
+    const listed = new Set((after?.body.nodes ?? []).map((n) => n.nodeId));
+    expect(standbyNodeIds.filter((id) => !listed.has(id))).toEqual([]);
+    // Each entry carries ITS OWN advertised address: a chart that listed the ids but collapsed the
+    // urls onto one winner would still strand seven tills.
+    for (const id of standbyNodeIds) {
+      expect(after?.body.nodes).toContainEqual({
+        nodeId: id,
+        contactUrl: `https://cloud-${id}.deli.test`,
+        standing: "serving-secondary",
+      });
     }
   });
 
