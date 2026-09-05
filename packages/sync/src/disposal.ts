@@ -46,19 +46,19 @@ export async function readDrainProgress(
     // This lane's own-origin high-water AND the carrier's reported cursor for it, as two scalar
     // subqueries in ONE round-trip per lane. `max(seq)` always yields one row (max_seq null when there
     // are no matching rows); the cursor subquery is null when the carrier has drained nothing on this
-    // lane. `tablesForLane` is total and non-empty for every SYNC_LANES entry GIVEN the enrolment set
-    // boot actually injects (the full 22-table set assembled from ALL_MODULES) — a property of that
-    // caller, not of `tablesForLane` itself, which returns `[]` for a lane a partial enrolment set
-    // omits. So `in ${tables}` is emitted unconditionally here — no `length === 0` arm to guard
-    // (unlike readSyncLogSince, whose `tables` is a caller-supplied allowlist that may legitimately be
-    // empty).
+    // lane. `tablesForLane` returns `[]` for a lane a partial enrolment set omits — the full 22-table
+    // set boot injects today (assembled from ALL_MODULES) never does, but SP-2b's enabled-set filtering
+    // can, so the empty-lane case is guarded with `and false` (mirroring readSyncLogSince in source.ts)
+    // rather than emitting an invalid `in ()`. An omitted lane thus contributes no own rows → `max_seq`
+    // null → the `continue` below treats it as nothing to drain, which is the correct semantics.
+    const tablesClause = tables.length === 0 ? sql`and false` : sql`and table_name in ${tables}`;
     const laneRes = await db.execute<{
       max_seq: string | null;
       last_applied_seq: string | null;
     }>(sql`
       select
         (select max(seq)::text from sync_log
-           where origin_id = ${args.selfNodeId}::uuid and table_name in ${tables}) as max_seq,
+           where origin_id = ${args.selfNodeId}::uuid ${tablesClause}) as max_seq,
         (select last_applied_seq::text from sync_cursor
            where subscriber_id = ${args.carrierNodeId} and origin_id = ${args.selfNodeId}::uuid
              and lane = ${lane}) as last_applied_seq

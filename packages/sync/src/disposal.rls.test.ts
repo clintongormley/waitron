@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
+import { CORE_ENROLMENT } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { readDrainProgress } from "./disposal.js";
 import { tablesForLane, type EnrolledTable } from "@waitron/sync-enrolment";
@@ -131,6 +132,25 @@ describe("readDrainProgress", () => {
     expect(p.drained).toBe(true);
     expect(p.ownTailSeq).toBe(200n); // from the earlier lane, not the last-iterated one
     expect(p.carrierAppliedSeq).toBe(50n); // min across own-carrying lanes
+  });
+
+  it("does not throw when a lane is omitted entirely from the enrolment set (empty table list → `and false`)", async () => {
+    // SP-2b's enabled-set filtering can hand `readDrainProgress` a partial enrolment set that omits a
+    // whole lane. CORE_ENROLMENT is real and entirely ordered-lane, so `tablesForLane(_, "fast")` is
+    // `[]` here. Without the empty-lane guard the fast lane's subquery emits an invalid `in ()` and
+    // Postgres throws a syntax error; with it, the fast lane is treated as no-own-rows and drops
+    // through the `continue`. Seed one ordered-lane own row that is drained, and assert the call
+    // completes with a sensible DrainProgress rather than throwing.
+    const orderedTable = tablesForLane(CORE_ENROLMENT, "ordered")[0];
+    expect(tablesForLane(CORE_ENROLMENT, "fast")).toEqual([]); // the fast lane is genuinely empty
+    await seedOwnRow(70, orderedTable);
+    await seedCarrierCursor("ordered", 70);
+    const p = await readDrainProgress(postgres.admin, {
+      selfNodeId: SELF,
+      carrierNodeId: CARRIER,
+      enrolments: CORE_ENROLMENT,
+    });
+    expect(p).toEqual({ drained: true, ownTailSeq: 70n, carrierAppliedSeq: 70n });
   });
 
   it("is NOT drained when only ONE of two own-carrying lanes has caught up", async () => {
