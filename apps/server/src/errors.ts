@@ -1631,5 +1631,17 @@ declare module "@waitron/shared" {
      * `restore.schema_too_new`. Never renamed once shipped.
      */
     "restore.unsafe_entry_path": { name: string };
+    /**
+     * BR-3's restore orchestrator (`restore.ts`) refused: the decrypted archive is missing a
+     * structurally-required entry — the `manifest.json` index it must read to run the compatibility
+     * gate, or the `db.dump` it must feed to `pg_restore`. A backup without either is not a partial
+     * backup to salvage, it is an archive this binary cannot restore from at all, so it fails LOUD
+     * and names the absent entry rather than proceeding to a half-restore. `missing` is the fixed
+     * entry name (`"manifest.json"` or `"db.dump"`), never attacker input or a secret. `restore.*`,
+     * not `backup.*`: the fault is in what THIS restore attempt received, beside
+     * `restore.unsafe_entry_path`/`restore.environment_mismatch`/`restore.schema_too_new`. Never
+     * renamed once shipped.
+     */
+    "restore.archive_incomplete": { missing: string };
   }
 }
