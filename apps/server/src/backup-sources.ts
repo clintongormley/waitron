@@ -5,6 +5,11 @@ import type { WaitronModule } from "@waitron/module";
 import type { ArchiveEntry } from "./backup-archive.js";
 import "./errors.js";
 
+/** How many files a single source dir's read fans out to at once. Bounds `readFile` concurrency so
+ * a large content-addressed store (thousands of blobs) cannot exhaust file descriptors (EMFILE);
+ * see the read loop in {@link collectModuleNonDbState} below. */
+const CONCURRENCY = 64;
+
 /**
  * Turn every enabled module's declared `backup.nonDbState` source refs into actual archive
  * entries. v1 knows one `NonDbSource` kind, `"content-addressed-dir"`: the named directory's files,
@@ -68,16 +73,19 @@ export async function collectModuleNonDbState(
         .filter((d) => d.isFile())
         .map((d) => d.name)
         .sort();
-      // Read the (already-sorted) files concurrently, with unbounded fan-out. `Array.map` preserves
-      // index order, so zipping the results back against `names` keeps the deterministic sorted
-      // archive order intact. Assumes a MODEST store: fine for a single-venue content-addressed media
-      // dir (dozens of blobs), but a store with thousands of files could hit EMFILE. Bounded-concurrency
-      // reads are a follow-on if media volume grows — tie it to the deferred incremental/dedup seam
-      // (design doc §4/§7: blobs are already content-addressed and dedupable).
-      const blobs = await Promise.all(names.map((name) => readFile(join(dir, name))));
-      names.forEach((name, i) => {
-        entries.push({ name: `${ref.source}/${name}`, bytes: blobs[i]! });
-      });
+      // Read the (already-sorted) files in fixed-size CHUNKS rather than one unbounded
+      // `Promise.all` over the whole directory — a store with thousands of files could otherwise
+      // hit EMFILE from opening them all at once. Each chunk is read concurrently
+      // (`Promise.all(chunk.map(readFile))`, up to CONCURRENCY files open at a time) and the
+      // chunks themselves are processed in order, so the deterministic sorted archive order is
+      // preserved exactly as it was under the old unbounded fan-out.
+      for (let i = 0; i < names.length; i += CONCURRENCY) {
+        const chunk = names.slice(i, i + CONCURRENCY);
+        const blobs = await Promise.all(chunk.map((name) => readFile(join(dir, name))));
+        chunk.forEach((name, j) => {
+          entries.push({ name: `${ref.source}/${name}`, bytes: blobs[j]! });
+        });
+      }
     }
   }
   return entries;

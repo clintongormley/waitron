@@ -7,6 +7,10 @@ export type ArchiveEntry = { name: string; bytes: Uint8Array };
 
 const MAGIC = Buffer.from("WBA1"); // Waitron Backup Archive, format 1
 const VERSION = 1;
+// Header layout: MAGIC(4) + version(1) + entryCount(u32 LE, 4) = 9 bytes.
+const HEADER_BYTES = MAGIC.length + 1 + 4;
+// The smallest an encoded entry can possibly be: nameLen(4) + name(0) + dataLen(8) + data(0).
+const MIN_ENTRY_BYTES = 4 + 8;
 
 /** Pack named entries into ONE deterministic binary container: `MAGIC(4) | version(1) |
  * entryCount(u32 LE) | [ nameLen(u32 LE) | name(utf8) | dataLen(u64 LE) | data ]*`, in the order
@@ -63,6 +67,16 @@ export function unpackArchive(buf: Uint8Array): ArchiveEntry[] {
   needRoomFor(4, "too_short");
   const entryCount = b.readUInt32LE(off);
   off += 4;
+
+  // Upfront, O(1) defense-in-depth: reject an entryCount that cannot possibly fit in the
+  // remaining buffer, before the loop below ever runs. The per-entry `needRoomFor` checks already
+  // bound the actual loop by buffer size — a hostile count still fails on (at worst) its first
+  // iteration — but there is no reason to enter the loop at all for a count this reader can prove
+  // impossible from the header alone.
+  const maxEntries = Math.floor((b.length - HEADER_BYTES) / MIN_ENTRY_BYTES);
+  if (entryCount > maxEntries) {
+    throw new AppError("backup.archive_invalid", { reason: "entry_count_too_large" });
+  }
 
   const entries: ArchiveEntry[] = [];
   for (let i = 0; i < entryCount; i++) {

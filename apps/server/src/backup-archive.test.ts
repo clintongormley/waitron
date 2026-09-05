@@ -53,11 +53,20 @@ describe("backup archive", () => {
   // Each declared length (name length, name bytes, data length) gets its own bounds check, so each
   // needs its own case to prove that check — not just the aggregate data-length case above — fires
   // rather than reading past the buffer.
+  //
+  // Each case below declares TWO entries, the first padded large enough that the truncated buffer
+  // still clears the upfront `entryCount` bound (fix for the huge-entryCount case below): with a
+  // single small entry, any buffer short enough to truncate that entry's own fields is also short
+  // enough to be rejected by the upfront bound first, which would test that guard instead of the
+  // per-entry one these cases exist to prove.
   it("rejects a truncated name length field", () => {
-    const good = packArchive([{ name: "x", bytes: Buffer.from("y") }]);
-    // Header is magic(4)+version(1)+count(4) = 9 bytes; cut right after it, before the 4-byte
-    // nameLen field can be fully read.
-    expect(() => unpackArchive(good.subarray(0, 11))).toThrowError(
+    const good = packArchive([
+      { name: "a".repeat(30), bytes: Buffer.from("y") },
+      { name: "x", bytes: Buffer.from("y") },
+    ]);
+    // First entry (name 30 bytes + 1-byte data) ends at header(9) + (4+30+8+1) = 52; cut 2 bytes
+    // into the second entry's 4-byte nameLen field, before it can be fully read.
+    expect(() => unpackArchive(good.subarray(0, 54))).toThrowError(
       expect.objectContaining({
         code: "backup.archive_invalid",
         params: { reason: "name_len_truncated" },
@@ -66,9 +75,13 @@ describe("backup archive", () => {
   });
 
   it("rejects a truncated name", () => {
-    const good = packArchive([{ name: "hello", bytes: Buffer.from("y") }]);
-    // Header(9) + nameLen(4) = 13; the declared name is 5 bytes but only 2 are supplied.
-    expect(() => unpackArchive(good.subarray(0, 15))).toThrowError(
+    const good = packArchive([
+      { name: "a".repeat(30), bytes: Buffer.from("y") },
+      { name: "hello", bytes: Buffer.from("y") },
+    ]);
+    // First entry ends at 52; the second entry's nameLen(4) is fully readable (declares 5), so cut
+    // 2 bytes into its 5-byte name field, before it can be fully read.
+    expect(() => unpackArchive(good.subarray(0, 58))).toThrowError(
       expect.objectContaining({
         code: "backup.archive_invalid",
         params: { reason: "name_truncated" },
@@ -77,9 +90,13 @@ describe("backup archive", () => {
   });
 
   it("rejects a truncated data length field", () => {
-    const good = packArchive([{ name: "x", bytes: Buffer.from("y") }]);
-    // Header(9) + nameLen(4) + name(1) = 14; cut before the 8-byte dataLen can be fully read.
-    expect(() => unpackArchive(good.subarray(0, 17))).toThrowError(
+    const good = packArchive([
+      { name: "a".repeat(30), bytes: Buffer.from("y") },
+      { name: "x", bytes: Buffer.from("y") },
+    ]);
+    // First entry ends at 52; the second entry's nameLen(4)+name(1) are fully readable, so cut 3
+    // bytes into its 8-byte dataLen field, before it can be fully read.
+    expect(() => unpackArchive(good.subarray(0, 60))).toThrowError(
       expect.objectContaining({
         code: "backup.archive_invalid",
         params: { reason: "data_len_truncated" },
@@ -102,16 +119,17 @@ describe("backup archive", () => {
     );
   });
 
-  // A huge declared entryCount with no data behind it must fail fast on the FIRST entry's bounds
-  // check, not attempt to loop or allocate anything sized by the untrusted count — proves the
-  // per-entry guard, not the count itself, is what keeps this cheap against a hostile container.
+  // A huge declared entryCount with no data behind it must be rejected upfront, before the loop
+  // below ever runs or allocates anything sized by the untrusted count — proves the O(1) entryCount
+  // bound against the buffer's actual size, computed from the header alone, is what keeps this
+  // cheap against a hostile container.
   it("rejects a huge entry count with no entries behind it, without hanging", () => {
     const header = Buffer.concat([Buffer.from("WBA1"), Buffer.from([1]), Buffer.alloc(4)]);
     header.writeUInt32LE(0xffffffff, 5);
     expect(() => unpackArchive(header)).toThrowError(
       expect.objectContaining({
         code: "backup.archive_invalid",
-        params: { reason: "name_len_truncated" },
+        params: { reason: "entry_count_too_large" },
       }),
     );
   });
