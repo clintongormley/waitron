@@ -18,6 +18,7 @@ import {
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import type { StorageBackend, StoredObject } from "./storage-backend.js";
+import { locateSharedContainer } from "./testing/locate-shared-container.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -493,32 +494,11 @@ describe("realPgDump custom-format invocation (real container, docker exec)", ()
     const uri = new URL(suite.pg.uri);
 
     // Find the shared container by its published host port + the harness label.
-    let containerId: string;
-    try {
-      const { stdout } = await execFileAsync("docker", [
-        "ps",
-        "--filter",
-        `publish=${uri.port}`,
-        "--filter",
-        "label=com.waitron.reapable",
-        "--format",
-        "{{.ID}}",
-      ]);
-      containerId = stdout.trim().split("\n")[0]!.trim();
-    } catch (err) {
-      console.warn(
-        `[backup-sweep smoke SKIPPED] could not run \`docker ps\` to locate the test container: ${String(err)}. ` +
-          `realPgDump's real invocation is UNPROVEN in this run.`,
-      );
-      return;
-    }
-    if (containerId === "") {
-      console.warn(
-        `[backup-sweep smoke SKIPPED] no running container published on port ${uri.port} with label ` +
-          `com.waitron.reapable. realPgDump's real invocation is UNPROVEN in this run.`,
-      );
-      return;
-    }
+    const containerId = await locateSharedContainer(uri, {
+      tag: "backup-sweep smoke",
+      unproven: "realPgDump's real invocation is UNPROVEN in this run.",
+    });
+    if (containerId === undefined) return;
 
     // Inside the container the server listens on localhost:5432; the clone db + superuser creds come
     // from the suite uri. This is the exact argv realPgDump builds (pg-dump.ts): custom format, --file,

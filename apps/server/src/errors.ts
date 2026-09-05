@@ -1588,5 +1588,75 @@ declare module "@waitron/shared" {
     // A diagnostics verbosity request named a level outside {debug,info} or a ttl outside its bounds.
     // `reason` is a fixed enum string (never a raw input value) — the redaction discipline holds.
     "diagnostics.invalid_verbosity": { reason: "level" | "ttl" };
+    /**
+     * BR-3's restore compatibility gate (`restore-gate.ts`) refused: the backup manifest's
+     * `environment` differs from the restoring binary's own target environment. Refusing this here,
+     * before `pg_restore` touches anything, is what stops a preproduction dump landing on a
+     * production database (or the reverse) — CLAUDE.md §5's "one database per environment": a
+     * cross-environment restore would leave `invoice_series.next_number` inherited from the wrong
+     * series, a permanent hole once real sales resume. `backup`/`target` are both a
+     * `DeploymentEnvironment` string (`"production"`/`"preproduction"`), never a secret, so echoing
+     * both is what makes the refusal actionable. `restore.*` names the DOMAIN CONCEPT — restoring a
+     * backup onto a target — never the throwing package (`tenant.not_found`'s note gives the rule).
+     * Never renamed once shipped.
+     */
+    "restore.environment_mismatch": { backup: string; target: string };
+    /**
+     * BR-3's restore compatibility gate refused: for some module the manifest's applied schema
+     * version is NEWER than the restoring binary's own `expectedVersions` entry for that module —
+     * this binary's migrations don't go that far forward, so it cannot safely read (or later migrate)
+     * what the backup contains. A module the manifest lists that the target does not run at all (absent
+     * from `expectedVersions`) is a different case and is silently IGNORED, not refused — its tables
+     * restore inert. `module` is the module's own declared name, `backup`/`target` the two applied
+     * schema versions being compared, none of them secrets. `restore.*`, not `backup.*`: the backup
+     * artifact itself is fine, it is this restore attempt, onto this binary, that is refused. Never
+     * renamed once shipped.
+     */
+    "restore.schema_too_new": { module: string; backup: number; target: number };
+    /**
+     * An archive entry name failed BR-3's traversal guard (`restore-entry-guard.ts`) before ANY
+     * write happened. Two layers, mirroring `unpackBundleToDir`'s (`state-secrets.ts`): a LEXICAL
+     * one — `name` is absolute, or `resolve(join(destRoot, name))` does not land under `destRoot`
+     * (a `../` escape) — and a SYMLINK-aware one that catches what the lexical check cannot: a
+     * lexically-fine name (`tls/ca.crt`) whose parent directory is a PRE-EXISTING symlink pointing
+     * outside `destRoot`, where `realpath` reveals the escape the string comparison alone would miss.
+     * GCM/tar integrity proves the archive's BYTES are authentic, never that its entry NAMES are the
+     * well-behaved `db.dump`/`media/*`/`secrets/*` set BR-3 expects, so a crafted-but-authentic
+     * archive still has to be refused here before `pg_restore` or any file write touches disk.
+     *
+     * `name` is the archive's own entry name — attacker-influenced, but not a secret, so echoing it
+     * is what makes the refusal actionable, the same as `backup.source_kind_unsupported`'s `kind`.
+     * `restore.*`, not `server.*`: a fact about this restore's own archive, not the process
+     * (`tenant.not_found`'s note gives the rule), beside `restore.environment_mismatch`/
+     * `restore.schema_too_new`. Never renamed once shipped.
+     */
+    "restore.unsafe_entry_path": { name: string };
+    /**
+     * BR-3's restore orchestrator (`restore.ts`) refused: the decrypted archive is missing a
+     * structurally-required entry — the `manifest.json` index it must read to run the compatibility
+     * gate, or the `db.dump` it must feed to `pg_restore`. A backup without either is not a partial
+     * backup to salvage, it is an archive this binary cannot restore from at all, so it fails LOUD
+     * and names the absent entry rather than proceeding to a half-restore. `missing` is the fixed
+     * entry name (`"manifest.json"` or `"db.dump"`), never attacker input or a secret. `restore.*`,
+     * not `backup.*`: the fault is in what THIS restore attempt received, beside
+     * `restore.unsafe_entry_path`/`restore.environment_mismatch`/`restore.schema_too_new`. Never
+     * renamed once shipped.
+     */
+    "restore.archive_incomplete": { missing: string };
+    /**
+     * BR-3's restore orchestrator (`restore.ts`) found a top-level archive entry it does not know how
+     * to route — one that is neither `manifest.json` nor `db.dump`, and whose top-level segment is
+     * neither `media/` nor `secrets/`. BR-2 emits exactly those four shapes today, so this never
+     * fires now; it fails LOUD the day a second non-DB source id starts emitting `<source>/...` blobs
+     * and the restore consumer has not been taught to route them — silently DROPPING an unrecognised
+     * entry would lose that data on the one path (cold recovery) that must not (CLAUDE.md §5). The
+     * fix when it fires is to update the restore consumer to route the new entry, never to widen this
+     * to accept it. `name` is the archive's own entry name — attacker-influenced but not a secret, so
+     * echoing it is what makes the refusal actionable, the same as `restore.unsafe_entry_path`'s
+     * `name`. `restore.*`, not `server.*`: a fact about this restore's own archive, not the process
+     * (`tenant.not_found`'s note gives the rule), beside the other `restore.*` codes above. Never
+     * renamed once shipped.
+     */
+    "restore.unexpected_entry": { name: string };
   }
 }
