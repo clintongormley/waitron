@@ -271,6 +271,8 @@ All three decisions are now taken.
    the request in flight, CORS + tenant-domain cookie, venue-wide till reads (absorbs R3a's two
    deferrals), CLAUDE.md §5 rewrite. The `dining_tables` comment and config-conflict-gate cleanups
    are dropped: both files die with the outbox (swap spec §7). Six slices; the run-it proof is item 2.
+   **Plan:** [`2026-09-05-till-reroute.md`](superpowers/plans/2026-09-05-till-reroute.md) (22 tasks,
+   one branch per slice: `feat/till-reroute-s1-server-truth` … `feat/till-reroute-s6-e2e`).
 2. **The cloud standby, end to end (MVP)** — the box↔cloud-instance WireGuard link (relay DECIDED
    2026-09-05: none; `@waitron/tunnel`, `WAITRON_TUNNEL_*` and the tunnel-aware dispatcher are
    deleted once the link carries replication, never before — the decisions-first line above), a
