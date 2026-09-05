@@ -488,6 +488,15 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
   module, designed against the enablement lifecycle then.
 - **SP-3 — fiscal as a module (= H2's fiscal-record lane)** + vocabulary + gated provisioning; swappable. The
   standalone H2 spec/plan (branch `feat/h2-fiscal-record-sync`, never merged) are reference material for this.
+  - **SP-3a — fiscal-record sync lane — IN FLIGHT on `feat/module-sp3a-fiscal-record-lane`.** The first
+    SP-3 slice: enrols the six fiscal tables (`registros_facturacion`, `cadenas`, `envios`, `envio_flujo`,
+    `series_reservadas`, `sif`) onto the sync ordered lane via `@waitron/sync-enrolment`, adds the capture
+    triggers, declares the `fiscal → sync` module edge (manifest reorder + descriptor `requires` + the
+    graph-honesty SPI-edge guard), and applies fiscal rows verbatim on a mirror (immutable, RLS-forced,
+    no AEAT submission) with the schema-version park gate. Spec:
+    [sp-3a](superpowers/specs/2026-09-05-module-sp3a-fiscal-record-lane-design.md); plan:
+    [sp-3a plan](superpowers/plans/2026-09-05-module-sp3a-fiscal-record-lane.md). (LANDED marking happens
+    at land via `/land-branch`.)
 - **SP-4 — module UI surface** (card-registry inversion + self-sourcing cards + fiscal's cards) — **after
   B3.2** (shares `@waitron/layouts` / `apps/till` card-grid).
 

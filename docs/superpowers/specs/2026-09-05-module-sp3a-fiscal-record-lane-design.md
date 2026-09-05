@@ -263,9 +263,11 @@ working and a broken implementation visibly **disagree** (CLAUDE.md §1).
 1. **Verbatim `registro` insert under FORCE RLS.** A foreign `registros_facturacion` row applies
    byte-identical (huella + four `anterior_*` + `entorno` preserved), idempotent on re-delivery via
    `ON CONFLICT (id) DO NOTHING`.
-2. **Immutability intact on the mirror.** A stray direct UPDATE/DELETE/TRUNCATE on a mirrored
-   `registros_facturacion` still trips `WT001` / the grant, while the insert-only apply path is
-   unobstructed.
+2. **Immutability intact on the mirror.** Two layers, verified on `postgres:18-alpine` (Task 6): a stray
+   UPDATE/DELETE/TRUNCATE by the apply role (`sync_applier`, a non-superuser `app_user` member) is refused
+   with `42501` — the grant is checked before the trigger ever fires — while the append-only `WT001` trigger
+   fires only for a grant/RLS-bypassing superuser (an UPDATE, or a `TRUNCATE … CASCADE`; a plain `TRUNCATE`
+   is refused earlier with `0A000` via the FK references). The insert-only apply path is unobstructed.
 3. **Mutable-table upsert non-regression.** `registro_sif` (revocation), `cadenas` (`actualizado_en`
    watermark), `envios`/`envio_flujo` (seq-cursor watermark) and `acks` (insert/update/delete) apply and
    never regress on a late older image — measured where a first delivery and a re-delivery visibly differ.
