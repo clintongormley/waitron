@@ -138,6 +138,16 @@ export interface ServerConfig {
    * `http://localhost:5191` for dev/tests; REQUIRED in production (same guard as `managementRpId`). */
   managementOrigin: string;
   /**
+   * The origin tills route on for THIS node (till-reroute design §3.3): what the node publishes as
+   * its `contactUrl` in the membership document, and what the CORS allow-list treats as "self". A
+   * BARE origin — `scheme://host[:port]`, no path, query or fragment — because a till concatenates
+   * request paths onto it and a browser's `Origin` header is compared against it byte-for-byte. From
+   * `WAITRON_ADVERTISED_ORIGIN`; unset or empty (the `isUnset` rule) → `managementOrigin`, the origin
+   * this box already serves the dashboard from; anything that is not a bare origin is
+   * `server.config_invalid` at boot rather than a broken address published to every till.
+   */
+  advertisedOrigin: string;
+  /**
    * The built `till` SPA directory this box serves at the origin root "/", or `undefined` to not
    * serve it (dev leaves it unset and uses the Vite dev server). When set, `boot.ts` mounts it as the
    * root catch-all — LAST, after every API route — so it never shadows `/api`, `/management-api`,
@@ -262,6 +272,28 @@ function requiredInProduction(
   if (environment === "production") return required(env, variable);
   const raw = env[variable];
   return isUnset(raw) ? devDefault : raw;
+}
+
+/**
+ * A BARE origin (`scheme://host[:port]`), or `fallback` when the variable is unset or empty (the
+ * `isUnset` rule every optional variable here follows). `new URL(raw).origin === raw` is the whole
+ * check: a missing scheme fails to parse at all, and a path, query or fragment survives into `raw`
+ * but not into the parsed `origin`, so the two differ. A URL that is nothing but its origin
+ * round-trips byte-for-byte.
+ */
+function bareOrigin(env: Env, variable: string, fallback: string): string {
+  const raw = env[variable];
+  if (isUnset(raw)) return fallback;
+  let origin: string;
+  try {
+    origin = new URL(raw).origin;
+  } catch {
+    throw new AppError("server.config_invalid", { variable, reason: "not_an_origin" });
+  }
+  if (origin !== raw) {
+    throw new AppError("server.config_invalid", { variable, reason: "not_an_origin" });
+  }
+  return raw;
 }
 
 export interface SyncPeer {
@@ -664,6 +696,22 @@ export function loadConfig(
   // WAITRON_ENV throws `server.config_invalid` only once those two have passed, exactly as it did when
   // this was `environment: deploymentEnvironment(env)` inline in the return below.
   const environment = deploymentEnvironment(env);
+  // `managementOrigin` is resolved before the literal because `advertisedOrigin` defaults to it and
+  // an object literal cannot reference its own sibling. `managementRpId` comes with it, in this
+  // order, so a production host missing BOTH still reports the RP ID first — the order the literal
+  // evaluated them in, and the one the "naming the missing variable" guard was written around.
+  const managementRpId = requiredInProduction(
+    env,
+    "WAITRON_MANAGEMENT_RP_ID",
+    environment,
+    DEFAULT_MANAGEMENT_RP_ID,
+  );
+  const managementOrigin = requiredInProduction(
+    env,
+    "WAITRON_MANAGEMENT_ORIGIN",
+    environment,
+    DEFAULT_MANAGEMENT_ORIGIN,
+  );
   return {
     databaseUrl,
     migrationsDatabaseUrl: isUnset(migrationsDatabaseUrl) ? databaseUrl : migrationsDatabaseUrl,
@@ -712,18 +760,11 @@ export function loadConfig(
     // production so a real deployment can never silently bind passkeys to `localhost` (see
     // `requiredInProduction` and the `DEFAULT_MANAGEMENT_*` note). Same `isUnset` empty-string rule
     // `httpHost` above follows, applied inside the helper.
-    managementRpId: requiredInProduction(
-      env,
-      "WAITRON_MANAGEMENT_RP_ID",
-      environment,
-      DEFAULT_MANAGEMENT_RP_ID,
-    ),
-    managementOrigin: requiredInProduction(
-      env,
-      "WAITRON_MANAGEMENT_ORIGIN",
-      environment,
-      DEFAULT_MANAGEMENT_ORIGIN,
-    ),
+    managementRpId,
+    managementOrigin,
+    // The origin tills route on for this node — defaulting to the origin the dashboard is already
+    // served from, so a box that configures nothing still advertises a reachable address.
+    advertisedOrigin: bareOrigin(env, "WAITRON_ADVERTISED_ORIGIN", managementOrigin),
     // The built front-end dirs the box serves same-origin (slice 1a). Absent OR empty → undefined
     // (the same `isUnset` rule `settlementLagMs` above and every other optional here follow): dev
     // leaves them unset and uses the Vite dev servers, so `boot.ts` mounts nothing. Stored verbatim

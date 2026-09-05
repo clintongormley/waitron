@@ -107,6 +107,9 @@ describe("loadConfig", () => {
       // No WAITRON_MANAGEMENT_* set, so the passkey Relying Party falls back to loopback dev values.
       managementRpId: "localhost",
       managementOrigin: "http://localhost:5191",
+      // No WAITRON_ADVERTISED_ORIGIN set, so the origin tills route on is the origin this box already
+      // serves the dashboard from.
+      advertisedOrigin: "http://localhost:5191",
       // No WAITRON_TILL_APP_DIR / WAITRON_DASHBOARD_APP_DIR / WAITRON_SETUP_APP_DIR set, so the box
       // serves none of the SPAs — dev uses the Vite dev servers. Present-but-undefined, asserted
       // explicitly the same way settlementLagMs above is, so this case pins that an unset app dir
@@ -336,6 +339,60 @@ describe("loadConfig", () => {
     expect(config.environment).toBe("preproduction");
     expect(config.managementRpId).toBe("staging.example.com");
     expect(config.managementOrigin).toBe("https://staging.example.com");
+  });
+
+  // `advertisedOrigin` is what this node publishes as its `contactUrl` and what CORS treats as
+  // "self", so a box that sets nothing must still advertise an origin a till can reach: the one it
+  // already serves the dashboard from. The management origin here is deliberately NOT the loopback
+  // default, so "fell back to managementOrigin" and "took DEFAULT_MANAGEMENT_ORIGIN" cannot both
+  // print the same value.
+  it("defaults advertisedOrigin to managementOrigin when WAITRON_ADVERTISED_ORIGIN is unset or empty", () => {
+    const managed = { ...MIN_ENV, WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com" };
+    const unset = loadConfig(managed, ROOT, MEDIA_ROOT, STATE_ROOT);
+    expect(unset.advertisedOrigin).toBe("https://dashboard.example.com");
+    // Empty string is unset (config.ts's `isUnset`), so `WAITRON_ADVERTISED_ORIGIN=` takes the same
+    // fallback rather than putting a blank `contactUrl` into the membership document — the
+    // `VAR=`-means-unset rule the rest of this file applies.
+    const empty = loadConfig(
+      { ...managed, WAITRON_ADVERTISED_ORIGIN: "" },
+      ROOT,
+      MEDIA_ROOT,
+      STATE_ROOT,
+    );
+    expect(empty.advertisedOrigin).toBe("https://dashboard.example.com");
+  });
+
+  it("honours a configured bare WAITRON_ADVERTISED_ORIGIN", () => {
+    const config = loadConfig(
+      { ...MIN_ENV, WAITRON_ADVERTISED_ORIGIN: "https://box.deli.waitron.app" },
+      ROOT,
+      MEDIA_ROOT,
+      STATE_ROOT,
+    );
+    expect(config.advertisedOrigin).toBe("https://box.deli.waitron.app");
+  });
+
+  // A `contactUrl` a till concatenates paths onto, and a CORS allow-list entry compared against a
+  // browser's `Origin` header, are both bare origins — anything carrying a path, or missing a scheme,
+  // is refused loudly at boot rather than silently published to every till.
+  it.each([
+    // No scheme: `new URL` cannot parse it at all.
+    "box.deli.waitron.app",
+    // A path: the parsed origin drops it, so it differs from the input.
+    "https://box.deli.waitron.app/till",
+    // Not a URL in any reading.
+    "not a url",
+  ])("refuses WAITRON_ADVERTISED_ORIGIN=%s, which is not a bare origin", async (bad) => {
+    const error = await captureError(() =>
+      Promise.resolve(
+        loadConfig({ ...MIN_ENV, WAITRON_ADVERTISED_ORIGIN: bad }, ROOT, MEDIA_ROOT, STATE_ROOT),
+      ),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_ADVERTISED_ORIGIN",
+      reason: "not_an_origin",
+    });
   });
 
   it("falls back to DATABASE_URL when WAITRON_MIGRATIONS_DATABASE_URL is set but empty", () => {
