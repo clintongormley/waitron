@@ -337,10 +337,15 @@ _Reference_.
   Measured: eslint lints 0 files under `docs/`, `prettier --file-info docs/backlog.md` is
   `ignored: true`, and CI classifies it documentation-only. A ROOT `CLAUDE.md` or `README.md` is
   format-checked (`ignored: false`) and takes the normal flow.
-- **Every commit needs `git commit -s`**; CI's `dco` job walks the whole PR range. So a PR that goes
-  `BEHIND` is cleared with a local rebase in the worktree (fetch, `git rebase origin/main`,
-  `git push --force-with-lease`), **never `gh pr update-branch`**, whose merge commit carries no sign-off and
-  fails DCO (#160).
+- **Every commit needs `git commit -s`**; CI's `dco` job walks the whole PR range. **A PR that goes
+  `BEHIND` is not rebased for that alone** (owner decision 2026-09-05): when GitHub still reports it
+  `MERGEABLE` and what `main` gained since the merge-base is documentation, or code in no file this
+  branch changed, it lands as it is with `gh pr merge --squash --admin` — the up-to-date rule guards
+  against semantic conflicts, which documentation cannot cause, and the post-merge unfiltered `main`
+  run tests the merged tree (verified #119 with code, #240 with four docs commits; `/land-branch`
+  step 2 classifies it). Rebase in the worktree only for `CONFLICTING`, or when `main` touched a code
+  file this branch also changed — `pnpm install`, then push through the hook, never `--no-verify`.
+  **Never `gh pr update-branch`**, whose merge commit carries no sign-off and fails DCO (#160).
 - **Do not merge a PR automatically — wait for the user's approval.** Invoking `/land-branch` is that
   approval; nothing else is.
 - **Merging requires resolved conversations** (`mergeStateStatus: BLOCKED` with green checks). Read
