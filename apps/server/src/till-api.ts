@@ -856,8 +856,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // off the redundant second pass. `null` (no cookie) still threads through fail-closed.
       const device = await tryReadDevice(deps, c);
       // Capability firewall (SP-A.2 §16): integrated card pay drives a real reader, so it requires the
-      // device's assigned canvas to declare `integrated-card-payment`. This generalises the old
-      // hardcoded handheld check — a handheld carries a capability-less canvas (or none), so it is
+      // device's assigned device profile to declare `integrated-card-payment`. This generalises the old
+      // hardcoded handheld check — a handheld carries a capability-less device profile (or none), so it is
       // still refused `device.forbidden_action` (403) here, before the provider guard and any fiscal
       // write, so the fence holds even if the client were bypassed. A cookie-less caller passes THIS
       // capability guard (there is no device to check) — but the route still nets to a rejection, because
@@ -1328,8 +1328,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const { personId, sessionId } = await requireSession(deps, c);
       // Capability firewall (SP-A.2 §16): opening the cash drawer requires the device's assigned
-      // canvas to declare `open-cash-drawer`. This generalises the old hardcoded handheld check — a
-      // handheld carries a capability-less canvas (or none) and so has no drawer to open, refused
+      // device profile to declare `open-cash-drawer`. This generalises the old hardcoded handheld check — a
+      // handheld carries a capability-less device profile (or none) and so has no drawer to open, refused
       // `device.forbidden_action` (403) before the policy/printer resolution. An ordinary till carries
       // no device cookie and passes.
       await assertDeviceCapability(deps, c, "open-cash-drawer", "drawer_open");

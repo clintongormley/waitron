@@ -40,6 +40,8 @@ export function validateCanvas(input: unknown): CanvasDef {
   }
   const seenKeys = new Set<string>();
   const tabs: TabDef[] = input.tabs.map((raw, tabIndex) => validateTab(raw, tabIndex, seenKeys));
+  // `capabilities` intentionally NOT read here — it moved to the device profile (2026-09-05); a stray
+  // key on input is silently ignored, not a validation gap.
   const canvas: CanvasDef = { formFactor: input.formFactor, tabs };
   assertSaleCritical(canvas, SELLING_FORM_FACTORS);
   if (input.theme !== undefined) canvas.theme = validateThemeOverride(input.theme);
