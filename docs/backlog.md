@@ -275,7 +275,8 @@ All three decisions are now taken.
    the auth model does not change — the device cookie stays httpOnly and gains a tenant-domain scope;
    `devices`/`tills`/`device_profiles`/`canvases` must replicate first (config-class, no new table);
    the promoted cloud serves tills on its public name; the app never talks to the local agent.
-   **S1 (server truth) BUILT 2026-09-06, PR pending; S2-S6 next:**
+   **S1 (server truth) LANDED #244 (2026-09-06). Next: S2 (CORS + tenant-domain cookie, plan Tasks
+   7–10) in its own worktree, then S3–S6:**
    [`2026-09-05-till-reroute-design.md`](superpowers/specs/2026-09-05-till-reroute-design.md) — the
    till FOLLOWS THE PRIMARY (probe every server, obey `acceptingSales`; no manual switch — owner
    2026-09-05; a status line + "check again" instead), server list = the membership document's
