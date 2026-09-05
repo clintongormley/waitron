@@ -28,14 +28,12 @@ export const GENERIC_PACKAGES = [
   "sync-enrolment",
 ] as const;
 
-/**
- * There is no exempt-package list. A package is Spanish by design exactly when a module DECLARES
- * vocabulary (`WaitronModule.vocabulary`, the seat the composition root wires in
- * `apps/server/src/modules.ts`), and `vocabularyOwners` below derives that module's package from its
- * `migrations.from`; the root suite asserts no owner is generic. `packages/verifactu` — the AEAT
- * library, no descriptor of its own — is in no list at all, like `provisioning` and `tunnel`: not
- * generic, never scanned.
- */
+// There is no exempt-package list. A package is Spanish by design exactly when a module DECLARES
+// vocabulary (`WaitronModule.vocabulary`, the seat the composition root wires in
+// `apps/server/src/modules.ts`), and `vocabularyOwners` below derives that module's package from its
+// `migrations.from`; the root suite asserts no owner is generic. `packages/verifactu` — the AEAT
+// library, no descriptor of its own — is in no list at all, like `provisioning` and `tunnel`: not
+// generic, never scanned.
 
 // -----------------------------------------------------------------------------------------------
 // Decision record: apps/* is OUT OF SCOPE for this guard. Prose, not another `as const` array,
@@ -59,7 +57,7 @@ export const GENERIC_PACKAGES = [
 // necessarily speaks both vocabularies in the
 // same file, on purpose — `boot.ts` importing `@waitron/fiscal-verifactu` IS the point of the
 // package existing. An exemption list that tried to cover everything a composition root legitimately
-// says would end up listing most of `SPANISH_WORDS` below, which asserts nothing.
+// says would end up listing most of the assembled forbidden set, which asserts nothing.
 //
 // This is not a loophole for a NEW generic package to hide Spanish vocabulary behind: the guard
 // still applies to every package under `packages/`, `apps/server` still imports the generic layer
@@ -74,14 +72,11 @@ export const GENERIC_PACKAGES = [
  * the scan that vocabulary feeds — this file, plus `packages/fiscal`'s narrower one.
  *
  * `english-only.ts` contains the guard's base wordlist in plain text, so scanning it would fail
- * on the vocabulary it exists to define. Its suite carries the same wordlist in its fixtures and
- * was listed here for the same reason until 2026-08-01, when it moved to
- * `scripts/english-only.test.ts` — the repo-level Vitest project, so that a push touching neither
- * `packages/db` nor a package that depends on it still runs it. `sourceFilesIn` only ever walks
- * `packages/<name>/src`, so the suite is now out of scope by location and naming it here would be
- * an exemption matching nothing.
+ * on the vocabulary it exists to define. Its suite (`scripts/english-only.test.ts`, the repo-level
+ * Vitest project) carries fiscal words in its fixtures but needs no entry here: `sourceFilesIn`
+ * only ever walks `packages/<name>/src`, so the suite is out of scope by location.
  * `no-regime-vocabulary.test.ts` (Task 11) has the identical structural problem one level down:
- * it is a SEPARATE guard, one this file's own `SPANISH_WORDS` cannot substitute for, because it
+ * it is a SEPARATE guard, one this guard's forbidden set cannot substitute for, because it
  * exists to catch regime vocabulary written in ENGLISH — `chain`, `hash`, `sif` — which is not
  * Spanish and this guard has no way to see. Its own forbidden-term list necessarily contains a few
  * words that overlap this one's (`huella`, `registro`, `cadena`, `encadenamiento`, `incidencia`,

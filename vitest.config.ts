@@ -82,10 +82,10 @@ export default defineConfig({
       // What `include` MEANS here, now that the guards have moved in: the code whose only tests
       // are in THIS project. That is the two classifiers, and one file that is not under
       // `scripts/` at all — `packages/db/src/english-only.ts`, the vocabulary guard's module,
-      // whose suite is `scripts/english-only.test.ts`. The module stayed behind because two other
-      // files in the tree reach for it where it is: `packages/db/src/schema/series.test.ts`
-      // imports `findSpanish` from it, and `packages/fiscal-verifactu/src/vocabulary-scope.test.ts`
-      // reads its source text by relative path. `packages/db`'s own config excludes it in the same
+      // whose suite is `scripts/english-only.test.ts`. The module stayed behind because
+      // `packages/db/src/schema/series.test.ts` imports `findSpanish` from it (the package-local
+      // vocabulary tests carry their own copy of the tokeniser instead). `packages/db`'s own
+      // config excludes it in the same
       // change, so it is measured in exactly one place rather than in two or in none — the failure
       // mode being the last of those, which no threshold anywhere would report.
       //

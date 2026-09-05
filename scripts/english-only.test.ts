@@ -6,8 +6,8 @@
  * The forbidden set is ASSEMBLED here, not listed in one place (SP-3b): `packages/db/src/english-only.ts`
  * holds only the base list of generic Spanish no module owns, and every Spanish-by-design module
  * declares its own terms on its descriptor's `vocabulary` seat (`apps/server/src/modules.ts`). This
- * suite derives each owner's package dir from `migrations.from` (the same derivation
- * `module-graph-honesty.test.ts` uses), asserts no owner is a generic package, and proves each
+ * suite derives each owner's package dir from `migrations.from` (the string
+ * `module-graph-honesty.test.ts` reads too), asserts no owner is generic, and proves each
  * declaration fires on its owner's real source. `ALL_MODULES` is imported for runtime values only —
  * the root project is not typechecked (CLAUDE.md §2).
  *

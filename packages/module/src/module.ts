@@ -49,6 +49,11 @@ export interface WaitronModule {
    * and injects it, so @waitron/sync imports no domain schema (spec §2/§5). */
   readonly sync?: readonly EnrolledTable[];
   readonly cards?: unknown; // SP-4
+  /** SP-3b: the domain terms this module OWNS — legitimate inside its own package (derived from
+   * `migrations.from`, `../<pkg>/drizzle`), forbidden in every generic package. Tokens, not words:
+   * lowercase ASCII, unaccented, singular and plural separately, nothing stemmed. Read only by the
+   * root english-only suite, which unions every declaration with the guard's base list and asserts
+   * the two are disjoint; no runtime consumer. Omit the seat rather than declare `[]`. */
   readonly vocabulary?: readonly string[];
   readonly permissions?: readonly string[];
   readonly duties?: unknown; // cronjobs

@@ -105,7 +105,8 @@ declare module "@waitron/shared" {
     /** No `absences` row for this id under the current tenant — never created, or hidden by RLS.
      * Raised by `setAbsenceStatus` (../absences.ts) when asked to move a non-existent absence to
      * approved/rejected. `absence.*`, grepped against the whole registry — unused before D2, and the
-     * English `absence` term (the Spanish `ausencia` is in SPANISH_WORDS, so the code stays English
+     * English `absence` term (the Spanish `ausencia` is workforce-es's declared vocabulary, so the
+     * code stays English
      * like the schema, following the domain-concept convention). */
     "absence.not_found": { tenantId: string; absenceId: string };
     /** `createAbsence` (../absences.ts) was asked to create an absence whose date range overlaps an

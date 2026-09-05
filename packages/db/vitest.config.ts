@@ -62,7 +62,7 @@ export default defineConfig({
       // now lives: scripts/english-only.test.ts, moved out of this package on
       // 2026-08-01 so that a push touching only packages/ui or only
       // packages/payments still runs it. What is left here loading the module
-      // is src/schema/series.test.ts, which imports `findSpanish` alone.
+      // is src/schema/series.test.ts, which imports `findSpanish` and the base `SPANISH_WORDS`.
       //
       // Excluded rather than left to be measured on that one import, and the
       // difference was run rather than reasoned about. Three states of

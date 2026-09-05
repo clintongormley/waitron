@@ -164,11 +164,18 @@ unfiltered `main` run, not a wrong hook.
   once shipped**; deprecate and add a sibling. `server.*` is reserved for facts about the process
   itself (`apps/server/src/errors.ts`). Every file that throws a code imports its registry
   (`import "./errors.js"`); reachability is guarded once, in the root project (§4).
-- **Spanish domain terms are deliberate**, guarded by `packages/db/src/english-only.ts` (suite
-  `scripts/english-only.test.ts`, root project). Fiscal tables and columns use the Veri\*Factu
-  vocabulary (`envios`, `estado`, `huella`, `secuencia`, `entorno`); add new tokens to
-  `SPANISH_WORDS`. `packages/verifactu` and `packages/fiscal-verifactu` are exempt; `apps/*` is out of
-  scope by a recorded decision, so Spanish IDENTIFIERS in app UI code are caught only by review.
+- **Spanish domain terms are deliberate, and a module declares its own.** The guard is
+  `packages/db/src/english-only.ts` (suite `scripts/english-only.test.ts`, root project); its
+  `SPANISH_WORDS` is only the BASE list of generic POS Spanish no module owns. A module's terms live
+  on its descriptor's `vocabulary` seat — `FISCAL_VOCABULARY` (`packages/fiscal-verifactu`),
+  `WORKFORCE_ES_VOCABULARY` (`packages/workforce-es`), wired in `apps/server/src/modules.ts` — and
+  the suite assembles the forbidden set from the descriptors, deriving each owner's package from
+  `migrations.from`. One declaring home per word: a new fiscal term goes in the fiscal list, never
+  the base (the suite fails on a clash). Fiscal tables and columns use the Veri\*Factu vocabulary
+  (`envios`, `estado`, `huella`, `secuencia`, `entorno`). `packages/verifactu` is an unlisted
+  library (in no list, never scanned); `apps/*` is out of scope by a recorded decision, so Spanish
+  IDENTIFIERS in app UI code are caught only by review. Design:
+  `docs/superpowers/specs/2026-09-05-module-sp3b-vocabulary-design.md`.
 - **`@waitron/db`'s `exports` map is enumerated, not a wildcard** — `.`, `./testing/postgres.js`,
   `./testing/seed.js`, `./testing/lifecycle.js`, `./testing/shared-container.js`. A wildcard would
   publish the whole harness and give `asAppUser` a second import path. Consequence: `apps/server`
