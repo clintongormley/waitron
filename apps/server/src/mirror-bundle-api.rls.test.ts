@@ -446,27 +446,28 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
     expect(res.status).toBe(200);
     const bundle = (await res.json()) as {
       reservedIdentity: {
-        nif: string;
-        idSistemaInformatico: string;
-        numeroInstalacion: number;
+        modules: {
+          fiscal: { nif: string; idSistemaInformatico: string; numeroInstalacion: number };
+        };
         series: { code: string; purpose: string }[];
         endorsement: { nodeId: string; publicKey: string; endorsedBy: string; signature: string };
       };
     };
     const r = bundle.reservedIdentity;
+    const fiscal = r.modules.fiscal;
     // A fresh installation number the primary reserved (past its own — applyVenue's registerSif took 1).
-    expect(r.numeroInstalacion).toBeGreaterThan(0);
-    expect(typeof r.nif).toBe("string");
+    expect(fiscal.numeroInstalacion).toBeGreaterThan(0);
+    expect(typeof fiscal.nif).toBe("string");
     // The primary's own IdSistemaInformatico — applyVenue registers the SIF under WAITRON_ID_SISTEMA ("W1").
-    expect(r.idSistemaInformatico).toBe("W1");
+    expect(fiscal.idSistemaInformatico).toBe("W1");
     // Disjoint series: one per primary series (FA + RF), each suffixed with the reserved number.
     expect(r.series.map((s) => s.code).sort()).toEqual(
-      [`FA-${r.numeroInstalacion}`, `RF-${r.numeroInstalacion}`].sort(),
+      [`FA-${fiscal.numeroInstalacion}`, `RF-${fiscal.numeroInstalacion}`].sort(),
     );
     // Purpose is preserved alongside the derived code.
     const byCode = new Map(r.series.map((s) => [s.code, s.purpose]));
-    expect(byCode.get(`FA-${r.numeroInstalacion}`)).toBe("standard");
-    expect(byCode.get(`RF-${r.numeroInstalacion}`)).toBe("rectificative");
+    expect(byCode.get(`FA-${fiscal.numeroInstalacion}`)).toBe("standard");
+    expect(byCode.get(`RF-${fiscal.numeroInstalacion}`)).toBe("rectificative");
     // The endorsement vouches for THIS standby, by the primary node.
     expect(r.endorsement.nodeId).toBe(standby.nodeId);
     expect(r.endorsement.publicKey).toBe(standby.publicKey);

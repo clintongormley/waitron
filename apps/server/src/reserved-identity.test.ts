@@ -9,6 +9,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { tenantId as brandTenantId, nodeId as brandNodeId } from "@waitron/shared";
 import type { LocationId, TenantId } from "@waitron/shared";
 import type { Endorsement } from "@waitron/membership";
+import { ALL_MODULES } from "./modules.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 
 // PGlite, not real Postgres: `establishReservedStandbyIdentity` seals a credential, inserts the
@@ -61,10 +62,9 @@ describe("establishReservedStandbyIdentity", () => {
         nodeName: "cloud",
         filingModule: "verifactu",
         taxModule: "iva",
+        modules: ALL_MODULES,
         reserved: {
-          nif: NIF,
-          idSistemaInformatico: "W1",
-          numeroInstalacion: 7,
+          modules: { fiscal: { nif: NIF, idSistemaInformatico: "W1", numeroInstalacion: 7 } },
           series: [{ code: "FA-7", purpose: "standard" }],
           endorsement: { ...ENDORSEMENT, nodeId: standby.nodeId, publicKey: standby.publicKey },
         },
@@ -94,16 +94,21 @@ describe("establishReservedStandbyIdentity", () => {
 
   it("is idempotent: a second call with a fresh identity is a no-op (keeps the first)", async () => {
     const first = generateStandbyIdentity();
-    const base = { tenantId, locationId, nodeName: "cloud", filingModule: null, taxModule: null };
+    const base = {
+      tenantId,
+      locationId,
+      nodeName: "cloud",
+      filingModule: null,
+      taxModule: null,
+      modules: ALL_MODULES,
+    };
     await establishReservedStandbyIdentity(
       { ownerDb: suite.db, ring: RING },
       {
         ...base,
         standby: first,
         reserved: {
-          nif: NIF,
-          idSistemaInformatico: "W1",
-          numeroInstalacion: 1,
+          modules: { fiscal: { nif: NIF, idSistemaInformatico: "W1", numeroInstalacion: 1 } },
           series: [],
           endorsement: { ...ENDORSEMENT },
         },
@@ -116,9 +121,7 @@ describe("establishReservedStandbyIdentity", () => {
         ...base,
         standby: second,
         reserved: {
-          nif: NIF,
-          idSistemaInformatico: "W1",
-          numeroInstalacion: 2,
+          modules: { fiscal: { nif: NIF, idSistemaInformatico: "W1", numeroInstalacion: 2 } },
           series: [],
           endorsement: { ...ENDORSEMENT },
         },
@@ -138,5 +141,26 @@ describe("establishReservedStandbyIdentity", () => {
       ),
     );
     expect(rows.rows[0]!.n).toBe(0);
+  });
+
+  it("refuses a bundle whose fiscal reservation is missing, before writing the node", async () => {
+    const standby = generateStandbyIdentity();
+    await expect(
+      establishReservedStandbyIdentity(
+        { ownerDb: suite.db, ring: RING },
+        {
+          tenantId,
+          locationId,
+          standby,
+          nodeName: "cloud",
+          filingModule: "verifactu",
+          taxModule: "iva",
+          modules: ALL_MODULES,
+          reserved: { modules: {}, series: [], endorsement: ENDORSEMENT },
+        },
+      ),
+    ).rejects.toMatchObject({ code: "sif.reservation_invalid" });
+    const node = await suite.db.execute(sql`select 1 from nodes where id = ${standby.nodeId}`);
+    expect(node.rows).toEqual([]); // the one transaction rolled back
   });
 });

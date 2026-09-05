@@ -11,7 +11,12 @@
 import "./errors.js";
 import { readFile } from "node:fs/promises";
 import { eq } from "drizzle-orm";
-import { AppError, nodeId as brandNodeId, tenantId as brandTenantId } from "@waitron/shared";
+import {
+  AppError,
+  locationId as brandLocationId,
+  nodeId as brandNodeId,
+  tenantId as brandTenantId,
+} from "@waitron/shared";
 import {
   invoiceSeries,
   locations,
@@ -23,34 +28,26 @@ import {
   type Database,
 } from "@waitron/db";
 import { enrolPeer } from "@waitron/sync";
-import {
-  currentSif,
-  deriveReservedSeriesCodes,
-  reserveInstallationNumber,
-} from "@waitron/fiscal-verifactu";
 import { endorseKey, type Endorsement } from "@waitron/membership";
 import type { KeyRing } from "@waitron/credentials";
 import type { AdoptResult, AdoptVenueRows } from "@waitron/provisioning";
-import { serializeModuleConfig } from "@waitron/module";
+import { enabledModules, serializeModuleConfig } from "@waitron/module";
 import { caCertPath } from "./box-secrets.js";
 import { readModuleConfig } from "./module-config.js";
+import { ALL_MODULES } from "./modules.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 
 /**
- * The dormant fiscal + membership identity the PRIMARY reserves for a standby at adopt
- * (reserved-standby-identity design §4/§6 R2). The primary is the sole allocator per NIF: it bumps ITS
- * OWN `contadores_instalacion` to mint a fresh `numeroInstalacion` the standby will persist inert (via
- * `writeReservedSif`, Task 3) and activate on promotion — a standby's DB is a copy and must never mint.
- * `series` are DISJOINT codes (`${primaryCode}-${numeroInstalacion}`), one per primary series, purpose
- * preserved: the installation number is globally unique + never-reused per NIF, so the suffix makes the
- * standby's series provably disjoint from the primary's. `endorsement` vouches for the standby's
- * identity key, signed by the primary's identity key — the chain-back-to-setup that lets other members
- * trust a document the standby later signs (Task 5 consumes this shape verbatim).
+ * The dormant identity the PRIMARY reserves for a standby at adopt (reserved-standby-identity design
+ * §4/§6 R2). What each module reserves is that module's own business and opaque here — the carrier
+ * neither reads nor validates it. `endorsement` vouches for the standby's identity key, signed by the
+ * primary's identity key — the chain-back-to-setup that lets other members trust a document the
+ * standby later signs.
  */
 export interface ReservedIdentity {
-  nif: string;
-  idSistemaInformatico: string;
-  numeroInstalacion: number;
+  /** Module name → the opaque state that module's `provisioning.standby.reserve` returned. */
+  modules: Record<string, unknown>;
+  /** The standby's invoice series, codes derived disjoint from the primary's by the reserving module. */
   series: { code: string; purpose: string }[];
   endorsement: Endorsement;
 }
@@ -82,11 +79,12 @@ export interface MirrorBundle {
 /**
  * `appDb` reads the venue rows under RLS as `app_user`; `retentionDb` (a `sync_retention` member) mints
  * the peer token via `enrolPeer` — the two roles that hold exactly the privileges each step needs.
- * `appDb` ALSO computes the reservation: `app_user` holds SELECT/INSERT/UPDATE on
- * `contadores_instalacion`/`registro_sif`/`cadenas` (`0001_registros_inmutables.sql`) and SELECT on
- * `invoice_series`, so the counter bump + fiscal/series reads all run as `app_user` (CLAUDE.md §3:
- * never widen a grant). `ring` unseals the primary's identity PRIVATE key (`readNodeIdentityKey`, as
- * `app_user`) to sign the standby's endorsement; `standby` is the node the primary vouches for.
+ * `appDb` ALSO runs the modules' reservations: `app_user` holds the reads and writes each enabled
+ * module's `provisioning.standby.reserve` needs (for fiscal, SELECT/INSERT/UPDATE on
+ * `contadores_instalacion`/`registro_sif`/`cadenas`, `0001_registros_inmutables.sql`, and SELECT on
+ * `invoice_series`), so no broader connection is used (CLAUDE.md §3: never widen a grant). `ring`
+ * unseals the primary's identity PRIVATE key (`readNodeIdentityKey`, as `app_user`) to sign the
+ * standby's endorsement; `standby` is the node the primary vouches for.
  * `designated` are the five ids the till was provisioned with (`config.till.*`); `stateDir` locates the
  * box CA; `relayUrl`/`boxHostname` are the box's dial-in.
  */
@@ -129,42 +127,42 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
   const environment = await readDeploymentEnvironment(deps.appDb);
   if (environment === null) throw new AppError("mirror.not_provisioned", {});
 
-  // Reserve the standby's dormant fiscal identity (reserved-standby-identity design §6 R2) and unseal
-  // the primary's identity key IN PARALLEL — the two have no data dependency (the endorsement needs only
-  // the private key + `deps.standby`, never `reserved`).
+  // SP-1d: the primary's enabled-module set, read FRESH at mint time rather than from boot — the
+  // operator may have edited modules.json since the primary booted, and a malformed file surfaces its
+  // `module.config_*` code HERE, before the reservation bumps any counter. It both decides which
+  // modules reserve below and travels to the mirror as `moduleOverrides`.
+  const moduleConfig = await readModuleConfig(deps.stateDir);
+  const modules = enabledModules(ALL_MODULES, moduleConfig);
+
+  // Reserve the standby's dormant identity through each enabled module's provisioning seat
+  // (reserved-standby-identity design §6 R2) and unseal the primary's identity key IN PARALLEL — the
+  // two have no data dependency (the endorsement needs only the private key + `deps.standby`, never
+  // `reserved`).
   //
-  // The reservation's counter bump + SIF/series reads share ONE `withTenant` transaction so it is
-  // consistent: `currentSif` reads the primary's live SIF, `reserveInstallationNumber` bumps the
-  // primary's OWN `contadores_instalacion` (the primary is the sole allocator per NIF), and the series
-  // codes are derived disjoint from the number just reserved. `currentSif` throwing `sif.not_registered`
-  // correctly surfaces an unprovisioned primary — an impossible state for a trading primary — and is left
-  // to propagate.
+  // The reservation shares ONE `withTenant` transaction, so every module's reads and its allocation are
+  // consistent with each other. What a module reserves, and what it throws when the primary is not in a
+  // state to reserve, is the module's own business; nothing is caught here.
   //
-  // The primary's identity PRIVATE key is unsealed as `app_user` inside `readNodeIdentityKey`'s own
-  // transaction; `endorseKey` (below) signs canonicalize({nodeId, publicKey}) so the endorsement chains
-  // the standby's key back to the primary's setup-established trust anchor (reserved-standby-identity §4).
+  // The endorsement is MEMBERSHIP's, not any module's: it is computed below from the primary's identity
+  // PRIVATE key, unsealed as `app_user` inside `readNodeIdentityKey`'s own transaction, and `endorseKey`
+  // signs canonicalize({nodeId, publicKey}) so the endorsement chains the standby's key back to the
+  // primary's setup-established trust anchor (reserved-standby-identity §4).
   const [reserved, primaryPrivateKey] = await Promise.all([
     withTenant(deps.appDb, deps.designated.tenantId, async (tx) => {
-      const primarySif = await currentSif(
-        tx,
-        brandTenantId(deps.designated.tenantId),
-        brandNodeId(deps.designated.nodeId),
-      );
-      const numeroInstalacion = await reserveInstallationNumber(tx, {
-        nif: primarySif.nif,
-        idSistemaInformatico: primarySif.idSistemaInformatico,
-      });
-      const primarySeries = await tx
-        .select({ code: invoiceSeries.code, purpose: invoiceSeries.purpose })
-        .from(invoiceSeries)
-        .where(eq(invoiceSeries.nodeId, brandNodeId(deps.designated.nodeId)));
-      const series = deriveReservedSeriesCodes(primarySeries, numeroInstalacion);
-      return {
-        nif: primarySif.nif,
-        idSistemaInformatico: primarySif.idSistemaInformatico,
-        numeroInstalacion,
-        series,
+      const primary = {
+        tenantId: brandTenantId(deps.designated.tenantId),
+        locationId: brandLocationId(deps.designated.locationId),
+        nodeId: brandNodeId(deps.designated.nodeId),
       };
+      const states: Record<string, unknown> = {};
+      const series: { code: string; purpose: string }[] = [];
+      for (const m of modules) {
+        if (m.provisioning?.standby === undefined) continue;
+        const r = await m.provisioning.standby.reserve(tx, primary);
+        states[m.name] = r.state;
+        series.push(...(r.series ?? []));
+      }
+      return { modules: states, series };
     }),
     readNodeIdentityKey(deps.appDb, deps.ring, deps.designated.tenantId),
   ]);
@@ -176,20 +174,11 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
     primaryPrivateKey,
   );
 
-  // The two READS have no data dependency, so run them together: the box CA, and — SP-1d — a snapshot
-  // of the primary's enabled-module set so the mirror inherits it at adopt. `moduleOverrides` is read
-  // FRESH here, not from boot: the operator may have edited modules.json since the primary booted, so
-  // the mint reflects the current desired set, and a malformed primary file surfaces its
-  // module.config_* code here (fail loud) — do not ship an unparseable set.
-  const [boxCaPem, moduleOverrides] = await Promise.all([
-    readFile(caCertPath(deps.stateDir), "utf8"),
-    readModuleConfig(deps.stateDir).then(serializeModuleConfig),
-  ]);
+  const boxCaPem = await readFile(caCertPath(deps.stateDir), "utf8");
 
   // `enrolPeer` INSERTs a `sync_peers` row (not idempotent, not auto-reaped), so it runs AFTER the
-  // reads have succeeded — never concurrently with them. Were it folded into the Promise.all above, a
-  // rejected read (a missing CA, or the fail-loud malformed-modules.json path) would abandon an
-  // already-committed peer row on every retry.
+  // reads have succeeded — never concurrently with them. Were it folded in with a read, a rejected
+  // read (a missing CA) would abandon an already-committed peer row on every retry.
   const { token } = await enrolPeer(deps.retentionDb, {
     subscriberId: deps.standby.nodeId,
     name: "cloud mirror",
@@ -204,6 +193,6 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
     relayUrl: deps.relayUrl,
     syncToken: token,
     reservedIdentity: { ...reserved, endorsement },
-    moduleOverrides,
+    moduleOverrides: serializeModuleConfig(moduleConfig),
   };
 }

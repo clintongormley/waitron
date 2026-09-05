@@ -161,15 +161,20 @@ describe("assembleMirrorBundle (primary side, real Postgres)", () => {
     // The reserved identity: a fresh installation number, disjoint series (FA/RF suffixed with it,
     // purpose preserved), and an endorsement of the standby's key by the primary node.
     const r = bundle.reservedIdentity;
-    expect(r.numeroInstalacion).toBeGreaterThan(0);
+    const fiscal = r.modules.fiscal as {
+      nif: string;
+      idSistemaInformatico: string;
+      numeroInstalacion: number;
+    };
+    expect(fiscal.numeroInstalacion).toBeGreaterThan(0);
     // The primary's own IdSistemaInformatico — applyVenue registers the SIF under WAITRON_ID_SISTEMA ("W1").
-    expect(r.idSistemaInformatico).toBe("W1");
+    expect(fiscal.idSistemaInformatico).toBe("W1");
     expect(r.series.map((s) => s.code).sort()).toEqual(
-      [`FA-${r.numeroInstalacion}`, `RF-${r.numeroInstalacion}`].sort(),
+      [`FA-${fiscal.numeroInstalacion}`, `RF-${fiscal.numeroInstalacion}`].sort(),
     );
     const byCode = new Map(r.series.map((s) => [s.code, s.purpose]));
-    expect(byCode.get(`FA-${r.numeroInstalacion}`)).toBe("standard");
-    expect(byCode.get(`RF-${r.numeroInstalacion}`)).toBe("rectificative");
+    expect(byCode.get(`FA-${fiscal.numeroInstalacion}`)).toBe("standard");
+    expect(byCode.get(`RF-${fiscal.numeroInstalacion}`)).toBe("rectificative");
     expect(r.endorsement.nodeId).toBe(standby.nodeId);
     expect(r.endorsement.publicKey).toBe(standby.publicKey);
     expect(r.endorsement.endorsedBy).toBe(designated.nodeId);

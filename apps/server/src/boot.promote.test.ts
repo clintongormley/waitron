@@ -31,6 +31,7 @@ import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer } from "./boot.js";
 import { establishNodeIdentity } from "./node-identity.js";
+import { ALL_MODULES } from "./modules.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 import { sealMirrorToken } from "./mirror-token.js";
 import { parseEnvFile } from "./env-file.js";
@@ -414,10 +415,15 @@ async function seedMirrorIdentity(
       nodeName: "cloud",
       filingModule: "verifactu",
       taxModule: "iva",
+      modules: ALL_MODULES,
       reserved: {
-        nif,
-        idSistemaInformatico: "W1",
-        numeroInstalacion: MIRROR_NUMERO_INSTALACION,
+        modules: {
+          fiscal: {
+            nif,
+            idSistemaInformatico: "W1",
+            numeroInstalacion: MIRROR_NUMERO_INSTALACION,
+          },
+        },
         series: [{ code: "FA-7", purpose: "standard" }],
         endorsement,
       },
