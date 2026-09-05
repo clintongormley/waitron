@@ -60,11 +60,11 @@ archived plan output; both are real stale claims and are recorded in `docs/backl
   whole-branch review, Codex tasks needing a Claude fix round) is what decides over the till-reroute
   slices.
 
-## Recommendation (owner decision pending)
+## Decision (owner, 2026-09-06)
 
-Move the run-it reviewer seat to Astra (`codex-seat.sh review-run`), keep the Opus convention reviewer
-as the second reader, and take Fable out of that seat: the experiment showed no Fable-only catch and a
-2× per-token price. Fable keeps the sessions the owner talks in and the plan-vs-spec review, which
-this experiment did not test. The rule files (`~/.claude/CLAUDE.md`, `CLAUDE.md` §6,
-`/finish-branch` step 2) currently name Fable for run-it as agreed before the experiment; flipping is
-a one-line edit in each.
+Run-it reviewer to Astra; plan-vs-spec review to Astra as well (Fable writes the plan, so it is
+still a different reader); Fable keeps the sessions the owner talks in, a new fresh-context review
+of any spec touching CLAUDE.md §5, and fix-loop round five; Opus keeps the execution driver, the
+per-task reviewer and the convention reviewer, so every stage has one reader that is not the code's
+author. Copilot's automatic review was switched off. Rule text: `~/.claude/CLAUDE.md`, `CLAUDE.md`
+§6, `/finish-branch` step 2. Still pending: dispatching `/simplify`'s lenses through Codex.
