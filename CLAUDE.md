@@ -172,9 +172,9 @@ unfiltered `main` run, not a wrong hook.
   the suite assembles the forbidden set from the descriptors, deriving each owner's package from
   `migrations.from`. One declaring home per word: a new fiscal term goes in the fiscal list, never
   the base (the suite fails on a clash). Fiscal tables and columns use the Veri\*Factu vocabulary
-  (`envios`, `huella`, `secuencia`, `entorno`). `packages/verifactu` is an unlisted
-  library (in no list, never scanned); `apps/*` is out of scope by a recorded decision, so Spanish
-  IDENTIFIERS in app UI code are caught only by review. Design:
+  (`envios`, `huella`, `secuencia`, `entorno`). `packages/verifactu` is an unlisted library (in no
+  list, never scanned); `apps/*` is out of scope by a recorded decision, so Spanish IDENTIFIERS in
+  app UI code are caught only by review. Design:
   `docs/superpowers/specs/2026-09-05-module-sp3b-vocabulary-design.md`.
 - **`@waitron/db`'s `exports` map is enumerated, not a wildcard** — `.`, `./testing/postgres.js`,
   `./testing/seed.js`, `./testing/lifecycle.js`, `./testing/shared-container.js`. A wildcard would

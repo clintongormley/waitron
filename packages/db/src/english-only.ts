@@ -112,10 +112,11 @@ export const SELF = ["english-only.ts", "no-regime-vocabulary.test.ts"] as const
  * failing test, not a second copy. Add a term here only if no module owns it.
  *
  * Singular and plural are listed separately and nothing is stemmed — stemming `series` to `serie`
- * would fire on `invoice_series`, which is in the naming contract. Words identical in both languages
- * are deliberately absent: total, base, local/locale, error, real, id. All appear in the naming
- * contract, and a guard that fires on `sales.total` on day one is a guard that gets deleted on day
- * two. `nif` is absent for the same reason — an acronym for a legal identifier, not vocabulary.
+ * would fire on `invoice_series`, which is in the naming contract. Words identical in both
+ * languages are deliberately absent: total, base, local/locale, error, real, id. All appear in the
+ * naming contract, and a guard that fires on `sales.total` on day one is a guard that gets deleted
+ * on day two. `nif` is absent for the same reason — an acronym for a legal
+ * identifier, not vocabulary.
  */
 export const SPANISH_WORDS: ReadonlySet<string> = new Set([
   // POS vocabulary a generic package might reach for
@@ -269,7 +270,8 @@ export function vocabularyOwners(modules: readonly VocabularyDeclaration[]): Voc
   return owners;
 }
 
-/** The forbidden set: `base` ∪ every module's declared terms. Returns a new set; `base` is untouched. */
+/** The forbidden set: `base` ∪ every module's declared terms.
+ * Returns a new set; `base` is untouched. */
 export function forbiddenVocabulary(
   base: ReadonlySet<string>,
   modules: readonly VocabularyDeclaration[],
