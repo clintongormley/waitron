@@ -97,10 +97,10 @@ What the MVP needs that is NOT built (Track B/C order, *Whole-project design rev
 hosting (the tunnel is proven only against a local stand-in), a per-tenant cloud instance
 provisioning path, the authenticated promotion endpoint, till reroute to the promoted cloud, a
 printing path when the primary is dead or the server is cloud-only (a poll-the-cloud printer or a
-local relay, distribution §5), and the control plane. **Gate: asesor Q16** — where an invoice-issuing
-cloud SIF may lawfully run — gates the cloud-only mode AND a promoted cloud standby (it issues
-invoices from the cloud the moment it is promoted). It is a go-live blocker for both, not a
-"later topology" question (*The advisor gap*).
+local relay, distribution §5), and the control plane. **Residency: cloud instances are hosted in
+Spain (owner decision 2026-09-05)**, so asesor Q16 — an invoice-issuing SIF operating from abroad —
+does not arise for either cloud mode; the control plane's region is Spain by decision, not a
+per-tenant choice.
 
 **Prioritisation is by soundness, not the calendar** (2026-08-02): Waitron will be finished before the
 deli must trade, so 1-Jan-2027 ranks nothing above anything. Order by dependency, correctness, and
@@ -130,7 +130,7 @@ conflict):**
   PER DATABASE everywhere, the cloud included.** A tenant is the obligado (`country` + `tax_id`, one
   NIF; `packages/provisioning/src/tenant-id.ts` derives its id) holding all of its locations. The
   cloud is a dedicated instance per tenant — the shape the built cloud mirror already has — as a warm
-  mirror today or, once asesor Q16 clears, as a primary; the shared multi-tenant cloud store
+  mirror today or as a primary (hosted in Spain, so Q16 does not arise); the shared multi-tenant cloud store
   (cloud-storage §2/§9) is DROPPED, and with it the parked *multi-tenant transport* (whole-log reader
   role). Density comes from many isolated instances per host, never from a shared database. The only
   multi-tenant pieces are the stateless tunnel relay, a small control plane (accounts, subscriptions,
@@ -259,7 +259,7 @@ control-plane docs):
    dedicated cloud instance per tenant, the only multi-tenant service Waitron will run is a small
    control plane: accounts (a customer of ours, a concept the schema does not have — a tenant is a
    taxpayer, and one customer may own several), subscriptions, instances (which box/VM serves which
-   tenant, its version, its region once asesor Q16 answers), relay tokens for the tunnel, and version
+   tenant, its version; region is Spain by decision), relay tokens for the tunnel, and version
    rollout per tenant. Density comes from many isolated instances per host, never a shared database.
    Pair it with item 5's tunnel question: the relay choice shapes what the control plane hands out.
    Docs-only until designed; nothing here is on the sale path.
@@ -1615,9 +1615,10 @@ against *both* designs, drop/rewrite what they invalidated, and add the replacem
 [cloud-storage-model §8a](superpowers/specs/2026-07-31-cloud-storage-model-design.md), plus the new
 "cloud server issuing invoices operates the SIF abroad" question — *before* paying for answers.
 
-> **2026-09-05 — Q16 is now a go-live blocker, not a later-topology question.** The MVP (*Priorities →
-> MVP for go-live*) includes a cloud-only primary and a cloud standby that issues invoices from the
-> moment it is promoted; both are an active cloud SIF. Ask Q16 first.
+> **2026-09-05 — Q16 closed by decision, not by the asesor.** Cloud instances are hosted in Spain, so
+> an invoice-issuing SIF never operates from abroad and the question does not arise for the MVP's
+> cloud modes. Do not send it. The outside-Spain / outside-EU conservation questions in cloud-storage
+> §8a are moot for the same reason — every copy is kept in Spain.
 
 **What each open question checks against the code:**
 

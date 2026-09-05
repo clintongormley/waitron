@@ -389,6 +389,10 @@ Two very different cases hide under "cloud-first"; they must not be conflated:
 **So (A) we can build now; (B) is gated on a compliance answer, not on code.** And (A) — the on-ramp
 that removes the adoption barrier — is the cheapest and simplest thing in this document.
 
+> **2026-09-05:** the compliance gate on (B) is closed by an owner decision — cloud instances are
+> hosted in Spain, so the "SIF abroad" question never arises. (B) is gated on code only; it is in the
+> MVP (`docs/backlog.md` → *Priorities → MVP for go-live*).
+
 **What "completely supported" requires us to build:** a provisioning path that stands up a cloud
 instance (a shared preproduction demo tenant for trials; a dedicated single-tenant instance for
 production), the PWA-points-at-a-cloud-origin path (largely the same-origin model already shipped),

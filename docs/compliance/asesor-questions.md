@@ -908,6 +908,11 @@ mechanics). The convenio side can be asked directly at `comunicacion.sepri@corre
 
 ### Q16. Where may an *active* cloud SIF run — issuing invoices from abroad? (added 2026-08-01)
 
+> **Closed 2026-09-05 by an owner decision, not an answer: cloud instances are hosted in Spain.** The
+> premise — a SIF operating from abroad — does not arise, for a cloud-only primary or for a promoted
+> cloud standby. Do not send this question. The Q11/Q12 custody remnant folded in here dies with it
+> (the certificate stays in Spain either way). Text below left as written.
+
 > **Sharpened 2026-08-26 (#86).** The distribution & client-topology design makes cloud-hosted a
 > first-class **planned** mode, not the disaster-edge this question was written against — so the
 > "only if a cloud-primary or standalone topology is offered" framing below now **understates** it:

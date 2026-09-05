@@ -374,6 +374,9 @@ outside Spain/EU) is an open asesor question (#33 §13, cloud-storage §8a) that
 promoted instance may occupy. A gate on offering cloud-primary / cloud-standalone topologies, not on
 this design.
 
+> **Resolved 2026-09-05 (owner decision):** cloud instances are hosted in Spain. The gate does not
+> arise; the promoted instance's region is Spain.
+
 ### 7.4 Hot failover *for* a cloud primary — the topology is fractal (review Point 6)
 
 > **Pointer (2026-09-05).** For the MVP's cloud-only mode the owner allows two shapes: (a) one node on
