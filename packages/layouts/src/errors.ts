@@ -89,6 +89,23 @@ declare module "@waitron/shared" {
     // duplicate name. `canvas-store.ts` translates the driver's 23505 into this so a duplicate returns
     // a clean 409, never a raw 500. No params: the offending name is never echoed (§1).
     "canvas.name_taken": Record<string, never>;
+    // A device profile's capability set failed validateCapabilities (device-profile.ts, design §7):
+    // the input was not an array, or an element was not a known CAPABILITY_FLAG. Sibling of
+    // `canvas.invalid`'s `bad_capabilities` rule, split out as capabilities move off the canvas onto a
+    // first-class device profile. `field` names the offending field ("capabilities"), NEVER the
+    // offending value (§1) — fail-closed: an unknown flag must never reach the /api/pay + /api/drawer
+    // firewall.
+    "device_profile.invalid": {
+      field?: "capabilities";
+    };
+    // A GET-by-id on the management device-profile surface named no profile the tenant owns (an absent
+    // id, or another tenant's row RLS hides). No params: the caller-supplied id is not echoed (§1) —
+    // the management API answers 404 on the code alone. Mirrors `canvas.not_found`.
+    "device_profile.not_found": Record<string, never>;
+    // A device-profile create/update collided on the per-tenant unique — a duplicate name. Translated
+    // from the driver's 23505 so a duplicate returns a clean 409, never a raw 500. No params: the
+    // offending name is never echoed (§1). Mirrors `canvas.name_taken`.
+    "device_profile.name_taken": Record<string, never>;
     // A ThemeOverride failed validateThemeOverride. `reason`:
     //   not_object    — input was not a plain object;
     //   bad_tokens    — `tokens` was missing or not a plain object;

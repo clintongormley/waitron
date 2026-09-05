@@ -21,6 +21,7 @@ export type { CardContract } from "./card-contract.js";
 // MAX_TAB_TITLE_LENGTH / validateCanvas are already re-exported above.
 export { validateThemeOverride, THEMEABLE_TOKENS, MAX_THEME_VALUE_LENGTH } from "./theme.js";
 export { DEFAULT_CANVASES } from "./default-canvases.js";
+export { validateCapabilities, DEFAULT_PROFILE_CAPABILITIES } from "./device-profile.js";
 export {
   listCanvases,
   getCanvas,
