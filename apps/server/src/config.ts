@@ -135,7 +135,9 @@ export interface ServerConfig {
    * `response` against as `expectedOrigin`. Distinct from `managementRpId`: the RP ID is the bare
    * domain, the origin carries scheme and port and must match the served URL byte-for-byte or
    * verification fails. Threaded into `ManagementApiDeps.origin`. Defaults to the Vite dev server's
-   * `http://localhost:5191` for dev/tests; REQUIRED in production (same guard as `managementRpId`). */
+   * `http://localhost:5191` for dev/tests; REQUIRED in production (same guard as `managementRpId`), and
+   * validated as a bare http(s) origin (`bareOrigin`) in EVERY environment — a trailing slash, a path
+   * or an explicit default port is refused as `server.config_invalid`, not merely absent-checked. */
   managementOrigin: string;
   /**
    * The origin tills route on for THIS node (till-reroute design §3.3): what the node publishes as
@@ -216,7 +218,10 @@ const MAX_HTTP_PORT = 65_535;
 /** Loopback defaults for the passkey Relying Party, so dev and every test resolve a working RP ID +
  * origin without setting either variable. These apply in preproduction/dev ONLY: in production both
  * are REQUIRED (`requiredInProduction` below throws `server.config_missing` if either is unset), so a
- * real deployment can never silently ship the loopback default and bind passkeys to `localhost`. A
+ * real deployment can never silently ship the loopback default and bind passkeys to `localhost`.
+ * Presence is not the only check on the origin: whatever value resolves — the operator's or this
+ * default — must be a bare http(s) origin in every environment (`bareOrigin`, `server.config_invalid`
+ * with `reason: "not_an_origin"`). A
  * production deployment sets both to its served domain (`WAITRON_MANAGEMENT_RP_ID`) and URL
  * (`WAITRON_MANAGEMENT_ORIGIN`) — see the `ServerConfig` fields. The origin default is the dashboard
  * Vite dev server's port (slice 1c), so a browser served from it verifies against the same value this
@@ -271,16 +276,32 @@ function requiredInProduction(
   return isUnset(raw) ? devDefault : raw;
 }
 
-/** A bare http(s) origin (`scheme://host[:port]`, nothing else): a till concatenates paths onto it and
- * a browser's `Origin` header is compared to it byte-for-byte. `host:port` with no scheme parses as a
- * non-special scheme whose origin is the literal "null", so the round-trip comparison catches it. */
-function bareOrigin(value: string, variable: string): string {
+/** Whether `value` is a bare http(s) origin (`scheme://host[:port]`, nothing else): a till concatenates
+ * paths onto it and a browser's `Origin` header is compared to it byte-for-byte. `host:port` with no
+ * scheme parses as a non-special scheme whose origin is the literal "null", so the round-trip
+ * comparison catches it. An EXPLICIT default port (`https://h:443`, `http://h:80`) is refused by that
+ * same comparison, because WHATWG `URL` normalises the port away and `parsed.origin` then differs from
+ * the value — consistent with a browser `Origin` header, which never carries a default port.
+ *
+ * Exported so the primary can hold the same line on a value a STANDBY advertised (`mirror-bundle-api.ts`
+ * signs it into the org chart and every till dials it) rather than re-deriving the rule. `""` is not a
+ * bare origin — `URL.parse("")` is `null` — so a caller that accepts an empty value screens for it
+ * before asking. */
+export function isBareOrigin(value: string): boolean {
   const parsed = URL.parse(value);
-  if (
-    parsed === null ||
-    parsed.origin !== value ||
-    (parsed.protocol !== "http:" && parsed.protocol !== "https:")
-  ) {
+  return (
+    parsed !== null &&
+    parsed.origin === value &&
+    (parsed.protocol === "http:" || parsed.protocol === "https:")
+  );
+}
+
+/** The config-boot form of `isBareOrigin`: returns the value or throws `server.config_invalid` naming
+ * the variable. Unlike every other validator here it takes a RESOLVED value rather than `(env,
+ * variable)`, because the value it checks may have come from a fallback (`advertisedOrigin` defaults
+ * to `managementOrigin`) and must be reported under the variable the operator actually set. */
+function bareOrigin(value: string, variable: string): string {
+  if (!isBareOrigin(value)) {
     throw new AppError("server.config_invalid", { variable, reason: "not_an_origin" });
   }
   return value;

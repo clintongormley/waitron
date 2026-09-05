@@ -1506,8 +1506,10 @@ declare module "@waitron/shared" {
     /**
      * A mirror-bundle request carried a malformed STANDBY identity (membership promotion R2) — the
      * `standbyNodeId` was absent or not a UUID, the `standbyPublicKey` was absent or empty, or the
-     * `standbyContactUrl` was absent or not a string (`""` IS accepted — a standby that advertises no
-     * origin is still a member). The primary reserves the standby's fiscal identity, endorses its key
+     * `standbyContactUrl` was absent, not a string, or a non-empty value that is not a bare http(s)
+     * origin (`""` IS accepted — a standby that advertises no origin is still a member; anything else
+     * the primary would sign into the org chart and every till would dial must pass the same
+     * `isBareOrigin` rule `config.ts` applies to this node's own advertised origin). The primary reserves the standby's fiscal identity, endorses its key
      * and records its address in the membership document, so all three are required on every request.
      * A CLIENT request-shape fault, reported as HTTP 400 by the bundle route's local STATUS map —
      * deliberately NOT folded into `password.invalid` (401): a bad standby identity is a distinct fault

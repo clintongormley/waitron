@@ -512,6 +512,59 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
     expect((await res3.json()).error.code).toBe("mirror.standby_invalid");
   });
 
+  it("refuses a standbyContactUrl that is not a bare origin as mirror.standby_invalid", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+
+    // A trailing slash: a well-formed URL, but NOT the bare origin the primary would sign into the
+    // chart — tills concatenate paths onto it, and a browser Origin header never carries one.
+    const slash = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      standbyNodeId: crypto.randomUUID(),
+      standbyPublicKey: STANDBY_PUB,
+      standbyContactUrl: "https://cloud.deli.test/",
+    });
+    expect(slash.status).toBe(400);
+    expect(await slash.json()).toEqual({ error: { code: "mirror.standby_invalid", params: {} } });
+
+    // A scheme a till must never dial. Refused for the same reason and under the same code — the
+    // primary holds this line itself rather than trusting the joiner to have screened its own value.
+    const script = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      standbyNodeId: crypto.randomUUID(),
+      standbyPublicKey: STANDBY_PUB,
+      standbyContactUrl: "javascript:alert(1)",
+    });
+    expect(script.status).toBe(400);
+    expect((await script.json()).error.code).toBe("mirror.standby_invalid");
+  });
+
+  it("ACCEPTS an empty standbyContactUrl and records the member address-less", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+    const standbyNodeId = crypto.randomUUID();
+
+    // The documented positive case: a standby that advertises no origin is still a member. Every
+    // other `""` row in this file fails for a DIFFERENT field, so without this the accept path is
+    // asserted nowhere.
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      standbyNodeId,
+      standbyPublicKey: STANDBY_PUB,
+      standbyContactUrl: "",
+    });
+    expect(res.status).toBe(200);
+    const after = await readNodeMembership(suite.admin);
+    expect(after?.body.nodes).toContainEqual({
+      nodeId: standbyNodeId,
+      contactUrl: "",
+      standing: "serving-secondary",
+    });
+  });
+
   it("refuses a non-string standbyContactUrl as mirror.standby_invalid", async () => {
     const { designated, adminPersonId } = await setupVenue();
     const app = mountApp(designated, "https://relay.example:9000/");

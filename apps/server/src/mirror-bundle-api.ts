@@ -32,6 +32,7 @@ import type { KeyRing } from "@waitron/credentials";
 import type { AdoptResult } from "@waitron/provisioning";
 import { assembleMirrorBundle } from "./mirror-bundle.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
+import { isBareOrigin } from "./config.js";
 import { createErrorBoundary } from "./error-boundary.js";
 import { readJsonBody } from "./read-json-body.js";
 import { isUuid } from "./till-session.js";
@@ -131,17 +132,22 @@ export function mountMirrorBundleApi(
       // The standby identity the primary will reserve + endorse rides in the same body and is REQUIRED
       // on every request (Task 5's fetcher always sends it; pre-production, no bwc). Screened exactly
       // like the credential above — a non-string/non-UUID `standbyNodeId`, a non-string/empty
-      // `standbyPublicKey`, or a non-string `standbyContactUrl` is refused as `mirror.standby_invalid`
-      // (a distinct 400 client fault, NOT the 401 a bad credential gets). An EMPTY `standbyContactUrl`
-      // is allowed: a standby that advertises no origin is still a member of the org chart. This runs
-      // AFTER the credential screen so a malformed credential still reports as `password.invalid`, and
-      // BEFORE auth so a well-formed request is fully shaped before any database work.
+      // `standbyPublicKey`, or a `standbyContactUrl` that is not a string is refused as
+      // `mirror.standby_invalid` (a distinct 400 client fault, NOT the 401 a bad credential gets). A
+      // PRESENT `standbyContactUrl` must be a bare http(s) origin — the primary signs it into the org
+      // chart and every till in the venue dials it, so the primary holds the same line `config.ts`
+      // holds on the origin THIS node advertises rather than trusting the caller's own screen. An
+      // EMPTY one is allowed: a standby that advertises no origin is still a member of the org chart.
+      // This runs AFTER the credential screen so a malformed credential still reports as
+      // `password.invalid`, and BEFORE auth so a well-formed request is fully shaped before any
+      // database work.
       if (
         typeof body.standbyNodeId !== "string" ||
         !isUuid(body.standbyNodeId) ||
         typeof body.standbyPublicKey !== "string" ||
         body.standbyPublicKey === "" ||
-        typeof body.standbyContactUrl !== "string"
+        typeof body.standbyContactUrl !== "string" ||
+        (body.standbyContactUrl !== "" && !isBareOrigin(body.standbyContactUrl))
       ) {
         throw new AppError("mirror.standby_invalid", {});
       }
