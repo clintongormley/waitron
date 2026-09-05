@@ -279,7 +279,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
       moduleOverrides: {},
     };
 
-    let standby: { nodeId: string; publicKey: string } | undefined;
+    let standby: { nodeId: string; publicKey: string; contactUrl: string } | undefined;
     await adoptFromPrimary(
       {
         ownerDb: mirror.admin,
@@ -336,7 +336,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
       moduleOverrides: {},
     };
 
-    let capturedStandby: { nodeId: string; publicKey: string } | undefined;
+    let capturedStandby: { nodeId: string; publicKey: string; contactUrl: string } | undefined;
     await adoptFromPrimary(
       {
         ownerDb: mirror.admin,

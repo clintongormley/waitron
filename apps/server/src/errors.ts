@@ -1508,10 +1508,11 @@ declare module "@waitron/shared" {
      * `standbyNodeId` was absent or not a UUID, the `standbyPublicKey` was absent or empty, or the
      * `standbyContactUrl` was absent or not a string (`""` IS accepted — a standby that advertises no
      * origin is still a member). The primary reserves the standby's fiscal identity, endorses its key
-     * and records its address in the membership document, so all three are required on every request. A CLIENT request-shape fault, reported as HTTP
-     * 400 by the bundle route's local STATUS map — deliberately NOT folded into `password.invalid`
-     * (401): a bad standby identity is a distinct fault from a bad credential, and mislabelling it as a
-     * credential error would mislead the operator (the rule §1's error-code conventions give).
+     * and records its address in the membership document, so all three are required on every request.
+     * A CLIENT request-shape fault, reported as HTTP 400 by the bundle route's local STATUS map —
+     * deliberately NOT folded into `password.invalid` (401): a bad standby identity is a distinct fault
+     * from a bad credential, and mislabelling it as a credential error would mislead the operator (the
+     * rule §1's error-code conventions give).
      *
      * NO params: the request is refused by shape and names no row, so a log line leaks nothing — the
      * same `sync.*`/`tunnel.*` no-leak discipline `mirror.no_relay`/`node.read_only` follow, and the

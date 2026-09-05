@@ -250,6 +250,11 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
     // `node_membership` is a whole-database singleton, so the term this mint bumps is whatever the
     // shared template already holds — read it rather than assume 0.
     const before = await readNodeMembership(suite.admin);
+    // The "everyone else survives" assertions below are only worth anything over a NON-EMPTY held
+    // chart, which the sibling test above leaves behind. Pinned so a reordering fails loudly here
+    // rather than turning those loops vacuous.
+    expect(before?.body.nodes.length ?? 0).toBeGreaterThan(0);
+
     const res = await post(app, {
       personId: adminPersonId,
       password: ADMIN_PASSWORD,
@@ -268,12 +273,43 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
       contactUrl: "https://cloud.deli.test",
       standing: "serving-secondary",
     });
+    // APPENDED, not replaced: every node the held chart already carried survives verbatim — standing
+    // and contactUrl untouched. Without this, minting from an EMPTY list instead of the held one
+    // passes every other assertion here while silently evicting the rest of the venue.
+    for (const node of before?.body.nodes ?? []) {
+      expect(after?.body.nodes).toContainEqual(node);
+    }
     // Signed by THIS primary, and it verifies against the primary's own key — so the document a till
     // later fetches is authentic, not merely present.
     expect(after?.signerNodeId).toBe(designated.nodeId);
     expect(verifyMembershipDocument(after!, { [designated.nodeId]: primaryPublicKey }).valid).toBe(
       true,
     );
+
+    // A RE-ADOPT of the same node (a wiped standby that kept its id, or a moved address): the entry is
+    // refreshed IN PLACE — one entry for that nodeId carrying the new url, not a second one — and the
+    // term bumps again.
+    const res2 = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      standbyNodeId,
+      standbyPublicKey: STANDBY_PUB,
+      standbyContactUrl: "https://cloud2.deli.test",
+    });
+    expect(res2.status).toBe(200);
+
+    const afterReadopt = await readNodeMembership(suite.admin);
+    expect(afterReadopt?.body.term).toBe(after!.body.term + 1);
+    expect(afterReadopt?.body.nodes.filter((n) => n.nodeId === standbyNodeId)).toEqual([
+      {
+        nodeId: standbyNodeId,
+        contactUrl: "https://cloud2.deli.test",
+        standing: "serving-secondary",
+      },
+    ]);
+    for (const node of before?.body.nodes ?? []) {
+      expect(afterReadopt?.body.nodes).toContainEqual(node);
+    }
   });
 
   it("refuses a non-admin (staff) credential with 403", async () => {
