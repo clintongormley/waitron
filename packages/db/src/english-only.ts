@@ -4,7 +4,12 @@ import { join } from "node:path";
 /** `<repo>/packages`. Derived, so the guard survives being run from anywhere. */
 export const PACKAGES_ROOT = join(import.meta.dirname, "..", "..");
 
-/** English throughout — identifiers and table/column names alike (spec §2). */
+/**
+ * English throughout — identifiers and table/column names alike (spec §2). A package neither
+ * listed here nor owning a module's declared `vocabulary` (`@waitron/module`'s `vocabularyOwners`,
+ * read by the root suite) is never scanned: `packages/verifactu` (the AEAT library, no descriptor
+ * of its own), `provisioning`, `tunnel`.
+ */
 export const GENERIC_PACKAGES = [
   "db",
   "core",
@@ -27,13 +32,6 @@ export const GENERIC_PACKAGES = [
   "diagnostics",
   "sync-enrolment",
 ] as const;
-
-// There is no exempt-package list. A package is Spanish by design exactly when a module DECLARES
-// vocabulary (`WaitronModule.vocabulary`, the seat the composition root wires in
-// `apps/server/src/modules.ts`), and `vocabularyOwners` below derives that module's package from
-// its `migrations.from`; the root suite asserts no owner is generic. `packages/verifactu` — the
-// AEAT library, no descriptor of its own — is in no list at all, like `provisioning` and `tunnel`:
-// not generic, never scanned.
 
 // -----------------------------------------------------------------------------------------------
 // Decision record: apps/* is OUT OF SCOPE for this guard. Prose, not another `as const` array,
@@ -107,9 +105,9 @@ export const SELF = ["english-only.ts", "no-regime-vocabulary.test.ts"] as const
  * The guard's BASE list: generic Spanish a generic package might reach for, owned by no module.
  * Every domain term lives on its module's `vocabulary` seat instead (`FISCAL_VOCABULARY` in
  * packages/fiscal-verifactu, `WORKFORCE_ES_VOCABULARY` in packages/workforce-es); the root suite
- * assembles the forbidden set with `forbiddenVocabulary` and asserts this list and the module
- * declarations are DISJOINT — a word has one declaring home, so a fiscal term added here is a
- * failing test, not a second copy. Add a term here only if no module owns it.
+ * assembles the forbidden set with `@waitron/module`'s `forbiddenVocabulary` and asserts this list
+ * and the module declarations are DISJOINT — a word has one declaring home, so a fiscal term added
+ * here is a failing test, not a second copy. Add a term here only if no module owns it.
  *
  * Singular and plural are listed separately and nothing is stemmed — stemming `series` to `serie`
  * would fire on `invoice_series`, which is in the naming contract. Words identical in both
@@ -224,61 +222,4 @@ export function sourceFilesIn(packageName: string): string[] {
     .filter((entry) => !SELF.some((name) => entry.endsWith(name)))
     .map((entry) => join(root, entry))
     .sort();
-}
-
-/**
- * The two descriptor fields the guard reads. Structural on purpose: importing `WaitronModule` from
- * `@waitron/module` would give packages/db a dev-only dependency cycle (module → migrations → db).
- */
-export interface VocabularyDeclaration {
-  readonly name: string;
-  readonly migrations: { readonly from: string };
-  readonly vocabulary?: readonly string[];
-}
-
-export interface VocabularyOwner {
-  /** The descriptor's name — the SLOT for a swappable module (`fiscal`), not the package. */
-  readonly module: string;
-  /** `packages/<packageDir>`, derived from `migrations.from`. */
-  readonly packageDir: string;
-  readonly terms: readonly string[];
-}
-
-/** `../<pkg>/drizzle` — the shape every descriptor's `migrations.from` has (module-graph-honesty
- * derives its package map from the same string). */
-const MIGRATIONS_FROM = /^\.\.\/([^/]+)\/drizzle$/;
-
-/**
- * Every module that declares a `vocabulary`, with its package dir derived from `migrations.from`.
- * A declaring module whose `from` has any other shape is refused loudly: the derivation would
- * otherwise exempt nothing and scan nothing, silently. An empty declaration is returned as an owner
- * with no terms so the suite can reject it by name.
- */
-export function vocabularyOwners(modules: readonly VocabularyDeclaration[]): VocabularyOwner[] {
-  const owners: VocabularyOwner[] = [];
-  for (const module of modules) {
-    if (module.vocabulary === undefined) continue;
-    const match = MIGRATIONS_FROM.exec(module.migrations.from);
-    if (match === null) {
-      throw new Error(
-        `english-only: module ${module.name} declares vocabulary but its migrations.from ` +
-          `(${module.migrations.from}) is not ../<pkg>/drizzle`,
-      );
-    }
-    owners.push({ module: module.name, packageDir: match[1]!, terms: module.vocabulary });
-  }
-  return owners;
-}
-
-/** The forbidden set: `base` ∪ every module's declared terms.
- * Returns a new set; `base` is untouched. */
-export function forbiddenVocabulary(
-  base: ReadonlySet<string>,
-  modules: readonly VocabularyDeclaration[],
-): Set<string> {
-  const words = new Set(base);
-  for (const owner of vocabularyOwners(modules)) {
-    for (const term of owner.terms) words.add(term);
-  }
-  return words;
 }

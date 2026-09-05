@@ -82,12 +82,11 @@ export default defineConfig({
       // What `include` MEANS here, now that the guards have moved in: the code whose only tests
       // are in THIS project. That is the two classifiers, and one file that is not under
       // `scripts/` at all — `packages/db/src/english-only.ts`, the vocabulary guard's module,
-      // whose suite is `scripts/english-only.test.ts`. The module stayed behind because
-      // `packages/db/src/schema/series.test.ts` imports `findSpanish` from it (the package-local
-      // vocabulary tests carry their own copy of the tokeniser instead). `packages/db`'s own
-      // config excludes it in the same change, so it is measured in exactly one place rather than
-      // in two or in none — the failure mode being the last of those, which no threshold anywhere
-      // would report.
+      // whose suite is `scripts/english-only.test.ts`. The module lives under `packages/db/src` so
+      // that package's `typecheck` covers it (the root project typechecks nothing); nothing in
+      // `packages/db` imports it, its own config excludes it from its coverage, and this `include`
+      // is what measures it — in exactly one place rather than in two or in none, the failure
+      // mode being the last of those, which no threshold anywhere would report.
       //
       // Not `scripts/**/*.ts`: the only `.ts` files under `scripts/` are the guard SUITES, and
       // Vitest leaves a suite out of its own coverage table whatever this says (measured on

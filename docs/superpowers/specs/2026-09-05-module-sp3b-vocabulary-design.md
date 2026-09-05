@@ -12,6 +12,16 @@ guard reads) and §9 ("English-only guard preserved, not exempted-around"). The 
 slices ([sp-3a](2026-09-05-module-sp3a-fiscal-record-lane-design.md) lists them); independent of 3a,
 3c and 3d.
 
+**Implementation notes (2026-09-05, the simplify pass before the PR; supersede §4–§6 where they
+differ):** the descriptor helpers live in `@waitron/module` — `packageDirOf` on the contract
+(`module.ts`) and `vocabularyOwners`/`forbiddenVocabulary` in `vocabulary.ts` — not in
+`english-only.ts`: there is no dependency cycle in that direction, the seat's owner package owns its
+semantics and typechecks them, and `scripts/module-graph-honesty.test.ts` reads the same derivation
+instead of its own regex. The package-local tokeniser copies (§6) and their byte-identity pin were
+dropped: the root suite runs on every non-docs push and is the positive control, with the guard's
+own comment stripping. The `invoice_series` test keeps only the exact column pin (the word filters
+were dead behind it), and `modules.test.ts` pins the two seats by reference only.
+
 ---
 
 ## 1. What this is, and its scope

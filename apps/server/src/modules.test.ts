@@ -51,8 +51,4 @@ describe("ALL_MODULES vocabulary seat (SP-3b)", () => {
     const wfes = ALL_MODULES.find((m) => m.name === "workforce-es");
     expect(wfes?.vocabulary).toBe(WORKFORCE_ES_VOCABULARY);
   });
-  it("no other module declares vocabulary — the generic modules are English", () => {
-    const owners = ALL_MODULES.filter((m) => m.vocabulary !== undefined).map((m) => m.name);
-    expect(owners).toEqual(["workforce-es", "fiscal"]);
-  });
 });

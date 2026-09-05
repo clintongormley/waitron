@@ -152,3 +152,22 @@ export function orderedMigrationSets(modules: readonly WaitronModule[]): Migrati
 
   return ordered.map((m) => m.migrations);
 }
+
+/** `../<pkg>/drizzle` — the shape every descriptor's `migrations.from` has (spec §4). */
+const MIGRATIONS_FROM = /^\.\.\/([^/]+)\/drizzle$/;
+
+/**
+ * The `packages/<dir>` a module's package lives in, derived from `migrations.from`. The ONE reader
+ * of that string's shape: the root guards (english-only, module-graph-honesty) map descriptors to
+ * package directories through it. Throws on any other shape — a derivation that silently skipped
+ * would exempt nothing and scan nothing.
+ */
+export function packageDirOf(module: WaitronModule): string {
+  const match = MIGRATIONS_FROM.exec(module.migrations.from);
+  if (match === null) {
+    throw new Error(
+      `module ${module.name}: migrations.from (${module.migrations.from}) is not ../<pkg>/drizzle`,
+    );
+  }
+  return match[1]!;
+}

@@ -6,13 +6,14 @@
  * The forbidden set is ASSEMBLED here, not listed in one place (SP-3b): `packages/db/src/english-only.ts`
  * holds only the base list of generic Spanish no module owns, and every Spanish-by-design module
  * declares its own terms on its descriptor's `vocabulary` seat (`apps/server/src/modules.ts`). This
- * suite derives each owner's package dir from `migrations.from` (the string
- * `module-graph-honesty.test.ts` reads too), asserts no owner is generic, and proves each
- * declaration fires on its owner's real source. `ALL_MODULES` is imported for runtime values only —
- * the root project is not typechecked (CLAUDE.md §2).
+ * suite derives each owner's package dir from `migrations.from` (`@waitron/module`'s
+ * `packageDirOf`, which `module-graph-honesty.test.ts` reads through as well), asserts no owner is
+ * generic, and proves each declaration fires on its owner's real source. `ALL_MODULES` is imported
+ * for runtime values only — the root project is not typechecked (CLAUDE.md §2).
  *
- * `english-only.ts` stays in `packages/db` because `packages/db/src/schema/series.test.ts` imports
- * `findSpanish` from it; the root config measures its coverage and `packages/db`'s config excludes it.
+ * `english-only.ts` lives under `packages/db/src` so that package's `typecheck` covers it — the
+ * root project typechecks nothing (CLAUDE.md §2). Nothing in `packages/db` imports it; the root
+ * config measures its coverage and `packages/db`'s config excludes it.
  */
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -24,11 +25,10 @@ import {
   SELF,
   SPANISH_WORDS,
   findSpanish,
-  forbiddenVocabulary,
   readSource,
   sourceFilesIn,
-  vocabularyOwners,
 } from "../packages/db/src/english-only.js";
+import { forbiddenVocabulary, vocabularyOwners } from "../packages/module/src/vocabulary.js";
 
 const OWNERS = vocabularyOwners(ALL_MODULES);
 const FORBIDDEN = forbiddenVocabulary(SPANISH_WORDS, ALL_MODULES);
@@ -36,11 +36,13 @@ const FORBIDDEN = forbiddenVocabulary(SPANISH_WORDS, ALL_MODULES);
 /**
  * Per-owner vacuous-pass anchors: terms each declaration MUST find in its owner's real source. A new
  * owner must add a row here (the "every owner has an anchor" test below insists), so a declaration
- * can never pass empty — the same reason module-graph-honesty pins its three known edges.
+ * can never pass empty — the same reason module-graph-honesty pins its three known edges. The
+ * workforce-es anchors include labour terms so `packages/workforce`, the English generic package
+ * under that Spanish module, is provably guarded.
  */
 const ANCHORS: Record<string, readonly string[]> = {
   fiscal: ["huella", "registro", "facturacion"],
-  "workforce-es": ["convenio", "jornada"],
+  "workforce-es": ["convenio", "jornada", "empleado", "fichaje"],
 };
 
 const discovered = GENERIC_PACKAGES.flatMap((name) =>
@@ -266,81 +268,6 @@ describe("findSpanish", () => {
       findSpanish('tipoOperacion: text("tipo_operacion"),', FORBIDDEN).map((v) => v.word),
     ).toEqual(["tipo", "operacion", "tipo", "operacion"]);
   });
-});
-
-describe("the labour vocabulary fires", () => {
-  it("flags Spanish labour identifiers and column names, so packages/workforce is guarded", () => {
-    // workforce-es's declaration arms the guard over packages/workforce — an English generic package
-    // sitting under a Spanish module — before the first Spanish labour name can land there.
-    expect(
-      findSpanish('jornadaLaboral: text("jornada_laboral"),', FORBIDDEN).map((v) => v.word),
-    ).toEqual(["jornada", "jornada"]);
-    expect(
-      findSpanish("const fichaje = 1; const empleado = 2;", FORBIDDEN).map((v) => v.word),
-    ).toEqual(["fichaje", "empleado"]);
-  });
-
-  it("does not flag English words that merely contain a labour token", () => {
-    // Whole-token matching: `contract` is not `contrato`, `permission` is not `permiso`.
-    expect(findSpanish("const contract = permission ?? baseline;", FORBIDDEN)).toEqual([]);
-  });
-});
-
-describe("vocabularyOwners / forbiddenVocabulary", () => {
-  const core = { name: "core", migrations: { from: "../db/drizzle" } };
-  const spanish = {
-    name: "regime",
-    migrations: { from: "../regime-impl/drizzle" },
-    vocabulary: ["huella", "cadena"] as const,
-  };
-
-  it("skips a module with no declaration and derives the package dir for one with", () => {
-    expect(vocabularyOwners([core, spanish])).toEqual([
-      { module: "regime", packageDir: "regime-impl", terms: ["huella", "cadena"] },
-    ]);
-  });
-
-  it("refuses a declaring module whose migrations.from is not ../<pkg>/drizzle", () => {
-    // The owner's package is DERIVED from `from`; a shape the derivation cannot read would silently
-    // exempt nothing and scan nothing, so it is a loud descriptor bug instead.
-    expect(() => vocabularyOwners([{ ...spanish, migrations: { from: "./elsewhere" } }])).toThrow(
-      /regime.*\.\.\/<pkg>\/drizzle/,
-    );
-  });
-
-  it("unions the base list with every declaration, without mutating the base", () => {
-    const base = new Set(["mesa"]);
-    const all = forbiddenVocabulary(base, [core, spanish]);
-    expect([...all].sort()).toEqual(["cadena", "huella", "mesa"]);
-    expect([...base]).toEqual(["mesa"]);
-  });
-});
-
-describe("the package-local tokeniser copies", () => {
-  // `findSpanish` is deliberately not importable from @waitron/db (its barrel says why: drizzle-kit
-  // loads the barrel, and english-only.ts computes PACKAGES_ROOT from import.meta.dirname at load
-  // time), so each vocabulary owner's package-local control carries a verbatim copy of `tokenise`.
-  // This pins every copy byte-identical to the original, so a change to how the guard tokenises
-  // cannot leave a package-local control silently disagreeing with the root guard.
-  const TOKENISE = /function tokenise\(line: string\): string\[\] \{[\s\S]*?\n\}/;
-  const original = TOKENISE.exec(
-    readSource(join(PACKAGES_ROOT, "db", "src", "english-only.ts")),
-  )?.[0];
-
-  it("finds the original to compare against", () => {
-    expect(original).toBeDefined();
-  });
-
-  it.each(OWNERS.map((o) => [o.module, o.packageDir] as const))(
-    "%s: its local copy is byte-identical to the guard's tokeniser",
-    (_module, packageDir) => {
-      const copies = sourceFilesIn(packageDir)
-        .filter((f) => /vocabulary(-scope)?\.test\.ts$/.test(f))
-        .map((f) => TOKENISE.exec(readSource(f))?.[0]);
-      expect(copies).toHaveLength(1);
-      expect(copies[0]).toBe(original);
-    },
-  );
 });
 
 describe.each(discovered)("%s", (_label, file) => {

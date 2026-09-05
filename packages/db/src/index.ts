@@ -129,7 +129,7 @@ export { CORE_MIGRATIONS } from "./migrations.js";
 export { asAppUser } from "./testing/roles.js";
 export { captureError, pgErrorCode, pgErrorMessage } from "./testing/errors.js";
 
-// english-only.ts's GENERIC_PACKAGES/SPANISH_WORDS/findSpanish/vocabularyOwners are deliberately
+// english-only.ts's GENERIC_PACKAGES/SPANISH_WORDS/findSpanish/sourceFilesIn are deliberately
 // NOT re-exported here, despite costing nothing at runtime in isolation. `english-only.ts`
 // computes `PACKAGES_ROOT` from `import.meta.dirname` at MODULE LOAD TIME (a top-level const,
 // not inside a function), and `drizzle-kit generate` loads this barrel transitively — any
@@ -138,5 +138,3 @@ export { captureError, pgErrorCode, pgErrorMessage } from "./testing/errors.js";
 // `import.meta.dirname` is `undefined` and the top-level `join(undefined, "..", "..")` throws
 // immediately, breaking `drizzle-kit generate` for that package. Verified live: adding this
 // export broke `pnpm --filter @waitron/fiscal-verifactu exec drizzle-kit generate` outright.
-// The package-local vocabulary tests (fiscal-verifactu, workforce-es) therefore carry their own
-// copy of the tokeniser rather than importing this file.
