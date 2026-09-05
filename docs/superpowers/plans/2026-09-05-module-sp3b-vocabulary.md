@@ -1177,6 +1177,10 @@ side, nothing missing or added."
 - Modify: `packages/module/src/module.ts:52` (seat doc)
 - Modify: `packages/db/src/index.ts:132-143` (barrel comment names `EXEMPT_PACKAGES`; its closing sentence claims `vocabulary-scope.test.ts` reads this file's source text — false since Task 1)
 - Modify: `vitest.config.ts:86-88` (the same false claim, inside the reason `english-only.ts` stays under the root `coverage.include`)
+- Modify: `packages/db/src/english-only.ts:62,84` (two sentences still attribute the forbidden set to `SPANISH_WORDS`, which is now only the base list)
+- Modify: `packages/db/vitest.config.ts:65` ("imports `findSpanish` alone" — `series.test.ts` now also imports `SPANISH_WORDS`)
+- Modify: `packages/db/src/english-only.ts:31-38,77-78` (a `/** */` block attached to no declaration; a narrative paragraph in the `SELF` doc)
+- Modify: `scripts/english-only.test.ts:9-10` (header wording: "the same derivation" overclaims)
 - Modify: `packages/provisioning/src/fiscal-modules.ts:22-25`
 - Modify: `packages/workforce/src/errors.ts:108`
 - Modify: `packages/workforce/src/schema/absences.ts:17-18`
@@ -1242,6 +1246,83 @@ with
 ```
 
 (the next line continues `// change, so it is measured in exactly one place …` unchanged; re-wrap only if a line exceeds 100 columns).
+
+- [ ] **Step 2c: Three sentences that still call the forbidden set `SPANISH_WORDS`**
+
+In `packages/db/src/english-only.ts` (inside the `apps/*` decision block, around line 62) replace
+```ts
+// says would end up listing most of `SPANISH_WORDS` below, which asserts nothing.
+```
+with
+```ts
+// says would end up listing most of the assembled forbidden set, which asserts nothing.
+```
+
+In the same file (the `SELF` doc comment, around line 84) replace
+```ts
+ * it is a SEPARATE guard, one this file's own `SPANISH_WORDS` cannot substitute for, because it
+```
+with
+```ts
+ * it is a SEPARATE guard, one this guard's forbidden set cannot substitute for, because it
+```
+
+In `packages/db/vitest.config.ts` (around line 65) replace
+```ts
+      // is src/schema/series.test.ts, which imports `findSpanish` alone.
+```
+with
+```ts
+      // is src/schema/series.test.ts, which imports `findSpanish` and the base `SPANISH_WORDS`.
+```
+
+- [ ] **Step 2d: Two more thins in `english-only.ts` and one in the suite header**
+
+In `packages/db/src/english-only.ts`, the block that begins `/**\n * There is no exempt-package list.` (around lines 31–38) is a `/** … */` comment attached to no declaration, sitting above a `//` prose block that says of itself "belongs to no declaration". Convert it to the same `//` form, text unchanged:
+
+```ts
+// There is no exempt-package list. A package is Spanish by design exactly when a module DECLARES
+// vocabulary (`WaitronModule.vocabulary`, the seat the composition root wires in
+// `apps/server/src/modules.ts`), and `vocabularyOwners` below derives that module's package from its
+// `migrations.from`; the root suite asserts no owner is generic. `packages/verifactu` — the AEAT
+// library, no descriptor of its own — is in no list at all, like `provisioning` and `tunnel`: not
+// generic, never scanned.
+```
+
+In the same file, the `SELF` doc comment's second paragraph is narrative and, since the wordlist here is now the base list, also wrong about what the suite's fixtures carry. Replace
+
+```ts
+ * `english-only.ts` contains the guard's base wordlist in plain text, so scanning it would fail
+ * on the vocabulary it exists to define. Its suite carries the same wordlist in its fixtures and
+ * was listed here for the same reason until 2026-08-01, when it moved to
+ * `scripts/english-only.test.ts` — the repo-level Vitest project, so that a push touching neither
+ * `packages/db` nor a package that depends on it still runs it. `sourceFilesIn` only ever walks
+ * `packages/<name>/src`, so the suite is now out of scope by location and naming it here would be
+ * an exemption matching nothing.
+```
+
+with
+
+```ts
+ * `english-only.ts` contains the guard's base wordlist in plain text, so scanning it would fail
+ * on the vocabulary it exists to define. Its suite (`scripts/english-only.test.ts`, the repo-level
+ * Vitest project) carries fiscal words in its fixtures but needs no entry here: `sourceFilesIn`
+ * only ever walks `packages/<name>/src`, so the suite is out of scope by location.
+```
+
+In `scripts/english-only.test.ts`'s header, "the same derivation" overclaims — `module-graph-honesty.test.ts` reads the same `migrations.from` string with a slightly different regex (`(.+)` vs this file's `([^/]+)`). Replace
+
+```ts
+ * suite derives each owner's package dir from `migrations.from` (the same derivation
+ * `module-graph-honesty.test.ts` uses), asserts no owner is a generic package, and proves each
+```
+
+with
+
+```ts
+ * suite derives each owner's package dir from `migrations.from` (the string
+ * `module-graph-honesty.test.ts` reads too), asserts no owner is generic, and proves each
+```
 
 - [ ] **Step 3: `packages/provisioning/src/fiscal-modules.ts`**
 
@@ -1372,7 +1453,7 @@ Expected: exit 0 (CLAUDE.md is format-checked; if prettier objects, `pnpm exec p
 - [ ] **Step 11: Commit**
 
 ```bash
-git add packages/module/src/module.ts packages/db/src/index.ts vitest.config.ts packages/provisioning/src/fiscal-modules.ts packages/workforce/src/errors.ts packages/workforce/src/schema/absences.ts packages/workforce/src/schema/employments.ts packages/db/src/schema/sales.ts packages/db/src/schema/purchase-invoices.ts CLAUDE.md
+git add packages/module/src/module.ts packages/db/src/index.ts vitest.config.ts packages/db/src/english-only.ts packages/db/vitest.config.ts scripts/english-only.test.ts packages/provisioning/src/fiscal-modules.ts packages/workforce/src/errors.ts packages/workforce/src/schema/absences.ts packages/workforce/src/schema/employments.ts packages/db/src/schema/sales.ts packages/db/src/schema/purchase-invoices.ts CLAUDE.md
 git commit -s -m "SP-3b: retire the receipts the vocabulary move falsified; seat doc; CLAUDE.md §3"
 ```
 
