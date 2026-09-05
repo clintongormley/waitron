@@ -15,6 +15,8 @@ import {
   restoreFromArtifact,
   restoreMedia,
   restoreSecrets,
+  validateArtifact,
+  writeValidated,
 } from "./restore.js";
 
 const KEY = "correct horse battery staple";
@@ -220,6 +222,84 @@ describe("restoreFromArtifact", () => {
     });
     expect(runRestore).not.toHaveBeenCalled();
     await expect(stat(join(mediaDir, "abc123.jpg"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+});
+
+describe("validateArtifact / writeValidated (R3 validate-before-wipe split)", () => {
+  useTempDirs("waitron-validate-");
+  let runRestore: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    runRestore = vi.fn(async () => {});
+  });
+
+  function deps(overrides: Partial<Parameters<typeof validateArtifact>[0]> = {}) {
+    return {
+      artifact: buildArtifact(FULL_ENTRIES),
+      recoveryKey: KEY,
+      databaseUrl: "postgres://admin@localhost/fresh",
+      mediaDir,
+      stateDir,
+      stagingDir,
+      migrationsRoot: null as string | null,
+      modules: ALL_MODULES,
+      environment: "preproduction" as const,
+      runRestore: runRestore as unknown as PgRestoreRunner,
+      log: noopLog,
+      ...overrides,
+    };
+  }
+
+  it("validateArtifact throws on a wrong recovery key and writes NOTHING", async () => {
+    // The commonest DR operator error. `validateArtifact` decrypts and must reject before any write —
+    // so R3 can run it BEFORE the irreversible wipe. No db restore, no media written.
+    await expect(validateArtifact(deps({ recoveryKey: "the-wrong-key" }))).rejects.toMatchObject({
+      code: "recovery.passphrase_invalid",
+    });
+    expect(runRestore).not.toHaveBeenCalled();
+    await expect(stat(join(mediaDir, "abc123.jpg"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("validateArtifact throws on an incompatible manifest (gate) and writes NOTHING", async () => {
+    const artifact = buildArtifact(FULL_ENTRIES, { ...MANIFEST, environment: "production" });
+    await expect(validateArtifact(deps({ artifact }))).rejects.toMatchObject({
+      code: "restore.environment_mismatch",
+    });
+    expect(runRestore).not.toHaveBeenCalled();
+    await expect(stat(join(mediaDir, "abc123.jpg"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("validateArtifact throws on a traversal entry (guard) and writes NOTHING", async () => {
+    const evil: ArchiveEntry[] = [
+      { name: "db.dump", bytes: DUMP },
+      { name: "media/../../evil.jpg", bytes: MEDIA },
+    ];
+    await expect(validateArtifact(deps({ artifact: buildArtifact(evil) }))).rejects.toMatchObject({
+      code: "restore.unsafe_entry_path",
+    });
+    expect(runRestore).not.toHaveBeenCalled();
+    await expect(stat(join(mediaDir, "abc123.jpg"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("validateArtifact returns the classified pieces and writeValidated then writes them", async () => {
+    // The two halves compose to exactly restoreFromArtifact's behaviour: validate returns the pieces,
+    // write consumes them. writeValidated is the ONLY writer — the gate/guard live solely in validate,
+    // so the security pass is single-sourced.
+    let staged: Uint8Array | undefined;
+    const capturing = vi.fn(async ({ inFile }: { inFile: string }) => {
+      staged = await readFile(inFile);
+    }) as unknown as PgRestoreRunner;
+
+    const validated = await validateArtifact(deps());
+    expect(validated.dumpEntry.bytes).toEqual(DUMP);
+    expect(validated.mediaEntries.map((e) => e.name)).toEqual(["media/abc123.jpg"]);
+    expect(validated.secretEntries.map((e) => e.name)).toEqual(["secrets/secrets.env"]);
+
+    await writeValidated(validated, deps({ runRestore: capturing }));
+    expect(staged).toEqual(DUMP);
+    expect(await readFile(join(mediaDir, "abc123.jpg"))).toEqual(MEDIA);
+    expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toBe(SECRET);
+    await expect(stat(join(stagingDir, "db.dump"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
 
