@@ -346,27 +346,14 @@ _Reference_.
 - **An untracked file in the main checkout can block the post-merge `git pull --ff-only`.** Diff
   before deleting; the scratch copy was 113 lines behind what landed.
 
-**Model selection (trial from 2026-09-05, owner decision after the whole-project review):**
-
-- **The main session runs on Fable 5.1** (`/model claude-fable-5-1`). It owns brainstorming, the
-  spec, the plan, the plan review, and every review step in `/finish-branch`.
-- **Every IMPLEMENTATION subagent** — a task from a plan, a fix round, `/simplify`'s lens agents — is
-  dispatched with `model: "opus"` (Opus 5.1). State the model in the dispatch explicitly; never rely
-  on the default, which inherits the session's model.
-- **Every REVIEWER subagent** — subagent-driven-development's spec-compliance and code-quality
-  reviewers, `/finish-branch`'s run-it reviewer — omits `model`, so it inherits Fable. The
-  `/finish-branch` convention reviewer is the one exception: dispatch it as `opus`.
-- **Review the plan once before dispatching implementers**, against the spec and §1's receipt rule,
-  and fix the plan rather than the code.
-- **Skip subagent-driven-development's final whole-branch reviewer.** `/finish-branch` step 2 is that
-  pass — the same prompt, run after `simplify` on the cleaned tree. The per-task reviews still run.
-- **Reviewers state the experiment they ran, not the conclusion** (§1). A review that only read the
-  diff says so.
-
-The trial's yardstick is the till-reroute slice against the previous five PRs: fix rounds before
-land, Copilot findings no internal layer caught, and false claims found at whole-branch review. If
-none of the three drops, move Fable back to reviewer-only seats (`model: "fable"` from an Opus
-session) and delete this block.
+**Model selection (trial from 2026-09-05, owner decision after the whole-project review):** the rule
+itself — Fable 5.1 main session and reviewer seats, `opus` implementers and `/simplify` lenses, skip
+subagent-driven-development's final whole-branch reviewer because `/finish-branch` step 2 is that
+pass — lives in the global `~/.claude/CLAUDE.md` so every repo shares it. What is waitron-specific is
+the yardstick: the till-reroute slice against the previous five PRs on fix rounds before land,
+Copilot findings no internal layer caught, and false claims found at whole-branch review. If none of
+the three drops, move Fable back to reviewer-only seats (`model: "fable"` from an Opus session) and
+retire the trial.
 
 **Before a PR**, run the §2 gate yourself rather than relying on the hook, then `/finish-branch`.
 Both the hook and CI narrow to changed packages; the unfiltered `main` merge is the only run that
