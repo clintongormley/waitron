@@ -311,8 +311,8 @@ jobs:
       #
       #   the two CLASSIFIERS under `scripts/` — if either is wrong, every gating decision below is
       #   wrong, so they must run even on the paths they would otherwise skip;
-      #   the two repo-wide GUARDS, `scripts/guarded-teardowns.test.ts` and
-      #   `scripts/english-only.test.ts`, which read `packages/` and `apps/` whole. They lived in
+      #   the repo-wide GUARDS (`scripts/*.test.ts`), which read `packages/` and `apps/` whole —
+      #   which package holds which coverage bar included. The first two lived in
       #   `packages/db` until 2026-08-01, where `test-heavy`'s own gate decided whether they ran —
       #   so a pull request touching only `packages/payments` ran neither, and their first run was
       #   the unfiltered `main` merge;

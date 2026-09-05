@@ -88,9 +88,11 @@ functions 98 / branches 95` in `verifactu`, `fiscal-verifactu`, `core`, `db`, `s
 — the fiscal core and the data-layer foundations — and the `90/90/85/85` floor in every other
 package, browser packages included. The six are the owner's list, not a rule that derives them
 (`apps/server` holds the AEAT transport and sits at the floor). The root project keeps the high
-bar: it measures the classifiers that decide what CI and the hook run. Which package holds which
-bar is pinned by `scripts/coverage-thresholds.test.ts`; moving one is an edit to that list, with
-the reason in the commit.
+bar: its coverage table is the root `scripts/*.mjs` plus the vocabulary module, two of them the
+classifiers that decide what CI and the hook run. Which package holds which bar is pinned by
+`scripts/coverage-thresholds.test.ts` — a hardcoded list, safe only because the root project is
+the one gate never narrowed away; moving a package is an edit to that list, with the reason in
+the commit.
 
 Traps, each of which cost a round trip:
 

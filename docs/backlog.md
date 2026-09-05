@@ -172,7 +172,7 @@ plan → PR; items marked **[owner]** never land unattended.
 harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.test.ts`, every
 `vitest.config.ts`, CLAUDE.md §2–§4):
 
-1. **Coverage split — PR open 2026-09-05:** 98/98/98/95 kept on `verifactu`, `fiscal-verifactu`,
+1. **Coverage split — in flight 2026-09-05:** 98/98/98/95 kept on `verifactu`, `fiscal-verifactu`,
    `core`, `db`, `sync`, `payments`; the 90/90/85/85 floor everywhere else (the four browser
    packages' 95/95/90/88 was above the floor on every axis, so they took the floor).
    The root project (the classifiers) keeps the high bar — a judgement call flagged at review.
@@ -1894,7 +1894,9 @@ naming is **`core_<schema>`** (self-describing about what it migrates, not the p
 a **per-package call**: (a) the `@vitest/coverage-v8` cross-fork branch-merge bug needs `singleFork` where
 a package runs under `pnpm -r` oversubscription; (b) a shared container is one cluster on a 100-connection
 budget, so a package whose suites open many backends caps at `maxForks: 4`. `packages/db` is the
-reason-(b) reference, `packages/payments` the reason-(a) one. Plan:
+reason-(b) reference, `packages/payments` the reason-(a) one — but both carry the HIGH coverage bar, so
+a new package that copies either config must set the `90/90/85/85` floor (CLAUDE.md §2), or
+`scripts/coverage-thresholds.test.ts` fails it in the ungated `lint` job. Plan:
 `docs/superpowers/plans/2026-08-19-shared-test-container.md`.
 
 ---
