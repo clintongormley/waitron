@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -94,6 +94,36 @@ describe("runOnce (fan-out)", () => {
     expect(a.objects.size).toBe(1); // only the newest survives
     // The newest is the dump this very run just wrote, not either pre-seeded fixture.
     expect(a.objects.has("waitron-20260905T000000Z.dump.enc")).toBe(true);
+  });
+
+  it("chmods the staging plaintext dump to 0600 before it is read/encrypted", async () => {
+    // pg_dump writes with the process umask, which can leave the whole-DB plaintext
+    // group/other-readable. runOnce chmods it to 0600 (owner-only) right after the dump and before
+    // the encrypt/fan-out. The rm is in a `finally`, so we observe the mode from inside a backend's
+    // `put` — the staged file still exists there, after the chmod. The runDump writes 0o644 so an
+    // absent chmod would leave it 0o644 and fail this.
+    const staged = join(staging, "waitron-20260905T000000Z.dump");
+    let observedMode = -1;
+    const probe: StorageBackend = {
+      id: "probe",
+      async put() {
+        observedMode = (await stat(staged)).mode & 0o777;
+      },
+      async get() {
+        return Buffer.alloc(0);
+      },
+      async list() {
+        return [];
+      },
+      async delete() {},
+    };
+    await runOnce({
+      ...deps([probe]),
+      runDump: async ({ outFile }: { outFile: string }) => {
+        await writeFile(outFile, "DUMP-BYTES", { mode: 0o644 });
+      },
+    });
+    expect(observedMode).toBe(0o600);
   });
 
   it("leaves no staging file behind", async () => {

@@ -66,5 +66,15 @@ export function buildBackend(dest: BackupDestination): StorageBackend {
   switch (dest.kind) {
     case "local-fs":
       return new LocalFsBackend(dest.id, dest.dir);
+    // Compile-time exhaustiveness guard: adding an `s3`/`sftp` kind to `BackupDestination` without a
+    // case above makes `dest.kind` non-`never` here and fails typecheck, rather than silently
+    // returning `undefined` from a fell-through switch. Structurally unreachable today (only
+    // `local-fs` exists), so v8-ignored — there is no runtime input that reaches it.
+    /* v8 ignore start */
+    default: {
+      const _never: never = dest.kind;
+      throw new Error(`unknown backup destination kind: ${String(_never)}`);
+    }
+    /* v8 ignore stop */
   }
 }

@@ -1513,9 +1513,6 @@ declare module "@waitron/shared" {
     "backup.recovery_key_too_short": { min: number };
     /** WAITRON_BACKUP_DESTINATIONS is not a valid JSON array of destination descriptors. */
     "backup.destinations_invalid": { reason: string };
-    /** One backup destination's write (or prune) failed this run; other destinations proceed. The
-     * run is best-effort housekeeping, so this warns and continues rather than throwing. */
-    "backup.destination_failed": { destination: string };
     /**
      * The operator-supplied `primaryUrl` a mirror was pointed at is not a URL the mirror may fetch from
      * (sync cloud-mirror hardening) — it fails to parse, uses a scheme other than http/https, or names a

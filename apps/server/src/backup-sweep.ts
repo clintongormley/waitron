@@ -11,7 +11,7 @@
 // never cost the others their backup (fail-safe, CLAUDE.md §5: nothing may block a sale, and backup
 // housekeeping is best-effort in the same spirit).
 
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { chmod, mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { codeOf } from "./error-code.js";
@@ -59,6 +59,10 @@ export async function runOnce(deps: Omit<BackupSweepDeps, "intervalMs" | "sleep"
   const staged = join(deps.stagingDir, dumpName);
   try {
     await runDump({ databaseUrl: deps.databaseUrl, outFile: staged, signal: deps.signal });
+    // The staged file is the whole-DB plaintext dump. Lock it to 0600 (owner-only) the moment it
+    // exists, matching the restrictive perms the encrypted artifact already gets on disk
+    // (`LocalFsBackend.put` writes 0o600) — pg_dump's own umask can leave it group/other-readable.
+    await chmod(staged, 0o600);
     const ciphertext = encryptArtifact(await readFile(staged), deps.recoveryKey);
     const key = `${dumpName}${ENC_SUFFIX}`;
     for (const backend of deps.backends) {

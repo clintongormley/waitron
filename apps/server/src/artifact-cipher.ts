@@ -1,14 +1,24 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { AppError } from "@waitron/shared";
-import { deriveKey, SCRYPT_PARAMS, type ScryptParams } from "./scrypt-kdf.js";
+import { deriveKey, type ScryptParams } from "./scrypt-kdf.js";
 import "./errors.js";
 
 const MAGIC = Buffer.from("WBK1"); // Waitron BacKup, format 1
-const VERSION = 1;
+export const VERSION = 1;
 /** The version byte selects the KDF cost params, so an artifact stays decryptable after a future
  * SCRYPT_PARAMS hardening: bump to VERSION 2 for new writes and keep v1's params in this map.
- * (Same self-describing-KDF property the recovery bundle keeps — see the Task 1 ruling.) */
-const KDF_BY_VERSION: Record<number, ScryptParams> = { 1: SCRYPT_PARAMS };
+ * (Same self-describing-KDF property the recovery bundle keeps — see the Task 1 ruling.)
+ *
+ * v1's entry is a FROZEN LITERAL of today's `SCRYPT_PARAMS`, deliberately NOT an alias of the live
+ * shared constant: if it aliased `SCRYPT_PARAMS`, a future in-place hardening of that constant that
+ * bumped `VERSION` but forgot to pin v1 would silently re-cost every historical v1 artifact and make
+ * it undecryptable. The guard test in artifact-cipher.test.ts asserts this literal still equals
+ * `SCRYPT_PARAMS` today (they match) and FAILS the moment `SCRYPT_PARAMS` is changed in place without
+ * a new frozen entry here — forcing the safe move (bump VERSION, add the new params, leave v1 pinned). */
+const KDF_BY_VERSION: Record<number, ScryptParams> = {
+  1: { N: 2 ** 17, r: 8, p: 1, keylen: 32, maxmem: 256 * 1024 * 1024 },
+};
+export { KDF_BY_VERSION };
 const SALT_LEN = 16;
 const IV_LEN = 12;
 const TAG_LEN = 16;

@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { decryptArtifact, encryptArtifact } from "./artifact-cipher.js";
+import { decryptArtifact, encryptArtifact, KDF_BY_VERSION, VERSION } from "./artifact-cipher.js";
+import { SCRYPT_PARAMS } from "./scrypt-kdf.js";
 
 describe("artifact cipher", () => {
   it("roundtrips arbitrary binary under the right passphrase", () => {
@@ -46,6 +47,15 @@ describe("artifact cipher", () => {
         params: { reason: "too_short" },
       }),
     );
+  });
+
+  // The current VERSION's frozen params must still equal the live SCRYPT_PARAMS today — they match
+  // by construction. This FAILS the moment a future dev changes SCRYPT_PARAMS in place without
+  // bumping VERSION and adding a new frozen entry, which is exactly the unsafe move that would
+  // re-cost (and so break decryption of) every historical v1 artifact. The failure forces the safe
+  // path: bump VERSION, add the new params, leave the pinned v1 literal untouched.
+  it("pins the current version's KDF params to the live SCRYPT_PARAMS default", () => {
+    expect(KDF_BY_VERSION[VERSION]).toEqual(SCRYPT_PARAMS);
   });
 
   // The magic check runs before the version check, so an all-zero frame (the test above) never

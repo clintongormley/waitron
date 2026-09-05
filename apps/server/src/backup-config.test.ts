@@ -107,4 +107,22 @@ describe("loadBackupConfig destinations + recovery key", () => {
       }),
     ).toThrow(new AppError("backup.destinations_invalid", { reason: "bad_entry" }));
   });
+
+  it("rejects a WAITRON_BACKUP_DESTINATIONS entry with an empty dir (never resolve(''))", () => {
+    expect(() =>
+      loadBackupConfig({
+        ...base,
+        WAITRON_BACKUP_DESTINATIONS: '[{"kind":"local-fs","id":"usb","dir":""}]',
+      }),
+    ).toThrow(new AppError("backup.destinations_invalid", { reason: "bad_entry" }));
+  });
+
+  it("rejects a WAITRON_BACKUP_DESTINATIONS entry with an empty id", () => {
+    expect(() =>
+      loadBackupConfig({
+        ...base,
+        WAITRON_BACKUP_DESTINATIONS: '[{"kind":"local-fs","id":"","dir":"/mnt/b"}]',
+      }),
+    ).toThrow(new AppError("backup.destinations_invalid", { reason: "bad_entry" }));
+  });
 });

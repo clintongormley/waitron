@@ -89,7 +89,12 @@ function parseDestinations(env: Env): BackupDestination[] {
         raw === null ||
         (raw as { kind?: unknown }).kind !== "local-fs" ||
         typeof (raw as { id?: unknown }).id !== "string" ||
-        typeof (raw as { dir?: unknown }).dir !== "string"
+        typeof (raw as { dir?: unknown }).dir !== "string" ||
+        // An empty id or dir is invalid, not merely present: `resolve("")` is cwd ("an empty
+        // connection string is a valid connection string", CLAUDE.md §3), so this fails closed
+        // BEFORE the resolve below rather than silently backing up to the process working dir.
+        (raw as { id: string }).id === "" ||
+        (raw as { dir: string }).dir === ""
       ) {
         throw new AppError("backup.destinations_invalid", { reason: "bad_entry" });
       }

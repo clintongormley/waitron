@@ -1,6 +1,5 @@
 import { execFile } from "node:child_process";
-import { readdir, rename, stat, unlink } from "node:fs/promises";
-import { join } from "node:path";
+import { rename, unlink } from "node:fs/promises";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -23,8 +22,7 @@ export type PgDumpRunner = (args: {
  * (`backupController.abort()` → SIGTERM to `pg_dump`) or a full disk — leaves only the `.partial`, so
  * the sweep's `readFile(staged)` (backup-sweep.ts) either reads a COMPLETE dump or fails with ENOENT
  * and never encrypts a truncated one, which would be a dangerously wrong "recovery-ready" artifact
- * since backup IS the cold-recovery path (CLAUDE.md §5). The `.partial` suffix does NOT match
- * `DUMP_FILE_NAME`, so `pruneOldDumps` never counts the temp file; `rename` is atomic
+ * since backup IS the cold-recovery path (CLAUDE.md §5). `rename` is atomic
  * within a directory, so the final name only ever appears fully written. On any failure the leftover
  * `.partial` is removed best-effort (so partials don't accumulate) and the error is re-thrown so
  * `runBackupSweep` logs `backup.failed`. `inner` is injectable so this temp-then-rename logic is
@@ -66,45 +64,13 @@ export const realPgDump: PgDumpRunner = (args) => dumpAtomic(args, pgDumpShellOu
 
 /** A filesystem-safe, lexically-sortable dump filename for `now`: `waitron-<basic-ISO>.dump`, e.g.
  * `waitron-20260829T175501Z.dump`. No colons (Windows/tooling safe) and second-precision basic ISO,
- * so a lexical sort of these names is a chronological sort — which is what `pruneOldDumps` relies on. */
+ * so a lexical sort of these names is a chronological sort. The sweep stamps the staging dump (and,
+ * with the `.enc` suffix, the fanned-out artifact key) with this; pruning is per-backend off
+ * `list("waitron-")` (backup-sweep.ts), not by re-reading the staging dir. */
 export function dumpFileName(now: Date): string {
   const stamp = now
     .toISOString()
     .replace(/[-:]/g, "")
     .replace(/\.\d+Z$/, "Z");
   return `waitron-${stamp}.dump`;
-}
-
-/** Matches the `waitron-<stamp>.dump` filenames `dumpFileName` emits — the single source of truth for
- * the STAGING dump-name convention, used by `pruneOldDumps` here. (Freshness is read off the storage
- * backends instead, via `list("waitron-")`, which prefix-matches the encrypted `.dump.enc` artifacts —
- * see `readBackupStatus`, backup-status.ts.) */
-export const DUMP_FILE_NAME = /^waitron-.*\.dump$/;
-
-/** Keep the newest `retain` `waitron-*.dump` files in `dir` and unlink the rest. Newest-first is a
- * descending NAME sort, which equals age order because `dumpFileName` is sortable. Non-matching files
- * are ignored, and a missing `dir` is tolerated (returns without error). A candidate that is not a
- * regular file (e.g. a directory named like a dump) is skipped rather than unlinked — the same
- * `isFile()` guard `LocalFsBackend.list` applies — so a `waitron-*.dump` DIR never throws EISDIR/EPERM
- * every tick. */
-export async function pruneOldDumps(dir: string, retain: number): Promise<void> {
-  let entries: string[];
-  try {
-    entries = await readdir(dir);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
-    throw err;
-  }
-  const dumps = entries
-    .filter((name) => DUMP_FILE_NAME.test(name))
-    .sort()
-    .reverse();
-  await Promise.all(
-    dumps.slice(retain).map(async (name) => {
-      const path = join(dir, name);
-      const info = await stat(path);
-      if (!info.isFile()) return; // a dir named like a dump is not a backup — don't unlink
-      await unlink(path);
-    }),
-  );
 }
