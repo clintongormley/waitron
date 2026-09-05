@@ -5,7 +5,7 @@ import "./errors.js";
 import { eq } from "drizzle-orm";
 import { AppError, locationId, nodeId, seriesId, tenantId, tillId } from "@waitron/shared";
 import type { LocationId, NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
-import { asAppUser, locations, orderFlow, withTenant } from "@waitron/db";
+import { asAppUser, locations, nodes, orderFlow, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { isUnset } from "./env-value.js";
 
@@ -259,5 +259,27 @@ export async function readOrderFlow(
     }
     /* v8 ignore stop */
     return row.orderFlow;
+  });
+}
+
+/**
+ * The node's stamped filing module (`nodes.filing_module`, set by provisioning from the territory's
+ * registry), which `fiscalSlot` cross-checks against the enabled fiscal module. Null for a bare
+ * fixture node. Read ONCE at boot, as the app role under the till's tenant.
+ */
+export async function readFilingModule(
+  db: Database,
+  cfg: Pick<TillConfig, "tenantId" | "nodeId">,
+): Promise<string | null> {
+  return withTenant(db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const [row] = await tx
+      .select({ filingModule: nodes.filingModule })
+      .from(nodes)
+      .where(eq(nodes.id, cfg.nodeId));
+    /* v8 ignore start */
+    if (row === undefined) throw new Error(`readFilingModule: no node ${cfg.nodeId}`);
+    /* v8 ignore stop */
+    return row.filingModule;
   });
 }

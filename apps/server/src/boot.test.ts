@@ -188,9 +188,10 @@ const RUNTIME_PASSWORD = "probe";
 // in this suite carries one; the two config-guard tests at the bottom, which omit `KEY_ENV` on purpose
 // to reach `server.config_invalid` / `credentials.key_missing`, spread it directly to stay in trading
 // mode (a bare `config.till === undefined` would branch to setup mode and never reach either).
-// A minimal tenant + location for these ids IS seeded in `beforeAll` — `startServer` now reads the
-// till's pay-timing mode from its location at boot (`readOrderFlow`, Task 8), so the location must
-// exist for a successful boot. No staff are seeded, so `GET /api/staff` still returns `[]`.
+// A minimal tenant, location and node for these ids IS seeded in `beforeAll` — `startServer` reads
+// the till's pay-timing mode from its location and its filing module from its node at boot
+// (`readOrderFlow`/`readFilingModule`), so both rows must exist for a successful boot. No staff are
+// seeded, so `GET /api/staff` still returns `[]`.
 const TILL_ENV = {
   WAITRON_TILL_TENANT_ID: "11111111-1111-4111-8111-111111111111",
   WAITRON_TILL_TILL_ID: "22222222-2222-4222-8222-222222222222",
@@ -271,9 +272,9 @@ beforeAll(async () => {
   syncPeerToken = (await enrolPeer(suite.admin, { subscriberId: "boot-mirror", name: "boot" }))
     .token;
 
-  // The till's own tenant + location, seeded once as the container superuser (RLS bypassed, exactly as
-  // `seedTenant`/`seedNode` do). `startServer` reads the location's `order_flow` at boot
-  // (`readOrderFlow`, Task 8) to complete the `TillConfig` it hands the routes, so the location must
+  // The till's own tenant, location and node, seeded once as the container superuser (RLS bypassed,
+  // exactly as `seedTenant`/`seedNode` do). `startServer` reads the location's `order_flow` at boot
+  // (`readOrderFlow`) to complete the `TillConfig` it hands the routes, so the location must
   // exist or every successful-boot test would fail at that read. `order_flow` defaults to `prepay`. A
   // distinctive NIF (90M base) stays clear of every other seed generator sharing this database.
   await suite.admin.execute(sql`
@@ -283,6 +284,14 @@ beforeAll(async () => {
     insert into locations (id, tenant_id, name, invoice_locales, operation_description)
     values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID}, 'Barra',
             array['es-ES'], 'Venta en establecimiento')`);
+  // The till's own NODE, stamped with the regime provisioning would have recorded: `startServer`
+  // reads `nodes.filing_module` at boot (`readFilingModule`) and cross-checks it against the enabled
+  // fiscal module, so the row must exist and must agree with `verifactu` or every successful-boot
+  // test would fail there. The unstamped (null) node is covered in `till-config.filing.test.ts`.
+  await suite.admin.execute(sql`
+    insert into nodes (id, tenant_id, location_id, name, filing_module)
+    values (${TILL_ENV.WAITRON_TILL_NODE_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID},
+            ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Boot Till', 'verifactu')`);
 
   // `boot.ts`'s own default migrations root is `<dirname of boot.ts>/drizzle` — under source (this
   // test, not the bundle) that resolves to `apps/server/src/drizzle`, which does not exist; only
