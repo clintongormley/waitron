@@ -1358,8 +1358,11 @@ declare module "@waitron/shared" {
      * unrecoverable failure the whole design exists to prevent (CLAUDE.md §5). Thrown BEFORE any state
      * change (before the point-of-no-return), so the node is left exactly as it was. A fenced node
      * returns to service via wipe-and-restore (a fresh boot that clears the fence), never by in-place
-     * promotion. `standing` names the fenced standing (`sell-only`/`evicted`) for diagnosis — a topology
-     * fact already in the served membership document, not a secret. `promotion.*` names the DOMAIN
+     * promotion. Thrown from BOTH promote paths (`assertNotFenced`, `promote.ts`): the local-secondary
+     * promote (the R1-axes-evade case above) and the mirror→primary promote (a fenced mirror that was
+     * superseded — guarded there alongside `membership_superseded`). `standing` names the fenced standing
+     * (`sell-only`/`evicted`) for diagnosis — a topology fact already in the served membership document,
+     * not a secret. `promotion.*` names the DOMAIN
      * CONCEPT, never the throwing package — the rule `promotion.fence_not_attested` gives. Never renamed
      * once shipped.
      */
