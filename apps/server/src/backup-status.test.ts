@@ -13,7 +13,9 @@ const backend = (id: string, newestMtimeMs: number | null): StorageBackend => ({
   get: async () => Buffer.alloc(0),
   delete: async () => {},
   list: async (): Promise<StoredObject[]> =>
-    newestMtimeMs === null ? [] : [{ key: "waitron-x.dump.enc", size: 1, mtimeMs: newestMtimeMs }],
+    newestMtimeMs === null
+      ? []
+      : [{ key: "waitron-x.backup.enc", size: 1, mtimeMs: newestMtimeMs }],
 });
 
 const NOW = new Date("2026-09-05T12:00:00Z");
@@ -64,20 +66,20 @@ describe("readBackupStatus", () => {
     expect(await readBackupStatus([], 60_000, NOW)).toEqual({ configured: false });
   });
 
-  // Regression guard (BR-1 Task 5 → 6): the sweep writes `waitron-<ts>.dump.enc`, which the old
-  // `DUMP_FILE_NAME = /^waitron-.*\.dump$/` filter did NOT match, so box-status reported the backup
-  // PERMANENTLY STALE while backups were landing. Scanning the real `LocalFsBackend.list("waitron-")`
-  // (prefix match, `.enc` included) must read a `.dump.enc` artifact as FRESH. Fails against the old
-  // `.dump`-anchored reader.
-  describe("against a real local-fs backend holding an encrypted artifact", () => {
+  // Regression guard (BR-1 → BR-2): the sweep writes `waitron-<ts>.backup.enc` (BR-1 wrote
+  // `.dump.enc`), which the pre-BR-1 `DUMP_FILE_NAME = /^waitron-.*\.dump$/` filter did NOT match, so
+  // box-status reported the backup PERMANENTLY STALE while backups were landing. Scanning the real
+  // `LocalFsBackend.list("waitron-")` (prefix match, suffix-agnostic) must read a `.backup.enc` archive
+  // as FRESH. Fails against the old `.dump`-anchored reader.
+  describe("against a real local-fs backend holding an encrypted archive", () => {
     let dir: string;
     afterEach(async () => {
       if (dir !== undefined) await rm(dir, { recursive: true, force: true });
     });
 
-    it("reads a waitron-<ts>.dump.enc object as FRESH", async () => {
+    it("reads a waitron-<ts>.backup.enc object as FRESH", async () => {
       dir = mkdtempSync(join(tmpdir(), "backup-status-enc-"));
-      const artifact = join(dir, "waitron-20260905T115900Z.dump.enc");
+      const artifact = join(dir, "waitron-20260905T115900Z.backup.enc");
       writeFileSync(artifact, "ciphertext");
       const mtime = new Date(NOW.getTime() - 30_000); // 30s old, well inside the 60s stale window
       await utimes(artifact, mtime, mtime);

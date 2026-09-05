@@ -25,9 +25,10 @@ export type BackupStatus =
 
 /**
  * Summarise each backend's freshness. Scans `backend.list("waitron-")` (newest-first per the
- * `StorageBackend` contract), so it matches the sweep's encrypted `waitron-<stamp>.dump.enc` artifacts
- * — NOT the pre-Task-5 `waitron-*.dump` filter, whose anchored `\.dump$` missed the `.enc` suffix and
- * reported a working backup permanently stale. With no backends (backup off) reports
+ * `StorageBackend` contract), so it matches the sweep's encrypted `waitron-<stamp>.backup.enc` archives
+ * — a PREFIX match, so it is suffix-agnostic (it matched BR-1's `.dump.enc` too), NOT the pre-BR-1
+ * `waitron-*.dump` filter whose anchored `\.dump$` missed the `.enc` suffix and reported a working
+ * backup permanently stale. With no backends (backup off) reports
  * `{ configured: false }`; a destination with no artifact yet reports null fields and `stale: true`.
  * `ageSeconds` is measured against `now` — the caller passes request time so freshness is per-request.
  * Any filesystem/backend fault propagates (fail-loud — the caller surfaces it, matching the box-status

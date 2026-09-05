@@ -4,6 +4,15 @@ import type { MigrationSet } from "@waitron/migrations";
 import type { EnrolledTable } from "@waitron/sync-enrolment";
 import "./errors.js";
 
+/** A reference to non-DB state a module owns, resolved to a path by the composition root. */
+export type NonDbSource = { readonly kind: "content-addressed-dir"; readonly source: string };
+
+/** A module's backup contribution: what non-DB state it owns and (later) how to restore it. */
+export interface ModuleBackupContribution {
+  readonly nonDbState?: readonly NonDbSource[];
+  readonly restore?: unknown; // seat — a root-wired hook; body lands in BR-3/BR-4
+}
+
 /**
  * A module descriptor: a plain object the composition root collects into a list, deriving each surface
  * (migrations here; routes/workers/cards/… in later slices) by mapping over it. There is no global
@@ -46,6 +55,7 @@ export interface WaitronModule {
   readonly theme?: unknown;
   readonly provisioningSeeds?: unknown; // SP-1b
   readonly routes?: unknown; // incremental
+  readonly backup?: ModuleBackupContribution; // BR-2: non-DB state a backup must capture
 }
 
 /** The dependencies a module declares — its `requires.core` (a dep on "core") plus every

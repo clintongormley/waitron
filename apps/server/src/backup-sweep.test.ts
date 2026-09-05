@@ -1,15 +1,57 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { decryptArtifact } from "./artifact-cipher.js";
-import { type BackupSweepDeps, runBackupSweep, runOnce } from "./backup-sweep.js";
+import { unpackArchive } from "./backup-archive.js";
+import type { BackupManifest } from "./backup-manifest.js";
+import {
+  type BackupSweepDeps,
+  type ManifestBuilder,
+  runBackupSweep,
+  runOnce,
+} from "./backup-sweep.js";
+import { ALL_MODULES } from "./modules.js";
+import { RECOVERY_FILES } from "./state-secrets.js";
 import type { StorageBackend, StoredObject } from "./storage-backend.js";
 
 const execFileAsync = promisify(execFile);
+
+// A privileged `db` is required by the deps type but never touched under an injected manifest builder,
+// so the pure-DI fan-out/assembly tests hand in this inert stand-in.
+const NO_DB = {} as Database;
+
+// A fixed manifest, no journal read — keeps the fan-out/assembly tests off a real container.
+const FIXED_MANIFEST: BackupManifest = {
+  manifestVersion: 1,
+  createdAt: "2026-09-05T00:00:00.000Z",
+  environment: "preproduction",
+  modules: { core: 3 },
+};
+const fixedManifest: ManifestBuilder = async () => FIXED_MANIFEST;
+
+// A fresh injectable `runDump` spy that writes the sentinel dump bytes — used by the fail-visible
+// tests to assert the dump was NEVER called (a throw in the cheap collection must fail the tick
+// before the dump). One per test so the call-count assertions stay isolated.
+const dumpSpy = () =>
+  vi.fn(async ({ outFile }: { outFile: string }) => writeFile(outFile, "DUMP-BYTES"));
+
+// Write the full RECOVERY_FILES set under a fresh temp state dir, so `collectStateSecrets` succeeds.
+// Omit one path (`skip`) to drive the fail-visible "incomplete state" case.
+async function makeStateDir(skip?: string): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), "backup-state-"));
+  for (const rel of RECOVERY_FILES) {
+    if (rel === skip) continue;
+    const target = join(dir, rel);
+    await mkdir(join(dir, dirname(rel)), { recursive: true });
+    await writeFile(target, `${rel}-contents`);
+  }
+  return dir;
+}
 
 // A fake StorageBackend for unit tests: `list` honours the real interface's "newest-first" contract
 // by returning keys in REVERSE insertion order (the most recently `put` — or directly seeded — key
@@ -40,16 +82,29 @@ class FakeBackend implements StorageBackend {
 }
 
 describe("runOnce (fan-out)", () => {
+  const KEY = "waitron-20260905T000000Z.backup.enc";
   let staging: string;
+  let mediaDir: string;
+  let stateDir: string;
   beforeEach(async () => {
     staging = await mkdtemp(join(tmpdir(), "backup-staging-"));
+    mediaDir = await mkdtemp(join(tmpdir(), "backup-media-"));
+    await writeFile(join(mediaDir, "abc123.jpg"), "IMG");
+    stateDir = await makeStateDir();
   });
   afterEach(async () => {
-    await rm(staging, { recursive: true, force: true });
+    for (const d of [staging, mediaDir, stateDir])
+      if (d !== undefined) await rm(d, { recursive: true, force: true });
   });
 
   const deps = (backends: StorageBackend[], log = vi.fn()) => ({
     backends,
+    db: NO_DB,
+    modules: ALL_MODULES,
+    environment: "preproduction" as const,
+    resolvers: { media: mediaDir },
+    stateDir,
+    buildManifest: fixedManifest,
     databaseUrl: "postgres://x",
     recoveryKey: "recovery-key-1",
     stagingDir: staging,
@@ -63,14 +118,78 @@ describe("runOnce (fan-out)", () => {
     },
   });
 
-  it("encrypts the dump once and fans the SAME ciphertext to every backend", async () => {
+  // Decrypt one backend's artifact and unpack it back into named archive entries.
+  const entriesOf = (backend: FakeBackend): Map<string, Buffer> =>
+    new Map(
+      unpackArchive(decryptArtifact(backend.objects.get(KEY)!, "recovery-key-1")).map((e) => [
+        e.name,
+        Buffer.from(e.bytes),
+      ]),
+    );
+
+  it("encrypts the archive once and fans the SAME ciphertext to every backend", async () => {
     const a = new FakeBackend("a");
     const b = new FakeBackend("b");
     await runOnce(deps([a, b]));
-    const key = "waitron-20260905T000000Z.dump.enc";
-    expect(a.objects.has(key)).toBe(true);
-    expect(b.objects.get(key)!.equals(a.objects.get(key)!)).toBe(true);
-    expect(decryptArtifact(a.objects.get(key)!, "recovery-key-1").toString()).toBe("DUMP-BYTES");
+    expect(a.objects.has(KEY)).toBe(true);
+    // Encrypt-ONCE: byte-identical ciphertext to every backend.
+    expect(b.objects.get(KEY)!.equals(a.objects.get(KEY)!)).toBe(true);
+    // The ciphertext decrypts to the packed archive, whose `db.dump` entry is the raw dump.
+    expect(entriesOf(a).get("db.dump")!.toString()).toBe("DUMP-BYTES");
+  });
+
+  it("assembles a full archive: manifest.json, db.dump, media/<blob>, secrets/<path>", async () => {
+    const a = new FakeBackend("a");
+    await runOnce(deps([a]));
+    const entries = entriesOf(a);
+    // All four entry kinds are present.
+    expect(entries.has("manifest.json")).toBe(true);
+    expect(entries.has("db.dump")).toBe(true);
+    expect(entries.has("media/abc123.jpg")).toBe(true);
+    expect(entries.has("secrets/secrets.env")).toBe(true);
+    // Every RECOVERY_FILES path is captured under `secrets/`.
+    for (const rel of RECOVERY_FILES) expect(entries.has(`secrets/${rel}`)).toBe(true);
+    // The media blob and a secret round-trip verbatim.
+    expect(entries.get("media/abc123.jpg")!.toString()).toBe("IMG");
+    expect(entries.get("secrets/secrets.env")!.toString()).toBe("secrets.env-contents");
+    // The manifest parses back to the builder's object.
+    expect(JSON.parse(entries.get("manifest.json")!.toString())).toEqual(FIXED_MANIFEST);
+  });
+
+  it("fail-visible: a throwing manifest build ships NO partial archive and never dumps", async () => {
+    const a = new FakeBackend("a");
+    const boom = new Error("journal unreadable");
+    const failingManifest: ManifestBuilder = async () => {
+      throw boom;
+    };
+    const runDump = dumpSpy();
+    await expect(runOnce({ ...deps([a]), buildManifest: failingManifest, runDump })).rejects.toBe(
+      boom,
+    );
+    // The throw happens before the first `put`, so nothing lands anywhere.
+    expect(a.objects.size).toBe(0);
+    // Fail-fast: the manifest is collected BEFORE the expensive dump, so the dump never ran.
+    expect(runDump).not.toHaveBeenCalled();
+  });
+
+  it("fail-visible: an incomplete state dir (missing a recovery file) ships NO partial archive and never dumps", async () => {
+    const a = new FakeBackend("a");
+    const incompleteState = await makeStateDir("secrets.env"); // omit the vault key
+    const runDump = dumpSpy();
+    try {
+      await expect(
+        runOnce({ ...deps([a]), stateDir: incompleteState, runDump }),
+      ).rejects.toMatchObject({
+        code: "recovery.state_incomplete",
+        params: { missing: "secrets.env" },
+      });
+      // collectStateSecrets throws before the fan-out — no partial archive is written.
+      expect(a.objects.size).toBe(0);
+      // Fail-fast: the secrets read happens BEFORE the expensive dump, so the dump never ran.
+      expect(runDump).not.toHaveBeenCalled();
+    } finally {
+      await rm(incompleteState, { recursive: true, force: true });
+    }
   });
 
   it("a failing backend does not stop the others", async () => {
@@ -115,12 +234,12 @@ describe("runOnce (fan-out)", () => {
 
   it("prunes each backend to retain", async () => {
     const a = new FakeBackend("a");
-    for (const t of ["waitron-1.dump.enc", "waitron-2.dump.enc"])
+    for (const t of ["waitron-1.backup.enc", "waitron-2.backup.enc"])
       a.objects.set(t, Buffer.from("old"));
     await runOnce({ ...deps([a]), retain: 1 });
     expect(a.objects.size).toBe(1); // only the newest survives
-    // The newest is the dump this very run just wrote, not either pre-seeded fixture.
-    expect(a.objects.has("waitron-20260905T000000Z.dump.enc")).toBe(true);
+    // The newest is the archive this very run just wrote, not either pre-seeded fixture.
+    expect(a.objects.has("waitron-20260905T000000Z.backup.enc")).toBe(true);
   });
 
   it("chmods the staging plaintext dump to 0600 before it is read/encrypted", async () => {
@@ -169,19 +288,32 @@ describe("runOnce (fan-out)", () => {
 // through as `"unknown"` rather than as a raw message that could carry the connection string.
 describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
   let staging: string;
+  let mediaDir: string;
+  let stateDir: string;
   beforeEach(async () => {
     staging = await mkdtemp(join(tmpdir(), "backup-loop-staging-"));
+    mediaDir = await mkdtemp(join(tmpdir(), "backup-loop-media-"));
+    stateDir = await makeStateDir();
   });
   afterEach(async () => {
-    await rm(staging, { recursive: true, force: true });
+    for (const d of [staging, mediaDir, stateDir])
+      if (d !== undefined) await rm(d, { recursive: true, force: true });
   });
 
-  // Mirrors the `deps()` helper in the runOnce block: the five constant loop fields in one place, with
-  // the per-test signal/sleep/log (and optional runDump/now) supplied as overrides. `signal`/`sleep`/
-  // `log` are required here because every loop test drives its own AbortController through them.
+  // Mirrors the `deps()` helper in the runOnce block: the constant loop fields in one place (including
+  // the BR-2 archive deps — a privileged `db` stand-in, the module set, the media resolver and state
+  // dir, and the injected manifest builder so the loop never needs a real journal), with the per-test
+  // signal/sleep/log (and optional runDump/now) supplied as overrides. `signal`/`sleep`/`log` are
+  // required here because every loop test drives its own AbortController through them.
   type LoopOverrides = Partial<BackupSweepDeps> & Pick<BackupSweepDeps, "signal" | "sleep" | "log">;
   const loopDeps = (backend: StorageBackend, overrides: LoopOverrides): BackupSweepDeps => ({
     backends: [backend],
+    db: NO_DB,
+    modules: ALL_MODULES,
+    environment: "preproduction",
+    resolvers: { media: mediaDir },
+    stateDir,
+    buildManifest: fixedManifest,
     databaseUrl: "postgres://x",
     recoveryKey: "recovery-key-1",
     stagingDir: staging,
@@ -301,6 +433,60 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
 // did not change — carried over from the pre-fan-out version of this file (Task 4) rather than dropped
 // in the rewrite, since it is the ONLY coverage of the real shell-out (pg-dump.ts says so explicitly).
 const suite = useTemplateDb({ template: "manifest" });
+
+// The DEFAULT (non-injected) manifest path against a REAL journal: proves runOnce's archive carries a
+// real BackupManifest built off `suite.admin` (a privileged pool — `appliedSchemaVersion` reads the
+// `__drizzle_migrations_*` journal `app_user` cannot). A pure-DI test would never notice the default
+// builder being wrong, so this drives it end to end. Needs `TESTCONTAINERS_RYUK_DISABLED=true` (§4).
+describe("runOnce with the real buildManifest (useTemplateDb)", () => {
+  let staging: string;
+  let mediaDir: string;
+  let stateDir: string;
+  beforeEach(async () => {
+    staging = await mkdtemp(join(tmpdir(), "backup-real-staging-"));
+    mediaDir = await mkdtemp(join(tmpdir(), "backup-real-media-"));
+    stateDir = await makeStateDir();
+  });
+  afterEach(async () => {
+    for (const d of [staging, mediaDir, stateDir])
+      if (d !== undefined) await rm(d, { recursive: true, force: true });
+  });
+
+  it("packs a real manifest (env + a positive core schema version) into the archive", async () => {
+    const a = new FakeBackend("a");
+    await runOnce({
+      backends: [a],
+      db: suite.admin, // privileged: reads the drizzle journal the app role cannot
+      modules: ALL_MODULES,
+      environment: "preproduction",
+      resolvers: { media: mediaDir },
+      stateDir,
+      // buildManifest intentionally OMITTED so the real default runs.
+      databaseUrl: suite.pg.uri,
+      recoveryKey: "recovery-key-1",
+      stagingDir: staging,
+      retain: 7,
+      signal: new AbortController().signal,
+      log: vi.fn(),
+      now: () => new Date("2026-09-05T00:00:00Z"),
+      runDump: async ({ outFile }) => {
+        await writeFile(outFile, "DUMP-BYTES");
+      },
+    });
+    const key = "waitron-20260905T000000Z.backup.enc";
+    const entries = new Map(
+      unpackArchive(decryptArtifact(a.objects.get(key)!, "recovery-key-1")).map((e) => [
+        e.name,
+        Buffer.from(e.bytes),
+      ]),
+    );
+    const manifest = JSON.parse(entries.get("manifest.json")!.toString()) as BackupManifest;
+    expect(manifest.environment).toBe("preproduction");
+    expect(manifest.createdAt).toBe("2026-09-05T00:00:00.000Z");
+    // `core` is mandatory and migrated by the `manifest` template, so its applied version is positive.
+    expect(manifest.modules.core).toBeGreaterThan(0);
+  });
+});
 
 describe("realPgDump custom-format invocation (real container, docker exec)", () => {
   it("produces a non-empty PGDMP custom-format dump against postgres:18-alpine", async () => {

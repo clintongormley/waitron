@@ -38,6 +38,9 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     tier: "mandatory",
     migrations: { name: "core", table: "__drizzle_migrations_db", from: "../db/drizzle" },
     sync: CORE_ENROLMENT,
+    // BR-2: the content-addressed media store is core's non-DB state; a backup must capture it
+    // alongside the DB. `restore` is a later slice's seat (BR-3/BR-4) — unpopulated here.
+    backup: { nonDbState: [{ kind: "content-addressed-dir", source: "media" }] },
   },
   {
     name: "identity",

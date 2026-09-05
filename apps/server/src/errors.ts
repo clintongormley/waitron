@@ -1525,6 +1525,13 @@ declare module "@waitron/shared" {
     /** A backup artifact's binary frame is malformed (bad magic, version, or truncated header)
      * before decryption is even attempted. `reason` is a short machine tag. */
     "backup.artifact_invalid": { reason: string };
+    /** The backup ARCHIVE container (the pack of named entries — manifest, DB dump, media,
+     * secrets — that gets encrypted as a single `backup.artifact_invalid`-checked frame) is
+     * malformed: bad magic, unsupported version, or any declared length (entry count, name
+     * length, data length) that would read past the buffer. Distinct from `backup.artifact_invalid`,
+     * which is the OUTER encryption frame — this is the INNER container it decrypts to. `reason`
+     * is a short machine tag, never the offending bytes. */
+    "backup.archive_invalid": { reason: string };
     /** A backup destination is configured but WAITRON_BACKUP_RECOVERY_KEY is unset — refused at load
      * so an unattended backup can never write an unencrypted or box-key-encrypted artifact. */
     "backup.recovery_key_missing": Record<string, never>;
@@ -1532,6 +1539,24 @@ declare module "@waitron/shared" {
     "backup.recovery_key_too_short": { min: number };
     /** WAITRON_BACKUP_DESTINATIONS is not a valid JSON array of destination descriptors. */
     "backup.destinations_invalid": { reason: string };
+    /**
+     * A module declared `backup.nonDbState` naming a `source` the composition root's resolver map
+     * carries no entry for (BR-2 Task 4). Every source ref a module declares must be resolvable to an
+     * absolute directory by the caller — `collectModuleNonDbState`'s `resolvers` parameter — or the
+     * module's non-DB state would be silently skipped from the archive rather than captured; this
+     * fails the backup loudly instead. `source` is the module's own declared identifier (e.g.
+     * `"media"`), not a secret, so echoing it is what makes the gap actionable. Never renamed once
+     * shipped.
+     */
+    "backup.source_unresolved": { source: string };
+    /**
+     * A module declared a `backup.nonDbState` source whose `kind` `collectModuleNonDbState` has no
+     * branch for. `NonDbSource.kind` is a closed union (only `"content-addressed-dir"` today); a
+     * future member added to the type without a capture branch here would otherwise be silently
+     * given flat-dir treatment. The exhaustiveness guard fails the backup loudly instead. `kind` is
+     * the module's own declared discriminant, not a secret, so echoing it names the missing branch.
+     */
+    "backup.source_kind_unsupported": { kind: string };
     /**
      * The operator-supplied `primaryUrl` a mirror was pointed at is not a URL the mirror may fetch from
      * (sync cloud-mirror hardening) — it fails to parse, uses a scheme other than http/https, or names a
