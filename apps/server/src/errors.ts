@@ -1613,5 +1613,23 @@ declare module "@waitron/shared" {
      * renamed once shipped.
      */
     "restore.schema_too_new": { module: string; backup: number; target: number };
+    /**
+     * An archive entry name failed BR-3's traversal guard (`restore-entry-guard.ts`) before ANY
+     * write happened. Two layers, mirroring `unpackBundleToDir`'s (`state-secrets.ts`): a LEXICAL
+     * one — `name` is absolute, or `resolve(join(destRoot, name))` does not land under `destRoot`
+     * (a `../` escape) — and a SYMLINK-aware one that catches what the lexical check cannot: a
+     * lexically-fine name (`tls/ca.crt`) whose parent directory is a PRE-EXISTING symlink pointing
+     * outside `destRoot`, where `realpath` reveals the escape the string comparison alone would miss.
+     * GCM/tar integrity proves the archive's BYTES are authentic, never that its entry NAMES are the
+     * well-behaved `db.dump`/`media/*`/`secrets/*` set BR-3 expects, so a crafted-but-authentic
+     * archive still has to be refused here before `pg_restore` or any file write touches disk.
+     *
+     * `name` is the archive's own entry name — attacker-influenced, but not a secret, so echoing it
+     * is what makes the refusal actionable, the same as `backup.source_kind_unsupported`'s `kind`.
+     * `restore.*`, not `server.*`: a fact about this restore's own archive, not the process
+     * (`tenant.not_found`'s note gives the rule), beside `restore.environment_mismatch`/
+     * `restore.schema_too_new`. Never renamed once shipped.
+     */
+    "restore.unsafe_entry_path": { name: string };
   }
 }
