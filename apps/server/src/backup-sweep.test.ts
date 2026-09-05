@@ -1,68 +1,155 @@
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { runBackupSweep } from "./backup-sweep.js";
+import { decryptArtifact } from "./artifact-cipher.js";
+import { runBackupSweep, runOnce } from "./backup-sweep.js";
+import type { StorageBackend, StoredObject } from "./storage-backend.js";
 
 const execFileAsync = promisify(execFile);
 
-describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
-  let dir: string;
+// A fake StorageBackend for unit tests: `list` honours the real interface's "newest-first" contract
+// by returning keys in REVERSE insertion order (the most recently `put` — or directly seeded — key
+// first), which is what lets the "prunes to retain" test below assert the actual survivor rather than
+// only a count.
+class FakeBackend implements StorageBackend {
+  objects = new Map<string, Buffer>();
+  constructor(
+    readonly id: string,
+    private failPut = false,
+  ) {}
+  async put(key: string, bytes: Uint8Array) {
+    if (this.failPut) throw new Error("boom");
+    this.objects.set(key, Buffer.from(bytes));
+  }
+  async get(key: string) {
+    return this.objects.get(key)!;
+  }
+  async list(prefix: string): Promise<StoredObject[]> {
+    return [...this.objects.keys()]
+      .reverse()
+      .filter((k) => k.startsWith(prefix))
+      .map((k) => ({ key: k, size: 0, mtimeMs: 0 }));
+  }
+  async delete(key: string) {
+    this.objects.delete(key);
+  }
+}
 
+describe("runOnce (fan-out)", () => {
+  let staging: string;
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), "backup-sweep-"));
+    staging = await mkdtemp(join(tmpdir(), "backup-staging-"));
   });
-
   afterEach(async () => {
-    await rm(dir, { recursive: true, force: true });
+    await rm(staging, { recursive: true, force: true });
   });
 
-  it("dumps once into dir, prunes, logs backup.completed, then exits on abort", async () => {
-    const controller = new AbortController();
-    // A pre-existing OLD dump: with retain=1 the sweep must unlink it and keep only the fresh one,
-    // which is how we prove pruneOldDumps actually ran inside the loop (not just that a file exists).
-    const stale = join(dir, "waitron-20200101T000000Z.dump");
-    await writeFile(stale, "old");
+  const deps = (backends: StorageBackend[], log = vi.fn()) => ({
+    backends,
+    databaseUrl: "postgres://x",
+    recoveryKey: "recovery-key-1",
+    stagingDir: staging,
+    retain: 7,
+    signal: new AbortController().signal,
+    sleep: vi.fn(),
+    log,
+    now: () => new Date("2026-09-05T00:00:00Z"),
+    runDump: async ({ outFile }: { outFile: string }) => {
+      await writeFile(outFile, "DUMP-BYTES");
+    },
+  });
 
-    const calls: Array<{ databaseUrl: string; outFile: string }> = [];
-    const runDump = vi.fn(
-      async ({ databaseUrl, outFile }: { databaseUrl: string; outFile: string }) => {
-        calls.push({ databaseUrl, outFile });
-        await writeFile(outFile, "stub-dump");
-      },
+  it("encrypts the dump once and fans the SAME ciphertext to every backend", async () => {
+    const a = new FakeBackend("a");
+    const b = new FakeBackend("b");
+    await runOnce(deps([a, b]));
+    const key = "waitron-20260905T000000Z.dump.enc";
+    expect(a.objects.has(key)).toBe(true);
+    expect(b.objects.get(key)!.equals(a.objects.get(key)!)).toBe(true);
+    expect(decryptArtifact(a.objects.get(key)!, "recovery-key-1").toString()).toBe("DUMP-BYTES");
+  });
+
+  it("a failing backend does not stop the others", async () => {
+    const good = new FakeBackend("good");
+    const bad = new FakeBackend("bad", true);
+    const log = vi.fn();
+    await runOnce(deps([bad, good], log));
+    expect(good.objects.size).toBe(1);
+    expect(log).toHaveBeenCalledWith(
+      "warn",
+      "backup.destination_failed",
+      expect.objectContaining({ destination: "bad" }),
     );
+  });
+
+  it("prunes each backend to retain", async () => {
+    const a = new FakeBackend("a");
+    for (const t of ["waitron-1.dump.enc", "waitron-2.dump.enc"])
+      a.objects.set(t, Buffer.from("old"));
+    await runOnce({ ...deps([a]), retain: 1 });
+    expect(a.objects.size).toBe(1); // only the newest survives
+    // The newest is the dump this very run just wrote, not either pre-seeded fixture.
+    expect(a.objects.has("waitron-20260905T000000Z.dump.enc")).toBe(true);
+  });
+
+  it("leaves no staging file behind", async () => {
+    const a = new FakeBackend("a");
+    await runOnce(deps([a]));
+    const { readdir } = await import("node:fs/promises");
+    expect(await readdir(staging)).toEqual([]);
+  });
+});
+
+// The loop shell (abort checks, sleep, error swallow) is unchanged from the pre-fan-out version of
+// this file, but `runOnce` is a fresh function under the new `BackupSweepDeps` shape, so these are
+// rewritten around backends rather than a bare `dir`. They pin the same three behaviours the old
+// `runBackupSweep` suite pinned: one tick fans to every backend, a per-tick throw is logged as
+// `backup.failed` and swallowed (the loop keeps going), and a non-`AppError` throw's code comes
+// through as `"unknown"` rather than as a raw message that could carry the connection string.
+describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
+  let staging: string;
+  beforeEach(async () => {
+    staging = await mkdtemp(join(tmpdir(), "backup-loop-staging-"));
+  });
+  afterEach(async () => {
+    await rm(staging, { recursive: true, force: true });
+  });
+
+  it("dumps once, fans to the backend, logs backup.destination_completed, then exits on abort", async () => {
+    const controller = new AbortController();
+    const backend = new FakeBackend("only");
     const logged: Array<[string, string]> = [];
 
     await runBackupSweep({
-      dir,
-      databaseUrl: "postgresql://example/db",
+      backends: [backend],
+      databaseUrl: "postgres://x",
+      recoveryKey: "recovery-key-1",
+      stagingDir: staging,
       intervalMs: 10,
-      retain: 1,
+      retain: 7,
       signal: controller.signal,
       log: (level, event) => logged.push([level, event]),
-      runDump,
+      runDump: async ({ outFile }: { outFile: string }) => {
+        await writeFile(outFile, "DUMP-BYTES");
+      },
+      now: () => new Date("2026-09-05T00:00:00Z"),
       // Aborts on the first (and only) sleep, so the loop runs exactly one iteration then exits.
       sleep: async () => {
         controller.abort();
       },
     });
 
-    expect(runDump).toHaveBeenCalledTimes(1);
-    expect(calls[0]!.databaseUrl).toBe("postgresql://example/db");
-    expect(calls[0]!.outFile.startsWith(dir)).toBe(true);
-    expect(/waitron-.*\.dump$/.test(calls[0]!.outFile)).toBe(true);
-    // The fresh stub dump was written and survived the prune; the stale one was unlinked (retain=1).
-    expect(existsSync(calls[0]!.outFile)).toBe(true);
-    expect(existsSync(stale)).toBe(false);
-    expect(logged).toContainEqual(["info", "backup.completed"]);
+    expect(backend.objects.size).toBe(1);
+    expect(logged).toContainEqual(["info", "backup.destination_completed"]);
   });
 
-  it("logs backup.failed and keeps looping when runDump throws, then exits cleanly", async () => {
+  it("logs backup.failed and keeps looping when the dump throws, then exits cleanly", async () => {
     const controller = new AbortController();
+    const backend = new FakeBackend("only");
     const logged: Array<[string, string]> = [];
     let dumpCalls = 0;
     let ticks = 0;
@@ -70,10 +157,12 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
     // The loop must NOT die on a dump failure: the throw is caught, logged as a warn, and a second
     // iteration runs before the abort — the same "logged and swallowed" contract runRetentionSweep has.
     await runBackupSweep({
-      dir,
-      databaseUrl: "postgresql://example/db",
+      backends: [backend],
+      databaseUrl: "postgres://x",
+      recoveryKey: "recovery-key-1",
+      stagingDir: staging,
       intervalMs: 10,
-      retain: 1,
+      retain: 7,
       signal: controller.signal,
       log: (level, event) => logged.push([level, event]),
       runDump: async () => {
@@ -93,13 +182,16 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
 
   it("passes the AppError code through backup.failed's errorCode field", async () => {
     const controller = new AbortController();
+    const backend = new FakeBackend("only");
     const logged: Array<[string, string, Record<string, unknown> | undefined]> = [];
 
     await runBackupSweep({
-      dir,
-      databaseUrl: "postgresql://example/db",
+      backends: [backend],
+      databaseUrl: "postgres://x",
+      recoveryKey: "recovery-key-1",
+      stagingDir: staging,
       intervalMs: 10,
-      retain: 1,
+      retain: 7,
       signal: controller.signal,
       log: (level, event, fields) => logged.push([level, event, fields]),
       runDump: async () => {
@@ -116,6 +208,33 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
     // carry a connection string.
     expect(failure![2]).toMatchObject({ errorCode: "unknown" });
   });
+
+  it("checks abort again after the tick and never sleeps when it aborted mid-tick", async () => {
+    const controller = new AbortController();
+    const backend = new FakeBackend("only");
+    const sleep = vi.fn();
+
+    await runBackupSweep({
+      backends: [backend],
+      databaseUrl: "postgres://x",
+      recoveryKey: "recovery-key-1",
+      stagingDir: staging,
+      intervalMs: 10,
+      retain: 7,
+      signal: controller.signal,
+      log: vi.fn(),
+      // Aborts DURING the dump itself, not in `sleep` — pins the loop's second abort check
+      // (immediately after the tick, before the sleep it would otherwise take).
+      runDump: async ({ outFile }: { outFile: string }) => {
+        controller.abort();
+        await writeFile(outFile, "DUMP-BYTES");
+      },
+      sleep,
+    });
+
+    expect(backend.objects.size).toBe(1); // the in-flight tick still completed
+    expect(sleep).not.toHaveBeenCalled();
+  });
 });
 
 // A real pg_dump against the shared test container — proves the custom-format invocation realPgDump
@@ -123,7 +242,9 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
 // pg18 `pg_dump` on PATH, so we run the IDENTICAL argv realPgDump uses INSIDE the container via
 // `docker exec`, then copy the file out and assert it is a non-empty custom-format dump (PGDMP magic).
 // A skipped smoke proves nothing (CLAUDE.md §2), so this only degrades to a loud skip when the `docker`
-// CLI or the container id genuinely cannot be resolved.
+// CLI or the container id genuinely cannot be resolved. Unchanged by BR-1 Task 5 — realPgDump itself
+// did not change — carried over from the pre-fan-out version of this file (Task 4) rather than dropped
+// in the rewrite, since it is the ONLY coverage of the real shell-out (pg-dump.ts says so explicitly).
 const suite = useTemplateDb({ template: "manifest" });
 
 describe("realPgDump custom-format invocation (real container, docker exec)", () => {

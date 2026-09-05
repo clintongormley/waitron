@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { mkdirSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import type { Hono } from "hono";
@@ -107,6 +108,7 @@ import { loadBackupConfig } from "./backup-config.js";
 import { assertBackupCanReadFiscal } from "./backup-probe.js";
 import { runBackupSweep } from "./backup-sweep.js";
 import { readBackupStatus } from "./backup-status.js";
+import { buildBackend } from "./local-fs-backend.js";
 import { fetchHttpClient } from "./sync-http.js";
 import { tunnelHttpClient } from "./tunnel-http.js";
 import { readOnlyGate } from "./read-only-gate.js";
@@ -1495,13 +1497,23 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       probeDb = await createPostgresDb(backupConfig.databaseUrl);
       await assertBackupCanReadFiscal(probeDb);
       backupWorker = runBackupSweep({
-        // INTERIM (BR-1 Task 4): `runBackupSweep` still takes a single `dir`; the real fan-out to every
-        // configured `destinations` entry is Task 5/6's job (plan: "Wire boot", boot.ts:1437-1467).
-        // `destinations[0]` is always present here — `loadBackupConfig` returns `undefined`, and this
-        // block never runs, when `destinations` is empty — and is the `WAITRON_BACKUP_DIR` "primary"
-        // entry whenever that convenience is set, matching today's single-dir behaviour exactly.
-        dir: backupConfig.destinations[0].dir,
+        // INTERIM (BR-1 Task 5): `runBackupSweep` now fans an ENCRYPTED artifact out to a list of
+        // `StorageBackend`s, but boot still wires only `destinations[0]` — real multi-destination
+        // fan-out (mapping every configured destination through `buildBackend`, plus a dedicated
+        // staging-dir config knob and the box-status multi-destination freshness reader) is Task 6's
+        // job (plan: "Wire boot", boot.ts:1437-1467). `destinations[0]` is always present here —
+        // `loadBackupConfig` returns `undefined`, and this block never runs, when `destinations` is
+        // empty — and is the `WAITRON_BACKUP_DIR` "primary" entry whenever that convenience is set,
+        // matching today's single-destination behaviour exactly (now encrypted, where it was not
+        // before Task 5).
+        backends: [buildBackend(backupConfig.destinations[0])],
+        // A plain OS tmp dir, not `destinations[0].dir`: the pre-encryption dump must never sit
+        // (even briefly) inside a directory a `StorageBackend.list("waitron-")` scan also walks, or a
+        // stray plaintext dump could be picked up as if it were a stored artifact. No dedicated
+        // `WAITRON_BACKUP_STAGING_DIR` config exists yet — Task 6's call.
+        stagingDir: join(tmpdir(), "waitron-backup-staging"),
         databaseUrl: backupConfig.databaseUrl,
+        recoveryKey: backupConfig.recoveryKey,
         intervalMs: backupConfig.intervalMs,
         retain: backupConfig.retain,
         signal: backupController.signal,
@@ -1628,8 +1640,14 @@ export async function startServer(env: Record<string, string | undefined>): Prom
           : undefined,
       readBackup:
         backupWorker !== undefined
-          ? // INTERIM (BR-1 Task 4): same single-dir shim as the sweep above, pending Task 6's
-            // per-destination freshness reader.
+          ? // INTERIM (BR-1 Task 5), WORSE THAN BEFORE: this still reads `destinations[0].dir` for
+            // `waitron-*.dump` (`DUMP_FILE_NAME`, pg-dump.ts), but the sweep above now writes
+            // `waitron-*.dump.enc` there (via `buildBackend`'s `LocalFsBackend`) — a suffix
+            // `DUMP_FILE_NAME` does not match. So as of Task 5 this ALWAYS reports
+            // `{ lastBackupAt: null, stale: true }` even while backups are landing successfully; it is
+            // no longer merely "single-destination only", it is silently wrong for that one
+            // destination too. `readBackupStatus` needs a per-destination-backend freshness reader
+            // (list "waitron-" newest-first, same as `pruneBackend`) — Task 6's job.
             () =>
               readBackupStatus(backupConfig!.destinations[0].dir, backupConfig!.staleAfterMs, now())
           : undefined,
