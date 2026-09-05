@@ -4,6 +4,7 @@ import { persistNodeMembershipIfNewer, readNodeMembership, type Database } from 
 import {
   evictNode,
   isFencedStanding,
+  servingPrimaryNodeId,
   standingOf,
   type SignedMembershipDocument,
 } from "@waitron/membership";
@@ -31,6 +32,13 @@ export interface RetireDeps {
    *  `readDrainProgress` on the sync_tailer pool under `withTenant`, exactly as box-status's
    *  `readDisposal` does; retire never touches that pool itself. */
   readonly readDrainProgress: (() => Promise<DrainProgress>) | undefined;
+  /** The carrier node id the injected `readDrainProgress` reader keys its cursor lookup on — captured at
+   *  BOOT (`servingPrimaryNodeId` of the held doc at boot). retireSelf re-derives the CURRENT carrier
+   *  from the fresh held chart and refuses (`node.retire_carrier_changed`) if it differs, because a
+   *  fenced node does not restart on a carrier change so the reader would otherwise measure drain against
+   *  a stale carrier. `undefined` exactly when `readDrainProgress` is `undefined` (both boot-derived from
+   *  the same carrier). */
+  readonly carrierNodeId: string | undefined;
   readonly log: Logger;
 }
 
@@ -50,10 +58,12 @@ export interface RetireResult {
  *
  * ABORT-BEFORE-WRITE (promote's discipline): every gate throws BEFORE any write, and the document is
  * built and signed in memory BEFORE the persist, so a refusal or a signing failure leaves the node
- * exactly as it was. The gate ORDER is what keeps decommission design fact (ii)'s states distinct —
- * an already-evicted no-op, a serving/absent node (`not_fenced`), a fenced node with no carrier
- * (`no_carrier`), and a fenced node still shipping rows (`not_drained`) are four different outcomes,
- * checked in that order. The departing node signs with its OWN directly-trusted identity key
+ * exactly as it was. The ordered guards are idempotent-evicted → not_fenced → no_carrier →
+ * carrier_changed → not_drained → mint → persist. The gate ORDER is what keeps decommission design fact
+ * (ii)'s states distinct — an already-evicted no-op, a serving/absent node (`not_fenced`), a fenced node
+ * with no carrier (`no_carrier`), a fenced node whose carrier CHANGED since boot so its drain reader is
+ * stale (`carrier_changed`), and a fenced node still shipping rows (`not_drained`) are distinct
+ * outcomes, checked in that order. The departing node signs with its OWN directly-trusted identity key
  * (`endorsements: []`) — its key is in every former peer's trust set from setup/adopt, so an
  * endorsement chain is unnecessary, exactly as R1's local promote does. Idempotent: an already-evicted
  * node returns before consulting the drain guard or minting, so a re-run never bumps the term.
@@ -80,6 +90,19 @@ export async function retireSelf(deps: RetireDeps): Promise<RetireResult> {
   // the drain cannot be confirmed. Signalled by an `undefined` drain-progress reader. Refused fail-safe.
   if (deps.readDrainProgress === undefined) {
     throw new AppError("node.retire_no_carrier", {});
+  }
+
+  // 5b. Carrier freshness: the injected reader keys on the BOOT carrier; a fenced node does not restart
+  // on a carrier change, so confirm the held chart still names that same serving-primary before trusting
+  // the drain verdict. A mismatch means the reader would measure against a stale carrier — refuse and let
+  // the operator restart the box to re-measure (fiscal-unrecoverable: never evict against a stale
+  // survivor). `held!` is non-null here (steps 3-4 return/throw on a null held).
+  const currentCarrier = servingPrimaryNodeId(held!);
+  if (currentCarrier !== deps.carrierNodeId) {
+    throw new AppError("node.retire_carrier_changed", {
+      boundCarrierNodeId: deps.carrierNodeId!, // defined: readDrainProgress !== undefined ⇒ carrier bound
+      currentCarrierNodeId: currentCarrier ?? null,
+    });
   }
 
   // 6. Not drained: gate on the disposal guard's `drained` BOOLEAN only, never a seq comparison (the

@@ -1570,11 +1570,21 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // absent (undefined) otherwise, which box-status reports as `disposal.applicable:false` and retire
   // refuses as `node.retire_no_carrier`. Factored to one reader so the fragile carrier-keying coupling
   // documented above has a single copy — a future change to how the drain read is scoped cannot desync
-  // the two consumers. Boot-captured staleness (both consumers): `fenced`/`carrierNodeId` are bound here
-  // at boot and neither re-derives the carrier, so a runtime carrier change is not reflected until the
-  // next boot — and a fenced node does not restart on a carrier change (`shouldFenceRestart` is false
-  // once `bootFenced`). Fail-safe: the coupling can only yield a false `drained:false`, never a false
-  // `drained:true`, so retire never green-lights junking a node that has not drained.
+  // the two consumers.
+  //
+  // Two distinct staleness couplings, and only one is fail-safe:
+  //  - Subscriber-id keying (documented above): if the carrier were enrolled under a non-nodeId
+  //    subscriber id, the cursor lookup misses and the reader reads `drained:false` INDEFINITELY. That
+  //    is fail-safe — it can only yield a false `drained:false`, never a false `drained:true` — so within
+  //    ONE carrier retire never green-lights junking a node that has not drained.
+  //  - Boot-captured CARRIER (`carrierNodeId`, bound here at boot; a fenced node does not restart on a
+  //    carrier change — `shouldFenceRestart` is false once `bootFenced`): after a SECOND failover the
+  //    reader still keys on the OLD carrier's cursor, so it CAN return a false `drained:true` (the tail
+  //    reached the old carrier, not the current survivor). This is NOT fail-safe on its own. For the
+  //    RETIRE consumer it is closed at request time: retireSelf re-derives the current carrier from the
+  //    fresh held chart and refuses `node.retire_carrier_changed` on a mismatch (I1), so it never evicts
+  //    against a stale carrier. For the box-status `disposal` READ it remains a benign informational
+  //    stale view — a read, not the destructive action — reconciled on the next boot.
   const readFenceDrainProgress =
     lagPool !== undefined && fenced && carrierNodeId !== undefined
       ? () =>
@@ -1640,6 +1650,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       tenantId: till.tenantId,
       nodeId: till.nodeId,
       readDrainProgress: readFenceDrainProgress,
+      // The boot carrier `readFenceDrainProgress` keys on. retireSelf re-derives the current carrier from
+      // the fresh held chart and refuses `node.retire_carrier_changed` if it changed — the request-time
+      // close of the boot-captured staleness noted at `readFenceDrainProgress`'s definition (I1).
+      carrierNodeId,
     },
     log,
   );

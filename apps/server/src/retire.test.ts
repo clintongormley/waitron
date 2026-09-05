@@ -46,7 +46,11 @@ async function fencedNode(): Promise<{
   db: Database;
   tenantId: string;
   nodeId: string;
-  deps: (log: RetireDeps["log"], readDrainProgress: RetireDeps["readDrainProgress"]) => RetireDeps;
+  deps: (
+    log: RetireDeps["log"],
+    readDrainProgress: RetireDeps["readDrainProgress"],
+    carrierNodeId?: RetireDeps["carrierNodeId"],
+  ) => RetireDeps;
 }> {
   const db = await createPgliteDb();
   await runMigrations(db, CORE_MIGRATIONS);
@@ -62,12 +66,16 @@ async function fencedNode(): Promise<{
     db,
     tenantId,
     nodeId,
-    deps: (log, readDrainProgress) => ({
+    // `carrierNodeId` defaults to CARRIER_ID — the serving-primary the default `heldDoc` names — so the
+    // request-time carrier-freshness guard passes for every test whose held chart carries CARRIER_ID.
+    // Tests exercising a carrier CHANGE pass an explicit id that differs from the held serving-primary.
+    deps: (log, readDrainProgress, carrierNodeId = CARRIER_ID) => ({
       appDb: db,
       ring: RING,
       tenantId,
       nodeId,
       readDrainProgress,
+      carrierNodeId,
       log,
     }),
   };
@@ -79,15 +87,19 @@ async function fencedNode(): Promise<{
 function heldDoc(
   nodeId: string,
   selfStanding: NodeStanding,
-  { carrier = true, term = 3 }: { carrier?: boolean; term?: number } = {},
+  {
+    carrier = true,
+    term = 3,
+    carrierId = CARRIER_ID,
+  }: { carrier?: boolean; term?: number; carrierId?: string } = {},
 ): SignedMembershipDocument {
   const nodes: MembershipNode[] = [{ nodeId, contactUrl: "", standing: selfStanding }];
   if (carrier) {
-    nodes.push({ nodeId: CARRIER_ID, contactUrl: "https://carrier", standing: "serving-primary" });
+    nodes.push({ nodeId: carrierId, contactUrl: "https://carrier", standing: "serving-primary" });
   }
   return {
     body: { term, nodes },
-    signerNodeId: carrier ? CARRIER_ID : nodeId,
+    signerNodeId: carrier ? carrierId : nodeId,
     signature: "held-placeholder-sig",
     endorsements: [],
   };
@@ -179,6 +191,50 @@ describe("retireSelf", () => {
 
     const held = await readNodeMembership(db);
     expect(held?.body.term).toBe(3); // no write
+    expect(held!.body.nodes.find((n) => n.nodeId === nodeId)?.standing).toBe("sell-only");
+    await db.close();
+  });
+
+  it("refuses when the held chart now names a DIFFERENT carrier than the boot-bound one (node.retire_carrier_changed) and writes nothing", async () => {
+    // The I1 data-loss guard: a fenced node bakes its carrier at boot and does NOT restart on a carrier
+    // change, so the injected `readDrainProgress` keys on the STALE boot carrier ("C1"). Here the fresh
+    // held chart names serving-primary "C2" — a second failover — while `deps.carrierNodeId` is still
+    // "C1". `readDrainProgress` returns drained:true against C1, but C2 (the current survivor) may not
+    // hold this node's tail. retireSelf must REFUSE and let the operator restart the box, never evict
+    // against a stale carrier (fiscal-unrecoverable). Proven by deletion: remove the guard and this node
+    // wrongly evicts (mints term 4) against the stale carrier.
+    const { db, deps, nodeId } = await fencedNode();
+    await writeNodeMembership(db, heldDoc(nodeId, "sell-only", { carrierId: "C2" }));
+
+    const err = await captureError(() => retireSelf(deps(noopLog, async () => drained, "C1")));
+    expect(isAppError(err) && err.code).toBe("node.retire_carrier_changed");
+    expect(isAppError(err) && err.params).toEqual({
+      boundCarrierNodeId: "C1",
+      currentCarrierNodeId: "C2",
+    });
+
+    const held = await readNodeMembership(db);
+    expect(held?.body.term).toBe(3); // no eviction written
+    expect(held!.body.nodes.find((n) => n.nodeId === nodeId)?.standing).toBe("sell-only");
+    await db.close();
+  });
+
+  it("refuses when the fresh chart names NO carrier though one was bound at boot (node.retire_carrier_changed, currentCarrierNodeId null)", async () => {
+    // Boot captured a carrier "C1" (so `readDrainProgress` is bound), but the fresh held chart now names
+    // no serving-primary at all — the carrier changed OUT of existence. `servingPrimaryNodeId` returns
+    // undefined ⇒ reported as `currentCarrierNodeId: null`, distinct from the bound "C1".
+    const { db, deps, nodeId } = await fencedNode();
+    await writeNodeMembership(db, heldDoc(nodeId, "sell-only", { carrier: false }));
+
+    const err = await captureError(() => retireSelf(deps(noopLog, async () => drained, "C1")));
+    expect(isAppError(err) && err.code).toBe("node.retire_carrier_changed");
+    expect(isAppError(err) && err.params).toEqual({
+      boundCarrierNodeId: "C1",
+      currentCarrierNodeId: null,
+    });
+
+    const held = await readNodeMembership(db);
+    expect(held?.body.term).toBe(3); // no eviction written
     expect(held!.body.nodes.find((n) => n.nodeId === nodeId)?.standing).toBe("sell-only");
     await db.close();
   });

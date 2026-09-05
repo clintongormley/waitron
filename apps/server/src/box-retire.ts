@@ -23,17 +23,22 @@ export type BoxRetireDeps = {
   /** The drain-progress reader (the same one box-status's `disposal` surface uses), or `undefined`
    * when the held document names no carrier — which retireSelf refuses as `node.retire_no_carrier`. */
   readDrainProgress: (() => Promise<DrainProgress>) | undefined;
+  /** The carrier node id captured at BOOT that `readDrainProgress` keys on — retireSelf refuses
+   * (`node.retire_carrier_changed`) if the fresh held chart names a different serving-primary, because a
+   * fenced node does not restart on a carrier change. `undefined` exactly when `readDrainProgress` is. */
+  carrierNodeId: string | undefined;
 };
 
 /**
  * The AppError codes this route can surface, and their HTTP status. `requireManagementSession` throws
  * `management_session.required` (401); `authorizeManager` re-resolves the session
  * (`management_session.required`/`.expired` → 401, `person.suspended` → 403) and refuses a role without
- * `till.configure` with `authorization.not_permitted` (403). `retireSelf`'s four ordered refusals are
+ * `till.configure` with `authorization.not_permitted` (403). `retireSelf`'s ordered refusals are
  * client-visible conflicts with the node's current membership standing, so each maps to 409 — an
  * UNMAPPED AppError would fall through to the boundary's 400 default, which is the wrong shape for a
- * "your node is not in a retirable state" answer. Any other thrown value is a server fault the boundary
- * answers with an opaque 500.
+ * "your node is not in a retirable state" answer. `node.retire_carrier_changed` is likewise a 409: the
+ * carrier moved since boot, so the box must be restarted before it can retire. Any other thrown value is
+ * a server fault the boundary answers with an opaque 500.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
@@ -42,6 +47,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "node.retire_not_fenced": 409,
   "node.retire_no_carrier": 409,
+  "node.retire_carrier_changed": 409,
   "node.retire_not_drained": 409,
   "node.retire_superseded": 409,
 };
@@ -76,6 +82,7 @@ export function mountBoxRetireApi(app: Hono, deps: BoxRetireDeps, log: Logger): 
         tenantId: deps.tenantId,
         nodeId: deps.nodeId,
         readDrainProgress: deps.readDrainProgress,
+        carrierNodeId: deps.carrierNodeId,
         log,
       });
       return c.json(result, 200);

@@ -92,6 +92,9 @@ function buildApp(
   tenantId: string,
   nodeId: string,
   readDrainProgress: (() => Promise<DrainProgress>) | undefined,
+  // The boot carrier retireSelf checks the fresh held chart against; matches the seeded serving-primary
+  // on the happy path, `undefined` (bound to `readDrainProgress`) on the refusal-before-carrier paths.
+  carrierNodeId: string | undefined = undefined,
 ): Hono {
   const app = new Hono();
   mountManagementApi(
@@ -107,7 +110,7 @@ function buildApp(
   );
   mountBoxRetireApi(
     app,
-    { appDb: suite.admin, ring: RING, tenantId, nodeId, readDrainProgress },
+    { appDb: suite.admin, ring: RING, tenantId, nodeId, readDrainProgress, carrierNodeId },
     () => {},
   );
   return app;
@@ -186,8 +189,11 @@ describe("POST /api/box/retire (real postgres)", () => {
         { nodeId: CARRIER_NODE_ID, contactUrl: "https://carrier", standing: "serving-primary" },
       ]),
     );
-    const app = buildApp(tenantId, nodeId, () =>
-      Promise.resolve({ drained: true, ownTailSeq: 5n, carrierAppliedSeq: 5n }),
+    const app = buildApp(
+      tenantId,
+      nodeId,
+      () => Promise.resolve({ drained: true, ownTailSeq: 5n, carrierAppliedSeq: 5n }),
+      CARRIER_NODE_ID, // the boot carrier matches the held serving-primary → freshness guard passes
     );
     const res = await app.request("/api/box/retire", {
       method: "POST",

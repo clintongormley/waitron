@@ -1371,6 +1371,25 @@ declare module "@waitron/shared" {
      */
     "node.retire_no_carrier": Record<string, never>;
     /**
+     * `retireSelf` measured the drain guard against the carrier captured at BOOT
+     * (`servingPrimaryNodeId` of the held document at boot, baked into the injected drain reader), but
+     * the held chart re-read at request time now names a DIFFERENT serving-primary (or none). A fenced
+     * node does NOT restart on a carrier change (`shouldFenceRestart` is false once `bootFenced`), so its
+     * drain reader still keys on the stale boot carrier's cursor — a `drained:true` it returns proves the
+     * tail reached the OLD carrier, not the current survivor. The node must be RESTARTED to re-measure
+     * against the current carrier before it can safely retire. Refused FAIL-SAFE: never evict a node
+     * whose own-origin tail may not have reached the current survivor, or those rows are lost with it
+     * (design §5.1; CLAUDE.md §5 unrecoverable-invariant). Node ids are topology facts already in the
+     * served membership document — not secrets — so they are named for operator diagnosis, mirroring
+     * `promotion.membership_superseded`'s diagnostic params. `currentCarrierNodeId` is `null` when the
+     * held chart names no serving-primary. `node.*` names the domain concept — a fact about this node's
+     * state in the topology; never renamed once shipped.
+     */
+    "node.retire_carrier_changed": {
+      boundCarrierNodeId: string;
+      currentCarrierNodeId: string | null;
+    };
+    /**
      * `retireSelf` found the node fenced with a carrier, but the disposal guard reports its own-origin
      * `sync_log` tail has NOT fully drained onto that carrier. Refused until the drain completes — a
      * node must not leave the chart while rows it originated are still un-shipped, or they would be
