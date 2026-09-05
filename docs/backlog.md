@@ -389,22 +389,41 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
   domain package at all — a real improvement, but it touches `@waitron/identity`'s public surface and
   every `hashSecret` consumer, so it was out of scope for this schema-inversion slice. Small,
   unclaimed, do-anytime.
-- **SP-2b — schema-version handshake + park gate (next).** The hello handshake advertises each
-  enabled module's `appliedSchemaVersion`; a subscriber applies a module's rows only when
-  `myVersion >= sourceVersion`, else parks them (skipped, cursor not advanced) until it reboots and
-  migrates — closing the silent-corruption case where a source runs a schema ahead of a subscriber's.
-  Rides the table→module map SP-2a establishes. Sketched, not built, in SP-2a's spec §6.
+- **SP-2b — schema-version handshake + park gate — built.** `/sync-api/hello` gains
+  `moduleVersions: Record<string, number>`, a boot snapshot of each module's **applied** (not
+  shipped) schema version. A subscriber compares its own applied version per module and **parks**
+  (never applies, never drops) a row whose owning module the source has migrated ahead of it,
+  funnelled through the existing at-least-once `deferred`/park machinery (`apply.ts`) — the lane
+  cursor holds strictly below the parked seq and redelivers it once the subscriber reboots and
+  migrates; convergence is the rolling reboot. Module identity at apply time comes from a
+  `table → module` map (`MODULE_BY_TABLE`) built at the composition root and threaded into
+  `applyBatch` alongside the version maps — SP-2a's `EnrolledTable` type and its threading are
+  untouched. Closes the silent-corruption hazard: `jsonb_populate_record` drops a JSON key with no
+  matching column, so an unparked source-ahead row would look complete but lose data — proven by
+  deletion (remove the version check and an ahead-module's row applies with its new column silently
+  gone). No migration, no new error code (a `versionParked` counter + log line instead — the park is
+  a normal operational state, not an error), behaviour-preserving with no version skew (equal
+  versions never park; an older peer that omits `moduleVersions` gates nothing). Spec:
+  [sp-2b](superpowers/specs/2026-09-05-module-sp2b-schema-version-gate-design.md).
+  **Deferred, same ruling as the gate itself (spec §2/§7.1): the "pull only your enabled modules"
+  source filter.** Cursor-unsafe with today's single per-lane cursor — excluding a module's tables
+  source-side while the cursor still advances past the excluded rows would delete history a
+  subscriber can never recover if it later re-enables that module — and there is no live case
+  (nothing is genuinely toggleable, SP-1b/SP-1d). Built alongside the first genuinely-toggleable
+  module, designed against the enablement lifecycle then.
 - **SP-3 — fiscal as a module (= H2's fiscal-record lane)** + vocabulary + gated provisioning; swappable. The
   standalone H2 spec/plan (branch `feat/h2-fiscal-record-sync`, never merged) are reference material for this.
 - **SP-4 — module UI surface** (card-registry inversion + self-sourcing cards + fiscal's cards) — **after
   B3.2** (shares `@waitron/layouts` / `apps/till` card-grid).
 
-With SP-1a + SP-1b + SP-1c landed, SP-1d's adopt-bootstrap half landed (#220), and **SP-2a landed
-(#227)** — it unblocked SP-3 (H2's fiscal-record lane rides SP-2a's sync inversion) and delivered
-SP-1c's deferred graph-honesty guard. **Ongoing flow-down defers again** (owner decision 2026-09-05, receipt
-refreshed): SP-2a introduces no genuinely-toggleable module, and no config channel exists to carry
-a later primary-side change (spec §7) — it is built alongside the first genuinely-toggleable
-module, not here. SP-2b (schema-version handshake + park gate) is next; SP-4 waits for B3.2.
+With SP-1a + SP-1b + SP-1c landed, SP-1d's adopt-bootstrap half landed (#220), SP-2a landed (#227),
+and **SP-2b built** — **SP-2 (the full sync inversion + schema-version gate) is complete.** SP-2a
+unblocked SP-3 (H2's fiscal-record lane rides SP-2a's sync inversion) and delivered SP-1c's deferred
+graph-honesty guard; SP-2b closes the cross-node schema-skew hazard the rolling-reboot convergence
+model depends on. **Ongoing flow-down and the enabled-set pull filter both stay deferred** (same
+receipt each time: nothing is genuinely toggleable yet, so there is no live case to build either
+against) — both are built alongside the first genuinely-toggleable module. Next module slice is
+**SP-3 (fiscal as a module = H2's fiscal-record lane)**; **SP-4** waits for B3.2.
 
 ### Product work still open (beneath the two tracks)
 

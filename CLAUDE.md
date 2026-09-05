@@ -304,6 +304,16 @@ scripts/changed-packages.mjs runnable test:coverage` exits **0** with
   false-green shape as the `test:coverage` and `--frozen-lockfile` traps above, in a third place.
   (Named rather than counted: an earlier version said "the two traps above" and stopped being true
   the moment a bullet was inserted between them.)
+- **A response-shape change needs the full package suite, not the touched file's named test run.**
+  SP-2b Task 2 added `moduleVersions` to `/sync-api/hello`'s body and verified with
+  `pnpm --filter @waitron/server test sync-api` (11 passed) — which never loads `boot.test.ts` or
+  `boot.mirror.rls.test.ts`, two boot-level e2e suites that pin the exact `/hello` body with
+  `toEqual` and share no name with `sync-api`. Both went red on that commit and stayed red through
+  the task's own review, surfacing only two tasks later when an unrelated task ran the suite
+  unfiltered (confirmed by `git stash` against the earlier commit). A different shape of the trap
+  above: there the invisible suite polices the whole package, here it is an ordinary e2e test
+  pinning a shared wire body — either way a _named_ filter under-covers. Run the package's full
+  suite whenever a change touches a value more than one suite asserts on.
 
 - **A hardcoded cross-package list goes stale when a manifest or scope changes, and scoped CI hides
   it.** Adding `identity` to `migrations.manifest.json` and to `packages/db/src/english-only.ts`'s
