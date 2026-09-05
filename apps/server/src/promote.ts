@@ -11,8 +11,9 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import { nextStandings, type SignedMembershipDocument } from "@waitron/membership";
+import { nextStandings, standingOf, type SignedMembershipDocument } from "@waitron/membership";
 import type { KeyRing } from "@waitron/credentials";
+import { isFenced } from "./membership-fence.js";
 import { refreshDeploymentHolders, type DeploymentHolders } from "./deployment-holders.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
@@ -72,10 +73,32 @@ export function assertFenced(attestation: FenceAttestation): void {
 }
 
 /**
+ * Refuses to promote a node whose OWN held membership document marks it fenced (`sell-only`/`evicted`)
+ * — a node that has been superseded (membership rejoin R1 reconciles a fenced node to the SAME axes as
+ * a healthy local secondary, so the axis guards cannot catch it). Promoting it in place would resume
+ * the fiscal submitter duties on a superseded chain: two submitters under one NIF (CLAUDE.md §5). A
+ * plain throw BEFORE any state change (before the point-of-no-return), so a refused promote leaves the
+ * node exactly as it was. A fenced node returns to service via wipe-and-restore, never in-place
+ * promotion (the un-fencing transition is out of scope, backlog note). Extracted so the guard can be
+ * proven by deletion (CLAUDE.md §4). Distinct from `assertFenced`, which checks the OPERATOR's
+ * old-node-neutralised attestation — the mirrored names track the two different "fence" concepts.
+ */
+export function assertNotFenced(held: SignedMembershipDocument | null, nodeId: string): void {
+  if (isFenced(held, nodeId)) {
+    // `isFenced` is false for a null document, so `held` is non-null here; `standingOf` returns the
+    // fenced standing (never `undefined` — a fenced node is by definition present in the chart).
+    throw new AppError("promotion.node_fenced", { standing: standingOf(held!, nodeId)! });
+  }
+}
+
+/**
  * Local secondary → primary (promotion runbook design §5a). The node already sells (`mode='primary'`); this
- * claims the singleton duties only. Idempotent and checkpointed (§3e): a fence refusal aborts with no
- * effect; an already-primary node is a no-op; a mirror is refused (it needs the SIF-mint path, §5b, a later
- * slice). The point-of-no-return (§7) is one owner transaction that flips `singleton_role` to primary AND
+ * claims the singleton duties only. Idempotent and checkpointed (§3e): a fence-attestation refusal aborts
+ * with no effect; an already-primary node is a no-op; a mirror is refused (it needs the SIF-mint path, §5b,
+ * a later slice); and a node its OWN held document marks FENCED (`sell-only`/`evicted`) is refused
+ * (`assertNotFenced`) — it was superseded, so promoting it in place would resume submitter duties on a
+ * superseded chain (two submitters under one NIF, §5); it returns via wipe-and-restore, not promotion.
+ * The point-of-no-return (§7) is one owner transaction that flips `singleton_role` to primary AND
  * writes the freshly-minted membership document together (CLAUDE.md §3) — making this node the AEAT
  * submitter and recording the new org chart atomically, so a crash cannot leave a primary with no
  * document. The document is built and signed BEFORE that transaction, so a signing failure aborts with no
@@ -110,6 +133,7 @@ export async function promoteLocalSecondaryToPrimary(
   // read, and the node list it needs is derived from the held document, so the shared helper wins over
   // saving one round trip on this rare failover path.
   const held = await readNodeMembership(deps.appDb);
+  assertNotFenced(held, deps.nodeId); // before PONR: a fenced node was superseded — refuse in place (§5)
   const document = await mintNextMembershipDocument(
     { db: deps.appDb, ring: deps.ring },
     {
@@ -209,9 +233,11 @@ export async function commitMirrorPromotionTx(
  * sealed key + the primary's endorsement). No identity ceremony, no SIF re-mint: `currentSif` returns
  * the reserved SIF once the box reboots `mode=primary`.
  *
- * ABORT-BEFORE-PONR (parent spec §7): the fence check, the held/endorsement/series reads, the in-memory
- * mint AND the `trading.env` correction (`persistTradingEnv`, inert on a still-read-only mirror) all run
- * BEFORE the one owner transaction, so any failure there leaves the mirror exactly as it was. The PONR is
+ * ABORT-BEFORE-PONR (parent spec §7): the fence-attestation check, the held/endorsement/series reads, the
+ * held-document fenced-node refusal (`assertNotFenced` — a fenced mirror was superseded and returns via
+ * wipe-and-restore, never in-place promotion onto a superseded chain, §5), the in-memory mint AND the
+ * `trading.env` correction (`persistTradingEnv`, inert on a still-read-only mirror) all run BEFORE the one
+ * owner transaction, so any failure there leaves the mirror exactly as it was. The PONR is
  * ONE owner transaction (`commitMirrorPromotionTx`) — `mode → primary`, `singleton_role → primary`, then
  * the TERM-GUARDED document write; if that write is refused (a concurrent gossip-adopt landed a >= term),
  * the whole transaction aborts with `promotion.membership_superseded` and the flip does not commit against
@@ -245,6 +271,7 @@ export async function promoteMirrorToPrimary(
   // transitively trusts this document (parent wire-protocol §4) — the first production doc signed by a
   // non-setup key.
   const held = await readNodeMembership(deps.appDb);
+  assertNotFenced(held, deps.nodeId); // before PONR/persist: a fenced mirror was superseded — refuse (§5)
   const endorsement = await readNodeEndorsement(deps.appDb, deps.tenantId, deps.nodeId);
   const document = await mintNextMembershipDocument(
     { db: deps.appDb, ring: deps.ring },

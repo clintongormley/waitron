@@ -104,6 +104,30 @@ function heldTermThreeDoc(
   };
 }
 
+// A held term-3 chart marking THIS node fenced (`sell-only`/`evicted`), with a serving-primary
+// carrier alongside it. This is exactly what membership rejoin R1 reconciles a fenced node to —
+// `(mode='primary', singleton_role='secondary')`, the SAME axis pair as a healthy local secondary —
+// so the axis guards pass and only the fence gate can refuse it. promote reads only term + node list,
+// so a placeholder signature is fine here (as in `heldTermThreeDoc`).
+function heldFencedDoc(
+  nodeId: string,
+  standing: "sell-only" | "evicted",
+  carrierNodeId = "carrier-node",
+): SignedMembershipDocument {
+  return {
+    body: {
+      term: 3,
+      nodes: [
+        { nodeId: carrierNodeId, contactUrl: "https://carrier", standing: "serving-primary" },
+        { nodeId, contactUrl: "", standing },
+      ],
+    },
+    signerNodeId: carrierNodeId,
+    signature: "held-placeholder-sig",
+    endorsements: [],
+  };
+}
+
 describe("promoteLocalSecondaryToPrimary", () => {
   it("refuses without a fence attestation and leaves state unchanged", async () => {
     const { db, deps } = await localSecondary();
@@ -231,6 +255,35 @@ describe("promoteLocalSecondaryToPrimary", () => {
     });
     expect(second.alreadyPrimary).toBe(true); // early return before any re-mint
     expect((await readNodeMembership(db))?.body.term).toBe(4); // term unchanged — no re-bump
+    await db.close();
+  });
+
+  it("refuses a fenced (sell-only) node with promotion.node_fenced and writes nothing", async () => {
+    // A fenced node reconciled to (primary, secondary) by rejoin R1 passes both axis guards, so only
+    // the fence gate stands between it and resuming submitter duties on a superseded chain (two
+    // submitters under one NIF, CLAUDE.md §5). It must be refused in place.
+    const { db, deps, nodeId } = await localSecondary();
+    await writeNodeMembership(db, heldFencedDoc(nodeId, "sell-only"));
+    const error = await captureError(() =>
+      promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
+    );
+    expect(isAppError(error) && error.code).toBe("promotion.node_fenced");
+    expect(isAppError(error) && error.params).toEqual({ standing: "sell-only" });
+    expect(await readSingletonRole(db)).toBe("secondary"); // never promoted
+    expect((await readNodeMembership(db))?.body.term).toBe(3); // no re-mint
+    await db.close();
+  });
+
+  it("refuses a fenced (evicted) node with promotion.node_fenced and writes nothing", async () => {
+    const { db, deps, nodeId } = await localSecondary();
+    await writeNodeMembership(db, heldFencedDoc(nodeId, "evicted"));
+    const error = await captureError(() =>
+      promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true }),
+    );
+    expect(isAppError(error) && error.code).toBe("promotion.node_fenced");
+    expect(isAppError(error) && error.params).toEqual({ standing: "evicted" });
+    expect(await readSingletonRole(db)).toBe("secondary"); // never promoted
+    expect((await readNodeMembership(db))?.body.term).toBe(3); // no re-mint
     await db.close();
   });
 
@@ -424,6 +477,30 @@ describe("promoteMirrorToPrimary", () => {
     expect(second.alreadyPrimary).toBe(true);
     expect(first.seriesId).toBe(second.seriesId); // the same corrected series, re-derived on re-run
     expect((await readNodeMembership(db))?.body.term).toBe(4); // not re-bumped
+    await db.close();
+  });
+
+  it("refuses a fenced node with promotion.node_fenced, leaving it a mirror and persisting nothing", async () => {
+    // A fenced mirror (its held doc marks it sell-only/evicted) must not be promoted in place either —
+    // it returns to service via wipe-and-restore, never by resuming duties on a superseded chain. The
+    // refusal is after the held read but before the mint AND before persistTradingEnv.
+    const { db, deps, nodeId } = await mirror();
+    await writeNodeMembership(db, heldFencedDoc(nodeId, "sell-only"));
+    const persisted: string[] = [];
+    const err = await captureError(() =>
+      promoteMirrorToPrimary(
+        deps(noopLog, async (seriesId) => {
+          persisted.push(seriesId);
+        }),
+        { oldNodeNeutralised: true },
+      ),
+    );
+    expect(isAppError(err) && err.code).toBe("promotion.node_fenced");
+    expect(isAppError(err) && err.params).toEqual({ standing: "sell-only" });
+    expect(await readDeploymentMode(db)).toBe("mirror"); // never promoted
+    expect(await readSingletonRole(db)).toBe("secondary");
+    expect((await readNodeMembership(db))?.body.term).toBe(3); // no re-mint
+    expect(persisted).toEqual([]); // the fence refusal is before persistTradingEnv
     await db.close();
   });
 
