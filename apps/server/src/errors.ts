@@ -1525,6 +1525,13 @@ declare module "@waitron/shared" {
     /** A backup artifact's binary frame is malformed (bad magic, version, or truncated header)
      * before decryption is even attempted. `reason` is a short machine tag. */
     "backup.artifact_invalid": { reason: string };
+    /** The backup ARCHIVE container (the pack of named entries — manifest, DB dump, media,
+     * secrets — that gets encrypted as a single `backup.artifact_invalid`-checked frame) is
+     * malformed: bad magic, unsupported version, or any declared length (entry count, name
+     * length, data length) that would read past the buffer. Distinct from `backup.artifact_invalid`,
+     * which is the OUTER encryption frame — this is the INNER container it decrypts to. `reason`
+     * is a short machine tag, never the offending bytes. */
+    "backup.archive_invalid": { reason: string };
     /** A backup destination is configured but WAITRON_BACKUP_RECOVERY_KEY is unset — refused at load
      * so an unattended backup can never write an unencrypted or box-key-encrypted artifact. */
     "backup.recovery_key_missing": Record<string, never>;
