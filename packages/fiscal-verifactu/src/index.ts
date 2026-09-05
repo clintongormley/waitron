@@ -2,6 +2,7 @@
 export { VerifactuBackend } from "./backend.js";
 export type { VerifactuBackendOptions } from "./backend.js";
 export { FISCAL_MIGRATIONS } from "./migrations.js";
+export { FISCAL_ENROLMENT } from "./enrolment.js";
 export {
   cadenas,
   contadoresInstalacion,

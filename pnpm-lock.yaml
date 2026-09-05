@@ -536,6 +536,9 @@ importers:
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
+      '@waitron/sync-enrolment':
+        specifier: workspace:*
+        version: link:../sync-enrolment
       '@waitron/verifactu':
         specifier: workspace:*
         version: link:../verifactu

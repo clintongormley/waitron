@@ -18,6 +18,7 @@
     "@waitron/db": "workspace:*",
     "@waitron/fiscal": "workspace:*",
     "@waitron/shared": "workspace:*",
+    "@waitron/sync-enrolment": "workspace:*",
     "@waitron/verifactu": "workspace:*",
     "drizzle-orm": "^0.45.2"
   },
