@@ -6,8 +6,7 @@ import type { ShiftSwapStatus } from "./schema/shift-swaps.js";
 /**
  * The STAFF-FACING read side of the swap/absence request path — one person's OWN schedule views, the
  * counterpart to the manager `listPending*` queues. Every read filters on the requester's `person_id`
- * in APPLICATION CODE: the planning tables' RLS is tenant-scoped only (`0008_scheduling_planning_rls.sql`,
- * `USING (tenant_id = current_tenant_id())`) with NO per-person row policy, so "a staff member sees only
+ * in application code: "a staff member sees only
  * their own rows" is enforced by these predicates and by the route passing the SESSION's personId — never
  * by the database (plan fact 3). Reads only; no throws, so no `./errors.js` import.
  */
@@ -152,7 +151,7 @@ export async function listSwapsForPerson(
 /**
  * All of the requester's absences, EVERY status (not only `requested` like the manager queue), ordered by
  * `starts_on` desc — a staff member's own leave history and pending requests. Person-scoped in application
- * code (RLS is tenant-only). Covered by `absences_tenant_person_idx` on `(tenant_id, person_id, starts_on)`.
+ * code. Covered by `absences_tenant_person_idx` on `(tenant_id, person_id, starts_on)`.
  */
 export async function listAbsencesForPerson(
   tx: Transaction,

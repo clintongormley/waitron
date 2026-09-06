@@ -40,7 +40,7 @@ function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 
 describe("listShiftsForPerson", () => {
   it("returns only the requester's shifts in the window (never a second person's), ordered by starts_at", async () => {
-    // Person-scoping is application code (RLS is tenant-only). Prove by deletion — drop the
+    // Person-scoping is application code. Prove by deletion — drop the
     // `person_id = ${personId}` predicate and the OTHER person's shift (seeded under the same tenant)
     // leaks into the result, reddening the `map((r) => r.id)` assertion.
     const me = await seedPerson(suite.db, tenantId, `me-${crypto.randomUUID()}`);

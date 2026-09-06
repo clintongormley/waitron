@@ -39,7 +39,7 @@ export type AbsenceStatus = (typeof absenceStatus.enumValues)[number];
 /**
  * A person's planned absence over a date range — a holiday, sick leave, or other leave. PLANNING
  * data, NOT the legal record (the inverse of `time_entries`): ordinary mutable rows, so the app role
- * holds SELECT, INSERT, UPDATE and DELETE (drizzle/0008_scheduling_planning_rls.sql). No append-only
+ * holds SELECT, INSERT, UPDATE and DELETE (drizzle/0001_workforce_baseline_sql.sql). No append-only
  * trigger and no hash chain — no Spanish statute requires an absence schedule to be tamper-evident
  * (design 2026-07-22 §2.1 / plan 2026-08-02-workforce-d2-scheduling §2.1).
  *
@@ -98,4 +98,4 @@ export const absences = pgTable(
     // An absence ends on or after it starts — a single day is starts_on = ends_on.
     check("absences_range_ck", sql`${t.endsOn} >= ${t.startsOn}`),
   ],
-).enableRLS();
+);

@@ -54,7 +54,7 @@ describe("the public surface", () => {
  * it, which is why a schema file's FK/index/check block shows as uncovered even though every other
  * test imports the table. Calling `getTableConfig` forces the callback to run, and the assertions
  * below are the meaningful check that each table's constraints exist under the names the migration
- * and the RLS policy depend on — not a coverage stunt. Mirrors packages/credentials/src/index.test.ts.
+ * uses — not a coverage stunt. Mirrors packages/credentials/src/index.test.ts.
  * (persons moved to @waitron/identity, which owns its own such block now.)
  */
 describe("employments constraint declarations (forces the lazy extraConfig callback)", () => {

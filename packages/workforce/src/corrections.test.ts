@@ -11,7 +11,7 @@ import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { seedEmployment, seedLocation, seedPerson } from "../test/fixtures.js";
 
 // PGlite, not real Postgres: the request→approve flow, the supervisor gate and reprojection are all
-// LOGIC — no privilege set, no RLS, no concurrency (CLAUDE.md §4, plan §7). The append-only floor
+// LOGIC — no privilege set, no concurrency (CLAUDE.md §4, plan §7). The append-only floor
 // that stops a correction being UPDATE-d is proven as the app role in immutability.test.ts, which
 // covers every row of `time_entries`, corrections included; it is not re-proven here.
 const backend = new WorkforceBackend();

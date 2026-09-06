@@ -33,7 +33,7 @@ export const workforceChains = pgTable(
   // Drizzle stores this extraConfig callback lazily and runs it only when something walks the table's
   // full metadata. Unlike fiscal's `cadenas.ts`, this one IS exercised inside this package's own
   // `vitest run` — index.test.ts calls `getTableConfig(workforceChains)` to assert the composite key,
-  // the foreign keys and the pointer check exist under the names the migration and RLS depend on —
+  // the foreign keys and the pointer check exist under the names the baseline uses —
   // so no `/* v8 ignore */` is needed: the callback runs and is genuinely covered.
   (t) => [
     primaryKey({ columns: [t.tenantId, t.locationId] }),
@@ -44,4 +44,4 @@ export const workforceChains = pgTable(
       sql`(${t.lastEntryId} is null) = (${t.lastEntryHash} is null)`,
     ),
   ],
-).enableRLS();
+);

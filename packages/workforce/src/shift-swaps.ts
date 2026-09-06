@@ -137,7 +137,7 @@ export interface DecideSwapInput {
  * setting `status = decision`, `decided_by_person_id` and `decided_at = now()` and `RETURNING id`
  * (mirrors `setAbsenceStatus`) — one round trip in the common case. When it matches no row the swap is
  * either absent or not decidable, and ONLY THEN a `SELECT` disambiguates: throws `swap.not_found` if
- * absent (never created, or hidden by RLS), else the new `swap.not_decidable` (a `requested` swap has
+ * absent (never created), else the new `swap.not_decidable` (a `requested` swap has
  * not been accepted yet; an `approved`/`rejected` one is terminal). PLANNING data — a plain status
  * flip, no chain. Who MAY decide is the route's gate (`swap.approve`), not this verb's.
  */
@@ -214,7 +214,7 @@ export async function listPendingSwaps(
 }
 
 /** The `person_id` of a shift under the tenant, or `undefined` when no such shift exists (never
- * created, or hidden by RLS — identical from the caller's side). */
+ * created). */
 async function shiftOwner(
   tx: Transaction,
   tenantId: string,

@@ -21,7 +21,7 @@ import { persons } from "@waitron/identity";
  * subtracts from (art. 35.5: overtime = actual − ordinary jornada). MUTABLE — a contract's terms
  * change and an employment ends by setting `end_date`, never by deleting the row (the time history
  * in `time_entries` must keep its referent) — so the app role holds SELECT, INSERT, UPDATE and no
- * DELETE (drizzle/0001_workforce_d1a_rls.sql), the same shape as `persons`.
+ * DELETE (drizzle/0001_workforce_baseline_sql.sql), the same shape as `persons`.
  *
  * No `convenio_ref`: the 2026-08-02 plan §3 listed one, but `convenio` is workforce-es's declared
  * vocabulary, which the English-only guard forbids in this generic package, and it has
@@ -67,4 +67,4 @@ export const employments = pgTable(
     check("employments_contracted_minutes_ck", sql`${t.contractedMinutesPerWeek} >= 0`),
     check("employments_dates_ck", sql`${t.endDate} is null or ${t.endDate} >= ${t.startDate}`),
   ],
-).enableRLS();
+);

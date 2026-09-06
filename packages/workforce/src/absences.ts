@@ -83,7 +83,7 @@ export async function createAbsence(tx: Transaction, input: CreateAbsenceInput):
  * Moves an existing absence to a decided status (`approved`/`rejected`, or back to `requested`) — a
  * plain UPDATE of the status column over PLANNING data, not a workflow: no role gate is imposed here
  * (who may decide an absence is a later owner decision, plan §7). Throws `absence.not_found` if no
- * such absence exists under the tenant (never created, or hidden by RLS).
+ * such absence exists under the tenant (never created).
  */
 export async function setAbsenceStatus(
   tx: Transaction,

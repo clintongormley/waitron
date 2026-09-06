@@ -35,19 +35,6 @@ const PIN = hashPin("1234");
 // layers under WORKFORCE because employments/time_entries FK it. These integration checks prove the
 // combined [core, identity, workforce] stack lands persons correctly under workforce.
 describe("persons, from the identity migration set layered under workforce", () => {
-  it("creates persons with row-level security both enabled and forced", async () => {
-    // relforcerowsecurity is the load-bearing half: ENABLE alone (drizzle's .enableRLS(), identity
-    // migration 0000_identity) leaves the table owner and every superuser exempt, so the tenant
-    // policy would not bind the deployment role. FORCE comes from identity's hand-written
-    // 0001_identity_rls — deleting its FORCE line drops relforcerowsecurity to false and fails this.
-    const result = await suite.db.execute<{
-      relrowsecurity: boolean;
-      relforcerowsecurity: boolean;
-    }>(sql`
-      select relrowsecurity, relforcerowsecurity from pg_class where relname = 'persons'`);
-    expect(result.rows[0]).toEqual({ relrowsecurity: true, relforcerowsecurity: true });
-  });
-
   it("stores a person and defaults role to staff and status to active", async () => {
     await suite.db.execute(sql`
       insert into persons (tenant_id, display_name, pin_hash)

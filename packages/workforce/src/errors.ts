@@ -40,7 +40,7 @@ declare module "@waitron/shared" {
      * `chain.append_contention`'s shape. */
     "attendance.append_contention": { tenantId: string; locationId: string; attempts: number };
     /** A correction was requested against, or an approval named, an entry that does not exist under
-     * the current tenant — never appended, or hidden by RLS (identical from the caller's side).
+     * the current tenant — never appended.
      * `correction.*`, not `attendance.*`: this is a fact about the correction workflow (a
      * missing target of a correct/approve), grepped against the registry — `correction.*` was
      * unused. */
@@ -49,14 +49,12 @@ declare module "@waitron/shared" {
      * supervisor/manager/admin. A correction takes effect only when a supervisor approves it (design
      * §5), so a staff-role approver is refused here rather than silently ignored. */
     "correction.not_permitted": { tenantId: string; personId: string };
-    /** No `shifts` row for this id under the current tenant — never created, or hidden by RLS
-     * (identical from the caller's side). Declared in D2.1 ahead of a consumer; its first thrower is
+    /** No `shifts` row for this id under the current tenant — never created. Declared in D2.1 ahead of a consumer; its first thrower is
      * D2.2's `requestSwap` (../shift-swaps.ts), which rejects a swap naming a `from_shift`/`to_shift`
      * that does not exist under the tenant. `shift.*`, grepped against the whole registry — never
      * `schedule.*` (a shift is the entity, the schedule is the aggregate). */
     "shift.not_found": { tenantId: string; shiftId: string };
-    /** No `roster_versions` row for this id under the current tenant — never created, or hidden by
-     * RLS. Raised by `publishRoster` (../clocking.ts) when asked to publish a version that does not
+    /** No `roster_versions` row for this id under the current tenant — never created. Raised by `publishRoster` (../clocking.ts) when asked to publish a version that does not
      * exist. `roster.*`, grepped against the registry — unused before D2; the prefix groups the three
      * codes `publishRoster` throws (`roster.not_found`, `roster.already_published`,
      * `roster.period_already_published`). The D2.3 guardrail breaches do NOT live here: they are
@@ -102,7 +100,7 @@ declare module "@waitron/shared" {
      * from `correction.target_not_found`, which is no such correction row at all; here the correction
      * EXISTS but is not approvable. `correction.*`, grepped against the registry — never renamed. */
     "correction.not_pending": { tenantId: string; correctionId: string };
-    /** No `absences` row for this id under the current tenant — never created, or hidden by RLS.
+    /** No `absences` row for this id under the current tenant — never created.
      * Raised by `setAbsenceStatus` (../absences.ts) when asked to move a non-existent absence to
      * approved/rejected. `absence.*`, grepped against the whole registry — unused before D2, and the
      * English `absence` term (the Spanish `ausencia` is workforce-es's declared vocabulary, so the
@@ -125,7 +123,7 @@ declare module "@waitron/shared" {
      * `shift.invalid` does. `absence.*`, grepped against the registry (`absence.not_found`,
      * `absence.overlaps`) — never renamed once shipped. */
     "absence.invalid": { tenantId: string; reason: string };
-    /** No `shift_swaps` row for this id under the current tenant — never created, or hidden by RLS.
+    /** No `shift_swaps` row for this id under the current tenant — never created.
      * Raised by `acceptSwap` (../shift-swaps.ts) when asked to accept a swap that does not exist.
      * `swap.*`, grepped against the registry — unused before D2; the entity is the swap (a shift is
      * `shift.*`, a person `person.*`). */
