@@ -8,6 +8,12 @@ import { IDENTITY_MIGRATIONS } from "../migrations.js";
  * The passkey redemption race needs independent PostgreSQL backends. One migrated template is
  * shared by the package; returning teardown stops its container after the workers finish.
  * Global setup precedes all workers, so Docker is also required for PGlite-only selections.
+ *
+ * The template migrates CORE then IDENTITY: identity's schema builds on core, and nothing enforces
+ * that order across packages, so it is explicit in the array below.
+ *
+ * The probe login is declared here rather than per suite because roles are cluster-global — the
+ * shared container is one cluster, so a per-file `CREATE ROLE` would fail `role … already exists`.
  */
 export default async function ({ provide }: GlobalSetupContext) {
   const { handle, teardown } = await startSharedContainer({

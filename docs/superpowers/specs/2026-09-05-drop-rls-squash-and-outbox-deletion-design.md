@@ -50,6 +50,13 @@ settlement, a void, a substitution, a daily close, an order amendment or a clock
 ever depended on RLS: the prototype's `permission denied` for `waitron_app` on `registros_facturacion`
 came from the grants alone).
 
+**Deviation (2026-09-06, step 1 as landed).** `withTenant` does not assert the single tenant at
+runtime — it keeps `tenantId` as an explicit write-path parameter but reads no tenant at boot and
+throws no `tenancy.wrong_tenant`. 61 suites seed more than one tenant for reasons unrelated to
+isolation, so a runtime one-tenant assertion would break them; the one-tenant property is enforced
+where tenants are created (the provisioner) and by `app_user` holding no INSERT on `tenants`, pinned
+by the privilege matrix.
+
 **Gone.** All 95 policies and 190 `ENABLE`/`FORCE` switches; `current_tenant_id()`; the
 `sync_log` / `sync_cursor` / `sync_peers` / `sync_config_conflicts` tables, `sync_capture()` and
 every capture trigger, and the `app.sync_apply`-gated variants of the `0037` triggers (they become

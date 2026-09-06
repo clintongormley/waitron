@@ -75,7 +75,9 @@ migration connection and use `app_user` membership for the day-to-day pool.
 ### `DATABASE_URL` — the deployment role, always
 
 Make this login a member of `app_user`, the NOLOGIN role that receives the migrations' table
-grants. The application login inherits those grants:
+grants — and nothing more: `app_user` cannot update or delete a fiscal record, a sale or a tender,
+because the grants and triggers say so and `privileges.test.ts` pins it. The application login
+inherits those grants:
 
 ```sql
 create role waitron_app login password '<secret>' in role app_user;

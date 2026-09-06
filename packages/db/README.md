@@ -53,7 +53,10 @@ references between tenants.
 Keep `out: "./drizzle"` in `drizzle.config.ts` as a **single string**, not an array. One config
 produces one folder and one journal; each package that owns tables has its own config and journal.
 
-The generated snapshot covers the schema barrel. Custom SQL stays outside that snapshot, so you
-must maintain it when changing a constraint, trigger or table that Drizzle does not generate.
+The generated snapshot covers the schema barrel. Triggers, grants and the append-only triggers'
+`ENABLE ALWAYS` state are hand-written into the `…_baseline_sql` custom migration; they survive
+later `generate` runs because drizzle-kit diffs against its own snapshot, which has no concept of
+them, so you maintain them by hand when changing a constraint, trigger or table Drizzle does not
+generate.
 `runMigrations` requires the module's journal table name; core uses `__drizzle_migrations_db`.
 The caller orders migration sets from different modules.

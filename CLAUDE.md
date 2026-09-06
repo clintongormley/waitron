@@ -220,14 +220,12 @@ unfiltered `main` run, not a wrong hook.
   subquery: check base-vs-join and READ the emitted SQL with `.toSQL()`.
 - **Never widen a grant to make a test pass.** `app_user` holds `SELECT` on `tenants` and not `INSERT`
   deliberately.
-- **A new `tenant_id`-bearing table needs FORCE RLS + a tenant-isolation policy + grants; Drizzle's
-  `.enableRLS()` gives only `ENABLE`.** The rest is a hand-written custom migration, the way
-  `0001_tenancy_rls.sql` does it. ENABLE with no policy denies the app role everything; no FORCE lets
-  the owner bypass. **The guard lives in another package:** `packages/fiscal-verifactu`'s
-  `inmutabilidad` suite scans every table carrying a `tenant_id` column — run
-  `pnpm --filter @waitron/fiscal-verifactu test inmutabilidad` after adding one anywhere (`nodes`
-  shipped without FORCE and its own package's suite was green). _Removing FORCE RLS altogether is a
-  pending owner decision — `docs/backlog.md`, design review 2026-09-05._
+- **A new table is classified `ledger`, `state` or `local` (swap design §2.1), and an append-only
+  table's `reject_mutation()` triggers are `ENABLE ALWAYS`** — the replication apply worker skips
+  ordinary triggers, and a copy of a corrupted row is exactly what those triggers exist to refuse.
+  No policies, no `ROW LEVEL SECURITY`: one tenant per database (owner decision 2026-09-05). The
+  guard is `packages/fiscal-verifactu`'s `inmutabilidad` suite (the trigger scan; the
+  classification guard arrives with step 2 of the chain) — run it after adding any table anywhere.
 - **A module/migration dependency graph has TWO kinds of cross-set edge**: FK `REFERENCES` and
   `CREATE [CONSTRAINT] TRIGGER … ON <table>`. `sync` enrols other modules' tables by installing capture
   triggers on them, so it depends on `identity` and `payments` with no FK between them; SP-1c's first
@@ -262,19 +260,21 @@ unfiltered `main` run, not a wrong hook.
 - **A drizzle migration-number collision on rebase is fixed by regeneration, never by hand-editing
   the snapshots or `_journal.json`.** At the paused rebase, reset the migrations dir to main's exact state
   (`git checkout origin/main -- packages/db/drizzle/`; keep the branch's `src/schema/*.ts`), then
-  `pnpm --filter @waitron/db db:generate --name <foo>` (and `db:generate:custom --name <foo>_rls`,
-  pasting back the RLS SQL you saved first), stage only your migrations, `rebase --continue`, and
-  verify by RUNNING the package's RLS suite plus `inmutabilidad`. Works because the snapshot chain
-  deliberately lags the DB (custom migrations are snapshot-less). Paid for on #165.
+  `pnpm --filter @waitron/db db:generate --name <foo>` (and `db:generate:custom --name <foo>_sql`,
+  pasting back the triggers and grants you saved first), stage only your migrations,
+  `rebase --continue`, and verify by RUNNING the package's grant assertions and `privileges.test.ts`
+  plus `inmutabilidad`. Works because the snapshot chain deliberately lags the DB (custom migrations
+  are snapshot-less). Paid for on #165.
 
 ---
 
 ## 4. Testing
 
 - **Two targets.** **PGlite** (`createPgliteDb` + `runMigrations`) is hermetic and fast, but every
-  connection is a superuser (RLS bypassed) and every query serialises onto one backend, so a
-  contention test on PGlite is a **false pass**. **Real Postgres** via Testcontainers is required for
-  anything about privileges, RLS as the deployment role, or concurrency; `describeEachTarget`
+  connection is a superuser (grants are not enforced; triggers still fire) and every query serialises
+  onto one backend, so a contention test on PGlite is a **false pass**. **Real Postgres** via
+  Testcontainers is required for anything about privileges, triggers as the deployment role, or
+  concurrency; `describeEachTarget`
   (`packages/db/src/testing/harness.ts`) runs a suite against both. Pick the lighter one when the
   heavier one's justification does not apply, and say why in a comment.
 - **`TESTCONTAINERS_RYUK_DISABLED=true` is required locally**, or container suites hang until the
