@@ -376,7 +376,7 @@ async function mirror(): Promise<{
       taxModule: "iva",
       modules: ALL_MODULES,
       reserved: {
-        modules: { fiscal: { nif, idSistemaInformatico: "W1", numeroInstalacion: 7 } },
+        modules: { "fiscal-verifactu": { nif, idSistemaInformatico: "W1", numeroInstalacion: 7 } },
         series: [{ code: "FA-7", purpose: "standard" }],
         endorsement,
       },

@@ -21,7 +21,7 @@ describe("ALL_MODULES is the migration source of truth", () => {
 
 describe("ALL_MODULES backup contribution", () => {
   it("fiscal declares its restore hook, by reference", () => {
-    const fiscal = ALL_MODULES.find((m) => m.name === "fiscal")!;
+    const fiscal = ALL_MODULES.find((m) => m.name === "fiscal-verifactu")!;
     expect(FISCAL_RESTORE).toBeTypeOf("function");
     expect(fiscal.backup?.restore).toBe(FISCAL_RESTORE);
   });
@@ -38,7 +38,7 @@ describe("ALL_MODULES backup contribution", () => {
 
 describe("ALL_MODULES vocabulary seat", () => {
   it("fiscal declares the fiscal module's own vocabulary, by reference", () => {
-    const fiscal = ALL_MODULES.find((m) => m.name === "fiscal");
+    const fiscal = ALL_MODULES.find((m) => m.name === "fiscal-verifactu");
     expect(fiscal?.vocabulary).toBe(FISCAL_VOCABULARY);
   });
   it("workforce-es declares the Spain labour module's own vocabulary, by reference", () => {
@@ -49,13 +49,13 @@ describe("ALL_MODULES vocabulary seat", () => {
 
 describe("ALL_MODULES provisioning and fiscal seats", () => {
   it("fiscal declares its provisioning contribution and fills the fiscal slot, by reference", () => {
-    const fiscal = ALL_MODULES.find((m) => m.name === "fiscal");
+    const fiscal = ALL_MODULES.find((m) => m.name === "fiscal-verifactu");
     expect(fiscal?.provisioning).toBe(FISCAL_PROVISIONING);
     expect(fiscal?.fiscal).toBe(FISCAL_SLOT);
   });
   it("exactly one module fills the fiscal slot", () => {
     expect(ALL_MODULES.filter((m) => m.fiscal !== undefined).map((m) => m.name)).toEqual([
-      "fiscal",
+      "fiscal-verifactu",
     ]);
   });
 });

@@ -1028,10 +1028,10 @@ describe("startServer, against a real container as the deployment role", () => {
 
   it("refuses a trading boot whose enabled set fills no fiscal slot (fiscal off) — module.fiscal_slot_empty", async () => {
     // SP-3c: the till's fiscal backend comes from whichever ENABLED module fills the `fiscal` seat
-    // (boot.ts's `makeFiscalBackend(setsToMigrate, …)` → `fiscalSlot`). Disabling `fiscal` in
-    // modules.json leaves the enabled set with no contributor, and a trading boot must REFUSE rather
+    // (boot.ts's `makeFiscalBackend(setsToMigrate, …)` → `fiscalSlot`). Disabling `fiscal-verifactu`
+    // in modules.json leaves the enabled set with no contributor, and a trading boot must REFUSE rather
     // than mount the till routes with no way to chain a sale (§5 — a sale needs its record).
-    // `fiscal` is `provision-only`, and nothing `requires` it, so the enabled set stays
+    // `fiscal-verifactu` is `provision-only`, and nothing `requires` it, so the enabled set stays
     // dependency-complete: the refusal that fires is the slot's, not SP-1c's.
     //
     // The shared suite DB (already migrated + seeded) is enough, exactly as the drift-log case above:
@@ -1043,7 +1043,7 @@ describe("startServer, against a real container as the deployment role", () => {
     try {
       await writeFile(
         join(stateDir, "modules.json"),
-        JSON.stringify({ modules: { fiscal: false } }),
+        JSON.stringify({ modules: { "fiscal-verifactu": false } }),
       );
       await expect(
         startServer({

@@ -32,7 +32,9 @@ const SAMPLE_BUNDLE: MirrorBundle = {
   relayUrl: "https://relay.example/abc",
   syncToken: "plaintext-sync-token",
   reservedIdentity: {
-    modules: { fiscal: { nif: "B00000000", idSistemaInformatico: "W1", numeroInstalacion: 7 } },
+    modules: {
+      "fiscal-verifactu": { nif: "B00000000", idSistemaInformatico: "W1", numeroInstalacion: 7 },
+    },
     series: [{ code: "A-7", purpose: "standard" }],
     endorsement: {
       nodeId: "55555555-5555-5555-5555-555555555555",

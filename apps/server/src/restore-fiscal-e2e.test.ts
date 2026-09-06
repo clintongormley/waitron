@@ -468,7 +468,7 @@ describe("fiscal restore (real Postgres, end to end)", () => {
     // The real fiscal hook runs, then its outcome is replaced by a code the node already holds — the
     // orchestrator's insert collides after the retire, and the whole transaction (SIF included) must roll back.
     const sabotaged: WaitronModule[] = ALL_MODULES.map((m) =>
-      m.name === "fiscal"
+      m.name === "fiscal-verifactu"
         ? {
             ...m,
             backup: {
@@ -487,7 +487,7 @@ describe("fiscal restore (real Postgres, end to end)", () => {
     const validated = await validateArtifact(rd);
     await expect(writeValidated(validated, { ...rd, modules: sabotaged })).rejects.toMatchObject({
       code: "restore.hook_failed",
-      params: { module: "fiscal", code: "series.code_collision" },
+      params: { module: "fiscal-verifactu", code: "series.code_collision" },
     });
     const db = await createPostgresDb(target);
     try {

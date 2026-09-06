@@ -469,7 +469,9 @@ describe("restore hooks (identity phase)", () => {
       await tx.execute(sql`insert into invoice_series (tenant_id, node_id, code, purpose)
         values (${T.tenantId}, ${T.nodeId}, 'FA-1', 'rectificative')`);
     });
-    await restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ fiscal: FISCAL_RESTORE }) }));
+    await restoreFromArtifact(
+      makeRestoreDeps({ modules: withHooks({ "fiscal-verifactu": FISCAL_RESTORE }) }),
+    );
     const sif = await withTenant(suite.db, brandTenantId(T.tenantId), (tx) =>
       currentSif(tx, brandTenantId(T.tenantId), brandNodeId(T.nodeId)),
     );
@@ -492,7 +494,7 @@ describe("restore hooks (identity phase)", () => {
     const deps = makeRestoreDeps({
       artifact: buildArtifact(entries),
       modules: withHooks({
-        fiscal: async () => ({
+        "fiscal-verifactu": async () => ({
           report: "ok",
           series: [{ code: "FA-9", purpose: "standard" }],
         }),
@@ -562,7 +564,7 @@ describe("restore hooks (identity phase)", () => {
     await restoreFromArtifact(
       makeRestoreDeps({
         migrate,
-        modules: withHooks({ fiscal: hook }),
+        modules: withHooks({ "fiscal-verifactu": hook }),
         runRestore: vi.fn(async () => {
           order.push("pg_restore");
         }),
@@ -580,7 +582,7 @@ describe("restore hooks (identity phase)", () => {
       makeRestoreDeps({
         skipSecrets: true,
         artifact: buildArtifact(noIdentity),
-        modules: withHooks({ fiscal: hook }),
+        modules: withHooks({ "fiscal-verifactu": hook }),
       }),
     );
     expect(hook).not.toHaveBeenCalled();
@@ -597,7 +599,9 @@ describe("restore hooks (identity phase)", () => {
       }),
     );
     const hook = vi.fn(async () => ({ report: "ok" }));
-    await restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ fiscal: hook }) }));
+    await restoreFromArtifact(
+      makeRestoreDeps({ modules: withHooks({ "fiscal-verifactu": hook }) }),
+    );
     expect(hook).toHaveBeenCalledWith(expect.anything(), {
       tenantId: T.tenantId,
       locationId: T.locationId,
@@ -624,10 +628,12 @@ describe("restore hooks (identity phase)", () => {
       throw new AppError("restore.unexpected_entry", { name: "boom" });
     };
     await expect(
-      restoreFromArtifact(makeRestoreDeps({ runRestore, modules: withHooks({ fiscal: boom }) })),
+      restoreFromArtifact(
+        makeRestoreDeps({ runRestore, modules: withHooks({ "fiscal-verifactu": boom }) }),
+      ),
     ).rejects.toMatchObject({
       code: "restore.hook_failed",
-      params: { module: "fiscal", code: "restore.unexpected_entry" },
+      params: { module: "fiscal-verifactu", code: "restore.unexpected_entry" },
     });
     expect(goneWhenRestoreRan).toBe(true); // set aside before the first irreversible step
     await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
@@ -649,7 +655,9 @@ describe("restore hooks (identity phase)", () => {
       report: "ok",
       series: [{ code: "FA-9", purpose: "standard" }],
     });
-    await restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ fiscal: hook }) }));
+    await restoreFromArtifact(
+      makeRestoreDeps({ modules: withHooks({ "fiscal-verifactu": hook }) }),
+    );
     const rows = await suite.db.execute<{ code: string; retired: boolean; next: number }>(
       sql`select code, retired_at is not null as retired, next_number as next from invoice_series where node_id = ${T.nodeId} order by code`,
     );
@@ -668,7 +676,9 @@ describe("restore hooks (identity phase)", () => {
 
   it("no series returned → the node must still hold one live standard series, and trading.env is byte-identical", async () => {
     await restoreFromArtifact(
-      makeRestoreDeps({ modules: withHooks({ fiscal: async () => ({ report: "ok" }) }) }),
+      makeRestoreDeps({
+        modules: withHooks({ "fiscal-verifactu": async () => ({ report: "ok" }) }),
+      }),
     );
     expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV);
     // The restored node has NO live standard series (retired in the backup) → refuse, no identity written.
@@ -720,7 +730,7 @@ describe("restore hooks (identity phase)", () => {
       ],
     });
     await expect(
-      restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ fiscal: hook }) })),
+      restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ "fiscal-verifactu": hook }) })),
     ).rejects.toThrow(/more than one standard series/);
     const rows = await suite.db.execute<{ code: string; retired: boolean }>(
       sql`select code, retired_at is not null as retired from invoice_series where node_id = ${T.nodeId} order by code`,
@@ -737,10 +747,10 @@ describe("restore hooks (identity phase)", () => {
       series: [{ code: "FA", purpose: "standard" }],
     });
     await expect(
-      restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ fiscal: hook }) })),
+      restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ "fiscal-verifactu": hook }) })),
     ).rejects.toMatchObject({
       code: "restore.hook_failed",
-      params: { module: "fiscal", code: "series.code_collision" },
+      params: { module: "fiscal-verifactu", code: "series.code_collision" },
     });
     const rows = await suite.db.execute<{ code: string; retired: boolean }>(
       sql`select code, retired_at is not null as retired from invoice_series where node_id = ${T.nodeId}`,
@@ -760,17 +770,19 @@ describe("restore hooks (identity phase)", () => {
       series: [{ code: "FA-2", purpose: "standard" }],
     });
     await expect(
-      restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ core: a, fiscal: b }) })),
+      restoreFromArtifact(
+        makeRestoreDeps({ modules: withHooks({ core: a, "fiscal-verifactu": b }) }),
+      ),
     ).rejects.toMatchObject({
       code: "restore.series_conflict",
-      params: { modules: "core,fiscal" },
+      params: { modules: "core,fiscal-verifactu" },
     });
     const empty: RestoreHook = async () => ({ report: "a", series: [] });
     await expect(
-      restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ fiscal: empty }) })),
+      restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ "fiscal-verifactu": empty }) })),
     ).rejects.toMatchObject({
       code: "restore.hook_failed",
-      params: { module: "fiscal", code: "series.no_standard_for_node" },
+      params: { module: "fiscal-verifactu", code: "series.no_standard_for_node" },
     });
   });
 

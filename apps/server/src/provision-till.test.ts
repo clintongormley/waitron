@@ -93,7 +93,7 @@ describe("provisioning a node that has no SIF registration yet", () => {
     const { tenantId, nodeId, nif } = await bootstrapTenant();
 
     const seeded = await provisionNode(suite.db, { tenantId, nodeId }, ALL_MODULES);
-    expect(seeded.map((s) => s.module)).toEqual(["fiscal"]);
+    expect(seeded.map((s) => s.module)).toEqual(["fiscal-verifactu"]);
     expect(seeded[0]!.report).toMatch(/^SIF .* \(installation 1\)$/);
 
     // The row `currentSif` would read back — the thing `recordSale` was missing.

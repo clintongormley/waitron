@@ -105,7 +105,10 @@ function makeVenueResult(): VenueResult {
     nodeId: NODE_ID,
     seriesIds: [SERIES_ID_0, SERIES_ID_1],
     seeded: [
-      { module: "fiscal", report: "SIF 55555555-5555-5555-5555-555555555555 (installation 1)" },
+      {
+        module: "fiscal-verifactu",
+        report: "SIF 55555555-5555-5555-5555-555555555555 (installation 1)",
+      },
     ],
   };
 }
@@ -647,7 +650,7 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
   it("maps a thrown module.provision_only_disabled to 409 (SP-1b fiscal gate)", async () => {
     const app = new Hono();
     const provision = vi.fn(async () => {
-      throw new AppError("module.provision_only_disabled", { module: "fiscal" });
+      throw new AppError("module.provision_only_disabled", { module: "fiscal-verifactu" });
     });
     const { deps } = makeDeps({ provision });
     mountSetup(app, deps, noopLog);

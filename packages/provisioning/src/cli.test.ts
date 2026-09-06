@@ -24,7 +24,10 @@ const VENUE_RESULT = {
   nodeId: "44444444-4444-4444-4444-444444444444",
   seriesIds: ["66666666-6666-6666-6666-666666666666", "77777777-7777-7777-7777-777777777777"],
   seeded: [
-    { module: "fiscal", report: "SIF 55555555-5555-5555-5555-555555555555 (installation 1)" },
+    {
+      module: "fiscal-verifactu",
+      report: "SIF 55555555-5555-5555-5555-555555555555 (installation 1)",
+    },
   ],
 } as unknown as VenueResult;
 
@@ -1090,7 +1093,7 @@ describe("runCli venue", () => {
     // The result summary names the node and one line per module seed the apply ran.
     expect(printed).toContain(`node:     ${VENUE_RESULT.nodeId}`);
     expect(printed).toContain(
-      "seeded:   fiscal — SIF 55555555-5555-5555-5555-555555555555 (installation 1)",
+      "seeded:   fiscal-verifactu — SIF 55555555-5555-5555-5555-555555555555 (installation 1)",
     );
 
     // No secret anywhere: the admin connection string is never echoed, the admin PIN never appears,

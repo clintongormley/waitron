@@ -118,12 +118,12 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     migrations: { name: "sync", table: "__drizzle_migrations_sync", from: "../sync/drizzle" },
   },
   {
-    name: "fiscal",
+    name: "fiscal-verifactu",
     version: "0.0.0",
     tier: "provision-only",
     requires: { core: "*", modules: { sync: "*" } },
     migrations: {
-      name: "fiscal",
+      name: "fiscal-verifactu",
       table: "__drizzle_migrations_fiscal",
       from: "../fiscal-verifactu/drizzle",
     },

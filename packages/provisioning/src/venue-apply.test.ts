@@ -94,7 +94,10 @@ describe("applyVenue", () => {
     expect(sif.rows[0]?.nif).toBe("B12345678");
     expect(sif.rows[0]?.numero_instalacion).toBeGreaterThanOrEqual(1);
     expect(result.seeded).toEqual([
-      { module: "fiscal", report: expect.stringMatching(/^SIF .* \(installation \d+\)$/) },
+      {
+        module: "fiscal-verifactu",
+        report: expect.stringMatching(/^SIF .* \(installation \d+\)$/),
+      },
     ]);
   });
 
@@ -339,7 +342,7 @@ describe("applyVenue", () => {
       },
       { kind: "create-till", name: "Caja 1" },
       { kind: "create-node", name: "Mostrador", filingModule: "verifactu", taxModule: "iva" },
-      { kind: "seed-module", module: "fiscal", summary: "s" },
+      { kind: "seed-module", module: "fiscal-verifactu", summary: "s" },
       { kind: "create-series", code: "A", purpose: "standard" },
       { kind: "create-series", code: "A", purpose: "rectificative" }, // same code ⇒ dropped
     ];
@@ -377,7 +380,7 @@ describe("applyVenue", () => {
         dayCutover: "06:00:00",
       },
       { kind: "create-node", name: "Mostrador", filingModule: "verifactu", taxModule: "iva" },
-      { kind: "seed-module", module: "fiscal", summary: "s" },
+      { kind: "seed-module", module: "fiscal-verifactu", summary: "s" },
       { kind: "create-series", code: "A", purpose: "standard" },
     ];
 
@@ -452,7 +455,7 @@ describe("applyVenue", () => {
         plan: [
           ensure,
           createLocation,
-          { kind: "seed-module", module: "fiscal", summary: "s" } as VenueAction,
+          { kind: "seed-module", module: "fiscal-verifactu", summary: "s" } as VenueAction,
         ],
         message: "applyVenue: seed-module before create-node",
       },
@@ -505,7 +508,7 @@ describe("applyVenue", () => {
         modules,
       });
       expect(seeded).toContain(result.nodeId);
-      expect(result.seeded.map((s) => s.module)).toEqual(["fiscal", "probe"]);
+      expect(result.seeded.map((s) => s.module)).toEqual(["fiscal-verifactu", "probe"]);
       expect(result.seeded[1]).toEqual({ module: "probe", report: `recorded ${result.nodeId}` });
     });
 

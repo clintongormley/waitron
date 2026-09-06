@@ -448,14 +448,18 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
     const bundle = (await res.json()) as {
       reservedIdentity: {
         modules: {
-          fiscal: { nif: string; idSistemaInformatico: string; numeroInstalacion: number };
+          "fiscal-verifactu": {
+            nif: string;
+            idSistemaInformatico: string;
+            numeroInstalacion: number;
+          };
         };
         series: { code: string; purpose: string }[];
         endorsement: { nodeId: string; publicKey: string; endorsedBy: string; signature: string };
       };
     };
     const r = bundle.reservedIdentity;
-    const fiscal = r.modules.fiscal;
+    const fiscal = r.modules["fiscal-verifactu"];
     // A fresh installation number the primary reserved (past its own — applyVenue's registerSif took 1).
     expect(fiscal.numeroInstalacion).toBeGreaterThan(0);
     expect(typeof fiscal.nif).toBe("string");

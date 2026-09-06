@@ -19,7 +19,7 @@ const PROVISIONED: InstanceState = {
       memberOf: ["app_user"],
     },
   },
-  inside: { migratedSets: ["core", "fiscal"], stamp: "preproduction" },
+  inside: { migratedSets: ["core", "fiscal-verifactu"], stamp: "preproduction" },
 };
 
 describe("formatStatus", () => {

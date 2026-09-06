@@ -424,7 +424,7 @@ async function seedMirrorIdentity(
       modules: ALL_MODULES,
       reserved: {
         modules: {
-          fiscal: {
+          "fiscal-verifactu": {
             nif,
             idSistemaInformatico: "W1",
             numeroInstalacion: MIRROR_NUMERO_INSTALACION,

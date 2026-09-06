@@ -64,7 +64,9 @@ describe("establishReservedStandbyIdentity", () => {
         taxModule: "iva",
         modules: ALL_MODULES,
         reserved: {
-          modules: { fiscal: { nif: NIF, idSistemaInformatico: "W1", numeroInstalacion: 7 } },
+          modules: {
+            "fiscal-verifactu": { nif: NIF, idSistemaInformatico: "W1", numeroInstalacion: 7 },
+          },
           series: [{ code: "FA-7", purpose: "standard" }],
           endorsement: { ...ENDORSEMENT, nodeId: standby.nodeId, publicKey: standby.publicKey },
         },
@@ -108,7 +110,9 @@ describe("establishReservedStandbyIdentity", () => {
         ...base,
         standby: first,
         reserved: {
-          modules: { fiscal: { nif: NIF, idSistemaInformatico: "W1", numeroInstalacion: 1 } },
+          modules: {
+            "fiscal-verifactu": { nif: NIF, idSistemaInformatico: "W1", numeroInstalacion: 1 },
+          },
           series: [],
           endorsement: { ...ENDORSEMENT },
         },
@@ -121,7 +125,9 @@ describe("establishReservedStandbyIdentity", () => {
         ...base,
         standby: second,
         reserved: {
-          modules: { fiscal: { nif: NIF, idSistemaInformatico: "W1", numeroInstalacion: 2 } },
+          modules: {
+            "fiscal-verifactu": { nif: NIF, idSistemaInformatico: "W1", numeroInstalacion: 2 },
+          },
           series: [],
           endorsement: { ...ENDORSEMENT },
         },

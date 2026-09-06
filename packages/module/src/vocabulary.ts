@@ -2,7 +2,7 @@ import { packageDirOf, type WaitronModule } from "./module.js";
 
 /** A module that declares a `vocabulary` seat, resolved to the package that owns those terms. */
 export interface VocabularyOwner {
-  /** The descriptor's name — the SLOT for a swappable module (`fiscal`), not the package. */
+  /** The descriptor's name — the SLOT a swappable module fills, which need not equal its package. */
   readonly module: string;
   /** `packages/<packageDir>`, derived from `migrations.from` (`packageDirOf`). */
   readonly packageDir: string;

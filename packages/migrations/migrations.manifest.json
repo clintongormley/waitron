@@ -36,7 +36,7 @@
     "from": "../sync/drizzle"
   },
   {
-    "name": "fiscal",
+    "name": "fiscal-verifactu",
     "table": "__drizzle_migrations_fiscal",
     "from": "../fiscal-verifactu/drizzle"
   }

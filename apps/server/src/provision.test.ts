@@ -105,7 +105,7 @@ describe("provisionVenue", () => {
       expect((id as string).length).toBeGreaterThan(0);
     }
     expect(result.seriesIds).toHaveLength(2);
-    expect(result.seeded.map((s) => s.module)).toEqual(["fiscal"]);
+    expect(result.seeded.map((s) => s.module)).toEqual(["fiscal-verifactu"]);
 
     // The box is now stamped for the requested environment.
     expect(await readDeploymentEnvironment(db)).toBe("preproduction");
@@ -115,13 +115,13 @@ describe("provisionVenue", () => {
   });
 
   it("refuses venue provisioning when a provision-only module is disabled — before minting anything", async () => {
-    // The SP-1b fiscal gate (spec §4): disabling the `fiscal` (provision-only) module must REFUSE
+    // The SP-1b fiscal gate (spec §4): disabling the `fiscal-verifactu` (provision-only) module must REFUSE
     // provisioning outright — never mint an unrecoverable SIF/hash chain for a module that is off
     // (CLAUDE.md §5). The guard is step 0, before planVenue/stampDeployment/applyVenue, so nothing is
     // validated, stamped or minted. Proven by an `ownerDb` Proxy that THROWS on ANY property access:
     // if the guard short-circuits first, the DB is never touched, so a `module.provision_only_disabled`
     // throw (rather than "ownerDb must not be touched") is the proof.
-    const moduleConfig = parseModuleConfig({ modules: { fiscal: false } }, ALL_MODULES);
+    const moduleConfig = parseModuleConfig({ modules: { "fiscal-verifactu": false } }, ALL_MODULES);
     const ownerDb = new Proxy(
       {},
       {

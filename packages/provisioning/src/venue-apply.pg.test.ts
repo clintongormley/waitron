@@ -109,7 +109,10 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
     });
     // The fiscal module's seed ran inside the venue transaction and reported its SIF line.
     expect(result.seeded).toEqual([
-      { module: "fiscal", report: expect.stringMatching(/^SIF .* \(installation \d+\)$/) },
+      {
+        module: "fiscal-verifactu",
+        report: expect.stringMatching(/^SIF .* \(installation \d+\)$/),
+      },
     ]);
 
     // Read the committed venue back in one transaction with explicit tenant and node predicates.

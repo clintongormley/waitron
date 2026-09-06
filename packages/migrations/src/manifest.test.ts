@@ -27,7 +27,7 @@ describe("the migration manifest", () => {
       identity: IDENTITY_MIGRATIONS.migrationsTable,
       workforce: WORKFORCE_MIGRATIONS.migrationsTable,
       "workforce-es": WORKFORCE_ES_MIGRATIONS.migrationsTable,
-      fiscal: FISCAL_MIGRATIONS.migrationsTable,
+      "fiscal-verifactu": FISCAL_MIGRATIONS.migrationsTable,
       payments: PAYMENTS_MIGRATIONS.migrationsTable,
       scheduler: SCHEDULER_MIGRATIONS.migrationsTable,
       credentials: CREDENTIALS_MIGRATIONS.migrationsTable,
