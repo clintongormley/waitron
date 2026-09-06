@@ -1272,13 +1272,14 @@ vs gated on an unbuilt foundation or an external dependency:
   (cross-cutting — adopt/provision share `writeFileAtomic`, cross-platform fsync care needed) or resolving the
   series at boot. **H2 (fiscal-record sync to mirrors)** independent. **Carry-ins (unchanged):** the primary
   burns an installation número per bundle-**fetch** (spec §7 gaps-permitted, admin-authed); the idempotency
-  guard assumes provision/adopt are mutually exclusive per box (true today). **Two new deferrals from R3a:** (i) **till-side read routing** — the till/KDS node-scoped reads
-  (`listHeldOrders`/`listStationQueue`/`listExpoQueue`) still filter `working_orders`/`ticket_items` by the OWN id, so
-  they'd return empty on a mirror; unreachable today (the read-only gate 403s till login, guarded by a test), but the
-  till-reroute slice that gives tills access to a promoted mirror MUST route these through the display-data node
-  first — and MUST gate selling on REBOOT COMPLETION (the corrected series in effect), not on the PONR commit,
-  since a promoted-not-yet-rebooted box briefly opens writes in-process under the stale series (see R3b's
-  power-loss carry-in above). (ii) **richer daily close** — a single close run by the primary across all tills, grouped by till + a venue
+  guard assumes provision/adopt are mutually exclusive per box (true today). **Two new deferrals from R3a:** (i) **till-side read routing —
+  READ-ROUTING HALF RESOLVED by till-reroute S3 (venue-wide till reads, this branch):** the till/KDS reads
+  (`listHeldOrders`/`listStationQueue`/`listExpoQueue` and the by-id `getHeldOrder`/`updateHeldOrder`/`abandonHeldOrder` family) are now
+  VENUE-WIDE — scoped to the tenant, never the OWN node id (till-reroute §3.6), so a promoted node serves the open tabs it inherited
+  instead of returning empty. That replaces the originally-planned "route these through the display-data node first" with the opposite
+  approach (drop the node filter, keep the tenant one). **STILL OPEN (selling-gate half):** selling MUST gate on REBOOT COMPLETION
+  (the corrected series in effect), not on the PONR commit, since a promoted-not-yet-rebooted box briefly opens writes in-process under
+  the stale series (see R3b's power-loss carry-in above); S3 does not address this. (ii) **richer daily close** — a single close run by the primary across all tills, grouped by till + a venue
   total (its own slice; fiscal nuance: cash-up is per-till drawer, VAT is per-NIF). Slice 6 (rejoin) and Slice 7 (conflict surface) follow the arc. **Owner directive
   (2026-09-03): stop deferring work because it touches fiscal code** — H2 / reserved-SIF / promotion are
   in the build sequence now, no longer "owner-gated / never land unattended" (correctness rigor on the

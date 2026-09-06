@@ -2487,8 +2487,8 @@ export interface HeldOrder {
 }
 
 /**
- * List this node's open parked orders, ordered by order number. Aggregate stored
- * gross line totals and line counts, retaining orders with no lines.
+ * List the venue's open parked orders (venue-wide, till-reroute §3.6 — not node-scoped), ordered by
+ * order number. Aggregate stored gross line totals and line counts, retaining orders with no lines.
  */
 export async function listHeldOrders(
   deps: WorkingOrderDeps,
@@ -3182,7 +3182,8 @@ export interface StationQueueGroup {
 }
 
 /**
- * The per-station kitchen queue (KDS-1 §3c) — this node's ticket items AT `stationId`, joined to their
+ * The per-station kitchen queue (KDS-1 §3c) — the venue's ticket items AT `stationId` (venue-wide,
+ * till-reroute §3.6 — not node-scoped, so a promoted node keeps serving the tabs it inherited), joined to their
  * working order for the display fields and GROUPED BY ORDER (each group = one order's lines at this
  * station), oldest order first. The per-line/per-station successor to #63's order-level `listPrepQueue`,
  * over `ticket_items` rather than `order_prep`.
@@ -3587,7 +3588,7 @@ export interface ExpoOrder {
 }
 
 /**
- * The cross-station expo/pass read (KDS-3 §3a) — every OPEN order on this node with at least one
+ * The cross-station expo/pass read (KDS-3 §3a) — every OPEN order in the venue with at least one
  * not-yet-away item, its `ticket_items` gathered ACROSS all stations and grouped by course, so the
  * expediter sees a whole order's coursing at once. The counterpart to KDS-1's per-station
  * `listStationQueue`, which filters to ONE station and never needs the station's name; this joins
@@ -3598,7 +3599,7 @@ export interface ExpoOrder {
  *  - `abandoned` orders (`ne(status,"abandoned")`) and COLLECTED orders (`collected_at IS NULL`), the
  *    same two `listStationQueue` drops;
  *  - FULLY-AWAY orders — an order leaves the pass once the expediter has dispatched every course (every
- *    item carries `away_at`). Expressed as an EXISTS of one still-not-away item on this node (§2a: `away`
+ *    item carries `away_at`). Expressed as an EXISTS of one still-not-away item in the venue (§2a: `away`
  *    is the KDS-3 dispatch marker; the waiter's `served_at` is a separate floor ack, not consulted here),
  *    so the order stays while ANY item is undispatched and drops the instant the last one goes away. Done
  *    in SQL rather than post-grouping so a venue's fully-dispatched orders are never hauled into memory.
