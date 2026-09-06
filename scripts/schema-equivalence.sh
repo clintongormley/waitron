@@ -116,10 +116,9 @@ import re, sys
 
 out, gate_new = sys.argv[1], sys.argv[2] == "1"
 
-# The seven helper roles the design deletes. §2 puts every statement NAMING one of them on the
-# normaliser's list, which is exactly why this proof cannot see where their privileges went: that
-# sync_tailer's and sync_retention's fold into app_user (§1's table) actually landed is invisible in
-# the diff and has to be checked on the NEW container directly.
+# Table grants from these two roles become app_user grants before deleted-role filtering.
+# Other references to any helper role remain on the deletion list.
+FOLD = {"sync_tailer": "app_user", "sync_retention": "app_user"}
 DELETED_ROLES = [
     "tenant_provisioner",
     "credentials_enumerator",
@@ -244,9 +243,46 @@ def sort_table_columns(stmt, counts):
     return TABLE_RE.sub(one, stmt)
 
 
+# pg_dump's table privilege order, as emitted in the raw dumps (SELECT,INSERT,DELETE,UPDATE).
+TABLE_VERBS = ["SELECT", "INSERT", "DELETE", "UPDATE", "TRUNCATE", "REFERENCES", "TRIGGER", "MAINTAIN"]
+FOLD_ACL_RE = re.compile(
+    r"^((?:GRANT|REVOKE) [^;\n]+ ON TABLE public\.[^;\n]+ (?:TO|FROM) )"
+    r"(" + "|".join(FOLD) + r");$", re.M
+)
+APP_TABLE_GRANT_RE = re.compile(
+    r"^GRANT ([A-Z,]+) ON TABLE (public\.[^;\n]+) TO app_user;$", re.M
+)
+
+
+def fold_table_grants(statements):
+    """Fold table ACL grantees and union table privileges; keep column ACLs separate."""
+    folded, grants = [], {}
+    for stmt in statements:
+        stmt = FOLD_ACL_RE.sub(lambda m: m[1] + FOLD[m[2]] + ";", stmt)
+        match = APP_TABLE_GRANT_RE.search(stmt)
+        if match:
+            verbs, table = match.groups()
+            if table in grants:
+                grants[table].update(verbs.split(","))
+                continue
+            grants[table] = set(verbs.split(","))
+        folded.append(stmt)
+    for stmt in folded:
+        match = APP_TABLE_GRANT_RE.search(stmt)
+        if match:
+            table = match[2]
+            verbs = grants[table]
+            # ALL stays ALL; unknown privileges fail instead of silently disappearing.
+            if verbs - set(TABLE_VERBS) - {"ALL"}:
+                raise ValueError(f"unknown table privileges on {table}: {verbs}")
+            union = "ALL" if "ALL" in verbs else ",".join(v for v in TABLE_VERBS if v in verbs)
+            stmt = APP_TABLE_GRANT_RE.sub(f"GRANT {union} ON TABLE {table} TO app_user;", stmt)
+        yield stmt
+
+
 def normalise(text, counts):
     kept = []
-    for stmt in split_statements(text):
+    for stmt in fold_table_grants(split_statements(text)):
         hit = next((label for label, pat in DROP if re.search(pat, stmt, re.M | re.S)), None)
         if hit is not None:
             counts[hit] += 1

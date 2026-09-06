@@ -12,7 +12,7 @@ Set `SCHEMAEQ_MODULES` to comma-separated manifest names (for example `core` or
 whole manifest; unknown or empty names are refused. Seam checks cover the seam functions defined
 in the OLD dump. Only an **unfiltered** run sees cross-module edges.
 
-It removes exactly this, the same list from **both** dumps (spec
+After folding the sync grants as described below, it removes this same list from **both** dumps (spec
 `docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md` §2):
 
 - whole statements matching `^CREATE POLICY `, `ROW LEVEL SECURITY;`,
@@ -39,8 +39,29 @@ It also makes one **representational** change, and only one: the column definiti
 differs for a table that is otherwise identical, and every query in the app names its columns.
 pg_dump's inline `CHECK` constraints follow the columns in NAME order rather than creation order
 (measured on PostgreSQL 18.6: a table created with `CONSTRAINT z_chk` inline and `a_chk` added
-afterwards dumps `a_chk` first), so that trailing run is already canonical and is left alone. **Any
-other difference is fixed in the baseline, never here.**
+afterwards dumps `a_chk` first), so that trailing run is already canonical and is left alone. **Outside these documented rules, fix differences in the baseline.**
+
+## How the sync grants fold into app_user
+
+The plan keeps the outbox working while it removes `sync_tailer` and `sync_retention`. Their table
+privileges move into `app_user`, alongside its existing INSERT grants. If you strip the old roles'
+grants before comparing, a correct baseline differs on `sync_log`, `sync_cursor`, `sync_peers` and
+`sync_config_conflicts`. The proof must compare that union so a missing folded privilege fails.
+
+Before the deleted-role strip, both dumps rewrite GRANT/REVOKE statements on `public` tables naming
+`sync_tailer` or `sync_retention` as grantee to name `app_user`. Table-level GRANTs to `app_user` on the
+same table merge into the union of their verbs, in pg_dump order: SELECT, INSERT, DELETE, UPDATE,
+TRUNCATE, REFERENCES, TRIGGER, MAINTAIN. Column grants such as UPDATE(last_seen_at) remain separate
+statements. Other references to those roles, including policies, membership and ownership, are still
+stripped and counted in the residue table. Applying the fold to both dumps preserves OLD-vs-OLD as a
+control; on a NEW baseline no grantee needs rewriting.
+
+For example, old `sync_log` grants of INSERT to `app_user`, SELECT to `sync_tailer`, and SELECT,DELETE
+to `sync_retention` compare as `GRANT SELECT,INSERT,DELETE ON TABLE public.sync_log TO app_user;`.
+If you remove DELETE from the baseline, the proof must print NOT EQUIVALENT and show that grant.
+Run the prefix proof with `SCHEMAEQ_MODULES=core,identity,workforce,workforce-es,payments,scheduler,credentials,sync`
+to exercise this fold before the later modules are baselined. Keep the direct NEW catalog ACL readback
+beside the proof as the human-readable receipt of the actual grantee privileges.
 
 ## Why the seam functions' EXECUTE grants are stripped from both sides
 
