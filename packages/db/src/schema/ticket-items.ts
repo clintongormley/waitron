@@ -27,13 +27,6 @@ export const ticketState = pgEnum("ticket_state", ["queued", "preparing", "ready
  * cancelled/abandoned line's item away with the line (the analogue of `order_prep`'s order FK).
  * `UNIQUE (tenant_id, working_order_line_id)` is one ticket item per line — also the guard that makes a
  * concurrent double-fire collide rather than duplicate.
- *
- * `.enableRLS()` emits only ENABLE ROW LEVEL SECURITY. The FORCE ROW LEVEL SECURITY, the
- * `ticket_items_tenant_isolation` policy, the SELECT/INSERT/UPDATE grant to `app_user` (no DELETE — a
- * cancelled line's item is cascaded via the line FK, never deleted directly, as `order_prep` relied on
- * its order FK) and the three composite FKs (node, working-order-line CASCADE, station) are all
- * hand-written in the paired --custom migration. The `inmutabilidad` guard in packages/fiscal-verifactu
- * scans every tenant_id-bearing table for both RLS flags, so a missing FORCE here fails that suite.
  */
 export const ticketItems = pgTable(
   "ticket_items",
@@ -73,17 +66,7 @@ export const ticketItems = pgTable(
     // FIRED (workable). The first course of an order auto-fires at fire time (`now()`); later courses
     // are held until `fireCourse` stamps them.
     firedAt: timestamp("fired_at", { withTimezone: true, mode: "string" }),
-    // AWAY vs not-yet-away (KDS-3, §2a) — the pass/expo has dispatched this item's course to the floor.
-    // NULL = not away; set = away (`now()`), the terminal display state after `ready` (item lifecycle
-    // held → fired → queued → preparing → ready → away). Additive nullable timestamptz, mirroring the
-    // `preparing_at` / `ready_at` / `fired_at` lifecycle columns above. The existing FORCE RLS + policy +
-    // SELECT/INSERT/UPDATE grant (0055) are table/row-level, so this column is covered — no RLS/grant change.
     awayAt: timestamp("away_at", { withTimezone: true, mode: "string" }),
-    // The per-line kitchen customisation, SNAPSHOTTED from the working-order line at fire time (like
-    // `station_id`/`course_id` above) so a later line edit never mutates fired kitchen state (spec §2/§3).
-    // `note` is a free-text instruction, `doneness` the meat-doneness enum. Additive nullable columns,
-    // covered by the existing FORCE RLS + policy + SELECT/INSERT/UPDATE grant (0055) — no RLS/grant change.
-    // NON-FISCAL: never read into a filed record.
     note: text("note"),
     doneness: doneness("doneness"),
   },
@@ -94,4 +77,4 @@ export const ticketItems = pgTable(
     // The per-station queue scan (the analogue of order_prep_queue_idx, re-keyed on station).
     index("ticket_items_queue_idx").on(t.tenantId, t.stationId, t.state),
   ],
-).enableRLS();
+);

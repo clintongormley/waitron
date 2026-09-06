@@ -92,10 +92,10 @@ const suite = usePgliteDb({
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
       entCourseId = ent.id;
       priCourseId = pri.id;
-      const catalogue = await createCatalogue(tx, { name: "Carta" });
-      const category = await createCategory(tx, { name: "Comida" });
+      const catalogue = await createCatalogue(tx, tenantId, { name: "Carta" });
+      const category = await createCategory(tx, tenantId, { name: "Comida" });
       const mk = async (description: string): Promise<string> => {
-        const p = await createProduct(tx, {
+        const p = await createProduct(tx, tenantId, {
           catalogueId: catalogue.id,
           categoryId: category.id,
           descriptions: { es: description },

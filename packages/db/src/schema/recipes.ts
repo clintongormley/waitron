@@ -44,7 +44,7 @@ export const ingredients = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [index("ingredients_tenant_id_idx").on(t.tenantId)],
-).enableRLS();
+);
 
 /** The flat composition: which ingredients a product is made of. No quantity this slice (allergen
  * presence is qualitative). One row per (product, ingredient). */
@@ -68,4 +68,4 @@ export const recipeLines = pgTable(
     index("recipe_lines_ingredient_id_idx").on(t.ingredientId),
     unique("recipe_lines_product_ingredient_key").on(t.productId, t.ingredientId),
   ],
-).enableRLS();
+);

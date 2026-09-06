@@ -16,12 +16,6 @@ export type IncidentSeverity = "warning" | "error";
  * `code` and `params` come from a structured code+params pair rather than from a message
  * string, so the till can render this bilingually. A prose column here would reach a screen
  * untranslatable, which is the constraint spec §9 places on this layer specifically.
- *
- * Mutable, not append-only — deliberately NOT run through the four-part immutability recipe
- * (`packages/db/src/immutability.sql.md`). Its own `acknowledged_at`/`acknowledged_by` are exactly
- * the kind of state that recipe forbids everywhere else, which is why this table carries only
- * tenant isolation (Part 4) plus a column-scoped GRANT, mirroring `invoice_series.next_number`
- * rather than `sales`.
  */
 export const incidents = pgTable(
   "incidents",
@@ -56,4 +50,4 @@ export const incidents = pgTable(
     check("incidents_severity_ck", sql`${t.severity} in ('warning', 'error')`),
     check("incidents_code_ck", sql`${t.code} <> ''`),
   ],
-).enableRLS();
+);

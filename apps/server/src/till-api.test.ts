@@ -119,9 +119,9 @@ const suite = usePgliteDb({
     // superuser insert. (Catalogue tables live in CORE_MIGRATIONS, already applied.)
     const { agua, cerveza } = await withTenant(db, tenantId, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, { name: "Carta" });
-      const bebidas = await createCategory(tx, { name: "Bebidas" });
-      const p = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
+      const bebidas = await createCategory(tx, tenantId, { name: "Bebidas" });
+      const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
         descriptions: { es: "Agua mineral" },
@@ -134,8 +134,8 @@ const suite = usePgliteDb({
       });
       await assignCatalogueToLocation(tx, loc.rows[0]!.id, cat.id);
 
-      const cat2 = await createCatalogue(tx, { name: "Happy Hour" });
-      const p2 = await createProduct(tx, {
+      const cat2 = await createCatalogue(tx, tenantId, { name: "Happy Hour" });
+      const p2 = await createProduct(tx, tenantId, {
         catalogueId: cat2.id,
         categoryId: bebidas.id,
         descriptions: { es: "Cerveza" },
@@ -143,7 +143,7 @@ const suite = usePgliteDb({
         unitPrice: "2.50",
         vatClass: "general",
       });
-      await addCatalogueToLocation(tx, loc.rows[0]!.id, cat2.id);
+      await addCatalogueToLocation(tx, tenantId, loc.rows[0]!.id, cat2.id);
 
       return { agua: { ...p, catalogueId: cat.id }, cerveza: { ...p2, catalogueId: cat2.id } };
     });

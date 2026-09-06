@@ -30,10 +30,6 @@ export const bookingStatus = pgEnum("booking_status", [
 ]);
 
 /**
- * A staff-entered table reservation — tenant + location scoped, following the built `shifts` shape
- * (separate `tenant_id` + `location_id` FKs, `onDelete restrict`, tenant-consistency via RLS —
- * shifts.ts:38-41,60-74), which needs no change to `locations` (design §2a).
- *
  * WALL-CLOCK, NOT AN INSTANT (design §2b, the #52 lesson): a booking is a future intention
  * ("Tuesday 20:00 at the venue"), not a moment that has occurred, so `booking_date` is a plain `date`
  * and `booking_time` a plain `time`, both venue-local — never a UTC instant. There is no instant to
@@ -49,12 +45,6 @@ export const bookingStatus = pgEnum("booking_status", [
  * `drawer_opens.person_id` / `daily_closes.closed_by` / `sales.operator_id` seam: the person/identity
  * schema is a separate slice (migrates AFTER `core`), so this table records the actor without
  * depending on it (packages/db must not import @waitron/identity — it would close a load-time cycle).
- *
- * `.enableRLS()` emits only ENABLE ROW LEVEL SECURITY; the FORCE ROW LEVEL SECURITY, the
- * `bookings_tenant_isolation` policy and the SELECT/INSERT/UPDATE grant (no DELETE) are hand-written in
- * the custom migration, exactly as 0074 does for `location_catalogues`. The `inmutabilidad` guard in
- * packages/fiscal-verifactu scans every tenant_id-bearing table for FORCE, so a missing FORCE here
- * fails that suite.
  */
 export const bookings = pgTable(
   "bookings",
@@ -118,4 +108,4 @@ export const bookings = pgTable(
     // A party of zero or fewer is malformed.
     check("bookings_party_size_ck", sql`${t.partySize} > 0`),
   ],
-).enableRLS();
+);

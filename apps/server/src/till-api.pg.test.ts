@@ -171,10 +171,10 @@ async function setupVenue(): Promise<{
   const cfg = tillConfigFromVenue(venue);
   const { available, operatorId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const comida = await createCategory(tx, { name: "Comida" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
-    await createProduct(tx, {
+    const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
+    const comida = await createCategory(tx, cfg.tenantId, { name: "Comida" });
+    const bebidas = await createCategory(tx, cfg.tenantId, { name: "Bebidas" });
+    await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: comida.id,
       descriptions: { es: "Jamón cortado" },
@@ -182,7 +182,7 @@ async function setupVenue(): Promise<{
       unitPrice: "24.90",
       vatClass: "reduced",
     });
-    await createProduct(tx, {
+    await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       descriptions: { es: "Agua mineral" },

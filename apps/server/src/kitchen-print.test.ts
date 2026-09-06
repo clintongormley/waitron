@@ -70,7 +70,7 @@ async function setupVenue(): Promise<Venue> {
   const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
   const catalogueId = await withTenant(db, tenantId, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, { name: "Carta" });
+    const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
     await assignCatalogueToLocation(tx, locationId, cat.id);
     return cat.id;
   });
@@ -135,7 +135,7 @@ async function makeProduct(
   name: string,
   route: { stationId?: string; courseId?: string } = {},
 ): Promise<string> {
-  const { id } = await createProduct(tx, {
+  const { id } = await createProduct(tx, cfg.tenantId, {
     catalogueId,
     categoryId: null,
     descriptions: { [LOCALE]: name },

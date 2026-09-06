@@ -40,10 +40,6 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
       { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
       { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
     ]);
-    // A location per tenant (plus a second for A): kitchen_stations carries a tenant-consistent
-    // (tenant_id, location_id) FK, so every station insert needs a real owning location. Seeded as
-    // the superuser admin (bypasses RLS). operation_description is Spanish test DATA, not a schema
-    // identifier, exactly as the sibling floor-zones test uses 'Hostelería'.
     await suite.admin.execute(sql`
       insert into locations (id, tenant_id, name, invoice_locales, operation_description)
       values

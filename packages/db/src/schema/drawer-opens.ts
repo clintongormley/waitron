@@ -11,15 +11,6 @@ export type DrawerOpenReason = "cash_sale" | "manual";
  * sale's receipt printed). The drawer is the till's receipt printer's kick (deli-hardware §6 — no
  * separate device), so this table records the ACT of opening, not a device.
  *
- * Append-only-ish: `app_user` holds SELECT/INSERT and NO UPDATE/DELETE — a drawer open is a fact
- * about what happened, never edited or removed. Unlike `sale_voids`/`daily_closes` it carries no
- * hash chain, so the design (spec §2) scopes it to the withheld-grant guard alone, not the full
- * four-part immutability recipe (no reject_mutation/TRUNCATE triggers). `.enableRLS()` emits only
- * ENABLE ROW LEVEL SECURITY; the FORCE ROW LEVEL SECURITY, the `drawer_opens_tenant_isolation`
- * policy and the SELECT/INSERT grant are hand-written in the paired --custom migration. The
- * `inmutabilidad` guard in packages/fiscal-verifactu scans every tenant_id-bearing table for
- * ENABLE + FORCE, so a missing FORCE here fails that suite, not this package's.
- *
  * `till_id` and `sale_id` are BARE uuids: their tenant-consistent composite FKs —
  * (tenant_id, till_id) → tills(tenant_id, id) and (tenant_id, sale_id) → sales(tenant_id, id) — are
  * hand-written in the --custom migration (a bare column carries no FK), exactly as `sale_voids`'s
@@ -79,4 +70,4 @@ export const drawerOpens = pgTable(
     viaOverride: boolean("via_override").notNull().default(false),
   },
   (t) => [check("drawer_opens_reason_ck", sql`${t.reason} in ('cash_sale', 'manual')`)],
-).enableRLS();
+);

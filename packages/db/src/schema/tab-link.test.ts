@@ -84,7 +84,7 @@ describe("table↔tab link columns (mutual composite FKs)", () => {
     );
   }
 
-  it("the new columns are visible/writable to the non-owner app_user under the existing policies", async () => {
+  it("the new columns are visible/writable to the non-owner app_user", async () => {
     // Differential: setting the tab_id back-pointer AND a delivery_table_id as app_user both succeed and
     // read back. Fails if the tables' existing grants did not already cover the added columns (they are
     // table-wide, so they do — the confirmation §2b calls for). Also proves each FK RESOLVES a valid ref.

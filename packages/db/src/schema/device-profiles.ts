@@ -14,10 +14,6 @@ import { tenants } from "./tenants.js";
  * `capabilities` is PLAIN jsonb (a CapabilityFlag[]), NOT `.$type<>()`-annotated — @waitron/layouts
  * depends on @waitron/db, so importing its type here is circular; the store validates on write. Same
  * rationale as canvases.definition. DEFAULT '[]' so a profile carries no capability until configured.
- *
- * `.enableRLS()` emits only ENABLE. FORCE + the tenant-isolation policy + the app_user grant
- * (SELECT/INSERT/UPDATE/DELETE — profiles are deletable config) are hand-written --custom (0107).
- * inmutabilidad requires FORCE on every tenant_id-bearing table.
  */
 export const deviceProfiles = pgTable(
   "device_profiles",
@@ -41,4 +37,4 @@ export const deviceProfiles = pgTable(
     unique("device_profiles_tenant_id_key").on(t.tenantId, t.id),
     unique("device_profiles_tenant_name_key").on(t.tenantId, t.name),
   ],
-).enableRLS();
+);

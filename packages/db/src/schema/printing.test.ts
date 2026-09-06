@@ -219,9 +219,6 @@ describe("printing schema (print_agents/pairing_codes/printers/print_jobs — co
   });
 
   it("printers: the agent binding is tenant-consistent (composite FK to print_agents)", async () => {
-    // Tenant A cannot bind a printer to tenant B's agent: the (tenant_id, agent_id) composite FK has
-    // no (A, agentB) row to satisfy it → foreign_key_violation, independently of RLS. The transport is
-    // network_tcp with a host, so the CHECK passes and the ONLY violated constraint is the agent FK.
     const agentB = await seedAgent(TENANT_B, "Agent B");
     const e = await captureError(() =>
       asApp(TENANT_A, (tx) =>
@@ -302,9 +299,6 @@ describe("printing schema (print_agents/pairing_codes/printers/print_jobs — co
   });
 
   it("print_jobs: the printer binding is tenant-consistent (composite FK to printers)", async () => {
-    // Tenant B cannot enqueue a job against tenant A's printer: the (tenant_id, printer_id) composite
-    // FK has no (B, printerA) row → foreign_key_violation. The insert is B's own tenant_id (so RLS
-    // WITH CHECK passes) but a foreign printer_id, isolating the FK as the violated constraint.
     const agentA = await seedAgent(TENANT_A, "Agent A for FK");
     const printerA = await seedPrinter(TENANT_A, agentA, "Printer A for FK");
     const e = await captureError(() =>

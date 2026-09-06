@@ -60,4 +60,4 @@ export const nodes = pgTable(
     unique("nodes_tenant_id_key").on(t.tenantId, t.id),
     index("nodes_tenant_id_idx").on(t.tenantId),
   ],
-).enableRLS();
+);

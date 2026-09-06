@@ -131,7 +131,7 @@ describe("computeDailyClose", () => {
     expect(close.cash.byTill[0]!.cashTakings).toBe("121.00");
   });
 
-  it("does not leak another tenant's data (RLS + explicit predicate)", async () => {
+  it("does not leak another tenant's data (explicit tenant predicate)", async () => {
     // Our tenant: nothing. A DIFFERENT tenant with a sale on the same day/node-of-its-own.
     const other = await seedVenue(suite.db);
     const issued = new Date("2026-08-04T10:00:00Z").toISOString();

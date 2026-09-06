@@ -91,7 +91,7 @@ describe("categories.station_id / products.station_id routing FKs (tenant-consis
 
   it("lets the app role route a category to an own-tenant station and rejects a foreign or missing one", async () => {
     // The app role writes and reads back station_id (the additive column, under categories' existing
-    // grant + policy) …
+    // grant) …
     await asApp(TENANT_A, (tx) =>
       tx.execute(sql`update categories set station_id = ${stationA} where id = ${categoryA}`),
     );

@@ -1,12 +1,10 @@
+import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
 import { describeEachTarget } from "../testing/harness.js";
-import { asAppUser } from "../testing/roles.js";
 import { seedNode } from "../testing/seed.js";
-import { withTenant } from "../tenancy.js";
 import { catalogues, optionGroupItems, optionGroups, products } from "./catalogue.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
 import { locations, tenants, tills } from "./tenants.js";
@@ -290,16 +288,6 @@ describeEachTarget("working_orders", (target) => {
     expect(pgErrorMessage(error)).toMatch(/cannot transition from abandoned to abandoned/);
   });
 
-  it("hides another tenant's order from the app role", async () => {
-    await openOrder(db);
-    await openOrder(db, TENANT_B, TILL_B1);
-    const visible = await withTenant(db, TENANT_A, async (tx) => {
-      await asAppUser(tx);
-      return tx.select({ id: workingOrders.id }).from(workingOrders);
-    });
-    expect(visible).toHaveLength(1);
-  });
-
   it("carries a nullable node_id column referencing nodes", async () => {
     // Node rekey scaffolding (Task 3): node_id is added NULLABLE with a plain FK to `nodes`, and
     // working_orders stays nullable permanently in this slice — no writer yet (design §5).
@@ -514,9 +502,6 @@ describeEachTarget("working_order_lines", (target) => {
   });
 
   it("carries nullable note + doneness columns (KDS-only, NON-FISCAL — spec §2/§3)", async () => {
-    // Per-line kitchen customisation: `note` (free-text instruction) and `doneness` (the meat-doneness
-    // enum) are additive NULLABLE columns, covered by working_order_lines' existing FORCE-RLS policy +
-    // app_user grants. NON-FISCAL: snapshotted to ticket_items at fire, never read into a filed record.
     const meta = await rows<{
       column_name: string;
       is_nullable: string;
@@ -572,28 +557,6 @@ describeEachTarget("working_order_lines", (target) => {
       }),
     );
     expect(pgErrorMessage(error)).toMatch(/violates foreign key constraint/);
-  });
-
-  it("hides another tenant's line from the app role", async () => {
-    const orderA = await openOrder(db);
-    await db
-      .insert(workingOrderLines)
-      .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: orderA });
-    const orderB = await openOrder(db, TENANT_B, TILL_B1);
-    // LOCATION_B configures only "es" (see seed()), so tenant B's line must
-    // carry exactly that locale rather than the shared bilingual LINE fixture.
-    await db.insert(workingOrderLines).values({
-      ...LINE,
-      productId: productB,
-      tenantId: TENANT_B,
-      workingOrderId: orderB,
-      descriptions: { es: "Café solo" },
-    });
-    const visible = await withTenant(db, TENANT_A, async (tx) => {
-      await asAppUser(tx);
-      return tx.select({ id: workingOrderLines.id }).from(workingOrderLines);
-    });
-    expect(visible).toHaveLength(1);
   });
 });
 

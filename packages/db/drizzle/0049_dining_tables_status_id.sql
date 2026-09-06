@@ -1,2 +1,0 @@
-ALTER TABLE "dining_tables" ADD COLUMN "status_id" uuid;--> statement-breakpoint
-ALTER TABLE "dining_tables" ADD CONSTRAINT "dining_tables_status_fk" FOREIGN KEY ("tenant_id","status_id") REFERENCES "public"."table_service_statuses"("tenant_id","id") ON DELETE no action ON UPDATE no action;

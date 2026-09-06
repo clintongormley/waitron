@@ -1,3 +1,4 @@
+import { tenantId as brandTenantId } from "@waitron/shared";
 // `seedDemoRestaurant` — the demo-seed orchestrator (Phase 2, Task 11). It wires the Task 6-10
 // sub-seeds together into the one call `dev-setup` makes after provisioning a venue, turning a bare
 // chained venue into the full demo restaurant: two menus, a floor plan, staff, per-dish media, and a
@@ -71,8 +72,11 @@ export async function seedDemoRestaurant(
   // the end, inside the SAME tx, so the sales generator draws from exactly what was just seeded.
   const products = await withTenant(db, tenantId, async (tx) => {
     await asAppUser(tx);
-    const { productsByImage } = await seedCatalogues(tx, { locationId, locale });
-    await seedOptions(tx, { productsByImage, locale });
+    const { productsByImage } = await seedCatalogues(tx, brandTenantId(tenantId), {
+      locationId,
+      locale,
+    });
+    await seedOptions(tx, brandTenantId(tenantId), { productsByImage, locale });
     await seedFloor(tx, { tenantId, locationId, locale });
     await seedStaff(tx);
     await seedMedia(tx, { mediaDir, productsByImage });

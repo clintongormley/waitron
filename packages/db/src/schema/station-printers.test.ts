@@ -25,9 +25,6 @@ describe("station_printers schema (KDS-4 mapping — PK + composite FKs)", () =>
       { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
       { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
     ]);
-    // A location per tenant — the owning location the station + printer each reference. Seeded as the
-    // superuser admin (bypasses RLS). operation_description is Spanish test DATA, not a schema
-    // identifier, exactly as the sibling printing/kitchen-stations tests use 'Hostelería'.
     await suite.admin.execute(sql`
       insert into locations (id, tenant_id, name, invoice_locales, operation_description)
       values
@@ -115,9 +112,6 @@ describe("station_printers schema (KDS-4 mapping — PK + composite FKs)", () =>
   });
 
   it("the station binding is tenant-consistent (composite FK to kitchen_stations)", async () => {
-    // Tenant A cannot map its own printer to tenant B's station: the (tenant_id, station_id) composite
-    // FK has no (A, stationB) row → foreign_key_violation, independently of RLS. The insert is A's own
-    // tenant_id (so WITH CHECK passes) and (A, printerA) exists, isolating the station FK.
     const printerA = await seedPrinter(TENANT_A, "Impresora FK station", "poll-fk-station");
     const stationB = await seedStation(TENANT_B, "Estación B");
     const e = await captureError(() =>

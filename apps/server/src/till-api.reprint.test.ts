@@ -65,8 +65,8 @@ const suite = usePgliteDb({
     // One sellable product, routed to the default station by the fire fallback (no explicit station/course).
     await withTenant(db, tenantId, async (tx) => {
       await asAppUser(tx);
-      const catalogue = await createCatalogue(tx, { name: "Carta" });
-      const cafe = await createProduct(tx, {
+      const catalogue = await createCatalogue(tx, tenantId, { name: "Carta" });
+      const cafe = await createProduct(tx, tenantId, {
         catalogueId: catalogue.id,
         categoryId: null,
         descriptions: { es: CAFE },

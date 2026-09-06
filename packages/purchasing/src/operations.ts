@@ -3,7 +3,7 @@ import type { SQL } from "drizzle-orm";
 import { isUniqueViolation, purchaseInvoiceVat, purchaseInvoices } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, compareDecimal, decimal } from "@waitron/shared";
-import type { Decimal } from "@waitron/shared";
+import type { Decimal, TenantId } from "@waitron/shared";
 import "./errors.js";
 import type {
   CreatePurchaseInvoiceInput,
@@ -16,19 +16,8 @@ import type {
   UpdatePurchaseInvoiceInput,
 } from "./types.js";
 
-/**
- * Plain mutable CRUD over the two purchase-invoice tables (`purchase_invoices` +
- * `purchase_invoice_vat`). Every function takes a `(tx, …)` and runs under the CALLER's tenant
- * context: the caller opens the transaction with `withTenant` (and `asAppUser` in the running POS),
- * so writes adopt that tenant through `current_tenant_id()` and reads are filtered to it by the
- * tenant-isolation policy — nothing here takes a `tenantId` argument, mirroring `packages/recipes`
- * and `packages/catalogue`. These are received-supplier records (facturas recibidas), the
- * commercial/accounting lane: mutable, with no huella, chain, or invoice number (spec §2).
- *
- * All SQL is built with Drizzle query builders — no string concatenation.
- */
+/** Received supplier invoices and VAT lines share the caller's transaction. */
 
-const CURRENT_TENANT = sql`current_tenant_id()`;
 const ZERO = decimal("0.00");
 const HUNDRED = decimal("100.00");
 
@@ -137,6 +126,7 @@ function validateLines(lines: readonly PurchaseInvoiceLineInput[]): void {
  */
 async function insertLines(
   tx: Transaction,
+  tenantId: TenantId,
   invoiceId: string,
   lines: readonly PurchaseInvoiceLineInput[],
 ): Promise<LineRowWithId[]> {
@@ -144,7 +134,7 @@ async function insertLines(
     .insert(purchaseInvoiceVat)
     .values(
       lines.map((line) => ({
-        tenantId: CURRENT_TENANT,
+        tenantId,
         purchaseInvoiceId: invoiceId,
         rate: line.rate,
         base: line.base,
@@ -189,6 +179,7 @@ async function selectLines(tx: Transaction, invoiceId: string): Promise<Purchase
  */
 export async function createPurchaseInvoice(
   tx: Transaction,
+  tenantId: TenantId,
   input: CreatePurchaseInvoiceInput,
 ): Promise<PurchaseInvoice> {
   validateProportion(input.header.deductibleProportion);
@@ -204,7 +195,7 @@ export async function createPurchaseInvoice(
     const [row] = await tx
       .insert(purchaseInvoices)
       .values({
-        tenantId: CURRENT_TENANT,
+        tenantId,
         supplierTaxId: input.header.supplierTaxId,
         supplierName: input.header.supplierName,
         supplierInvoiceNumber: input.header.supplierInvoiceNumber,
@@ -230,11 +221,11 @@ export async function createPurchaseInvoice(
     throw error;
   }
 
-  const lines = sortLineRows(await insertLines(tx, header.id, input.lines)).map(mapLine);
+  const lines = sortLineRows(await insertLines(tx, tenantId, header.id, input.lines)).map(mapLine);
   return { ...header, lines };
 }
 
-/** The header plus its VAT lines, or null when no invoice with `id` is visible in this tenant. */
+/** The header plus its VAT lines, or null when no invoice with `id` exists. */
 export async function getPurchaseInvoice(
   tx: Transaction,
   id: string,
@@ -289,6 +280,7 @@ export async function listPurchaseInvoices(
  */
 export async function updatePurchaseInvoice(
   tx: Transaction,
+  tenantId: TenantId,
   id: string,
   patch: UpdatePurchaseInvoiceInput,
 ): Promise<void> {
@@ -306,7 +298,7 @@ export async function updatePurchaseInvoice(
 
   if (patch.lines !== undefined) {
     await tx.delete(purchaseInvoiceVat).where(eq(purchaseInvoiceVat.purchaseInvoiceId, id));
-    await insertLines(tx, id, patch.lines);
+    await insertLines(tx, tenantId, id, patch.lines);
   }
 }
 

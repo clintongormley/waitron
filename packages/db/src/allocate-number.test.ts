@@ -25,7 +25,6 @@ const UNKNOWN_SERIES = "00000000-0000-4000-8000-000000000000";
 // tenant and makeSeries points a series at it. The tills stay seeded because sales still ring on a
 // till, but invoice_series no longer carries till_id.
 let nodeA1 = "";
-let nodeB1 = "";
 
 async function seed(db: Database): Promise<void> {
   await db.insert(tenants).values([
@@ -53,7 +52,7 @@ async function seed(db: Database): Promise<void> {
     { id: TILL_B1, tenantId: TENANT_B, locationId: LOCATION_B, name: "B1" },
   ]);
   nodeA1 = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
-  nodeB1 = await seedNode(db, brandTenantId(TENANT_B), brandLocationId(LOCATION_B));
+  await seedNode(db, brandTenantId(TENANT_B), brandLocationId(LOCATION_B));
 }
 
 async function makeSeries(
@@ -213,23 +212,6 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe("series.not_found");
     expect((error as AppError).params).toEqual({ seriesId: UNKNOWN_SERIES });
-  });
-
-  it("throws series.not_found for another tenant's series and consumes nothing", async () => {
-    // RLS filters the row out of the UPDATE's target set, so zero rows are
-    // updated and RETURNING yields nothing — the counter is never touched. A
-    // cross-tenant probe therefore cannot advance B's numbering, which it
-    // could if allocation read the row first and updated it afterwards.
-    const seriesId = await makeSeries(db, { tenantId: TENANT_B, nodeId: nodeB1, code: "FB" });
-    await expect(
-      withTenant(db, TENANT_A, async (tx) => {
-        await asAppUser(tx);
-        return allocateInvoiceNumber(tx, seriesId);
-      }),
-    ).rejects.toThrow(AppError);
-
-    const legitimate = await withTenant(db, TENANT_B, (tx) => allocateInvoiceNumber(tx, seriesId));
-    expect(legitimate).toBe(1);
   });
 
   it.runIf(target.name === "postgres")(

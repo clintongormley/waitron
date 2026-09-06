@@ -301,9 +301,9 @@ async function main(): Promise<void> {
     // apps/* is out of the english-only guard's scope.
     const cafe = await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, { name: "Delicatessen" });
-      const bebidas = await createCategory(tx, { name: "Bebidas" });
-      const product = await createProduct(tx, {
+      const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
+      const bebidas = await createCategory(tx, cfg.tenantId, { name: "Bebidas" });
+      const product = await createProduct(tx, cfg.tenantId, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
         descriptions: { [LOCALE]: "Café" },

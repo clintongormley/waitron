@@ -6,14 +6,6 @@ import { nodes } from "./schema/nodes.js";
 import { withTenant } from "./tenancy.js";
 
 /**
- * Stamp a node's membership identity PUBLIC key (design §4) on a caller-provided transaction whose
- * tenant GUC is already set. Factored from `setNodePublicKey` so a caller that must stamp atomically
- * WITH another write shares one transaction rather than opening a second: `establishNodeIdentity`
- * seals the matching private key and calls this in the SAME `withTenant`, so the private/public pair
- * lands together or not at all (CLAUDE.md §3 — `withTenant` IS that transaction; a write-path helper
- * takes a `tx`). `nodes` is FORCE-RLS, so the tx must carry the tenant GUC (its `withTenant` sets it),
- * and the connection's role must hold UPDATE on `nodes` — owner-role, since app_user holds none.
- *
  * No-op-safe on a non-matching id (0 rows updated): callers pass a just-minted id, so a 0-row update
  * would be a bug — but this accessor does not assert it, because the id is fresh by construction and a
  * guard here would only add a read the caller does not need.

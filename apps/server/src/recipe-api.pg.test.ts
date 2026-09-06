@@ -1,3 +1,4 @@
+import { tenantId as brandTenantId } from "@waitron/shared";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -109,8 +110,10 @@ async function setupVenue(): Promise<Venue> {
         tenantId: venue.tenantId,
         personId: stf.rows[0]!.id,
       });
-      const catalogue = await createCatalogue(tx, { name: "Recipe catalogue" });
-      const product = await createProduct(tx, {
+      const catalogue = await createCatalogue(tx, brandTenantId(venue.tenantId), {
+        name: "Recipe catalogue",
+      });
+      const product = await createProduct(tx, brandTenantId(venue.tenantId), {
         catalogueId: catalogue.id,
         categoryId: null,
         descriptions: { es: "Tostada" },

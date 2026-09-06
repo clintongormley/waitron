@@ -51,11 +51,6 @@ describe("dining_tables placement columns", () => {
   }
 
   it("exposes the four placement columns through the Drizzle export", async () => {
-    // FP-2 adds four nullable placement columns (pos_x, pos_y, shape, rotation) to dining_tables.
-    // Being additive columns on an existing FORCE-RLS table, they inherit the table-wide UPDATE/SELECT
-    // grant with no new migration — this asserts that inheritance: app_user can write and read them
-    // back. The drizzle query builder (rather than raw SQL) also exercises the schema mapping
-    // posX→"pos_x" and the enum/smallint decoding.
     const id = await seedTable(TENANT_A, LOCATION_A, "T-placement");
     await asApp(TENANT_A, (tx) =>
       tx

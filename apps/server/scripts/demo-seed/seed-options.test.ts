@@ -1,3 +1,4 @@
+import { tenantId as brandTenantId } from "@waitron/shared";
 // Real-Postgres proof of `seedOptions` (Phase 4, Task 13): it creates the demo modifier groups
 // (menu.ts's `PRODUCT_OPTION_GROUPS`) and attaches them to their named products, so the till shows a
 // picker on those two dishes and a plain ring on everything else. Real Postgres, not PGlite: the
@@ -73,8 +74,11 @@ describe("seedOptions", () => {
 
     const products = await withTenant(suite.admin, tenantId, async (tx) => {
       await asAppUser(tx);
-      const { productsByImage } = await seedCatalogues(tx, { locationId, locale: LOCALE });
-      await seedOptions(tx, { productsByImage, locale: LOCALE });
+      const { productsByImage } = await seedCatalogues(tx, brandTenantId(tenantId), {
+        locationId,
+        locale: LOCALE,
+      });
+      await seedOptions(tx, brandTenantId(tenantId), { productsByImage, locale: LOCALE });
       return (await listAvailableProducts(tx, locationId)).products;
     });
 

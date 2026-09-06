@@ -141,9 +141,9 @@ async function setupVenue(): Promise<SeededVenue> {
   const cfg = tillConfigFromVenue(venue);
   const available = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
-    await createProduct(tx, {
+    const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
+    const bebidas = await createCategory(tx, cfg.tenantId, { name: "Bebidas" });
+    await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       descriptions: { [LOCALE]: "Café" },

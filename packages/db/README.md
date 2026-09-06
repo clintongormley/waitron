@@ -1,41 +1,34 @@
 # @waitron/db
 
-Postgres schema and client for both deployment modes: PGlite (embedded WASM PostgreSQL)
-standalone, real PostgreSQL in the cloud. **One dialect.** There is no SQLite path — see
-`docs/superpowers/specs/2026-07-19-sales-spine-and-fiscal-layer-design.md` §3.
+Use this package for the PostgreSQL schema and database client. Each database holds one tenant.
+`withTenant(db, tenantId, fn, opts?)` runs your work in one transaction and keeps the tenant argument
+explicit at call sites. It sets `app.node_id` when you supply `opts.nodeId`, so capture triggers can
+record the producing node. It does not set a tenant session variable.
 
 ## Commands
 
-| Command                   | Does                                                                |
-| ------------------------- | ------------------------------------------------------------------- |
-| `pnpm test`               | Vitest. Skips the real-Postgres target if Docker is absent, loudly. |
-| `pnpm test:coverage`      | The same, under V8 coverage thresholds. What CI runs.               |
-| `pnpm typecheck`          | `tsc --noEmit`                                                      |
-| `pnpm mutation`           | Stryker. Weekly in CI, not a merge gate.                            |
-| `pnpm db:generate`        | Regenerates `drizzle/` from `src/schema/*.ts`.                      |
-| `pnpm db:generate:custom` | An empty numbered migration for hand-written SQL (triggers, RLS).   |
+| Command                   | Does                                           |
+| ------------------------- | ---------------------------------------------- |
+| `pnpm test`               | Runs Vitest; the global setup requires Docker. |
+| `pnpm test:coverage`      | Runs the suite with coverage thresholds.       |
+| `pnpm typecheck`          | Runs `tsc --noEmit`.                           |
+| `pnpm mutation`           | Runs Stryker.                                  |
+| `pnpm db:generate`        | Generates migrations from the schema barrel.   |
+| `pnpm db:generate:custom` | Creates a migration for hand-written SQL.      |
 
-## Three things that will waste your afternoon
-
-**Every test boots a WASM PostgreSQL.** That is why `testTimeout` is 30s here and 5s everywhere
-else. Do not lower it.
-
-**PGlite runs as superuser, and superusers always bypass RLS** — with `ENABLE` and with `FORCE`.
-Every RLS test must `set local role app_user` via `asAppUser()` (from Task 4). A suite that omits
-it passes green while asserting nothing.
-
-**PGlite cannot test lock contention.** Concurrent queries serialise onto one backend, so
-`FOR UPDATE` parses and runs but never blocks. Anything about concurrent chain appends goes in
-the real-Postgres suite, never PGlite. Run with Docker available, or set `REQUIRE_DOCKER=1` to
-turn a missing daemon into a failure.
+Use PGlite for schema and query behaviour. Use real PostgreSQL for privileges and concurrency:
+PGlite connects as superuser and serialises queries onto one backend, so it cannot measure lock
+contention. Set `TESTCONTAINERS_RYUK_DISABLED=true` for local container runs.
 
 ## Migrations
 
-`drizzle.config.ts` has `out: "./drizzle"` — a **single string**, not an array, whatever the
-docs render. One config, one folder, one journal table (`__drizzle_migrations_db`). Each package
-that owns tables gets its own config and its own journal; `runMigrations` takes the table name
-with no default for exactly that reason. Ordering across packages is the runtime's job.
+Core has two baselines: `0000_db_baseline.sql` contains the generated schema, and
+`0001_db_baseline_sql.sql` contains the additional tables, constraints, grants, functions and
+triggers. `app_user` is a non-login role; it receives only the grants in the custom baseline.
+You still supply `tenant_id` on writes, and composite foreign keys still reject inconsistent
+references between tenants.
 
-Drizzle has no trigger support in `pg-core`. Triggers and `FORCE ROW LEVEL SECURITY` are
-hand-written into a `--custom` migration; they survive later `generate` runs because drizzle-kit
-diffs against its own snapshot, which has no concept of either.
+The generated snapshot covers the schema barrel. Custom SQL stays outside that snapshot, so you
+must maintain it when changing a constraint, trigger or table that Drizzle does not generate.
+`runMigrations` requires the module's journal table name; core uses `__drizzle_migrations_db`.
+The caller orders migration sets from different modules.

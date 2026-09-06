@@ -9,7 +9,7 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { AppError } from "@waitron/shared";
+import { AppError, tenantId as brandTenantId } from "@waitron/shared";
 import { asAppUser, withTenant, type Database, type Transaction } from "@waitron/db";
 import {
   createIngredient,
@@ -139,7 +139,9 @@ export function mountRecipeApi(app: Hono, deps: RecipeApiDeps, log: Logger): voi
           ? {}
           : { dietaryOrigin: body.dietaryOrigin as DietaryOrigin | null }),
       };
-      const created = await gated(sessionId, (tx) => createIngredient(tx, input));
+      const created = await gated(sessionId, (tx) =>
+        createIngredient(tx, brandTenantId(deps.cfg.tenantId), input),
+      );
       return c.json(created, 201);
     }),
   );
@@ -215,7 +217,9 @@ export function mountRecipeApi(app: Hono, deps: RecipeApiDeps, log: Logger): voi
       // `requireBodyUuid` maps a malformed element to `management.request_invalid { field }` (a valid but
       // nonexistent id is the separate FK case — `recipe.*_not_found` is deferred by the spec §8).
       const ingredientIds = body.ingredientIds.map((x) => requireBodyUuid(x, "ingredientIds"));
-      await gated(sessionId, (tx) => setProductRecipe(tx, productId, ingredientIds));
+      await gated(sessionId, (tx) =>
+        setProductRecipe(tx, brandTenantId(deps.cfg.tenantId), productId, ingredientIds),
+      );
       return c.body(null, 204);
     }),
   );

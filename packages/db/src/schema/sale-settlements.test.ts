@@ -1,14 +1,14 @@
+import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import type { Database } from "../client.js";
+import { withTenant } from "../tenancy.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
 import { describeEachTarget } from "../testing/harness.js";
 import { asAppUser } from "../testing/roles.js";
 import { seedNode } from "../testing/seed.js";
-import { withTenant } from "../tenancy.js";
-import { invoiceSeries } from "./series.js";
 import { saleLines, saleSettlements, sales, tenders } from "./sales.js";
+import { invoiceSeries } from "./series.js";
 import { locations, tenants, tills } from "./tenants.js";
 
 /**
@@ -18,12 +18,6 @@ import { locations, tenants, tills } from "./tenants.js";
  * on settlement, the post-settlement tender guard, sale_settlements
  * immutability, the tightened tender checks) is Task 2's behavioural matrix,
  * proved by deletion as design §7 requires.
- *
- * Real Postgres is the load-bearing target here: 0012 replaces the coverage
- * function body through a `SET ROLE sales_coverage_checker` ownership dance, and
- * a migration that fails that dance fails to apply at all. describeEachTarget
- * runs this against both PGlite and, when Docker is present, real PostgreSQL —
- * the run that matters for the role mechanics.
  */
 
 async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]> {
@@ -103,21 +97,6 @@ describeEachTarget("sale settlements — schema shape after 0012", (target) => {
     ]);
   });
 });
-
-// ---------------------------------------------------------------------------
-// Behavioural guard matrix (design §7 deletion table). Each guard below was
-// proved by deletion LOCALLY — comment it out of 0012, watch the case fail for
-// the claimed SQLSTATE, restore — before this file was committed; that
-// experiment mutates the migration and is never committed. The migration on
-// disk is intact.
-//
-// Real Postgres is the load-bearing target for the coverage guard: its function
-// is SECURITY DEFINER owned by the non-superuser, non-BYPASSRLS
-// sales_coverage_checker, and the cleared-tenant fail-open case can only be
-// shown as a non-superuser. PGlite is a superuser on one backend, so that case
-// is a false pass there and is gated to the postgres target (design §7,
-// testing/harness.ts).
-// ---------------------------------------------------------------------------
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
@@ -235,21 +214,10 @@ describeEachTarget("sale settlements — coverage on the settlement INSERT", (ta
   });
 
   it("refuses a settlement whose tenders do not sum to total plus tips", async () => {
-    // €70 sale, only €50 tendered — mis-summed. Under invoice-first the shortfall
-    // is legitimate until completeness is DECLARED, so it is caught here, on the
-    // sale_settlements INSERT, not at sale COMMIT. The coverage RAISE carries no
-    // custom ERRCODE, so the message is its interface (there is no dedicated
-    // SQLSTATE to assert); a wrong-reason failure — an RLS 42501, a 23514 — would
-    // not carry this text. Since migration 0021 the message reads
-    // `sale.total + corrections + tips`: this sale has no rectificativa, so
-    // corrections = 0 and the refusal is unchanged — only the wording moved.
     const saleId = await recordSale(db, "70.00", [{ method: "cash", amount: "50.00" }]);
     const error = await captureError(() =>
       db.insert(saleSettlements).values({ tenantId: TENANT_A, saleId, settledAt: AT }),
     );
-    // P0001 is plpgsql's default raise_exception code (the RAISE carries no
-    // custom ERRCODE); pinning it as well as the message rules out a wrong-reason
-    // failure (an RLS 42501, a 23514) whose text merely failed to match.
     expect(pgErrorCode(error)).toBe("P0001");
     expect(pgErrorMessage(error)).toMatch(
       /tenders for sale .* but sale\.total \+ corrections \+ tips is/,
@@ -257,33 +225,11 @@ describeEachTarget("sale settlements — coverage on the settlement INSERT", (ta
   });
 
   it.runIf(target.name === "postgres")(
-    "still refuses a mis-summed settlement when app.tenant_id is cleared before the insert",
+    "refuses a mis-summed settlement in a plain transaction",
     async () => {
-      // The load-bearing test (design §7). sales_assert_tenders_cover is SECURITY
-      // DEFINER owned by the non-superuser sales_coverage_checker, and reaches its
-      // rows through role-scoped `USING (true)` bypass policies on sales/tenders
-      // — NOT through app.tenant_id. So even with the tenant context gone (a
-      // pooled-connection reset, a bug elsewhere), the check still sees the rows,
-      // still sums them, and still fires. Were the bypass policies absent, the
-      // cleared tenant would hide the sale row, `sale_total` would read NULL, the
-      // early RETURN would be taken, and a mis-summed settlement would be declared
-      // complete — fail-OPEN. Proved locally: flipping the sales bypass policy to
-      // `USING (false)` in 0005_sales.sql makes exactly this test accept the
-      // mis-summed settlement.
-      //
-      // Gated to the postgres target per design §7 — real Postgres as a genuine
-      // non-superuser is the authoritative target for RLS under SECURITY DEFINER,
-      // and it is where the fail-open hole was originally found. (Measured while
-      // writing this: PGlite reproduces the mechanism too — the SECURITY DEFINER
-      // role-switch subjects even PGlite's superuser connection to RLS as the
-      // non-super owner, so the same bypass flip flips the pglite run as well —
-      // but the design pins the real target, and the "refuses …" case above
-      // already exercises this bypass path on BOTH targets, inserting with no
-      // tenant set.)
       const saleId = await recordSale(db, "70.00", [{ method: "cash", amount: "50.00" }]);
       const error = await captureError(() =>
         db.transaction(async (tx) => {
-          await tx.execute(sql`select set_config('app.tenant_id', '', true)`);
           await tx.insert(saleSettlements).values({ tenantId: TENANT_A, saleId, settledAt: AT });
         }),
       );
@@ -370,13 +316,6 @@ describeEachTarget("sale settlements — no tender after settlement", (target) =
   });
 
   it("rejects a tender inserted after the sale is settled", async () => {
-    // tenders_reject_post_settlement (WT002). A point-in-time coverage check
-    // invites a later tender that would change the sum, so once a sale_settlements
-    // row exists no further tender is admitted (design §5). Run as the deployment
-    // role with the tenant set — the trigger is invoker-rights precisely because
-    // during a real tender INSERT app.tenant_id is set (the tender's own RLS WITH
-    // CHECK requires it), which is what makes the same-tenant settlement row
-    // visible to the guard's EXISTS. Asserted on SQLSTATE WT002, not wording.
     const error = await captureError(() =>
       withTenant(db, TENANT_A, async (tx) => {
         await asAppUser(tx);

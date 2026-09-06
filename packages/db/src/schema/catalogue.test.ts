@@ -22,16 +22,6 @@ describeEachTarget("catalogue — menu, taxonomy and priced items", (target) => 
     if (db !== undefined) await db.close();
   });
 
-  it("forces RLS on the three catalogue tables", async () => {
-    const out = await rows<{ relname: string; relforcerowsecurity: boolean }>(
-      db,
-      sql`select relname, relforcerowsecurity from pg_class
-          where relname in ('catalogues','categories','products') order by relname`,
-    );
-    expect(out.map((r) => r.relname)).toEqual(["catalogues", "categories", "products"]);
-    expect(out.every((r) => r.relforcerowsecurity)).toBe(true);
-  });
-
   it("rejects a bad pricing_unit and a bad vat_class, each on its own CHECK", async () => {
     // Seed real FK parents FIRST so the two INSERTs below reach the CHECK constraints instead of
     // tripping products' tenant_id / catalogue_id foreign keys. The previous version of this test

@@ -128,9 +128,9 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
 
   const { cafeId, aguaId, catalogueId } = await withTenant(db, tenantId, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, { name: "Carta" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
-    const cafe = await createProduct(tx, {
+    const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
+    const bebidas = await createCategory(tx, tenantId, { name: "Bebidas" });
+    const cafe = await createProduct(tx, tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       descriptions: { [LOCALE]: "Café" },
@@ -140,7 +140,7 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
     });
     // Deliberately category-less: `listAvailableProducts` resolves its `category` to NULL (LEFT JOIN),
     // so its priced line snapshots `category: null` — the other side of `parkOrder`'s `?? null`.
-    const agua = await createProduct(tx, {
+    const agua = await createProduct(tx, tenantId, {
       catalogueId: cat.id,
       categoryId: null,
       descriptions: { [LOCALE]: "Agua" },
@@ -828,7 +828,7 @@ async function makeProduct(
   catalogueId: string,
   route: { categoryId?: string; stationId?: string },
 ): Promise<string> {
-  const { id } = await createProduct(tx, {
+  const { id } = await createProduct(tx, cfg.tenantId, {
     catalogueId,
     categoryId: route.categoryId ?? null,
     descriptions: { [LOCALE]: `P-${randomUUID().slice(0, 8)}` },
@@ -1019,7 +1019,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const barra = await createStation(tx, cfg, { name: "Barra" });
-      const drinks = await createCategory(tx, { name: "Copas" });
+      const drinks = await createCategory(tx, cfg.tenantId, { name: "Copas" });
       await setCategoryStation(tx, cfg, drinks.id, barra.id);
       const cana = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id }); // → barra (category)
       const cafe = await makeProduct(tx, cfg, catalogueId, {
@@ -1515,7 +1515,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       // A gluten burger with a gluten-free-bun swap: base `{gluten: contains}`, the option removes it.
-      const burger = await createProduct(tx, {
+      const burger = await createProduct(tx, cfg.tenantId, {
         catalogueId,
         categoryId: null,
         descriptions: { [LOCALE]: "Hamburguesa" },
@@ -1607,7 +1607,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const dish = await createProduct(tx, {
+      const dish = await createProduct(tx, cfg.tenantId, {
         catalogueId,
         categoryId: null,
         descriptions: { [LOCALE]: "Ensalada" },
@@ -1641,7 +1641,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const dish = await createProduct(tx, {
+      const dish = await createProduct(tx, cfg.tenantId, {
         catalogueId,
         categoryId: null,
         descriptions: { [LOCALE]: "Crema" },
@@ -2529,7 +2529,7 @@ describe("correction slips on recall & void (A6)", () => {
     name: string,
     courseId?: string,
   ): Promise<string> {
-    const { id } = await createProduct(tx, {
+    const { id } = await createProduct(tx, cfg.tenantId, {
       catalogueId,
       categoryId: null,
       descriptions: { [LOCALE]: name },

@@ -55,9 +55,6 @@ async function openOrder(admin: Database, orderNumber: number): Promise<string> 
 describe("park & retrieve schema", () => {
   const suite = useTemplateDb({ template: "core" });
 
-  // Common scaffolding seeded once as the owner (superuser bypasses RLS — pure setup). Registered
-  // after the helper's own hook, which vitest runs first; if it throws this one never runs, so
-  // `suite.admin` is never read unstarted (verified pattern, daily-closes.test.ts).
   beforeAll(async () => {
     const admin = suite.admin;
     await admin

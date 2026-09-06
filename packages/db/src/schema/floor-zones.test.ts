@@ -25,10 +25,6 @@ describe("floor_zones schema (columns and the dining_tables.zone_id composite FK
       { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
       { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
     ]);
-    // A location per tenant: floor_zones carries a tenant-consistent (tenant_id, location_id) FK, so
-    // every zone insert below needs a real owning location. Seeded as the superuser admin (bypasses
-    // RLS). operation_description is Spanish test DATA (not a schema identifier), exactly as the
-    // sibling dining_tables test uses 'Hostelería'.
     await suite.admin.execute(sql`
       insert into locations (id, tenant_id, name, invoice_locales, operation_description)
       values
@@ -120,13 +116,6 @@ describe("floor_zones schema (columns and the dining_tables.zone_id composite FK
   });
 
   it("working_order_lines.served_at is visible and writable by the non-owner app_user", async () => {
-    // served_at is an additive NULLABLE column on working_order_lines, which already carries TS-1's
-    // FORCE-RLS policy + table-wide app_user SELECT/INSERT/UPDATE grants, and is NON-FISCAL (design
-    // H2 — never read into a filed record). A full round-trip would need the whole node→till→product→
-    // working_order graph; disproportionate for an additive column already under the existing policy.
-    // Instead prove app_user can SELECT and UPDATE the column: PostgreSQL resolves the column and
-    // checks the privilege at parse/execute time regardless of how many rows match, so an
-    // undefined column would raise 42703 and a missing grant 42501 — a clean, non-vacuous check.
     await asApp(TENANT_A, (tx) =>
       tx.execute(sql`select served_at from working_order_lines where tenant_id = ${TENANT_A}`),
     );

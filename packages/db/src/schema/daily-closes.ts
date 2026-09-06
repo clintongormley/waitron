@@ -28,14 +28,6 @@ import { nodes } from "./nodes.js";
  * output (VAT summary, cash-up, counts) — opaque `unknown` here, reporting owns its precise type —
  * and `cashReconciliation` is the per-till/per-node cash-variance block reporting builds at close time.
  * All money is stored as `Decimal` strings, matching the rest of the schema.
- *
- * `.enableRLS()` emits only ENABLE ROW LEVEL SECURITY. The FORCE ROW LEVEL SECURITY, the
- * `daily_closes_tenant_isolation` policy, the SELECT/INSERT-only grant to `app_user` (no
- * UPDATE/DELETE), and the append-only + no-truncate triggers are hand-written in the custom
- * migration (0033), exactly as packages/fiscal-verifactu's 0001_registros_inmutables.sql does for
- * `registros_facturacion`. The `inmutabilidad` guard in packages/fiscal-verifactu scans every
- * tenant_id-bearing table for ENABLE + FORCE, so a missing FORCE here fails that suite, not this
- * package's.
  */
 export interface DailyCloseSnapshot {
   /** The VAT-exact `computeDailyClose` output (vat, cash, counts). Reporting owns the precise type. */
@@ -91,20 +83,8 @@ export const dailyCloses = pgTable(
     // Chain-position backstop: no two closes on a node share a sequence number.
     unique("daily_closes_sequence_key").on(t.tenantId, t.nodeId, t.sequenceNo),
   ],
-).enableRLS();
+);
 
-/**
- * The mutable per-(tenant, node) chain head for {@link dailyCloses}. One row per node: `sequence_no`
- * is the last assigned close number (next close is +1) and `last_entry_hash` is the last close's
- * `entry_hash` ("" before the first). A counter, not a sequence — tenant-scoped, replicates as
- * ordinary row data (memory: replication is shared infra), and is locked FOR UPDATE + advanced under
- * the same RLS as everything else, mirroring `working_order_counters`.
- *
- * Keyed by (tenant_id, node_id), no surrogate id: there is exactly one head per node and the key is
- * the identity. MUTABLE — the head advances on every close — so it gets Part 4 of the immutability
- * recipe (FORCE RLS + tenant-isolation policy) plus a SELECT/INSERT/UPDATE grant, and NO append-only
- * trigger. The same shape `invoice_series` and `working_order_counters` already carry.
- */
 export const dailyCloseChain = pgTable(
   "daily_close_chain",
   {
@@ -121,4 +101,4 @@ export const dailyCloseChain = pgTable(
       name: "daily_close_chain_node_fk",
     }),
   ],
-).enableRLS();
+);

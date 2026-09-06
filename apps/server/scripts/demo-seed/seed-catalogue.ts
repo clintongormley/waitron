@@ -12,6 +12,7 @@
 // category route update) — never string-concatenated (CLAUDE.md §3).
 
 import { sql } from "drizzle-orm";
+import type { TenantId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import {
   addCatalogueToLocation,
@@ -77,15 +78,16 @@ async function resolveStationIds(tx: Transaction, locationId: string): Promise<S
  */
 export async function seedCatalogues(
   tx: Transaction,
+  tenantId: TenantId,
   { locationId, locale }: SeedCataloguesInput,
 ): Promise<SeedCataloguesResult> {
   const stationIds = await resolveStationIds(tx, locationId);
   const productsByImage = new Map<string, string>();
 
   const seedOne = async (data: SeedCatalogue): Promise<string> => {
-    const catalogue = await createCatalogue(tx, { name: data.name[locale] });
+    const catalogue = await createCatalogue(tx, tenantId, { name: data.name[locale] });
     for (const cat of data.categories) {
-      const category = await createCategory(tx, { name: cat.name[locale] });
+      const category = await createCategory(tx, tenantId, { name: cat.name[locale] });
       if (cat.station !== null) {
         // The create op takes no station; set the route with a parameterised update. Both the id and
         // the category id are bound params.
@@ -94,7 +96,7 @@ export async function seedCatalogues(
         );
       }
       for (const product of cat.products) {
-        const created = await createProduct(tx, {
+        const created = await createProduct(tx, tenantId, {
           catalogueId: catalogue.id,
           categoryId: category.id,
           // Only the active locale's text — the till reads the venue's locale, and a single-locale
@@ -120,7 +122,7 @@ export async function seedCatalogues(
   const diaId = await seedOne(MENU_DEL_DIA);
 
   await assignCatalogueToLocation(tx, locationId, casaId);
-  await addCatalogueToLocation(tx, locationId, diaId);
+  await addCatalogueToLocation(tx, tenantId, locationId, diaId);
 
   return { productsByImage };
 }

@@ -1,14 +1,12 @@
+import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
-import { asAppUser } from "../testing/roles.js";
 import { describeEachTarget } from "../testing/harness.js";
 import { seedNode } from "../testing/seed.js";
-import { withTenant } from "../tenancy.js";
-import { locations, tenants, tills } from "./tenants.js";
 import { invoiceSeries } from "./series.js";
+import { locations, tenants, tills } from "./tenants.js";
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
@@ -36,7 +34,6 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
   return Array.isArray(result) ? result : result.rows;
 }
 
-/** Seeds as owner, deliberately: RLS has nothing to say about the fixture. */
 async function seed(db: Database): Promise<void> {
   await db.insert(tenants).values([
     { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
@@ -232,76 +229,5 @@ describeEachTarget("invoice_series schema", (target) => {
       (i) => /UNIQUE/i.test(i.indexdef) && /\(tenant_id, node_id\)/.test(i.indexdef),
     );
     expect(pairOnly).toEqual([]);
-  });
-
-  it("hides another tenant's series from the app role", async () => {
-    await db.insert(invoiceSeries).values([
-      { tenantId: TENANT_A, nodeId: nodeA1, code: "FA", purpose: "standard" },
-      { tenantId: TENANT_B, nodeId: nodeB1, code: "FB", purpose: "standard" },
-    ]);
-    const visible = await withTenant(db, TENANT_A, async (tx) => {
-      await asAppUser(tx);
-      return tx.select({ code: invoiceSeries.code }).from(invoiceSeries);
-    });
-    expect(visible.map((r) => r.code)).toEqual(["FA"]);
-  });
-
-  it("grants the app role UPDATE on next_number and on no other column", async () => {
-    // The one relaxation of Task 5's blanket revocation in this plan, and it
-    // is scoped to a single column. Asserted by introspection rather than by
-    // trying each column in turn: a new column added later is caught by this
-    // test without anyone remembering to extend a list.
-    // `db.execute()` returns `{ rows }`, never the row array itself (see
-    // client.ts's `SharedQueryResultHKT` and the `rows()` helper above) — a
-    // bare `.map()` on the result throws `TypeError: ... is not a function`
-    // rather than silently misreporting, which is why this uses the same
-    // helper the other introspection tests in this file already do.
-    const granted = await rows<{ column_name: string }>(
-      db,
-      sql`
-        select column_name from information_schema.column_privileges
-        where table_name = 'invoice_series'
-          and grantee = 'app_user'
-          and privilege_type = 'UPDATE'
-        order by column_name
-      `,
-    );
-    expect(granted.map((r) => r.column_name)).toEqual(["next_number"]);
-  });
-
-  it("refuses an UPDATE of any other column as the app role", async () => {
-    // next_number moves; the series' identity does not. A blanket UPDATE would
-    // let the application retarget a series at another node, which the audit
-    // trail assumes is stable.
-    const [series] = await db
-      .insert(invoiceSeries)
-      .values({ tenantId: TENANT_A, nodeId: nodeA1, code: "FA", purpose: "standard" })
-      .returning({ id: invoiceSeries.id });
-    // Same wrapper issue: match the unwrapped Postgres message.
-    const error = await captureError(() =>
-      withTenant(db, TENANT_A, async (tx) => {
-        await asAppUser(tx);
-        return tx.update(invoiceSeries).set({ code: "ZZ" }).where(eq(invoiceSeries.id, series.id));
-      }),
-    );
-    expect(pgErrorMessage(error)).toMatch(/permission denied for table invoice_series/);
-  });
-
-  it("permits an UPDATE of next_number as the app role", async () => {
-    // The counterpart to the test above, and the reason allocation can run
-    // outside the owner role at all.
-    const [series] = await db
-      .insert(invoiceSeries)
-      .values({ tenantId: TENANT_A, nodeId: nodeA1, code: "FA", purpose: "standard" })
-      .returning({ id: invoiceSeries.id });
-    await expect(
-      withTenant(db, TENANT_A, async (tx) => {
-        await asAppUser(tx);
-        return tx
-          .update(invoiceSeries)
-          .set({ nextNumber: 9999 })
-          .where(eq(invoiceSeries.id, series.id));
-      }),
-    ).resolves.not.toThrow();
   });
 });

@@ -227,7 +227,7 @@ describe("computeTopSellers", () => {
     expect(await run()).toEqual([]);
   });
 
-  it("excludes another tenant's sales (RLS + the tenant predicate)", async () => {
+  it("excludes another tenant's sales (the tenant predicate)", async () => {
     const other = await seedVenue(suite.db);
     await seedSale(suite.db, other, {
       invoiceNumber: 1,

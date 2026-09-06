@@ -1,3 +1,4 @@
+import { tenantId as brandTenantId } from "@waitron/shared";
 // Side-effect only: loads this host's errors.ts augmentation for the code this file THROWS directly,
 // `management.request_invalid` (declared in `./errors.js`), under the "every file that throws one of
 // these imports ./errors.js" convention. `shared.invalid_id` is declared in `@waitron/shared` and
@@ -309,7 +310,9 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         throw new AppError("management.request_invalid", { field: "name" });
       }
       const { name } = body;
-      const created = await gated(sessionId, (tx) => createCatalogue(tx, { name }));
+      const created = await gated(sessionId, (tx) =>
+        createCatalogue(tx, brandTenantId(deps.cfg.tenantId), { name }),
+      );
       return c.json(created, 201);
     }),
   );
@@ -342,7 +345,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const catalogueId = await requireCatalogueIdBody(c);
       await gated(sessionId, async (tx) => {
         await assertCatalogueVisible(tx, catalogueId);
-        await addCatalogueToLocation(tx, locationId, catalogueId);
+        await addCatalogueToLocation(tx, brandTenantId(deps.cfg.tenantId), locationId, catalogueId);
       });
       return c.body(null, 204);
     }),
@@ -365,7 +368,12 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const catalogueId = await requireCatalogueIdBody(c);
       await gated(sessionId, async (tx) => {
         await assertCatalogueVisible(tx, catalogueId);
-        await setLocationDefaultCatalogue(tx, locationId, catalogueId);
+        await setLocationDefaultCatalogue(
+          tx,
+          brandTenantId(deps.cfg.tenantId),
+          locationId,
+          catalogueId,
+        );
       });
       return c.body(null, 204);
     }),
@@ -388,7 +396,9 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         throw new AppError("management.request_invalid", { field: "name" });
       }
       const { name } = body;
-      const created = await gated(sessionId, (tx) => createCategory(tx, { name }));
+      const created = await gated(sessionId, (tx) =>
+        createCategory(tx, brandTenantId(deps.cfg.tenantId), { name }),
+      );
       return c.json(created, 201);
     }),
   );
@@ -473,9 +483,14 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         ...(body.active === undefined ? {} : { active: body.active }),
       };
       const created = await gated(sessionId, async (tx) => {
-        const product = await createProduct(tx, input);
+        const product = await createProduct(tx, brandTenantId(deps.cfg.tenantId), input);
         if (optionGroupIds !== undefined) {
-          await setProductOptionGroups(tx, product.id, optionGroupIds);
+          await setProductOptionGroups(
+            tx,
+            brandTenantId(deps.cfg.tenantId),
+            product.id,
+            optionGroupIds,
+          );
         }
         return product;
       });
@@ -565,7 +580,12 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       await gated(sessionId, async (tx) => {
         await updateProduct(tx, productId, patch);
         if (optionGroupIds !== undefined) {
-          await setProductOptionGroups(tx, productId, optionGroupIds);
+          await setProductOptionGroups(
+            tx,
+            brandTenantId(deps.cfg.tenantId),
+            productId,
+            optionGroupIds,
+          );
         }
       });
       return c.body(null, 204);
@@ -630,7 +650,9 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         ...(sort === undefined ? {} : { sort }),
         ...(body.active === undefined ? {} : { active: body.active }),
       };
-      const created = await gated(sessionId, (tx) => createOptionGroup(tx, input));
+      const created = await gated(sessionId, (tx) =>
+        createOptionGroup(tx, brandTenantId(deps.cfg.tenantId), input),
+      );
       return c.json(created, 201);
     }),
   );
@@ -747,7 +769,9 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       // The group :id is screened for SHAPE only; a well-formed-but-missing/foreign group makes the
       // tenant-consistent (tenant_id, group_id) FK raise 23503 → the opaque 500 the STATUS map documents
       // for a foreign id, the same posture the product routes take on a foreign catalogueId.
-      const created = await gated(sessionId, (tx) => createOptionGroupItem(tx, groupId, input));
+      const created = await gated(sessionId, (tx) =>
+        createOptionGroupItem(tx, brandTenantId(deps.cfg.tenantId), groupId, input),
+      );
       return c.json(created, 201);
     }),
   );

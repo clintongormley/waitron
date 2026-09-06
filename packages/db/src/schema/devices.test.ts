@@ -16,8 +16,6 @@ const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
-// One kitchen_station per tenant — the composite (tenant_id, station_id) FK target the device
-// binding points at. Seeded as the superuser admin (bypasses RLS).
 const STATION_A = "cccccccc-0000-4000-8000-000000000001";
 const STATION_B = "cccccccc-0000-4000-8000-000000000002";
 // A location id that is never seeded — the negative for the direct location_id → locations.id FK.
@@ -134,9 +132,6 @@ describe("devices + device_pairing_codes schema (columns, CHECKs, FKs, unique)",
   });
 
   it("devices: the station binding is tenant-consistent (composite FK to kitchen_stations)", async () => {
-    // Tenant A cannot bind a device to tenant B's station: the (tenant_id, station_id) composite FK
-    // has no (A, STATION_B) row to satisfy it → foreign_key_violation, independently of RLS. The
-    // location_id here is A's own (the default), so the ONLY violated FK is the station one.
     const e = await captureError(() => seedDevice(TENANT_A, STATION_B, "Cross-tenant station"));
     expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation
   });

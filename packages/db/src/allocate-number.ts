@@ -43,10 +43,6 @@ import { invoiceSeries } from "./schema/series.js";
  * but a sequence per series row means CREATE SEQUENCE executed from a trigger
  * on every insert — dynamic DDL on the write path, plus a SECURITY DEFINER
  * function to run it — to buy a gap the regulation never asked for.
- *
- * A series filtered out by RLS is not in the UPDATE's target set, so zero rows
- * are updated and RETURNING yields nothing: a cross-tenant probe cannot
- * advance another tenant's numbering.
  */
 export async function allocateInvoiceNumber(tx: Transaction, seriesId: string): Promise<number> {
   const updated = await tx

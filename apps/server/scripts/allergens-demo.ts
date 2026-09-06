@@ -177,12 +177,12 @@ async function main(): Promise<void> {
     // POS does: `withTenant` sets the tenant GUC, `asAppUser` drops to the RLS-bound role.
     await withTenant(db, venue.tenantId, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, { name: "Delicatessen" });
-      const comida = await createCategory(tx, { name: "Comida" });
-      const postres = await createCategory(tx, { name: "Postres" });
+      const cat = await createCatalogue(tx, venue.tenantId, { name: "Delicatessen" });
+      const comida = await createCategory(tx, venue.tenantId, { name: "Comida" });
+      const postres = await createCategory(tx, venue.tenantId, { name: "Postres" });
 
       // 1. `contains` WITH a source — the richest declaration.
-      await createProduct(tx, {
+      await createProduct(tx, venue.tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,
         descriptions: { [LOCALE]: "Empanada de trigo" },
@@ -196,7 +196,7 @@ async function main(): Promise<void> {
       });
 
       // 2. a `may_contain` (cross-contamination) alongside a plain `contains`.
-      await createProduct(tx, {
+      await createProduct(tx, venue.tenantId, {
         catalogueId: cat.id,
         categoryId: postres.id,
         descriptions: { [LOCALE]: "Tarta de la casa" },
@@ -210,7 +210,7 @@ async function main(): Promise<void> {
       });
 
       // 3. reviewed, but no declarable allergens — the empty map. NOT the same as pending.
-      await createProduct(tx, {
+      await createProduct(tx, venue.tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,
         descriptions: { [LOCALE]: "Ensalada de la huerta" },
@@ -221,7 +221,7 @@ async function main(): Promise<void> {
       });
 
       // 4. allergens left UNSET (null) — never reviewed → PENDING.
-      await createProduct(tx, {
+      await createProduct(tx, venue.tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,
         descriptions: { [LOCALE]: "Sopa del día" },

@@ -91,18 +91,14 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
     let priced: ReturnType<typeof priceBasket>;
 
     const { saleId } = await withTenant(suite.db, tenantId, async (tx) => {
-      // The application role, never the owner: an owner bypasses RLS, so an owner-run write proves
-      // the code runs, not that the POS role is permitted to run it. Registering the node is a
-      // one-time admin action `recordSale` never performs itself (the fake refuses an unregistered
-      // node with `fiscal.node_not_registered`, exactly as a real backend would).
       await asAppUser(tx);
       await backend.registerNode(tx, nodeId, { tenantId });
 
       // Seed a catalogue: one weight-priced product ("sliced ham") in a "Food" category. English
       // strings only — this is a generic package under the english-only guard.
-      const cat = await createCatalogue(tx, { name: "Deli" });
-      const food = await createCategory(tx, { name: "Food" });
-      await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const food = await createCategory(tx, tenantId, { name: "Food" });
+      await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: food.id,
         descriptions: { en: "sliced ham" },

@@ -28,13 +28,6 @@ import { workingOrderCounters } from "./schema/working-order-counters.js";
  * first call) rather than the pre-increment value: an order number is a plain
  * per-node counter starting at 1, not a fiscal series that may carry a
  * migrated starting point.
- *
- * RLS makes the isolation the till depends on: `working_order_counters`'s
- * FOR ALL policy (0029) filters both the USING read and the WITH CHECK write to
- * `tenant_id = current_tenant_id()`, so an allocation scoped to another tenant
- * cannot see, create, or advance this tenant's counter — it is rejected, never
- * returned empty. `row` is therefore always present when this resolves; the
- * non-null assertion cannot fire on a live database.
  */
 export async function allocateOrderNumber(
   tx: Transaction,

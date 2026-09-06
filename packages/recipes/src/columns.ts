@@ -1,16 +1,6 @@
-import { sql } from "drizzle-orm";
 import { ingredients } from "@waitron/db";
 
-/**
- * Shared column selections and value helpers for the recipes package. A LEAF module: it imports only
- * the `ingredients` table (from `@waitron/db`) and drizzle's `sql`, and nothing in the package's own
- * runtime graph. Both `ingredients.ts` and `recipes.ts` import from here, so the constants live in one
- * place without either file having to value-import the other — which is what would close the
- * `ingredients → recipes` runtime edge into a cycle.
- */
-
-/** The tenant scope as an insertable value — reads the GUC the caller set via withTenant. */
-export const CURRENT_TENANT = sql`current_tenant_id()`;
+// Shared selections keep the ingredients → recipes runtime dependency acyclic.
 
 /**
  * The `ingredients` columns projected into the {@link Ingredient} shape. The type is annotated

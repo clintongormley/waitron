@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import {
-  CORE_MIGRATIONS,
   asAppUser,
   optionGroupItems,
   optionGroups,
@@ -10,7 +9,6 @@ import {
   withTenant,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { TenantId } from "@waitron/shared";
 import { priceBasket } from "./pricing.js";
 import type { PriceableProduct } from "./pricing.js";
@@ -47,22 +45,16 @@ import {
 } from "./operations.js";
 import { AppError } from "@waitron/shared";
 import type { AvailableProduct } from "./operations.js";
-import { seedCatalogueFixture, seedVenue } from "../test/fixtures.js";
+import { seedCatalogueFixture, seedVenue, useCatalogueDb } from "../test/fixtures.js";
 
-// Behaviour and query-shape correctness run on PGlite: fast, hermetic, and enough for the joins and
-// CRUD here. What the app role may do on the catalogue tables is pinned by the privilege matrix
-// (`packages/fiscal-verifactu/src/privileges.expected.ts`), not here — PGlite connects as a
-// superuser and holds every grant (CLAUDE.md §4). Each test seeds a FRESH tenant so the
-// suites are order-independent (every operation is scoped to `current_tenant_id()`).
-const fx = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+// Query behaviour runs on PGlite; each case owns its fixture database.
+const fx = useCatalogueDb();
 
 describe("catalogue operations", () => {
   let tenantId: TenantId;
   let locationId: string;
 
   beforeEach(async () => {
-    // A fresh tenant per test (fresh NIF), so suites are order-independent: no test sees another's
-    // rows, since every operation is scoped to `current_tenant_id()`.
     const venue = await seedVenue(fx.db);
     tenantId = venue.tenantId;
     locationId = venue.locationId;
@@ -78,8 +70,8 @@ describe("catalogue operations", () => {
 
   it("creates and lists catalogues", async () => {
     await asTenant(async (tx) => {
-      const deli = await createCatalogue(tx, { name: "Deli" });
-      const stall = await createCatalogue(tx, { name: "Drinks stall" });
+      const deli = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const stall = await createCatalogue(tx, tenantId, { name: "Drinks stall" });
       expect(deli.active).toBe(true);
       expect(deli.version).toBe(1);
       const cats = await listCatalogues(tx);
@@ -90,8 +82,8 @@ describe("catalogue operations", () => {
 
   it("creates and lists categories", async () => {
     await asTenant(async (tx) => {
-      const food = await createCategory(tx, { name: "Food" });
-      const drinks = await createCategory(tx, { name: "Drinks" });
+      const food = await createCategory(tx, tenantId, { name: "Food" });
+      const drinks = await createCategory(tx, tenantId, { name: "Drinks" });
       const cats = await listCategories(tx);
       expect(cats.map((c) => c.name).sort()).toEqual(["Drinks", "Food"]);
       expect(cats.map((c) => c.id).sort()).toEqual([drinks.id, food.id].sort());
@@ -100,9 +92,9 @@ describe("catalogue operations", () => {
 
   it("creates and lists a catalogue's products", async () => {
     await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
-      const other = await createCatalogue(tx, { name: "Other" });
-      const ham = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const other = await createCatalogue(tx, tenantId, { name: "Other" });
+      const ham = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "sliced ham" },
@@ -110,7 +102,7 @@ describe("catalogue operations", () => {
         unitPrice: "24.90",
         vatClass: "reduced",
       });
-      const water = await createProduct(tx, {
+      const water = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "water" },
@@ -119,7 +111,7 @@ describe("catalogue operations", () => {
         vatClass: "general",
       });
       // A product in a DIFFERENT catalogue must not leak into this catalogue's listing.
-      await createProduct(tx, {
+      await createProduct(tx, tenantId, {
         catalogueId: other.id,
         categoryId: null,
         descriptions: { en: "olives" },
@@ -140,8 +132,8 @@ describe("catalogue operations", () => {
 
   it("updates a product's price and description", async () => {
     await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
-      const water = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const water = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "water" },
@@ -161,9 +153,9 @@ describe("catalogue operations", () => {
 
   it("threads a product's image through create, update and list", async () => {
     await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
       // Created WITH an image: the stored reference round-trips out of createProduct and listProducts.
-      const withImage = await createProduct(tx, {
+      const withImage = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "ham" },
@@ -174,7 +166,7 @@ describe("catalogue operations", () => {
       });
       expect(withImage.image).toBe("x.webp");
       // Omitting `image` leaves it null (no picture — distinct from allergens' PENDING null).
-      const noImage = await createProduct(tx, {
+      const noImage = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "water" },
@@ -199,8 +191,8 @@ describe("catalogue operations", () => {
 
   it("toggles a product's active flag through updateProduct", async () => {
     await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
-      const p = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "water" },
@@ -223,9 +215,9 @@ describe("catalogue operations", () => {
 
   it("creates a product inactive when active:false, active by default when omitted", async () => {
     await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
       // Created INACTIVE in one write: the flag round-trips out of createProduct.
-      const hidden = await createProduct(tx, {
+      const hidden = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "seasonal" },
@@ -236,7 +228,7 @@ describe("catalogue operations", () => {
       });
       expect(hidden.active).toBe(false);
       // Omitting `active` leaves the column default (true) — today's behaviour, unchanged.
-      const shown = await createProduct(tx, {
+      const shown = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "water" },
@@ -254,8 +246,8 @@ describe("catalogue operations", () => {
 
   it("round-trips a product's allergens", async () => {
     await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
-      const p = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "bread" },
@@ -272,8 +264,8 @@ describe("catalogue operations", () => {
 
   it("defaults allergens to null (unreviewed) when omitted", async () => {
     await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
-      const p = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "water" },
@@ -287,9 +279,9 @@ describe("catalogue operations", () => {
 
   it("rejects an invalid allergen code on create", async () => {
     await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
       await expect(
-        createProduct(tx, {
+        createProduct(tx, tenantId, {
           catalogueId: cat.id,
           categoryId: null,
           descriptions: { en: "mystery" },
@@ -304,8 +296,8 @@ describe("catalogue operations", () => {
 
   it("validates allergens on update and clears them with null", async () => {
     await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
-      const p = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "cake" },
@@ -331,8 +323,8 @@ describe("catalogue operations", () => {
 
   it("listAvailableProducts returns allergens", async () => {
     await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
-      await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "milk" },
@@ -349,8 +341,8 @@ describe("catalogue operations", () => {
 
   it("listAvailableProducts loads a product's active option groups & items, sorted", async () => {
     await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
-      const burger = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const burger = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "burger" },
@@ -359,7 +351,7 @@ describe("catalogue operations", () => {
         vatClass: "general",
       });
       // A second product with NO attached groups — must come back with optionGroups: [].
-      const water = await createProduct(tx, {
+      const water = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "water" },
@@ -379,7 +371,7 @@ describe("catalogue operations", () => {
       const [extras] = await tx
         .insert(optionGroups)
         .values({
-          tenantId: sql`current_tenant_id()`,
+          tenantId,
           name: { en: "Extras" },
           minSelect: 0,
           maxSelect: 2,
@@ -390,7 +382,7 @@ describe("catalogue operations", () => {
         .returning({ id: optionGroups.id });
       await tx.insert(optionGroupItems).values([
         {
-          tenantId: sql`current_tenant_id()`,
+          tenantId,
           groupId: extras!.id,
           name: { en: "Bacon" },
           priceDelta: "0.50",
@@ -399,7 +391,7 @@ describe("catalogue operations", () => {
           active: true,
         },
         {
-          tenantId: sql`current_tenant_id()`,
+          tenantId,
           groupId: extras!.id,
           name: { en: "Lettuce" },
           priceDelta: "0",
@@ -408,7 +400,7 @@ describe("catalogue operations", () => {
           active: true,
         },
         {
-          tenantId: sql`current_tenant_id()`,
+          tenantId,
           groupId: extras!.id,
           name: { en: "Gold leaf" },
           priceDelta: "5.00",
@@ -422,14 +414,14 @@ describe("catalogue operations", () => {
       const [retired] = await tx
         .insert(optionGroups)
         .values({
-          tenantId: sql`current_tenant_id()`,
+          tenantId,
           name: { en: "Retired" },
           sort: 1,
           active: false,
         })
         .returning({ id: optionGroups.id });
       await tx.insert(optionGroupItems).values({
-        tenantId: sql`current_tenant_id()`,
+        tenantId,
         groupId: retired!.id,
         name: { en: "Old" },
         priceDelta: "1.00",
@@ -445,14 +437,14 @@ describe("catalogue operations", () => {
       const [sauces] = await tx
         .insert(optionGroups)
         .values({
-          tenantId: sql`current_tenant_id()`,
+          tenantId,
           name: { en: "Sauces" },
           sort: 0,
           active: true,
         })
         .returning({ id: optionGroups.id });
       await tx.insert(optionGroupItems).values({
-        tenantId: sql`current_tenant_id()`,
+        tenantId,
         groupId: sauces!.id,
         name: { en: "Discontinued ketchup" },
         priceDelta: "0",
@@ -466,9 +458,9 @@ describe("catalogue operations", () => {
       // expected order below can only be produced by `product_option_groups.sort`. Retired (2) is
       // inactive and excluded regardless.
       await tx.insert(productOptionGroups).values([
-        { tenantId: sql`current_tenant_id()`, productId: burger.id, groupId: extras!.id, sort: 0 },
-        { tenantId: sql`current_tenant_id()`, productId: burger.id, groupId: retired!.id, sort: 2 },
-        { tenantId: sql`current_tenant_id()`, productId: burger.id, groupId: sauces!.id, sort: 1 },
+        { tenantId, productId: burger.id, groupId: extras!.id, sort: 0 },
+        { tenantId, productId: burger.id, groupId: retired!.id, sort: 2 },
+        { tenantId, productId: burger.id, groupId: sauces!.id, sort: 1 },
       ]);
 
       await assignCatalogueToLocation(tx, locationId, cat.id);
@@ -519,8 +511,8 @@ describe("catalogue operations", () => {
   // of the allergen projection above. Task 6 (till) consumes these.
   it("listAvailableProducts carries the diet profile and option origin overlays", async () => {
     await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
-      const dish = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const dish = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "falafel wrap" },
@@ -534,10 +526,10 @@ describe("catalogue operations", () => {
       // dairy — inserted directly so the projection is exercised independent of the write path.
       const [extras] = await tx
         .insert(optionGroups)
-        .values({ tenantId: sql`current_tenant_id()`, name: { en: "Extras" }, active: true })
+        .values({ tenantId, name: { en: "Extras" }, active: true })
         .returning({ id: optionGroups.id });
       await tx.insert(optionGroupItems).values({
-        tenantId: sql`current_tenant_id()`,
+        tenantId,
         groupId: extras!.id,
         name: { en: "Add bacon" },
         priceDelta: "1.00",
@@ -548,7 +540,7 @@ describe("catalogue operations", () => {
         removeOrigins: ["dairy"],
       });
       await tx.insert(productOptionGroups).values({
-        tenantId: sql`current_tenant_id()`,
+        tenantId,
         productId: dish.id,
         groupId: extras!.id,
         sort: 0,
@@ -570,8 +562,8 @@ describe("catalogue operations", () => {
   it("createProduct publishes the manual allergen map when there is no recipe", async () => {
     const result = await withTenant(fx.db, tenantId, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, { name: "C" });
-      const p = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "C" });
+      const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "sandwich" },
@@ -589,8 +581,8 @@ describe("catalogue operations", () => {
   it("applyRecipeDerivation republishes allergens as floor ∪ manual", async () => {
     const seen = await withTenant(fx.db, tenantId, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, { name: "C" });
-      const p = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "C" });
+      const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "sandwich" },
@@ -614,8 +606,8 @@ describe("catalogue operations", () => {
   it("exposes manual_allergens distinctly from the published union", async () => {
     const seen = await withTenant(fx.db, tenantId, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, { name: "C" });
-      const p = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "C" });
+      const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "sandwich" },
@@ -645,8 +637,8 @@ describe("catalogue operations", () => {
   it("exposes diet_override on the management product read", async () => {
     const [withOverride, without] = await withTenant(fx.db, tenantId, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, { name: "C" });
-      const forced = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "C" });
+      const forced = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "falafel" },
@@ -655,7 +647,7 @@ describe("catalogue operations", () => {
         vatClass: "general",
         dietOverride: { vegan: "no", halal: "yes", addContains: ["meat"] },
       });
-      const plain = await createProduct(tx, {
+      const plain = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "plain" },
@@ -674,8 +666,8 @@ describe("catalogue operations", () => {
   it("applyRecipeDerivation with pending=true publishes PENDING (null)", async () => {
     const seen = await withTenant(fx.db, tenantId, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, { name: "C" });
-      const p = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "C" });
+      const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "x" },
@@ -697,7 +689,7 @@ describe("catalogue operations", () => {
   // also exercises republishProduct's `row === undefined` branch.
   it("updateProduct with allergens on a nonexistent id does not throw and affects no row", async () => {
     await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "C" });
+      const cat = await createCatalogue(tx, tenantId, { name: "C" });
       const missing = "00000000-0000-0000-0000-0000000000ff";
       await expect(
         updateProduct(tx, missing, { allergens: { eggs: { presence: "contains" } } }),
@@ -732,8 +724,8 @@ describe("catalogue operations", () => {
   // "unknown" (never a positive claim on an unreviewed plate), mirroring the allergen twin's `pending`.
   it("createProduct with no override publishes an unknown (cautious) diet profile", async () => {
     const [row] = await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "C" });
-      const p = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "C" });
+      const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "plain" },
@@ -751,8 +743,8 @@ describe("catalogue operations", () => {
   // the override, so they surface on `diet` straight away.
   it("createProduct persists dietOverride and folds it into published diet", async () => {
     const [row] = await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "C" });
-      const p = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "C" });
+      const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "falafel" },
@@ -769,9 +761,9 @@ describe("catalogue operations", () => {
 
   it("createProduct rejects a diet override that both adds and removes a contains-tag", async () => {
     await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "C" });
+      const cat = await createCatalogue(tx, tenantId, { name: "C" });
       await expect(
-        createProduct(tx, {
+        createProduct(tx, tenantId, {
           catalogueId: cat.id,
           categoryId: null,
           descriptions: { en: "x" },
@@ -788,8 +780,8 @@ describe("catalogue operations", () => {
   // pending derivation alone would read vegan "unknown", the override forces "yes".
   it("a forced vegan override wins over an uncategorised (pending) recipe", async () => {
     const [before, after] = await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "C" });
-      const p = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "C" });
+      const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "mystery bowl" },
@@ -811,8 +803,8 @@ describe("catalogue operations", () => {
   // Clearing the override with `null` reverts the published diet to the pure derived profile.
   it("updateProduct with dietOverride null reverts diet to the derived profile", async () => {
     const [row] = await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "C" });
-      const p = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "C" });
+      const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "salad" },
@@ -835,8 +827,8 @@ describe("catalogue operations", () => {
   // republishes would.
   it("updateProduct with both allergens and dietOverride republishes both columns", async () => {
     const result = await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "C" });
-      const p = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "C" });
+      const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "salad" },
@@ -862,8 +854,8 @@ describe("catalogue operations", () => {
 
   it("updateProduct rejects a conflicting diet override", async () => {
     await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "C" });
-      const p = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "C" });
+      const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "x" },
@@ -882,8 +874,8 @@ describe("catalogue operations", () => {
   // An unrelated edit (no dietOverride key) must NOT disturb the published diet profile.
   it("updateProduct without a dietOverride key leaves diet untouched", async () => {
     const [row] = await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "C" });
-      const p = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "C" });
+      const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "x" },
@@ -901,8 +893,8 @@ describe("catalogue operations", () => {
   // applyDietDerivation folds an all-plant reviewed derivation into a vegan published profile.
   it("applyDietDerivation republishes diet from the origin set", async () => {
     const [row] = await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "C" });
-      const p = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "C" });
+      const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "veg" },
@@ -921,8 +913,8 @@ describe("catalogue operations", () => {
   // the cautious posture: clearing the recipe drops the diet back to "unknown", not a positive claim.
   it("applyDietDerivation with null clears the derivation and republishes", async () => {
     const [row] = await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "C" });
-      const p = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "C" });
+      const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "veg" },
@@ -952,7 +944,7 @@ describe("catalogue operations", () => {
 
   it("renames a catalogue", async () => {
     await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
       await renameCatalogue(tx, cat.id, "Delicatessen");
       const [seen] = await listCatalogues(tx);
       expect(seen!.name).toBe("Delicatessen");
@@ -961,7 +953,7 @@ describe("catalogue operations", () => {
 
   it("renames a category", async () => {
     await asTenant(async (tx) => {
-      const food = await createCategory(tx, { name: "Food" });
+      const food = await createCategory(tx, tenantId, { name: "Food" });
       await renameCategory(tx, food.id, "Fresh food");
       const [seen] = await listCategories(tx);
       expect(seen!.name).toBe("Fresh food");
@@ -970,9 +962,9 @@ describe("catalogue operations", () => {
 
   it("lists a location's catalogue's active products only, with the category name resolved", async () => {
     await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
-      const food = await createCategory(tx, { name: "Food" });
-      const p1 = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const food = await createCategory(tx, tenantId, { name: "Food" });
+      const p1 = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: food.id,
         descriptions: { en: "sliced ham" },
@@ -980,7 +972,7 @@ describe("catalogue operations", () => {
         unitPrice: "24.90",
         vatClass: "reduced",
       });
-      const p2 = await createProduct(tx, {
+      const p2 = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "water" },
@@ -1001,10 +993,10 @@ describe("catalogue operations", () => {
 
   it("lists products across the default AND other accessible catalogues, tagged", async () => {
     await asTenant(async (tx) => {
-      const main = await createCatalogue(tx, { name: "Main" });
-      const lunch = await createCatalogue(tx, { name: "Lunch" });
-      const other = await createCatalogue(tx, { name: "Unlisted" }); // NOT accessible
-      const pMain = await createProduct(tx, {
+      const main = await createCatalogue(tx, tenantId, { name: "Main" });
+      const lunch = await createCatalogue(tx, tenantId, { name: "Lunch" });
+      const other = await createCatalogue(tx, tenantId, { name: "Unlisted" }); // NOT accessible
+      const pMain = await createProduct(tx, tenantId, {
         catalogueId: main.id,
         categoryId: null,
         descriptions: { en: "Steak" },
@@ -1012,7 +1004,7 @@ describe("catalogue operations", () => {
         unitPrice: "20.00",
         vatClass: "general",
       });
-      const pLunch = await createProduct(tx, {
+      const pLunch = await createProduct(tx, tenantId, {
         catalogueId: lunch.id,
         categoryId: null,
         descriptions: { en: "Set menu" },
@@ -1020,7 +1012,7 @@ describe("catalogue operations", () => {
         unitPrice: "12.00",
         vatClass: "general",
       });
-      await createProduct(tx, {
+      await createProduct(tx, tenantId, {
         catalogueId: other.id,
         categoryId: null,
         descriptions: { en: "Hidden" },
@@ -1029,7 +1021,7 @@ describe("catalogue operations", () => {
         vatClass: "general",
       });
       await assignCatalogueToLocation(tx, locationId, main.id); // default
-      await addCatalogueToLocation(tx, locationId, lunch.id); // other accessible
+      await addCatalogueToLocation(tx, tenantId, locationId, lunch.id); // other accessible
       const { products: rows } = await listAvailableProducts(tx, locationId);
       expect(rows.map((r) => r.id).sort()).toEqual([pMain.id, pLunch.id].sort());
       expect(rows.find((r) => r.id === pLunch.id)).toMatchObject({
@@ -1041,10 +1033,10 @@ describe("catalogue operations", () => {
 
   it("lists accessible catalogues with the default flagged, default first", async () => {
     await asTenant(async (tx) => {
-      const main = await createCatalogue(tx, { name: "Main" });
-      const lunch = await createCatalogue(tx, { name: "Lunch" });
+      const main = await createCatalogue(tx, tenantId, { name: "Main" });
+      const lunch = await createCatalogue(tx, tenantId, { name: "Lunch" });
       await assignCatalogueToLocation(tx, locationId, main.id);
-      await addCatalogueToLocation(tx, locationId, lunch.id);
+      await addCatalogueToLocation(tx, tenantId, locationId, lunch.id);
       expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
         { id: main.id, name: "Main", isDefault: true },
         { id: lunch.id, name: "Lunch", isDefault: false },
@@ -1056,12 +1048,12 @@ describe("catalogue operations", () => {
   // sort must fall through to the alphabetical comparison rather than the default-first branch alone.
   it("sorts non-default accessible catalogues alphabetically after the default", async () => {
     await asTenant(async (tx) => {
-      const main = await createCatalogue(tx, { name: "Main" });
-      const zebra = await createCatalogue(tx, { name: "Zebra" });
-      const alpha = await createCatalogue(tx, { name: "Alpha" });
+      const main = await createCatalogue(tx, tenantId, { name: "Main" });
+      const zebra = await createCatalogue(tx, tenantId, { name: "Zebra" });
+      const alpha = await createCatalogue(tx, tenantId, { name: "Alpha" });
       await assignCatalogueToLocation(tx, locationId, main.id);
-      await addCatalogueToLocation(tx, locationId, zebra.id);
-      await addCatalogueToLocation(tx, locationId, alpha.id);
+      await addCatalogueToLocation(tx, tenantId, locationId, zebra.id);
+      await addCatalogueToLocation(tx, tenantId, locationId, alpha.id);
       expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
         { id: main.id, name: "Main", isDefault: true },
         { id: alpha.id, name: "Alpha", isDefault: false },
@@ -1074,9 +1066,9 @@ describe("catalogue operations", () => {
   // not first in creation/scan order) and still sorts first.
   it("sorts the default first regardless of creation order", async () => {
     await asTenant(async (tx) => {
-      const lunch = await createCatalogue(tx, { name: "Lunch" });
-      const main = await createCatalogue(tx, { name: "Main" });
-      await addCatalogueToLocation(tx, locationId, lunch.id);
+      const lunch = await createCatalogue(tx, tenantId, { name: "Lunch" });
+      const main = await createCatalogue(tx, tenantId, { name: "Main" });
+      await addCatalogueToLocation(tx, tenantId, locationId, lunch.id);
       await assignCatalogueToLocation(tx, locationId, main.id);
       expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
         { id: main.id, name: "Main", isDefault: true },
@@ -1093,10 +1085,10 @@ describe("catalogue operations", () => {
 
   it("removes a member catalogue from a location's accessible set", async () => {
     await asTenant(async (tx) => {
-      const main = await createCatalogue(tx, { name: "Main" });
-      const lunch = await createCatalogue(tx, { name: "Lunch" });
+      const main = await createCatalogue(tx, tenantId, { name: "Main" });
+      const lunch = await createCatalogue(tx, tenantId, { name: "Lunch" });
       await assignCatalogueToLocation(tx, locationId, main.id);
-      await addCatalogueToLocation(tx, locationId, lunch.id);
+      await addCatalogueToLocation(tx, tenantId, locationId, lunch.id);
       await removeCatalogueFromLocation(tx, locationId, lunch.id);
       expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
         { id: main.id, name: "Main", isDefault: true },
@@ -1106,8 +1098,8 @@ describe("catalogue operations", () => {
 
   it("removeCatalogueFromLocation is a no-op for a catalogue that is not a member", async () => {
     await asTenant(async (tx) => {
-      const main = await createCatalogue(tx, { name: "Main" });
-      const ghost = await createCatalogue(tx, { name: "Ghost" });
+      const main = await createCatalogue(tx, tenantId, { name: "Main" });
+      const ghost = await createCatalogue(tx, tenantId, { name: "Ghost" });
       await assignCatalogueToLocation(tx, locationId, main.id);
       await removeCatalogueFromLocation(tx, locationId, ghost.id);
       expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
@@ -1122,7 +1114,7 @@ describe("catalogue operations", () => {
   // menus via the remove route.
   it("removeCatalogueFromLocation never removes the default (it is not a member row)", async () => {
     await asTenant(async (tx) => {
-      const main = await createCatalogue(tx, { name: "Main" });
+      const main = await createCatalogue(tx, tenantId, { name: "Main" });
       await assignCatalogueToLocation(tx, locationId, main.id);
       await removeCatalogueFromLocation(tx, locationId, main.id);
       expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
@@ -1136,11 +1128,11 @@ describe("catalogue operations", () => {
   // catalogue the tenant owns but this location does not sell, so it must appear with `sellable:false`.
   it("lists every tenant catalogue with sellable + default flags for a location", async () => {
     await asTenant(async (tx) => {
-      const main = await createCatalogue(tx, { name: "Main" });
-      const lunch = await createCatalogue(tx, { name: "Lunch" });
-      const shelf = await createCatalogue(tx, { name: "Shelf" });
+      const main = await createCatalogue(tx, tenantId, { name: "Main" });
+      const lunch = await createCatalogue(tx, tenantId, { name: "Lunch" });
+      const shelf = await createCatalogue(tx, tenantId, { name: "Shelf" });
       await assignCatalogueToLocation(tx, locationId, main.id);
-      await addCatalogueToLocation(tx, locationId, lunch.id);
+      await addCatalogueToLocation(tx, tenantId, locationId, lunch.id);
       const rows = await listCataloguesForLocation(tx, locationId);
       expect(rows).toHaveLength(3);
       const byId = new Map(rows.map((r) => [r.id, r]));
@@ -1160,11 +1152,11 @@ describe("catalogue operations", () => {
   // still sellable, Día now flagged default.
   it("setLocationDefaultCatalogue changes the default and keeps the old default sellable", async () => {
     await asTenant(async (tx) => {
-      const casa = await createCatalogue(tx, { name: "Casa" });
-      const dia = await createCatalogue(tx, { name: "Día" });
+      const casa = await createCatalogue(tx, tenantId, { name: "Casa" });
+      const dia = await createCatalogue(tx, tenantId, { name: "Día" });
       await assignCatalogueToLocation(tx, locationId, casa.id);
-      await addCatalogueToLocation(tx, locationId, dia.id);
-      await setLocationDefaultCatalogue(tx, locationId, dia.id);
+      await addCatalogueToLocation(tx, tenantId, locationId, dia.id);
+      await setLocationDefaultCatalogue(tx, tenantId, locationId, dia.id);
       expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
         { id: dia.id, name: "Día", isDefault: true },
         { id: casa.id, name: "Casa", isDefault: false },
@@ -1175,8 +1167,8 @@ describe("catalogue operations", () => {
   // No prior default (a freshly-provisioned location) → just set it, nothing to demote.
   it("setLocationDefaultCatalogue sets the default when the location had none", async () => {
     await asTenant(async (tx) => {
-      const casa = await createCatalogue(tx, { name: "Casa" });
-      await setLocationDefaultCatalogue(tx, locationId, casa.id);
+      const casa = await createCatalogue(tx, tenantId, { name: "Casa" });
+      await setLocationDefaultCatalogue(tx, tenantId, locationId, casa.id);
       expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
         { id: casa.id, name: "Casa", isDefault: true },
       ]);
@@ -1190,9 +1182,9 @@ describe("catalogue operations", () => {
   // this test red. (Proven by deletion: `defaultId !== catalogueId` removed → member count becomes 1.)
   it("setLocationDefaultCatalogue is idempotent when the catalogue is already the default", async () => {
     await asTenant(async (tx) => {
-      const casa = await createCatalogue(tx, { name: "Casa" });
+      const casa = await createCatalogue(tx, tenantId, { name: "Casa" });
       await assignCatalogueToLocation(tx, locationId, casa.id);
-      await setLocationDefaultCatalogue(tx, locationId, casa.id);
+      await setLocationDefaultCatalogue(tx, tenantId, locationId, casa.id);
       expect(await listAccessibleCatalogues(tx, locationId)).toEqual([
         { id: casa.id, name: "Casa", isDefault: true },
       ]);
@@ -1207,7 +1199,7 @@ describe("catalogue operations", () => {
   // current tenant? A same-tenant id is true; an absent id is false.
   it("catalogueExists is true for a tenant catalogue and false for an absent id", async () => {
     await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Casa" });
+      const cat = await createCatalogue(tx, tenantId, { name: "Casa" });
       expect(await catalogueExists(tx, cat.id)).toBe(true);
       expect(await catalogueExists(tx, "00000000-0000-0000-0000-000000000000")).toBe(false);
     });
@@ -1215,8 +1207,8 @@ describe("catalogue operations", () => {
 
   it("returns null category for an available product with no category", async () => {
     await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
-      await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "water" },
@@ -1242,7 +1234,7 @@ describe("catalogue operations", () => {
 
   it("hides every product of a deactivated catalogue", async () => {
     await asTenant(async (tx) => {
-      const fixture = await seedCatalogueFixture(tx, { locationId });
+      const fixture = await seedCatalogueFixture(tx, { tenantId, locationId });
       expect((await listAvailableProducts(tx, locationId)).products.length).toBe(2);
       await deactivateCatalogue(tx, fixture.catalogueId);
       expect((await listAvailableProducts(tx, locationId)).products).toEqual([]);
@@ -1251,7 +1243,7 @@ describe("catalogue operations", () => {
 
   it("returns products from a seeded catalogue that priceBasket can consume directly", async () => {
     await asTenant(async (tx) => {
-      await seedCatalogueFixture(tx, { locationId });
+      await seedCatalogueFixture(tx, { tenantId, locationId });
       const { products: available } = await listAvailableProducts(tx, locationId);
       expect(available.map((p) => p.category).sort()).toEqual(["Drinks", "Food"]);
       // Compile-time proof that AvailableProduct is structurally assignable to PriceableProduct:
@@ -1287,7 +1279,7 @@ describe("catalogue operations", () => {
   describe("option group authoring", () => {
     it("createOptionGroup applies column defaults and validates the select-bound invariant", async () => {
       await asTenant(async (tx) => {
-        const g = await createOptionGroup(tx, { name: { en: "Size" } });
+        const g = await createOptionGroup(tx, tenantId, { name: { en: "Size" } });
         expect(g).toMatchObject({
           name: { en: "Size" },
           minSelect: 0,
@@ -1300,18 +1292,18 @@ describe("catalogue operations", () => {
 
         // max < min → options.group_invalid / select_bounds.
         await expect(
-          createOptionGroup(tx, { name: { en: "bad" }, minSelect: 3, maxSelect: 1 }),
+          createOptionGroup(tx, tenantId, { name: { en: "bad" }, minSelect: 3, maxSelect: 1 }),
         ).rejects.toMatchObject({
           code: "options.group_invalid",
           params: { reason: "select_bounds" },
         });
         // negative min → select_bounds.
         await expect(
-          createOptionGroup(tx, { name: { en: "bad" }, minSelect: -1 }),
+          createOptionGroup(tx, tenantId, { name: { en: "bad" }, minSelect: -1 }),
         ).rejects.toBeInstanceOf(AppError);
         // required with min 0 → required_without_min.
         await expect(
-          createOptionGroup(tx, { name: { en: "bad" }, required: true, minSelect: 0 }),
+          createOptionGroup(tx, tenantId, { name: { en: "bad" }, required: true, minSelect: 0 }),
         ).rejects.toMatchObject({
           code: "options.group_invalid",
           params: { reason: "required_without_min" },
@@ -1321,8 +1313,12 @@ describe("catalogue operations", () => {
 
     it("createOptionGroup honours explicit sort/active and lists groups by sort then id", async () => {
       await asTenant(async (tx) => {
-        const b = await createOptionGroup(tx, { name: { en: "B" }, sort: 2, active: false });
-        const a = await createOptionGroup(tx, { name: { en: "A" }, sort: 1 });
+        const b = await createOptionGroup(tx, tenantId, {
+          name: { en: "B" },
+          sort: 2,
+          active: false,
+        });
+        const a = await createOptionGroup(tx, tenantId, { name: { en: "A" }, sort: 1 });
         expect(b.active).toBe(false);
         const list = await listOptionGroups(tx);
         expect(list.map((g) => g.id)).toEqual([a.id, b.id]); // sort 1 before sort 2
@@ -1331,7 +1327,7 @@ describe("catalogue operations", () => {
 
     it("updateOptionGroup merges the patch onto the stored row for the bounds check", async () => {
       await asTenant(async (tx) => {
-        const g = await createOptionGroup(tx, {
+        const g = await createOptionGroup(tx, tenantId, {
           name: { en: "x" },
           minSelect: 2,
           maxSelect: 3,
@@ -1364,8 +1360,8 @@ describe("catalogue operations", () => {
 
     it("createOptionGroupItem applies defaults, honours overrides, and lists items by sort then id", async () => {
       await asTenant(async (tx) => {
-        const g = await createOptionGroup(tx, { name: { en: "Sauces" } });
-        const def = await createOptionGroupItem(tx, g.id, { name: { en: "Aioli" } });
+        const g = await createOptionGroup(tx, tenantId, { name: { en: "Sauces" } });
+        const def = await createOptionGroupItem(tx, tenantId, g.id, { name: { en: "Aioli" } });
         expect(def).toMatchObject({
           groupId: g.id,
           name: { en: "Aioli" },
@@ -1375,7 +1371,7 @@ describe("catalogue operations", () => {
           active: true,
           maxQuantity: 1, // default: no per-option quantity
         });
-        const big = await createOptionGroupItem(tx, g.id, {
+        const big = await createOptionGroupItem(tx, tenantId, g.id, {
           name: { en: "Extra" },
           priceDelta: "1.50",
           vatClass: "reduced",
@@ -1399,15 +1395,15 @@ describe("catalogue operations", () => {
 
     it("createOptionGroupItem rejects a maxQuantity below 1 or non-integer with options.item_invalid", async () => {
       await asTenant(async (tx) => {
-        const g = await createOptionGroup(tx, { name: { en: "Sauces" } });
+        const g = await createOptionGroup(tx, tenantId, { name: { en: "Sauces" } });
         await expect(
-          createOptionGroupItem(tx, g.id, { name: { en: "bad" }, maxQuantity: 0 }),
+          createOptionGroupItem(tx, tenantId, g.id, { name: { en: "bad" }, maxQuantity: 0 }),
         ).rejects.toMatchObject({
           code: "options.item_invalid",
           params: { reason: "max_quantity" },
         });
         await expect(
-          createOptionGroupItem(tx, g.id, { name: { en: "bad" }, maxQuantity: 1.5 }),
+          createOptionGroupItem(tx, tenantId, g.id, { name: { en: "bad" }, maxQuantity: 1.5 }),
         ).rejects.toMatchObject({
           code: "options.item_invalid",
           params: { reason: "max_quantity" },
@@ -1417,8 +1413,8 @@ describe("catalogue operations", () => {
 
     it("updateOptionGroupItem writes the named fields", async () => {
       await asTenant(async (tx) => {
-        const g = await createOptionGroup(tx, { name: { en: "x" } });
-        const item = await createOptionGroupItem(tx, g.id, { name: { en: "before" } });
+        const g = await createOptionGroup(tx, tenantId, { name: { en: "x" } });
+        const item = await createOptionGroupItem(tx, tenantId, g.id, { name: { en: "before" } });
         await updateOptionGroupItem(tx, item.id, {
           name: { en: "after" },
           priceDelta: "2.00",
@@ -1441,8 +1437,11 @@ describe("catalogue operations", () => {
 
     it("updateOptionGroupItem leaves maxQuantity unchanged when omitted and re-validates when set", async () => {
       await asTenant(async (tx) => {
-        const g = await createOptionGroup(tx, { name: { en: "x" } });
-        const item = await createOptionGroupItem(tx, g.id, { name: { en: "a" }, maxQuantity: 5 });
+        const g = await createOptionGroup(tx, tenantId, { name: { en: "x" } });
+        const item = await createOptionGroupItem(tx, tenantId, g.id, {
+          name: { en: "a" },
+          maxQuantity: 5,
+        });
         // A patch that omits maxQuantity leaves the stored 5 intact.
         await updateOptionGroupItem(tx, item.id, { priceDelta: "1.00" });
         expect((await listOptionGroupItems(tx, g.id))[0]).toMatchObject({ maxQuantity: 5 });
@@ -1456,19 +1455,21 @@ describe("catalogue operations", () => {
 
     it("createOptionGroupItem persists an allergen overlay", async () => {
       await asTenant(async (tx) => {
-        const g = await createOptionGroup(tx, { name: { en: "Buns" } });
-        const item = await createOptionGroupItem(tx, g.id, {
+        const g = await createOptionGroup(tx, tenantId, { name: { en: "Buns" } });
+        const item = await createOptionGroupItem(tx, tenantId, g.id, {
           name: { en: "Gluten-free bun" },
           removeAllergens: ["gluten"],
         });
         expect(item.removeAllergens).toEqual(["gluten"]);
         expect(item.addAllergens).toBeNull();
         // Omitting the overlay entirely leaves both columns NULL.
-        const plain = await createOptionGroupItem(tx, g.id, { name: { en: "Plain bun" } });
+        const plain = await createOptionGroupItem(tx, tenantId, g.id, {
+          name: { en: "Plain bun" },
+        });
         expect(plain.addAllergens).toBeNull();
         expect(plain.removeAllergens).toBeNull();
         // The add side round-trips too.
-        const cheese = await createOptionGroupItem(tx, g.id, {
+        const cheese = await createOptionGroupItem(tx, tenantId, g.id, {
           name: { en: "Extra cheese" },
           addAllergens: { milk: { presence: "contains" } },
         });
@@ -1479,9 +1480,9 @@ describe("catalogue operations", () => {
 
     it("createOptionGroupItem rejects a conflicting overlay", async () => {
       await asTenant(async (tx) => {
-        const g = await createOptionGroup(tx, { name: { en: "x" } });
+        const g = await createOptionGroup(tx, tenantId, { name: { en: "x" } });
         await expect(
-          createOptionGroupItem(tx, g.id, {
+          createOptionGroupItem(tx, tenantId, g.id, {
             name: { en: "x" },
             addAllergens: { gluten: { presence: "contains" } },
             removeAllergens: ["gluten"],
@@ -1492,10 +1493,10 @@ describe("catalogue operations", () => {
 
     it("updateOptionGroupItem enforces disjointness on the RESULTING row, not just the patch", async () => {
       await asTenant(async (tx) => {
-        const g = await createOptionGroup(tx, { name: { en: "x" } });
+        const g = await createOptionGroup(tx, tenantId, { name: { en: "x" } });
         // Stored with gluten already REMOVED; patching only the add side to gluten would make the
         // resulting row conflict, so the read-current-side check must reject it.
-        const item = await createOptionGroupItem(tx, g.id, {
+        const item = await createOptionGroupItem(tx, tenantId, g.id, {
           name: { en: "GF bun" },
           removeAllergens: ["gluten"],
         });
@@ -1524,7 +1525,7 @@ describe("catalogue operations", () => {
 
         // Symmetric direction: stored ADD, patch REMOVE only — the resulting-row check reads the
         // stored add side and rejects the conflict.
-        const cheese = await createOptionGroupItem(tx, g.id, {
+        const cheese = await createOptionGroupItem(tx, tenantId, g.id, {
           name: { en: "Extra cheese" },
           addAllergens: { milk: { presence: "contains" } },
         });
@@ -1536,8 +1537,8 @@ describe("catalogue operations", () => {
 
     it("updateOptionGroupItem leaving the overlay untouched writes neither column", async () => {
       await asTenant(async (tx) => {
-        const g = await createOptionGroup(tx, { name: { en: "x" } });
-        const item = await createOptionGroupItem(tx, g.id, {
+        const g = await createOptionGroup(tx, tenantId, { name: { en: "x" } });
+        const item = await createOptionGroupItem(tx, tenantId, g.id, {
           name: { en: "GF bun" },
           removeAllergens: ["gluten"],
         });
@@ -1554,8 +1555,8 @@ describe("catalogue operations", () => {
 
     it("listAvailableProducts projects the option overlay onto ResolvedOptionItem", async () => {
       await asTenant(async (tx) => {
-        const cat = await createCatalogue(tx, { name: "Deli" });
-        const burger = await createProduct(tx, {
+        const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+        const burger = await createProduct(tx, tenantId, {
           catalogueId: cat.id,
           categoryId: null,
           descriptions: { en: "burger" },
@@ -1563,14 +1564,16 @@ describe("catalogue operations", () => {
           unitPrice: "9.00",
           vatClass: "general",
         });
-        const g = await createOptionGroup(tx, { name: { en: "Buns" } });
-        const gf = await createOptionGroupItem(tx, g.id, {
+        const g = await createOptionGroup(tx, tenantId, { name: { en: "Buns" } });
+        const gf = await createOptionGroupItem(tx, tenantId, g.id, {
           name: { en: "Gluten-free bun" },
           removeAllergens: ["gluten"],
         });
         // A sibling item with no overlay proves the projected fields default to null on the sell path.
-        const plain = await createOptionGroupItem(tx, g.id, { name: { en: "Plain bun" } });
-        await setProductOptionGroups(tx, burger.id, [g.id]);
+        const plain = await createOptionGroupItem(tx, tenantId, g.id, {
+          name: { en: "Plain bun" },
+        });
+        await setProductOptionGroups(tx, tenantId, burger.id, [g.id]);
         await assignCatalogueToLocation(tx, locationId, cat.id);
 
         const { products } = await listAvailableProducts(tx, locationId);
@@ -1591,8 +1594,8 @@ describe("catalogue operations", () => {
     // collapse an empty list to NULL, and round-trip through listOptionGroupItems.
     it("createOptionGroupItem persists an origin overlay and rejects a bad origin", async () => {
       await asTenant(async (tx) => {
-        const g = await createOptionGroup(tx, { name: { en: "Extras" } });
-        const bacon = await createOptionGroupItem(tx, g.id, {
+        const g = await createOptionGroup(tx, tenantId, { name: { en: "Extras" } });
+        const bacon = await createOptionGroupItem(tx, tenantId, g.id, {
           name: { en: "Add bacon" },
           addOrigins: ["meat"],
           removeOrigins: ["dairy"],
@@ -1600,25 +1603,28 @@ describe("catalogue operations", () => {
         expect(bacon.addOrigins).toEqual(["meat"]);
         expect(bacon.removeOrigins).toEqual(["dairy"]);
         // Omitting the overlay leaves both columns NULL; an empty list collapses to NULL too.
-        const plain = await createOptionGroupItem(tx, g.id, { name: { en: "Nothing" } });
+        const plain = await createOptionGroupItem(tx, tenantId, g.id, { name: { en: "Nothing" } });
         expect(plain.addOrigins).toBeNull();
         expect(plain.removeOrigins).toBeNull();
-        const empty = await createOptionGroupItem(tx, g.id, {
+        const empty = await createOptionGroupItem(tx, tenantId, g.id, {
           name: { en: "Empty" },
           addOrigins: [],
         });
         expect(empty.addOrigins).toBeNull();
         // A non-origin entry is rejected before the write.
         await expect(
-          createOptionGroupItem(tx, g.id, { name: { en: "bad" }, addOrigins: ["wombat"] }),
+          createOptionGroupItem(tx, tenantId, g.id, {
+            name: { en: "bad" },
+            addOrigins: ["wombat"],
+          }),
         ).rejects.toThrow(/diet.invalid_origin/);
       });
     });
 
     it("updateOptionGroupItem threads the origin overlay and clears it with null", async () => {
       await asTenant(async (tx) => {
-        const g = await createOptionGroup(tx, { name: { en: "Extras" } });
-        const item = await createOptionGroupItem(tx, g.id, { name: { en: "Add bacon" } });
+        const g = await createOptionGroup(tx, tenantId, { name: { en: "Extras" } });
+        const item = await createOptionGroupItem(tx, tenantId, g.id, { name: { en: "Add bacon" } });
         await updateOptionGroupItem(tx, item.id, { addOrigins: ["meat"] });
         const [added] = await listOptionGroupItems(tx, g.id);
         expect(added!.addOrigins).toEqual(["meat"]);
@@ -1640,8 +1646,8 @@ describe("catalogue operations", () => {
 
     it("setProductOptionGroups is a full ordered replace; listProductOptionGroupIds reads it back", async () => {
       await asTenant(async (tx) => {
-        const cat = await createCatalogue(tx, { name: "Menu" });
-        const product = await createProduct(tx, {
+        const cat = await createCatalogue(tx, tenantId, { name: "Menu" });
+        const product = await createProduct(tx, tenantId, {
           catalogueId: cat.id,
           categoryId: null,
           descriptions: { en: "steak" },
@@ -1649,22 +1655,22 @@ describe("catalogue operations", () => {
           unitPrice: "18.00",
           vatClass: "general",
         });
-        const g1 = await createOptionGroup(tx, { name: { en: "A" } });
-        const g2 = await createOptionGroup(tx, { name: { en: "B" } });
+        const g1 = await createOptionGroup(tx, tenantId, { name: { en: "A" } });
+        const g2 = await createOptionGroup(tx, tenantId, { name: { en: "B" } });
 
         // No attach yet.
         expect(await listProductOptionGroupIds(tx, product.id)).toEqual([]);
 
         // Attach [g1, g2] — order preserved via the per-attachment sort.
-        await setProductOptionGroups(tx, product.id, [g1.id, g2.id]);
+        await setProductOptionGroups(tx, tenantId, product.id, [g1.id, g2.id]);
         expect(await listProductOptionGroupIds(tx, product.id)).toEqual([g1.id, g2.id]);
 
         // Replace with [g2] — g1 detaches.
-        await setProductOptionGroups(tx, product.id, [g2.id]);
+        await setProductOptionGroups(tx, tenantId, product.id, [g2.id]);
         expect(await listProductOptionGroupIds(tx, product.id)).toEqual([g2.id]);
 
         // Empty list detaches everything.
-        await setProductOptionGroups(tx, product.id, []);
+        await setProductOptionGroups(tx, tenantId, product.id, []);
         expect(await listProductOptionGroupIds(tx, product.id)).toEqual([]);
       });
     });

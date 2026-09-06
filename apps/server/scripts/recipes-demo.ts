@@ -125,15 +125,15 @@ async function main(): Promise<void> {
 
       // Step 1 — three ingredients: two reviewed, one deliberately UNREVIEWED (allergens omitted →
       // null). The unreviewed one is what makes the product go PENDING in step 5.
-      const alioli = await createIngredient(tx, {
+      const alioli = await createIngredient(tx, venue.tenantId, {
         name: "alioli",
         allergens: { eggs: { presence: "contains" } },
       });
-      const pan = await createIngredient(tx, {
+      const pan = await createIngredient(tx, venue.tenantId, {
         name: "pan",
         allergens: { gluten: { presence: "contains", source: "wheat" } },
       });
-      const misterio = await createIngredient(tx, { name: "misterio" }); // allergens omitted → null
+      const misterio = await createIngredient(tx, venue.tenantId, { name: "misterio" }); // allergens omitted → null
 
       console.log("Step 1 — ingredients (raw materials):");
       console.log(`  alioli   → ${format(alioli.allergens)}`);
@@ -143,8 +143,8 @@ async function main(): Promise<void> {
 
       // Step 2 — a product with NO manual allergens of its own. Its declaration is whatever its
       // recipe derives (nothing, yet).
-      const cat = await createCatalogue(tx, { name: "Delicatessen" });
-      const bocadillo = await createProduct(tx, {
+      const cat = await createCatalogue(tx, venue.tenantId, { name: "Delicatessen" });
+      const bocadillo = await createProduct(tx, venue.tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { [LOCALE]: "bocadillo" },
@@ -160,7 +160,7 @@ async function main(): Promise<void> {
       // Step 3 — give it a recipe of the two REVIEWED ingredients. The published declaration is now
       // the derived floor: eggs (from alioli) ∪ gluten (from pan).
       console.log("Step 3 — setProductRecipe(bocadillo, [alioli, pan])  → inherited floor");
-      await setProductRecipe(tx, bocadillo.id, [alioli.id, pan.id]);
+      await setProductRecipe(tx, venue.tenantId, bocadillo.id, [alioli.id, pan.id]);
       expect(await readPublished(tx, bocadillo.id), ["eggs", "gluten"]);
       console.log("");
 
@@ -182,7 +182,7 @@ async function main(): Promise<void> {
       console.log(
         "Step 5 — setProductRecipe(bocadillo, [alioli, pan, misterio])  → PENDING contagion",
       );
-      await setProductRecipe(tx, bocadillo.id, [alioli.id, pan.id, misterio.id]);
+      await setProductRecipe(tx, venue.tenantId, bocadillo.id, [alioli.id, pan.id, misterio.id]);
       expect(await readPublished(tx, bocadillo.id), ["<pending>"]);
       console.log("");
 

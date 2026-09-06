@@ -30,9 +30,6 @@ describe("bookings schema (staff reservations — columns, CHECK, composite FKs)
       { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
       { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
     ]);
-    // A location per tenant — the owning location a booking references. Seeded as the superuser admin
-    // (bypasses RLS). operation_description is Spanish test DATA, not a schema identifier, exactly as
-    // the sibling location-catalogues test uses 'Hostelería'.
     await suite.admin.execute(sql`
       insert into locations (id, tenant_id, name, invoice_locales, operation_description)
       values
@@ -126,9 +123,6 @@ describe("bookings schema (staff reservations — columns, CHECK, composite FKs)
   });
 
   it("the table binding is tenant-consistent (composite FK to dining_tables)", async () => {
-    // Tenant A cannot assign its booking to tenant B's table: the (tenant_id, table_id) composite FK
-    // has no (A, TABLE_B) row → foreign_key_violation, independently of RLS. The insert is A's own
-    // tenant_id (WITH CHECK passes) and (A, LOCATION_A) exists, isolating the table FK.
     const e = await captureError(() =>
       seedBooking(TENANT_A, LOCATION_A, "19:00", { table_id: TABLE_B }),
     );

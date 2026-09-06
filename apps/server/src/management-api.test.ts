@@ -1376,9 +1376,13 @@ describe("/management-api/stations (KDS-1 config)", () => {
     // Seed a real category + product to route, on the app role under this venue's tenant.
     const { categoryId, productId } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
       await asAppUser(tx);
-      const catalogue = await createCatalogue(tx, { name: unique("Carta") });
-      const category = await createCategory(tx, { name: unique("Cat") });
-      const product = await createProduct(tx, {
+      const catalogue = await createCatalogue(tx, brandTenantId(venue.tenantId), {
+        name: unique("Carta"),
+      });
+      const category = await createCategory(tx, brandTenantId(venue.tenantId), {
+        name: unique("Cat"),
+      });
+      const product = await createProduct(tx, brandTenantId(venue.tenantId), {
         catalogueId: catalogue.id,
         categoryId: category.id,
         descriptions: { [LOCALE]: unique("Prod") },
@@ -1638,9 +1642,13 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     // Seed a real product to route, on the app role under this venue's tenant.
     const { productId } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
       await asAppUser(tx);
-      const catalogue = await createCatalogue(tx, { name: unique("Carta") });
-      const category = await createCategory(tx, { name: unique("Cat") });
-      const product = await createProduct(tx, {
+      const catalogue = await createCatalogue(tx, brandTenantId(venue.tenantId), {
+        name: unique("Carta"),
+      });
+      const category = await createCategory(tx, brandTenantId(venue.tenantId), {
+        name: unique("Cat"),
+      });
+      const product = await createProduct(tx, brandTenantId(venue.tenantId), {
         catalogueId: catalogue.id,
         categoryId: category.id,
         descriptions: { [LOCALE]: unique("Prod") },

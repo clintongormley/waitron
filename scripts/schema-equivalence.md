@@ -7,6 +7,11 @@ both, normalises, and diffs. Exit 0 prints `EQUIVALENT`; exit 1 prints the diff 
 both raw dumps, both normalised dumps, the applied file lists, the role lists and the residue table
 in `<OUT_DIR>`.
 
+Set `SCHEMAEQ_MODULES` to comma-separated manifest names (for example `core` or
+`core,identity,workforce`) to apply only those sets on both sides, in manifest order. Unset runs the
+whole manifest; unknown or empty names are refused. Seam checks cover the seam functions defined
+in the OLD dump. Only an **unfiltered** run sees cross-module edges.
+
 It removes exactly this, the same list from **both** dumps (spec
 `docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md` §2):
 
@@ -19,7 +24,7 @@ It removes exactly this, the same list from **both** dumps (spec
 - the `SECURITY DEFINER` clause of the five seam functions — `credential_tenants`,
   `envios_tenants_with_work`, `resolve_payment_tenant`, `sales_assert_tenders_cover`,
   `sale_settlements_check_coverage` — the clause only, so their bodies stay in the comparison; the
-  run fails if any of the five is missing from the NEW dump;
+  run fails if a seam defined in OLD is missing from the NEW dump;
 - every `GRANT` or `REVOKE … ON FUNCTION public.<seam>(…)` statement, for those same five. This is
   the one strip that is not on the design's delete-or-add lists; the section below is why;
 - pg_dump's own noise: every line that starts at column 0 with `--`, and every line that starts at
@@ -84,7 +89,7 @@ into agreement and diff clean. The flag reads the RAW new dump, before normalisa
   deleted roles, or `SECURITY DEFINER` on one of the five seam functions;
 - **unexpected:** an `ENABLE ALWAYS TRIGGER` in the **old** dump — only the new side may add those;
 - **missing:** for `credential_tenants`, `envios_tenants_with_work` and `resolve_payment_tenant`,
-  both halves — `REVOKE … ON FUNCTION public.<fn>(…) FROM PUBLIC` as well as
+  when defined in OLD, both halves — `REVOKE … ON FUNCTION public.<fn>(…) FROM PUBLIC` as well as
   `GRANT … ON FUNCTION public.<fn>(…) TO app_user`. A baseline that kept the grant and lost the
   revoke would leave PUBLIC's default `EXECUTE` in place, which the stripped diff cannot see.
 

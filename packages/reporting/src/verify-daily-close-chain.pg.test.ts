@@ -9,17 +9,8 @@ import { recordDailyClose } from "./record-daily-close.js";
 import { verifyDailyCloseChain } from "./verify-daily-close-chain.js";
 import type { CashCountInput, DailyCloseRecord } from "./close-types.js";
 
-// Real PostgreSQL via Testcontainers — deliberately NOT skipped when Docker is unavailable (the
-// package's vitest `globalSetup` throws when Docker is absent rather than degrading to a skip). Both
-// assertions turn on a mutation
-// that bypasses the app-role immutability: `daily_closes` is append-only under app_user (REVOKE
-// UPDATE/DELETE) AND behind an append-only trigger, so the only way to tamper with or delete a
-// COMMITTED close is a privileged actor who can disable that trigger (session_replication_role =
-// replica is superuser-only). This suite proves the verifier catches exactly that — a real edit /
-// real deletion of a real committed chain flips ok:true → ok:false. On PGlite this proves nothing
-// new: the pure walk over crafted rows already lives in verify-daily-close-chain.test.ts; what is
-// real-Postgres-only is that the break here is a genuine privileged mutation of an otherwise-valid
-// chain (CLAUDE.md §4). Mirrors record-daily-close.pg.test.ts's split.
+// Real PostgreSQL exercises committed chain corruption by the table owner, then verifies the
+// result through app_user. The pure row-walk cases live in verify-daily-close-chain.test.ts.
 
 const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";
 
@@ -56,14 +47,13 @@ function verify() {
   });
 }
 
-/** Runs `mutate` with the append-only trigger disabled for the transaction — the privileged path a
- * tamperer needs (session_replication_role = replica is superuser-only and reverts at commit). This
- * is what makes the UPDATE/DELETE possible AT ALL; the point of each test is that the verifier still
- * catches its effect afterwards. */
+/** Seed a corrupted chain as the test database owner. Trigger changes and corruption share one
+ * transaction: success restores ALWAYS, and failure rolls back the trigger change too. */
 function bypassingImmutability(mutate: (tx: Transaction) => Promise<unknown>): Promise<void> {
   return suite.admin.transaction(async (tx) => {
-    await tx.execute(sql`set local session_replication_role = replica`);
+    await tx.execute(sql`alter table daily_closes disable trigger daily_closes_immutable`);
     await mutate(tx);
+    await tx.execute(sql`alter table daily_closes enable always trigger daily_closes_immutable`);
   });
 }
 

@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { ingredients, recipeLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import type { TenantId } from "@waitron/shared";
 import {
   applyDietDerivation,
   applyRecipeDerivation,
@@ -9,23 +10,10 @@ import {
   type ProductAllergens,
   type RecipeDerivation,
 } from "@waitron/catalogue";
-import { CURRENT_TENANT, INGREDIENT_COLUMNS } from "./columns.js";
+import { INGREDIENT_COLUMNS } from "./columns.js";
 import type { Ingredient } from "./ingredients.js";
 
-/**
- * Recipe composition and allergen derivation — the flat `recipe_lines` between a product and its
- * ingredients, plus the fold that turns those ingredients' declarations into the product's derived
- * allergen floor.
- *
- * Every function takes a `(tx, …)` and runs under the CALLER's tenant context (the caller opens the
- * transaction with `withTenant`/`asAppUser`), exactly as `ingredients.ts` does: inserts adopt the
- * tenant through `current_tenant_id()` and reads are filtered by the tenant-isolation policy.
- *
- * The `Ingredient` import is TYPE-ONLY (`import type`), so it is erased at compile time and creates
- * no runtime edge back to `ingredients.ts`. `ingredients.ts` value-imports this module's propagation
- * helpers, so the only runtime edge runs ingredients → recipes. `CURRENT_TENANT`/`INGREDIENT_COLUMNS`
- * come from the leaf `./columns.js` (which imports neither file), so sharing them adds no back edge.
- */
+/** Recipe changes and their derived allergen and diet values share the caller's transaction. */
 
 /** The ingredients that make up a product (ordered by created_at then id — a stable order, not
  * the order the ids were passed to setProductRecipe: setProductRecipe inserts every line in one
@@ -87,6 +75,7 @@ export async function recomputeProductDerivations(
 /** Replace a product's recipe with exactly `ingredientIds`, then recompute its allergens + diet. */
 export async function setProductRecipe(
   tx: Transaction,
+  tenantId: TenantId,
   productId: string,
   ingredientIds: string[],
 ): Promise<void> {
@@ -94,7 +83,7 @@ export async function setProductRecipe(
   if (ingredientIds.length > 0) {
     await tx.insert(recipeLines).values(
       ingredientIds.map((ingredientId) => ({
-        tenantId: CURRENT_TENANT,
+        tenantId,
         productId,
         ingredientId,
       })),

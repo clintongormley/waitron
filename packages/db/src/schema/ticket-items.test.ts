@@ -81,9 +81,6 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     return r.rows[0]!.id;
   }
 
-  /** Opens one fresh `open` working order and one line on it, as the owner (superuser bypasses RLS —
-   * pure setup). Returns both ids. A fresh order per call so `line_no = 1` never collides and each
-   * fixture is independent of the others. */
   async function seedOrderLine(
     tenant: string,
     till: string,

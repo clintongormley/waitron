@@ -25,9 +25,6 @@ describe("location_catalogues schema (multi-menu accessibility map — PK + comp
       { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
       { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
     ]);
-    // A location per tenant — the owning location a membership references. Seeded as the superuser
-    // admin (bypasses RLS). operation_description is Spanish test DATA, not a schema identifier,
-    // exactly as the sibling station-printers/printing tests use 'Hostelería'.
     await suite.admin.execute(sql`
       insert into locations (id, tenant_id, name, invoice_locales, operation_description)
       values
@@ -103,9 +100,6 @@ describe("location_catalogues schema (multi-menu accessibility map — PK + comp
   });
 
   it("the location binding is tenant-consistent (composite FK to locations)", async () => {
-    // Tenant A cannot map its own catalogue to tenant B's location: the (tenant_id, location_id)
-    // composite FK has no (A, LOCATION_B) row → foreign_key_violation, independently of RLS. The insert
-    // is A's own tenant_id (so WITH CHECK passes) and (A, catalogueA) exists, isolating the location FK.
     const catalogueA = await seedCatalogue(TENANT_A, "Menú FK ubicación");
     const e = await captureError(() =>
       asApp(TENANT_A, (tx) =>

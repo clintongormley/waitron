@@ -44,11 +44,6 @@ async function rollBackAfter(
 describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, composite FKs)", () => {
   const suite = useTemplateDb({ template: "core" });
 
-  // Scaffolding seeded once as the owner (superuser bypasses RLS — pure setup). A location, a till and
-  // a cloud_poll printer per tenant: the till is the composite-FK parent for `till_id`, the printer for
-  // the new `tills.receipt_printer_id` column. A cloud_poll printer needs only poll_id (no agent), so
-  // this suite needs no print_agents fixture. operation_description is Spanish test DATA, not a schema
-  // identifier, exactly as the sibling printing/kitchen-stations tests use 'Hostelería'.
   beforeAll(async () => {
     await suite.admin.insert(tenants).values([
       { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
@@ -161,9 +156,6 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
   });
 
   it("the till binding is tenant-consistent (composite FK to tills)", async () => {
-    // Tenant A cannot record an open against tenant B's till: the (tenant_id, till_id) composite FK has
-    // no (A, TILL_B) row → foreign_key_violation, independently of RLS. The insert is A's own tenant_id
-    // (so WITH CHECK passes) and sale_id is NULL, isolating the till FK.
     const e = await captureError(() =>
       asApp(TENANT_A, (tx) =>
         tx.execute(
@@ -210,8 +202,6 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
   });
 
   it("tills.receipt_printer_id is tenant-consistent (rejects a foreign-tenant printer, 23503)", async () => {
-    // The composite FK's teeth: tenant A cannot point its till at tenant B's printer — no
-    // (A, PRINTER_B) row in printers → foreign_key_violation, independently of RLS.
     const e = await captureError(() =>
       asApp(TENANT_A, (tx) =>
         tx.execute(sql`update tills set receipt_printer_id = ${PRINTER_B} where id = ${TILL_A}`),

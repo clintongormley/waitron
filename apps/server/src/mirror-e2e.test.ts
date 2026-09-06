@@ -1,3 +1,4 @@
+import { tenantId as brandTenantId } from "@waitron/shared";
 import { createServer as createHttpsServer, type Server as HttpsServer } from "node:https";
 import { createServer } from "node:net";
 import type { AddressInfo } from "node:net";
@@ -270,9 +271,14 @@ beforeAll(async () => {
   // inserts them and the catalogues_capture trigger writes each to source.sync_log with
   // origin_id = PRIMARY_SYNC_NODE — the exact rows the mirror's ordered lane pulls.
   for (const name of CATALOGUE_NAMES) {
-    await withTenant(sourceWriter, TENANT, (tx) => createCatalogue(tx, { name }), {
-      nodeId: PRIMARY_SYNC_NODE,
-    });
+    await withTenant(
+      sourceWriter,
+      TENANT,
+      (tx) => createCatalogue(tx, brandTenantId(TENANT), { name }),
+      {
+        nodeId: PRIMARY_SYNC_NODE,
+      },
+    );
   }
 
   // The box's HTTPS sync-api behind the tunnel (tunnel-e2e.test.ts's shape): a leaf whose SAN is

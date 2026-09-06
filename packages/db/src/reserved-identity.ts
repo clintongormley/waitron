@@ -52,12 +52,6 @@ export async function insertReservedSeriesTx(
   await tx.insert(invoiceSeries).values([...series]);
 }
 
-/**
- * The endorsement stored on a node's row, or null for a node that carries none (a self-trusted
- * primary). The R3 promote-signer reads it to attach to the membership document it mints. Read under
- * `withTenant`, mirroring `readMembershipTrustSet` (its sibling reader of `nodes`): `nodes` is
- * FORCE-RLS, so the read must carry the tenant GUC and rides app_user's SELECT.
- */
 export function readNodeEndorsement(
   db: Database,
   tenantId: string,
@@ -67,8 +61,6 @@ export function readNodeEndorsement(
     const [row] = await tx
       .select({ endorsement: nodes.endorsement })
       .from(nodes)
-      // `nodes` is FORCE-RLS and this read runs inside `withTenant`, so the tenant GUC policy already
-      // scopes it — no `eq(nodes.tenantId, …)` needed (matches sibling `readMembershipTrustSet`).
       .where(eq(nodes.id, nodeId))
       .limit(1);
     return row?.endorsement ?? null;

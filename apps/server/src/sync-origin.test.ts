@@ -341,8 +341,8 @@ async function seedProductAndIngredient(
 ): Promise<{ productId: string; ingredientId: string }> {
   return withTenant(suite.admin, tenantId, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, { name: "Carta" });
-    const product = await createProduct(tx, {
+    const cat = await createCatalogue(tx, brandTenantId(tenantId), { name: "Carta" });
+    const product = await createProduct(tx, brandTenantId(tenantId), {
       catalogueId: cat.id,
       categoryId: null,
       descriptions: { es: "plato" },
@@ -350,7 +350,7 @@ async function seedProductAndIngredient(
       unitPrice: "3.00",
       vatClass: "general",
     });
-    const ingredient = await createIngredient(tx, {
+    const ingredient = await createIngredient(tx, brandTenantId(tenantId), {
       name: "harina",
       allergens: { gluten: { presence: "contains" } },
     });

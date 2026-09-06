@@ -17,8 +17,6 @@ const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
-// One till / printer / device-profile per tenant — the composite-FK targets. Seeded as the
-// superuser admin (bypasses RLS; the FK still applies).
 const TILL_A = "11111111-0000-4000-8000-0000000000a1";
 const TILL_B = "22222222-0000-4000-8000-0000000000b1";
 const PRINTER_A = "11111111-0000-4000-8000-0000000000a3";

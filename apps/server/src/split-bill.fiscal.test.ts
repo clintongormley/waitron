@@ -140,10 +140,10 @@ async function setupVenue(): Promise<Seeded> {
   const cfg = tillConfigFromVenue(venue);
   const seeded = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const comida = await createCategory(tx, { name: "Comida" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
-    const jamon = await createProduct(tx, {
+    const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
+    const comida = await createCategory(tx, cfg.tenantId, { name: "Comida" });
+    const bebidas = await createCategory(tx, cfg.tenantId, { name: "Bebidas" });
+    const jamon = await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: comida.id,
       descriptions: { [LOCALE]: "Jamón cortado" },
@@ -151,7 +151,7 @@ async function setupVenue(): Promise<Seeded> {
       unitPrice: "24.90",
       vatClass: "reduced",
     });
-    const agua = await createProduct(tx, {
+    const agua = await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       descriptions: { [LOCALE]: "Agua mineral" },

@@ -1,3 +1,4 @@
+import { tenantId as brandTenantId } from "@waitron/shared";
 // Real-Postgres proof of `seedCatalogues` (Phase 2, Task 6): it stands up the two demo menus, routes
 // categories to KDS stations, sets the default + the accessible second, and reports the image→product
 // map. Real Postgres (not PGlite): the seed runs under RLS as `app_user` (SELECT/INSERT on
@@ -74,7 +75,7 @@ describe("seedCatalogues", () => {
 
     const res = await withTenant(suite.admin, tenantId, async (tx) => {
       await asAppUser(tx);
-      const out = await seedCatalogues(tx, { locationId, locale: LOCALE });
+      const out = await seedCatalogues(tx, brandTenantId(tenantId), { locationId, locale: LOCALE });
       const menus = await listAccessibleCatalogues(tx, locationId);
       const { products } = await listAvailableProducts(tx, locationId);
       // Read back the two stations and one category's route per menu, as app_user, to prove routing.

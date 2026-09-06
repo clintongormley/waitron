@@ -49,7 +49,7 @@ export const catalogues = pgTable(
     // tenant-consistent rather than merely referential.
     unique("catalogues_tenant_id_key").on(t.tenantId, t.id),
   ],
-).enableRLS();
+);
 
 /** Tenant-wide analytics taxonomy ("Food", "Drinks"). Orthogonal to catalogue; snapshotted onto
  * the sale line as a label so a roll-up sums one canonical bucket across catalogues. */
@@ -61,17 +61,12 @@ export const categories = pgTable(
       .notNull()
       .references(() => tenants.id),
     name: text("name").notNull(),
-    // The DEFAULT kitchen station for products in this category (KDS-1 routing, §2b). Bare NULLABLE
-    // uuid: the tenant-consistent (tenant_id, station_id) → kitchen_stations(tenant_id, id) FK is
-    // hand-written in the --custom migration. NULL = no category-level route; a fired line then falls
-    // to the product override or the location's default station. categories' existing RLS policy +
-    // app_user grants (0027) cover this additive column with no change.
     stationId: uuid("station_id"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [index("categories_tenant_id_idx").on(t.tenantId)],
-).enableRLS();
+);
 
 /** A priced item. `unit_price` is GROSS (VAT-inclusive), per item (`each`) or per kg (`weight`).
  * Deactivate via `active`, never delete (may sit behind historical sale-line snapshots). */
@@ -86,17 +81,7 @@ export const products = pgTable(
       .notNull()
       .references(() => catalogues.id),
     categoryId: uuid("category_id").references(() => categories.id),
-    // The per-product OVERRIDE kitchen station (KDS-1 routing, §2b) — wins over the category default.
-    // Bare NULLABLE uuid: the tenant-consistent (tenant_id, station_id) → kitchen_stations(tenant_id,
-    // id) FK is hand-written in the --custom migration. NULL = no override; the fired line then falls to
-    // the category default or the location's default station. products' existing RLS policy + app_user
-    // grants (0027) cover this additive column with no change.
     stationId: uuid("station_id"),
-    // The per-product DEFAULT kitchen course (KDS-2 coursing, §2b) — resolved onto the line at ring
-    // time (overridable there). Bare NULLABLE uuid: the tenant-consistent (tenant_id, course_id) →
-    // kitchen_courses(tenant_id, id) FK is hand-written in the --custom migration, exactly like
-    // `station_id` above. NULL = no default course; such a line fires earliest (spec §2b). products'
-    // existing RLS policy + app_user grants (0027) cover this additive column with no change.
     courseId: uuid("course_id"),
     descriptions: jsonb("descriptions").$type<Record<string, string>>().notNull(),
     pricingUnit: text("pricing_unit").notNull(),
@@ -165,7 +150,7 @@ export const products = pgTable(
       sql`${t.vatClass} in ('general','reduced','super_reduced','zero')`,
     ),
   ],
-).enableRLS();
+);
 
 /** A reusable, named group of choices ("Size", "Extras") that attaches to many products via
  * `product_option_groups`. `min_select`/`max_select` bound how many items a diner may pick;
@@ -197,7 +182,7 @@ export const optionGroups = pgTable(
     // required implies at least one selection. Design §3 invariant.
     check("option_groups_required_ck", sql`${t.required} = false or ${t.minSelect} >= 1`),
   ],
-).enableRLS();
+);
 
 /** The individual choices within an `option_groups` row. `price_delta` is GROSS (VAT-inclusive) and
  * added to the parent dish's price when the item is chosen. `vat_class` NULL means "inherit the
@@ -219,18 +204,10 @@ export const optionGroupItems = pgTable(
     // column existed, its child line counted at the dish quantity alone. A value of N lets a diner
     // take the option up to ×N per dish; the pricer multiplies the dish quantity by the chosen count.
     maxQuantity: integer("max_quantity").notNull().default(1),
-    // The per-option ALLERGEN OVERLAY (EU 1169/2011 Annex II), applied to the dish's published
-    // allergens to produce the as-served profile (@waitron/catalogue deriveAsServedAllergens). Both
-    // NULLABLE and additive: option_group_items' existing FORCE RLS + policy + app_user grants (0082)
-    // cover them with no change (the same way products' allergen overlays ride on products' policy).
-    // `add_allergens`: codes this option ADDS ("extra cheese" → milk). NULL = adds nothing.
     addAllergens: jsonb("add_allergens").$type<AllergenMap>(),
     // `remove_allergens`: codes this option REMOVES ("gluten-free bun" → gluten). NULL = removes
     // nothing. A remove only takes effect against a REVIEWED base (Cautious policy, design §4).
     removeAllergens: jsonb("remove_allergens").$type<string[]>(),
-    // Per-option ORIGIN overlay (the diet twin of add/remove_allergens). `add_origins`: origins this
-    // option introduces ("add bacon" → ["meat"]). `remove_origins`: origins it removes ("no cheese" →
-    // ["dairy"]). NULL = none. Additive nullable — rides option_group_items' existing RLS/policy/grants.
     addOrigins: jsonb("add_origins").$type<string[]>(),
     removeOrigins: jsonb("remove_origins").$type<string[]>(),
     sort: integer("sort").notNull().default(0),
@@ -250,7 +227,7 @@ export const optionGroupItems = pgTable(
       name: "option_group_items_group_fk",
     }).onDelete("cascade"),
   ],
-).enableRLS();
+);
 
 /** The many-to-many attaching reusable `option_groups` to `products` — one group serves many dishes.
  * `sort` orders the groups within a product's modifier UI. Both FKs are tenant-consistent and cascade,
@@ -282,4 +259,4 @@ export const productOptionGroups = pgTable(
       name: "product_option_groups_group_fk",
     }).onDelete("cascade"),
   ],
-).enableRLS();
+);

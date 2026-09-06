@@ -294,7 +294,7 @@ describe("computeOverdueOrders", () => {
     expect(await run()).toEqual([]);
   });
 
-  it("excludes another tenant's overdue order (RLS + the explicit tenant predicate)", async () => {
+  it("excludes another tenant's overdue order (the explicit tenant predicate)", async () => {
     const other = await seedVenue(suite.db);
     const otherStation = await seedKitchenStation(suite.db, {
       tenantId: other.tenantId,

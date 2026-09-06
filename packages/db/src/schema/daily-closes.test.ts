@@ -76,9 +76,6 @@ class RollbackSignal extends Error {}
 describe("frozen daily close schema (append-only triggers, columns, composite FK)", () => {
   const suite = useTemplateDb({ template: "core" });
 
-  // Scaffolding seeded once as the owner (superuser bypasses RLS — pure setup). Registered after the
-  // helper's own hook, which vitest runs first; if it throws this one never runs, so `suite.admin`
-  // is never read unstarted (verified pattern, park-retrieve.test.ts).
   beforeAll(async () => {
     const admin = suite.admin;
     await admin.insert(tenants).values([

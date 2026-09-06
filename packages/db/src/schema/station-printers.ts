@@ -11,19 +11,6 @@ import { tenants } from "./tenants.js";
  * the location, so the mapping needs only the tenant plus the two ids. The key is the identity —
  * PRIMARY KEY (tenant_id, station_id, printer_id), no surrogate id — because a (station, printer) pair
  * is present at most once and attach/detach is add/remove of exactly that row.
- *
- * `station_id` and `printer_id` are BARE uuids: their tenant-consistent composite FKs —
- * (tenant_id, station_id) → kitchen_stations(tenant_id, id) and (tenant_id, printer_id) →
- * printers(tenant_id, id) — are hand-written in the paired --custom migration (a bare column carries no
- * FK; both targets are other slices' tables), exactly as `print_jobs.printer_id` does. Those FKs keep a
- * mapping from ever pointing at another tenant's station or printer, independently of RLS.
- *
- * `.enableRLS()` emits only ENABLE ROW LEVEL SECURITY. The FORCE ROW LEVEL SECURITY, the
- * `station_printers_tenant_isolation` policy and the SELECT/INSERT/DELETE grant to `app_user` (DELETE,
- * not UPDATE — a mapping row is added or removed, never edited, the pairing-codes precedent in 0063)
- * are hand-written in the paired --custom migration. The `inmutabilidad` guard in
- * packages/fiscal-verifactu scans every tenant_id-bearing table for both flags, so a missing FORCE here
- * fails that suite, not this package's.
  */
 export const stationPrinters = pgTable(
   "station_printers",
@@ -47,4 +34,4 @@ export const stationPrinters = pgTable(
       name: "station_printers_pk",
     }),
   ],
-).enableRLS();
+);

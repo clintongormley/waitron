@@ -13,14 +13,6 @@ import { tenants } from "./tenants.js";
  * packages/db rather than deriving it from the module's anulación registro is
  * what lets a Z-report answer "which sales were voided" without a
  * cross-boundary join per row.
- *
- * This table is itself append-only, for the identical reason `sales` is: a
- * void is a fact about what happened, not a piece of mutable state — there is
- * no future revision to "un-void" or "correct" a void in place, only a further
- * fact recorded elsewhere. It therefore takes the full four-part recipe
- * (`packages/db/src/immutability.sql.md`), not merely `invoice_series`'s
- * tenant-isolation-only subset: REVOKE UPDATE/DELETE/TRUNCATE plus the
- * row/statement trigger backstop, in the same migration that creates it.
  */
 export const saleVoids = pgTable(
   "sale_voids",
@@ -60,4 +52,4 @@ export const saleVoids = pgTable(
       name: "sale_voids_sale_fk",
     }).onDelete("restrict"),
   ],
-).enableRLS();
+);

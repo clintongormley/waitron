@@ -64,9 +64,6 @@ describe("locations.catalogue_id (a location's default menu) — tenant-consiste
   });
 
   it("rejects a CROSS-tenant catalogue as the location's default (composite FK, 23503)", async () => {
-    // A's own location cannot take tenant B's catalogue as its default — no (A, catalogueB) row in
-    // catalogues → foreign_key_violation, independently of RLS (a FK check bypasses RLS). Before the
-    // composite FK this UPDATE SUCCEEDED (the single-column FK to catalogues(id) accepts any catalogue).
     const catalogueB = await seedCatalogue(TENANT_B, "Menú de otro inquilino");
     const e = await captureError(() =>
       asApp(TENANT_A, (tx) =>

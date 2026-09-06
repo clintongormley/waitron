@@ -1,29 +1,17 @@
 import { eq, sql } from "drizzle-orm";
 import { ingredients } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import type { TenantId } from "@waitron/shared";
 import {
   validateAllergens,
   validateOrigin,
   type DietaryOrigin,
   type ProductAllergens,
 } from "@waitron/catalogue";
-import { CURRENT_TENANT, INGREDIENT_COLUMNS } from "./columns.js";
+import { INGREDIENT_COLUMNS } from "./columns.js";
 import { productsUsingIngredient, recomputeProductDerivations } from "./recipes.js";
 
-/**
- * Ingredient operations — CRUD over the `ingredients` table (raw materials / prep items).
- *
- * Every function takes a `(tx, …)` and runs under the CALLER's tenant context: the caller opens the
- * transaction with `withTenant` (and `asAppUser` in the running POS), so writes adopt that tenant
- * through `current_tenant_id()` and reads are filtered to it by the tenant-isolation policy. Nothing
- * here takes a `tenantId` argument — the GUC the caller already set is the single source of it, which
- * also satisfies the table's `WITH CHECK (tenant_id = current_tenant_id())`. Mirrors the
- * `packages/catalogue` operations for the identical reasons.
- *
- * Deactivation is `active = false`, never DELETE: an ingredient may sit behind `recipe_lines`, and
- * the app role holds no DELETE grant on `ingredients` anyway (SELECT/INSERT/UPDATE only). All SQL is
- * built with Drizzle query builders — no string concatenation.
- */
+/** Ingredient writes share the caller's transaction. Deactivation preserves recipe references. */
 
 export interface Ingredient {
   id: string;
@@ -54,6 +42,7 @@ export interface UpdateIngredientInput {
 
 export async function createIngredient(
   tx: Transaction,
+  tenantId: TenantId,
   input: CreateIngredientInput,
 ): Promise<Ingredient> {
   // Validate before the write: an unreviewed ingredient stores null, a supplied map is checked
@@ -65,7 +54,7 @@ export async function createIngredient(
   const dietaryOrigin = input.dietaryOrigin == null ? null : validateOrigin(input.dietaryOrigin);
   const [row] = await tx
     .insert(ingredients)
-    .values({ tenantId: CURRENT_TENANT, name: input.name, allergens, dietaryOrigin })
+    .values({ tenantId, name: input.name, allergens, dietaryOrigin })
     .returning(INGREDIENT_COLUMNS);
   return row!;
 }

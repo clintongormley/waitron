@@ -149,10 +149,10 @@ async function setupVenue(): Promise<{ cfg: TillConfig; available: AvailableProd
   const cfg = tillConfigFromVenue(venue);
   const available = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const comida = await createCategory(tx, { name: "Comida" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
-    await createProduct(tx, {
+    const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
+    const comida = await createCategory(tx, cfg.tenantId, { name: "Comida" });
+    const bebidas = await createCategory(tx, cfg.tenantId, { name: "Bebidas" });
+    await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: comida.id,
       descriptions: { [LOCALE]: "Jamón cortado" },
@@ -160,7 +160,7 @@ async function setupVenue(): Promise<{ cfg: TillConfig; available: AvailableProd
       unitPrice: "24.90",
       vatClass: "reduced",
     });
-    await createProduct(tx, {
+    await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       descriptions: { [LOCALE]: "Agua mineral" },
@@ -349,9 +349,9 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
     const cfg = tillConfigFromVenue(venue);
     const productId = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, { name: "Delicatessen" });
-      const bebidas = await createCategory(tx, { name: "Bebidas" });
-      const product = await createProduct(tx, {
+      const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
+      const bebidas = await createCategory(tx, cfg.tenantId, { name: "Bebidas" });
+      const product = await createProduct(tx, cfg.tenantId, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
         descriptions,
@@ -488,9 +488,9 @@ describe("ordering modifiers — parent + child lines", () => {
     const cfg = tillConfigFromVenue(venue);
     const available = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, { name: "Delicatessen" });
-      const comida = await createCategory(tx, { name: "Comida" });
-      const burger = await createProduct(tx, {
+      const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
+      const comida = await createCategory(tx, cfg.tenantId, { name: "Comida" });
+      const burger = await createProduct(tx, cfg.tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,
         descriptions: { es: "Hamburguesa" },
@@ -498,7 +498,7 @@ describe("ordering modifiers — parent + child lines", () => {
         unitPrice: "9.00",
         vatClass: "general",
       });
-      const menu = await createProduct(tx, {
+      const menu = await createProduct(tx, cfg.tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,
         descriptions: { es: "Menú" },
@@ -506,7 +506,7 @@ describe("ordering modifiers — parent + child lines", () => {
         unitPrice: "12.00",
         vatClass: "general",
       });
-      await createProduct(tx, {
+      await createProduct(tx, cfg.tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,
         descriptions: { es: "Jamón" },
@@ -516,7 +516,7 @@ describe("ordering modifiers — parent + child lines", () => {
       });
       // "Combo" carries a REQUIRED group whose only item is INACTIVE — so it resolves to `items: []`.
       // A required-but-empty group is an authoring bug and must NOT deadlock a sale (CLAUDE.md §5).
-      const combo = await createProduct(tx, {
+      const combo = await createProduct(tx, cfg.tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,
         descriptions: { es: "Combo" },
@@ -526,7 +526,7 @@ describe("ordering modifiers — parent + child lines", () => {
       });
       // "Plato" carries a NON-required group demanding at least TWO picks (`min_select` 2) — the
       // `below_min` selection-invalid path (a non-required group with a floor is DB-legal).
-      const plato = await createProduct(tx, {
+      const plato = await createProduct(tx, cfg.tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,
         descriptions: { es: "Plato" },

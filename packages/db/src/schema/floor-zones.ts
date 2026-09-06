@@ -20,14 +20,6 @@ import { locations, tenants } from "./tenants.js";
  * Location-scoped, unlike TS-2's tenant-wide `table_service_statuses`: a floor plan belongs to one
  * venue, so the composite (tenant_id, location_id) → locations(tenant_id, id) FK ties a zone to its
  * venue, and `floor_zones_name_key` makes a name unique within that venue rather than tenant-wide.
- *
- * Deactivate, never hard-delete (`active`): a `dining_tables.zone_id` may reference a row, so the
- * config CRUD flips `active = false` rather than DELETE — and `app_user` holds no DELETE here (the
- * custom migration grants only SELECT/INSERT/UPDATE). `.enableRLS()` emits only ENABLE ROW LEVEL
- * SECURITY; the FORCE ROW LEVEL SECURITY, the `floor_zones_tenant_isolation` policy and the grant
- * are hand-written in the paired --custom migration, exactly as 0048 does for
- * `table_service_statuses`. The `inmutabilidad` guard in packages/fiscal-verifactu scans
- * every tenant_id-bearing table for both RLS flags, so a missing FORCE here fails that suite.
  */
 export const floorZones = pgTable(
   "floor_zones",
@@ -58,12 +50,10 @@ export const floorZones = pgTable(
     unique("floor_zones_tenant_id_key").on(t.tenantId, t.id),
     // No two zones share a name within a venue.
     unique("floor_zones_name_key").on(t.tenantId, t.locationId, t.name),
-    // Tenant-consistent composite FK to the owning location: a zone cannot point at a location of
-    // another tenant, independently of whether RLS is in force on this connection.
     foreignKey({
       columns: [t.tenantId, t.locationId],
       foreignColumns: [locations.tenantId, locations.id],
       name: "floor_zones_location_fk",
     }),
   ],
-).enableRLS();
+);

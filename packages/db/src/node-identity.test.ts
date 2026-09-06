@@ -32,12 +32,6 @@ describe("membership trust-set accessors", () => {
   let tenantId: TenantId;
   let nodeId: NodeId;
 
-  // Clear `nodes` before each case, then seed a fresh tenant + node. `readMembershipTrustSet` issues
-  // `select id, public_key from nodes` with NO tenant predicate (node-identity.ts): its only scoping
-  // is `withTenant`'s GUC through RLS, which PGlite's superuser connection does not enforce, so here
-  // the read sees every `nodes` row regardless of tenant and a stamped row from a prior case would
-  // leak in. Deleting first makes each case order-independent (CLAUDE.md §4) rather than relying on
-  // execution order.
   beforeEach(async () => {
     await pg.db.execute(sql`delete from nodes`);
     tenantId = await seedTenant(pg.db);

@@ -34,10 +34,6 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
       { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
       { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
     ]);
-    // A location per tenant (plus a second for A): kitchen_courses carries a tenant-consistent
-    // (tenant_id, location_id) FK, so every course insert needs a real owning location. Seeded as the
-    // superuser admin (bypasses RLS). operation_description is Spanish test DATA, not a schema
-    // identifier, exactly as the sibling routing-station test uses 'Hostelería'.
     await suite.admin.execute(sql`
       insert into locations (id, tenant_id, name, invoice_locales, operation_description)
       values
@@ -109,7 +105,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
 
   it("exposes locations.fire_control to the app role, defaulting to 'waiter' (the new venue setting)", async () => {
     // The additive fire_control column lands NOT NULL DEFAULT 'waiter' and is readable under the app
-    // role (locations' existing policy + SELECT grant cover it). Writing it is a config verb (Task 3),
+    // role (locations' SELECT grant covers it). Writing it is a config verb (Task 3),
     // not exercised here.
     const [row] = await asApp(TENANT_A, (tx) =>
       tx
@@ -147,7 +143,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
 
   it("lets the app role route a product to an own-tenant course and rejects a foreign or missing one", async () => {
     // The app role writes and reads back products.course_id (the additive column, under products'
-    // existing grant + policy) …
+    // existing grant) …
     await asApp(TENANT_A, (tx) =>
       tx.execute(sql`update products set course_id = ${courseA} where id = ${productA}`),
     );

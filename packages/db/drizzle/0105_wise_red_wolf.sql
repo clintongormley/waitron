@@ -1,1 +1,0 @@
-DROP TABLE "till_layouts" CASCADE;

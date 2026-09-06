@@ -38,8 +38,6 @@ let nextOrderNumber = 1;
 describe("working_orders state machine (enforce_transition)", () => {
   const suite = useTemplateDb({ template: "core" });
 
-  // Every transition/line write under test runs through here: tenant A's GUC set, then SET ROLE
-  // app_user — the deployment role, under RLS. The seed (below) and open() run as the owner instead.
   function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
     return withTenant(suite.admin, TENANT_A, async (tx) => {
       await asAppUser(tx);
@@ -47,9 +45,6 @@ describe("working_orders state machine (enforce_transition)", () => {
     });
   }
 
-  // Inserts one `open` working order as the owner (superuser bypasses RLS — pure setup, exactly like
-  // park-retrieve's openOrder). node_id is set (design §5: every counter order carries one), which
-  // also exercises the composite working_orders_node_fk.
   async function open(): Promise<string> {
     const orderNumber = nextOrderNumber++;
     const result = await suite.admin.execute<{ id: string }>(
@@ -73,9 +68,6 @@ describe("working_orders state machine (enforce_transition)", () => {
     );
   }
 
-  // Common scaffolding seeded once as the owner (superuser bypasses RLS — pure setup). Registered
-  // after the helper's own hook, which vitest runs first; if it throws this one never runs, so
-  // `suite.admin` is never read unstarted (verified pattern, park-retrieve.test.ts).
   beforeAll(async () => {
     const admin = suite.admin;
     await admin

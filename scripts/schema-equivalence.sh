@@ -47,7 +47,16 @@ order() { # migration files of a checkout, in manifest + journal order
   python3 - "$1" <<'PY'
 import json, os, sys
 repo = sys.argv[1]
-for s in json.load(open(os.path.join(repo, "packages/migrations/migrations.manifest.json"))):
+manifest = json.load(open(os.path.join(repo, "packages/migrations/migrations.manifest.json")))
+selection = os.environ.get("SCHEMAEQ_MODULES")
+modules = None if selection is None else set(selection.split(","))
+if modules is not None:
+    unknown = modules - {s["name"] for s in manifest}
+    if unknown:
+        sys.exit("unknown SCHEMAEQ_MODULES: " + ", ".join(sorted(unknown)))
+for s in manifest:
+    if modules is not None and s["name"] not in modules:
+        continue
     d = os.path.normpath(os.path.join("packages/migrations", s["from"]))
     for e in json.load(open(os.path.join(repo, d, "meta/_journal.json")))["entries"]:
         print(f"{d}/{e['tag']}.sql")
@@ -277,7 +286,8 @@ report = "\n".join(lines) + "\n"
 open(f"{out}/normalisation.txt", "w", encoding="utf-8").write(report)
 sys.stdout.write(report)
 
-missing = [fn for fn in SEAM if f"CREATE FUNCTION public.{fn}(" not in raws["new"]]
+old_seams = {fn for fn in SEAM if f"CREATE FUNCTION public.{fn}(" in raws["old"]}
+missing = [fn for fn in SEAM if fn in old_seams and f"CREATE FUNCTION public.{fn}(" not in raws["new"]]
 if missing:
     sys.exit("seam functions missing from NEW: " + ", ".join(missing))
 
@@ -304,7 +314,7 @@ if gate_new:
     # sides, so without this check such a baseline prints EQUIVALENT.
     for stmt in split_statements(raws["new"]):
         m = SEAM_RE.search(stmt)
-        if m and re.search(r"\bSECURITY DEFINER\b", stmt):
+        if m and m.group(1) in old_seams and re.search(r"\bSECURITY DEFINER\b", stmt):
             problems.append(f"  still present — SECURITY DEFINER on public.{m.group(1)}()")
     # The residue table's other reader rule, made a gate: only the NEW side may add these.
     if residue["old"]["ENABLE ALWAYS TRIGGER"]:
@@ -321,6 +331,8 @@ if gate_new:
     # app_user;`, one handed to a helper role first dumps neither). Three functions, not five —
     # see SEAM_GRANTED.
     for fn in SEAM_GRANTED:
+        if fn not in old_seams:
+            continue
         for verb, tail in (("GRANT", r"TO app_user"), ("REVOKE", r"FROM PUBLIC")):
             pat = rf"^{verb}\b.*\bON FUNCTION public\.{fn}\(.*\b{tail}\b"
             if not re.search(pat, raws["new"], re.M):

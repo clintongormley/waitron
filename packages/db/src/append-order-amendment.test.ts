@@ -107,7 +107,6 @@ describe("order_amendments append helper", () => {
     return result.rows[0]!.id;
   }
 
-  /** Runs `fn` inside tenant A's transaction, wearing the app role (the only role RLS constrains). */
   function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
     return withTenant(suite.admin, TENANT_A, async (tx) => {
       await tx.execute(sql`set local role app_user`);

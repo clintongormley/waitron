@@ -177,11 +177,6 @@ export const sales = pgTable(
       name: "sales_corrects_fk",
     }).onDelete("restrict"),
     index("sales_corrects_idx").on(t.tenantId, t.correctsSaleId),
-    // Tenant-consistent composite FK to the owning node (node-id rekey,
-    // 2026-08-03): a sale cannot point at a node belonging to another tenant,
-    // independently of whether RLS is in force on this connection. Mirrors the
-    // `sales`→`invoice_series` composite target (`invoice_series_tenant_id_key`)
-    // and the `sale_lines_sale_fk`/`tenders_sale_fk` pattern.
     foreignKey({
       columns: [t.tenantId, t.nodeId],
       foreignColumns: [nodes.tenantId, nodes.id],
@@ -211,7 +206,7 @@ export const sales = pgTable(
     check("sales_locale_member_ck", sql`${t.locale} = any(${t.invoiceLocales})`),
     check("sales_issued_offset_ck", sql`${t.issuedOffsetMinutes} between -840 and 840`),
   ],
-).enableRLS();
+);
 
 /** Snapshotted values, never catalogue references (architecture §6). */
 export const saleLines = pgTable(
@@ -243,8 +238,6 @@ export const saleLines = pgTable(
     parentLineId: uuid("parent_line_id"),
   },
   (t) => [
-    // Composite FK: a line cannot point at a sale belonging to another tenant,
-    // independently of whether RLS is in force on this connection.
     foreignKey({
       columns: [t.tenantId, t.saleId],
       foreignColumns: [sales.tenantId, sales.id],
@@ -260,7 +253,7 @@ export const saleLines = pgTable(
     check("sale_lines_vat_rate_ck", sql`${t.vatRate} >= 0 and ${t.vatRate} <= 100`),
     check("sale_lines_line_no_ck", sql`${t.lineNo} >= 1`),
   ],
-).enableRLS();
+);
 
 /**
  * One row per payment against one invoice. Split tender is several rows; the
@@ -298,7 +291,7 @@ export const tenders = pgTable(
     check("tenders_amount_ck", sql`${t.amount} > 0`),
     check("tenders_tip_amount_ck", sql`${t.tipAmount} >= 0 and ${t.tipAmount} <= ${t.amount}`),
   ],
-).enableRLS();
+);
 
 /**
  * One row per fully-settled sale — appended when settlement is *declared*
@@ -323,7 +316,7 @@ export const saleSettlements = pgTable(
     }).onDelete("restrict"),
     unique("sale_settlements_sale_key").on(t.tenantId, t.saleId),
   ],
-).enableRLS();
+);
 
 /**
  * The N:1 substitution link for F3 canje: one row per (F3 sale, substituted simplified ticket)
@@ -332,10 +325,6 @@ export const saleSettlements = pgTable(
  * generic-layer projection of that relationship, deliberately NOT `corrects_sale_id` reuse —
  * `corrects_sale_id` is 1:1 and means "corrects" (a rectificativa), canje is N:1 and means
  * "substitutes".
- *
- * An immutable, append-only child of `sales` exactly like `sale_lines`/`tenders`: composite
- * tenant-consistent FKs (a row cannot reference a sale of another tenant), RLS with FORCE, and the
- * reject_mutation() triggers — all applied in migration 0014.
  *
  * `unique(tenant_id, substituted_sale_id)` is the DB control for "a ticket is substituted at most
  * once" (§5, decision 4): were the same ticket substituted by two F3s, the underlying operation
@@ -353,8 +342,6 @@ export const saleSubstitutions = pgTable(
     substitutedSaleId: uuid("substituted_sale_id").notNull(),
   },
   (t) => [
-    // Composite FKs: neither the substitute nor a substituted ticket may belong to another tenant,
-    // independently of whether RLS is in force on this connection. Mirrors sale_lines_sale_fk.
     foreignKey({
       columns: [t.tenantId, t.substitutionSaleId],
       foreignColumns: [sales.tenantId, sales.id],
@@ -370,4 +357,4 @@ export const saleSubstitutions = pgTable(
     unique("sale_substitutions_substituted_key").on(t.tenantId, t.substitutedSaleId),
     index("sale_substitutions_substitution_idx").on(t.tenantId, t.substitutionSaleId),
   ],
-).enableRLS();
+);

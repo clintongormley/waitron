@@ -184,10 +184,10 @@ async function main(): Promise<void> {
     // sale requests carry real product ids (the till never invents one).
     const available = await withTenant(db, caja1.tenantId, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, { name: "Delicatessen" });
-      const comida = await createCategory(tx, { name: "Comida" });
-      const bebidas = await createCategory(tx, { name: "Bebidas" });
-      await createProduct(tx, {
+      const cat = await createCatalogue(tx, caja1.tenantId, { name: "Delicatessen" });
+      const comida = await createCategory(tx, caja1.tenantId, { name: "Comida" });
+      const bebidas = await createCategory(tx, caja1.tenantId, { name: "Bebidas" });
+      await createProduct(tx, caja1.tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,
         descriptions: { [LOCALE]: "Jamón cortado" },
@@ -195,7 +195,7 @@ async function main(): Promise<void> {
         unitPrice: "24.90", // €/kg, gross (VAT-inclusive), reduced (10%)
         vatClass: "reduced",
       });
-      await createProduct(tx, {
+      await createProduct(tx, caja1.tenantId, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
         descriptions: { [LOCALE]: "Agua mineral" },

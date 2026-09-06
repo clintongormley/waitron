@@ -382,9 +382,14 @@ beforeAll(async () => {
   // origin_id = designated.nodeId — the exact rows the mirror's ordered lane pulls once it has adopted
   // that same node id as its own subscriber.
   for (const name of CATALOGUE_NAMES) {
-    await withTenant(sourceWriter, designated.tenantId, (tx) => createCatalogue(tx, { name }), {
-      nodeId: designated.nodeId,
-    });
+    await withTenant(
+      sourceWriter,
+      designated.tenantId,
+      (tx) => createCatalogue(tx, brandTenantId(designated.tenantId), { name }),
+      {
+        nodeId: designated.nodeId,
+      },
+    );
   }
 
   // A REAL trading venue is not freshly-provisioned: it assigns a menu to its location

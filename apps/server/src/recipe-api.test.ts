@@ -1,3 +1,4 @@
+import { tenantId as brandTenantId } from "@waitron/shared";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -56,8 +57,10 @@ const suite = usePgliteDb({
         tenantId,
         personId: stf.rows[0]!.id,
       });
-      const catalogue = await createCatalogue(tx, { name: "Recipe catalogue" });
-      const product = await createProduct(tx, {
+      const catalogue = await createCatalogue(tx, brandTenantId(tenantId), {
+        name: "Recipe catalogue",
+      });
+      const product = await createProduct(tx, brandTenantId(tenantId), {
         catalogueId: catalogue.id,
         categoryId: null,
         descriptions: { es: "Tostada" },

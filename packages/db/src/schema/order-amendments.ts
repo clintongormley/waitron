@@ -105,4 +105,4 @@ export const orderAmendments = pgTable(
           or (not ${t.isFirstEntry} and ${t.prevEntryHash} is not null)`,
     ),
   ],
-).enableRLS();
+);

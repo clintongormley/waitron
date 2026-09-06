@@ -75,13 +75,6 @@ describe("table_service_statuses schema (the dining_tables.status_id composite F
     );
     expect(pgErrorCode(eRandom)).toBe("23503"); // foreign_key_violation
 
-    // The case a SINGLE-COLUMN FK would let through: a status that genuinely EXISTS, but belongs to
-    // another tenant. B seeds a real status (committed — `asApp` does not roll back), then A points its
-    // dining_table at B's status id. A single-column FK on status_id alone would find B's row and PASS;
-    // the composite FK requires a `table_service_statuses` row with (tenant_id = TENANT_A, id = B's id),
-    // which does not exist (B's row carries tenant_id = TENANT_B), so it is a 23503. The FK check fires
-    // on the raw id at write time regardless of A's RLS read-visibility of B's row. This is what makes
-    // the test title ("tenant-consistent FK") honest — it now distinguishes composite from single-column.
     const foreignStatusId = await seedStatus(TENANT_B, "B's status");
     const eForeign = await captureError(() =>
       asApp(TENANT_A, (tx) =>

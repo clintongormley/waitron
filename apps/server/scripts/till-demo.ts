@@ -190,10 +190,10 @@ async function main(): Promise<void> {
     // out of the english-only guard's scope.
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, { name: "Delicatessen" });
-      const comida = await createCategory(tx, { name: "Comida" });
-      const bebidas = await createCategory(tx, { name: "Bebidas" });
-      await createProduct(tx, {
+      const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
+      const comida = await createCategory(tx, cfg.tenantId, { name: "Comida" });
+      const bebidas = await createCategory(tx, cfg.tenantId, { name: "Bebidas" });
+      await createProduct(tx, cfg.tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,
         descriptions: { [LOCALE]: "Jamón cortado" },
@@ -201,7 +201,7 @@ async function main(): Promise<void> {
         unitPrice: "24.90", // €/kg, gross (VAT-inclusive), reduced (10%)
         vatClass: "reduced",
       });
-      await createProduct(tx, {
+      await createProduct(tx, cfg.tenantId, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
         descriptions: { [LOCALE]: "Agua mineral" },

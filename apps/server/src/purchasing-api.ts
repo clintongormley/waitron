@@ -10,7 +10,7 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { AppError } from "@waitron/shared";
+import { AppError, tenantId as brandTenantId } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { asAppUser, withTenant, type Database, type Transaction } from "@waitron/db";
 import {
@@ -242,7 +242,9 @@ export function mountPurchasingApi(app: Hono, deps: PurchasingApiDeps, log: Logg
       const body = await readJsonBody<{ header?: unknown; lines?: unknown }>(c);
       const header = screenHeaderCreate(body.header);
       const lines = screenLines(body.lines);
-      const created = await gated(sessionId, (tx) => createPurchaseInvoice(tx, { header, lines }));
+      const created = await gated(sessionId, (tx) =>
+        createPurchaseInvoice(tx, brandTenantId(deps.cfg.tenantId), { header, lines }),
+      );
       return c.json(created, 201);
     }),
   );
@@ -259,7 +261,9 @@ export function mountPurchasingApi(app: Hono, deps: PurchasingApiDeps, log: Logg
       const patch: UpdatePurchaseInvoiceInput = {};
       if (body.header !== undefined) patch.header = screenHeaderPatch(body.header);
       if (body.lines !== undefined) patch.lines = screenLines(body.lines);
-      await gated(sessionId, (tx) => updatePurchaseInvoice(tx, id, patch));
+      await gated(sessionId, (tx) =>
+        updatePurchaseInvoice(tx, brandTenantId(deps.cfg.tenantId), id, patch),
+      );
       return c.body(null, 204);
     }),
   );
