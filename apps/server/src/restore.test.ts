@@ -706,6 +706,42 @@ describe("restore hooks (identity phase)", () => {
     });
   });
 
+  it.each(["key", "file"] as const)(
+    "refuses a missing identity %s during validation, with the target intact",
+    async (missing) => {
+      const existing = formatEnvFile({
+        ...parseEnvFile(TRADING_ENV),
+        WAITRON_TILL_NODE_ID: "c0000000-0000-4000-8000-0000000000aa",
+      });
+      await writeFile(join(stateDir, "trading.env"), existing);
+      const entries = FULL_ENTRIES.filter((e) => e.name !== "secrets/trading.env");
+      if (missing === "key") {
+        entries.push({
+          name: "secrets/trading.env",
+          bytes: Buffer.from(
+            formatEnvFile({ ...parseEnvFile(TRADING_ENV), WAITRON_TILL_NODE_ID: "" }),
+          ),
+        });
+      }
+      const runRestore = vi.fn(async () => {});
+      const migrate = vi.fn(async () => {});
+      const restoreDeps = deps({ artifact: buildArtifact(entries), runRestore, migrate });
+      const error = {
+        code: "restore.identity_incomplete",
+        params: { missing: missing === "key" ? "WAITRON_TILL_NODE_ID" : "trading.env" },
+      };
+
+      await expect(restoreFromArtifact(restoreDeps)).rejects.toMatchObject(error);
+      expect.soft(runRestore).not.toHaveBeenCalled();
+      expect.soft(migrate).not.toHaveBeenCalled();
+      await expect(readFile(join(stateDir, "trading.env"), "utf8")).resolves.toBe(existing);
+      await expect(stat(join(stateDir, "trading.env.replaced"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      await expect(validateArtifact(restoreDeps)).rejects.toMatchObject(error);
+    },
+  );
+
   it("identity_incomplete on a missing key or file; identity_unknown on a node the restored db lacks", async () => {
     const base = FULL_ENTRIES.filter((e) => e.name !== "secrets/trading.env");
     const withEnv = (body: string) =>

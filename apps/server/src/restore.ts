@@ -98,9 +98,9 @@ export interface RestoreDeps {
  * The classified, validated pieces of one backup artifact — the output of {@link validateArtifact}
  * and the input to {@link writeValidated}. Everything the destructive write phase needs, decided
  * entirely from the in-memory artifact bytes: an artifact that produces one of these has passed the
- * compatibility GATE and the traversal GUARD, so a returned value is safe to write. R3 rejoin threads
- * it across the wipe (validate BEFORE the irreversible `DROP DATABASE`, write AFTER), so a bad key or
- * a rejected manifest/entry refuses with the database still intact.
+ * compatibility GATE and the traversal GUARD, plus identity completeness when secrets are restored.
+ * R3 rejoin threads it across the wipe (validate BEFORE the irreversible `DROP DATABASE`, write
+ * AFTER), so a bad key or a rejected manifest/entry refuses with the database still intact.
  */
 export interface ValidatedArtifact {
   readonly manifest: BackupManifest;
@@ -112,10 +112,12 @@ export interface ValidatedArtifact {
 /**
  * The whole up-front, WRITE-FREE pass of a restore: decrypt → unpack → classify entries → refuse an
  * incompatible target (the GATE) → refuse an unroutable entry → mkdir the destination roots → validate
- * EVERY entry name against its destination root (the GUARD). Returns the classified pieces; writes
- * NOTHING to the database and no artifact content to disk (it only `mkdir`s the destination roots the
- * guard must `realpath`). Every rejection here — a wrong recovery key, a cross-environment or
- * schema-too-new manifest, a crafted entry name — is decidable from the artifact bytes alone.
+ * EVERY entry name against its destination root (the GUARD) → check identity completeness unless
+ * `skipSecrets`. Returns the classified pieces; writes NOTHING to the database and no artifact
+ * content to disk (it only `mkdir`s the destination roots the guard must `realpath`). Every rejection
+ * here — a wrong recovery key, a cross-environment or
+ * schema-too-new manifest, a crafted entry name, an incomplete identity — is decidable from the
+ * artifact bytes alone.
  *
  * The GATE and the GUARD live HERE, before any write, on purpose: `pg_restore` mutates the live
  * database irreversibly and media/secrets writes land permanently on disk, so an incompatible manifest
@@ -124,6 +126,7 @@ export interface ValidatedArtifact {
  * rejections refuse the whole operation while the old database is still intact.
  *
  * Throws `restore.archive_incomplete` for a missing `manifest.json`/`db.dump`,
+ * `restore.identity_incomplete` for missing identity keys/file when secrets are restored,
  * `restore.unexpected_entry` for a top-level entry it cannot route,
  * `restore.environment_mismatch`/`restore.schema_too_new` from the gate, or
  * `restore.unsafe_entry_path` from the guard (plus `recovery.passphrase_invalid`/`backup.*` from
@@ -133,11 +136,8 @@ export async function validateArtifact(deps: RestoreDeps): Promise<ValidatedArti
   const plaintext = decryptArtifact(deps.artifact, deps.recoveryKey);
   const entries = unpackArchive(plaintext);
 
-  // ONE pass classifies every entry into its bucket: the manifest, the db dump, media/* blobs,
-  // secrets/* files, and the FIRST entry that routes nowhere. `??=` keeps first-wins for the two
-  // singletons (matching the old `.find`) and for `firstUnexpected` (matching the old loop, which
-  // threw on its first unrouted entry). The presence/unexpected checks below then run in the exact
-  // same precedence as before — manifest missing → db.dump missing → gate → unexpected → guard.
+  // First-wins classification preserves rejection precedence: missing manifest → missing dump →
+  // compatibility gate → unexpected entry → path guard → identity completeness.
   let manifestEntry: ArchiveEntry | undefined;
   let dumpEntry: ArchiveEntry | undefined;
   const mediaEntries: ArchiveEntry[] = [];
@@ -209,12 +209,16 @@ export async function validateArtifact(deps: RestoreDeps): Promise<ValidatedArti
     await assertSafeEntryName(entry.name.slice(SECRETS_PREFIX.length), deps.stateDir);
   }
 
+  if (!deps.skipSecrets) readArtifactIdentity(secretEntries);
+
   return { manifest, dumpEntry, mediaEntries, secretEntries };
 }
 
 /**
- * After validation, set any existing identity aside → restore database and media → migrate → run
- * module hooks and settle series in one transaction → write secrets. Once the old identity is set
+ * Identity completeness is checked by `validateArtifact`: refusal leaves the target intact, before
+ * any set-aside or database restore. After validation, set any existing identity aside → restore
+ * database and media → migrate → run module hooks and settle series in one transaction → write
+ * secrets. Once the old identity is set
  * aside, a failure before the secrets write leaves no bootable identity. `skipSecrets` keeps the
  * target's identity and skips hooks.
  * The GATE and GUARD belong to `validateArtifact`; staging is cleaned even on failure.
@@ -246,6 +250,7 @@ export async function writeValidated(
       log("info", "restore.identity.kept", {});
       return;
     }
+    // Completeness is a validation precondition; this pure read recovers the already-checked ids.
     const identity = readArtifactIdentity(validated.secretEntries);
     const opened = await (deps.openDb ?? openPostgres)(deps.databaseUrl);
     let seriesId: string;
@@ -270,8 +275,9 @@ export async function writeValidated(
 }
 
 /**
- * Validate an encrypted backup, then set aside any existing identity, restore, migrate, run the
- * module hooks in one transaction and write the artifact's secrets last. After set-aside and before
+ * Validate an encrypted backup and its identity completeness, then set aside any existing identity,
+ * restore, migrate, run the module hooks in one transaction and write the artifact's secrets last.
+ * After set-aside and before
  * the secrets write, the box has no bootable identity. Rejoin calls the two halves separately around its
  * database wipe and uses `skipSecrets` to keep its own identity without running restore hooks.
  */
@@ -378,7 +384,8 @@ export async function setAsideExistingIdentity(stateDir: string, log: Logger): P
 /**
  * The identity the restored box will take, read from the ARTIFACT's `secrets/trading.env` — never the
  * target box's file, which may hold a stale or foreign identity. Every key is required and non-empty
- * (`isUnset`): a backup of a never-provisioned box has no node to re-register.
+ * (`isUnset`): a backup of a never-provisioned box has no node to re-register. `validateArtifact`
+ * checks this before set-aside or database restore unless `skipSecrets` keeps the target's identity.
  */
 export function readArtifactIdentity(secretEntries: readonly ArchiveEntry[]): {
   node: ProvisionedNode;
