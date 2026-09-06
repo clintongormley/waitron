@@ -247,7 +247,7 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    the `*.rls.test.ts` suites replaced by per-module grant suites and `privileges.test.ts`, and
    CLAUDE.md §2–§4 rewritten. Proof: old migrations vs new baselines, `pg_dump --schema-only`,
    normalised diff EMPTY. Measurements: real-PG test files 212 → 159; full-suite wall clock
-   352 s → 319 s. Post-squash follow-ups: (1) `sales_assert_tenders_cover`'s "even though
+   352 s → 319 s. Post-squash follow-ups: (0) `adoptVenue` (the mirror/replication path, `venue-adopt.ts`) inserts a tenant but is NOT behind the one-tenant `assertNoForeignTenant` guard the two creation paths now share (finish-branch run-it review) — decide whether mirror-adopt into an occupied DB should refuse a foreign obligado; (1) `sales_assert_tenders_cover`'s "even though
    the definer sees every row" clause (core baseline) is now false — kept byte-verbatim so the
    equivalence proof stays EMPTY; thin it on the first change to that function; (2) `sync_peers`
    carries a redundant `UPDATE (last_seen_at)` column grant beside its table-level `UPDATE` — drop at
