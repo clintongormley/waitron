@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs";
 // Two jobs, both of them answers ABOUT a scope rather than derivations OF one (that is
 // changed-packages.mjs, which imports `classify` and `isInertPath` from here):
 //
-//   * whether a change can affect anything but prose, so CI can skip the expensive jobs when it
-//     cannot — `isInertPath` and `classify`, design §3.4;
+//   * whether a change can affect a test, build or type-check result, so CI can skip the expensive
+//     jobs when it cannot — `isInertPath` and `classify`, design §3.4;
 //   * which gated jobs a resolved scope gives work to — `SCOPE_GATES` and `gateOutputs`, §3.6.
 //
 // Design: docs/superpowers/specs/2026-07-31-scoped-ci-design.md.
@@ -16,13 +16,30 @@ import { readFileSync } from "node:fs";
 // exactly that edit skip exactly that test.
 
 /**
+ * Root directories and root files that no gate reads: an editor's or another agent's own config,
+ * which cannot reach a test, a build or a type-check.
+ *
+ * ROOT-ONLY, and the prefixes below carry that. The same names inside a package are that package's
+ * files — a package's own `.gitignore` decides what its build and test runs can see.
+ *
+ * Root config a gate DOES read is deliberately absent and stays code: `.github/`, `.husky/`,
+ * `scripts/`, the lockfile, the root manifests, `eslint.config.js`, `.prettierrc*`,
+ * `tsconfig*.json` and `pnpm-workspace.yaml` can each affect any package or the lint/format gates.
+ */
+const INERT_ROOT_PREFIXES = [".codex/", ".vscode/"];
+const INERT_ROOT_FILES = [".gitignore", ".editorconfig"];
+
+/**
  * True when a change to `path` cannot affect any test, build or type-check result.
  *
- * Inert means: anywhere under `docs/`, or a Markdown file at the repository root. Everything else —
- * including Markdown inside a package — is code.
+ * Inert means: anywhere under `docs/`, a Markdown file at the repository root, or the root config
+ * above that no gate reads. Everything else — including Markdown inside a package, and those same
+ * config names inside a package — is code.
  */
 export function isInertPath(path) {
   if (path.startsWith("docs/")) return true;
+  if (INERT_ROOT_PREFIXES.some((prefix) => path.startsWith(prefix))) return true;
+  if (INERT_ROOT_FILES.includes(path)) return true;
   // No slash means repository root. CLAUDE.md, README.md, CONTRIBUTING.md.
   if (path.endsWith(".md") && !path.includes("/")) return true;
   return false;
@@ -30,6 +47,11 @@ export function isInertPath(path) {
 
 /**
  * Classifies a list of changed paths.
+ *
+ * `code: false` is what both gates call `documentation` — a name narrower than the set, which is
+ * every inert path: prose AND the root config no gate reads. The name is the consumers' contract
+ * (ci.yml gates on `code`, .husky/pre-push compares its scope to the literal `documentation`), so
+ * it stays.
  *
  * Fails closed: an empty list means the diff could not be worked out (a force-push, a new branch,
  * an all-zero `github.event.before`), which is a reason to run everything rather than nothing.

@@ -109,7 +109,8 @@ Traps, each of which cost a round trip:
   by FILE COUNT, so shard imbalance is the real limit, and `N` must never exceed a package's test-file
   count.
 - **CI does not run every check on every push.** The `changes` job skips the expensive jobs when
-  every changed path is documentation, and on a pull request narrows the shards and mutation jobs to
+  every changed path is documentation or root config no gate reads (`.codex/`, `.vscode/`, the root
+  `.gitignore`, the root `.editorconfig`), and on a pull request narrows the shards and mutation jobs to
   the changed packages and their dependents. A merge to `main` runs the unfiltered suite whenever
   anything but documentation changed — that run verifies the narrowing. Read the `changes` job's
   `code`, `scope` and `packages` outputs before treating a green PR as evidence about the workspace.
