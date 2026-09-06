@@ -71,7 +71,7 @@ interface DaySeed {
 }
 
 /** Seed one sale + its tender + one sale_line on a FIXED business day (issued/settled at a literal
- * midday-UTC instant). Superuser insert (RLS bypassed — pure setup, the demo idiom). */
+ * midday-UTC instant). Superuser insert (fixture setup, the demo idiom). */
 async function seedDay(db: Database, invoiceNumber: number, d: DaySeed): Promise<void> {
   const sale = await db.execute<{ id: string }>(sql`
     insert into sales (
@@ -126,7 +126,7 @@ const suite = usePgliteDb({
       const mkPerson = async (name: string, role: string): Promise<string> => {
         const p = await tx.execute<{ id: string }>(sql`
           insert into persons (tenant_id, display_name, pin_hash, role)
-          values (current_tenant_id(), ${name}, ${hashPin("1234")}, ${role}) returning id`);
+          values (${tenantId}, ${name}, ${hashPin("1234")}, ${role}) returning id`);
         const session = await startManagementSession(tx, { tenantId, personId: p.rows[0]!.id });
         return session.id;
       };

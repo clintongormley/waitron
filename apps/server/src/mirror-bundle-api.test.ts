@@ -61,7 +61,7 @@ function nextNif(): string {
 }
 
 let stateDir: string;
-let appDb: Database; // app_login → app_user: auth + the RLS venue reads
+let appDb: Database; // app_login → app_user: authentication and venue reads
 let retentionDb: Database; // sync_pruner → sync_retention: mints the peer token
 
 /** Provision a fresh venue (as the owner) with standard FA + rectificative RF series and an ESTABLISHED
@@ -122,10 +122,12 @@ async function setupVenue(): Promise<{
   const primaryPublicKey = (await readMembershipTrustSet(suite.admin, designated.tenantId))[
     designated.nodeId
   ]!;
-  // The admin person id — read back under RLS as app_user, the only role the endpoint ever uses.
+  // The admin person id — read back as app_user, the only role the endpoint ever uses.
   const adminPersonId = await withTenant(appDb, designated.tenantId, async (tx) => {
     await asAppUser(tx);
-    const r = await tx.execute<{ id: string }>(sql`select id from persons where role = 'admin'`);
+    const r = await tx.execute<{ id: string }>(
+      sql`select id from persons where tenant_id = ${venue.tenantId} and role = 'admin'`,
+    );
     return r.rows[0]!.id;
   });
   return { designated, adminPersonId, primaryPublicKey };
@@ -138,7 +140,7 @@ async function seedStaff(tenantId: string): Promise<string> {
     await asAppUser(tx);
     const r = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'Cajera', ${hashPin("4321")}, ${hashPassword(STAFF_PASSWORD)}, 'staff')
+      values (${tenantId}, 'Cajera', ${hashPin("4321")}, ${hashPassword(STAFF_PASSWORD)}, 'staff')
       returning id`);
     return r.rows[0]!.id;
   });
@@ -197,8 +199,7 @@ beforeAll(async () => {
       .caCertPem,
   );
 
-  // One stamp on the shared template serves every venue (a whole-DB fact). app_login → app_user for the
-  // auth + RLS reads; sync_pruner → sync_retention for enrolPeer, exactly as mirror-bundle.test.ts.
+  // One deployment stamp serves this file's database. Both app_login and sync_pruner inherit app_user.
   await stampDeployment(suite.admin, "preproduction");
   appDb = await suite.pg.connectAs("app_login", "app_pw");
   retentionDb = await suite.pg.connectAs("sync_pruner", "pp");

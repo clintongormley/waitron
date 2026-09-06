@@ -7,9 +7,7 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import { lagFor } from "@waitron/sync";
 import { ALL_MODULES } from "./modules.js";
 
-// Real Postgres, and specifically a REAL sync_tailer member (sync_applier), not the owner: FORCE RLS
-// on sync_log only bites a non-superuser, so this is the one connection shape that can show the
-// withTenant wrap is load-bearing. Owner reads (box-status.replication.test.ts) bypass RLS and can't.
+// Exercise replication lag through the app_user member used by the server.
 const ORIGIN = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const suite = useTemplateDb({ template: "manifest" });
 
@@ -52,7 +50,7 @@ async function setupTenant(): Promise<string> {
     ),
     { db: suite.admin, modules: ALL_MODULES },
   );
-  // One sync_log row at seq 10 for this tenant; one cursor at 3 → lag 7 under the tenant, 0 without.
+  // One sync_log row at seq 10 for this tenant; one cursor at 3 → lag 7.
   await suite.admin.execute(
     sql`insert into sync_log (seq, origin_id, table_name, op, tenant_id, row_image)
         overriding system value
@@ -65,13 +63,13 @@ async function setupTenant(): Promise<string> {
   return venue.tenantId;
 }
 
-describe("box-status replication reader through a real sync_tailer pool", () => {
+describe("box-status replication reader through a real app_user member pool", () => {
   let tailer: Database | undefined;
   let tenantId: string;
 
   beforeAll(async () => {
     tenantId = await setupTenant();
-    tailer = await suite.pg.connectAs("sync_applier", "ap"); // app_user + sync_tailer member
+    tailer = await suite.pg.connectAs("sync_applier", "ap"); // app_user member
   });
 
   afterAll(async () => {
@@ -81,10 +79,5 @@ describe("box-status replication reader through a real sync_tailer pool", () => 
   it("withTenant-wrapped lagFor sees the tenant's real lag", async () => {
     const lags = await withTenant(tailer!, tenantId, (tx) => lagFor(tx));
     expect(lags[0]?.lag).toBe(7n);
-  });
-
-  it("bare lagFor (no tenant context) reads a false-healthy lag 0 — the wrap is load-bearing", async () => {
-    const lags = await lagFor(tailer!);
-    for (const l of lags) expect(l.lag).toBe(0n);
   });
 });

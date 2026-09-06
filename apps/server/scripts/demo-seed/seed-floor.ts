@@ -1,17 +1,6 @@
-// `seedFloor` — the demo-seed's floor-plan step (Phase 2, Task 7). Given a provisioned venue's
-// tenant + location, it stands up the three floor-plan zones, ~16 placed tables (floor.ts), and the
-// four manual service statuses.
-//
-// It runs inside the CALLER's transaction, under the tenant GUC + app_user role the caller set with
-// `withTenant`/`asAppUser` (the demo/POS shape, matching `seedCatalogues`). Unlike the catalogue
-// create ops, `createZone`/`createTable`/`setTablePlacement` (`apps/server/src/tables.ts`) insert the
-// LITERAL `cfg.tenantId`/`cfg.locationId` they are given rather than reading the tenant off the GUC —
-// so this module bridges the plain-string ids `applyVenue` returns into the branded `TillConfig`
-// shape those three functions are typed to take (see `toTableCfg`).
-//
-// The `table_service_statuses` insert is raw + parameterised (never string-concatenated,
-// CLAUDE.md §3): `createStatus` is manager-session-gated (`till.configure`), which a seed script has
-// no management session for, so the four statuses go in directly here.
+// Seed the floor plan and service statuses in the caller's transaction.
+// toTableCfg brands the supplied venue ids for the table operations.
+// Statuses are inserted directly because the management helper requires a session.
 
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -105,7 +94,7 @@ export async function seedFloor(
   for (const [index, status] of DEMO_STATUSES.entries()) {
     await tx.execute(
       sql`insert into table_service_statuses (tenant_id, label, color, display_order)
-          values (current_tenant_id(), ${status.label[locale]}, ${status.color}, ${index})`,
+          values (${tenantId}, ${status.label[locale]}, ${status.color}, ${index})`,
     );
   }
 }

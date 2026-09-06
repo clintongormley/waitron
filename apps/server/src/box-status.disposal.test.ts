@@ -11,11 +11,8 @@ import { mountBoxStatusApi } from "./box-status.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 
-// Real Postgres, not PGlite: the route AUTHORIZES with `authorizeManager` (persons +
-// management_sessions under the app role's RLS) and reads the tenant's `cadenas` chain row — both
-// false passes on PGlite's superuser connection (CLAUDE.md §4). Mirrors `box-status.replication.test.ts`;
-// the disposal reader here is a stub (its own drain read is proven in packages/sync's disposal.test.ts),
-// so the point exercised is the collapse in `collectBoxStatus` driven through the real GET route.
+// Exercise the disposal-summary response through PostgreSQL-backed manager authorization.
+// The disposal reader is stubbed; packages/sync tests its real queries.
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the seeded manager's dashboard password.
 // Dashboard sign-in resolves the person by EMAIL, so the seeded manager carries a login email
@@ -32,13 +29,7 @@ function nextNif(): string {
   return `${String(73_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/**
- * Stand up a fresh provisioned venue (as the owner), then seed — as the app role under the tenant, so
- * RLS is exercised — a MANAGER (role `manager`, which holds `till.configure`) WITH a dashboard
- * password so it can log in. Provisioning creates only the ADMIN, so the manager is seeded directly;
- * `pin_hash` is NOT NULL, so a value is supplied even though it logs in by password. Mirrors the
- * sibling `box-status.replication.test.ts` scaffolding.
- */
+/** Provision a venue as owner and seed the people and sessions this route fixture needs. */
 async function setupTenant(): Promise<{ tenantId: string; nodeId: string; managerId: string }> {
   const venue = await applyVenue(
     planVenue(
@@ -77,7 +68,7 @@ async function setupTenant(): Promise<{ tenantId: string; nodeId: string; manage
     await asAppUser(tx);
     const manager = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
+      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
       returning id`);
     return manager.rows[0]!.id;
   });

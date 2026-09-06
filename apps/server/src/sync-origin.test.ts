@@ -140,7 +140,7 @@ async function setupVenue(): Promise<Venue> {
     await asAppUser(tx);
     const mgr = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
-      values (current_tenant_id(), 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+      values (${venue.tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
     const managerSession = await startManagementSession(tx, {
       tenantId: venue.tenantId,
       personId: mgr.rows[0]!.id,
@@ -181,7 +181,7 @@ async function postCatalogue(app: Hono, cookie: string, name: string): Promise<v
   expect(res.status).toBe(201);
 }
 
-/** The origin_id captured for this tenant's most recent `catalogues` write (RLS-bypassing admin read). */
+/** The origin_id captured for this tenant's most recent `catalogues` write (fixture owner read). */
 async function catalogueOrigin(tenantId: string): Promise<string | null> {
   const r = await suite.admin.execute<{ v: string | null }>(
     sql`select origin_id::text as v from sync_log
@@ -231,7 +231,7 @@ function mountMgmt(tenantId: string, nodeId: string): Hono {
   return app;
 }
 
-/** The origin_id captured for this tenant's most recent `persons` write (RLS-bypassing admin read).
+/** The origin_id captured for this tenant's most recent `persons` write (fixture owner read).
  * `setupVenue` seeds a manager persons row (op=insert, origin all-zero, no node id supplied) before the
  * API's createPerson runs, so `seq desc limit 1` reads the API write specifically — the same
  * most-recent-write convention `catalogueOrigin` uses. (The route is `/staff` but the enrolled table,

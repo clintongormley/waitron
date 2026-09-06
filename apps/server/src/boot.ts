@@ -949,15 +949,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     await db.close();
     throw error;
   }
-  // On a mirror, front the whole user-facing surface with the read-only gate (non-GET → node.read_only
-  // 403) and the ambient viewer session (so the existing management-session gates pass with no login).
-  // Registered BEFORE the mounts below so Hono wraps them; `/health` (registered before this branch) is
-  // deliberately not wrapped — it is a GET and must answer in every mode. A primary installs neither.
-  // BOTH middlewares read `holders.mode.current` per request, so promotion is a genuine flag-flip: when the
-  // holder flips to 'primary', the gate opens writes AND the ambient viewer stops (real auth applies) —
-  // there is no window where writes are open while an admin is still auto-logged-in. `ensureMirrorViewer`
-  // runs on this app-role `db` (RLS as app_user); guarded so its throw closes the pool rather than leaking
-  // it, matching the loadKeyRing / mirror-config db-cleanup discipline in this branch.
+  // On mirrors, apply the read-only gate and establish the ambient viewer session.
   if (fencedOrMirror) {
     app.use(
       "*",
@@ -966,18 +958,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // fence only by the wipe-and-restore of a later round, which is a fresh boot anyway.
       readOnlyGate(
         () => holders.mode.current === "mirror" || fenced,
-        // Let exactly two write surfaces through the fence, each named as ONE route (never a prefix), so
-        // a future mutating route added nearby is NOT auto-exempted — it hits the fence and fails loud
-        // (403), the safe default.
-        //   1. POST /sync-api/cursor — the carrier's cursor report, the disposal guard's only input (it
-        //      writes `sync_cursor`: no tenant_id, no RLS). The GET source routes (`/sync-api/hello`,
-        //      `/sync-api/log`) need no exemption — they pass as SAFE_METHODS. A mirror mounts no
-        //      /sync-api, so this clause is a no-op there.
-        //   2. POST /api/box/retire — a FENCED node's self-eviction (retire/evict R3), gated on `fenced`
-        //      so a MIRROR does not expose it. Like the cursor report it writes only whole-DB
-        //      `node_membership` (no tenant_id, no RLS — a self-eviction membership edit), never a client
-        //      tenant/fiscal write, so it is a write a read-only fenced node legitimately serves. This is
-        //      the ONE `/api/box/*` write let through; the rest stay behind the fence.
+        // Cursor and retirement writes use their own authentication gates.
         (c) =>
           (c.req.method === "POST" && c.req.path === "/sync-api/cursor") ||
           (fenced && c.req.method === "POST" && c.req.path === "/api/box/retire"),
@@ -1268,13 +1249,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // boot; the `purchase.manage` gate runs per request. This is the #91 fast-follow's capture surface,
   // feeding the headless modelo 303 IVA-deducible reporting.
   mountPurchasingApi(app, { db, cfg: { tenantId: till.tenantId } }, log);
-  // The dashboard's gated staff-reservation write group (create/list-by-day/edit + the seat + lifecycle
-  // moves) on the SAME app, the identical convention. Unlike the siblings it receives the FULL `till`
-  // config, not just `{ tenantId }`: `seatBooking` opens a real TS-1 tab whose order-number allocation
-  // reads `till.tillId`/`till.nodeId`, and create/list read `till.locationId` (the day-list scope RLS
-  // cannot supply). Reuses the EXACT `db` + this venue's `till` the trading surface holds so scope
-  // cannot drift. Routes only — no database work at boot; the `booking.manage` gate runs per request,
-  // and no fiscal path is touched (a seat writes a pre-fiscal working order only).
+  // Mount booking routes with the venue configuration and shared authorization gate.
   mountBookingsApi(app, { db, cfg: till }, log);
   // The dashboard's gated reporting surface on the SAME app, the identical convention. Reuses the EXACT
   // `db` and tenant (`till.tenantId`, this venue's one tenant) `mountPurchasingApi` above receives so
@@ -1549,46 +1524,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     }
   }
 
-  // The scheduled local pg_dump backup (onboarding slice 4b-ii). OPT-IN on WAITRON_BACKUP_DIR
-  // (`loadBackupConfig` → undefined otherwise), and a SINGLETON duty: the singleton primary owns the
-  // backup, so it takes the SAME `isSingletonPrimary` gate the retention sweep and the tunnel client take
-  // (a mirror holds a pulled copy, not the source of record it must dump, and its RLS probe below needs a
-  // SUPERUSER/BYPASSRLS role it is not provisioned with; a sell-only local secondary must not run a SECOND
-  // backup writer against the same dir/source either). It MIRRORS
-  // the retention worker's shape exactly: its OWN AbortController + worker promise (declared beside the
-  // sync/tunnel ones so close() below tears it down), a `.catch` logging `codeOf`, and a teardown that
-  // aborts + awaits. Unlike the pre-BR-2 dump-only sweep, `runBackupSweep` now DOES hold a long-lived
-  // pool: BR-2's archive embeds a manifest, and `buildManifest` reads each module's applied schema
-  // version off the `__drizzle_migrations_*` journal — which `app_user` holds no SELECT on — so it needs
-  // a PRIVILEGED pool. That pool is `backupDb` below (the SAME connection the RLS probe just validated,
-  // reused rather than reopened), closed in `closePools` like `syncDb`/`retentionDb`; the dump itself
-  // still shells out to a fresh `pg_dump` process over `backupConfig.databaseUrl`.
-  //
-  // Before the worker starts, an RLS PROBE (`assertBackupCanReadFiscal`): under FORCE RLS a `pg_dump`
-  // as a role that is neither SUPERUSER nor BYPASSRLS either loud-fails or silently emits an empty
-  // fiscal dump, so a fenced backup role must never be enabled (backup-probe.ts). The probe opens a
-  // pool to `backupConfig.databaseUrl` — the EXACT connection string `runBackupSweep` /
-  // `realPgDump` dump with, no SET ROLE and no second role — so a green probe is evidence about the
-  // real dump connection, not an adjacent one; on success that pool is HANDED to the worker as
-  // `backupDb` for its manifest's journal reads too. The probe only checks fiscal-table readability
-  // (rolsuper/rolbypassrls), not the journal specifically — that read's receipt is `pg_dump` itself
-  // (see the `db` field doc on `BackupSweepDeps` in backup-sweep.ts): it connects with the SAME
-  // connection string / role (a separate process, opening its own connection) and must read those
-  // ordinary journal tables for a complete dump, so a role able to dump them holds SELECT on them,
-  // and `buildManifest` fails the tick visibly (`backup.failed`) before `pg_dump` runs if it somehow
-  // does not. Only on a
-  // FAILURE path is the probe pool closed here in the `finally` instead of being handed off. It is
-  // FAIL-SAFE, NEVER fatal (CLAUDE.md §5 — nothing may
-  // block a sale): a fenced role, an unreachable backup database, or ANY other probe error leaves
-  // backup off (`backupWorker` stays undefined) and logs `backup.disabled_probe_failed` (with the
-  // structured `errorCode` so a connection/network fault is distinguishable from an RLS fence — the
-  // event name covers ANY probe failure, not just a fence) rather than throwing out of boot — a bad backup
-  // role must not brick the till. The whole open+assert sits inside the `try`, and the pool is closed in
-  // the `finally` on any path that did NOT hand it to the worker, so nothing leaks. `backupWorker` is the single
-  // source of truth for "backup is on": it is assigned ONLY on the probe's success path (so a fenced or
-  // unreachable role leaves it `undefined`), and the box-status wiring and teardown below both gate on
-  // `backupWorker !== undefined`. When `backupConfig` is set on a non-singleton node (mirror or local
-  // secondary) the config is simply not consulted (the `isSingletonPrimary` gate), matching retention/tunnel.
+  // Start backups only on a singleton primary after the configured backup connection
+  // passes assertBackupCanReadFiscal. The worker reuses that pool for manifest reads;
+  // pg_dump opens its own connection with the same URL. A probe failure leaves backup
+  // disabled and is logged without stopping sales. Close any pool not handed to the worker.
   const backupConfig = loadBackupConfig(env);
   const backupController = new AbortController();
   // Build the `StorageBackend`s ONCE, here in boot scope, so the sweep worker below and the
@@ -1657,34 +1596,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     log("info", "backup.disabled", {});
   }
 
-  // The operator box-status surface (onboarding slice 4a). Mounted AFTER the sync block so it can hand
-  // box-status the sync-pool lag reader when sync is on; when sync is off (`syncDb === undefined`, the
-  // free-tier single box) the reader stays absent and `replication.configured:false`. GET-only, so the
-  // mirror read-only gate passes it. On a mirror the ambient viewer primes the session cookie on the
-  // RESPONSE, so a cookieless first request 401s AND emits the Set-Cookie; the browser's next request
-  // carries that ambient cookie and `requireManagementSession` passes (see `mirror-e2e.test.ts` —
-  // Hono setCookie is a response header, not readable within the same request). `health` and `now` are
-  // the same bindings `healthApp(health, now)` used above; `config.tls?.certFile` is the served-leaf
-  // path (absent on a plain-HTTP boot → `cert.available:false`).
-  //
-  // `syncDb` (the sync_tailer + app_user member pool the sync block opened) is captured into a `const`
-  // so TS keeps its non-`undefined` narrowing inside the reader closure — a captured `let` widens back
-  // to `Database | undefined`, the same reason the sync block hoists `localSyncDb`. It is the pool the
-  // reader must use: `lagFor` reads `sync_log`, which `app_user` (the `db` pool) holds no SELECT on at
-  // all (0000_sync_outbox.sql REVOKEs it, granting only INSERT for capture), so the app pool cannot
-  // read the lag — only this sync-tailer pool can.
-  //
-  // The reader runs `lagFor` INSIDE `withTenant(till.tenantId)`, not bare: `sync_tailer`'s SELECT on
-  // `sync_log` is fenced by the per-tenant `sync_log_tenant_isolation` policy (no TO clause → applies
-  // under FORCE RLS to this login too), and with no `app.tenant_id` set `current_tenant_id()` is NULL,
-  // so a BARE `lagFor(syncDb)` sees ZERO `sync_log` rows and reports every subscriber at lag 0 — a
-  // silent false-healthy. This is PINNED by the box-status durability guard
-  // (`packages/sync/src/retention.gate.test.ts`), which asserts a bare `sync_tailer` `lagFor` and the
-  // SAME member under `withTenant` DISAGREE — the invariant, not any specific number (the guard's own
-  // probe happens to see 0 vs a real lag). The box is single-venue (one tenant, `till.tenantId`), so every captured
-  // outbox row carries that tenant_id and its context reveals the whole log. NO `asAppUser` here — that
-  // `SET ROLE app_user`s and would drop the sync_tailer membership's SELECT on `sync_log`; `withTenant`
-  // only sets the GUC (packages/db/src/tenancy.ts), leaving the login's inherited grants intact.
+  // Read replication lag through the sync pool when sync is configured. Capture the
+  // pool in a const so its non-undefined type is preserved inside the reader closure.
+  // The database holds one tenant; app_user can read its sync log.
   const lagPool = syncDb;
   // Hoisted to a plain `const` so TS keeps the `carrierNodeId !== undefined` narrowing inside the
   // `readDisposal` arrow below (a captured `const`, unlike a `let`, does not widen — same rule the
@@ -1748,21 +1662,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         lagPool === undefined
           ? undefined
           : () => withTenant(lagPool, till.tenantId, (tx) => lagFor(tx)),
-      // The backup freshness reader (Task 6): present only when the RLS probe above ENABLED backup, so
-      // `configured:false` covers both "no backup env" and "backup env set but the role is fenced /
-      // unreachable" — the box-status surface reports the effective state, not merely the config. Reads
-      // freshness PER destination off the SAME `backupBackends` the sweep writes to, each via
-      // `list("waitron-")` (which matches the encrypted `.backup.enc` archives the sweep produces); `now`
-      // is the live wall-clock factory (`() => new Date()`) established at boot, CALLED per box-status
-      // request so `ageSeconds` is measured against request time. `backupConfig!` is safe: `backupWorker`
-      // is only ever assigned when `backupConfig` was defined (the probe block above runs under
-      // `backupConfig !== undefined`), and when it is defined `backupBackends` is that config's mapped
-      // destinations.
-      // The producer-side disposal guard (membership rejoin R2, design §5.1): wraps the shared
-      // `readFenceDrainProgress` (above) with the carrier id for the wire shape. Absent (undefined) on a
-      // serving node → box-status reports disposal.applicable:false. The `carrierNodeId !== undefined`
-      // arm is what narrows it to a string for the spread (a captured `const`, so the narrowing holds
-      // inside the arrow); it is redundant with `readFenceDrainProgress`'s own guard but free.
+      // Expose freshness only when the backup worker started successfully. This reports
+      // the effective worker state, including a failed probe, rather than configuration alone.
+      // The disposal reader carries the retiring node id when its fence is active.
       readDisposal:
         readFenceDrainProgress !== undefined && carrierNodeId !== undefined
           ? async () => ({ carrierNodeId, ...(await readFenceDrainProgress()) })
@@ -1771,14 +1673,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         backupWorker !== undefined
           ? () => readBackupStatus(backupBackends, backupConfig!.staleAfterMs, now())
           : undefined,
-      // The Slice-7 config-conflict count surface. Present iff sync is on (`lagPool !== undefined`) —
-      // the sync module is `toggleable`, so its `sync_config_conflicts` table exists only when the
-      // module is migrated; without sync no conflict can ever be recorded, so box-status reports
-      // configured:false (the same gate the replication lag reader uses). Reads through `lagPool` (the
-      // sync_tailer pool), NOT the app `db` pool: `row_image` is tenant business data, so SELECT is
-      // granted to `sync_tailer` only (0009), the same isolation `sync_log` enforces — see
-      // readConfigConflictCount. No `withTenant`/`asAppUser` here (the table has no RLS/tenant_id, and
-      // asAppUser would drop the sync_tailer SELECT), mirroring the lag reader above.
+      // Expose the configuration-conflict count when the sync pool exists.
       readConfigConflicts:
         lagPool === undefined ? undefined : () => readConfigConflictCount(lagPool),
       // Report the effective mode the box is actually serving as — the same holder the read-only gate

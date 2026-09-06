@@ -94,7 +94,7 @@ function printCfg(cfg: TillConfig): PrintConfig {
   return { tenantId: cfg.tenantId, locationId: cfg.locationId };
 }
 
-/** Run `fn` on a transaction scoped to the venue's tenant as `app_user` (RLS in force), the shape every
+/** Run `fn` on a transaction scoped to the venue's tenant as `app_user`, the shape every
  *  route uses. `nodeId` mirrors the fire path so `ticket_items.node_id` is set as production would. */
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTenant(
@@ -108,8 +108,7 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
   );
 }
 
-/** Read the venue's print-job outbox (the brief's `printJobsFor`, modelled on outbox.test.ts's `jobRow`).
- *  RLS scopes it to the caller's tenant; `payload` decodes through the bytea customType to a Buffer. */
+/** Read the print-job outbox; the bytea custom type decodes payload into a Buffer. */
 async function printJobsFor(
   tx: Transaction,
 ): Promise<{ id: string; printerId: string; status: string; payload: Buffer }[]> {
@@ -206,6 +205,7 @@ async function fireNewOrder(
  *  NO station — a modifier never routes to its own station (that is the point of the parent-only rule). */
 async function addOption(
   tx: Transaction,
+  tenantId: TillConfig["tenantId"],
   productId: string,
   name: string,
   maxQuantity = 1,
@@ -213,7 +213,7 @@ async function addOption(
   const [group] = await tx
     .insert(optionGroups)
     .values({
-      tenantId: sql`current_tenant_id()`,
+      tenantId,
       name: { [LOCALE]: `${name} group` },
       minSelect: 0,
       // Per-option quantity counts toward maxSelect (working-order.ts), so a maxQuantity>1 option needs
@@ -226,7 +226,7 @@ async function addOption(
   const [item] = await tx
     .insert(optionGroupItems)
     .values({
-      tenantId: sql`current_tenant_id()`,
+      tenantId,
       groupId: group!.id,
       name: { [LOCALE]: name },
       priceDelta: "0.50",
@@ -236,7 +236,7 @@ async function addOption(
     })
     .returning({ id: optionGroupItems.id });
   await tx.insert(productOptionGroups).values({
-    tenantId: sql`current_tenant_id()`,
+    tenantId,
     productId,
     groupId: group!.id,
     sort: 0,
@@ -505,8 +505,8 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
       // A dish with TWO options — even with a DEFAULT station present (so a child would otherwise route
       // to it), only the parent must become a ticket item.
       const cortado = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: cocina.id });
-      const grande = await addOption(tx, cortado, "Grande");
-      const avena = await addOption(tx, cortado, "Leche avena");
+      const grande = await addOption(tx, cfg.tenantId, cortado, "Grande");
+      const avena = await addOption(tx, cfg.tenantId, cortado, "Leche avena");
 
       const orderId = await fireNewOrder(tx, cfg, [
         {
@@ -546,8 +546,8 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
       const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
       await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId });
       const cortado = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: cocina.id });
-      const grande = await addOption(tx, cortado, "Grande");
-      const avena = await addOption(tx, cortado, "Leche avena");
+      const grande = await addOption(tx, cfg.tenantId, cortado, "Grande");
+      const avena = await addOption(tx, cfg.tenantId, cortado, "Leche avena");
 
       await fireNewOrder(tx, cfg, [
         {
@@ -607,8 +607,8 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
       const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
       await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId });
       const cortado = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: cocina.id });
-      const grande = await addOption(tx, cortado, "Grande", 3); // maxQuantity 3 admits a ×2
-      const avena = await addOption(tx, cortado, "Leche avena"); // plain (max 1)
+      const grande = await addOption(tx, cfg.tenantId, cortado, "Grande", 3); // maxQuantity 3 admits a ×2
+      const avena = await addOption(tx, cfg.tenantId, cortado, "Leche avena"); // plain (max 1)
 
       // Dish quantity 1; the "Grande" option taken ×2 → child quantity 2 (per-dish 2 → "x2"); the
       // "Leche avena" option taken once → child quantity 1 (per-dish 1 → no suffix).
@@ -643,7 +643,7 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
       // line that resolves neither a product nor category route has nowhere to go (station.no_default).
       const barra = await createStation(tx, cfg, { name: "Barra", isDefault: false });
       const cafe = await makeProduct(tx, cfg, catalogueId, "Cafe", { stationId: barra.id });
-      const grande = await addOption(tx, cafe, "Grande");
+      const grande = await addOption(tx, cfg.tenantId, cafe, "Grande");
 
       // This must NOT throw station.no_default — the child is filtered before station resolution.
       const orderId = await fireNewOrder(tx, cfg, [
@@ -741,4 +741,8 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
     });
     expect(jobs).toHaveLength(0);
   });
+});
+
+afterEach(async () => {
+  await suite.db.execute(sql`delete from print_jobs`);
 });

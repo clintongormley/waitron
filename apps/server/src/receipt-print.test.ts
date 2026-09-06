@@ -248,7 +248,8 @@ async function printJobsFor(
         status: printJobs.status,
         payload: printJobs.payload,
       })
-      .from(printJobs);
+      .from(printJobs)
+      .where(eq(printJobs.tenantId, cfg.tenantId));
   });
 }
 
@@ -264,14 +265,18 @@ async function drawerOpensFor(
         personId: drawerOpens.personId,
         tillId: drawerOpens.tillId,
       })
-      .from(drawerOpens);
+      .from(drawerOpens)
+      .where(eq(drawerOpens.tenantId, cfg.tenantId));
   });
 }
 
 async function registroCount(cfg: TillConfig): Promise<number> {
   return withTenant(suite.admin, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-    const rows = await tx.select().from(registrosFacturacion);
+    const rows = await tx
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
     return rows.length;
   });
 }
@@ -281,7 +286,10 @@ async function registroCount(cfg: TillConfig): Promise<number> {
 async function onlySaleId(cfg: TillConfig): Promise<string> {
   return withTenant(suite.admin, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-    const rows = await tx.select({ id: sales.id }).from(sales);
+    const rows = await tx
+      .select({ id: sales.id })
+      .from(sales)
+      .where(eq(sales.tenantId, cfg.tenantId));
     return rows[0]!.id;
   });
 }
@@ -362,10 +370,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
   });
 
   it("prints the tenant's authored receipt trim from tenant_receipts (SP-B4 rehome)", async () => {
-    // The receipt trim lives in `tenant_receipts`, read via `getReceipt`. Seed a trim there (raw insert
-    // under RLS as the app role — pure setup) and prove it renders in the printed ticket. Against the
-    // pre-rehome code (which read the trim from the old widget-layout row) this footer is absent, so the
-    // assertion fails — the by-source proof for the repoint.
+    // Seed a tenant_receipts trim and assert it appears in the printed ticket.
     const { cfg, each } = await setupVenue();
     const printerId = await makePrinter(cfg, { transport: "network_tcp" });
     await configureReceipt(cfg, { mode: "auto", printerId });

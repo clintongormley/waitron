@@ -28,13 +28,13 @@ const suite = usePgliteDb({
       await asAppUser(tx);
       const loc = await tx.execute<{ id: string }>(sql`
         insert into locations (tenant_id, name, invoice_locales, operation_description)
-        values (current_tenant_id(), 'Main', array['es-ES'], 'Sale on premises') returning id`);
+        values (${tenantId}, 'Main', array['es-ES'], 'Sale on premises') returning id`);
       const mgr = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
-        values (current_tenant_id(), 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+        values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
       const stf = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
-        values (current_tenant_id(), 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+        values (${tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
       const mSes = await startManagementSession(tx, { tenantId, personId: mgr.rows[0]!.id });
       const sSes = await startManagementSession(tx, { tenantId, personId: stf.rows[0]!.id });
       return {
@@ -292,7 +292,7 @@ describe("mountWorkforceApi — publish", () => {
       await asAppUser(tx);
       await tx.execute(sql`
         insert into convenio_config (tenant_id, location_id)
-        values (current_tenant_id(), ${locationId})
+        values (${tenantId}, ${locationId})
         on conflict (tenant_id, location_id) do nothing`);
     });
   }
@@ -361,7 +361,7 @@ describe("mountWorkforceApi — publish", () => {
       await asAppUser(tx);
       const r = await tx.execute<{ id: string }>(sql`
         insert into locations (tenant_id, name, invoice_locales, operation_description)
-        values (current_tenant_id(), 'Annex', array['es-ES'], 'Sale on premises') returning id`);
+        values (${tenantId}, 'Annex', array['es-ES'], 'Sale on premises') returning id`);
       return r.rows[0]!.id;
     });
     const create = await send(app, "POST", "/management-api/roster", {
@@ -391,11 +391,11 @@ describe("mountWorkforceApi — swap + absence approvals", () => {
       await asAppUser(tx);
       const shift = await tx.execute<{ id: string }>(sql`
         insert into shifts (tenant_id, person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes)
-        values (current_tenant_id(), ${personId}, ${locationId}, '2026-03-02T09:00:00Z', 0, '2026-03-02T13:00:00Z', 0)
+        values (${tenantId}, ${personId}, ${locationId}, '2026-03-02T09:00:00Z', 0, '2026-03-02T13:00:00Z', 0)
         returning id`);
       const swap = await tx.execute<{ id: string }>(sql`
         insert into shift_swaps (tenant_id, requested_by_person_id, from_shift_id, to_person_id, status)
-        values (current_tenant_id(), ${personId}, ${shift.rows[0]!.id}, ${personId}, 'accepted') returning id`);
+        values (${tenantId}, ${personId}, ${shift.rows[0]!.id}, ${personId}, 'accepted') returning id`);
       return swap.rows[0]!.id;
     });
   }
@@ -404,7 +404,7 @@ describe("mountWorkforceApi — swap + absence approvals", () => {
       await asAppUser(tx);
       const r = await tx.execute<{ id: string }>(sql`
         insert into absences (tenant_id, person_id, absence_kind, starts_on, ends_on)
-        values (current_tenant_id(), ${personId}, 'holiday', '2026-03-02', '2026-03-04') returning id`);
+        values (${tenantId}, ${personId}, 'holiday', '2026-03-02', '2026-03-04') returning id`);
       return r.rows[0]!.id;
     });
   }

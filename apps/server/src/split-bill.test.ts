@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -110,7 +110,9 @@ async function setupVenue(): Promise<Seeded> {
   return { cfg, ...seeded };
 }
 
-/** Run `fn` on a fresh app-scoped transaction (RLS in force, `app_user` role), like production. */
+/**
+ * Run fn in one transaction as app_user.
+ */
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTenant(db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
@@ -241,7 +243,10 @@ describe("splitOffCheck", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, tabId))
         .orderBy(workingOrderLines.lineNo);
-      const orders = await tx.select({ id: workingOrders.id }).from(workingOrders);
+      const orders = await tx
+        .select({ id: workingOrders.id })
+        .from(workingOrders)
+        .where(eq(workingOrders.tenantId, cfg.tenantId));
       return { originLines, orderCount: orders.length };
     });
     // Origin untouched — still the whole agua×3, quantity conserved (NOT split down to 2.000).
@@ -287,7 +292,10 @@ describe("splitOffCheck", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, tabId))
         .orderBy(workingOrderLines.lineNo);
-      const orders = await tx.select({ id: workingOrders.id }).from(workingOrders);
+      const orders = await tx
+        .select({ id: workingOrders.id })
+        .from(workingOrders)
+        .where(eq(workingOrders.tenantId, cfg.tenantId));
       return { originLines, orderCount: orders.length };
     });
     // Origin untouched — still the whole agua×3.
@@ -358,7 +366,7 @@ describe("unjoinTable", () => {
       const [{ count }] = await tx
         .select({ count: sql<number>`count(*)::int` })
         .from(workingOrders)
-        .where(eq(workingOrders.status, "open"));
+        .where(and(eq(workingOrders.status, "open"), eq(workingOrders.tenantId, cfg.tenantId)));
       return { anchor, count };
     });
     expect(state.anchor?.tabId).toBe(tabId); // unchanged — the guard threw before the repoint

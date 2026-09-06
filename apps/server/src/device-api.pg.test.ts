@@ -131,7 +131,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
 /**
  * Stand up a fresh provisioned venue (mode `ticket_then_pay`), seed a two-product catalogue, and mint a
  * manager + staff management session. The venue provisions with the DEFAULT `prepay`; the `order_flow`
- * column is flipped to `ticket_then_pay` (as the owner, RLS bypassed) so the DB agrees with `cfg`, the
+ * column is flipped to `ticket_then_pay` (as the owner, fixture setup) so the DB agrees with `cfg`, the
  * way `boot.ts`/`modeVenue` wire them.
  */
 async function setupVenue(): Promise<Venue> {
@@ -197,10 +197,10 @@ async function setupVenue(): Promise<Venue> {
 
     const mgr = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
-      values (current_tenant_id(), 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+      values (${cfg.tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
     const stf = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
-      values (current_tenant_id(), 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+      values (${cfg.tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
     const managerSession = await startManagementSession(tx, {
       tenantId: cfg.tenantId,
       personId: mgr.rows[0]!.id,
@@ -257,7 +257,7 @@ async function fireOrder(venue: Venue): Promise<{ orderId: string; items: string
   return { orderId, items: rows.map((r) => r.id) };
 }
 
-/** Move a ticket item to a DIFFERENT station (owner SQL, RLS bypassed) — manufactures a "foreign
+/** Move a ticket item to a DIFFERENT station (owner SQL, fixture setup) — manufactures a "foreign
  *  station" item the device bound to the default station may not bump. */
 async function moveItemToStation(itemId: string, stationId: string): Promise<void> {
   await suite.admin.execute(
@@ -288,7 +288,7 @@ async function seedPrinter(cfg: TillConfig): Promise<string> {
   return rows[0]!.id;
 }
 
-/** The enrolled device row's binding columns, read as the superuser (RLS bypassed). */
+/** The enrolled device row's binding columns, read as the superuser. */
 async function deviceBindings(deviceId: string): Promise<Record<string, unknown>> {
   const { rows } = await suite.admin.execute<Record<string, unknown>>(sql`
     select till_id, device_profile_id, receipt_printer_id, has_cash_drawer, card_provider, card_reader_id

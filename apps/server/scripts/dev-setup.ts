@@ -224,26 +224,10 @@ export async function waitForPostgres(uri: string, log: (line: string) => void):
 }
 
 /**
- * Two facts about a database's venues, read in one connection: whether it holds the SPECIFIC tenant
- * the `.env` names (`hasExpected` — reuse this venue), and whether it holds ANY tenant at all
- * (`hasAny` — refuse to provision a second one). `expectedTenantId` is `null` when there is no usable
- * `.env` to match, in which case `hasExpected` is trivially false.
- *
- * REQUIRES a superuser or BYPASSRLS connection. `tenants` is under FORCE ROW LEVEL SECURITY (policy
- * `USING (id = current_tenant_id())`), so on a non-privileged connection with no tenant GUC set, both
- * `exists()` checks below silently return false even when tenants exist — a false negative that would
- * defeat the refuse-to-clobber guard both `dev-setup` and `dev-onboard` rely on to avoid minting a
- * second fiscal chain (CLAUDE.md §5). Rather than risk that silently, this asserts the connection's
- * privilege FIRST (`pg_roles.rolsuper or rolbypassrls` for `current_user`) and throws loudly if it is
- * neither — `pg_roles` always exists, migrated or not, so the assertion runs even against a
- * freshly-wiped volume, before the `tenants` query that needs the table to exist.
- *
- * A missing `tenants` table (an unmigrated database — e.g. a freshly wiped volume) is "no venue at
- * all", so `42P01 undefined_table` returns both-false and the caller provisions fresh. Any OTHER
- * failure (a permission error, a malformed id → `22P02`, a connection blip after `waitForPostgres`
- * already succeeded) must NOT be read as "no venue": that would route a database already holding a
- * chain into a spurious re-provision — a second SIF, a second hash chain (CLAUDE.md §5). Those fail
- * loud.
+ * Read whether the database contains the expected tenant and whether any tenant
+ * exists. The current connection check accepts superuser or BYPASSRLS roles.
+ * Only an absent tenants table means no venue; propagate other query failures so
+ * a failed inspection cannot trigger provisioning over an existing venue.
  */
 export async function inspectVenues(
   uri: string,
@@ -262,10 +246,7 @@ export async function inspectVenues(
     );
     if (privilegeRows[0]?.privileged !== true) {
       throw new Error(
-        "dev-setup: inspectVenues requires a superuser or BYPASSRLS connection. `tenants` is under " +
-          "FORCE ROW LEVEL SECURITY, so a non-privileged connection's exists() check silently returns " +
-          "false even when tenants exist — that would defeat the refuse-to-clobber guard `dev:setup` " +
-          "and `dev:onboard` rely on to avoid minting a second fiscal chain (CLAUDE.md §5). " +
+        "dev-setup: inspectVenues requires a superuser or BYPASSRLS connection. " +
           "`dev:onboard`/`dev:setup` are meant to run against the local dev container as its " +
           "`postgres` superuser — check DATABASE_URL.",
       );

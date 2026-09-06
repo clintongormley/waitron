@@ -32,13 +32,11 @@ import { requireManagementSession } from "./management-session.js";
 import { requirePeriod } from "./request-screens.js";
 import type { Logger } from "./logger.js";
 
-/** Deps for the reporting/export routes: `db` + this venue's `cfg.tenantId` scope every read via
- * `withTenant` (RLS confines it to this server's one tenant). `cfg.nodeId` is the node whose data this
- * server DISPLAYS, not necessarily its own identity: on a primary it is the node's own id, but on a
- * MIRROR it is the ORIGIN (the primary whose replicated sales the mirror holds — those rows keep the
- * primary's node_id, so `boot` passes `dataNodeId` here, membership promotion R3a). The per-till/fiscal
- * reports (daily-close view, period, cash-up, VAT, overdue) resolve by it. The dashboard OVERVIEW
- * ignores it and aggregates the WHOLE venue (all nodes), as the modelo 303 export does. */
+/**
+ * Reporting dependencies include the tenant and data node. On a mirror the data
+ * node is the replicated origin. Per-node reports use it; the overview and modelo
+ * 303 aggregate the tenant's nodes.
+ */
 export interface ReportApiDeps {
   db: Database;
   cfg: { tenantId: string; nodeId: string };
@@ -106,18 +104,11 @@ function requireDeclarationType(raw: string | undefined): string {
   return raw;
 }
 
-/** Reads THIS server's venue clock — the `time_zone`/`day_cutover` of the node's location — the inputs
- * `currentBusinessDay`/`computeDailyClose` consume (spec D9). `day_cutover` is a `time` ("HH:MM:SS"),
- * sliced to the "HH:MM" the reporting validators expect. A missing node is not user input: `cfg.nodeId`
- * is the node whose data this server DISPLAYS — its own id on a primary, the replicated ORIGIN (the
- * primary's node) on a mirror — and its `nodes` row is always present (own at setup, or the primary's
- * via `adoptVenue`); `nodes.location_id` is `NOT NULL` with an FK to `locations.id`
- * (`nodes_location_id_locations_id_fk`, migration 0015_nodes), so the expected invariant is that its
- * location row is present; a missing one is an invariant break → an opaque 500 via `run`,
- * never a registered code (the `tenants`-row guard in the modelo 303 route below does the same). The
- * `l.tenant_id = n.tenant_id` join predicate is satisfied under RLS, which scopes both tables to this
- * server's one tenant. The explicit `n.tenant_id` predicate is belt-and-suspenders over RLS, matching
- * `countOpenTables` below. */
+/**
+ * Read the configured data node's location clock, matching both tenant and location
+ * on the join. Convert day_cutover to HH:MM. A missing location is a configuration
+ * error surfaced as an opaque server error.
+ */
 async function resolveVenueClock(
   tx: Transaction,
   tenantId: TenantId,
@@ -141,13 +132,10 @@ async function resolveVenueClock(
   return { timeZone: row.time_zone, dayCutover: row.day_cutover.slice(0, 5) };
 }
 
-/** Counts the dining tables at `nodeId`'s LOCATION (the shared venue's, not the node's own) and how many
- * carry an open tab, for the overview's open-tables tile. `dining_tables` is LOCATION-scoped, not
- * node-scoped, so it is scoped by the node's location (join `nodes` on the tenant-consistent
- * `location_id`) — on a mirror that node is the replicated origin, the same venue as the primary;
- * `tab_id is not null` is the open flag (design §2b). Inactive tables (deactivated, `active = false`)
- * are excluded. The explicit `tenant_id` predicate is belt-and-suspenders over RLS, the aggregate idiom
- * the reporting reads use. */
+/**
+ * Count active dining tables and open tabs at the data node's location.
+ * The query explicitly matches tenant ids and the configured tenant.
+ */
 async function countOpenTables(
   tx: Transaction,
   tenantId: TenantId,
@@ -164,35 +152,11 @@ async function countOpenTables(
 }
 
 /**
- * Mounts the gated reporting routes on an existing Hono app — `mountPurchasingApi`'s sibling, attached
- * to the SAME app. Five `GET /management-api/reports/*` routes, each funnelling every DB touch through
- * `gated` (withTenant + asAppUser + authorizeManager) so RLS scopes the read to this server's one
- * tenant and the gate runs in one place:
- *
- * - `/reports/modelo-303?year&period&declarationType` — gated on `report.export` (manager + admin).
- *   The AEAT DR303 fixed-layout file (ISO-8859-1) for the period; aggregates ALL of the obligado's
- *   nodes (ignores `cfg.nodeId`).
- * - `/reports/overview` — gated on `report.view` (supervisor, manager + admin). The WHOLE VENUE's
- *   sales/takings for TODAY (venue-clock business day): takings, record counts and top sellers
- *   aggregate ALL of the tenant's nodes (no node predicate — correct for a multi-till venue, and on a
- *   mirror it shows the replicated venue's data rather than the mirror's empty own node). Only the
- *   open-tables tile is location-scoped (via `cfg.nodeId`'s location).
- * - `/reports/daily-close?businessDay` — gated on `report.view`. The full daily close (VAT summary,
- *   cash-up, counts) plus top sellers for ONE explicit business day, THIS node.
- * - `/reports/period?from&to` — gated on `report.view`. A VAT summary + top sellers over a closed
- *   business-day RANGE (inclusive), THIS node.
- * - `/reports/overdue-orders` — gated on `report.view`. The manager overview's "orders taking too
- *   long" list (KDS order-timing alerts, design §7.4): THIS node's currently-open kitchen orders
- *   whose worst unserved line has crossed into `overdue`/`forgotten`, worst-first. A LIVE snapshot
- *   (no business-day range, unlike the other three `report.view` routes) — the dashboard screen
- *   polls it on an interval rather than fetching once.
- *
- * The `report.export` seam is DISTINCT from `report.view`: viewing the takings dashboard is not
- * exporting the fiscal file (a supervisor holds view but not export).
- *
- * PRE-FILING CAVEATS for the modelo 303 route (unchanged from dr303.ts §29-38): the produced file is a
- * CANDIDATE, not a proven submission-ready one — página 2 is omitted (validate once against the real
- * sede uploader), and under prorrata the base is emitted unscaled pending an asesor confirmation.
+ * Mount reporting routes through the shared authorization gate. report.view
+ * permits operational reports; report.export permits the modelo 303 export.
+ * The overview aggregates all tenant nodes; per-node reports use cfg.nodeId.
+ * The modelo 303 file remains a candidate requiring uploader validation and asesor
+ * confirmation for prorrata handling.
  */
 export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): void {
   const gated = <T>(
@@ -232,16 +196,14 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       const declarationType = requireDeclarationType(c.req.query("declarationType"));
 
       const record = await gated(sessionId, REPORT_EXPORT_PERMISSION, async (tx) => {
-        // The obligado identity comes from the authoritative tenant row (RLS-scoped), not a client
-        // param — the till-api whoami idiom. Structurally present: cfg.tenantId is this server's own.
+        // Read the obligado identity from the configured tenant row.
         const [issuer] = await tx
           .select({ taxId: tenants.taxId, name: tenants.legalName })
           .from(tenants)
           .where(eq(tenants.id, deps.cfg.tenantId));
         /* v8 ignore start */
         if (issuer === undefined) {
-          // Unreachable: this server's own tenant row always exists and RLS returns it (mirrors
-          // till-api.ts's whoami guard). A misconfigured tenant becomes an opaque 500 via `run`.
+          // A missing configured tenant is a server configuration error.
           throw new Error(`report-api: no tenant row for ${deps.cfg.tenantId}`);
         }
         /* v8 ignore stop */
@@ -276,15 +238,8 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     }),
   );
 
-  // The dashboard's sales/takings overview for the WHOLE VENUE, TODAY: takings (tender + tip + gross),
-  // the record counts and the top sellers aggregate ALL of the tenant's nodes (NO node predicate —
-  // `computeDailyClose`/`computeTopSellers` are called with no `nodeId`, so they scope by tenant + RLS
-  // only). This is correct for a multi-till venue, and on a MIRROR it means the overview shows the
-  // replicated venue's data (the primary's sales keep the primary's node_id) instead of the mirror's
-  // empty own node. Only the open-tables tile stays scoped to `cfg.nodeId`'s LOCATION (dining tables are
-  // location-, not node-, grain). Gated on `report.view`. The venue clock (`cfg.nodeId`'s location)
-  // decides "today". Money crosses the wire as decimal STRINGS (the branded `Decimal` JSON-stringifies
-  // as-is). The per-till/fiscal reports below stay node-scoped — a richer grouped close is a later slice.
+  // The overview aggregates every tenant node for the venue business day. Only the
+  // open-table count is location-scoped. Read the venue clock to determine today.
   app.get("/management-api/reports/overview", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

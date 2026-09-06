@@ -1,27 +1,8 @@
-import { tenantId as brandTenantId } from "@waitron/shared";
-// `seedDemoRestaurant` — the demo-seed orchestrator (Phase 2, Task 11). It wires the Task 6-10
-// sub-seeds together into the one call `dev-setup` makes after provisioning a venue, turning a bare
-// chained venue into the full demo restaurant: two menus, a floor plan, staff, per-dish media, and a
-// back-fill of historical preproduction sales.
-//
-// TRANSACTION SHAPE (deliberate, matches each sub-seed's own header):
-//   - `seedCatalogues` → `seedFloor` → `seedStaff` → `seedMedia` all run inside ONE
-//     `withTenant(db, tenantId, asAppUser)` transaction: they write under the tenant GUC as `app_user`,
-//     exactly as the running POS does, and share the image→product map `seedCatalogues` returns.
-//   - `seedSales` is called AFTER that transaction commits, with `db` (NOT the tx): it opens its OWN
-//     per-sale `withTenant` for each `recordSale`, so it must see the catalogue/products the first tx
-//     committed. Running it inside the shared tx would nest transactions and hide those rows from its
-//     fresh connections.
-//
-// FISCAL POSTURE (CLAUDE.md §5): `seedSales` writes IMMUTABLE preproduction `registros_facturacion`
-// rows through `recordSale` and never drains — this orchestrator only passes `salesDays` through and
-// adds nothing to that path. `WAITRON_ENV` unset resolves to `preproduction` (the safe default);
-// dev-setup's guards keep this off any production database.
-//
-// `mediaDir` is resolved here (the one place that knows both the seed and the server's media store):
-// `WAITRON_MEDIA_DIR` if set, else boot's `DEFAULT_MEDIA_ROOT` — the exact path the running dev server
-// serves `GET /media/:filename` from, so the tiles seedMedia writes are the ones the till renders.
+// Seed catalogue, floor, staff and media in one app-role transaction. Seed sales after it commits
+// because each sale opens its own transaction and reads the committed products.
+// Media uses the same configured directory as the server. Fiscal sales are preproduction.
 
+import { tenantId as brandTenantId } from "@waitron/shared";
 import { asAppUser, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { listAvailableProducts } from "@waitron/catalogue";
@@ -78,7 +59,7 @@ export async function seedDemoRestaurant(
     });
     await seedOptions(tx, brandTenantId(tenantId), { productsByImage, locale });
     await seedFloor(tx, { tenantId, locationId, locale });
-    await seedStaff(tx);
+    await seedStaff(tx, brandTenantId(tenantId));
     await seedMedia(tx, { mediaDir, productsByImage });
     return (await listAvailableProducts(tx, locationId)).products;
   });

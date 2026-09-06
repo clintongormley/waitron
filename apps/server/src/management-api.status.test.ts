@@ -10,11 +10,7 @@ import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 
-// Real Postgres, not PGlite: these routes wrap the service-status config CRUD, and each verb both
-// AUTHORIZES (`authorizeManager` reads persons + management_sessions under the app role's RLS) and
-// writes `table_service_statuses` under FORCE ROW LEVEL SECURITY — both false passes on PGlite's
-// superuser connection (CLAUDE.md §4). The same real-Postgres justification as `management-api.pg.test.ts`,
-// whose harness (`applyVenue`/`planVenue` + password `login`) this file reuses.
+// Exercise service-status configuration and manager authorization on PostgreSQL.
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
 // Dashboard sign-in resolves the person by EMAIL, so each seeded person carries a login email
@@ -41,13 +37,7 @@ function uniqueLabel(base: string): string {
   return `${base}-${randomUUID().slice(0, 8)}`;
 }
 
-/**
- * Stand up a fresh provisioned venue (as the owner), then seed — as the app role under the tenant, so
- * RLS is exercised — a MANAGER (role `manager`, which holds `till.configure`) and a STAFF person (role
- * `staff`, which holds nothing), each WITH a dashboard password so both can log in. Provisioning
- * creates only the ADMIN, so these two are seeded directly; `pin_hash` is NOT NULL, so a value is
- * supplied even though they log in by password.
- */
+/** Provision a venue as owner and seed the people and sessions this route fixture needs. */
 async function setupTenant(): Promise<{ tenantId: string; managerId: string; staffId: string }> {
   const venue = await applyVenue(
     planVenue(
@@ -86,11 +76,11 @@ async function setupTenant(): Promise<{ tenantId: string; managerId: string; sta
     await asAppUser(tx);
     const manager = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
+      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
       returning id`);
     const staff = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
+      values (${venue.tenantId}, 'The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
       returning id`);
     return { managerId: manager.rows[0]!.id, staffId: staff.rows[0]!.id };
   });

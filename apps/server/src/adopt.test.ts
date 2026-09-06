@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadKeyRing } from "@waitron/credentials";
 import {
   invoiceSeries,
@@ -135,8 +135,7 @@ async function buildBundleParts(): Promise<{ rows: AdoptVenueRows; designated: A
     nodeId: venue.nodeId,
     seriesId: venue.seriesIds[0]!,
   };
-  // Read the parent rows as app_user under withTenant (RLS scopes them), the same read
-  // `assembleMirrorBundle` performs — column-for-column rows ready to insert verbatim on the mirror.
+  // Read the bundle parent rows through the application transaction.
   const rows: AdoptVenueRows = await withTenant(sourceApp, designated.tenantId, async (tx) => ({
     tenant: (
       await tx
@@ -144,10 +143,22 @@ async function buildBundleParts(): Promise<{ rows: AdoptVenueRows; designated: A
         .from(tenants)
         .where(sql`${tenants.id} = ${designated.tenantId}`)
     )[0]!,
-    locations: await tx.select().from(locations),
-    nodes: await tx.select().from(nodes),
-    tills: await tx.select().from(tills),
-    invoiceSeries: await tx.select().from(invoiceSeries),
+    locations: await tx
+      .select()
+      .from(locations)
+      .where(sql`${locations.tenantId} = ${designated.tenantId}`),
+    nodes: await tx
+      .select()
+      .from(nodes)
+      .where(sql`${nodes.tenantId} = ${designated.tenantId}`),
+    tills: await tx
+      .select()
+      .from(tills)
+      .where(sql`${tills.tenantId} = ${designated.tenantId}`),
+    invoiceSeries: await tx
+      .select()
+      .from(invoiceSeries)
+      .where(sql`${invoiceSeries.tenantId} = ${designated.tenantId}`),
   }));
   return { rows, designated };
 }
@@ -272,11 +283,15 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
     // back. So a mirror trusts the primary with nothing but the row it already copies.
     const PRIMARY_PUB = "PRIMARY_PUB";
     const { rows, designated } = await buildBundleParts();
-    // Stamp the primary's node on the SOURCE as the owner (setNodePublicKey is owner-role), then re-read
-    // the `nodes` rows as app_user under RLS — the same read `assembleMirrorBundle` performs — so the
-    // key rides the bundle through a real app-pool read on BOTH sides, not a hand-set field.
+    // Stamp the source node key as owner, then read it through the same app connection
+    // used to assemble a mirror bundle.
     await setNodePublicKey(source.admin, designated.tenantId, designated.nodeId, PRIMARY_PUB);
-    rows.nodes = await withTenant(sourceApp, designated.tenantId, (tx) => tx.select().from(nodes));
+    rows.nodes = await withTenant(sourceApp, designated.tenantId, (tx) =>
+      tx
+        .select()
+        .from(nodes)
+        .where(sql`${nodes.tenantId} = ${designated.tenantId}`),
+    );
     const bundle: MirrorBundle = {
       rows,
       designated,
@@ -487,4 +502,8 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
     );
     expect(orphanTenant.rows).toHaveLength(0);
   });
+});
+
+afterEach(async () => {
+  await mirror.admin.execute(sql`update nodes set public_key = null`);
 });

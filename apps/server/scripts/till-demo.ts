@@ -1,44 +1,8 @@
-// Self-contained, human-checkable demonstration of the Counter POS till's walk-up sale — driven
-// through the till's OWN HTTP surface exactly as the browser does, both by CASH and by a manual CARD
-// tender (the "datáfono" case, sub-project 7 slice 3). Modelled on `catalogue-demo.ts`
-// (self-migrating, tsx-run, a real `VerifactuBackend`) and on `till-api.pg.test.ts` (which mounts
-// `mountTillApi` on a `new Hono()` and drives it with `app.request(...)`), it:
-//
-//   1. connects to a FRESH postgres (via `DATABASE_URL`) and applies the core, identity and fiscal
-//      migrations itself — so it runs against a blank `postgres:18-alpine` with nothing pre-seeded;
-//   2. stands up a real chained venue + registered SIF with `applyVenue` (@waitron/provisioning);
-//   3. seeds a catalogue (one `weight` product, one `each` product) and a staff person with a known
-//      PIN — Spanish names are fine, apps/* is out of the english-only guard's scope;
-//   4. mounts the till API on an in-process Hono app and drives the operator's whole journey over
-//      HTTP: `POST /api/session` (log in) → `GET /api/products` (read the menu) → `POST /api/sales`
-//      (ring a mixed-rate basket, cash) — the browser never invents a product id or a price;
-//   5. prints the ticket payload the till would render, so a human can eyeball the invoice number,
-//      total, per-rate desglose and change;
-//   6. rings a SECOND sale over the same HTTP surface, this time tendered by manual CARD (the
-//      operator ran the card on a separate bank terminal — `recordManualCardPayment` makes no network
-//      call, `manual.ts:36-42`), then reads back the filed `tenders` row (`method = 'card'`) and the
-//      linked `payments` row (`provider = 'manual'`, `state = 'captured'`) directly from the database
-//      as the connection owner (bypassing RLS, the same read shape `working-order.pg.test.ts` uses),
-//      so a human can see the captured-payment ledger a card tender adds beside the tender itself.
-//
-// Like `catalogue-demo.ts` (and unlike `daily-close-demo.ts`'s in-memory PGlite) this uses a real
-// PostgreSQL, because the whole point is to file a genuine huella-chained, append-only
-// `registros_facturacion` row AS THE APP ROLE UNDER RLS — which PGlite's superuser-only connection
-// cannot prove. The demo drives the app as the connection owner (`secureCookies: false`, so the
-// session cookie rides the non-TLS `app.request`), while the routes themselves drop to `app_user`
-// via `withTenant` + `asAppUser`, the same as the deployed host. `resolveClient` is supplied but
-// never reached: `recordTillSale`/`recordSale` never contact AEAT (that is `drain`'s job), so the
-// stub below throws if it is ever called.
-//
-// Run it against a throwaway database (NEVER a real one — it creates a tenant and chains a real
-// fiscal record, and a pre-production stamp on a production chain is unrecoverable, see CLAUDE.md §5):
-//
-//   docker run --rm -e POSTGRES_PASSWORD=pg -p 5432:5432 postgres:18-alpine
-//   DATABASE_URL=postgres://postgres:pg@localhost:5432/postgres WAITRON_ENV=preproduction \
-//     pnpm --filter @waitron/server demo:till
-//
-// `WAITRON_ENV` defaults to `preproduction` (the safe reading of "unset", config.ts), which is the
-// only environment this demo should ever run in.
+// Demonstrate a cash sale and a manual-card sale through the till HTTP surface on PostgreSQL.
+// Provision a throwaway venue, seed its menu and staff, then print the ticket and payment rows.
+// Routes use app_user; provisioning and read-back use the owner. AEAT is never called.
+// Run with DATABASE_URL pointing at a fresh database and WAITRON_ENV=preproduction:
+// pnpm --filter @waitron/server demo:till
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -212,7 +176,7 @@ async function main(): Promise<void> {
       await assignCatalogueToLocation(tx, venue.locationId, cat.id);
       await tx.execute(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
-        values (current_tenant_id(), 'Cajera', ${hashPin("5555")}, 'staff')`);
+        values (${cfg.tenantId}, 'Cajera', ${hashPin("5555")}, 'staff')`);
     });
 
     const clock = systemClock();
@@ -339,9 +303,7 @@ async function main(): Promise<void> {
     }
     const cardTicket = (await cardSaleRes.json()) as TillSaleResult;
 
-    // Read the filed `tenders` row back as the connection OWNER (bypasses RLS) — the same join shape
-    // `working-order.pg.test.ts`'s `tendersFor` uses: `tenders` links to `sales`, not directly to
-    // `working_orders`, so the join goes through `sales.working_order_id`.
+    // Read the filed tender and its payment through the owner connection.
     const { rows: cardTenders } = await db.execute<{ method: string; amount: string }>(sql`
       select t.method, t.amount
       from tenders t

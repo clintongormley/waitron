@@ -12,10 +12,8 @@ import "./errors.js";
 // load-bearing cross-box fact. The token is never logged.
 
 /**
- * Seal the sync token into the `sync.mirror_token` vault purpose for `tenantId`, on the OWNER
- * connection. `tenant_credentials` is FORCE-RLS, so `putCredential` runs under `withTenant` with
- * `app.tenant_id` set (the row's WITH CHECK is `tenant_id = current_tenant_id()`), and the tenant must
- * already exist — the seal runs AFTER `adoptVenue` inserts it (the FK is `restrict`).
+ * Seal the mirror token on the owner connection after adoptVenue inserts the tenant.
+ * The credential write uses one transaction and the explicit tenant id.
  */
 export function sealMirrorToken(
   ownerDb: Database,

@@ -1,9 +1,5 @@
-// Real-Postgres proof of `seedStaff` (Phase 2, Task 8): it inserts the demo staff, all on `DEMO_PIN`.
-// Real Postgres (not PGlite): the seed runs under RLS as `app_user` (SELECT/INSERT on `persons`,
-// granted by drizzle/0001_identity_rls.sql) exactly as the demo scripts do, and PGlite's superuser
-// connection would bypass FORCE ROW LEVEL SECURITY and prove nothing about those grants (CLAUDE.md
-// §4). Uses the shared `manifest` template, cloned per file via `useTemplateDb`, the same pattern as
-// `seed-catalogue.test.ts` / `seed-floor.test.ts`.
+import { tenantId as brandTenantId } from "@waitron/shared";
+// Exercise the staff seed on PostgreSQL through app_user, including the permitted persons writes.
 
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
@@ -71,7 +67,7 @@ describe("seedStaff", () => {
 
     const persons = await withTenant(suite.admin, tenantId, async (tx) => {
       await asAppUser(tx);
-      await seedStaff(tx);
+      await seedStaff(tx, brandTenantId(tenantId));
 
       const { rows } = await tx.execute<{
         display_name: string;
@@ -108,7 +104,7 @@ describe("seedStaff", () => {
 
     const rows = await withTenant(suite.admin, tenantId, async (tx) => {
       await asAppUser(tx);
-      await seedStaff(tx);
+      await seedStaff(tx, brandTenantId(tenantId));
 
       const { rows } = await tx.execute<{
         display_name: string;

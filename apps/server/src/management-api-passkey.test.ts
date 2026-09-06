@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
@@ -97,17 +97,7 @@ function nextNif(): string {
   return `${String(70_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/**
- * Stand up a fresh provisioned venue (as the owner), then seed — as the app role under the tenant, so
- * RLS is exercised — a MANAGER (role `manager`, which holds `person.manage`) WITH a dashboard password,
- * so a password login yields a management-session cookie that gates the register routes. Each test gets
- * its OWN tenant, so the credential re-reads below are that test's alone and order-independent
- * (CLAUDE.md §4). This person is seeded directly because provisioning creates only the ADMIN, and this
- * test needs a `manager` (which holds `person.manage`); `pin_hash` is NOT NULL, so a value is supplied
- * even though they log in by password.
- * (Mirrors the 1b harness's `setupTenant`, minus the unused STAFF person: these passkey routes resolve
- * the person from the session, so only the logged-in manager is needed.)
- */
+/** Provision a venue as owner and seed the people and sessions this route fixture needs. */
 async function setupTenant(): Promise<{ tenantId: string; managerId: string }> {
   const venue = await applyVenue(
     planVenue(
@@ -146,7 +136,7 @@ async function setupTenant(): Promise<{ tenantId: string; managerId: string }> {
     await asAppUser(tx);
     const manager = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
+      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
       returning id`);
     return { managerId: manager.rows[0]!.id };
   });
@@ -188,7 +178,7 @@ async function login(app: Hono, email: string, password = PASSWORD): Promise<str
   return res.headers.get("set-cookie")!.split(";")[0];
 }
 
-/** Read every `webauthn_credentials` row for the tenant as the app role under RLS — the proof a genuine
+/** Read every `webauthn_credentials` row for the tenant as the app role — the proof a genuine
  * tenant-scoped credential landed, not merely that a route returned 200. */
 async function readCredentials(
   tenantId: string,
@@ -273,7 +263,7 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
     expect(verify.status).toBe(200);
     expect((await verify.json()) as { credentialId: string }).toEqual({ credentialId: "cred-abc" });
 
-    // Re-read as the app role under RLS: exactly one credential landed, owned by the manager, under
+    // Re-read as the app role: exactly one credential landed, owned by the manager, under
     // this tenant — a genuine tenant-scoped write, not merely a 200.
     const creds = await readCredentials(tenantId);
     expect(creds).toHaveLength(1);
@@ -311,7 +301,7 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
       error: { code: "passkey.already_registered" },
     });
 
-    // Under RLS still exactly one credential — the collision landed no second row.
+    // Still exactly one credential — the collision landed no second row.
     const creds = await readCredentials(tenantId);
     expect(creds).toHaveLength(1);
     expect(creds[0]).toMatchObject({ credential_id: "cred-dup", person_id: managerId });
@@ -483,4 +473,9 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
     expect(mockVerifyReg).not.toHaveBeenCalled();
     expect(await readCredentials(tenantId)).toHaveLength(0);
   });
+});
+
+afterEach(async () => {
+  await suite.admin.execute(sql`delete from webauthn_credentials`);
+  await suite.admin.execute(sql`delete from webauthn_challenges`);
 });

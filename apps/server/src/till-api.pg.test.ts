@@ -114,7 +114,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    // No integrated card terminal for these RLS API suites.
+    // No integrated card terminal for these API suites.
     cardProvider: "none",
     tipsEnabled: false,
     // These API tests exercise routes that do not dispatch on the mode; the venue defaults to prepay.
@@ -195,7 +195,7 @@ async function setupVenue(): Promise<{
     // `persons`), so the login route can verify their credential and the sale is attributed to them.
     const person = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
-      values (current_tenant_id(), 'Cajera', ${hashPin("5555")}, 'staff') returning id`);
+      values (${cfg.tenantId}, 'Cajera', ${hashPin("5555")}, 'staff') returning id`);
     return {
       available: (await listAvailableProducts(tx, cfg.locationId)).products,
       operatorId: person.rows[0]!.id,
@@ -211,7 +211,7 @@ function apiDeps(cfg: TillConfig): TillApiDeps {
   // No integrated card provider built for these suites (`cfg.tipsEnabled` is `false` — see
   // `tillConfigFromVenue`). `cardProvider` (the built PaymentProvider) is optional and left undefined.
   // `venueLocale` is the display default `GET /api/till`/`GET /api/locales` echo; mirror the cfg's
-  // locale so it is internally consistent (these RLS suites assert no locale field).
+  // locale so it is internally consistent (these API suites assert no locale field).
   return {
     db: suite.admin,
     backend,
@@ -364,7 +364,10 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     // the count is order-independent).
     const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      return tx.select().from(registrosFacturacion);
+      return tx
+        .select()
+        .from(registrosFacturacion)
+        .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
     });
     expect(registros.length).toBe(1);
     expect(registros[0]!.tenantId).toBe(cfg.tenantId);
@@ -374,7 +377,10 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     // 5. The sale is attributed to the logged-in operator — the whole point of the session guard.
     const saleRows = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      return tx.select({ operatorId: sales.operatorId }).from(sales);
+      return tx
+        .select({ operatorId: sales.operatorId })
+        .from(sales)
+        .where(eq(sales.tenantId, cfg.tenantId));
     });
     expect(saleRows).toEqual([{ operatorId }]);
   });
@@ -482,7 +488,11 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     // the stored 64-hex huella the append-only table pins.
     const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
+      return tx
+        .select()
+        .from(registrosFacturacion)
+        .where(eq(registrosFacturacion.tenantId, cfg.tenantId))
+        .orderBy(registrosFacturacion.secuencia);
     });
     expect(registros).toHaveLength(2);
 
@@ -539,7 +549,10 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
     // Refused before the fiscal write — the unrecoverable record is never touched (CLAUDE.md §5).
     const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      return tx.select().from(registrosFacturacion);
+      return tx
+        .select()
+        .from(registrosFacturacion)
+        .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
     });
     expect(registros).toHaveLength(0);
   });
@@ -592,7 +605,10 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
     expect(await res.json()).toMatchObject({ error: { code: "device.till_required" } });
     const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      return tx.select().from(registrosFacturacion);
+      return tx
+        .select()
+        .from(registrosFacturacion)
+        .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
     });
     expect(registros).toHaveLength(0);
   });
@@ -663,14 +679,18 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
     const after = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
       return {
-        registros: await tx.select().from(registrosFacturacion),
+        registros: await tx
+          .select()
+          .from(registrosFacturacion)
+          .where(eq(registrosFacturacion.tenantId, cfg.tenantId)),
         wo: await tx
           .select({ status: workingOrders.status })
           .from(workingOrders)
           .where(eq(workingOrders.id, workingOrderId)),
         saleRows: await tx
           .select({ workingOrderId: sales.workingOrderId, operatorId: sales.operatorId })
-          .from(sales),
+          .from(sales)
+          .where(eq(sales.tenantId, cfg.tenantId)),
       };
     });
     expect(after.registros).toHaveLength(1);
@@ -706,7 +726,10 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
     // Still exactly ONE record — the replay filed nothing.
     const stillOne = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      return tx.select().from(registrosFacturacion);
+      return tx
+        .select()
+        .from(registrosFacturacion)
+        .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
     });
     expect(stillOne).toHaveLength(1);
   });
@@ -762,7 +785,10 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const after = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         return {
-          registros: await tx.select().from(registrosFacturacion),
+          registros: await tx
+            .select()
+            .from(registrosFacturacion)
+            .where(eq(registrosFacturacion.tenantId, cfg.tenantId)),
           wo: await tx
             .select({ status: workingOrders.status })
             .from(workingOrders)
@@ -814,7 +840,10 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const after = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         return {
-          registros: await tx.select().from(registrosFacturacion),
+          registros: await tx
+            .select()
+            .from(registrosFacturacion)
+            .where(eq(registrosFacturacion.tenantId, cfg.tenantId)),
           wo: await tx
             .select({ status: workingOrders.status })
             .from(workingOrders)
@@ -859,13 +888,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
   });
 });
 
-// Task 9's prep surface over HTTP: place → prep-queue → advance → collect. Real Postgres because
-// `collect` under Mode T (`ticket_then_pay`) files `recordSale` IMMEDIATE at collect — a genuine
-// chained fiscal write as the app role under RLS, exactly what `till-api.test.ts`'s stub
-// `FiscalBackend` cannot exercise (that hermetic suite proves only the malformed-id short-circuit,
-// which never reaches the backend at all). `place`/`prep-queue`/`prep`-advance need no fiscal write
-// under Mode T (no doc issues until collect), but are driven through the SAME real venue here so the
-// one test walks the whole route surface end to end, the way an actual till session would.
+// Drive place, prep, advance and collect through the same venue on PostgreSQL.
+// In ticket_then_pay mode, collect files the sale through the real fiscal backend.
 describe("place → station queue → per-line advance → collect (KDS-1 ticket model, over HTTP)", () => {
   it("Mode T: place files no fiscal doc; the prep queue tracks it; collect files the sale at collect", async () => {
     const { cfg, available, operatorId } = await setupVenue();
@@ -914,7 +938,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
 
     const noSaleYet = await withTenant(suite.admin, modeCfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      return tx.select({ id: sales.id }).from(sales);
+      return tx.select({ id: sales.id }).from(sales).where(eq(sales.tenantId, cfg.tenantId));
     });
     expect(noSaleYet).toEqual([]); // Mode T: nothing filed at placing
 
@@ -1044,7 +1068,10 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
           .select({ status: workingOrders.status })
           .from(workingOrders)
           .where(eq(workingOrders.id, workingOrderId)),
-        registros: await tx.select().from(registrosFacturacion),
+        registros: await tx
+          .select()
+          .from(registrosFacturacion)
+          .where(eq(registrosFacturacion.tenantId, cfg.tenantId)),
       };
     });
     expect(after.wo).toEqual([{ status: "settled" }]);
@@ -1265,20 +1292,8 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
   });
 });
 
-// The handheld firewall (spec §5, decision 0.1; owner reversal 2026-08-30, widened same day): a handheld
-// device takes and fires orders and settles a sale on `POST /api/sales` for CASH or a MANUAL card tender,
-// because the fiscal chain is keyed by the submitting NODE (`nodeId`), not the till (record-sale.ts:79-82),
-// so a handheld files a sale under its node's SIF exactly like the fixed till (the manual card is the
-// datáfono leg — a separate bank terminal the POS never talks to, no reader). What a handheld must NEVER
-// do stays fenced: the INTEGRATED card reader (`POST /api/pay`), reprint, drawer, place, collect and
-// cancel — every fiscal/cash write settled at the fixed till other than the node-keyed sale. Enforced ON
-// THE SERVER (`assertNotHandheld` on the fenced routes; `POST /api/sales` runs no handheld guard) so the
-// boundary holds even if the client were bypassed. Real Postgres because the guard reads the enrolled
-// device as `app_user` inside `withTenant` — the same reason the rest of this file cannot run on PGlite (a
-// superuser PGlite connection bypasses RLS and is a false pass for a device-authentication guard,
-// CLAUDE.md §4). The handheld here holds BOTH a device cookie AND a valid operator session — exactly the
-// bypass this server-side guard exists to police, because a compromised or hacked-together client could
-// present both.
+// A handheld can file node-keyed cash and manual-card sales. Integrated payment, reprint,
+// drawer and prep mutation routes remain fenced even with a valid device cookie and operator session.
 describe("handheld firewall (a handheld may settle a cash or manual-card sale, but not integrated pay, reprint, open the drawer, place, collect, or cancel)", () => {
   /** Enrol a REAL handheld device in `cfg`'s tenant (no station — `kindRequiresStation("handheld")` is
    * false, Task 2), returning the `waitron_device=<id>.<token>` cookie pair a handheld carries. The
@@ -1348,7 +1363,11 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     // separate device metadata; it never keys the chain.
     const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
+      return tx
+        .select()
+        .from(registrosFacturacion)
+        .where(eq(registrosFacturacion.tenantId, cfg.tenantId))
+        .orderBy(registrosFacturacion.secuencia);
     });
     expect(registros).toHaveLength(1);
     const [only] = registros;
@@ -1397,7 +1416,11 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     // huella), plus the deployment `entorno`. `tillId` is separate device metadata; it never keys the chain.
     const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
+      return tx
+        .select()
+        .from(registrosFacturacion)
+        .where(eq(registrosFacturacion.tenantId, cfg.tenantId))
+        .orderBy(registrosFacturacion.secuencia);
     });
     expect(registros).toHaveLength(1);
     const [only] = registros;
@@ -1412,7 +1435,7 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     // The manual-card side effect a cash sale does NOT have: exactly one CAPTURED `payments` row for the
     // sale, under the sentinel `manual` provider with a freshly minted `manual-…` ref — no reader, no
     // network call (`recordManualCardPayment` commits inline in the sale transaction). Read on the
-    // superuser admin (RLS bypassed) — the `paymentsFor`/`paymentCount` shape in `working-order.pg.test.ts`.
+    // superuser admin — the `paymentsFor`/`paymentCount` shape in `working-order.pg.test.ts`.
     const paymentRows = await suite.admin.execute<{
       provider: string;
       state: string;
@@ -1565,7 +1588,10 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     // Nothing was filed — the unrecoverable chained record the guard protects (CLAUDE.md §5).
     const afterRefused = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      return tx.select().from(registrosFacturacion);
+      return tx
+        .select()
+        .from(registrosFacturacion)
+        .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
     });
     expect(afterRefused.length).toBe(0);
 
@@ -1581,7 +1607,10 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     expect((await placed.json()).invoiceNumber).toMatch(/^A\/\d+$/);
     const afterPlaced = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      return tx.select().from(registrosFacturacion);
+      return tx
+        .select()
+        .from(registrosFacturacion)
+        .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
     });
     expect(afterPlaced.length).toBe(1);
   });
@@ -1628,7 +1657,10 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     expect((await refused.json()).error.code).toBe("device.forbidden_action");
     const afterRefused = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      return tx.select().from(registrosFacturacion);
+      return tx
+        .select()
+        .from(registrosFacturacion)
+        .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
     });
     expect(afterRefused.length).toBe(0);
 
@@ -1650,7 +1682,10 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
           .select({ status: workingOrders.status })
           .from(workingOrders)
           .where(eq(workingOrders.id, workingOrderId)),
-        registros: await tx.select().from(registrosFacturacion),
+        registros: await tx
+          .select()
+          .from(registrosFacturacion)
+          .where(eq(registrosFacturacion.tenantId, cfg.tenantId)),
       };
     });
     expect(after.wo).toEqual([{ status: "settled" }]);

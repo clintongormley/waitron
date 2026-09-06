@@ -64,7 +64,7 @@ async function setupVenue(): Promise<Seeded> {
     values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   // KDS-1: a default kitchen station so addTabRound's fire (→ fireLines) has a fallback. Seeded as the
-  // superuser here, as the surrounding venue rows are (RLS bypassed in this pure setup).
+  // superuser here, as the surrounding venue rows are (fixture setup).
   await seedKitchenStation(db, { tenantId, locationId: brandLocationId(locationId) });
   const till = await db.execute<{ id: string }>(sql`
     insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
@@ -151,7 +151,7 @@ async function seedFiredDelivery(
   return id;
 }
 
-/** The dining table's current tab_id — owner read (bypasses RLS). */
+/** The dining table's current tab_id — owner read. */
 async function tabIdOf(tableId: string): Promise<string | null> {
   const { rows } = await db.execute<{ tab_id: string | null }>(
     sql`select tab_id from dining_tables where id = ${tableId}`,
@@ -203,7 +203,7 @@ describe("openTab", () => {
     const { tabId: firstTab } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
     );
-    // Settle the first tab (owner write — RLS bypassed, pure setup). tab_id STILL points at it (no
+    // Settle the first tab (owner write — fixture setup). tab_id STILL points at it (no
     // settle-time write, design §2b), but it is now stale.
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = now() where id = ${firstTab}`,
@@ -223,7 +223,7 @@ describe("openTab", () => {
       code: "table.not_found",
       params: { tableId: missing },
     });
-    // Deactivate the real table (owner write, RLS bypassed — pure setup), then a tab is refused.
+    // Deactivate the real table (owner write, fixture setup), then a tab is refused.
     await db.execute(sql`update dining_tables set active = false where id = ${tableId}`);
     await expect(asApp(cfg, (tx) => openTab(tx, cfg, { tableId }))).rejects.toMatchObject({
       code: "table.inactive",
@@ -277,7 +277,7 @@ describe("addTabRound (append-only, no re-price)", () => {
       const [group] = await tx
         .insert(optionGroups)
         .values({
-          tenantId: sql`current_tenant_id()`,
+          tenantId: cfg.tenantId,
           name: { [LOCALE]: "Extras" },
           minSelect: 0,
           maxSelect: 2,
@@ -288,7 +288,7 @@ describe("addTabRound (append-only, no re-price)", () => {
       const [bacon] = await tx
         .insert(optionGroupItems)
         .values({
-          tenantId: sql`current_tenant_id()`,
+          tenantId: cfg.tenantId,
           groupId: group!.id,
           name: { [LOCALE]: "Bacon" },
           priceDelta: "0.50",
@@ -297,7 +297,7 @@ describe("addTabRound (append-only, no re-price)", () => {
         })
         .returning({ id: optionGroupItems.id });
       await tx.insert(productOptionGroups).values({
-        tenantId: sql`current_tenant_id()`,
+        tenantId: cfg.tenantId,
         productId: cafeId,
         groupId: group!.id,
         sort: 0,
@@ -506,7 +506,7 @@ describe("voidTabLine", () => {
 });
 
 describe("markLineServed / unmarkLineServed", () => {
-  /** served_at per line_no — owner read (RLS bypassed). NULL until a runner marks the line served. */
+  /** served_at per line_no — owner read. NULL until a runner marks the line served. */
   async function servedAtByLine(tabId: string): Promise<Map<number, string | null>> {
     const rows = await db
       .select({ lineNo: workingOrderLines.lineNo, servedAt: workingOrderLines.servedAt })
@@ -669,7 +669,7 @@ describe("readTabLines", () => {
       const [group] = await tx
         .insert(optionGroups)
         .values({
-          tenantId: sql`current_tenant_id()`,
+          tenantId: cfg.tenantId,
           name: { [LOCALE]: "Extras" },
           minSelect: 0,
           maxSelect: 2,
@@ -680,7 +680,7 @@ describe("readTabLines", () => {
       const [bacon] = await tx
         .insert(optionGroupItems)
         .values({
-          tenantId: sql`current_tenant_id()`,
+          tenantId: cfg.tenantId,
           groupId: group!.id,
           name: { [LOCALE]: "Bacon" },
           priceDelta: "0.50",
@@ -689,7 +689,7 @@ describe("readTabLines", () => {
         })
         .returning({ id: optionGroupItems.id });
       await tx.insert(productOptionGroups).values({
-        tenantId: sql`current_tenant_id()`,
+        tenantId: cfg.tenantId,
         productId: cafeId,
         groupId: group!.id,
         sort: 0,
@@ -742,7 +742,7 @@ describe("readTabLines", () => {
     const { tabId } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
     );
-    // Settled → not open (owner write, RLS bypassed — pure setup).
+    // Settled → not open (owner write, fixture setup).
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = now() where id = ${tabId}`,
     );

@@ -54,18 +54,16 @@ afterAll(async () => {
 });
 
 /**
- * Runs `fn` as the app writer inside ONE transaction with the tenant + node GUCs bound
- * transaction-locally, mirroring capture.gate.test.ts's `withTenantNode`. With `apply: true` it also
+ * Runs `fn` as the app writer inside ONE transaction with the node setting bound
+ * transaction-locally, mirroring capture.gate.test.ts's `withNode`. With `apply: true` it also
  * sets app.sync_apply='on' so the WHEN clause suppresses the capture (the echo path).
  */
 async function asWriter(
-  tenantId: string,
   nodeId: string,
   fn: (tx: Transaction) => Promise<void>,
   opts: { apply?: boolean } = {},
 ): Promise<void> {
   await writer.transaction(async (tx) => {
-    await tx.execute(sql`select set_config('app.tenant_id', ${tenantId}, true)`);
     await tx.execute(sql`select set_config('app.node_id', ${nodeId}, true)`);
     if (opts.apply === true) {
       await tx.execute(sql`select set_config('app.sync_apply', 'on', true)`);
@@ -74,7 +72,7 @@ async function asWriter(
   });
 }
 
-describe("fiscal sync capture — the six triggers of 0014", () => {
+describe("fiscal sync capture — the six capture triggers", () => {
   it("captures a registros_facturacion insert verbatim, as the app role, despite REVOKE ALL", async () => {
     // Failing case: capture does not fire on the immutable ledger (REVOKE ALL blocks it, or the
     // trigger is absent) → n = "0" and the row would never mirror; OR it fires but mangles the row —
@@ -90,7 +88,7 @@ describe("fiscal sync capture — the six triggers of 0014", () => {
     const p = await seedFiscalParents(postgres.admin);
 
     let registroId = "";
-    await asWriter(p.tenantId, p.nodeId, async (tx) => {
+    await asWriter(p.nodeId, async (tx) => {
       ({ registroId } = await insertFiscalRegistro(tx, p, {
         numSerie: "A/1",
         secuencia: 1,
@@ -166,7 +164,7 @@ describe("fiscal sync capture — the six triggers of 0014", () => {
       entorno: "preproduction",
     });
 
-    await asWriter(p.tenantId, p.nodeId, async (tx) => {
+    await asWriter(p.nodeId, async (tx) => {
       await tx.execute(sql`
         insert into acks (registro_id, tenant_id, submitted_at, csv, state)
         values (${registroId}, ${p.tenantId}, '2026-07-20T19:25:00+01:00', 'CSV-XYZ', 'accepted')`);
@@ -180,7 +178,7 @@ describe("fiscal sync capture — the six triggers of 0014", () => {
     expect(before.rows[0]!.del).toBe("0"); // nothing deleted yet
     expect(before.rows[0]!.ins).toBe("1"); // the ack's INSERT was captured (trigger is attached)
 
-    await asWriter(p.tenantId, p.nodeId, async (tx) => {
+    await asWriter(p.nodeId, async (tx) => {
       await tx.execute(sql`delete from acks where registro_id = ${registroId}`);
     });
 
@@ -217,7 +215,6 @@ describe("fiscal sync capture — the six triggers of 0014", () => {
     const guarded = await seedFiscalParents(postgres.admin);
 
     await asWriter(
-      guarded.tenantId,
       guarded.nodeId,
       async (tx) => {
         await insertFiscalRegistro(tx, guarded, {
@@ -249,7 +246,6 @@ describe("fiscal sync capture — the six triggers of 0014", () => {
     try {
       const unguarded = await seedFiscalParents(postgres.admin);
       await asWriter(
-        unguarded.tenantId,
         unguarded.nodeId,
         async (tx) => {
           await insertFiscalRegistro(tx, unguarded, {

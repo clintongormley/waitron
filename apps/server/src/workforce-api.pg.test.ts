@@ -70,14 +70,14 @@ async function setupVenue(): Promise<Venue> {
   const seeded = await withTenant(suite.admin, venue.tenantId, async (tx) => {
     await asAppUser(tx);
     const loc = await tx.execute<{ id: string }>(
-      sql`select id from locations where tenant_id = current_tenant_id() limit 1`,
+      sql`select id from locations where tenant_id = ${venue.tenantId} limit 1`,
     );
     const mgr = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
-      values (current_tenant_id(), 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+      values (${venue.tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
     const stf = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
-      values (current_tenant_id(), 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+      values (${venue.tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
     const mSes = await startManagementSession(tx, {
       tenantId: venue.tenantId,
       personId: mgr.rows[0]!.id,
@@ -192,7 +192,7 @@ describe("Workforce API over real Postgres (roster publish, decide columns, gate
 
   it("publishes end-to-end as the app role and returns the breaches array", async () => {
     const v = await setupVenue();
-    // Seed the location's convenio_config (as admin — superuser bypasses RLS; tenant_id set explicitly).
+    // Seed the location's convenio_config (as admin — owner; tenant_id set explicitly).
     await suite.admin.execute(
       sql`insert into convenio_config (tenant_id, location_id) values (${v.tenantId}, ${v.locationId})`,
     );

@@ -70,7 +70,7 @@ async function seedPerson(tenantId: string, name: string, pin: string): Promise<
     await asAppUser(tx);
     const r = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
-      values (current_tenant_id(), ${name}, ${hashPin(pin)}, 'staff') returning id`);
+      values (${tenantId}, ${name}, ${hashPin(pin)}, 'staff') returning id`);
     return r.rows[0]!.id;
   });
 }

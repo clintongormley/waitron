@@ -46,12 +46,7 @@ interface Venue {
   staffCookie: string;
 }
 
-/**
- * Stand up a fresh provisioned venue (as the owner), build the full `TillConfig` from the real ids
- * `applyVenue` returns, then — as the app role under the tenant, so RLS is exercised — seed a MANAGER
- * (role `manager`) and a STAFF person (role `staff`) and mint a live management session for each. Each
- * test gets its OWN tenant, so its reads are that test's alone and order-independent (CLAUDE.md §4).
- */
+/** Provision a venue as owner and seed the people and sessions this route fixture needs. */
 async function setupVenue(): Promise<Venue> {
   const venue = await applyVenue(
     planVenue(
@@ -90,10 +85,10 @@ async function setupVenue(): Promise<Venue> {
     await asAppUser(tx);
     const mgr = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
-      values (current_tenant_id(), 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+      values (${venue.tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
     const stf = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
-      values (current_tenant_id(), 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+      values (${venue.tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
     const managerSession = await startManagementSession(tx, {
       tenantId: venue.tenantId,
       personId: mgr.rows[0]!.id,
@@ -133,13 +128,13 @@ function mountApp(cfg: TillConfig): Hono {
   return app;
 }
 
-/** Insert an ACTIVE dining table for the venue as the app role (RLS-scoped), returning its id. */
+/** Insert an ACTIVE dining table for the venue as the app role, returning its id. */
 async function seedTable(cfg: TillConfig, label = "12"): Promise<string> {
   return withTenant(suite.admin, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
     const row = await tx.execute<{ id: string }>(sql`
       insert into dining_tables (tenant_id, location_id, label, active)
-      values (current_tenant_id(), ${cfg.locationId}, ${label}, true) returning id`);
+      values (${cfg.tenantId}, ${cfg.locationId}, ${label}, true) returning id`);
     return row.rows[0]!.id;
   });
 }

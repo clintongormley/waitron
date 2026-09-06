@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { asAppUser, sales, withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
@@ -33,24 +33,9 @@ import { enrolDevice, generatePairingCode } from "./device.js";
 import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
 
 /**
- * The H2 fiscal receipt for the SP-A.2 device-unification cutover — the REAL-Postgres arm (spec
- * §16.4(b) mutation control + §16.4(c) `nodeId` untouched). The cutover (`requireSaleTillId`,
- * `device-session.ts`) moved a sale's `till_id` from the env `WAITRON_TILL_TILL_ID` to the
- * AUTHENTICATED enrolled device's assigned `tills` row; `nodeId`/`seriesId` (the SIF and chain
- * anchor) still come from `cfg`. This suite drives the ACTUAL `POST /api/sales` route over HTTP,
- * with a real `waitron_device` cookie, to a GENUINE chained fiscal record written by the app role
- * under RLS — the one place the whole cutover path (device auth -> `requireSaleTillId` ->
- * `saleCfg = { ...cfg, tillId }` -> `recordSale`) runs end to end.
- *
- * Real Postgres, not PGlite (CLAUDE.md §4): this proves the deployment role, under RLS, resolves a
- * device's `till_id` and files it, while `node_id` stays `cfg`'s — a privilege/RLS property PGlite
- * (every connection a superuser) cannot show. The byte-identity huella-inertness half of §16.4(b) —
- * two first-of-chain records differing only in `till_id` hash identically — is a determinism property
- * that needs no container and lives in `packages/fiscal-verifactu/src/write-path.e2e.test.ts`
- * ("till_id is inert to the huella and the chain"), beside its `entorno`/`parent_line_id` precedents.
- *
- * Setup mirrors `till-api.pg.test.ts`: a provisioned venue + a seeded catalogue + a login person, a
- * real `VerifactuBackend` and the system clock.
+ * Exercise device authentication through the sale route to a fiscal record on PostgreSQL.
+ * till_id comes from the enrolled device; node_id and series_id remain the configured chain keys.
+ * The fiscal write-path suite separately checks that changing only till_id preserves the huella.
  */
 const LOCALE = "es-ES";
 
@@ -165,7 +150,7 @@ async function setupVenue(): Promise<{
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
     const person = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
-      values (current_tenant_id(), 'Cajera', ${hashPin("5555")}, 'staff') returning id`);
+      values (${cfg.tenantId}, 'Cajera', ${hashPin("5555")}, 'staff') returning id`);
     const available = (await listAvailableProducts(tx, cfg.locationId)).products;
     return {
       product: available.find((p) => p.pricingUnit === "each")!,
@@ -291,7 +276,8 @@ async function registrosFor(cfg: TillConfig): Promise<Registro[]> {
         entorno: registrosFacturacion.entorno,
         numSerieFactura: registrosFacturacion.numSerieFactura,
       })
-      .from(registrosFacturacion);
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
     return rows.sort((a, b) => a.secuencia - b.secuencia);
   });
 }
@@ -303,7 +289,8 @@ async function saleTillIds(cfg: TillConfig): Promise<string[]> {
     await asAppUser(tx);
     const rows = await tx
       .select({ tillId: sales.tillId, invoiceNumber: sales.invoiceNumber })
-      .from(sales);
+      .from(sales)
+      .where(eq(sales.tenantId, cfg.tenantId));
     return rows.sort((a, b) => a.invoiceNumber - b.invoiceNumber).map((r) => r.tillId);
   });
 }

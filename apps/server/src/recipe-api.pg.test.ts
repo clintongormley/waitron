@@ -48,15 +48,7 @@ interface Venue {
   productId: string;
 }
 
-/**
- * Stand up a fresh provisioned venue (as the owner), then — as the app role under the tenant, so RLS
- * is exercised — seed a MANAGER (role `manager`) and a STAFF person (role `staff`), one catalogue +
- * product for the recipe routes to hang lines on, and mint a live management session for each person,
- * returning the two session cookies the recipe routes read. Each test gets its OWN tenant, so its reads
- * are that test's alone and order-independent (CLAUDE.md §4). The recipe routes carry no login route of
- * their own, so the sessions are minted directly with `startManagementSession`, exactly as the PGlite
- * `recipe-api.test.ts` does.
- */
+/** Provision a venue as owner and seed the people and sessions this route fixture needs. */
 async function setupVenue(): Promise<Venue> {
   const venue = await applyVenue(
     planVenue(
@@ -98,10 +90,10 @@ async function setupVenue(): Promise<Venue> {
       await asAppUser(tx);
       const mgr = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
-        values (current_tenant_id(), 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+        values (${venue.tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
       const stf = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
-        values (current_tenant_id(), 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+        values (${venue.tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
       const managerSession = await startManagementSession(tx, {
         tenantId: venue.tenantId,
         personId: mgr.rows[0]!.id,

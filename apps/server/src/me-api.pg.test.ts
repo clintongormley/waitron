@@ -70,7 +70,7 @@ async function seedPerson(tenantId: string, name: string): Promise<string> {
     await asAppUser(tx);
     const r = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
-      values (current_tenant_id(), ${name}, ${hashPin("0000")}, 'staff') returning id`);
+      values (${tenantId}, ${name}, ${hashPin("0000")}, 'staff') returning id`);
     return r.rows[0]!.id;
   });
 }
@@ -101,9 +101,7 @@ async function seedShift(
 
 function mountApp(tenantId: string): Hono {
   const app = new Hono();
-  // A fixed sentinel node id: this suite proves the me routes' RLS + session-identity properties, not
-  // sync origin attribution (that is `sync-origin.test.ts`), and no test here reads `sync_log`, so
-  // the value only has to satisfy the widened `MeApiDeps.cfg` (`{ tenantId, nodeId }`).
+  // This fixture does not assert sync attribution, so use the default all-zero node id.
   mountMeApi(
     app,
     {

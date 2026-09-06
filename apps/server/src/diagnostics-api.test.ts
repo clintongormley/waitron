@@ -13,11 +13,7 @@ import { mountDiagnosticsApi } from "./diagnostics-api.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
 import "./errors.js";
 
-// Real Postgres, not PGlite: this suite proves the diagnostics ROUTE's `diagnostics.view` gate
-// DIFFERENTIALLY (a manager session is admitted, a staff/supervisor one refused). That gate runs
-// `authorizeManager` as the app role under FORCE RLS, which PGlite cannot exercise — every PGlite
-// connection is a superuser that bypasses RLS (CLAUDE.md §4), so a "staff was refused" there could be
-// a false pass. The verbosity + limit-clamp mechanics are pure in-process logic proven the same run.
+// Exercise diagnostics permission gates, verbosity and limit clamping through the real route.
 const LOCALE = "es-ES";
 
 const suite = useTemplateDb({ template: "manifest" });
@@ -43,12 +39,7 @@ interface Venue {
   supervisorCookie: string;
 }
 
-/**
- * Stand up a fresh provisioned venue (as the owner), then — as the app role under the tenant, so RLS
- * is exercised on the write side too — seed a MANAGER (holds `diagnostics.view`), a STAFF and a
- * SUPERVISOR (neither holds it) and mint a live management session for each. Each test gets its OWN
- * tenant, so its reads are that test's alone and order-independent (CLAUDE.md §4).
- */
+/** Provision a venue as owner and seed the people and sessions this route fixture needs. */
 async function setupVenue(): Promise<Venue> {
   const taxId = nextNif();
   const venue = await applyVenue(
@@ -92,7 +83,7 @@ async function setupVenue(): Promise<Venue> {
       const seedPerson = async (role: string): Promise<string> => {
         const p = await tx.execute<{ id: string }>(sql`
           insert into persons (tenant_id, display_name, pin_hash, role)
-          values (current_tenant_id(), ${`The ${role}`}, ${hashPin("1234")}, ${role}) returning id`);
+          values (${venue.tenantId}, ${`The ${role}`}, ${hashPin("1234")}, ${role}) returning id`);
         const session = await startManagementSession(tx, {
           tenantId: venue.tenantId,
           personId: p.rows[0]!.id,

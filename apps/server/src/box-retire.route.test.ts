@@ -13,12 +13,8 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountManagementApi } from "./management-api.js";
 
-// Real Postgres, not PGlite: the route AUTHORIZES with `authorizeManager`, which reads persons +
-// management_sessions under the app role's RLS — a false pass on PGlite's superuser connection
-// (CLAUDE.md §4). This mirrors box-status.route.test.ts's manager-login harness exactly; only the
-// route under test and its deps differ. The retire SEMANTICS (the four refusal codes, idempotency,
-// the signed eviction) are unit-tested in retire.test.ts — this suite covers the HTTP GLUE only:
-// the auth-throw path through the boundary, the refusal→status mapping, and the success passthrough.
+// Exercise route authorization, refusal-to-status mapping and success responses on PostgreSQL.
+// Retirement semantics are covered by retire.test.ts.
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the seeded manager's dashboard password.
 const MANAGER_EMAIL = "manager@x.com";
@@ -44,9 +40,7 @@ function nextNif(): string {
   return `${String(72_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/** Stand up a fresh provisioned venue (as the owner), then seed — as the app role under the tenant,
- * so RLS is exercised — a MANAGER (role `manager`, which holds `till.configure`) WITH a dashboard
- * password so it can log in. Provisioning creates only the ADMIN, so the manager is seeded directly. */
+/** Provision a venue as owner and seed the people and sessions this route fixture needs. */
 async function setupTenant(): Promise<{ tenantId: string; nodeId: string }> {
   const venue = await applyVenue(
     planVenue(
@@ -85,7 +79,7 @@ async function setupTenant(): Promise<{ tenantId: string; nodeId: string }> {
     await asAppUser(tx);
     await tx.execute(sql`
       insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')`);
+      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')`);
   });
   return { tenantId: venue.tenantId, nodeId: venue.nodeId };
 }

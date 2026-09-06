@@ -1,18 +1,6 @@
-// The booking CRUD + lifecycle service (design §3a) — a dedicated module, imported by Task 5's
-// `booking-api.ts` routes, the same split `purchasing-api.ts` uses over the `@waitron/purchasing`
-// operations (routes on one side, DB ops on the other). NO HTTP and NO floor read (Task 6) here — the
-// reservation CRUD and its status machine, PLUS `seatBooking` (the TS-1 tab integration, which imports
-// `openTab` from `working-order.ts`) that a `booked` row transitions through into `seated`.
-//
-// Every verb runs on the CALLER's transaction, already tenant-scoped as `app_user` (Task 5's `gated`
-// wrapper = withTenant + asAppUser + authorizeManager). RLS confines every read/write to the tenant, so
-// a by-id verb needs no tenant predicate of its own; `cfg` supplies the LOCATION scope, which RLS does
-// not (a tenant can hold several locations). `createBooking`/`listBookings` read it for the creation /
-// day-list scope, and `updateBooking` reads it too — to location-scope an edited table assignment
-// (`requireActiveTable`), the same defence-in-depth `createBooking` applies. The pure lifecycle by-id
-// verbs (cancel/no-show/complete) take `_cfg` unused, keeping one uniform signature the routes call.
-//
-// "One of these throws imports ./errors.js" — the booking + table codes load here directly.
+// Booking operations run on the caller's transaction. Creation and day lists use the
+// configured location; table assignments also check that location. Route handlers
+// own authorization. By-id lifecycle operations address the supplied reservation id.
 import "./errors.js";
 import { and, asc, eq, inArray, type InferSelectModel } from "drizzle-orm";
 import { bookings, diningTables, type Transaction } from "@waitron/db";
@@ -25,11 +13,7 @@ import { openTab } from "./working-order.js";
 export type Booking = InferSelectModel<typeof bookings>;
 
 /**
- * The tenant + location a booking verb operates in. A NARROW object (not the till-scoped `TillConfig`):
- * bookings are a management-dashboard surface, not a till, so — like `mountPurchasingApi`'s
- * `{ tenantId }` and `mountWorkforceApi`'s tenant-only deps — it carries only what these verbs need.
- * `tenantId` stamps the `tenant_id` column on insert (RLS `WITH CHECK` requires it match
- * `current_tenant_id()`); `locationId` is the day-list / creation scope RLS cannot supply.
+ * tenantId stamps new reservations; locationId scopes day lists and table assignments.
  */
 export interface BookingConfig {
   tenantId: TenantId;
@@ -69,17 +53,8 @@ export interface UpdateBookingPatch {
 }
 
 /**
- * The table exists, is active, AND belongs to `locationId`, or `table.not_found`. Bookings collapse "no
- * such table", "deactivated table" and "table in another location" into the ONE reused TS-1 code
- * (design §3a) — a booking may not be assigned to a table that cannot take its party, and the
- * distinction `openTab` draws (`table.inactive`) is a running-service concern, not a reservation one.
- *
- * The `location_id` predicate is defence-in-depth (multi-location): RLS scopes only by TENANT and the
- * composite FK enforces same-tenant only, so without it a crafted (non-UI) request could assign a
- * booking in location A a table physically in location B — which the FP-1 floor read (keyed on
- * `dt.location_id` + `table_id`) would then surface on B's floor. A cross-location table is simply "not
- * found in this location", so it reuses `table.not_found` (do NOT invent a code). Existence-active-and-
- * location only; no `FOR UPDATE` — a reservation takes no lock on the table (it is not opening a tab).
+ * Require an active table in this location, otherwise table.not_found.
+ * A reservation checks availability of the table definition without taking a row lock.
  */
 async function requireActiveTable(
   tx: Transaction,
@@ -136,11 +111,7 @@ export async function createBooking(
 }
 
 /**
- * The location's reservations for one wall-clock day, ordered by `booking_time` (design §3a) — ALL
- * statuses, since the day-list screen filters/labels them itself. RLS scopes to the tenant; the
- * `location_id` + `booking_date` predicates match the `(tenant_id, location_id, booking_date)` index.
- * Ties on time are broken by `id` (canonical uuid order) so the list is deterministic, not insert-order
- * reliant.
+ * List every status for the location and wall-clock date, ordered by time then id.
  */
 export async function listBookings(
   tx: Transaction,
@@ -155,9 +126,8 @@ export async function listBookings(
 }
 
 /**
- * One reservation by id, or `undefined` if none is visible to the caller (absent, or another tenant's —
- * RLS hides it). A plain read primitive Task 4's seat and Task 5's read-back compose on; it does NOT
- * throw `booking.not_found` — the verbs that must (the lifecycle ones) raise it themselves.
+ * Read one reservation by id, returning undefined when absent. Lifecycle verbs
+ * translate absence into booking.not_found.
  */
 export async function getBooking(
   tx: Transaction,
@@ -169,13 +139,8 @@ export async function getBooking(
 }
 
 /**
- * Edit a reservation's business fields while it is `booked` (design §3a). Validates a patched
- * `partySize > 0` (`booking.invalid`) and a patched non-null `tableId` (`table.not_found`) first, then a
- * conditional UPDATE gated on `status = 'booked'`. An empty match — the id is absent, another tenant's
- * (RLS-hidden), OR the row is no longer `booked` (seated/completed/…): all outside the editable window —
- * raises `booking.not_found`, the ONE error design §3a lists for this verb. It is deliberately NOT
- * `booking.invalid_transition`: `errors.ts` scopes that code to the lifecycle verbs
- * (cancel/no-show/complete/seat), and an edit is not a lifecycle move.
+ * Edit business fields only while booked. Validate party size and any table assignment
+ * before the conditional update; a missing or non-booked row is booking.not_found.
  */
 export async function updateBooking(
   tx: Transaction,
@@ -210,12 +175,8 @@ export async function updateBooking(
 }
 
 /**
- * A lifecycle move as a conditional UPDATE — the `advancePrep`/`advanceTicketItem` shape: `set status =
- * to where id = ? and status in (<legal predecessors>)`, so the legality of the move IS the write and
- * the common success is one query. On an empty match a single disambiguating read splits the two
- * refusals design §3a / `errors.ts` require: an ABSENT (or RLS-hidden) row → `booking.not_found`; a row
- * in a state the move is not legal from → `booking.invalid_transition`. Both carry the caller-supplied
- * `bookingId` (not a secret).
+ * Change status only from a legal predecessor. A failed conditional update is read
+ * back to distinguish booking.not_found from booking.invalid_transition.
  */
 async function advanceStatus(
   tx: Transaction,
@@ -262,26 +223,9 @@ export async function completeBooking(
 }
 
 /**
- * Seat a reservation: open a TS-1 tab on its table and link the two (design §3b). The party has
- * arrived, so this is the `booked → seated` move — but unlike the pure-status lifecycle verbs it takes
- * the FULL `TillConfig`, not `BookingConfig`: `openTab` → `createOpenOrder` → `allocateOrderNumber`
- * read `cfg.tillId`/`cfg.nodeId` to mint the order number, which the narrow config cannot supply. A
- * `TillConfig` is a structural superset of `BookingConfig`, so Task 5 mounts every verb with the same
- * object; only this one is typed for the wider shape.
- *
- * 1. the booking must exist (`booking.not_found`) and be `booked` (`booking.invalid_transition`) —
- *    the not_found/invalid_transition split the other lifecycle verbs draw;
- * 2. resolve the table — the passed `tableId` ?? the booking's own — or `booking.table_required` when
- *    neither is set (a booking with no table cannot be seated without one);
- * 3. `openTab` opens the pre-fiscal working order and takes the table `FOR UPDATE`, enforcing
- *    one-open-tab-per-table; its `table.not_found`/`table.inactive`/`tab.already_open` bubble up
- *    unchanged (a busy or missing table is the caller's to resolve). Its `orderNumber` is discarded —
- *    the booking links to the tab, not to the order number.
- * 4. stamp `table_id` (in case it was newly chosen via `req.tableId`), `tab_id`, and `status = seated`
- *    on the booking. RLS scopes the write to the tenant, as it does every by-id verb here.
- *
- * No fiscal path is touched: `openTab` writes a pre-fiscal working order, never a
- * `registros_facturacion` row / `huella` / invoice number (design §3b, §5).
+ * Seat a booked reservation by opening a tab and linking it in the same transaction.
+ * Use the requested table or the reservation's table; require one before opening the tab.
+ * openTab supplies its table checks and locking. No fiscal record is filed here.
  */
 export async function seatBooking(
   tx: Transaction,
@@ -300,12 +244,8 @@ export async function seatBooking(
   if (tableId === null || tableId === undefined) {
     throw new AppError("booking.table_required", {});
   }
-  // A NEWLY chosen table (`req.tableId`) must be in the BOOKING's location — the booking's own
-  // `table_id` was already location-scoped at create/update time, but a `req.tableId` is caller-supplied
-  // here and reaches openTab, which is location-BLIND (RLS scopes only by tenant). A cross-location
-  // table reads as `table.not_found`, the same defence-in-depth `requireActiveTable` gives create/edit.
-  // A LOCATION-only check (not `requireActiveTable`): openTab still owns exists/active — an inactive
-  // same-location table keeps surfacing as `table.inactive`, the running-service concern it always was.
+  // Check a newly selected table against the reservation's location. openTab handles
+  // existence and activity, preserving table.inactive for an inactive local table.
   if (req.tableId !== undefined) {
     const [inLocation] = await tx
       .select({ id: diningTables.id })

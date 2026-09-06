@@ -11,12 +11,8 @@ import { mountReportApi } from "./report-api.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
 import "./errors.js";
 
-// PGlite, not real Postgres: this suite proves the `/reports/overdue-orders` ROUTE — the
-// request/response boundary, the `report.view` gate + STATUS map, and the JSON shape wrapping
-// `computeOverdueOrders` — end to end in-process, the way `report-api.overview.test.ts` proves the
-// overview route. Its own file/tenant (not that suite's) so a fired KITCHEN order here never touches
-// the overview suite's takings/open-tables fixtures. The differential RLS-isolation proof is the
-// real-Postgres suite (report-api.pg.test.ts), which PGlite cannot show (CLAUDE.md §4).
+// PGlite exercises the overdue-orders route, permission gate, status mapping and JSON response.
+// Its fixture is separate from the overview suite's current-day sales.
 const noopLog: Logger = () => {};
 
 let tenantId: string;
@@ -26,10 +22,9 @@ let locationId: string;
 let managerCookie: string;
 let staffCookie: string;
 
-/** Fires one line onto a fresh OPEN working order, its `ticket_items.queued_at` backdated by
- *  `ageMinutes` — the `now() - N minutes` idiom `apps/server/src/working-order.test.ts` uses for its
- *  own band tests. Raw inserts as the connection owner (superuser bypasses RLS) — pure setup,
- *  mirroring `report-api.overview.test.ts`'s `seedDiningTables`/`seedTodaySale`. */
+/**
+ * Fire one line on a fresh open order and backdate queued_at by ageMinutes.
+ */
 async function seedFiredOrder(
   db: Database,
   opts: { orderNumber: number; ageMinutes: number; stationId: string; tableLabel?: string },
@@ -98,10 +93,10 @@ const suite = usePgliteDb({
       await asAppUser(tx);
       const mgr = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
-        values (current_tenant_id(), 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+        values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
       const stf = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
-        values (current_tenant_id(), 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+        values (${tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
       const managerSession = await startManagementSession(tx, {
         tenantId,
         personId: mgr.rows[0]!.id,

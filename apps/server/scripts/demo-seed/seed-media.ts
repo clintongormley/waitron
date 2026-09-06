@@ -1,22 +1,6 @@
-// `seedMedia` — the demo-seed's media step (Phase 2, Task 9). Task 6's `seedCatalogues` stores the
-// PLAIN image basename (e.g. `"jamon-iberico.png"`) in each product's `image`; this step reads the
-// committed per-dish PNG tile for that basename, content-addresses it into the venue's media dir
-// under its SHA-256, and rewrites `products.image` to the served `<sha256hex>.png` name — the exact
-// shape the public `GET /media/:filename` route serves (`MEDIA_FILENAME` in `src/media-api.ts`,
-// `^[0-9a-f]{64}\.(jpg|png|webp)$`). After this, the till/dashboard `<img src="/media/<image>">`
-// resolves to a real file on disk.
-//
-// The committed tiles under `media/` are the source of truth (authored by `gen-media.mjs`, a
-// zero-dependency built-ins-only PNG generator — a dev convenience, not run here). This module only
-// COPIES their bytes; it never rasterises anything.
-//
-// It runs inside the CALLER's transaction, under the tenant GUC the caller set with `withTenant` +
-// `asAppUser`, so the `products` UPDATE adopts the current tenant and satisfies the FORCE-RLS
-// `USING/WITH CHECK (tenant_id = current_tenant_id())`. The UPDATE is parameterised via Drizzle's
-// `sql` template (CLAUDE.md §3) — never string-concatenated.
-//
-// `mediaDir` is PASSED IN (Task 11 resolves the real one from boot's `DEFAULT_MEDIA_ROOT`); this
-// module does NOT import boot, so it stays a pure seed helper testable against a temp dir.
+// Copy committed product image tiles into the venue media directory under their
+// content hashes and update product image names in the caller's transaction.
+// The caller supplies mediaDir; the helper does not generate images.
 
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";

@@ -1,15 +1,5 @@
-// `seedCatalogues` — the demo-seed's catalogue step (Phase 2, Task 6). Given a provisioned venue's
-// location, it stands up the two demo menus (menu.ts), wires KDS routing, and reports which product
-// each image basename became so Task 9's media step can attach the real PNGs.
-//
-// It runs inside the CALLER's transaction, under the tenant GUC the caller set with `withTenant` and
-// (in the demo/POS shape) `asAppUser` — so every write adopts the current tenant through
-// `current_tenant_id()` and satisfies each table's `WITH CHECK (tenant_id = current_tenant_id())`.
-// It takes no `tenantId`/`stationIds` argument: the GUC is the single source of the tenant, and this
-// module OWNS station resolution (see `resolveStationIds`).
-//
-// All SQL is parameterised via Drizzle's `sql` template (the station lookup, the Barra insert, the
-// category route update) — never string-concatenated (CLAUDE.md §3).
+// Seed both demo menus in the caller's transaction and return the image-to-product map.
+// The explicit tenant id supplies writes; this module resolves the kitchen stations.
 
 import { sql } from "drizzle-orm";
 import type { TenantId } from "@waitron/shared";
@@ -40,13 +30,12 @@ export interface SeedCataloguesResult {
 /** The logical routing targets a seed category names, mapped to their concrete `kitchen_stations.id`. */
 type StationIds = Record<"kitchen" | "bar", string>;
 
-/**
- * Resolve the KDS station ids this seed routes to. Provisioning (`applyVenue`) seeds exactly one
- * DEFAULT station named "Cocina" per location, so `kitchen` is a lookup; the bar is not seeded by
- * provisioning, so this creates a second, NON-default "Barra" station. Both run under the caller's
- * tenant GUC as `app_user` (SELECT + INSERT on `kitchen_stations`, granted by 0027-era migrations).
- */
-async function resolveStationIds(tx: Transaction, locationId: string): Promise<StationIds> {
+/** Resolve the location's provisioned Cocina station and create its non-default Barra station. */
+async function resolveStationIds(
+  tx: Transaction,
+  tenantId: TenantId,
+  locationId: string,
+): Promise<StationIds> {
   const { rows: cocina } = await tx.execute<{ id: string }>(sql`
     select id from kitchen_stations
     where location_id = ${locationId} and name = 'Cocina'
@@ -55,14 +44,10 @@ async function resolveStationIds(tx: Transaction, locationId: string): Promise<S
   if (kitchen === undefined) {
     throw new Error(`seedCatalogues: no "Cocina" station found for location ${locationId}`);
   }
-  // Create "Barra" for drinks via a raw insert because `createStation` (apps/server/src/kitchen.ts) is
-  // management-session-gated (`withVenueAuth`), which a seed script has no session for — the same
-  // raw-insert-past-a-gated-helper pattern `seedFloor`/`seedStaff` use. NOT the default (the partial
-  // unique allows one default per location, which "Cocina" already holds). `current_tenant_id()`
-  // satisfies the FORCE-RLS WITH CHECK.
+  // Seed scripts have no management session, so insert the non-default station directly.
   const { rows: barra } = await tx.execute<{ id: string }>(sql`
     insert into kitchen_stations (tenant_id, location_id, name, display_order, is_default, active)
-    values (current_tenant_id(), ${locationId}, 'Barra', 1, false, true)
+    values (${tenantId}, ${locationId}, 'Barra', 1, false, true)
     returning id`);
   const bar = barra[0]?.id;
   if (bar === undefined) {
@@ -81,7 +66,7 @@ export async function seedCatalogues(
   tenantId: TenantId,
   { locationId, locale }: SeedCataloguesInput,
 ): Promise<SeedCataloguesResult> {
-  const stationIds = await resolveStationIds(tx, locationId);
+  const stationIds = await resolveStationIds(tx, tenantId, locationId);
   const productsByImage = new Map<string, string>();
 
   const seedOne = async (data: SeedCatalogue): Promise<string> => {

@@ -56,10 +56,10 @@ beforeAll(async () => {
     await asAppUser(tx);
     const mgr = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
-      values (current_tenant_id(), 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+      values (${tenantA.tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
     const stf = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
-      values (current_tenant_id(), 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+      values (${tenantA.tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
     const managerSession = await startManagementSession(tx, {
       tenantId: tenantA.tenantId,
       personId: mgr.rows[0]!.id,
@@ -172,9 +172,9 @@ describe("Print API over real Postgres (as the app role)", () => {
 
   it("agent scope: claims ONLY the calling agent's own printers' jobs (cross-agent → empty)", async () => {
     const app = mountApp(tenantA);
-    const mine = await enrolAgent(app, "Mine RLS");
-    const other = await enrolAgent(app, "Other RLS");
-    const otherPrinter = await createPrinter(app, other.agentId, "Other printer RLS");
+    const mine = await enrolAgent(app, "Mine");
+    const other = await enrolAgent(app, "Other");
+    const otherPrinter = await createPrinter(app, other.agentId, "Other printer");
     const jobId = await enqueue(tenantA, otherPrinter, new Uint8Array([1]));
 
     const res = await send(app, "GET", "/print-api/agent/jobs", { bearer: mine.token });

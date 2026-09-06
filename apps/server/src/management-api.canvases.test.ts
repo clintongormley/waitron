@@ -49,12 +49,7 @@ function phoneCanvas(title: string): CanvasDef {
   return { ...base, tabs: [{ ...base.tabs[0]!, title }, ...base.tabs.slice(1)] };
 }
 
-/**
- * Stand up a fresh provisioned venue (as the owner), then seed — as the app role under the tenant, so
- * RLS is exercised — a MANAGER (role `manager`, holds `till.configure`) and a STAFF person (role
- * `staff`, holds nothing), each WITH a dashboard password so both can log in. Provisioning creates
- * only the ADMIN, so these two are seeded directly; `pin_hash` is NOT NULL so a value is supplied.
- */
+/** Provision a venue as owner and seed the people and sessions this route fixture needs. */
 async function setupTenant(): Promise<{ tenantId: string }> {
   const venue = await applyVenue(
     planVenue(
@@ -93,10 +88,10 @@ async function setupTenant(): Promise<{ tenantId: string }> {
     await asAppUser(tx);
     await tx.execute(sql`
       insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')`);
+      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')`);
     await tx.execute(sql`
       insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')`);
+      values (${venue.tenantId}, 'The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')`);
   });
   return { tenantId: venue.tenantId };
 }
@@ -243,7 +238,7 @@ describe("Management API — layout-canvas CRUD (Task 11)", () => {
 
   it("DELETE a canvas a device profile still references → 409 canvas.in_use, canvas survives", async () => {
     const app = mountApp(tenantId);
-    // Create a canvas, then bind a device profile to it as the owner (RLS bypassed — setup). The
+    // Create a canvas, then bind a device profile to it as the owner (fixture setup). The
     // composite FK device_profiles_canvas_fk is ON DELETE RESTRICT, so the DELETE trips a 23001 the
     // store translates to canvas.in_use → the house 409.
     const created = await app.request("/management-api/canvases", {

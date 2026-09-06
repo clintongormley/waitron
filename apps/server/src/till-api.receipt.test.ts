@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   asAppUser,
   drawerOpens,
@@ -170,10 +170,10 @@ async function setupVenue(): Promise<{
       await assignCatalogueToLocation(tx, venue.locationId, cat.id);
       const staff = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
-        values (current_tenant_id(), 'Cajera', ${hashPin("5555")}, 'staff') returning id`);
+        values (${cfg.tenantId}, 'Cajera', ${hashPin("5555")}, 'staff') returning id`);
       const supervisor = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
-        values (current_tenant_id(), 'Responsable', ${hashPin("5555")}, 'supervisor') returning id`);
+        values (${cfg.tenantId}, 'Responsable', ${hashPin("5555")}, 'supervisor') returning id`);
       const { products: available } = await listAvailableProducts(tx, cfg.locationId);
       return {
         each: available.find((p) => p.pricingUnit === "each")!,
@@ -244,7 +244,8 @@ async function printJobsFor(
         status: printJobs.status,
         payload: printJobs.payload,
       })
-      .from(printJobs);
+      .from(printJobs)
+      .where(eq(printJobs.tenantId, cfg.tenantId));
   });
 }
 
@@ -269,7 +270,8 @@ async function drawerOpensFor(cfg: TillConfig): Promise<
         authorizedBy: drawerOpens.authorizedBy,
         viaOverride: drawerOpens.viaOverride,
       })
-      .from(drawerOpens);
+      .from(drawerOpens)
+      .where(eq(drawerOpens.tenantId, cfg.tenantId));
   });
 }
 
@@ -288,14 +290,20 @@ async function setDrawerPolicy(cfg: TillConfig, policy: "gated" | "open"): Promi
 async function registroCount(cfg: TillConfig): Promise<number> {
   return withTenant(suite.admin, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-    return (await tx.select().from(registrosFacturacion)).length;
+    return (
+      await tx
+        .select()
+        .from(registrosFacturacion)
+        .where(eq(registrosFacturacion.tenantId, cfg.tenantId))
+    ).length;
   });
 }
 
 async function saleCount(cfg: TillConfig): Promise<number> {
   return withTenant(suite.admin, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-    return (await tx.select({ id: sales.id }).from(sales)).length;
+    return (await tx.select({ id: sales.id }).from(sales).where(eq(sales.tenantId, cfg.tenantId)))
+      .length;
   });
 }
 
@@ -824,4 +832,10 @@ describe("GET /api/drawer/authorizers (eligible cash.drawer supervisors over HTT
       error: { code: "session.required" },
     });
   });
+});
+
+afterEach(async () => {
+  await suite.admin.execute(sql`delete from management_sessions`);
+  await suite.admin.execute(sql`delete from sessions`);
+  await suite.admin.execute(sql`delete from persons`);
 });

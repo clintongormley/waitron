@@ -43,11 +43,7 @@ import type { TillConfig } from "./till-config.js";
 import { payWorkingOrder, recordTillSale } from "./till-sale.js";
 import { addTabRound, createOpenOrder, openTab, voidTabLine } from "./working-order.js";
 
-// Real Postgres, not PGlite: the whole point is a genuine chained fiscal record written by the app
-// role under RLS. PGlite runs every connection as a superuser, which bypasses RLS and cannot prove
-// the deployment role is permitted to write `registros_facturacion` (CLAUDE.md §4). The sale path
-// runs through `asAppUser` (SET LOCAL ROLE app_user) exactly as `catalogue-demo.ts` does on the
-// owner connection; provisioning runs as the owner.
+// Exercise the sale path and chained fiscal write as app_user on PostgreSQL. Provision as owner.
 const LOCALE = "es-ES";
 
 const suite = useTemplateDb({ template: "manifest" });
@@ -433,7 +429,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
  * server-side (the client is never the gate). These are the fiscal-adjacent invariants — a filed
  * modifier sale carries parent + child `sale_lines`, and a parked-then-paid one re-prices its children
  * from their add-time lock to the same total/desglose. Real Postgres, like the sales above: the
- * chained record, the self-referential `parent_line_id`, and the RLS-scoped inserts are the point.
+ * chained record, the self-referential `parent_line_id`, and the app-role inserts are the point.
  */
 describe("ordering modifiers — parent + child lines", () => {
   interface ModifierVenue {
@@ -538,7 +534,7 @@ describe("ordering modifiers — parent + child lines", () => {
       const [extras] = await tx
         .insert(optionGroups)
         .values({
-          tenantId: sql`current_tenant_id()`,
+          tenantId: cfg.tenantId,
           name: { es: "Extras" },
           minSelect: 0,
           maxSelect: 3,
@@ -548,7 +544,7 @@ describe("ordering modifiers — parent + child lines", () => {
         .returning({ id: optionGroups.id });
       await tx.insert(optionGroupItems).values([
         {
-          tenantId: sql`current_tenant_id()`,
+          tenantId: cfg.tenantId,
           groupId: extras!.id,
           name: { es: "Bacon" },
           priceDelta: "0.50",
@@ -559,7 +555,7 @@ describe("ordering modifiers — parent + child lines", () => {
           sort: 0,
         },
         {
-          tenantId: sql`current_tenant_id()`,
+          tenantId: cfg.tenantId,
           groupId: extras!.id,
           name: { es: "Queso" },
           priceDelta: "0.75",
@@ -571,7 +567,7 @@ describe("ordering modifiers — parent + child lines", () => {
       const [size] = await tx
         .insert(optionGroups)
         .values({
-          tenantId: sql`current_tenant_id()`,
+          tenantId: cfg.tenantId,
           name: { es: "Tamaño" },
           minSelect: 1,
           maxSelect: 1,
@@ -581,7 +577,7 @@ describe("ordering modifiers — parent + child lines", () => {
         .returning({ id: optionGroups.id });
       await tx.insert(optionGroupItems).values([
         {
-          tenantId: sql`current_tenant_id()`,
+          tenantId: cfg.tenantId,
           groupId: size!.id,
           name: { es: "Pequeño" },
           priceDelta: "0",
@@ -589,7 +585,7 @@ describe("ordering modifiers — parent + child lines", () => {
           sort: 0,
         },
         {
-          tenantId: sql`current_tenant_id()`,
+          tenantId: cfg.tenantId,
           groupId: size!.id,
           name: { es: "Grande" },
           priceDelta: "2.00",
@@ -602,7 +598,7 @@ describe("ordering modifiers — parent + child lines", () => {
       const [salsa] = await tx
         .insert(optionGroups)
         .values({
-          tenantId: sql`current_tenant_id()`,
+          tenantId: cfg.tenantId,
           name: { es: "Salsa" },
           minSelect: 1,
           maxSelect: 1,
@@ -611,7 +607,7 @@ describe("ordering modifiers — parent + child lines", () => {
         })
         .returning({ id: optionGroups.id });
       await tx.insert(optionGroupItems).values({
-        tenantId: sql`current_tenant_id()`,
+        tenantId: cfg.tenantId,
         groupId: salsa!.id,
         name: { es: "Alioli" },
         priceDelta: "0",
@@ -624,7 +620,7 @@ describe("ordering modifiers — parent + child lines", () => {
       const [guarnicion] = await tx
         .insert(optionGroups)
         .values({
-          tenantId: sql`current_tenant_id()`,
+          tenantId: cfg.tenantId,
           name: { es: "Guarnición" },
           minSelect: 2,
           maxSelect: 3,
@@ -634,7 +630,7 @@ describe("ordering modifiers — parent + child lines", () => {
         .returning({ id: optionGroups.id });
       await tx.insert(optionGroupItems).values([
         {
-          tenantId: sql`current_tenant_id()`,
+          tenantId: cfg.tenantId,
           groupId: guarnicion!.id,
           name: { es: "Patatas" },
           priceDelta: "1.00",
@@ -642,7 +638,7 @@ describe("ordering modifiers — parent + child lines", () => {
           sort: 0,
         },
         {
-          tenantId: sql`current_tenant_id()`,
+          tenantId: cfg.tenantId,
           groupId: guarnicion!.id,
           name: { es: "Ensalada" },
           priceDelta: "1.50",
@@ -652,11 +648,11 @@ describe("ordering modifiers — parent + child lines", () => {
       ]);
 
       await tx.insert(productOptionGroups).values([
-        { tenantId: sql`current_tenant_id()`, productId: burger.id, groupId: extras!.id, sort: 0 },
-        { tenantId: sql`current_tenant_id()`, productId: menu.id, groupId: size!.id, sort: 0 },
-        { tenantId: sql`current_tenant_id()`, productId: combo.id, groupId: salsa!.id, sort: 0 },
+        { tenantId: cfg.tenantId, productId: burger.id, groupId: extras!.id, sort: 0 },
+        { tenantId: cfg.tenantId, productId: menu.id, groupId: size!.id, sort: 0 },
+        { tenantId: cfg.tenantId, productId: combo.id, groupId: salsa!.id, sort: 0 },
         {
-          tenantId: sql`current_tenant_id()`,
+          tenantId: cfg.tenantId,
           productId: plato.id,
           groupId: guarnicion!.id,
           sort: 0,

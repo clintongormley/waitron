@@ -49,12 +49,7 @@ function phoneCanvas(title: string): CanvasDef {
   return { ...base, tabs: [{ ...base.tabs[0]!, title }, ...base.tabs.slice(1)] };
 }
 
-/**
- * Stand up a fresh provisioned venue (as the owner), then seed — as the app role under the tenant, so
- * RLS is exercised — a MANAGER (role `manager`, holds `till.configure`) and a STAFF person (role
- * `staff`, holds nothing), each WITH a dashboard password so both can log in. Mirrors the canvas
- * suite's `setupTenant`.
- */
+/** Provision a venue as owner and seed the people and sessions this route fixture needs. */
 async function setupTenant(): Promise<{ tenantId: string }> {
   const venue = await applyVenue(
     planVenue(
@@ -93,10 +88,10 @@ async function setupTenant(): Promise<{ tenantId: string }> {
     await asAppUser(tx);
     await tx.execute(sql`
       insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')`);
+      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')`);
     await tx.execute(sql`
       insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')`);
+      values (${venue.tenantId}, 'The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')`);
   });
   return { tenantId: venue.tenantId };
 }
@@ -330,7 +325,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
 
   it("DELETE a profile a device still references → 409 device_profile.in_use, profile survives", async () => {
     const app = mountApp(tenantId);
-    // Create a profile, then bind a device to it as the owner (RLS bypassed — setup), reusing the
+    // Create a profile, then bind a device to it as the owner (fixture setup), reusing the
     // venue's provisioned location. The composite FK devices_device_profile_fk is ON DELETE RESTRICT, so
     // the DELETE trips a 23001 the store translates to device_profile.in_use → the house 409.
     const created = await app.request("/management-api/device-profiles", {

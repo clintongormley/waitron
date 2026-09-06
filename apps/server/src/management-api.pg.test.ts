@@ -38,15 +38,7 @@ function nextNif(): string {
   return `${String(70_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/**
- * Stand up a fresh provisioned venue (as the owner), then seed — as the app role under the tenant, so
- * RLS is exercised — a MANAGER (role `manager`, which holds `person.manage`) and a STAFF person (role
- * `staff`, which holds nothing), each WITH a dashboard password so both can log in. Each test gets its
- * OWN tenant, so the `persons` re-reads below are that test's alone and order-independent (CLAUDE.md
- * §4). These persons are seeded directly because provisioning creates only the ADMIN, and these tests
- * need a `manager` and a `staff` person to exercise permission gating; `pin_hash` is NOT NULL, so a
- * value is supplied even though they log in by password.
- */
+/** Provision a venue as owner and seed the people and sessions this route fixture needs. */
 async function setupTenant(): Promise<{ tenantId: string; managerId: string; staffId: string }> {
   const venue = await applyVenue(
     planVenue(
@@ -85,11 +77,11 @@ async function setupTenant(): Promise<{ tenantId: string; managerId: string; sta
     await asAppUser(tx);
     const manager = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
+      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
       returning id`);
     const staff = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
+      values (${venue.tenantId}, 'The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
       returning id`);
     return { managerId: manager.rows[0]!.id, staffId: staff.rows[0]!.id };
   });
@@ -107,8 +99,7 @@ function mountApp(tenantId: string): Hono {
     app,
     {
       db: suite.admin,
-      // The all-zero node id (the capture default): these suites exercise the staff routes' RLS, not
-      // origin attribution, so the sentinel keeps their enrolled writes' origin exactly as before Task 6.
+      // These cases do not assert sync attribution, so use the default all-zero origin.
       cfg: { tenantId, nodeId: "00000000-0000-0000-0000-000000000000" },
       secureCookies: false,
       rpId: "localhost",
@@ -132,7 +123,7 @@ async function login(app: Hono, email: string, password = PASSWORD): Promise<str
   return res.headers.get("set-cookie")!.split(";")[0];
 }
 
-/** Count the tenant's persons named `displayName`, read back as the app role under RLS — the proof a
+/** Count the tenant's persons named `displayName`, read back as the app role — the proof a
  * genuine tenant-scoped row landed, not merely that a route returned a success status. */
 async function countPersonsNamed(tenantId: string, displayName: string): Promise<number> {
   const rows = await withTenant(suite.admin, tenantId, async (tx) => {
@@ -177,7 +168,7 @@ describe("Management API staff + session routes over real Postgres", () => {
     expect(created.status).toBe(201);
     expect((await created.json()) as { id: string }).toHaveProperty("id");
 
-    // Re-read as the app role: exactly one 'Ada' row landed under this tenant via RLS — proving a
+    // Re-read as the app role: exactly one 'Ada' row landed under this tenant through the route — proving a
     // genuine tenant-scoped write, not just a 201.
     expect(await countPersonsNamed(tenantId, "Ada")).toBe(1);
   });
@@ -290,7 +281,7 @@ describe("Management API staff + session routes over real Postgres", () => {
     });
     expect(patched.status).toBe(204);
 
-    // Re-read as the app role: both fields changed under RLS.
+    // Re-read as the app role: both fields changed as app_user.
     const row = await withTenant(suite.admin, tenantId, async (tx) => {
       await asAppUser(tx);
       const r = await tx.execute<{ role: string; status: string }>(
@@ -787,11 +778,7 @@ describe("Management API staff + session routes over real Postgres", () => {
   });
 });
 
-// ── Task 7: receipt write routes ────────────────────────────────────────────────────────────────
-// The dashboard's receipt-configuration surface: GET the current receipt trim, PUT a new one.
-// Same real-Postgres justification as the staff routes above — every touch runs `withTenant` +
-// `asAppUser`, so RLS scopes the read/write and the authorize gate (persons + management_sessions) to
-// the dashboard's own tenant, which PGlite's superuser connection cannot prove (CLAUDE.md §4).
+// Exercise receipt configuration GET and PUT through PostgreSQL-backed manager authorization.
 
 /** GET the current receipt trim as `cookie` (its own `tenant_receipts`-backed route, SP-B4), asserting
  * the 200 and returning the parsed `{ receipt }` a round-trip test reads back after a PUT. */
@@ -833,11 +820,7 @@ describe("Management API — receipt routes (Task 7)", () => {
     const cookie = await login(app, STAFF_EMAIL);
     const json = { "content-type": "application/json" };
 
-    // The GET is gated by the ROUTE's own explicit `authorizeManager` call (getReceipt does not
-    // authorize, being shared with the unauthenticated till boot read) — deleting that call flips the
-    // GET from 403 to 200 (the by-deletion proof for the route-level gate, demonstrated in this task's
-    // report). The PUT is gated INSIDE putReceipt (proven by deletion in the store rls suite); here the
-    // same 403 is exercised end-to-end through the HTTP surface.
+    // GET authorizes at the route; PUT authorizes in putReceipt. Both refuse this session.
     const cases = [
       app.request("/management-api/receipt", { headers: { cookie } }),
       app.request("/management-api/receipt", {
