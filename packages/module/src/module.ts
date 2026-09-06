@@ -4,15 +4,16 @@ import type { MigrationSet } from "@waitron/migrations";
 import type { EnrolledTable } from "@waitron/sync-enrolment";
 import type { FiscalContribution } from "@waitron/fiscal";
 import type { ModuleProvisioning } from "./provisioning.js";
+import type { RestoreHook } from "./restore.js";
 import "./errors.js";
 
 /** A reference to non-DB state a module owns, resolved to a path by the composition root. */
 export type NonDbSource = { readonly kind: "content-addressed-dir"; readonly source: string };
 
-/** A module's backup contribution: what non-DB state it owns and (later) how to restore it. */
+/** A module's backup contribution: the non-DB state it owns, and what it does after a restore. */
 export interface ModuleBackupContribution {
   readonly nonDbState?: readonly NonDbSource[];
-  readonly restore?: unknown; // seat — a root-wired hook; body lands in BR-3/BR-4
+  readonly restore?: RestoreHook;
 }
 
 /**
