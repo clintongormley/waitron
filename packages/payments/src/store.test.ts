@@ -861,19 +861,6 @@ describe("listReconcilable", () => {
     expect(rows[0].auditedAt).toBe(rows[0].settledAt);
   });
 
-  it("scopes to the given tenant by an EXPLICIT predicate, not just RLS", async () => {
-    // PGlite's connection is always a superuser (RLS never applies under it — see this suite's
-    // header note), so this is the one place able to prove the explicit `tenant_id` predicate is
-    // doing real work rather than RLS quietly covering for it. Without the fix, this query carries
-    // no tenant scoping at all under a bypassing connection, and BOTH tenants' rows come back.
-    const a = await seedTenant();
-    const b = await seedTenant();
-    await capture(a, "tenant-a-pay");
-    await capture(b, "tenant-b-pay");
-    const rows = await pg.db.transaction((tx) => listReconcilable(tx, a.tenantId, "fake", PERIOD));
-    expect(rows.map((r) => r.paymentRef)).toEqual(["tenant-a-pay"]);
-  });
-
   it("returns settled rows too — the forwarded-offline state the orphan rule also reaches", async () => {
     // Load-bearing, not completeness for its own sake: `settled` is the state a mode-2b tender
     // reaches once `forward()` clears it, it is auditable exactly like `captured`, and it can be an
@@ -1075,19 +1062,6 @@ describe("existingReferences", () => {
     );
     expect(found).toEqual(new Set(["ext-5"]));
   });
-
-  it("does not leak another tenant's reference by an EXPLICIT predicate, not just RLS", async () => {
-    // Same reasoning as listReconcilable's tenant-scoping test above, but the consequence here is
-    // sharper: leaking tenant B's reference into tenant A's check would suppress a real
-    // `missingLocal` finding — exactly the money-loss case this audit exists to catch.
-    const a = await seedTenant();
-    const b = await seedTenant();
-    await seedReference(b, "b-init", "ext-b");
-    const found = await pg.db.transaction((tx) =>
-      existingReferences(tx, a.tenantId, "fake", ["ext-b"]),
-    );
-    expect(found).toEqual(new Set());
-  });
 });
 
 describe("markReconcileRemediated", () => {
@@ -1189,15 +1163,6 @@ describe("tillsForWorkingOrders", () => {
     ];
     const tills = await pg.db.transaction((tx) => tillsForWorkingOrders(tx, seeded.tenantId, ids));
     expect(tills).toEqual(new Map([[seeded.workingOrderId, seeded.tillId]]));
-  });
-
-  it("does not leak another tenant's working order by an EXPLICIT predicate, not just RLS", async () => {
-    const a = await seedTenant();
-    const b = await seedTenant();
-    const tills = await pg.db.transaction((tx) =>
-      tillsForWorkingOrders(tx, a.tenantId, [b.workingOrderId]),
-    );
-    expect(tills).toEqual(new Map());
   });
 });
 

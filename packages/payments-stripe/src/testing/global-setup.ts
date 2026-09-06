@@ -29,7 +29,7 @@ import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
  * the moment two files created a role of the same name against the shared cluster the second would
  * fail `role … already exists` — and `useTemplateDb` offers no per-file `probeRole` at all. Each
  * inherits `app_user`'s grants via
- * `inRole`; `app_user` exists by the time the roles run because CORE's `0001_tenancy_rls.sql` creates
+ * `inRole`; `app_user` exists by the time the roles run because CORE's `0001_db_baseline_sql.sql` creates
  * it and `startSharedContainer` runs `roles` AFTER the templates migrate. (A fourth,
  * `rls_probe_reconcile`, went with the reconcile suite it served — the sweep's behaviour is
  * @waitron/payments-stripe's own `reconciler.test.ts` and its grants are the privilege matrix's.)

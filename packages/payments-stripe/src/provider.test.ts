@@ -331,15 +331,7 @@ describe("reverseViaStripe's processor-ref resolution", () => {
 
 describe("reverseViaStripe's tenant scoping", () => {
   it("refuses another tenant's payment before any money moves, and still reverses the owner's", async () => {
-    // `findPaymentByRef` is deliberately untenanted (the `PaymentProvider` reversal methods carry
-    // only a payment ref), which left the one query on the reconcile path that goes on to move money
-    // relying on RLS alone, while its two siblings on that path (`listReconcilable`,
-    // `existingReferences`) each carry an explicit tenant predicate as documented defence-in-depth.
-    //
-    // This test can only exist BECAUSE PGlite connects as superuser and bypasses FORCE ROW LEVEL
-    // SECURITY: the lookup genuinely returns the other tenant's row, so what rejects it is the
-    // explicit predicate and nothing else. That is exactly the condition the predicate defends —
-    // an RLS-unenforced connection, or one whose tenant GUC was never set.
+    // The lookup has no tenant predicate; the reversal must refuse before money moves.
     const owner = await seedWorkingOrder(pg.db, freshNif());
     const stranger = await seedWorkingOrder(pg.db, freshNif());
     const paymentRef = "ref-cross-tenant";

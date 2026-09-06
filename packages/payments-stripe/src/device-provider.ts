@@ -48,22 +48,7 @@ const FORWARD_RETRY_MS = 5 * 60 * 1000;
 export interface StripeOnDeviceProviderOptions {
   client: StripeDeviceClient;
   /** A plain `Database` handle. `collect`/`forward`/`reverse` open their own transactions and scope
-   * each one with `withTenant(db, tenantId, …)`, so nothing is required of the handle itself.
-   *
-   * An earlier version of this comment demanded a "TENANT-SCOPED `Database` handle (sets
-   * `app.tenant_id`)". No such handle can be built — `withTenant` sets the GUC transaction-locally
-   * from inside a transaction it opens itself, and `createPostgresDb` returns an unscoped handle —
-   * so under a real non-superuser role this adapter did not work at all:
-   *
-   *   - `collect` threw `42501` on `insertCapturedPayment`, AFTER `collectOnDevice` had already
-   *     taken the customer's money. It failed OPEN: a charge with no local row on every sale, which
-   *     is reconcile's `missingLocal`, and an on-device one is unattributed (see the class doc).
-   *   - `forward` read `listAcceptedOffline` through the tenant-isolation policy with no GUC set,
-   *     matched zero rows and returned all-zeros — silently, no error, for ever.
-   *   - the reversals failed closed with `payment.not_found`.
-   *
-   * PGlite connects as superuser and bypasses FORCE ROW LEVEL SECURITY, so no hermetic suite could
-   * show any of it; `device.test.ts` makes the adapter itself the subject. */
+   * each one with `withTenant(db, tenantId, …)`, so nothing is required of the handle itself. */
   db: Database;
   /** The tenant this provider serves. An on-device provider is a per-till object and a till belongs
    * to exactly one tenant, so the scope is known at construction — which is what lets `forward` and
@@ -123,8 +108,8 @@ export class StripeOnDeviceProvider implements PaymentProvider {
    * carrying `a1b2…` from a database read hold the same tenant in Postgres's eyes and different
    * strings in JavaScript's. A `!==` here would reject every sale on that till.
    *
-   * Throws `stripe.tenant_mismatch` BEFORE any network call. Leaving the disagreement to the
-   * isolation policy's WITH CHECK would be too late on the on-device path — see the code's doc. */
+   * Throws `stripe.tenant_mismatch` before any network call: the on-device path charges the card
+   * before writing its local row. */
   private requireOwnTenant(supplied: TenantId): void {
     if (supplied.toLowerCase() !== this.opts.tenantId.toLowerCase()) {
       throw new AppError("stripe.tenant_mismatch", {
@@ -145,8 +130,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
 
   async collect(params: CollectParams): Promise<PaymentResult> {
     // FIRST — before the policy read and, critically, before `collectOnDevice` takes the money.
-    // This class writes its row only after the card is charged, so a mis-wiring caught by the RLS
-    // policy instead would be caught one statement too late.
+    // This class writes its row after the card is charged, so the tenant check must precede it.
     this.requireOwnTenant(params.tenantId);
     const paymentRef = randomUUID();
     // See `workingOrderIdempotencyKey`'s own doc for the rationale (shared with the terminal
@@ -318,13 +302,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
 
   /** The one place a reversal's tenant scope is derived, for the same reason `inTenant` is the one
    * place a transaction's is. Delegates to the shared `reverseViaStripe` (the design's "shared with StripeTerminalProvider, not re-implemented"); the on-device client's `refund` satisfies `StripeRefunder` structurally.
-   *
-   * Supplying `tenantId` is what makes a reversal work at all: `reverseViaStripe` opens with the
-   * untenanted `findPaymentByRef`, which under a real role matches zero rows with no GUC set, so
-   * every reversal failed closed with `payment.not_found` for a payment sitting right there.
-   * `reverse.ts` diagnosed exactly that, then defaulted these callers to omitting the option
-   * because their options "already REQUIRE a tenant-scoped handle" — the requirement that could
-   * not be met. */
+   * The reversal checks the returned payment's tenant id before any money moves. */
   private reverse(kind: "void" | "refund", ref: string, amount?: Decimal): Promise<PaymentResult> {
     return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, kind, amount, {
       tenantId: this.opts.tenantId,

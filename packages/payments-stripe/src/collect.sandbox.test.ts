@@ -17,8 +17,8 @@ import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 // PaymentIntent through a REAL (simulated) Terminal reader — the one place this package's coverage
 // touches the actual `stripe` SDK boundary rather than `FakeStripe`. `stripe-client.ts` is coverage-
 // excluded from the hermetic run precisely because this suite is its only exerciser (see
-// vitest.config.ts). It self-skips with no `STRIPE_SECRET_KEY`, which is deliberate here — not the
-// RLS suites' "never skip" rule, since the hermetic suite already proves collect's logic; this suite
+// vitest.config.ts). It self-skips with no `STRIPE_SECRET_KEY`; the hermetic suite proves collect's
+// logic, while this suite
 // adds real-API fidelity on a cadence, not correctness the PR gate depends on.
 const KEY = process.env.STRIPE_SECRET_KEY;
 const d = KEY ? describe : describe.skip; // nightly only — deliberate skip when unconfigured

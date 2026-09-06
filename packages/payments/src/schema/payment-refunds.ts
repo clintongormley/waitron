@@ -46,4 +46,4 @@ export const paymentRefunds = pgTable(
     index("payment_refunds_payment_idx").on(t.paymentId),
     check("payment_refunds_amount_ck", sql`${t.amount} > 0`),
   ],
-).enableRLS();
+);

@@ -25,7 +25,7 @@ import { PAYMENTS_MIGRATIONS } from "../migrations.js";
  * same name against a shared cluster the second would fail `role … already exists`, and
  * `useTemplateDb` offers no per-file `probeRole` at all. It inherits `app_user`'s grants via
  * `inRole`; `app_user` exists by the time the roles run
- * because CORE's `0001_tenancy_rls.sql` creates it and roles run AFTER the templates migrate.
+ * because CORE's `0001_db_baseline_sql.sql` creates it and roles run AFTER the templates migrate.
  * (`rls_probe_policy` and `reconcile_rls_probe` went with the two suites they served: those suites'
  * grant facts are the privilege matrix's now, and their behaviour is policy.test.ts / store.test.ts /
  * reconcile.test.ts.)

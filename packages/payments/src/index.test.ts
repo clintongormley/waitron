@@ -211,7 +211,7 @@ describe("the reconcile surface", () => {
  * show as uncovered even though every other test in this package imports these tables. Calling
  * `getTableConfig` forces the callback to run, and the assertions below are the meaningful check
  * that the constraints these tables declare actually exist under the names the rest of the
- * schema (FKs from other packages, migrations, RLS policies) depends on — not a coverage stunt.
+ * schema (FKs from other packages, migrations) depends on — not a coverage stunt.
  */
 describe("schema constraint declarations (forces the lazy extraConfig callbacks)", () => {
   it("declares the payments table's unique, foreign-key, check and index constraints", () => {

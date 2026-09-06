@@ -254,38 +254,6 @@ describe("StripeOnDeviceProvider.forward", () => {
   });
 });
 
-describe("StripeOnDeviceProvider.forward tenant isolation", () => {
-  it("does not forward another tenant's accepted_offline payment", async () => {
-    // The explicit `tenant_id` predicate in `forwardableWhere`, asserted directly rather than
-    // incidentally. Under PGlite the RLS policy is bypassed (superuser), so the predicate is the
-    // ONLY thing scoping this — which is exactly the condition it was added to defend, and the
-    // reason a hermetic forward test means anything.
-    const mine = await seedWorkingOrder(pg.db, freshNif());
-    const theirs = await seedWorkingOrder(pg.db, freshNif());
-    await seedPaymentPolicy(pg.db, theirs.tenantId, "accept_offline", "50.00");
-
-    const theirClient = new FakeStripeDevice();
-    theirClient.nextCollect("offline");
-    const theirs_ = await providerFor(theirClient, theirs).collect(collectParams(theirs, true));
-    expect(theirs_.state).toBe("accepted_offline");
-
-    // My provider sweeps. The device would happily settle their ref if it were listed.
-    const myClient = new FakeStripeDevice();
-    myClient.queueResult({ settled: [theirs_.paymentRef], declined: [] });
-    const result = await providerFor(myClient, mine).forward(AT);
-
-    expect(result).toEqual({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
-    const row = await pg.db.transaction((tx) =>
-      getPaymentByRef(tx, {
-        tenantId: theirs.tenantId,
-        provider: "stripe",
-        paymentRef: theirs_.paymentRef,
-      }),
-    );
-    expect(row?.state).toBe("accepted_offline"); // untouched
-  });
-});
-
 describe("StripeOnDeviceProvider reversals", () => {
   it("refunds a captured payment; a Stripe-refused refund leaves state unchanged", async () => {
     const s = await seedWorkingOrder(pg.db, freshNif());

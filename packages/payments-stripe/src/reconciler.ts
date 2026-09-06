@@ -110,15 +110,8 @@ export class StripeReconciler implements PaymentReconciler {
    * The first is the processor-ref resolver — a Checkout Session id is not something
    * `stripe.refunds` can address.
    *
-   * The second is the TENANT, and it is the less obvious of the two. `this.opts.db` is a plain,
-   * unscoped handle by construction: the neutral sweep opens its own `withTenant` transactions
-   * around its own phases and hands this callback nothing but a payment ref, so nothing here has
-   * ever set `app.tenant_id`. `reverseViaStripe` opens its own transactions, and a bare
-   * `db.transaction` sets no tenant GUC — so under a real non-superuser role its untenanted
-   * `findPaymentByRef` matched zero rows and EVERY hosted orphan's auto-reversal failed closed with
-   * `payment.not_found`, permanently (the marker is stamped before the attempt). The tenant is
-   * threaded down from `reconcile`'s own argument rather than read from anything ambient, so the
-   * scope a reversal runs under is the scope the sweep was asked for, always.
+   * The second is the tenant, threaded from `reconcile`'s argument to the reversal's explicit
+   * tenant check. The callback itself receives only a payment reference.
    *
    * Throwing out of the resolver remains the correct failure mode: `reconcilePayments` catches it,
    * records the `AppError` code on `remediationFailures` and folds it into ONE aggregated

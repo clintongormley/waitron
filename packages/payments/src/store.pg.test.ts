@@ -11,7 +11,7 @@ import { seedSale, seedWorkingOrder } from "../test/seed.js";
 
 // The real-Postgres companion to store.test.ts, which is PGlite. It connects as a non-superuser
 // LOGIN role inheriting app_user's grants — what lets it SELECT/INSERT/UPDATE `payments` at all
-// (0001_payments_rls.sql's REVOKE ALL + targeted GRANT). PGlite connects as a superuser holding
+// (0001_payments_baseline_sql.sql's REVOKE ALL + targeted GRANT). PGlite connects as a superuser holding
 // every grant, so this is the only target on which a missing one shows up. The role is created once,
 // cluster-wide, in the package's globalSetup (`src/testing/global-setup.ts`) — not per file, because
 // a shared container is one cluster.

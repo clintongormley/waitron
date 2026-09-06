@@ -5,92 +5,15 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1784759143976,
-      "tag": "0000_payments",
+      "when": 1788692496576,
+      "tag": "0000_payments_baseline",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1784759629037,
-      "tag": "0001_payments_rls",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1784812918315,
-      "tag": "0002_payment_external_ref",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1784826699567,
-      "tag": "0003_payment_attempting",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1784839844506,
-      "tag": "0004_payment_offline",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1784839851628,
-      "tag": "0005_payment_policy_rls",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1784921259652,
-      "tag": "0006_payment_initiated_state",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1784921857276,
-      "tag": "0007_payments_async_ref_unique",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1784922945621,
-      "tag": "0008_payments_webhook_resolver",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "7",
-      "when": 1784970765498,
-      "tag": "0009_payments_reconcile_marker",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "7",
-      "when": 1785748206891,
-      "tag": "0010_add_node_id",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "7",
-      "when": 1785760764025,
-      "tag": "0011_payments_node_composite_fk",
-      "breakpoints": true
-    },
-    {
-      "idx": 12,
-      "version": "7",
-      "when": 1785889284684,
-      "tag": "0012_famous_hedge_knight",
+      "when": 1788692497098,
+      "tag": "0001_payments_baseline_sql",
       "breakpoints": true
     }
   ]

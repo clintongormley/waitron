@@ -87,8 +87,8 @@ export class StripeTerminalProvider implements PaymentProvider {
    * carrying `a1b2…` from a database read hold the same tenant in Postgres's eyes and different
    * strings in JavaScript's. A `!==` here would reject every sale on that till.
    *
-   * Throws `stripe.tenant_mismatch` BEFORE any network call. Leaving the disagreement to the
-   * isolation policy's WITH CHECK would be too late on the on-device path — see the code's doc. */
+   * Throws `stripe.tenant_mismatch` before any network call: the on-device path charges the card
+   * before writing its local row. */
   private requireOwnTenant(supplied: TenantId): void {
     if (supplied.toLowerCase() !== this.opts.tenantId.toLowerCase()) {
       throw new AppError("stripe.tenant_mismatch", {
@@ -193,13 +193,7 @@ export class StripeTerminalProvider implements PaymentProvider {
 
   /** The one place a reversal's tenant scope is derived, for the same reason `inTenant` is the one
    * place a transaction's is. The three public methods below differ only in kind and amount.
-   *
-   * Supplying `tenantId` is what makes a reversal work at all: `reverseViaStripe` opens with the
-   * untenanted `findPaymentByRef`, which under a real role matches zero rows with no GUC set, so
-   * every reversal failed closed with `payment.not_found` for a payment sitting right there.
-   * `reverse.ts` diagnosed exactly that, then defaulted these callers to omitting the option
-   * because their options "already REQUIRE a tenant-scoped handle" — the requirement that could
-   * not be met. */
+   * The reversal checks the returned payment's tenant id before any money moves. */
   private reverse(kind: "void" | "refund", ref: string, amount?: Decimal): Promise<PaymentResult> {
     return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, kind, amount, {
       tenantId: this.opts.tenantId,

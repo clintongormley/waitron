@@ -1,9 +1,77 @@
 {
-  "id": "c6a02eb1-79fe-4f32-ae0f-194eb74e2bf8",
-  "prevId": "cce21078-536d-4a00-89bc-ef7f3ca3c445",
+  "id": "8c96403d-a92f-4102-bb36-63cc4fac0964",
+  "prevId": "d4f2b08e-f1f6-483f-aabd-3d11c6e403a3",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
+    "public.payment_policy": {
+      "name": "payment_policy",
+      "schema": "",
+      "columns": {
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "offline_mode": {
+          "name": "offline_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "offline_amount_cap": {
+          "name": "offline_amount_cap",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "payment_policy_tenant_fk": {
+          "name": "payment_policy_tenant_fk",
+          "tableFrom": "payment_policy",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "tableTo": "tenants",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "payment_policy_offline_mode_ck": {
+          "name": "payment_policy_offline_mode_ck",
+          "value": "\"payment_policy\".\"offline_mode\" in ('accept_offline', 'cash_only')"
+        },
+        "payment_policy_cap_ck": {
+          "name": "payment_policy_cap_ck",
+          "value": "\"payment_policy\".\"offline_amount_cap\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.payment_refunds": {
       "name": "payment_refunds",
       "schema": "",
@@ -51,6 +119,12 @@
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true
+        },
+        "authorized_by": {
+          "name": "authorized_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -103,7 +177,7 @@
           "value": "\"payment_refunds\".\"amount\" > 0"
         }
       },
-      "isRLSEnabled": true
+      "isRLSEnabled": false
     },
     "public.payments": {
       "name": "payments",
@@ -134,6 +208,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "node_id": {
+          "name": "node_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "provider": {
           "name": "provider",
           "type": "text",
@@ -145,6 +225,12 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "external_ref": {
+          "name": "external_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "amount": {
           "name": "amount",
@@ -161,6 +247,12 @@
         },
         "settled_at": {
           "name": "settled_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reconcile_remediated_at": {
+          "name": "reconcile_remediated_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
@@ -210,6 +302,33 @@
           "with": {},
           "method": "btree",
           "concurrently": false
+        },
+        "payments_reconcile_idx": {
+          "name": "payments_reconcile_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "settled_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
         }
       },
       "foreignKeys": {
@@ -242,6 +361,21 @@
           ],
           "onUpdate": "no action",
           "onDelete": "restrict"
+        },
+        "payments_node_fk": {
+          "name": "payments_node_fk",
+          "tableFrom": "payments",
+          "columnsFrom": [
+            "tenant_id",
+            "node_id"
+          ],
+          "tableTo": "nodes",
+          "columnsTo": [
+            "tenant_id",
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -271,7 +405,7 @@
           "value": "\"payments\".\"amount\" > 0"
         }
       },
-      "isRLSEnabled": true
+      "isRLSEnabled": false
     }
   },
   "enums": {
@@ -287,11 +421,16 @@
       "name": "payment_state",
       "schema": "public",
       "values": [
+        "attempting",
         "captured",
         "voided",
         "refunded",
         "partially_refunded",
-        "failed"
+        "failed",
+        "accepted_offline",
+        "settled",
+        "declined",
+        "initiated"
       ]
     }
   },

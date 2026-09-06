@@ -33,33 +33,9 @@ export interface StripeRefunder {
  */
 export interface ReverseViaStripeOptions {
   /**
-   * The tenant whose payment is being reversed. REQUIRED — see below for why it stopped being
-   * optional.
-   *
-   * Tenancy here is non-obvious: a bare `db.transaction(...)` sets no `app.tenant_id` GUC at all.
-   * `withTenant` sets it with `set_config(..., true)` — transaction-local — from INSIDE the
-   * transaction it itself opens, so a transaction opened any other way begins with
-   * `current_tenant_id()` NULL. This function's first act is `findPaymentByRef`, deliberately
-   * untenanted (the `PaymentProvider` reversal methods carry only a `paymentRef`), so with the GUC
-   * unset the `payments` tenant-isolation policy matches ZERO rows and the reversal fails closed
-   * with `payment.not_found` — for a payment that is sitting right there. No money moves; it just
-   * fails every single time.
-   *
-   * No hermetic suite can show that: PGlite connects as superuser and bypasses FORCE ROW LEVEL
-   * SECURITY, so the untenanted transaction reads the row anyway and every PGlite test passes.
-   *
-   * **This option used to be optional, and its own doc named the two interactive providers as the
-   * "correct default" for omitting it, "whose own options already REQUIRE a tenant-scoped handle
-   * and document it".** That handle cannot be constructed — `withTenant` is transaction-local and
-   * `createPostgresDb` returns an unscoped handle — so the advice recommended precisely the failure
-   * described two paragraphs up, and both providers' reversals did fail that way. Requiring the
-   * tenant makes the mistake unrepresentable rather than documented. See
-   * `2026-07-26-provider-tenant-scoping-design.md`.
-   *
-   * Given it, both database phases run through `withTenant`, the GUC is set, RLS matches the row,
-   * AND the found row's own `tenant_id` is checked against this value before anything moves — the
-   * explicit predicate `listReconcilable`/`existingReferences` already carry, applied to the one
-   * money-moving query on the reconcile path (see the check itself for why RLS alone is not enough).
+   * The tenant whose payment is being reversed. Both database phases use `withTenant`.
+   * The first lookup uses only the payment reference; its returned tenant id must match this
+   * value before any refund is issued or local state is changed.
    */
   tenantId: TenantId;
   /**
@@ -96,10 +72,7 @@ export interface ReverseViaStripeOptions {
  * real refund; SAME-reversal retry-safety (a persisted per-reversal id) is deferred, and reconcile
  * backstops Stripe-vs-local drift.
  *
- * Both database phases run through `withTenant` under `ReverseViaStripeOptions.tenantId`, which is
- * required. It was once optional, defaulting to a bare `db.transaction` that sets no `app.tenant_id`
- * GUC and therefore, under a real non-superuser role, sees none of the tenant's rows — read that
- * option's comment before loosening it again. */
+ * Both database phases run through `withTenant` with the required tenant and node ids. */
 export async function reverseViaStripe(
   db: Database,
   client: StripeRefunder,
@@ -135,15 +108,8 @@ export async function reverseViaStripe(
     if (f === undefined || f.externalRef === null) {
       throw new AppError("payment.not_found", { provider, paymentRef: ref });
     }
-    // Defence in depth, matching what the sweep's two READ queries already do: `listReconcilable`
-    // and `existingReferences` each carry an explicit `tenant_id` predicate on top of RLS, precisely
-    // so a connection that is not RLS-enforced (a superuser, a `BYPASSRLS` role, or a future pooled
-    // handle whose GUC was not set) still cannot see across tenants. `findPaymentByRef` is
-    // deliberately untenanted — the `PaymentProvider` reversal methods carry only a `paymentRef` —
-    // which left this, the ONE query on the reconcile path that goes on to move money, relying on
-    // RLS alone. Now that the tenant is in hand it is checked here too: a row belonging to anyone
-    // else is `payment.not_found`, the same answer as a row that does not exist, before the refund
-    // is issued or any local state is touched.
+    // findPaymentByRef has no tenant predicate. Refuse a mismatched tenant before issuing a
+    // refund or changing local state, using the same not_found code as an absent payment.
     // Case-insensitive: Postgres renders `uuid` canonical-lowercase while `tenantId()` accepts and
     // preserves either case, so a caller holding `A1B2…` would be denied its OWN payment.
     if (f.tenantId.toLowerCase() !== tenantId.toLowerCase()) {

@@ -343,8 +343,7 @@ export async function findCapturedPaymentForWorkingOrder(
 
 /** A payment row plus its tenant, looked up by (provider, paymentRef) WITHOUT a tenant filter — the
  * lookup a provider uses when it holds only its own reference (e.g. the fake's `void`/`refund`, or a
- * real adapter's webhook). Under RLS with no tenant set this returns nothing (the policy hides every
- * row); callers that already hold a tenant scope, and the superuser test DB, see the row. */
+ * real adapter's webhook). */
 export interface PaymentRecord extends PaymentRow {
   tenantId: string;
 }
@@ -385,13 +384,7 @@ const FORWARDABLE_COLUMNS = {
  * The predicate both forward-queue reads share — kept as one function so the twins below cannot
  * drift, which they briefly did when only one of them gained the tenant filter.
  *
- * Filters `tenant_id` EXPLICITLY, defence in depth alongside the RLS policy — the convention
- * fiscal's `pendingCount` already follows. Not belt-and-braces: relying on the policy alone made
- * these queries return DIFFERENT rows in different environments, because PGlite connects as
- * superuser and bypasses FORCE ROW LEVEL SECURITY. Every hermetic test therefore saw every
- * tenant's `accepted_offline` rows, so a `forward` pass counted other tenants' unresolved refs as
- * its own, while the same code under a real role saw only its own tenant's. The predicate makes
- * both agree — which is what makes a hermetic test of a forward pass mean anything at all.
+ * Filters by tenant, provider and accepted_offline state.
  */
 function forwardableWhere(tenantId: string, provider: string) {
   return and(
@@ -490,8 +483,7 @@ export async function insertInitiated(
 }
 
 /** Advance a hosted payment still `initiated` -> `captured`, setting `settled_at`. Keyed by
- * `(provider, external_ref)` — all the inbound webhook carries — under the caller's tenant scope
- * (RLS), guarded by `state = 'initiated'`. Returns the row when it advanced, `null` when it matched
+ * `(provider, external_ref)` — all the inbound webhook carries — guarded by `state = 'initiated'`. Returns the row when it advanced, `null` when it matched
  * nothing (already captured — an at-least-once redelivery). That row-or-null is the idempotency
  * signal the orchestrator branches on: it chains `recordSale` only on a non-null return, so no second
  * invoice number is ever allocated. Mirrors `settleForwarded`'s state-guarded, idempotent advance. */
@@ -538,7 +530,7 @@ export async function expireInitiated(
 
 /** Resolve the tenant that owns a hosted payment from `(provider, external_ref)` alone — the ONLY
  * identifiers an inbound webhook carries, with NO tenant context. Calls the `resolve_payment_tenant`
- * SECURITY DEFINER seam, the single controlled RLS bypass (it returns only tenant_id). Runs on a
+ * function, which returns only tenant_id using the caller's privileges. Runs on a
  * plain `db` handle, OUTSIDE any tenant scope — the app-level orchestrator calls this first, then
  * opens `withTenant(tenantId)` for the settle + `recordSale` + associate. Returns null for an unknown
  * reference (the missingLocal case reconcile audits per-tenant). Mirrors fiscal drain's
@@ -670,15 +662,8 @@ export interface ReconcilableRow {
  * single query's created_at ordering AND is fully deterministic (the old single `ORDER BY
  * created_at` left same-instant rows in whatever order the plan produced them).
  *
- * Run under `withTenant`, so RLS scopes both tables; on top of that, both arms below ALSO carry an
- * explicit `eq(payments.tenantId, tenantId)` predicate — defence-in-depth for a superuser or
- * `BYPASSRLS` connection, where RLS does not apply and this predicate is the only thing scoping the
- * query to one tenant at all. The join's `workingOrders.tenantId = payments.tenantId` equality is
- * NOT that defence: it only keeps the join tenant-*consistent* (the two tables agree with each
- * other), never tenant-*scoped* (that either belongs to the caller's tenant) — under a bypassing
- * connection with no `eq(payments.tenantId, …)` at all, it happily agrees across every tenant's
- * rows. Mirrors the fiscal sweep's `rowsForPeriod`, which carries the same explicit predicate
- * alongside its own join-consistency one, for the identical reason.
+ * Both arms filter by `payments.tenantId`. The join's tenant equality keeps the two tables
+ * consistent with each other; the explicit predicate scopes the result to the requested tenant.
  */
 export async function listReconcilable(
   tx: Transaction,
@@ -764,9 +749,7 @@ const CHUNK_SIZE = 1000;
  * than the local rows (settlement lags capture by days), so a window-difference would manufacture
  * false positives for payments whose local row simply sits outside the audited period.
  *
- * Carries an explicit `eq(payments.tenantId, tenantId)` predicate for the same defence-in-depth
- * reason as `listReconcilable` — under a superuser or `BYPASSRLS` connection, where RLS does not
- * apply, this is the only thing scoping the check to one tenant. The consequence of skipping it here
+ * Carries an explicit `eq(payments.tenantId, tenantId)` predicate to scope the check. The consequence of skipping it here
  * is sharper than `listReconcilable`'s: a match against another tenant's `external_ref` would
  * suppress a real `missingLocal` finding, silently hiding exactly the money-loss case this audit
  * exists to catch.
@@ -825,13 +808,11 @@ export async function markReconcileRemediated(
  * would lengthen lock contention with the concurrent sweeps this feature explicitly supports (see
  * `reconcile.concurrency.test.ts`), worst-case largest for a large report with few or no local rows.
  *
- * Returns a map keyed by `workingOrderId`; an id that does not exist (or that RLS hides) is simply
+ * Returns a map keyed by `workingOrderId`; an id that does not exist (or that the tenant predicate excludes) is simply
  * absent from it, which the caller reads as "skip this hint" — the same contract the unbatched
  * single-lookup form expressed with `undefined`.
  *
- * Carries an explicit `eq(workingOrders.tenantId, tenantId)` predicate for the same defence-in-depth
- * reason as `listReconcilable`/`existingReferences` — under a superuser or `BYPASSRLS` connection,
- * where RLS does not apply, this is the only thing scoping the lookup to one tenant.
+ * The explicit `workingOrders.tenantId` predicate scopes the lookup to the requested tenant.
  */
 export async function tillsForWorkingOrders(
   tx: Transaction,
