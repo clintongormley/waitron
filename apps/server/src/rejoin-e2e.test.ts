@@ -382,7 +382,7 @@ describe("R3 rejoin-as-secondary (real Postgres, end to end)", () => {
     if (containerId === undefined) return; // LOUD skip logged in beforeAll
 
     // ARRANGE — same fenced held chart, but seed an own-origin sync_log tail with NO carrier cursor, so
-    // readDrainProgress returns drained:false (disposal.rls.test.ts's not-drained shape).
+    // readDrainProgress returns drained:false (disposal.test.ts's not-drained shape).
     const target = await makeTarget();
     const targetName = new URL(target.uri).pathname.replace(/^\//, "");
     const orderedTable = tablesForLane(ALL_SYNC_ENROLMENTS, "ordered")[0]!;

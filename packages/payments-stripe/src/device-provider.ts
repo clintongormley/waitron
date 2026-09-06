@@ -63,7 +63,7 @@ export interface StripeOnDeviceProviderOptions {
    *   - the reversals failed closed with `payment.not_found`.
    *
    * PGlite connects as superuser and bypasses FORCE ROW LEVEL SECURITY, so no hermetic suite could
-   * show any of it; `device.rls.test.ts` makes the adapter itself the subject. */
+   * show any of it; `device.test.ts` makes the adapter itself the subject. */
   db: Database;
   /** The tenant this provider serves. An on-device provider is a per-till object and a till belongs
    * to exactly one tenant, so the scope is known at construction — which is what lets `forward` and

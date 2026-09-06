@@ -12,8 +12,7 @@ import type { InputVatReturn } from "./types.js";
 // a foreign tenant's rows are invisible under `asAppUser`, count 0). The explicit `p.tenant_id`
 // predicate is a SEPARATE, belt-and-suspenders scoping; it is proven on its own in the last test by
 // reading under the RAW superuser connection (no asAppUser), where RLS is bypassed so the predicate is
-// the only thing scoping the query. The read under the real non-superuser app_user role against a real
-// Postgres with FORCE RLS live is proven in input-vat.rls.test.ts.
+// the only thing scoping the query.
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
 let venue: SeededVenue;
@@ -161,8 +160,7 @@ describe("computeInputVat", () => {
     // Read WITHOUT asAppUser — the raw PGlite superuser connection, where RLS is bypassed (the probe
     // that established this reads a foreign tenant's rows here). So the explicit `p.tenant_id`
     // predicate is the ONLY thing scoping the query, and removing it leaks the other tenant's 4% line
-    // (prove-by-deletion). The RLS half — the same read under a real non-superuser app_user role — is
-    // proven in input-vat.rls.test.ts.
+    // (prove-by-deletion).
     const other = await seedVenue(suite.db);
     await seedPurchaseInvoice(suite.db, other, {
       supplierInvoiceNumber: "OTHER",

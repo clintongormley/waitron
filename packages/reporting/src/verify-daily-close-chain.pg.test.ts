@@ -19,7 +19,7 @@ import type { CashCountInput, DailyCloseRecord } from "./close-types.js";
 // real deletion of a real committed chain flips ok:true → ok:false. On PGlite this proves nothing
 // new: the pure walk over crafted rows already lives in verify-daily-close-chain.test.ts; what is
 // real-Postgres-only is that the break here is a genuine privileged mutation of an otherwise-valid
-// chain (CLAUDE.md §4). Mirrors record-daily-close.rls.test.ts's split.
+// chain (CLAUDE.md §4). Mirrors record-daily-close.pg.test.ts's split.
 
 const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";
 
@@ -47,8 +47,8 @@ function record(businessDay: string, cashCounts: CashCountInput[]): Promise<Dail
   });
 }
 
-// Verify under the real app role + tenant GUC — the exact shape a caller (Task 5's demo) uses, which
-// also proves app_user's SELECT grant is enough to re-walk the chain under FORCE row-level security.
+// Verify under the real app role, inside `withTenant` — the exact shape a caller (Task 5's demo)
+// uses, which also proves app_user's SELECT grant is enough to re-walk the chain.
 function verify() {
   return withTenant(suite.admin, venue.tenantId, async (tx) => {
     await asAppUser(tx);

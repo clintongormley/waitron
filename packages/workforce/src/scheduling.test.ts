@@ -18,9 +18,10 @@ import {
 } from "../test/fixtures.js";
 
 // PGlite, not real Postgres: publishRoster is LOGIC over mutable planning rows (flip status, stamp,
-// attach shifts) — there is no privilege set and no RLS decision to prove here. The app role's exact
-// grants on shifts/roster_versions (that they CAN be UPDATEd/DELETEd, the inverse of time_entries'
-// append-only floor) are proven against real Postgres in scheduling.rls.test.ts, not re-proven here.
+// attach shifts) — there is no privilege decision to prove here. The app role's exact grants on
+// shifts/roster_versions (that they CAN be UPDATEd/DELETEd, the inverse of time_entries' append-only
+// floor) are `shifts`/`roster_versions: "SIUD"` in the privilege matrix, `packages/fiscal-verifactu/src/privileges.expected.ts`; the append-only
+// floor itself is immutability.test.ts.
 const backend = new WorkforceBackend();
 
 let tenantId: string;

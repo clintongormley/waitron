@@ -10,8 +10,8 @@
 //
 // PGlite is the right target for a demo: everything shown here is deterministic logic over immutable
 // commercial rows (the snapshot, the per-till variance arithmetic, the hash chain). The non-superuser
-// deployment role, FORCE RLS and two-writer contention — the three things PGlite cannot show — are
-// covered by `record-daily-close.rls.test.ts` on real Postgres, not by a demo.
+// deployment role and two-writer contention — two of the things PGlite cannot show — are
+// covered by `record-daily-close.pg.test.ts` on real Postgres, not by a demo.
 //
 // The day it rings up — business day 2026-08-04, Europe/Madrid, across TWO tills at one node:
 //   Caja 1: base 100.00 @ 21% → 121.00 CASH  ;  base 40.00 @ 10% → 44.00 CARD

@@ -20,15 +20,13 @@ import { IDENTITY_MIGRATIONS } from "@waitron/identity";
  * template `core_identity` (CORE + IDENTITY) in their own globalSetups — that is not a collision: each
  * handle is provided/injected within its own package's run, so the key is scoped to this package.
  *
- * NO `roles` here, unlike the RLS-probe packages (payments-stripe, identity, db). Those create a
- * non-superuser LOGIN role per suite and connect AS it (`pg.connectAs`); core's three real-PG suites
- * instead reach the non-superuser path with `asAppUser(tx)`, which `SET ROLE`s the admin connection to
- * the `app_user` GROUP role that CORE's `0001_tenancy_rls.sql` already creates inside the template. A
- * superuser that has `SET ROLE`d to non-superuser `app_user` is itself subject to FORCE ROW LEVEL
- * SECURITY — the very thing the cross-tenant `not_found` assertions verify — so no additional cluster
- * LOGIN role has to be created. `settle-sale.test.ts`'s two-backend settlement race opens its extra
- * backends with `pg.connect()` (superuser connections to the clone) and applies `asAppUser` inside
- * each, so it needs no probe role either.
+ * NO `roles` here, unlike the probe-role packages (payments-stripe, identity, db). Those create a
+ * non-superuser LOGIN role per suite and connect AS it (`pg.connectAs`); `settle-sale.test.ts`, the
+ * one real-PG suite left in this package, reaches the non-superuser path with `asAppUser(tx)`, which
+ * `SET ROLE`s the admin connection to the `app_user` GROUP role CORE's `0001_tenancy_rls.sql` already
+ * creates inside the template. Its two-backend settlement race opens its extra backends with
+ * `pg.connect()` (superuser connections to the clone) and applies `asAppUser` inside each, so it
+ * needs no probe role either.
  *
  * A globalSetup's return value is its globalTeardown, so returning `teardown` stops the container
  * once the run finishes.
@@ -37,23 +35,19 @@ import { IDENTITY_MIGRATIONS } from "@waitron/identity";
  * @waitron/core suite (its PGlite-only and hermetic files included) with it, not only the real-PG
  * suites — a real broadening of what needs Docker, the same one db and apps/server accepted. What
  * makes it acceptable is not an assumption that every machine has Docker, but that this package's
- * reason to be in the real-PG tier at all needs Docker regardless: `record-correction.rls` and
- * `record-substitution.rls` prove that a cross-tenant original/ticket lookup carrying NO tenant
- * predicate is hidden by FORCE ROW LEVEL SECURITY alone — which a PGlite superuser would defeat by
- * returning the row and turning `not_found` into a wrong answer — and `settle-sale.test.ts` needs both
- * that FORCE-RLS `not_found` path and a settlement race across two distinct backends, neither of which
- * PGlite (one superuser backend, every query serialised) can stage. CLAUDE.md §4 documents that this
+ * reason to be in the real-PG tier at all needs Docker regardless: `settle-sale.test.ts` races a
+ * settlement across two DISTINCT backends, which PGlite — one backend, every query serialised —
+ * cannot stage at all, so a lock test there is a false pass. (That suite also still carries a
+ * cross-tenant `sale.not_found` case; it goes when the schema does.) CLAUDE.md §4 documents that this
  * repo's real-Postgres test tier needs a local Docker daemon (plus `TESTCONTAINERS_RYUK_DISABLED`);
  * `dockerRequired` turns the raw testcontainers daemon error into that guidance when Docker is absent.
  */
 export default async function ({ provide }: GlobalSetupContext) {
   const { handle, teardown } = await startSharedContainer({
     dockerRequired:
-      "@waitron/core's real-Postgres suites require a running Docker daemon. They cannot be skipped: " +
-      "PGlite's superuser bypasses FORCE ROW LEVEL SECURITY (so the cross-tenant not_found paths in " +
-      "record-correction.rls / record-substitution.rls / settle-sale prove nothing) and it serialises " +
-      "every query onto one backend (so settle-sale's settlement race is a false pass) — see " +
-      "settle-sale.test.ts and the design's §7.",
+      "@waitron/core's real-Postgres suite requires a running Docker daemon. It cannot be skipped: " +
+      "PGlite serialises every query onto one backend, so settle-sale's settlement race across two " +
+      "distinct backends is a false pass there — see settle-sale.test.ts and the design's §7.",
     templates: {
       core_identity: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS, IDENTITY_MIGRATIONS]),
     },

@@ -15,8 +15,9 @@ import type { CreatePurchaseInvoiceInput } from "./types.js";
 
 // PGlite (a WASM PostgreSQL): hermetic and fast, and the RIGHT target for the pure CRUD/validation
 // logic here — nothing in these tests depends on running under the non-superuser deployment role or
-// on concurrency, which is what would force real Postgres (CLAUDE.md §4). The tenant-isolation policy
-// and the app_user grants are proven on real Postgres in purchase-invoices.rls.test.ts instead.
+// on concurrency, which is what would force real Postgres (CLAUDE.md §4). What `app_user` may do on
+// the purchase-invoice tables is pinned by the privilege matrix
+// (`packages/fiscal-verifactu/src/privileges.expected.ts`) instead.
 const fx = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
 
 const d = (s: string): Decimal => s as Decimal;

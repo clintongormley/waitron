@@ -25,6 +25,7 @@ import {
   recordFailedRefund,
   recordRefund,
   recordVoid,
+  resolvePaymentTenant,
   settleForwarded,
   settleInitiated,
   tillsForWorkingOrders,
@@ -399,9 +400,9 @@ describe("findPaymentByRef", () => {
 });
 
 describe("findCapturedPaymentForWorkingOrder", () => {
-  // PGlite: this asserts the STATE filter and column projection only — no RLS, no concurrency — so
-  // the hermetic superuser target is the right one (CLAUDE.md §4). Tenant isolation is proven on
-  // real Postgres in payments.rls.test.ts.
+  // PGlite: this asserts the STATE filter and column projection only — no privileges, no
+  // concurrency — so the hermetic superuser target is the right one (CLAUDE.md §4). The REPLAY
+  // branch (a non-null `saleId`) is asserted in payments.test.ts, on real Postgres.
   it("returns a captured payment for the working order, ignoring non-captured states", async () => {
     const s = await seedWorkingOrder(pg.db, freshNif());
     const key = { tenantId: s.tenantId, provider: "stripe", workingOrderId: s.workingOrderId };
@@ -1197,5 +1198,30 @@ describe("tillsForWorkingOrders", () => {
       tillsForWorkingOrders(tx, a.tenantId, [b.workingOrderId]),
     );
     expect(tills).toEqual(new Map());
+  });
+});
+
+describe("resolvePaymentTenant", () => {
+  it("returns the owning tenant for a (provider, external_ref) an initiated row carries", async () => {
+    const seeded = await seedTenant();
+    await pg.db.transaction((tx) =>
+      insertInitiated(tx, {
+        tenantId: seeded.tenantId,
+        workingOrderId: seeded.workingOrderId,
+        provider: "fake",
+        paymentRef: "res-1",
+        externalRef: "hosted-res-1",
+        amount: decimal("10.00"),
+      }),
+    );
+    expect(await resolvePaymentTenant(pg.db, "fake", "hosted-res-1")).toBe(seeded.tenantId);
+  });
+
+  it("returns null for a reference no local row carries — the missingLocal case reconcile audits", async () => {
+    // The `?? null` arm of the seam's single expression: `resolve_payment_tenant` is a scalar select,
+    // so it always returns one ROW; when nothing matches, that row's `tenant_id` is SQL NULL, and this
+    // is what turns it into a JS null the webhook route can branch on rather than an undefined. Both
+    // arms have to be exercised here: the test above is the non-null one.
+    expect(await resolvePaymentTenant(pg.db, "fake", "nothing-ever-initiated-this")).toBeNull();
   });
 });

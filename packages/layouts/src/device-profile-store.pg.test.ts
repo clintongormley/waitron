@@ -17,14 +17,16 @@ import {
   updateDeviceProfile,
 } from "./device-profile-store.js";
 
-// Real Postgres, not PGlite: the device-profile store both AUTHORIZES (authorizeManager reads persons
-// + management_sessions under the app role's RLS + grants) and writes device_profiles under FORCE ROW
-// LEVEL SECURITY. PGlite runs every connection as a superuser, which bypasses FORCE and the
-// tenant-isolation policy, so the cross-tenant isolation assertion and the "app role can run the whole
-// authorize→write path" claim would both be false passes there (CLAUDE.md §4). It also cannot exercise
-// the tenant-consistent composite FK (device_profiles_canvas_fk) that rejects another tenant's canvas.
-// Seeds run as the superuser owner (RLS bypassed — pure setup); every store call runs under
-// withTenant + asAppUser so it is a genuine RLS subject, exactly as canvas-store.rls.test.ts does.
+// Real Postgres, not PGlite: every store call below runs as a non-superuser member of `app_user`
+// (`withTenant` + `asAppUser`), the shape the management routes use. PGlite connects as a superuser
+// holding every grant, so a missing GRANT on `device_profiles` — or on the
+// `persons`/`management_sessions` reads `authorizeManager` performs — is invisible there (CLAUDE.md
+// §4). Whether that alone still warrants a container is the per-suite target review's question
+// (docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md §4), not this
+// suite's. Seeds run as the owner (pure setup); the `core_identity` template pairs core + identity
+// migrations so authorizeManager's tables and `device_profiles` both exist.
+// It also exercises the tenant-consistent composite FK `device_profiles_canvas_fk`, which rejects a
+// canvas row keyed to a different tenant — a constraint, not a policy.
 
 const suite = useTemplateDb({ template: "core_identity" });
 
@@ -62,8 +64,8 @@ async function codeOf(fn: () => Promise<unknown>): Promise<string> {
   return typeof error === "string" ? error : error.code;
 }
 
-/** Rows for `tenantId` read straight as the superuser owner (RLS bypassed), to count what the app role
- * could never see across the isolation policy. */
+/** Rows for `tenantId` counted as the owner, independently of anything the app role's own reads
+ * return — so a refused or rolled-back write is visible here as an absence. */
 async function rowCount(tenantId: string): Promise<number> {
   const rows = await suite.admin.execute<{ n: number }>(
     sql`select count(*)::int as n from device_profiles where tenant_id = ${tenantId}`,
@@ -71,7 +73,7 @@ async function rowCount(tenantId: string): Promise<number> {
   return rows.rows[0]!.n;
 }
 
-/** Delete every device profile of `tenantId` as the owner (RLS bypassed) — a `finally` teardown so a
+/** Delete every device profile of `tenantId` as the owner — a `finally` teardown so a
  * suite reusing the shared managerTenant is order-independent (CLAUDE.md §4). */
 async function purgeProfiles(tenantId: string): Promise<void> {
   await suite.admin.execute(sql`delete from device_profiles where tenant_id = ${tenantId}`);
@@ -91,7 +93,7 @@ async function seedCanvas(tenantId: string, session: string, name: string): Prom
   return id;
 }
 
-describe("device-profile store under real row-level security", () => {
+describe("device-profile store on real Postgres, as the app role", () => {
   let managerTenant: string;
   let managerSession: string;
 
@@ -238,7 +240,7 @@ describe("device-profile store under real row-level security", () => {
     // now translates (via translateWriteError) into the domain device_profile.in_use — a clean 409, not
     // the raw DB error a 500 would surface. Proof-by-deletion: remove the try/catch in
     // deleteDeviceProfile and this fails with a raw 23001 instead of the AppError. RESTRICT means the
-    // profile survives, asserted via rowCount as the owner (RLS bypassed).
+    // profile survives, asserted via rowCount as the owner.
     const tenantId = await seedTenant(suite.admin);
     const session = await seedSession(tenantId, "manager");
     const created = await asApp(tenantId, (tx) =>
@@ -250,7 +252,7 @@ describe("device-profile store under real row-level security", () => {
         capabilities: [],
       }),
     );
-    // Seed a location + a device that binds the profile, as the superuser owner (RLS bypassed — setup).
+    // Seed a location + a device that binds the profile, as the owner — setup, not the thing under test.
     const location = await suite.admin.execute<{ id: string }>(sql`
       insert into locations (tenant_id, name, invoice_locales, operation_description)
       values (${tenantId}, 'Loc', array['es'], 'Hostelería') returning id`);
@@ -435,25 +437,5 @@ describe("device-profile store under real row-level security", () => {
       ),
     );
     expect(code).toBe("device_profile.name_taken");
-  });
-
-  it("keeps one tenant's device profiles invisible to another — RLS isolation", async () => {
-    const tenantA = await seedTenant(suite.admin);
-    const tenantB = await seedTenant(suite.admin);
-    const sessionA = await seedSession(tenantA, "manager");
-    const created = await asApp(tenantA, (tx) =>
-      createDeviceProfile(tx, {
-        managementSessionId: sessionA,
-        tenantId: tenantA,
-        name: "A only",
-        canvasId: null,
-        capabilities: [],
-      }),
-    );
-    // B's own list is empty, and even asking for A's id under B's GUC returns undefined — the policy's
-    // USING clause filters A's row out. Drop asAppUser (or the policy) and the superuser owner would
-    // read A's row here.
-    expect(await asApp(tenantB, (tx) => listDeviceProfiles(tx, tenantB))).toEqual([]);
-    expect(await asApp(tenantB, (tx) => getDeviceProfile(tx, tenantB, created.id))).toBeUndefined();
   });
 });

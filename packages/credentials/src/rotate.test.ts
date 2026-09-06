@@ -57,13 +57,10 @@ const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS
  * every other file in this package (`test/seed.ts`'s own comment) — nothing here reads across
  * tenant rows outside `tenant_credentials`, so a stale `tenants` row is inert.
  *
- * A real, non-superuser Postgres connection would stop the mis-attribution, but not the deeper
- * problem: `credentialTenants` is deliberately cross-tenant (that is its entire purpose — see
- * store.ts's own doc comment), so without the truncate it would keep returning every tenant an
- * earlier `it` in the same file created, however faithfully the per-tenant table read is scoped —
- * which is why this stays here rather than moving to credentials.rls.test.ts (see that file's own
- * "rotateCredentials under real RLS" block for the property that DOES need genuine RLS: that
- * rotation does not cross tenants when the connection is not a superuser).
+ * A real, non-superuser Postgres connection would not help either: `credentialTenants` enumerates
+ * every tenant holding the purpose (that is its entire purpose — see store.ts's own doc comment), so
+ * without the truncate it would keep returning every tenant an earlier `it` in the same file
+ * created, however faithfully the per-tenant table read is scoped.
  */
 beforeEach(async () => {
   await suite.db.execute(sql`truncate tenant_credentials cascade`);
@@ -188,7 +185,7 @@ describe("rotateCredentials", () => {
     // reads back untyped rows off the same table, so a purpose the registry has since retired (or
     // a row seeded outside the registry entirely) is a real, reachable case here. Sealed directly
     // with raw bytes, bypassing `putCredential` — the same technique as
-    // credentials.rls.test.ts's "ordering-probe" row — since this row is never meant to be
+    // credentials.test.ts's "ordering-probe" row — since this row is never meant to be
     // decrypted; only the iv/auth-tag LENGTH constraints need satisfying, not real ciphertext.
     const tenantId = await seedTenant(suite.db);
     await withTenant(suite.db, tenantId, (tx) =>

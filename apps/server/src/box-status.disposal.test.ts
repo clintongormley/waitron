@@ -14,7 +14,7 @@ import { ALL_MODULES } from "./modules.js";
 // Real Postgres, not PGlite: the route AUTHORIZES with `authorizeManager` (persons +
 // management_sessions under the app role's RLS) and reads the tenant's `cadenas` chain row — both
 // false passes on PGlite's superuser connection (CLAUDE.md §4). Mirrors `box-status.replication.test.ts`;
-// the disposal reader here is a stub (its own drain read is proven in packages/sync's disposal.rls.test.ts),
+// the disposal reader here is a stub (its own drain read is proven in packages/sync's disposal.test.ts),
 // so the point exercised is the collapse in `collectBoxStatus` driven through the real GET route.
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the seeded manager's dashboard password.

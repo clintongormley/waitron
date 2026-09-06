@@ -3,7 +3,7 @@ import { isAppError } from "@waitron/shared";
 import { translateWriteError } from "./canvas-store.js";
 
 // The duplicate-name → canvas.name_taken and referenced-delete → canvas.in_use translations, proven end
-// to end against the real DB in canvas-store.rls.test.ts (real Postgres). Here we pin the translator's
+// to end against the real DB in canvas-store.pg.test.ts. Here we pin the translator's
 // branches directly with crafted errors — no DB — so the re-throw branches are covered
 // deterministically. `translateWriteError` is exported from canvas-store.ts for exactly this, not from
 // the package barrel. Mirrors identity's `asEmailTaken` unit tests (staff.test.ts).

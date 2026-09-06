@@ -14,12 +14,10 @@ import type { CashCountInput, DailyCloseRecord } from "./close-types.js";
 // assertion below turns on
 // something PGlite cannot show: PGlite serialises every query onto ONE backend, so the single-writer
 // FOR UPDATE lock reads the same, whether present or removed, and a "concurrency" test on it is a
-// FALSE pass. It also runs every connection as a superuser, so the append-only immutability and the
-// app-role grant/RLS that let `recordDailyClose` run at all are invisible there. The deterministic
-// LOGIC — snapshot, per-till variance, chaining, validation — lives in `record-daily-close.test.ts`
-// on PGlite, where it belongs (CLAUDE.md §4). This suite additionally exercises the whole write path
-// under the real non-superuser `app_user` role with FORCE ROW LEVEL SECURITY active, which no PGlite
-// suite can.
+// FALSE pass. It also runs every connection as a superuser holding every grant, so a missing GRANT on
+// `daily_closes`/`daily_close_chain` — without which `recordDailyClose` could not run at all — is
+// invisible there. The deterministic LOGIC — snapshot, per-till variance, chaining, validation —
+// lives in `record-daily-close.test.ts` on PGlite, where it belongs (CLAUDE.md §4).
 
 const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";
 const WRITERS = 10;
@@ -33,8 +31,8 @@ beforeEach(async () => {
   venue = await seedVenue(suite.admin);
 });
 
-/** Runs `recordDailyClose` on `db` under the real app role and this tenant's RLS GUC — the exact
- * shape the running POS uses. Each caller passes its own `db` (a distinct backend) so two of them
+/** Runs `recordDailyClose` on `db` under the real app role, inside `withTenant` — the exact shape
+ * the running POS uses. Each caller passes its own `db` (a distinct backend) so two of them
  * genuinely contend. */
 function record(
   db: Database,

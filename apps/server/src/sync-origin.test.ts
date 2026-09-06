@@ -58,7 +58,8 @@ const NODE_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const NODE_D = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const ZERO = "00000000-0000-0000-0000-000000000000";
 
-// The proven reconcile fixture (mirrors reconcile.rls.test.ts): a payment settled well before
+// The proven reconcile fixture (mirrors @waitron/payments' reconcile.test.ts orphan-remediation
+// block): a payment settled well before
 // NOW - DEFAULT_SETTLEMENT_LAG_MS on an ABANDONED working order with no sale is the auto-reversible
 // orphan the sweep reverses and stamps (its `payments` UPDATE, which capture records).
 const NOW = new Date("2026-07-25T12:00:00Z");

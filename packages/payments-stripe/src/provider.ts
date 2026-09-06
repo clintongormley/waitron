@@ -34,7 +34,7 @@ export interface StripeTerminalProviderOptions {
    * `2026-07-26-provider-tenant-scoping-design.md` for the full account. Here it meant `collect`
    * failed on `insertAttempting` with `42501` under any real role, on every sale. It failed CLOSED
    * (T1 precedes the reader network call, so no money moved), which is the only reason this
-   * adapter's version was less serious than the on-device one. `stripe.rls.test.ts` is the proof. */
+   * adapter's version was less serious than the on-device one. `stripe.test.ts` is the proof. */
   db: Database;
   /** The tenant this provider serves. A terminal provider is a per-till object and a till belongs
    * to exactly one tenant, so the scope is known at construction — which is what makes every

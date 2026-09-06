@@ -43,7 +43,7 @@ function uniqueName(base: string): string {
 }
 
 /** A valid phone canvas with a distinguishing title, so a stored row is never mistaken for a default
- *  and two round-trips can be told apart. Mirrors `canvas-store.rls.test.ts`'s helper. */
+ *  and two round-trips can be told apart. Mirrors `canvas-store.pg.test.ts`'s helper. */
 function phoneCanvas(title: string): CanvasDef {
   const base = DEFAULT_CANVASES["phone-portrait"];
   return { ...base, tabs: [{ ...base.tabs[0]!, title }, ...base.tabs.slice(1)] };

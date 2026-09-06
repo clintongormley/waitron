@@ -50,9 +50,9 @@ import type { AvailableProduct } from "./operations.js";
 import { seedCatalogueFixture, seedVenue } from "../test/fixtures.js";
 
 // Behaviour and query-shape correctness run on PGlite: fast, hermetic, and enough for the joins and
-// CRUD here. The cross-tenant ISOLATION GUARANTEE is proven separately, on real Postgres under a
-// non-superuser probe role (operations.rls.test.ts) — the authoritative place for PostgreSQL's RLS
-// and privilege semantics, per the brief and CLAUDE.md §4. Each test seeds a FRESH tenant so the
+// CRUD here. What the app role may do on the catalogue tables is pinned by the privilege matrix
+// (`packages/fiscal-verifactu/src/privileges.expected.ts`), not here — PGlite connects as a
+// superuser and holds every grant (CLAUDE.md §4). Each test seeds a FRESH tenant so the
 // suites are order-independent (every operation is scoped to `current_tenant_id()`).
 const fx = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
 

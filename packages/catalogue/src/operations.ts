@@ -41,7 +41,8 @@ import type { PricingUnit, VatClass } from "./pricing.js";
  * it, which is also what satisfies every table's `WITH CHECK (tenant_id = current_tenant_id())`.
  *
  * Deactivation is `active = false`, never DELETE: a product may sit behind historical sale-line
- * snapshots, and the app role holds no DELETE grant anyway (0027; proven in operations.rls.test.ts).
+ * snapshots, and the app role holds no DELETE grant anyway (0027; `products: "SIU"` in
+ * `packages/fiscal-verifactu/src/privileges.expected.ts`).
  * All SQL is built with Drizzle query builders — no string concatenation.
  */
 

@@ -16,12 +16,13 @@ import type { CashCountInput, DailyCloseRecord } from "./close-types.js";
 // asserts is DETERMINISTIC LOGIC over immutable commercial rows: the snapshot captures exactly what
 // `computeDailyClose` returns, the per-till variance arithmetic, the chain-position/`prev_entry_hash`
 // bookkeeping, the hash reproduction, and the input validation. None of it turns on the non-superuser
-// deployment role, on `FORCE ROW LEVEL SECURITY`, or on two writers contending — the three things
-// PGlite cannot show (CLAUDE.md §4). Those live in `record-daily-close.rls.test.ts` on real Postgres:
-// the single-writer `FOR UPDATE` lock, the concurrent `close.already_closed`, and the append-only
-// immutability. This mirrors `daily-close.test.ts`, which computes the same close on PGlite for the
+// deployment role or on two writers contending — the two things PGlite cannot show (CLAUDE.md §4).
+// Those live in `record-daily-close.pg.test.ts` on real Postgres: the single-writer `FOR UPDATE`
+// lock, the concurrent `close.already_closed`, and the gap-free sequence under ten racing closers.
+// This mirrors `daily-close.test.ts`, which computes the same close on PGlite for the
 // same reason. The `close.already_closed` catch path (a real 23505 from `daily_closes_business_day_key`
-// carrying a `constraint` name node-postgres populates) is proven in the real-PG suite, not here.
+// carrying a `constraint` name node-postgres populates) is proven in `record-daily-close.pg.test.ts`,
+// not here.
 
 const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";
 

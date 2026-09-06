@@ -15,8 +15,7 @@ const PROBE_PASSWORD = "probe";
 // A clone of the `core_identity_workforce` template (CORE + IDENTITY + WORKFORCE); the probe
 // connections below authenticate as `workforce_rls_probe`, a cluster-wide role the package
 // globalSetup creates in place of the per-file `probeRole` this suite passed before the shared
-// container. That role is SHARED with scheduling.rls.test.ts — both connectAs it — so it is created
-// once for the whole cluster rather than per file.
+// container. (`scheduling.rls.test.ts` shared the same role until it was retired with the RLS drop.)
 const suite = useTemplateDb({ template: "core_identity_workforce" });
 
 describe("employments under real row-level security", () => {

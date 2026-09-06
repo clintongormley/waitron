@@ -18,15 +18,14 @@ import {
   updateCanvas,
 } from "./canvas-store.js";
 
-// Real Postgres, not PGlite: the canvas store both AUTHORIZES (authorizeManager reads persons +
-// management_sessions under the app role's RLS + grants) and writes canvases under FORCE ROW
-// LEVEL SECURITY. PGlite runs every connection as a superuser, which bypasses FORCE and the
-// tenant-isolation policy, so the cross-tenant isolation assertion and the "app role can run the
-// whole authorize→write path" claim would both be false passes there (CLAUDE.md §4). Seeds run as the
-// superuser owner (RLS bypassed — pure setup); every store call runs under withTenant + asAppUser so
-// it is a genuine RLS subject, exactly as the sibling store suites do. The `core_identity`
-// template pairs core + identity migrations so authorizeManager's tables and canvases both
-// exist.
+// Real Postgres, not PGlite: every store call below runs as a non-superuser member of `app_user`
+// (`withTenant` + `asAppUser`), the shape the management routes use. PGlite connects as a superuser
+// holding every grant, so a missing GRANT on `canvases` — or on the `persons`/`management_sessions`
+// reads `authorizeManager` performs — is invisible there (CLAUDE.md §4). Whether that alone still
+// warrants a container is the per-suite target review's question
+// (docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md §4), not this
+// suite's. Seeds run as the owner (pure setup); the `core_identity` template pairs core + identity
+// migrations so authorizeManager's tables and `canvases` both exist.
 
 const suite = useTemplateDb({ template: "core_identity" });
 
@@ -58,8 +57,8 @@ async function codeOf(fn: () => Promise<unknown>): Promise<string> {
   return isAppError(error) ? error.code : `did not throw an AppError: ${String(error)}`;
 }
 
-/** Rows for `tenantId` read straight as the superuser owner (RLS bypassed), to count what the app role
- * could never see across the isolation policy. */
+/** Rows for `tenantId` counted as the owner, independently of anything the app role's own reads
+ * return — so a refused or rolled-back write is visible here as an absence. */
 async function rowCount(tenantId: string): Promise<number> {
   const rows = await suite.admin.execute<{ n: number }>(
     sql`select count(*)::int as n from canvases where tenant_id = ${tenantId}`,
@@ -73,7 +72,7 @@ function phoneCanvas(title: string): CanvasDef {
   return { ...base, tabs: [{ ...base.tabs[0]!, title }, ...base.tabs.slice(1)] };
 }
 
-describe("layout canvas store under real row-level security", () => {
+describe("layout canvas store on real Postgres, as the app role", () => {
   let managerTenant: string;
   let managerSession: string;
 
@@ -187,7 +186,7 @@ describe("layout canvas store under real row-level security", () => {
         definition: phoneCanvas("Bound"),
       }),
     );
-    // Seed a device profile that binds the canvas, as the superuser owner (RLS bypassed — setup).
+    // Seed a device profile that binds the canvas, as the owner — setup, not the thing under test.
     await suite.admin.execute(sql`
       insert into device_profiles (tenant_id, name, canvas_id)
       values (${tenantId}, 'Binding profile', ${id})`);
@@ -201,8 +200,7 @@ describe("layout canvas store under real row-level security", () => {
   it("throws canvas.not_found when updating an id the tenant does not own", async () => {
     // The write-path no-row guard: `.returning({ id })` comes back empty, so updateCanvas throws
     // rather than reporting a silent success. Proof-by-deletion: drop the `updated.length === 0` check
-    // and this call resolves, failing the assertion. A well-formed uuid that names no row of this
-    // tenant (an absent canvas, or another tenant's row RLS hides) hits it.
+    // and this call resolves, failing the assertion. A well-formed uuid that names no row hits it.
     const tenantId = await seedTenant(suite.admin);
     const session = await seedSession(tenantId, "manager");
     const code = await codeOf(() =>
@@ -302,9 +300,8 @@ describe("layout canvas store under real row-level security", () => {
   it("translates a duplicate name to canvas.name_taken (23505 → clean 409), no second row", async () => {
     // The per-tenant `canvases_tenant_name_key` unique fires on the SECOND create with the same
     // name; canvas-store catches the driver's 23505 and re-throws it as the domain canvas.name_taken
-    // (the Phase-3 reviewer's flagged gap — a duplicate must not surface as a raw 500). Real Postgres,
-    // not PGlite: PGlite serialises and reports no constraint, so the constraint-targeted translation
-    // is only genuinely exercised here.
+    // — a duplicate must not surface as a raw 500. Here that runs against the real constraint;
+    // canvas-store.test.ts pins the translator's own branches on crafted errors instead.
     const tenantId = await seedTenant(suite.admin);
     const session = await seedSession(tenantId, "manager");
     await asApp(tenantId, (tx) =>
@@ -361,24 +358,5 @@ describe("layout canvas store under real row-level security", () => {
       ),
     );
     expect(code).toBe("canvas.name_taken");
-  });
-
-  it("keeps one tenant's canvases invisible to another — RLS isolation", async () => {
-    const tenantA = await seedTenant(suite.admin);
-    const tenantB = await seedTenant(suite.admin);
-    const sessionA = await seedSession(tenantA, "manager");
-    const { id } = await asApp(tenantA, (tx) =>
-      createCanvas(tx, {
-        managementSessionId: sessionA,
-        tenantId: tenantA,
-        name: "A only",
-        definition: phoneCanvas("Secret"),
-      }),
-    );
-    // B's own list is empty, and even asking for A's id under B's GUC returns undefined — the policy's
-    // USING clause filters A's row out. Drop asAppUser (or the policy) and the superuser owner would
-    // read A's row here.
-    expect(await asApp(tenantB, (tx) => listCanvases(tx, tenantB))).toEqual([]);
-    expect(await asApp(tenantB, (tx) => getCanvas(tx, tenantB, id))).toBeUndefined();
   });
 });

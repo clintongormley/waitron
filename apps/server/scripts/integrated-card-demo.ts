@@ -41,8 +41,8 @@
 // plain connection-owner `db` this script passes into the provider's constructor below, so in THIS
 // demo those particular writes run as the connection owner, not as `app_user`. This demo therefore
 // proves the fiscal record and `payWorkingOrderIntegrated`'s own writes under the real app role, but
-// does NOT exercise the provider's writes under it — `stripe.rls.test.ts` (a non-superuser probe
-// role that is a member of `app_user`) is what proves those.
+// does NOT exercise the provider's writes under it — `stripe.test.ts` in @waitron/payments-stripe
+// (a non-superuser probe role that is a member of `app_user`) is what proves those.
 // `resolveClient` is supplied but never reached: `recordSale` never contacts AEAT (that is `drain`'s
 // job), so the stub below throws if it is ever called.
 //

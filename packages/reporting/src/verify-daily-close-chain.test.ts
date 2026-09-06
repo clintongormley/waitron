@@ -10,12 +10,12 @@ import type { CashCountInput, DailyCloseRecord } from "./close-types.js";
 
 // PGlite, deliberately — and the right target for the WALK. The re-walk (contiguity, genesis,
 // broken-link, hash recomputation from the jsonb read-back) is deterministic logic over rows already
-// committed; it does not turn on the non-superuser deployment role, FORCE RLS, or two writers
-// contending — the three things PGlite cannot show (CLAUDE.md §4). The break cases are crafted with
+// committed; it does not turn on the non-superuser deployment role or on two writers contending —
+// two of the things PGlite cannot show (CLAUDE.md §4). The break cases are crafted with
 // raw INSERTs, which the append-only trigger does NOT guard (it is BEFORE UPDATE OR DELETE), so they
 // need no privilege bypass. The verifier's teeth against a real mutation of a COMMITTED chain — a
 // privileged UPDATE/DELETE that bypasses the app-role immutability — are proven on real Postgres in
-// verify-daily-close-chain.rls.test.ts, where that bypass is the whole point. Mirrors
+// verify-daily-close-chain.pg.test.ts, where that bypass is the whole point. Mirrors
 // record-daily-close.test.ts's split.
 
 const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";

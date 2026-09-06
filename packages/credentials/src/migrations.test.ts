@@ -115,8 +115,8 @@ describe("the credentials migration set", () => {
 
 /**
  * The `credential_tenants` SECURITY DEFINER seam (migration 0002), catalog properties asserted BY
- * VALUE — the RLS suite (`credentials.rls.test.ts`) proves the seam behaves correctly under real
- * Postgres, functionally; this proves WHY, structurally, on PGlite (no Docker needed), so a silent
+ * VALUE — `credentials.test.ts` proves the seam behaves correctly on real Postgres, functionally;
+ * this proves WHY, structurally, on PGlite (no Docker needed), so a silent
  * regression to any one guard turns a specific assertion red instead of nothing at all. Mirrors
  * `packages/fiscal-verifactu/src/migrations.test.ts`'s "envios drainer enumeration seam" block,
  * which is migration 0002's own precedent (its doc comment names it directly) — extended here with
@@ -229,7 +229,7 @@ describe("credential_tenants enumeration seam (migration 0002)", () => {
 
   it("refuses to reuse a pre-existing credentials_enumerator role that has LOGIN", async () => {
     // The DO block's ELSIF fires only when the role already exists AND rolcanlogin — an input no
-    // other test in this file, or in credentials.rls.test.ts, ever supplies (both harnesses always
+    // other test in this file, or in credentials.test.ts, ever supplies (both harnesses always
     // start from a role-free database). Simulated here by creating the LOGIN role by hand, on a
     // FRESH database, before letting migration 0002 run against it.
     const fresh = await createPgliteDb();

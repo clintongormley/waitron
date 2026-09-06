@@ -11,15 +11,14 @@ import { DEFAULT_RECEIPT } from "./defaults.js";
 import { getReceipt, putReceipt } from "./receipt-store.js";
 import type { ReceiptConfig } from "./types.js";
 
-// Real Postgres, not PGlite: the receipt store both AUTHORIZES (authorizeManager reads persons +
-// management_sessions under the app role's RLS + grants) and upserts tenant_receipts under FORCE ROW
-// LEVEL SECURITY. PGlite runs every connection as a superuser, which bypasses FORCE and the
-// tenant-isolation policy, so the cross-tenant isolation assertion and the "app role can run the whole
-// authorize→upsert path" claim would both be false passes there (CLAUDE.md §4). Seeds run as the
-// superuser owner (RLS bypassed — pure setup); every store call runs under withTenant + asAppUser so
-// it is a genuine RLS subject, exactly as theme-store.rls.test.ts (tenant_themes) does. The
-// `core_identity` template pairs core + identity migrations so authorizeManager's tables and
-// tenant_receipts both exist.
+// Real Postgres, not PGlite: every store call below runs as a non-superuser member of `app_user`
+// (`withTenant` + `asAppUser`), the shape the management routes use. PGlite connects as a superuser
+// holding every grant, so a missing GRANT on `tenant_receipts` — or on the
+// `persons`/`management_sessions` reads `authorizeManager` performs — is invisible there (CLAUDE.md
+// §4). Whether that alone still warrants a container is the per-suite target review's question
+// (docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md §4), not this
+// suite's. Seeds run as the owner (pure setup); the `core_identity` template pairs core + identity
+// migrations so authorizeManager's tables and `tenant_receipts` both exist.
 
 const suite = useTemplateDb({ template: "core_identity" });
 
@@ -52,7 +51,7 @@ async function rowCount(tenantId: string): Promise<number> {
   return rows.rows[0]!.n;
 }
 
-describe("tenant receipt store under real row-level security", () => {
+describe("tenant receipt store on real Postgres, as the app role", () => {
   let managerTenant: string;
   let managerSession: string;
 
@@ -130,23 +129,5 @@ describe("tenant receipt store under real row-level security", () => {
     );
     expect(code).toBe("receipt.invalid");
     expect(await rowCount(tenantId)).toBe(0); // validate threw before the INSERT
-  });
-
-  it("keeps one tenant's receipt invisible to another — RLS isolation", async () => {
-    const tenantA = await seedTenant(suite.admin);
-    const tenantB = await seedTenant(suite.admin);
-    const sessionA = await seedSession(tenantA, "manager");
-    await asApp(tenantA, (tx) =>
-      putReceipt(tx, {
-        managementSessionId: sessionA,
-        tenantId: tenantA,
-        receipt: { footerMessage: "Solo para A" },
-      }),
-    );
-    // B authored nothing, so its own get returns DEFAULT_RECEIPT. Even asking under B's GUC never
-    // surfaces A's row — the policy's USING clause filters it out. Drop asAppUser (or the policy) and
-    // the superuser owner would read A's row here.
-    expect(await asApp(tenantB, (tx) => getReceipt(tx, tenantB))).toEqual(DEFAULT_RECEIPT);
-    expect(await asApp(tenantB, (tx) => getReceipt(tx, tenantA))).toEqual(DEFAULT_RECEIPT);
   });
 });

@@ -6,12 +6,12 @@ import { readDrainProgress } from "./disposal.js";
 import { tablesForLane, type EnrolledTable } from "@waitron/sync-enrolment";
 
 // Real Postgres, not PGlite (CLAUDE.md §4 — say WHY the heavier target when its usual justification
-// doesn't apply): this suite exercises no RLS, privilege, or concurrency — only the drain arithmetic —
-// so it seeds and reads as the OWNER (superuser `postgres.admin`), which needs no tenant policy. Real
-// PG is used purely to match this package's harness convention: every `@waitron/sync` gate suite runs on
-// `useTemplateDb` and there is no PGlite harness wired here. The production path `readDrainProgress`
-// takes — a `sync_tailer` member under `withTenant` with `sync_log_tenant_isolation` scoping the
-// own-origin max — is proven separately by `apps/server/src/boot.fence.test.ts` Case E, not here.
+// doesn't apply): this suite exercises no privilege and no concurrency — only the drain arithmetic —
+// so it seeds and reads as the OWNER (`postgres.admin`). Real PG is used purely to match this
+// package's harness convention: every `@waitron/sync` gate suite runs on `useTemplateDb` and there is
+// no PGlite harness wired here. `readDrainProgress` on the pool a running server actually hands it is
+// exercised end to end by `apps/server/src/boot.fence.test.ts` Case E (a fenced node's box-status
+// disposal verdict), not here.
 const postgres = useTemplateDb({ template: "manifest" });
 
 const SELF = "11111111-1111-4111-8111-111111111111"; // the returned/fenced node's own origin

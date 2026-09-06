@@ -7,12 +7,7 @@ import {
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
-import {
-  getPaymentByRef,
-  insertAcceptedOffline,
-  insertCapturedPayment,
-  listAcceptedOffline,
-} from "@waitron/payments";
+import { getPaymentByRef, insertAcceptedOffline, insertCapturedPayment } from "@waitron/payments";
 import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { FakeStripeDevice } from "./testing/fake-stripe-device.js";
 import { StripeOnDeviceProvider } from "./device-provider.js";
@@ -30,52 +25,7 @@ const SETTLED = new Date("2026-07-24T10:00:00Z");
 // core+payments only, no sync capture triggers); threaded into the adapter's withTenant (design §4d(B)).
 const TEST_NODE_ID = "11111111-1111-4111-8111-111111111111";
 
-describe("on-device accepted_offline lifecycle under real row-level security", () => {
-  it("lists and reads its own tenant's offline payment, and only its own", async () => {
-    const tenantA = await seedWorkingOrder(suite.admin, "B41111111");
-    const tenantB = await seedWorkingOrder(suite.admin, "B42222222");
-
-    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
-    try {
-      const key = { tenantId: tenantA.tenantId, provider: "stripe", paymentRef: "dev-off-1" };
-
-      await withTenant(probe, tenantA.tenantId, (tx) =>
-        insertAcceptedOffline(tx, {
-          tenantId: tenantA.tenantId,
-          workingOrderId: tenantA.workingOrderId,
-          provider: "stripe",
-          paymentRef: "dev-off-1",
-          amount: decimal("10.00"),
-          settledAt: SETTLED,
-          externalRef: "pi_dev_rls",
-        }),
-      );
-
-      // listAcceptedOffline under tenant A sees the row.
-      const listedA = await withTenant(probe, tenantA.tenantId, (tx) =>
-        listAcceptedOffline(tx, tenantA.tenantId, "stripe"),
-      );
-      expect(listedA.map((r) => r.paymentRef)).toContain("dev-off-1");
-
-      const seen = await withTenant(probe, tenantA.tenantId, (tx) => getPaymentByRef(tx, key));
-      expect(seen?.state).toBe("accepted_offline");
-      expect(seen?.externalRef).toBe("pi_dev_rls");
-
-      // Under tenant B the isolation policy hides A's row from both the read and the list. The list
-      // call deliberately asks for tenant A's id from inside B's scope — a caller reaching for
-      // another tenant's rows outright — so the ONLY thing that can return nothing is the policy.
-      // (Passing B's own id would prove nothing: the explicit predicate alone would empty it.)
-      const listedB = await withTenant(probe, tenantB.tenantId, (tx) =>
-        listAcceptedOffline(tx, tenantA.tenantId, "stripe"),
-      );
-      expect(listedB.map((r) => r.paymentRef)).not.toContain("dev-off-1");
-      const hidden = await withTenant(probe, tenantB.tenantId, (tx) => getPaymentByRef(tx, key));
-      expect(hidden).toBeUndefined();
-    } finally {
-      await probe.close();
-    }
-  });
-
+describe("the stripe on-device adapter against a real database", () => {
   it("forward() clears an offline payment when given the only Database handle the API can build", async () => {
     const t = await seedWorkingOrder(suite.admin, freshNif());
     await withTenant(suite.admin, t.tenantId, (tx) =>

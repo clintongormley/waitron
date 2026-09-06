@@ -11,7 +11,8 @@ import { validateReceiptConfig } from "./validate.js";
  * `tenant_id`, which doubles as the `ON CONFLICT` target — the tenant_themes shape. Every function
  * takes a `(tx, …)` the CALLER has already scoped (`withTenant` + `asAppUser`), so RLS supplies
  * `current_tenant_id()` and no function here sets a GUC. Proven under that shape in
- * receipt-store.rls.test.ts (real Postgres — RLS as the app role is a false pass on PGlite, §4).
+ * receipt-store.test.ts (real Postgres, as a non-superuser `app_user` member — PGlite holds every
+ * grant, §4).
  *
  * `putReceipt` runs, in order: (1) `authorizeManager(..., "till.configure")` — the write gate, before
  * any DB write, proven by-deletion; (2) `validateReceiptConfig` — fail-closed (throws `receipt.invalid`

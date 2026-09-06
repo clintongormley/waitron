@@ -43,8 +43,8 @@ let staffSessionId: string;
 
 // PGlite for everything in this file: the guards here are pure logic (an unknown id, a series of
 // the wrong purpose, an unsettled corrective) that a superuser backend exercises just as well as a
-// forced-RLS one. The two cross-tenant "hidden reads as not-found" cases genuinely need RLS and
-// live in record-correction.rls.test.ts (real Postgres), per the plan's §6 target split.
+// non-superuser one. `sale.not_found` and `sale.series_not_found` are asserted below for a
+// genuinely ABSENT row, which is what those codes mean with one tenant per database.
 const suite = usePgliteDb({
   // IDENTITY_MIGRATIONS after CORE: recordVoid now calls `authorize`, which reads persons/sessions.
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],

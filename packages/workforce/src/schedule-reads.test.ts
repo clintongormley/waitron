@@ -19,10 +19,9 @@ import {
 } from "../test/fixtures.js";
 
 // PGlite, not real Postgres: these are person-scoped READ models over mutable planning rows — the
-// scoping predicate is application-code (RLS is tenant-only, plan fact 3), so there is no privilege
-// set and no RLS decision to prove here. The app role's grants on shifts/shift_swaps/absences are
-// proven against real Postgres elsewhere (scheduling-planning.rls.test.ts); the ROUTE that passes the
-// session's personId is proven against real Postgres in schedule-api.pg.test.ts.
+// scoping predicate is application code, so there is no privilege decision to prove here. The app
+// role's grants on shifts/shift_swaps/absences are in the privilege matrix, `packages/fiscal-verifactu/src/privileges.expected.ts`; the ROUTE that
+// passes the session's personId is proven against real Postgres in schedule-api.pg.test.ts.
 
 let tenantId: string;
 let locationId: string;

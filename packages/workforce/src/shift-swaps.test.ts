@@ -11,9 +11,8 @@ import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { insertDraftShift, insertShiftSwap, seedLocation, seedPerson } from "../test/fixtures.js";
 
 // PGlite, not real Postgres: requestSwap / acceptSwap are LOGIC over mutable planning rows (ownership
-// and existence checks, a status flip) — there is no privilege set and no RLS decision to prove here.
-// The app role's grants on `shift_swaps` are proven against real Postgres in
-// scheduling-planning.rls.test.ts, not re-proven here.
+// and existence checks, a status flip) — there is no privilege decision to prove here. The app role's
+// grants on `shift_swaps` are `shift_swaps: "SIUD"` in the privilege matrix, `packages/fiscal-verifactu/src/privileges.expected.ts`.
 
 let tenantId: string;
 let locationId: string;
