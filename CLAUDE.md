@@ -252,6 +252,14 @@ unfiltered `main` run, not a wrong hook.
   logical change across transactions is a commented decision, never a default** — the two that do it
   (`provisionVenue`'s latch, `adoptFromPrimary`'s idempotent steps) say so in their headers because a
   non-DB step sits between the writes.
+- **A by-id read still needs its own `eq(table.tenantId, cfg.tenantId)` — one-tenant-per-database is
+  NOT the query's isolation boundary.** Since RLS was dropped (#255) `withTenant` no longer isolates
+  SELECTs, so every read scopes to the tenant itself — a by-id read as much as a list read, never
+  trusting a globally-unique UUID or the deployment invariant. Cost: `getHeldOrder`/`abandonHeldOrder`
+  keyed on the `working_orders.id` UUID alone, so tenant A could read AND abandon tenant B's order in a
+  multi-tenant DB (till-reroute S3). The per-task review and four quality lenses all reasoned it "safe
+  under one-tenant-per-db"; only the run-it seat, which RAN a two-tenant probe as `app_user`
+  (rolsuper=f), caught it — reading missed it, running caught it (§1, §4).
 - **No backwards-compatibility or data-migration code until Waitron is in production.** Nothing is
   deployed; schema changes drop and recreate. A backfill for an empty database is code to maintain
   that buys nothing — and the first draft of the settlement design carried one that could only ever
