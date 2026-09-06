@@ -23,7 +23,7 @@ import { IDENTITY_MIGRATIONS } from "@waitron/identity";
  * NO `roles` here, unlike the probe-role packages (payments-stripe, identity, db). Those create a
  * non-superuser LOGIN role per suite and connect AS it (`pg.connectAs`); `settle-sale.test.ts`, the
  * one real-PG suite left in this package, reaches the non-superuser path with `asAppUser(tx)`, which
- * `SET ROLE`s the admin connection to the `app_user` GROUP role CORE's `0001_tenancy_rls.sql` already
+ * `SET ROLE`s the admin connection to the `app_user` GROUP role CORE's `0001_db_baseline_sql.sql` already
  * creates inside the template. Its two-backend settlement race opens its extra backends with
  * `pg.connect()` (superuser connections to the clone) and applies `asAppUser` inside each, so it
  * needs no probe role either.

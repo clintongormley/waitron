@@ -58,8 +58,7 @@ beforeEach(async () => {
   ({ tenantId, tillId, nodeId, seriesId } = await seedTenant(suite.db));
   rectSeriesId = await seedRectificativeSeries(suite.db, tenantId, nodeId);
   // A supervisor and a manager (both hold `sale.rectify`), and a staff member (holds nothing).
-  // Seeded as the superuser owner exactly like the record-void suite does — PGlite bypasses RLS for
-  // the seeding connection, so no `app.tenant_id` is needed here.
+  // Seeded on the fixture connection, like the record-void suite.
   supervisorId = await seedPerson("supervisor");
   managerId = await seedPerson("manager");
   const staffId = await seedPerson("staff");
@@ -72,7 +71,7 @@ beforeEach(async () => {
   staffSessionId = await openSession(staffId);
 });
 
-/** A person of `role` whose PIN is "1234", inserted as the superuser owner (RLS bypassed on PGlite),
+/** A person of `role` whose PIN is "1234", inserted as the superuser owner,
  * the same shape identity's own suites and the record-void suite seed. */
 async function seedPerson(role: "staff" | "supervisor" | "manager" | "admin"): Promise<string> {
   const { rows } = await suite.db.execute<{ id: string }>(

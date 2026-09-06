@@ -44,9 +44,7 @@ export async function recordVoid(
     .where(eq(sales.id, saleId));
 
   if (sale === undefined) {
-    // Also the cross-tenant case: RLS filters the row out, so a sale belonging to another tenant
-    // is genuinely not found rather than forbidden — which is the right answer to leak. An
-    // OPERATIONAL failure, not a fiscal one: there is nothing here to void, which is a different
+    // An OPERATIONAL failure, not a fiscal one: there is nothing here to void, which is a different
     // condition from a chain that failed to verify, and NO FISCAL CONDITION BLOCKS a void does not
     // extend to it.
     throw new AppError("sale.not_found", { saleId });

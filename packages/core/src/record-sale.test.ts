@@ -158,7 +158,7 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
  */
 async function run(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
   return withTenant(suite.db, tenantId, async (tx) => {
-    // Never as the owner. An owner bypasses RLS and can disable any trigger, so an owner-run
+    // Never as the owner. An owner can disable any trigger, so an owner-run
     // write-path test would prove the code runs, not that the application role is permitted to
     // run it.
     await asAppUser(tx);

@@ -24,7 +24,7 @@ function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTenant(suite.db, tenantId, fn);
 }
 
-// Read `locale` back as the superuser owner (RLS bypassed on PGlite). A validation that rejects
+// Read `locale` back as the superuser owner. A validation that rejects
 // BEFORE its UPDATE leaves the column untouched.
 async function localeOf(id: string): Promise<string | null> {
   const rows = await suite.db.execute<{ locale: string | null }>(

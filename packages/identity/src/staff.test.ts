@@ -52,8 +52,7 @@ async function personCount(): Promise<number> {
   return rows.rows[0]!.n;
 }
 
-// The mutable columns the staff-admin API writes, read as the superuser owner (RLS bypassed on
-// PGlite). A gate that rejects BEFORE its write leaves every one of these unchanged.
+// The mutable columns the staff-admin API writes, read as the superuser owner. A gate that rejects BEFORE its write leaves every one of these unchanged.
 async function personRow(
   id: string,
 ): Promise<{ role: string; status: string; pin_hash: string; password_hash: string | null }> {
@@ -66,7 +65,7 @@ async function personRow(
   return rows.rows[0]!;
 }
 
-// The stored login email, read as the superuser owner (RLS bypassed on PGlite).
+// The stored login email, read as the superuser owner.
 async function emailOf(id: string): Promise<string | null> {
   const rows = await suite.db.execute<{ email: string | null }>(
     sql`select email from persons where id = ${id}`,

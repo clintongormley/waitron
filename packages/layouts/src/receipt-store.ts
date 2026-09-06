@@ -9,8 +9,7 @@ import { validateReceiptConfig } from "./validate.js";
 /**
  * The get/put service over `tenant_receipts` (SP-B4; design §9). ONE row per tenant, keyed on
  * `tenant_id`, which doubles as the `ON CONFLICT` target — the tenant_themes shape. Every function
- * takes a `(tx, …)` the CALLER has already scoped (`withTenant` + `asAppUser`), so RLS supplies
- * `current_tenant_id()` and no function here sets a GUC. Proven under that shape in
+ * takes the caller's transaction (`withTenant` + `asAppUser`). Exercised in
  * receipt-store.test.ts (real Postgres, as a non-superuser `app_user` member — PGlite holds every
  * grant, §4).
  *

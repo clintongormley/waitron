@@ -85,7 +85,7 @@ declare module "@waitron/shared" {
       configKey?: string;
     };
     // A GET-by-id on the management canvas surface named no canvas the tenant owns (an absent id, or
-    // another tenant's row RLS hides). No params: the caller-supplied id is not echoed (§1) — the
+    // another tenant's row excluded by the tenant predicate). No params: the caller-supplied id is not echoed (§1) — the
     // management API answers 404 on the code alone.
     "canvas.not_found": Record<string, never>;
     // A canvas create/update collided on the per-tenant `canvases_tenant_name_key` unique — a
@@ -113,7 +113,7 @@ declare module "@waitron/shared" {
       reason: "bad_capabilities" | "bad_canvas_ref";
     };
     // A GET-by-id on the management device-profile surface named no profile the tenant owns (an absent
-    // id, or another tenant's row RLS hides). No params: the caller-supplied id is not echoed (§1) —
+    // id, or another tenant's row excluded by the tenant predicate). No params: the caller-supplied id is not echoed (§1) —
     // the management API answers 404 on the code alone. Mirrors `canvas.not_found`.
     "device_profile.not_found": Record<string, never>;
     // A device-profile create/update collided on the per-tenant unique — a duplicate name. Translated

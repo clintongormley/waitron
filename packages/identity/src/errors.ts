@@ -9,10 +9,9 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
-    /** No open session for this id — unknown, already ended, or another tenant's (RLS-hidden). */
+    /** No open session for this id — unknown or already ended. */
     "session.not_open": { sessionId: string };
-    /** No live management session for this id — unknown, already ended, or another tenant's
-     * (RLS-hidden). The browser must sign in again. */
+    /** No live management session for this id — unknown or already ended. The browser must sign in again. */
     "management_session.required": Record<string, never>;
     /** The management session idled past the timeout and is no longer live. Sign in again. */
     "management_session.expired": Record<string, never>;
@@ -27,7 +26,7 @@ declare module "@waitron/shared" {
     "password.invalid": Record<string, never>;
     /** The TOTP token did not verify against the stored secret (or was malformed — fail-closed). */
     "totp.invalid": Record<string, never>;
-    /** No such person in this tenant (RLS-scoped): unknown id, or another tenant's. */
+    /** No person matched the supplied id. */
     "person.not_found": { personId: string };
     /** The person exists but is suspended — cannot log in or authorize. */
     "person.suspended": { personId: string };

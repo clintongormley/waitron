@@ -280,8 +280,7 @@ describe("recordSubstitution — error propagation", () => {
     const foreignTicket = await seedBareSale(suite.db, other);
 
     const error = await captureError(() =>
-      // Deliberately NOT the `substitute` helper: that switches to `app_user`, whose RLS would hide
-      // the cross-tenant ticket. Run as the superuser connection so the ticket reaches the FK.
+      // The composite FK must reject a ticket from a different tenant.
       withTenant(suite.db, tenantId, (tx) =>
         recordSubstitution(tx, backend, substitutionInput([foreignTicket])),
       ),

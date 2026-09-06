@@ -12,7 +12,7 @@ import { IDENTITY_MIGRATIONS } from "@waitron/identity";
  *
  * One template, because every real-PG suite here migrates exactly the same pair — CORE then
  * IDENTITY. `@waitron/layouts` owns no migrations of its own: its tables (`canvases`, `tenant_themes`,
- * `tenant_receipts`) and their FORCE-RLS/policy/grant lines live in `CORE_MIGRATIONS`, and the stores'
+ * `tenant_receipts`) and their grants live in `CORE_MIGRATIONS`, and the stores'
  * `authorizeManager` gate reads identity's `persons`/`management_sessions`, so IDENTITY has to be
  * present too. Core migrates first (identity's schema builds on it) — that ordering is the runtime's
  * responsibility and nothing enforces it across packages, so it is explicit here. The suites clone it
@@ -24,7 +24,7 @@ import { IDENTITY_MIGRATIONS } from "@waitron/identity";
  * NO `roles` here, unlike the probe-role packages (credentials, payments-stripe, identity). Those
  * create a non-superuser LOGIN role and connect AS it (`pg.connectAs`); layouts' FOUR real-PG suites
  * instead reach the non-superuser path with `asAppUser(tx)`, which `SET ROLE`s the admin connection
- * to the `app_user` GROUP role that CORE's `0001_tenancy_rls.sql` already creates inside the template.
+ * to the `app_user` GROUP role that CORE's `0001_db_baseline_sql.sql` already creates inside the template.
  * That is enough for what those suites depend on — the grants `app_user` holds on `canvases`,
  * `device_profiles`, `tenant_themes` and `tenant_receipts`, and on the `persons`/`management_sessions`
  * reads `authorizeManager` performs — so no additional cluster LOGIN role has to be created.

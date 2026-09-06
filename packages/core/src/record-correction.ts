@@ -57,7 +57,7 @@ export interface RecordCorrectionInput {
    * `standard` series for `recordSale`; no series is auto-provisioned.
    */
   seriesId: SeriesId;
-  /** The earlier sale being corrected. Read RLS-scoped, so a cross-tenant id is `sale.not_found`. */
+  /** The earlier sale being corrected. An unknown id is `sale.not_found`. */
   correctsSaleId: SaleId;
   /**
    * The corrective invoice's OWN total — negative for a full or partial reversal, allowed on `sales`
@@ -113,9 +113,7 @@ export async function recordCorrection(
   backend: FiscalBackend,
   input: RecordCorrectionInput,
 ): Promise<{ saleId: SaleId; fiscal: FiscalRecordRef }> {
-  // Step 1. The original sale, RLS-scoped and tenant-unqualified exactly as `./record-void.ts`:
-  // RLS filters a row belonging to another tenant, so a cross-tenant original is genuinely
-  // not-found rather than forbidden — the right answer to leak. `locale`/`invoiceLocales` are read
+  // Step 1. Look up the original sale by id. `locale`/`invoiceLocales` are read
   // here because the corrective INHERITS them (spec §9: a corrective invoice inherits the original
   // list); they are not supplied on the input.
   const [original] = await tx
@@ -129,7 +127,7 @@ export async function recordCorrection(
 
   // Step 1b. Refuse to correct a VOIDED sale (ratified decision, spec §4). A sale that should never
   // have existed is annulled, not corrected; correcting an already-annulled sale is a staff/UI
-  // error. Reuses `sale.voided`, RLS-scoped like the lookup above.
+  // error. Reuses `sale.voided`, like the lookup above.
   const [voided] = await tx
     .select({ saleId: saleVoids.saleId })
     .from(saleVoids)
@@ -142,7 +140,7 @@ export async function recordCorrection(
   // Step 2. The corrective series, and the purpose guard that IS the §5 separation. A correction
   // must draw from a `purpose='rectificative'` series; an ordinary sale must not (the mirror guard
   // lives in `./record-sale.ts`). The explicit tenant predicate mirrors `recordSale` and is
-  // redundant under RLS but guards a non-scoped connection too.
+  // applied to the series lookup.
   const [series] = await tx
     .select({
       code: invoiceSeries.code,
@@ -267,8 +265,7 @@ export async function recordCorrection(
 
   /* v8 ignore start */
   if (inserted === undefined) {
-    // Unreachable for the same reason as `recordSale`: this INSERT carries no WHERE clause, and
-    // RLS's WITH CHECK fails a mismatched tenant with an error rather than inserting zero rows.
+    // This unconditional INSERT returns its row or throws on a constraint violation.
     throw new Error("sales: insert returned no row");
   }
   /* v8 ignore stop */
@@ -311,7 +308,7 @@ export async function recordCorrection(
   if (location === undefined) {
     // Structurally unreachable given the schema: `tills.location_id` is a NOT NULL foreign key, so
     // a till that exists joins to exactly one location. Reaching here means the till does not exist
-    // or RLS hid another tenant's — a caller programming error, not a fiscal condition.
+    // or the tenant predicate excluded it — a caller programming error, not a fiscal condition.
     throw new Error(`recordCorrection: no location found for till ${input.tillId}`);
   }
   /* v8 ignore stop */

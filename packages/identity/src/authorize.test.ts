@@ -93,7 +93,7 @@ describe("authorize", () => {
     expect(code).toBe("pin.invalid");
   });
 
-  it("throws person.not_found when the override personId is unknown (or another tenant's, RLS-hidden)", async () => {
+  it("throws person.not_found when the override personId is unknown", async () => {
     const tillId = await seedTill(suite.db, tenantId);
     const staffId = await seedPerson(suite.db, tenantId, "staff");
     const sessionId = await openSession(suite.db, tenantId, tillId, staffId);

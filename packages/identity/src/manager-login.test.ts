@@ -73,9 +73,8 @@ describe("loginManager", () => {
     expect(spy).toHaveBeenCalledWith("some password", expect.any(String));
   });
   it("does not authenticate a person from another tenant (tenant filter)", async () => {
-    // A person with a valid email + password, but in a DIFFERENT tenant. Even on PGlite (superuser,
-    // RLS bypassed), loginManager scoped to `tenantId` must not find them — so a caller that forgets
-    // withTenant cannot mint a session with a mismatched tenant_id. The hardened code is the same
+    // A person with a valid email + password, but in a DIFFERENT tenant. The explicit tenant filter must not find them, so loginManager cannot
+    // mint a session with a mismatched tenant_id. The hardened code is the same
     // `password.invalid` an unknown email yields.
     const otherTenant = await seedTenant(suite.db);
     await seedManager(suite.db, otherTenant, { email: "owner@x.com" });

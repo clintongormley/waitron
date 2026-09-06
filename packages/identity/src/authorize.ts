@@ -42,7 +42,7 @@ export async function authorize(
 ): Promise<Authorization> {
   // One round-trip, not two: the open-session lookup and the operator's role are resolved by a
   // single innerJoin. `sessions_person_fk` (restrict) guarantees a session cannot exist without its
-  // person, and RLS scopes both tables to one tenant, so the join matches whenever the session does
+  // person, so the join matches whenever the session does
   // — the row is absent ONLY when there is no open session, which is exactly `session.not_open`.
   const [row] = await tx
     .select({ personId: sessions.personId, role: persons.role })

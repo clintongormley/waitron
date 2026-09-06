@@ -112,8 +112,7 @@ declare module "@waitron/shared" {
       charged: string;
     };
     /** Thrown by `recordSale` when `RecordSaleInput.seriesId` names no row in `invoice_series` —
-     * either it never existed, or row-level security hid a series belonging to another tenant,
-     * which reads identically from here (spec's own fail-closed shape for a cross-tenant probe). */
+     * either it never existed, or the tenant predicate excluded it. */
     "sale.series_not_found": { seriesId: string; tenantId: string };
     /** Thrown by `recordSale` when `RecordSaleInput.seriesId` names a real series, but one that
      * belongs to a DIFFERENT node than `RecordSaleInput.nodeId` (node-id rekey, 2026-08-03: a
@@ -143,10 +142,7 @@ declare module "@waitron/shared" {
      * the same way `record-sale.test.ts`'s "never reissues a number" test already does — neither
      * `recordSale` nor `recordVoid` catches and translates that violation into this code. */
     "sale.number_reused": { seriesId: string; invoiceNumber: number };
-    /** Thrown by `recordVoid` (`./record-void.ts`) when `saleId` names no row in `sales` — either
-     * it never existed, or row-level security hid a sale belonging to another tenant, which reads
-     * identically from here (the same fail-closed shape `sale.series_not_found` already uses for
-     * an analogous cross-tenant probe). An operational failure, not a fiscal one: NO FISCAL
+    /** Thrown by `recordVoid` (`./record-void.ts`) when `saleId` names no row in `sales`. An operational failure, not a fiscal one: NO FISCAL
      * CONDITION BLOCKS a void applies to a chain-integrity failure, never to "there is nothing
      * here to void". */
     "sale.not_found": { saleId: string };
@@ -157,7 +153,7 @@ declare module "@waitron/shared" {
      * condition, and must not be confused with a chain-verification failure. */
     "sale.already_voided": { saleId: string };
     /** Thrown by `settleSale` when the sale is already settled. Three sources converge on this one
-     * code (`packages/db/drizzle/0012_sale_settlement.sql`): the sequential retry is caught by the
+     * code (`packages/db/drizzle/0001_db_baseline_sql.sql`): the sequential retry is caught by the
      * prior SELECT, and a concurrent loser is caught at *whichever* insert it reaches — the
      * `sale_settlements` `UNIQUE (tenant_id, sale_id)` violation (`sale_settlements_sale_key`,
      * detected via `isUniqueViolation`) when it collides on the settlement row, OR the `tenders`

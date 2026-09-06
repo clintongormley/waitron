@@ -25,7 +25,7 @@ import { IDENTITY_MIGRATIONS } from "../migrations.js";
  * shares that cluster's roles. A per-file `CREATE ROLE` could not do it: `probeRoleStatement` emits
  * a bare `create role …`, so a second file naming the same role would fail `role … already exists`,
  * and `useTemplateDb` offers no per-file `probeRole` at all. `app_user` exists by the time the roles
- * run because CORE's `0001_tenancy_rls.sql` creates it and `startSharedContainer` runs `roles` AFTER
+ * run because CORE's `0001_db_baseline_sql.sql` creates it and `startSharedContainer` runs `roles` AFTER
  * the templates migrate.
  *
  * A globalSetup's return value is its globalTeardown, so returning `teardown` stops the container
