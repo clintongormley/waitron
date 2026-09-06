@@ -2059,13 +2059,8 @@ a new package that copies either config must set the `90/90/85/85` floor (CLAUDE
 
 ---
 
-**Dev stack from a worktree.** Start it with `wa-wt <worktree-name>` (`~/workspace/tools`), never a
-bare `pnpm dev*`: `apps/server/.env` is per-database and gitignored, and compose names its project
-after the directory, so `wa-wt` copies the newest sibling `.env` into a worktree that has none and
-brings the one shared `db` up under `COMPOSE_PROJECT_NAME=waitron`. `wa-wt reset [name]` wipes and
-reseeds from that checkout's code and spreads the new `.env` to every checkout. Detail:
-[ui-review.md](ui-review.md) → *Running the stack from a worktree*. Fold into CLAUDE.md §6 with the
-next PR that touches it (a root `CLAUDE.md` edit takes the normal PR flow).
+**Dev stack from a worktree.** `wa-wt <worktree-name>` / `wa-wt reset [name]` — the rule is in
+CLAUDE.md §6; detail in [ui-review.md](ui-review.md) → _Running the stack from a worktree_.
 
 ## How to keep this file honest
 

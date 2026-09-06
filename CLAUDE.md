@@ -421,6 +421,18 @@ push that carried no TypeScript. `/land-branch` runs `pnpm install` right after 
 run it yourself after any other pull. The hook skips a push that only deletes refs (all-zero local
 sha) and fails closed when stdin is empty.
 
+**The dev stack from a worktree is started with `wa-wt <worktree-name>`** (`~/workspace/tools`),
+never with a bare `pnpm dev*`. The dev Postgres is ONE compose service shared by every checkout, and
+`apps/server/.env` describes that DATABASE (venue ids, credentials key) — gitignored and absent from
+a fresh worktree. Compose names its project after the directory, so an unqualified
+`docker compose up` from a worktree starts a SECOND `db` with an empty volume on the same port.
+`wa-wt` brings the shared db up under `COMPOSE_PROJECT_NAME=waitron`, copies the newest sibling
+`.env` into a worktree that has none, and follows the log. `wa-wt reset [name]` is the only "start
+over": it wipes the volume, reseeds from that checkout's code and copies the new `.env` to every
+checkout; the till is then re-enrolled per browser with the fixed dev pairing code `DEMO`. Cost: a
+round trip each on 2026-09-05 and 2026-09-06 while the two rules were manual. Detail:
+`docs/ui-review.md` → _Running the stack from a worktree_.
+
 ---
 
 ## 7. Keep this file current — it is part of the work, not a chore
