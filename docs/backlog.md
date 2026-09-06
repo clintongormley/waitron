@@ -331,8 +331,8 @@ All three decisions are now taken.
 `packages/composition` (the `ALL_MODULES` list), every NEW module package, `apps/dashboard` module
 screens, `apps/server/src/modules.ts` (the maps derived from that list), and the control-plane docs):
 
-1. **Finish fiscal as a module:** SP-3b vocabulary (landed #240), SP-3c gated-provisioning seam (in PR,
-   `feat/module-sp3c-gated-provisioning`), SP-3d backup/restore hook (= BR-4) — the queued slices under
+1. **Finish fiscal as a module:** SP-3b vocabulary (landed #240), SP-3c gated-provisioning seam (landed #245),
+   SP-3d backup/restore hook (= BR-4) — the queued slices under
    *Waitron module system*.
 2. **`fiscal-none` module** (tiny; the UK case; forces every chain/huella/`entorno` assumption
    through the `FiscalBackend` seam — a better pluggability proof than TicketBAI). Put the two agreed
@@ -819,7 +819,7 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
       `mirror-bundle.ts` through `provisioning.standby`, `provision-till.ts` through `provisioning.seed`,
       `till-backend.ts` through the `fiscal` slot. `boot.ts`'s `drain` is the one deferred to
       `fiscal-none`, allowlisted with its reason in `scripts/module-seams.test.ts`.)_
-  - **SP-3c — module-owned gated provisioning — in PR (`feat/module-sp3c-gated-provisioning`).** The
+  - **SP-3c — module-owned gated provisioning — LANDED #245 (2026-09-06).** The
     fiscal regime is reached through two typed descriptor seats: `provisioning` (`seed.summary`/`run` per
     node; `standby.reserve`/`establish` for a mirror's dormant identity) and `fiscal` (`id` +
     `makeBackend`, selected by `@waitron/module`'s `fiscalSlot`, which refuses zero candidates, two, or a
@@ -842,6 +842,26 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
     the list, nothing grows it. Spec:
     [sp-3c](superpowers/specs/2026-09-05-module-sp3c-gated-provisioning-design.md); plan:
     [sp-3c plan](superpowers/plans/2026-09-05-module-sp3c-gated-provisioning.md).
+    - *Left behind, not gaps (recorded at land):* (a) **a `provisionTestVenue(db, overrides)` helper
+      for `apps/server`'s tests** — sixty-odd suites repeat the same 30-line venue request +
+      `applyVenue(planVenue(…, ALL_MODULES), { db, modules: ALL_MODULES })` pair; this slice edited every
+      one by hand and the next `planVenue`/`applyVenue` signature change repeats the sweep (both
+      whole-branch reviews flagged it; a small PR of its own, `apps/server/src/testing/` is the home).
+      (b) `tenant.not_found` (`apps/server/src/errors.ts`) has no production thrower — its last moved into
+      the fiscal seed; kept as the file's naming reference and a test-used code; keep or remove is an owner
+      call. (c) `mirror-bundle.ts`'s `r.series ?? []` branch is un-exercised (no module omits `series`) and
+      un-injectable (`assembleMirrorBundle` reads `ALL_MODULES` internally) — not v8-ignored, because no
+      "unreachable" sentence would be true. (d) `packages/verifactu` still states the software-id cap as a
+      bare `2` inside `validate` and exports no constant; `ID_SISTEMA_MAX_LENGTH` now lives once in
+      `packages/fiscal-verifactu/src/registro-sif.ts` — export the cap from `packages/verifactu` when
+      either is next touched. **Yardstick data (built under the seat rule in force when the branch started
+      — Opus implementers, Fable reviewers — before the 2026-09-06 Codex rule):** fix rounds before land:
+      Task 4 ×3 (wire-input validation and its doc wording), Tasks 6 and 9 ×1 each, one simplify wave (13
+      items), one whole-branch fix wave (23 findings across two reviewers); false claims found at
+      whole-branch review: 5 falsified by the run-it reviewer (untested `fiscal_backend` on two paths, deep
+      imports invisible to the seams guard, an over-claiming composition header, a bare `TypeError` on a
+      keyless bundle, an "unreachable" that a misconfigured env reaches) plus the convention reviewer's
+      "every write path" and "no caller can" absolutes — all fixed on the branch. Copilot: off.
   - **SP-3d — fiscal backup/restore contribution (= BR-4).** Fill the module `backup.restore` seat with the
     fresh-chain / disjoint-series behaviour that lets a restored box trade again as primary (cold-DR),
     never resuming the dead chain. Unblocked by SP-3a's module seams (see the Backup & restore section).
@@ -856,8 +876,8 @@ model depends on. **Ongoing flow-down and the enabled-set pull filter both stay 
 receipt each time: nothing is genuinely toggleable yet, so there is no live case to build either
 against) — both are built alongside the first genuinely-toggleable module. **SP-3a (fiscal-record sync
 lane) LANDED #238 (2026-09-05)** — H2's fiscal-record lane is delivered. **SP-3b (vocabulary) LANDED
-#240 (2026-09-05)** and **SP-3c (gated-provisioning seam) is in PR
-(`feat/module-sp3c-gated-provisioning`)**, leaving **SP-3d (backup-restore hook = BR-4)** as the open
+#240 (2026-09-05)** and **SP-3c (gated-provisioning seam) LANDED #245
+(2026-09-06)**, leaving **SP-3d (backup-restore hook = BR-4)** as the open
 module slice. `fiscal-none` (Track C item 2) follows SP-3c: it fills the same two seats and designs the
 runtime-duty seat SP-3c deferred. **SP-4** waits for B3.2.
 
