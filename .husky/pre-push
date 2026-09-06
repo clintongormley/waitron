@@ -360,8 +360,10 @@ check_signoff() {
 
 run_step "sign-off (DCO)" "git rebase --signoff <base>   (or: git commit -s --amend)" check_signoff
 
-# ONE classifier call answers both questions. stdout carries two lines and nothing else; the reason
-# goes to stderr, where it has already been printed by the time this reads the result.
+# ONE classifier call answers both questions. stdout carries four lines (`code=`, `scope=`,
+# `packages=`, `root=`) and nothing else; this hook reads `scope=` and `packages=` and routes on
+# them — `root=` is emitted for the record and read by no consumer today. The reason goes to
+# stderr, where it has already been printed by the time this reads the result.
 #
 #   scope=documentation   every changed path is inert: prose, or root config no code-gated job reads
 #   scope=root            the repository's own machinery only — the repo-level suite, nothing scoped
@@ -546,12 +548,16 @@ fi
 tc_log=$(mktemp "${TMPDIR:-/tmp}/waitron-pre-push-typecheck.XXXXXX")
 echo "pre-push: running typecheck ($scope_label) and tests with coverage ($scope_label) concurrently..."
 par_start=$(date +%s)
-( pnpm "$@" typecheck > "$tc_log" 2>&1; echo "$?" > "$tc_log.rc"; date +%s > "$tc_log.end" ) &
+# Husky runs this hook under `sh -e` (.husky/_/h). Inside the subshell that flag would end it the
+# moment the typecheck failed, before the status file is written, and `wait` would then end the hook
+# before the failure is reported — the push still blocked, the diagnostics gone (a run-it reviewer
+# reproduced exactly that, 2026-09-06). So the subshell turns `-e` off, and `wait` is guarded.
+( set +e; pnpm "$@" typecheck > "$tc_log" 2>&1; echo "$?" > "$tc_log.rc"; date +%s > "$tc_log.end" ) &
 tc_pid=$!
 cov_rc=0
 pnpm -r "$@" test:coverage || cov_rc=$?
 cov_end=$(date +%s)
-wait "$tc_pid"
+wait "$tc_pid" || true
 tc_rc=$(cat "$tc_log.rc" 2>/dev/null || echo 1)
 tc_end=$(cat "$tc_log.end" 2>/dev/null || date +%s)
 failed=0

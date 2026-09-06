@@ -272,8 +272,10 @@ export function scopeForPaths(changedPaths, loadPackages) {
  * `.husky/` or `.github/` gives none of them work, and ci.yml's UNGATED `lint` job is what runs the
  * repo-level project that does read it. It is emitted from here rather than recomputed by the
  * workflow's shell so the two cannot drift. ci.yml appends the first three lines to
- * `$GITHUB_OUTPUT`; the hook reads `scope=` and `packages=` with `sed`, plus `root=` to decide
- * whether the repo-level suite has work.
+ * `$GITHUB_OUTPUT`; the hook reads `scope=` and `packages=` with `sed` and routes a root-only push
+ * on `scope=root`. `root=` is emitted for the record — a mixed push says `packages` AND `root=true`
+ * — and is read by no consumer today: the hook runs the repo-level suite on every
+ * non-documentation push anyway, and ci.yml's `lint` job runs it on every push.
  *
  * A single space separates the package names, and that separator is the contract between this file
  * and its callers, asserted as such below. Both still WORD-SPLIT that line — `for pkg in

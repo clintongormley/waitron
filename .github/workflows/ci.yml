@@ -171,8 +171,9 @@ jobs:
 
           # Four lines out — `code=`, `scope=` (one of documentation, root, global, packages),
           # `packages=` and `root=` — from ONE classifier call, which is also the one
-          # `.husky/pre-push` makes. Only the first three become job outputs: `root=` tells the hook
-          # whether the repo-level suite has work, and here that suite is ungated anyway.
+          # `.husky/pre-push` makes. Only the first three become job outputs: `root=` is emitted for
+          # the record and read by no consumer today — the hook routes a root-only push on
+          # `scope=root`, and here the repo-level suite is ungated anyway.
           # Its reason goes to stderr, so it lands in this job's log rather than in $GITHUB_OUTPUT.
           #
           # `set -e` is what makes a classifier that cannot run FAIL this step rather than quietly
@@ -186,7 +187,8 @@ jobs:
           #
           # It cannot happen today, and here is the code that says so rather than an impression:
           # `formatScope` (scripts/changed-packages.mjs) builds `code=` from
-          # `kind !== "documentation"`, a boolean that always renders, and `scopeForPaths` always
+          # `kind === "packages" || kind === "global"` (so `documentation` AND `root` answer
+          # false), a boolean that always renders, and `scopeForPaths` always
           # returns a `kind` — so a node that exits 0 always emits the line. A node that exits
           # NON-zero is caught by `set -o pipefail` plus `set -e` on the `out=$(…)` assignment
           # below, which fails the step. Both halves have to hold; neither is a property of this
