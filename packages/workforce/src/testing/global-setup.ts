@@ -30,8 +30,10 @@ import { WORKFORCE_MIGRATIONS } from "../migrations.js";
  * `CREATE ROLE` cannot stay — `probeRoleStatement` emits a bare `create role …`, so the moment two
  * files created a role of the same name against the shared cluster the second would fail
  * `role … already exists`. (Two more, `workforce_rls_probe` and `workforce_planning_rls_probe`, went
- * with `rls.test.ts`, `scheduling.rls.test.ts` and `scheduling-planning.rls.test.ts` — their grant
- * facts are the privilege matrix's now.) It inherits `app_user`'s grants via `inRole`;
+ * with the three RLS suites they served — those suites' grant facts are the privilege matrix's now:
+ * `employments`, `shifts`, `roster_versions`, `absences`, `availability`, `shift_templates`,
+ * `shift_swaps`, `time_entries` and `workforce_chains` all have a row in
+ * `packages/fiscal-verifactu/src/privileges.expected.ts`.) It inherits `app_user`'s grants via `inRole`;
  * `app_user` exists by the time the roles run because CORE's `0001_tenancy_rls.sql` creates it and
  * roles run AFTER the templates migrate.
  *

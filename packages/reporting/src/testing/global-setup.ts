@@ -34,9 +34,10 @@ import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
  * proves a single-writer `FOR UPDATE` lock and a concurrent `close.already_closed`, which PGlite —
  * serialising every query onto one backend — cannot stage (a false pass, not a weak one); and
  * `verify-daily-close-chain.pg.test.ts` tampers with a committed chain via a superuser-only
- * `session_replication_role = replica`, which has no PGlite analogue. (`input-vat.rls.test.ts` and
- * `vat-return.rls.test.ts` were the other two; both were pure cross-tenant isolation and went with
- * the RLS drop — the arithmetic they controlled lives in their PGlite siblings.) CLAUDE.md §4
+ * `session_replication_role = replica`, which has no PGlite analogue. (Two further real-PG suites
+ * here, over `computeInputVat` and `computeVatReturn`, were pure cross-tenant isolation and went
+ * with the RLS drop — the arithmetic they controlled lives in `input-vat.test.ts` and
+ * `vat-return.test.ts`.) CLAUDE.md §4
  * documents that this repo's real-Postgres test tier needs a local Docker daemon (plus
  * `TESTCONTAINERS_RYUK_DISABLED`); `dockerRequired` turns the raw testcontainers daemon error into
  * that guidance when Docker is absent.

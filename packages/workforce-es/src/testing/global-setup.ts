@@ -24,8 +24,8 @@ import { WORKFORCE_ES_MIGRATIONS } from "../migrations.js";
  * migrates workforce-es's full package stack, exactly as the now-removed per-file
  * `startRealPostgres` did.
  *
- * No `roles`: the `convenio_es_rls_probe` login this file created existed for
- * `convenio-config.rls.test.ts` alone, and that suite was retired with the RLS drop — its isolation
+ * No `roles`: the `convenio_es_rls_probe` login this file created existed for one suite alone, and
+ * that suite was retired with the RLS drop — its isolation
  * cases had no meaning under one tenant per database, and its three grant cases are
  * `convenio_config: "SIU"` in `packages/fiscal-verifactu/src/privileges.expected.ts` (the column
  * defaults and the enum's rejection are `migrations.test.ts`).

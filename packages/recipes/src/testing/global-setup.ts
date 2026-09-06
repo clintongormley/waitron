@@ -9,8 +9,8 @@ import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
  * a container per file. See the plan at
  * `docs/superpowers/plans/2026-08-19-shared-test-container.md`.
  *
- * **NOTHING IN THIS PACKAGE CURRENTLY CLONES IT.** `ingredients.rls.test.ts` and
- * `recipe-lines.rls.test.ts`, the two suites that ever did, were retired with the RLS drop: their
+ * **NOTHING IN THIS PACKAGE CURRENTLY CLONES IT.** The two suites that ever did were retired with
+ * the RLS drop: their
  * isolation cases had no meaning under one tenant per database, and their two grant cases are
  * `ingredients: "SIU"` and `recipe_lines: "SIUD"` in
  * `packages/fiscal-verifactu/src/privileges.expected.ts` (the create/list and set/get behaviours are

@@ -9,10 +9,10 @@ import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
  * a container per file. See the plan at
  * `docs/superpowers/plans/2026-08-19-shared-test-container.md`.
  *
- * **NOTHING IN THIS PACKAGE CURRENTLY CLONES IT.** `operations.rls.test.ts`, the one suite that ever
- * did, was retired with the RLS drop (its isolation cases had no meaning under one tenant per
- * database, and its grant cases are pinned by the privilege matrix in
- * `packages/fiscal-verifactu/src/privileges.expected.ts`). The wiring is left standing — and this
+ * **NOTHING IN THIS PACKAGE CURRENTLY CLONES IT.** The one suite that ever did was retired with the
+ * RLS drop: its isolation cases had no meaning under one tenant per database, and its grant cases
+ * are `catalogues`/`products: "SIU"` in the privilege matrix
+ * (`packages/fiscal-verifactu/src/privileges.expected.ts`). The wiring is left standing — and this
  * package therefore still requires Docker — because whether @waitron/catalogue keeps a real-Postgres
  * tier at all is the per-suite target review's call
  * (docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md §4, "PGlite
@@ -26,7 +26,7 @@ import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
  * and no cross-package ordering has to be stated. `core` is the established key for a CORE-only
  * template — packages/db, apps/server and reporting all name theirs `core`.
  *
- * No `roles`: the `rls_probe` login this file created existed for `operations.rls.test.ts` alone.
+ * No `roles`: the `rls_probe` login this file created existed for that one suite alone.
  *
  * A globalSetup's return value is its globalTeardown, so returning `teardown` stops the container
  * once the run finishes.

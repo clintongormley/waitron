@@ -15,10 +15,10 @@ import { PAYMENTS_MIGRATIONS } from "../migrations.js";
  * migrations.test.ts; the now-removed per-file `startRealPostgres` ran the same pair. Suites clone
  * the template with `useTemplateDb({ template: "core_payments" })`.
  *
- * ONE probe role, `rls_probe`, is the only cluster role any suite here creates: `payments.test.ts`
- * connects AS it (`pg.connectAs`) so its writes go through `app_user`'s grants rather than the
- * container superuser's. It is created ONCE here, idempotently, in place of the per-file `probeRole`
- * that suite passed to `useRealPostgres`. Roles are CLUSTER-global: a shared container is one
+ * ONE probe role, `rls_probe`, is the only cluster role any suite here creates: `store.pg.test.ts`
+ * connects AS it (`pg.connectAs`, its `PROBE_ROLE`) so its writes go through `app_user`'s grants
+ * rather than the container superuser's. It is created ONCE here, idempotently, in place of the
+ * per-file `probeRole` that suite passed to `useRealPostgres`. Roles are CLUSTER-global: a shared container is one
  * cluster and every suite clones its own DATABASE from a template but shares that cluster's roles.
  * That is why per-suite names have to be distinct — a per-file `CREATE ROLE` is non-idempotent
  * (`probeRoleStatement` emits a bare `create role …`), so the moment two files created a role of the
@@ -53,7 +53,7 @@ export default async function ({ provide }: GlobalSetupContext) {
       core_payments: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS]),
     },
     roles: [
-      // The non-superuser LOGIN role payments.test.ts connects as, inheriting app_user's grants.
+      // The non-superuser LOGIN role store.pg.test.ts connects as, inheriting app_user's grants.
       { name: "rls_probe", password: "probe", inRole: "app_user" },
     ],
   });

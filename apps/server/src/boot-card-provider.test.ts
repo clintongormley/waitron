@@ -18,8 +18,9 @@ import type { CardProvider, TillConfig } from "./till-config.js";
 
 // buildCardProvider only reads the tenant's `payments.stripe` credential and constructs a provider —
 // no reader/network call — so PGlite (superuser, one backend) is the right target here: nothing on
-// this path depends on the deployment role or on concurrency (the RLS behaviour of the providers
-// themselves is proven in `packages/payments-stripe`'s own `*.rls.test.ts` suites). The two provider
+// this path depends on the deployment role or on concurrency (what the providers themselves do
+// against a real database, as a non-superuser member of `app_user`, is proven in
+// `packages/payments-stripe`'s `device.test.ts`, `hosted.test.ts` and `stripe.test.ts`). The two provider
 // branches (`stripe_terminal`, `stripe_on_device`) are the ones `boot.test.ts` — which boots against
 // a real container with `cardProvider=none` — cannot reach; the `none` branch is covered there.
 const KEY_ENV = {

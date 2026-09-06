@@ -11,11 +11,13 @@ import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 
 // PGlite, not real Postgres: this suite is about appendToChain's OWN logic — ordering, the genesis
-// shape, the error shape, and that a real appended chain re-verifies. RLS and true lock CONTENTION
-// are proven elsewhere (rls.test.ts as the app role; chain.concurrency.test.ts on real Postgres —
-// PGlite serialises every query onto one backend, so it cannot test contention, see
-// chain.pglite-cannot-test-contention.test.ts). PGlite's superuser connection bypasses RLS, so no
-// withTenant/asAppUser is needed here.
+// shape, the error shape, and that a real appended chain re-verifies. True lock CONTENTION is proven
+// elsewhere, in chain.concurrency.test.ts on real Postgres — PGlite serialises every query onto one
+// backend, so it cannot test contention, see chain.pglite-cannot-test-contention.test.ts. What the
+// app role may do on `workforce_chains` is the privilege matrix's
+// (`packages/fiscal-verifactu/src/privileges.expected.ts`, `workforce_chains: "SIU"`), not this
+// suite's. PGlite connects as a superuser holding every grant, so no withTenant/asAppUser wrapper is
+// needed here.
 const pg = usePgliteDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });

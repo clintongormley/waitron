@@ -34,7 +34,8 @@ import { IDENTITY_MIGRATIONS } from "@waitron/identity";
  *
  * Because globalSetup runs before every worker, a Docker-absent run dies HERE, taking the WHOLE
  * @waitron/layouts suite (its hermetic unit files, errors/validate, included) with it, not only the
- * real-PG suite — a real broadening of what needs Docker, the same one db and apps/server accepted.
+ * four real-PG suites — a real broadening of what needs Docker, the same one db and apps/server
+ * accepted.
  * What makes it acceptable is not an assumption that every machine has Docker, but that this package's
  * reason to be in the real-PG tier at all needs Docker regardless: the four store suites
  * (`canvas-store.pg.test.ts`, `device-profile-store.pg.test.ts`, `theme-store.test.ts`,
