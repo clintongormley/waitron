@@ -1069,6 +1069,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     now: () => Date.now(),
   });
   app.use("/api/*", corsForVenue(allowOrigin));
+  // The media surface is served at `/media/*` (media-api.ts), OUTSIDE `/api/*`, but §3.4 lists it
+  // among the CORS surfaces: a rerouted till fetches menu photos cross-origin. Same `allowOrigin`
+  // instance — one allow-list, not a second read path.
+  app.use("/media/*", corsForVenue(allowOrigin));
 
   // One Hono app: `/health` plus the Mode 3 inbound webhook, which "attaches to this app rather than
   // creating a second one" (health.ts's own note). `makeStripe` is `defaultMakeStripe`, the same SDK
