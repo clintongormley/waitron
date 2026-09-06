@@ -5,11 +5,11 @@
 -- `public`, because core migrations run before this package's (migrations.manifest.json orders `core`
 -- first). It fails closed — an unset app.tenant_id returns NULL, filtering every row.
 --
--- FORCE applies RLS to the table OWNER too. It does nothing against a superuser, so it is not the
--- control the app_user probe in webauthn.rls.test.ts exercises: with the owner a superuser in the test
--- harness, removing a FORCE line leaves that behavioural suite green. It is required by the house rule
--- for every tenant_id table and is here for the deployment that connects as the NON-superuser
--- migration owner, which is the only case FORCE isolates. The catalog guard that DOES cover it is
+-- FORCE applies RLS to the table OWNER too. It does nothing against a superuser, so no app_user
+-- probe can be its control: with the owner a superuser in a test harness, removing a FORCE line
+-- leaves such a suite green. It is required by the house rule for every tenant_id table and is here
+-- for the deployment that connects as the NON-superuser migration owner, which is the only case
+-- FORCE isolates. The catalog guard that DOES cover it is
 -- fiscal-verifactu's `inmutabilidad` scan (inmutabilidad.test.ts): it applies IDENTITY_MIGRATIONS and
 -- asserts relforcerowsecurity on every tenant_id-bearing table, both of these included — dropping a
 -- FORCE line makes that scan report `webauthn_credentials`/`webauthn_challenges: relforcerowsecurity=false`.

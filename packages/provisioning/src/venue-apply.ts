@@ -113,8 +113,8 @@ export async function applyVenue(
           // guards below. Idempotent: find-or-create by name, so a D8 second-shop re-run adds no
           // duplicate (profiles belong to the tenant, not a shop). Runs on the caller's owner tx under
           // the tenant GUC — device_profiles/management_sessions are FORCE-RLS, satisfied because
-          // withTenant set current_tenant_id() to this tenant, proven under the owner role in
-          // venue-apply.node-privilege.rls.test.ts.
+          // withTenant set current_tenant_id() to this tenant, exercised under the owner role in
+          // venue-apply.pg.test.ts.
           await seedDeviceProfiles(tx, tenantId, action.profiles);
           break;
         case "create-location": {

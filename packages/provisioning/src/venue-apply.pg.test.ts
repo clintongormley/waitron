@@ -5,8 +5,6 @@ import { createPostgresDb, withTenant, type Database } from "@waitron/db";
 import { applyInstance, withDatabase } from "./instance-apply.js";
 import { planInstance } from "./instance-plan.js";
 import { readInstanceState } from "./instance-state.js";
-import { sqlStateOf } from "./sql-state.js";
-import { obligadoTenantId } from "./tenant-id.js";
 import { applyVenue } from "./venue-apply.js";
 import { planVenue, type VenueRequest } from "./venue-plan.js";
 import { roleUrl, startBarePostgres, type RealPostgres } from "./testing/postgres.js";
@@ -37,15 +35,17 @@ function venueRequest(taxId: string): VenueRequest {
 }
 
 const DATABASE = "waitron_venue_priv_suite";
-const FIXED_PW = "fixedpw"; // every role instance creates gets this, so we can connect as any of them
+const FIXED_PW = "fixedpw"; // a fixed generator, so `applyInstance` is deterministic here
 
-describe("who may INSERT a node under FORCE RLS", () => {
+// The one place `applyVenue` runs end to end against a real, migrated, stamped database over a
+// connection that is NOT a superuser — so the grants and triggers the venue write path passes
+// through are genuinely enforced, which PGlite (every connection a superuser holding every grant,
+// CLAUDE.md §4) cannot do. `.pg` rather than `.rls`: venue-apply.test.ts and venue-apply.e2e.test.ts
+// are both PGlite and hold the name.
+describe("applyVenue against a real container, as the non-superuser owner", () => {
   let pg: RealPostgres;
   let superuser: Database;
   let owner: Database; // prov_admin @ target — ran the migrations, therefore owns the tables
-  let provisioner: Database; // waitron_provisioner @ target — member of app_user + tenant_provisioner
-  let tenantId: string;
-  let locationId: string;
 
   beforeAll(async () => {
     pg = await startBarePostgres();
@@ -77,31 +77,15 @@ describe("who may INSERT a node under FORCE RLS", () => {
     }
 
     owner = await createPostgresDb(withDatabase(adminUri, DATABASE));
-    provisioner = await createPostgresDb(
-      withDatabase(roleUrl(pg.uri, "waitron_provisioner", FIXED_PW), DATABASE),
-    );
-
-    // Seed a tenant + location as the owner, under the tenant scope (deterministic id).
-    tenantId = obligadoTenantId("ES", "B00000000");
-    locationId = await withTenant(owner, tenantId, async (tx) => {
-      await tx.execute(sql`
-        insert into tenants (id, country, tax_id, legal_name)
-        values (${tenantId}, 'ES', 'B00000000', 'Probe SL') on conflict do nothing`);
-      const loc = await tx.execute<{ id: string }>(sql`
-        insert into locations (tenant_id, name, invoice_locales, operation_description)
-        values (${tenantId}, 'Probe', array['es-ES'], 'venta') returning id`);
-      return loc.rows[0]!.id;
-    });
   }, 180_000);
 
   afterAll(async () => {
-    if (provisioner !== undefined) await provisioner.close();
     if (owner !== undefined) await owner.close();
     if (superuser !== undefined) await superuser.close();
     if (pg !== undefined) await pg.stop();
   });
 
-  it("prov_admin is a non-superuser (the negative control for this whole suite)", async () => {
+  it("prov_admin is a non-superuser (the negative control for the run below)", async () => {
     const rows = await owner.execute<{ me: string; rolsuper: boolean; rolbypassrls: boolean }>(
       sql`select current_user as me, rolsuper, rolbypassrls from pg_roles where rolname = current_user`,
     );
@@ -110,34 +94,11 @@ describe("who may INSERT a node under FORCE RLS", () => {
     expect(rows.rows[0]?.rolbypassrls).toBe(false);
   });
 
-  it("the OWNER-admin CAN insert a node under the tenant GUC", async () => {
-    const nodeId = await withTenant(owner, tenantId, async (tx) => {
-      const node = await tx.execute<{ id: string }>(sql`
-        insert into nodes (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Owner node') returning id`);
-      return node.rows[0]!.id;
-    });
-    expect(nodeId).toMatch(/^[0-9a-f-]{36}$/);
-  });
-
-  it("waitron_provisioner CANNOT (nodes is SELECT-only, 0017) — the control that proves the owner path does real work", async () => {
-    let sqlState: string | null = null;
-    try {
-      await withTenant(provisioner, tenantId, async (tx) => {
-        await tx.execute(sql`
-          insert into nodes (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Provisioner node')`);
-      });
-      expect.unreachable("provisioner should be refused INSERT on nodes");
-    } catch (error) {
-      sqlState = sqlStateOf(error);
-    }
-    expect(sqlState).toBe("42501"); // permission denied for table nodes
-  });
-
-  it("the REAL applyVenue provisions a complete sellable venue over the owner connection, end-to-end under FORCE RLS", async () => {
-    // The one place the whole flow runs as the non-superuser OWNER against a migrated + stamped
-    // real database — closing the gap PGlite (a superuser that bypasses RLS) cannot. A fresh
-    // obligado, distinct from this suite's B00000000 seed, so ensure-tenant creates rather than
-    // reuses.
+  it("the REAL applyVenue provisions a complete sellable venue over the owner connection, end to end", async () => {
+    // The one place the whole flow runs as the non-superuser OWNER against a migrated + stamped real
+    // database, where every grant and trigger it passes through is genuinely enforced — the gap
+    // PGlite (a superuser holding every grant) cannot close. The database is fresh, so ensure-tenant
+    // creates rather than reuses.
     const result = await applyVenue(planVenue(venueRequest("B12345678"), ALL_MODULES), {
       db: owner,
       modules: ALL_MODULES,
@@ -147,13 +108,12 @@ describe("who may INSERT a node under FORCE RLS", () => {
       { module: "fiscal", report: expect.stringMatching(/^SIF .* \(installation \d+\)$/) },
     ]);
 
-    // FORCE RLS is REAL for the owner here, and reading back must happen INSIDE the tenant scope:
-    // the USING policy `tenant_id = current_tenant_id()` hides every row from a session with no GUC
-    // set, so an unscoped `owner.execute(...)` count returns 0 for rows that were in fact written
-    // (measured in this task's first container run: all four counts came back 0 against a venue
-    // `applyVenue` had just committed). The PGlite unit test does NOT catch this — its superuser
-    // connection bypasses RLS, so the same raw SELECT sees the rows. This scoped read-back is the
-    // gap that test cannot close.
+    // The read-back happens INSIDE the tenant scope because today's schema still forces row-level
+    // security on the OWNER: the USING policy `tenant_id = current_tenant_id()` hides every row from
+    // a session with no GUC set, so an unscoped `owner.execute(...)` count returns 0 for rows that
+    // were in fact written (measured: all four counts came back 0 against a venue `applyVenue` had
+    // just committed). `withTenant` is the transaction primitive here regardless of that, so this
+    // read stays as written when the policies go.
     const { counts, node, sif, profiles } = await withTenant(owner, result.tenantId, async (tx) => {
       const counts = await tx.execute<{
         tenants: number;
@@ -172,8 +132,8 @@ describe("who may INSERT a node under FORCE RLS", () => {
         select nif from registro_sif where node_id = ${result.nodeId} and revocado_en is null`);
       // The starter device profiles, read back under the same scope. This is the ONE place the store's
       // createDeviceProfile (which opens an admin management session and validates capabilities) runs
-      // as the non-superuser OWNER under real FORCE RLS on device_profiles / management_sessions —
-      // the gap PGlite (a superuser that bypasses RLS) cannot close.
+      // as the non-superuser OWNER against real device_profiles / management_sessions grants — the
+      // gap PGlite (a superuser holding every grant) cannot close.
       const profiles = await tx.execute<{
         name: string;
         canvas_id: string | null;

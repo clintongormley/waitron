@@ -68,7 +68,7 @@ describe("quoteLiteral", () => {
   it("doubles a single quote, so a password cannot end the literal early", () => {
     // `applyInstance` and `InstanceAction` are exported (`index.ts`) and `password` is typed
     // `string`, so the old safety was a property of ONE caller rather than of the code — and this
-    // package's own `instance-apply.rls.test.ts` already passes a hand-written password through
+    // package's own `instance-apply.pg.test.ts` already passes a hand-written password through
     // that path.
     expect(quoteLiteral("a'b")).toBe("'a''b'");
     expect(quoteLiteral("'; alter role waitron_app superuser; --")).toBe(

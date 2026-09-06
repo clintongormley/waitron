@@ -324,7 +324,7 @@ declare module "@waitron/shared" {
      * `provisioning.role_creation_failed` above, minus the password: this statement embeds no
      * secret, and the catch exists because the driver's raw error otherwise escaped `applyInstance`
      * unformatted on a path a real operator reaches (an admin holding CREATEROLE but no ADMIN
-     * OPTION on `app_user` — 42501, proven in `instance-apply.rls.test.ts`). */
+     * OPTION on `app_user` — 42501, proven in `instance-apply.pg.test.ts`). */
     "provisioning.membership_grant_failed": {
       role: string;
       memberOf: string;

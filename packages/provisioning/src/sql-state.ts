@@ -18,7 +18,7 @@ const SQLSTATE = /^[0-9A-Z]{5}$/;
  *
  * It walks `.cause` because the code is not on the error its callers catch: Drizzle wraps the
  * driver's error rather than re-exposing its fields. That is asserted against the real shape, not
- * assumed — `instance-apply.rls.test.ts`'s "never lets the generated password reach a thrown error"
+ * assumed — `instance-apply.pg.test.ts`'s "never lets the generated password reach a thrown error"
  * forces a genuine failure through a real container and pins `sqlState: "42704"`, which is only
  * reachable through this walk.
  *

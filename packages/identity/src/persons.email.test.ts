@@ -7,13 +7,10 @@ import { hashPin } from "./verify-pin.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 
-// A non-superuser LOGIN role inheriting app_user's grants — the same probe persons.rls.test.ts uses.
-// email rides on the table-level GRANT SELECT, INSERT, UPDATE that persons already holds
-// (drizzle/0001_identity_rls.sql), so a new nullable column needs no grant or RLS change. This suite
-// proves the functional partial index persons_tenant_email_uq — case-insensitive, per-tenant, and
-// NULL-permissive — under FORCE ROW LEVEL SECURITY as the deployment app role. PGlite cannot show it:
-// it is a superuser that bypasses RLS AND serialises every query, so a real unique-constraint
-// violation under the app role is invisible there.
+// The subject is the functional partial index persons_tenant_email_uq: case-insensitive
+// (lower(email)), keyed on tenant_id, and NULL-permissive. An index is enforced on any target, so
+// this file is a candidate for the PGlite tier once the suites are re-tagged; it runs through the
+// probe login below only because that is the connection this suite already had.
 const PROBE_ROLE = "identity_rls_probe";
 const PROBE_PASSWORD = "probe";
 
@@ -21,9 +18,8 @@ const PIN = hashPin("1234");
 
 const suite = useTemplateDb({ template: "core_identity" });
 
-/** Insert one persons row for `tenantId`, scoped through withTenant so RLS's WITH CHECK
- * (tenant_id = current_tenant_id()) is satisfied. Returns the insert promise so a caller can assert
- * on rejection (unique violation) or resolution. */
+/** Insert one persons row for `tenantId`. Returns the insert promise so a caller can assert on
+ * rejection (unique violation) or resolution. */
 function insertPerson(
   probe: Database,
   tenantId: string,
@@ -37,7 +33,7 @@ function insertPerson(
   );
 }
 
-describe("persons.email unique index under real row-level security", () => {
+describe("persons.email unique index (persons_tenant_email_uq)", () => {
   it("rejects a second person with the same email (case-insensitively) in one tenant", async () => {
     const t1 = await seedTenant(suite.admin);
     const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
@@ -45,8 +41,8 @@ describe("persons.email unique index under real row-level security", () => {
       await insertPerson(probe, t1, "A", "Owner@x.com");
       // The differing case (Owner@x.com vs owner@x.com) is the point: lower(email) collides. drizzle
       // wraps the pg error, so its .message is a generic "Failed query…" — the unique-violation code
-      // and the constraint name live on the underlying pg error, read here the same way
-      // persons.rls.test.ts reads 42501. 23505 = unique_violation.
+      // and the constraint name live on the underlying pg error, which `pgErrorCode` reaches by
+      // walking `.cause`. 23505 = unique_violation.
       const error = await insertPerson(probe, t1, "B", "owner@x.com")
         .then(() => undefined)
         .catch((e: unknown) => e);

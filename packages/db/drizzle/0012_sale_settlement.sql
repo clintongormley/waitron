@@ -56,7 +56,7 @@ CREATE TRIGGER sale_settlements_block_truncate
 -- of app.tenant_id — the fail-open fix. Replace the body AS the owner: grant
 -- membership + schema CREATE to CURRENT_USER's role, SET ROLE, CREATE OR REPLACE,
 -- then revoke. Mirrors the ownership dance 0005 used for ALTER FUNCTION OWNER.
--- (The genuine non-superuser apply is packages/provisioning/src/instance-apply.rls.test.ts,
+-- (The genuine non-superuser apply is packages/provisioning/src/instance-apply.pg.test.ts,
 --  which applies this migration set — the `core` manifest, resolving to ../db/drizzle and so
 --  including this file — as `prov_admin` (login createdb createrole; the suite asserts rolsuper=f,
 --  rolbypassrls=f): if the privileges are wrong, this dance fails loudly there. packages/db's OWN

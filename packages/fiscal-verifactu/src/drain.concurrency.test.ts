@@ -9,11 +9,9 @@ import { staticResolver } from "../test/write-path-fixtures.js";
 
 // A non-superuser LOGIN role that inherits app_user's grants (including EXECUTE on
 // envios_tenants_with_work). Being non-superuser is what subjects EVERY query a drain issues on
-// this connection to FORCE ROW LEVEL SECURITY — crucially including tenantsWithWork's top-level
-// cross-tenant enumeration, which runs OUTSIDE any withTenant transaction and therefore cannot be
-// covered by a per-transaction `asAppUser` SET LOCAL ROLE. Mirrors pending-count.rls.test.ts's
-// rls_probe: current_tenant_id() reads app.tenant_id, so with no GUC set the tenant-isolation
-// policy matches zero rows.
+// this connection to the app role's real privilege set — crucially including tenantsWithWork's
+// top-level enumeration, which runs OUTSIDE any withTenant transaction and therefore cannot be
+// covered by a per-transaction `asAppUser` SET LOCAL ROLE.
 const DRAIN_PROBE_ROLE = "drain_probe";
 const DRAIN_PROBE_PASSWORD = "probe";
 
@@ -106,19 +104,16 @@ describe("drain — claim concurrency (real Postgres)", () => {
   }, 30_000);
 
   /**
-   * `pendingCount`'s own dedicated RLS proof already lives in `pending-count.rls.test.ts` (a
-   * genuinely non-superuser LOGIN role via `pg.connectAs`, exercising the class method's own
-   * internal `withTenant` call end to end). This test is narrower and complements it: it proves
-   * that AFTER a `drain()` pass — which itself always runs on the admin/owner connection, since
-   * `tenantsWithWork`'s cross-tenant enumeration is RLS-deferred by design (spec §7.1, `drain.ts`'s
-   * own doc comment) — the pending count under a genuinely RLS-subject role (`asAppUser`, `SET
-   * LOCAL ROLE app_user`) reflects the drained state, not a stale or unscoped one. `asAppUser`
-   * changes the EFFECTIVE role for the rest of that one transaction (current_user, not
-   * session_user, is what Postgres checks for RLS bypass), so this holds even though `admin`
-   * itself is the Testcontainers superuser login — the same pattern this package's other suites
-   * use on PGlite (`asAppUser`'s own doc comment), now proven on real Postgres too.
+   * AFTER a `drain()` pass — which itself always runs on the admin/owner connection, since
+   * `tenantsWithWork`'s enumeration crosses tenants by design (spec §7.1, `drain.ts`'s own doc
+   * comment) — the pending count read under `app_user` (`asAppUser`, `SET LOCAL ROLE app_user`)
+   * reflects the drained state, not a stale or unscoped one. `asAppUser` changes the EFFECTIVE role
+   * for the rest of that one transaction (current_user, not session_user, is what Postgres checks),
+   * so this holds even though `admin` itself is the Testcontainers superuser login — the same
+   * pattern this package's other suites use on PGlite (`asAppUser`'s own doc comment), here on real
+   * Postgres where the grants are genuinely enforced.
    */
-  it("pendingCount reflects drained rows under the app_user role (RLS), not just the suite.admin connection", async () => {
+  it("pendingCount reflects drained rows under the app_user role, not just the suite.admin connection", async () => {
     const seeded = await seedPendingEnvios(suite.admin, { count: 3 });
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const backend = new VerifactuBackend({

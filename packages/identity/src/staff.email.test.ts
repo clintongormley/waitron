@@ -11,8 +11,8 @@ import { openManagementSession, seedPerson } from "../test/fixtures.js";
 // production translator (`isUniqueViolation`, a Drizzle-cause-chain walk) then maps to the domain
 // error. PGlite is a superuser that serialises every query and need not reproduce that constraint
 // faithfully, so the duplicate must be proven against a real server — the same reason
-// persons.email.rls.test.ts uses a real backend. The connection here is the template's OWNER: the
-// unique INDEX fires for any role (RLS-bypass is irrelevant to a unique constraint), so this drives
+// persons.email.test.ts uses a real backend. The connection here is the template's OWNER: the
+// unique INDEX fires for any role, so this drives
 // the gated createPerson/setEmail API exactly as the PGlite logic suite does, just on a backend that
 // enforces the index.
 const suite = useTemplateDb({ template: "core_identity" });

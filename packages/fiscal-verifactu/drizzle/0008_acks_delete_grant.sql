@@ -7,8 +7,9 @@
 -- drainer/reconcile write paths needed AT THE TIME. Reconcile's `noTrace` auto-remediation
 -- (plan 3b Task 4, reconcile-resolution) adds a fourth: `deleteAck` removes the stale `accepted`
 -- ack when it resets a record to `pendiente` (the acks invariant — a `pendiente` row carries no
--- ack), so app_user now needs DELETE too. Confirmed live against a real, non-superuser role while
--- writing reconcile.rls.test.ts: without this grant, `deleteAck` fails
--- `permission denied for table acks` under RLS, rolling back the WHOLE reconcile T2 transaction
--- (the estado reset included) for a condition that is otherwise silent and self-healing.
+-- ack), so app_user now needs DELETE too. Confirmed live against a real, non-superuser role: without
+-- this grant, `deleteAck` fails `permission denied for table acks`, rolling back the WHOLE reconcile
+-- T2 transaction (the estado reset included) for a condition that is otherwise silent and
+-- self-healing. The standing guard is `acks: "SIUD"` in
+-- packages/fiscal-verifactu/src/privileges.expected.ts.
 GRANT DELETE ON "acks" TO app_user;

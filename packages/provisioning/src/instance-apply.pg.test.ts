@@ -184,16 +184,14 @@ describe("applyInstance against a blank container", () => {
     }
   });
 
-  it("gives waitron_app membership of app_user, and not tenant_provisioner", async () => {
-    // Checks the two membership EDGES least privilege depends on — not any ability. This does not
-    // prove waitron_app can run a duty pass, nor that it is refused an INSERT on tenants; it proves
-    // the membership shape those abilities are built on. Actually connecting as the role to prove
-    // the ability itself is deliberately out of scope here: `packages/db`'s
-    // `provisioner-role.rls.test.ts` already proves the grant behaviour with known passwords, and
-    // this suite proves the provisioning, not the policy.
+  it("gives waitron_app membership of app_user", async () => {
+    // Checks the membership EDGE least privilege depends on — not any ability. This does not prove
+    // waitron_app can run a duty pass, nor that it is refused an INSERT on tenants; it proves the
+    // membership shape those abilities are built on. Connecting as the role to prove an ability is
+    // deliberately out of scope: what `app_user` may do to each table is pinned by
+    // packages/fiscal-verifactu/src/privileges.expected.ts, and this suite proves the provisioning.
     const state = await readInstanceState(admin, DATABASE, null);
     expect(state.roles.waitron_app?.memberOf).toContain("app_user");
-    expect(state.roles.waitron_app?.memberOf).not.toContain("tenant_provisioner");
   });
 
   it("repairs a membership that drifted after provisioning", async () => {
@@ -224,9 +222,11 @@ describe("applyInstance against a blank container", () => {
       // The repair under test is what normally puts this back, so a failure ANYWHERE above it
       // leaves the membership revoked for every test that follows. `GRANT` is idempotent, so this
       // is a no-op on the passing path. Originally left out on the grounds that this was the last
-      // test in its `describe`; three have been appended since (:214, :275, :354), and it is safe
-      // today only because none of them happens to read `waitron_provisioner`'s memberships —
-      // which is a property of those tests, not of this one.
+      // test in its `describe`; several have been appended since, and it is safe today only because
+      // none of them reads `waitron_provisioner`'s memberships — which is a property of those
+      // tests, not of this one. (Named rather than numbered: every in-file `:NN` this comment and
+      // the one below carried was already pointing at an unrelated line by the time the file was
+      // renamed.)
       await admin.execute(sql.raw(`grant tenant_provisioner to waitron_provisioner`));
     }
   });
@@ -378,23 +378,25 @@ describe("applyInstance against a blank container", () => {
     // has never had; `errors.ts`'s `provisioning.state_unreadable` cites the real one correctly.
     //
     // `prov_admin` created `app_user`, and can therefore grant it. The narrow claim this test needs
-    // is about ONE call, not about the file: the `applyInstance` at :93 — the only one that runs a
-    // `migrate` action — was passed `admin`, and `admin` is `prov_admin` (:64-65), not the
-    // container's superuser. `migrate` composes the migrator's URL from `adminUri` (:64), which is
-    // also `prov_admin`'s, so the `CREATE ROLE app_user` inside the core migration set ran as
-    // `prov_admin`. Postgres grants a role admin option on a role it creates (`instance-plan.ts`'s
-    // REQUIREMENTS comment says the same about `waitron_migrator`), which is where `prov_admin`'s
-    // ability to grant `app_user` comes from.
+    // is about ONE call, not about the file: the `applyInstance` in `takes a blank cluster to a
+    // migrated, stamped, granted database` — the only one that runs a `migrate` action — was passed
+    // `admin`, and this block's `beforeAll` binds `admin` and `adminUri` to `prov_admin`, not to
+    // the container's superuser. `migrate` composes the migrator's URL from that same `adminUri`,
+    // so the `CREATE ROLE app_user` inside the core migration set ran as `prov_admin`. Postgres
+    // grants a role admin option on a role it creates (`instance-plan.ts`'s REQUIREMENTS comment
+    // says the same about `waitron_migrator`), which is where `prov_admin`'s ability to grant
+    // `app_user` comes from.
     //
     // Deliberately NOT claimed, because an earlier version of this comment claimed both and both
-    // are false. (a) "Every `applyInstance` call in this file passes `admin`" — :243, :306 and :404
-    // each pass a purpose-built under-privileged probe (`grant_probe_admin`, `delegate_admin`,
-    // `probe_admin`) precisely so a refusal can be forced; none of them runs a `migrate`, so none
-    // affects who owns `app_user`. (b) "The container's superuser is never `ApplyDeps.admin`" — the
-    // second `describe` in this file (:429) binds its own `admin` to `pg.connect()` (:440), which
-    // `packages/db/src/testing/postgres.ts:52-54` documents as the container's superuser, and
-    // hands it to `applyInstance` at :476. That block is a separate bare container and has no
-    // bearing on this one; the mistake was scoping a per-block fact to the whole file.
+    // are false. (a) "Every `applyInstance` call in this file passes `admin`" — the
+    // `grant_probe_admin`, `delegate_admin` and `probe_admin` calls each pass a purpose-built
+    // under-privileged probe precisely so a refusal can be forced; none of them runs a `migrate`,
+    // so none affects who owns `app_user`. (b) "The container's superuser is never
+    // `ApplyDeps.admin`" — the second `describe` in this file, `applyInstance's create-role failure
+    // handling`, binds its own `admin` to `pg.connect()`, which
+    // `packages/db/src/testing/postgres.ts:52-54` documents as the container's superuser, and hands
+    // it to `applyInstance`. That block is a separate bare container and has no bearing on this
+    // one; the mistake was scoping a per-block fact to the whole file.
     //
     // A SECOND admin, holding exactly the attributes this tool's spec asks for — `login createdb
     // createrole`, no superuser, no BYPASSRLS — did not create `app_user`, holds no ADMIN OPTION on

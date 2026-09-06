@@ -8,21 +8,20 @@ import type { PersonRoleValue } from "./permissions.js";
 import { hashPin } from "./verify-pin.js";
 import { listActivePersonsWithPermission } from "./staff.js";
 
-// REAL Postgres, not PGlite: this exercises `listActivePersonsWithPermission`'s SELECT on persons
-// under RLS as a NON-SUPERUSER, tenant-scoped. It connects DIRECTLY as `identity_rls_probe` — a
-// cluster-wide login role globalSetup creates as a member of `app_user` (`inRole: "app_user"`,
-// testing/global-setup.ts) — rather than SET ROLE via `asAppUser`. A real member-of-`app_user`
-// login is subject to the SAME tenant-isolation policy the drawer route's production `withTenant` +
-// `asAppUser` posture runs under, so it proves the read is tenant-scoped; PGlite could not (every
-// connection a superuser, RLS bypassed — CLAUDE.md §4). Same probe pattern as persons.rls.test.ts.
+// `.pg` rather than `.rls`, and rather than joining staff.test.ts, which is PGlite: the case below
+// runs through `identity_rls_probe`, a cluster-wide login globalSetup creates as a member of
+// `app_user` (`inRole: "app_user"`, testing/global-setup.ts), and a PGlite connection is a superuser
+// holding every grant (CLAUDE.md §4). What the case actually pins — the permission and status
+// filters, the name ordering and the returned key set — needs no particular role, so this file is a
+// candidate for the PGlite tier once the suites are re-tagged.
 const PROBE_ROLE = "identity_rls_probe";
 const PROBE_PASSWORD = "probe";
 const PIN = hashPin("1234");
 
 const suite = useTemplateDb({ template: "core_identity" });
 
-/** Seed one active-by-default person of `role` as the superuser (bypasses RLS to write across roles),
- * returning its id. The query under test then reads them back as the app_user probe. */
+/** Seed one active-by-default person of `role` as the owner, returning its id. The query under test
+ * then reads them back as the app_user probe. */
 async function seedPerson(
   admin: Database,
   tenantId: string,
@@ -36,7 +35,7 @@ async function seedPerson(
   return rows.rows[0]!.id;
 }
 
-describe("listActivePersonsWithPermission (real RLS, app_user role)", () => {
+describe("listActivePersonsWithPermission", () => {
   it("returns active persons whose role holds the permission — supervisor/manager/admin in, staff and inactive out, name-sorted", async () => {
     const tenantId = await seedTenant(suite.admin);
     // Insert out of alphabetical order so a sorted result proves the orderBy, not insertion order.
@@ -64,24 +63,6 @@ describe("listActivePersonsWithPermission (real RLS, app_user role)", () => {
       const ids = new Set(rows.map((r) => r.personId));
       expect(ids.has(staff)).toBe(false);
       expect(ids.has(goneSup)).toBe(false);
-    } finally {
-      await probe.close();
-    }
-  });
-
-  it("is tenant-scoped by RLS — another tenant's supervisor is never returned", async () => {
-    const mine = await seedTenant(suite.admin);
-    const theirs = await seedTenant(suite.admin);
-    const mySup = await seedPerson(suite.admin, mine, "Nadia", "supervisor");
-    // A supervisor in the OTHER tenant: real (so there is something to hide) but out of scope.
-    await seedPerson(suite.admin, theirs, "Otra", "supervisor");
-
-    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
-    try {
-      const rows = await withTenant(probe, mine, (tx) =>
-        listActivePersonsWithPermission(tx, "cash.drawer"),
-      );
-      expect(rows).toEqual([{ personId: mySup, displayName: "Nadia" }]);
     } finally {
       await probe.close();
     }

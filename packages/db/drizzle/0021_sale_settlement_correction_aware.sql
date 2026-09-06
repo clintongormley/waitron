@@ -8,7 +8,7 @@
 -- bypass policies regardless of app.tenant_id (the fail-open fix). The added SELECT is on `sales`,
 -- which the checker already reads, so no new grant. Apply the body AS the owner via the same dance
 -- 0012 used. The genuine non-superuser apply is exercised by
--- packages/provisioning/src/instance-apply.rls.test.ts, which applies this whole directory as
+-- packages/provisioning/src/instance-apply.pg.test.ts, which applies this whole directory as
 -- prov_admin (login createdb createrole; rolsuper=f, rolbypassrls=f): a wrong privilege fails there.
 GRANT CREATE ON SCHEMA public TO sales_coverage_checker;
 --> statement-breakpoint

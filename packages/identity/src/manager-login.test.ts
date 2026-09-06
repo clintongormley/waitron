@@ -20,8 +20,8 @@ vi.mock("./verify-password.js", async (importOriginal) => {
 });
 
 // PGlite, not real Postgres: this suite tests the verifier LOGIC — the password/TOTP/suspended
-// branches and the role gate. A PGlite connection is superuser, so RLS is a false pass here
-// (CLAUDE.md §4); tenant-isolation is proven as the app role in the *.rls suites, not re-proven here.
+// branches and the role gate. A PGlite connection is superuser holding every grant, so a privilege
+// or trigger assertion would be a false pass here (CLAUDE.md §4); nothing below makes one.
 let tenantId: string;
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],

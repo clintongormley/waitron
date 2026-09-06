@@ -10,12 +10,9 @@ import type { PersonRoleValue } from "../src/permissions.js";
 
 /**
  * Seed helpers shared by the identity LOGIC suites (authorize / login / staff), which drive
- * `loginWithPin`/`authorize`/the staff-admin API on PGlite. All seed as the connection OWNER
- * (superuser on PGlite, so RLS is bypassed — pure setup, exactly as `@waitron/db`'s own `seedTenant`
- * documents). Under `test/`, so out of the english-only scan and the src coverage glob, mirroring
- * `packages/workforce/test/fixtures.ts`. The real-PG `sessions.rls.test.ts` keeps its own
- * `seedTillAndPerson` — it seeds location+till+person together for a caller-supplied tenant and its
- * shape genuinely differs.
+ * `loginWithPin`/`authorize`/the staff-admin API on PGlite. All seed as the connection OWNER — pure
+ * setup, exactly as `@waitron/db`'s own `seedTenant` documents. Under `test/`, so out of the
+ * english-only scan and the src coverage glob, mirroring `packages/workforce/test/fixtures.ts`.
  */
 
 /** Seed a location → till for `tenantId`. Returns the till id a session references. */

@@ -139,7 +139,7 @@ below). That command replaced `apps/server/sql/bootstrap-tenant.sql`, which was 
 migration `0018`, now `node_id NOT NULL`) so it could no longer run, and it created no node so it
 could not produce a sellable venue.
 
-This case is no longer exercised only by hand. `packages/provisioning/src/instance-apply.rls.test.ts`
+This case is no longer exercised only by hand. `packages/provisioning/src/instance-apply.pg.test.ts`
 runs the whole sequence against a real `postgres:18-alpine` container **as a role holding exactly
 `login createdb createrole`** — asserted in that suite's own first test, which reads back
 `rolsuper = f` and `rolbypassrls = f` for `current_user` — and that role is what the migrations
@@ -154,9 +154,9 @@ than only when a journal table is missing. This sentence said "no create and no 
 gate was removed.
 
 Two receipts sit behind that, and they are **not** the same one. What
-`packages/provisioning/src/instance-apply.rls.test.ts` pins is the PLAN: it asserts
+`packages/provisioning/src/instance-apply.pg.test.ts` pins is the PLAN: it asserts
 `toContainEqual({ kind: "migrate" })` on exactly that second plan, then applies it again — and the
-test body ends there (`:177`), with no assertion after the `applyInstance` call. So that suite
+test body ends there, with no assertion after the `applyInstance` call. So that suite
 establishes only that the re-run **does not throw**; nothing in it observes what the migrator did.
 The "applied nothing new" half is pinned one package over, by
 `packages/migrations/src/apply.concurrency.test.ts:74-79`: it counts the rows in
@@ -248,7 +248,7 @@ add for this table.
 
 **What actually writes the stamp.** `waitron-provision instance` does, as the last action of its
 plan: it calls the programmatic `stampDeployment` (`@waitron/db`).
-`packages/provisioning/src/instance-apply.rls.test.ts` asserts the stamp is present after a real run
+`packages/provisioning/src/instance-apply.pg.test.ts` asserts the stamp is present after a real run
 against a container, so this is an automated provisioning path that runs it against a real database.
 Nothing else writes it in an automated path — in particular `waitron-provision venue` **refuses** a
 database that carries no stamp (`provisioning.database_unstamped`) rather than stamping one itself,

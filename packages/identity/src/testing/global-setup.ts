@@ -18,20 +18,15 @@ import { IDENTITY_MIGRATIONS } from "../migrations.js";
  * not a collision: each handle is provided/injected within its own package's run, so the key is scoped
  * to this package.
  *
- * The four RLS probe roles are the only cluster roles any suite here creates, one per RLS suite
- * (`identity_webauthn_probe` for webauthn.rls, `identity_rls_probe` for persons.rls,
- * `identity_sessions_probe` for sessions.rls, `identity_mgmt_sessions_probe` for
- * management-sessions.rls). They are created ONCE here, idempotently, in place of the per-file
- * `probeRole` those four suites passed to `useRealPostgres`. Roles are CLUSTER-global: a shared
- * container is one cluster, and every suite clones its own DATABASE from a template but shares that
- * cluster's roles, so all four coexist. That is why the names have to be distinct: a per-file
- * `CREATE ROLE` is non-idempotent (`probeRoleStatement` emits a bare `create role …`), so the moment
- * two files created a role of the same name against the shared cluster the second would fail
- * `role … already exists` — and `useTemplateDb` offers no per-file `probeRole` at all. The four
- * suites already used distinct names, so those names are now literally load-bearing. Each inherits
- * `app_user`'s grants via `inRole`; `app_user` exists by the time the roles run because CORE's
- * `0001_tenancy_rls.sql` creates it and `startSharedContainer` runs `roles` AFTER the templates
- * migrate.
+ * `identity_rls_probe` is the only cluster role any suite here creates: a non-superuser LOGIN
+ * inheriting `app_user`'s grants, shared by persons.test.ts, persons.email.test.ts and
+ * staff.pg.test.ts. It is created ONCE here, idempotently, because roles are CLUSTER-global — a
+ * shared container is one cluster, and every suite clones its own DATABASE from a template but
+ * shares that cluster's roles. A per-file `CREATE ROLE` could not do it: `probeRoleStatement` emits
+ * a bare `create role …`, so a second file naming the same role would fail `role … already exists`,
+ * and `useTemplateDb` offers no per-file `probeRole` at all. `app_user` exists by the time the roles
+ * run because CORE's `0001_tenancy_rls.sql` creates it and `startSharedContainer` runs `roles` AFTER
+ * the templates migrate.
  *
  * A globalSetup's return value is its globalTeardown, so returning `teardown` stops the container
  * once the run finishes.
@@ -40,33 +35,29 @@ import { IDENTITY_MIGRATIONS } from "../migrations.js";
  * @waitron/identity suite (its PGlite-only and hermetic files included) with it, not only the real-PG
  * suites — a real broadening of what needs Docker, the same one db and apps/server accepted. What
  * makes it acceptable is not an assumption that every machine has Docker, but that this package's
- * reason to be in the real-PG tier at all needs Docker regardless: the four RLS suites need a
- * non-superuser role, which PGlite cannot provide (its every connection is a superuser and bypasses
- * FORCE ROW LEVEL SECURITY, the very thing they verify), and `passkey.concurrency.test.ts` needs two
- * distinct backends whose row locks actually contend, which PGlite — serialising every query onto one
- * backend — cannot stage. CLAUDE.md §4 documents that this repo's real-Postgres test tier needs a
- * local Docker daemon (plus `TESTCONTAINERS_RYUK_DISABLED`); `dockerRequired` turns the raw
- * testcontainers daemon error into that guidance when Docker is absent.
+ * reason to be in the real-PG tier at all needs Docker regardless: `passkey.concurrency.test.ts`
+ * needs two distinct backends whose row locks actually contend, which PGlite — serialising every
+ * query onto one backend — cannot stage, and `staff.email.test.ts` needs a server that enforces the
+ * functional partial unique index its `person.email_taken` path is built on. CLAUDE.md §4 documents
+ * that this repo's real-Postgres test tier needs a local Docker daemon (plus
+ * `TESTCONTAINERS_RYUK_DISABLED`); `dockerRequired` turns the raw testcontainers daemon error into
+ * that guidance when Docker is absent.
  */
 export default async function ({ provide }: GlobalSetupContext) {
   const { handle, teardown } = await startSharedContainer({
     dockerRequired:
       "@waitron/identity's real-Postgres suites require a running Docker daemon. They cannot be " +
-      "skipped: PGlite's every connection is a superuser and bypasses FORCE ROW LEVEL SECURITY, so " +
-      "it cannot exercise the tenant-isolation policies and exact grants the RLS suites verify " +
-      "(see persons.rls.test.ts), and it serialises every query onto one backend, so it cannot stage " +
-      "the two-backend row-lock race passkey.concurrency.test.ts exists to prove.",
+      "skipped: PGlite serialises every query onto one backend, so it cannot stage the two-backend " +
+      "row-lock race passkey.concurrency.test.ts exists to prove, and staff.email.test.ts needs a " +
+      "server that enforces the persons_tenant_email_uq functional partial index.",
     templates: {
       core_identity: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS, IDENTITY_MIGRATIONS]),
     },
     roles: [
-      // Non-superuser LOGIN roles — being non-superuser is what makes FORCE ROW LEVEL SECURITY apply
-      // to them, which is the whole point of the RLS suites they drive. (Which role serves which
-      // suite, and why the names must be distinct, is in the docblock above.)
-      { name: "identity_webauthn_probe", password: "probe", inRole: "app_user" },
+      // A non-superuser LOGIN role holding exactly `app_user`'s grants, so a suite can drive a query
+      // as the deployment role rather than as the owner. (Docblock above: why it is declared here
+      // and not per file.)
       { name: "identity_rls_probe", password: "probe", inRole: "app_user" },
-      { name: "identity_sessions_probe", password: "probe", inRole: "app_user" },
-      { name: "identity_mgmt_sessions_probe", password: "probe", inRole: "app_user" },
     ],
   });
   provide("sharedPg", handle);

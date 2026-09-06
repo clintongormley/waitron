@@ -38,10 +38,9 @@ import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import "./errors.js";
 
 // PGlite, not real Postgres: the session routes are LOGIC (login → cookie → logout), and the login
-// path runs through `withTenant` + `asAppUser` exactly as production does, so RLS scopes the person
-// lookup to the till's tenant on the app role. Sessions/persons live in identity, so the schema is
-// CORE_MIGRATIONS + IDENTITY_MIGRATIONS. Real-PG privilege proofs for these tables are elsewhere
-// (identity's sessions.rls.test.ts / persons.rls.test.ts); they are not re-proven here.
+// path runs through `withTenant` + `asAppUser` exactly as production does. Sessions/persons live in
+// identity, so the schema is CORE_MIGRATIONS + IDENTITY_MIGRATIONS. What `app_user` may do to those
+// tables is pinned by packages/fiscal-verifactu's privileges.expected.ts, not here.
 let cfg: TillConfig;
 let ana: { id: string };
 // The pre-login roster fixtures: `abel` is a second ACTIVE person whose name sorts BEFORE "Ana" but

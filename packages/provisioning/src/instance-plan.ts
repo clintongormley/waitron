@@ -149,7 +149,7 @@ export function planInstance(
   // first needs database-level CREATE and the second needs CREATE on `public`. An admin holding
   // neither now fails on a run that used to be a silent no-op: measured on postgres:18-alpine as
   // `42501 permission denied for database` on that first statement (this change's spec §4, and
-  // `instance-apply.rls.test.ts`'s "a partially-privileged admin reads state but fails the
+  // `instance-apply.pg.test.ts`'s "a partially-privileged admin reads state but fails the
   // migrate"). Over and above that, one advisory lock and one journal read per set.
   actions.push({ kind: "migrate" });
 

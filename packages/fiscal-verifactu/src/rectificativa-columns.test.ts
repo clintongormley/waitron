@@ -12,10 +12,7 @@ import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
  *
  * PGlite (via usePgliteDb), matching this package's own `inmutabilidad.test.ts`: these are CHECK,
  * jsonb round-trip and trigger-backstop assertions, none of which needs the non-superuser
- * deployment role or lock contention that would require real Postgres (CLAUDE.md §4). The one
- * assertion that DOES — RLS still scopes the table as a non-superuser after the column add — lives
- * in `rectificativa-columns.rls.test.ts` against a real container, mirroring this package's other
- * `*.rls.test.ts` files.
+ * deployment role or lock contention that would require real Postgres (CLAUDE.md §4).
  */
 const pg = usePgliteDb({
   migrations: TEST_MIGRATIONS,

@@ -13,9 +13,7 @@ import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
  *
  * PGlite (via usePgliteDb), matching this package's `rectificativa-columns.test.ts`: these are
  * jsonb round-trip, CHECK and trigger-backstop assertions, none of which needs the non-superuser
- * deployment role or lock contention that would require real Postgres (CLAUDE.md §4). The one
- * assertion that DOES — RLS still scopes the table after the column add — lives in
- * `canje-columns.rls.test.ts` against a real container.
+ * deployment role or lock contention that would require real Postgres (CLAUDE.md §4).
  */
 const pg = usePgliteDb({
   migrations: TEST_MIGRATIONS,
