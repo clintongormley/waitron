@@ -12,6 +12,8 @@ import { applyTokens } from "@waitron/ui";
 export type Theme = "light" | "dark";
 
 const mounted: HTMLElement[] = [];
+const originalUrl = location.href;
+const originalHistoryState: unknown = history.state;
 
 /** The element under test plus the themed host it was mounted into (pass the host to axe). */
 export interface Mounted<T extends HTMLElement> {
@@ -66,6 +68,7 @@ function paintCanvas(host: HTMLElement): void {
 /** Removes every host mounted since the last cleanup. Use as `afterEach(cleanupWidgets)`. */
 export function cleanupWidgets(): void {
   for (const host of mounted.splice(0)) host.remove();
+  history.replaceState(originalHistoryState, "", originalUrl);
   document.body.style.background = "";
   document.documentElement.style.background = "";
 }

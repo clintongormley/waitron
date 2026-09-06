@@ -202,13 +202,13 @@ describe("till-lock-screen", () => {
     expect(spy).toHaveBeenCalledWith({ code: "en-GB" });
   });
 
-  it("hides the language chooser in PIN mode (roster-view only, like the device set-up affordance)", async () => {
+  it("keeps the language chooser available in PIN mode", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
     await flush(el);
     expect(el.shadowRoot!.querySelector("till-language-chooser")).not.toBeNull();
     click(el, 'wt-button.operator-button[data-person="p1"]');
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("till-language-chooser")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-language-chooser")).not.toBeNull();
   });
 
   it("round-trips a leading-zero PIN (e.g. the default 0000) to login unmangled", async () => {

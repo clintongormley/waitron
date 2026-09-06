@@ -1,3 +1,4 @@
+import { userEvent } from "@vitest/browser/context";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -1018,4 +1019,96 @@ describe("printers-screen", () => {
   it("registers as a custom element", () => {
     expect(customElements.get("dashboard-printers-screen")).toBe(PrintersScreen);
   });
+});
+
+it.each([
+  {
+    method: "createAgentCode",
+    field: "[data-test=agent-label]",
+    button: "[data-test=generate-code]",
+    result: { code: "PAIR" },
+  },
+  {
+    method: "createPrinter",
+    field: "[data-test=new-printer-name]",
+    button: "[data-test=add-printer]",
+    result: { id: "p9" },
+  },
+  {
+    method: "updatePrinter",
+    field: "[data-test=printer-name-p1]",
+    button: "[data-test=save-printer-p1]",
+    result: null,
+  },
+])(
+  "Enter guards pending $method and allows retry after rejection",
+  async ({ method, field, button, result }) => {
+    let reject!: (reason: unknown) => void;
+    const pending = new Promise((_, fail) => {
+      reject = fail;
+    });
+    const request = vi.fn().mockReturnValueOnce(pending).mockResolvedValue(result);
+    const api = stubApi({ [method]: request });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    const control = el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(field)!;
+    await control.updateComplete;
+    const input = control.shadowRoot!.querySelector("input")!;
+    input.value = "Updated";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    input.focus();
+    await userEvent.keyboard("{Enter}");
+    await userEvent.keyboard("{Enter}");
+    el.shadowRoot!.querySelector<HTMLElement>(button)!.click();
+    expect(request).toHaveBeenCalledTimes(1);
+    expect((el.shadowRoot!.querySelector(button) as import("@waitron/ui").WtButton).disabled).toBe(
+      true,
+    );
+    reject({ code: "management.request_invalid" });
+    await flush(el);
+    input.focus();
+    await userEvent.keyboard("{Enter}");
+    await flush(el);
+    expect(request).toHaveBeenCalledTimes(2);
+    expect((el.shadowRoot!.querySelector(button) as import("@waitron/ui").WtButton).disabled).toBe(
+      false,
+    );
+  },
+);
+
+it("keeps Test Print working while Generate is pending without unlocking Generate", async () => {
+  let resolve!: (value: { code: string }) => void;
+  const createAgentCode = vi.fn(
+    () =>
+      new Promise<{ code: string }>((done) => {
+        resolve = done;
+      }),
+  );
+  const api = stubApi({ createAgentCode });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  const field =
+    el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("[data-test=agent-label]")!;
+  await field.updateComplete;
+  const input = field.shadowRoot!.querySelector("input")!;
+  input.value = "Kitchen agent";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  input.focus();
+  await userEvent.keyboard("{Enter}");
+  expect(createAgentCode).toHaveBeenCalledExactlyOnceWith("Kitchen agent");
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=test-print-p1]")!.click();
+  await flush(el);
+  expect(api.testPrint).toHaveBeenCalledExactlyOnceWith("p1");
+  input.focus();
+  await userEvent.keyboard("{Enter}");
+  expect(createAgentCode).toHaveBeenCalledTimes(1);
+  expect(
+    (el.shadowRoot!.querySelector("[data-test=generate-code]") as import("@waitron/ui").WtButton)
+      .disabled,
+  ).toBe(true);
+  resolve({ code: "PAIR" });
+  await flush(el);
 });

@@ -1,7 +1,7 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { createRef, ref } from "lit/directives/ref.js";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
@@ -215,6 +215,7 @@ export class PrintersScreen extends LitElement {
 
   // The enrolled agents (server order kept), the printers as editable rows, and the recent jobs — all
   // (re)loaded on connect and after every mutation.
+  @state() private submitting = false;
   @state() private agents: PrintAgentRow[] = [];
   @state() private printers: EditablePrinter[] = [];
   @state() private jobs: PrintJobRow[] = [];
@@ -382,6 +383,17 @@ export class PrintersScreen extends LitElement {
     }
   }
 
+  /** Form submissions share a gate; immediate printer actions keep their own dispatch. */
+  async #submit(action: () => Promise<unknown>): Promise<void> {
+    if (this.submitting) return;
+    this.submitting = true;
+    try {
+      await this.#mutate(action);
+    } finally {
+      this.submitting = false;
+    }
+  }
+
   // ── Agents ─────────────────────────────────────────────────────────────────────────────────────
 
   /** The generate-code label field's composed `wt-change`. `stopPropagation` keeps it inside this shadow. */
@@ -397,7 +409,7 @@ export class PrintersScreen extends LitElement {
     this.errorKey = null; // also dismisses a prior banner on the blank-label early return below
     const label = this.newAgentLabel.trim();
     if (label === "") return;
-    await this.#mutate(async () => {
+    await this.#submit(async () => {
       const { code } = await this.api.createAgentCode(label);
       this.generatedCode = code;
       this.copied = false;
@@ -480,7 +492,7 @@ export class PrintersScreen extends LitElement {
       if (this.newHost.trim() !== "") input.host = this.newHost.trim();
       if (this.newPort.trim() !== "") input.port = Number(this.newPort);
     }
-    await this.#mutate(async () => {
+    await this.#submit(async () => {
       await this.api.createPrinter(input);
       this.newPrinterName = "";
       this.newHost = "";
@@ -535,7 +547,7 @@ export class PrintersScreen extends LitElement {
       // cloud_poll — the only remaining transport.
       patch.pollId = row.pollId === "" ? null : row.pollId;
     }
-    await this.#mutate(() => this.api.updatePrinter(id, patch));
+    await this.#submit(() => this.api.updatePrinter(id, patch));
   }
 
   /** Soft-delete (deactivate) the printer `id` holds, then reload. A rejection becomes the `errorKey`
@@ -699,18 +711,21 @@ export class PrintersScreen extends LitElement {
         </div>
         <div class="row">
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="save-printer-${p.id}"]`))}
             label=${t("printers.name")}
             data-test="printer-name-${p.id}"
             .value=${p.name}
             @wt-change=${this.#editHandler(p.id, "name")}
           ></wt-input>
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="save-printer-${p.id}"]`))}
             label=${t("printers.host")}
             data-test="printer-host-${p.id}"
             .value=${p.host}
             @wt-change=${this.#editHandler(p.id, "host")}
           ></wt-input>
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="save-printer-${p.id}"]`))}
             type="number"
             label=${t("printers.port")}
             data-test="printer-port-${p.id}"
@@ -718,12 +733,14 @@ export class PrintersScreen extends LitElement {
             @wt-change=${this.#editHandler(p.id, "port")}
           ></wt-input>
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="save-printer-${p.id}"]`))}
             label=${t("printers.usb_path")}
             data-test="printer-usb-path-${p.id}"
             .value=${p.usbPath}
             @wt-change=${this.#editHandler(p.id, "usbPath")}
           ></wt-input>
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="save-printer-${p.id}"]`))}
             label=${t("printers.poll_id")}
             data-test="printer-poll-id-${p.id}"
             .value=${p.pollId}
@@ -751,6 +768,7 @@ export class PrintersScreen extends LitElement {
             variant="primary"
             size="sm"
             data-test="save-printer-${p.id}"
+            ?disabled=${this.submitting}
             @click=${() => void this.#savePrinter(p.id)}
             >${t("action.save")}</wt-button
           >
@@ -842,6 +860,7 @@ export class PrintersScreen extends LitElement {
         <h3 class="panel-title">${t("printers.generate_title")}</h3>
         <div class="new">
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=generate-code]"))}
             label=${t("printers.agent_label")}
             data-test="agent-label"
             .value=${this.newAgentLabel}
@@ -850,6 +869,7 @@ export class PrintersScreen extends LitElement {
           <wt-button
             variant="primary"
             data-test="generate-code"
+            ?disabled=${this.submitting}
             @click=${() => void this.#generateCode()}
             >${t("printers.generate")}</wt-button
           >
@@ -873,6 +893,7 @@ export class PrintersScreen extends LitElement {
         <h3 class="panel-title">${t("printers.new_printer")}</h3>
         <div class="new">
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-printer]"))}
             label=${t("printers.name")}
             data-test="new-printer-name"
             .value=${this.newPrinterName}
@@ -901,6 +922,7 @@ export class PrintersScreen extends LitElement {
             </select>
           </label>
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-printer]"))}
             label=${t("printers.host")}
             data-test="new-host"
             .value=${this.newHost}
@@ -908,6 +930,7 @@ export class PrintersScreen extends LitElement {
               this.#onNewField(e, (v) => (this.newHost = v))}
           ></wt-input>
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-printer]"))}
             type="number"
             label=${t("printers.port")}
             data-test="new-port"
@@ -916,6 +939,7 @@ export class PrintersScreen extends LitElement {
               this.#onNewField(e, (v) => (this.newPort = v))}
           ></wt-input>
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-printer]"))}
             label=${t("printers.usb_path")}
             data-test="new-usb-path"
             .value=${this.newUsbPath}
@@ -923,6 +947,7 @@ export class PrintersScreen extends LitElement {
               this.#onNewField(e, (v) => (this.newUsbPath = v))}
           ></wt-input>
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-printer]"))}
             label=${t("printers.poll_id")}
             data-test="new-poll-id"
             .value=${this.newPollId}
@@ -932,6 +957,7 @@ export class PrintersScreen extends LitElement {
           <wt-button
             variant="primary"
             data-test="add-printer"
+            ?disabled=${this.submitting}
             @click=${() => void this.#createPrinter()}
             >${t("printers.add_printer")}</wt-button
           >

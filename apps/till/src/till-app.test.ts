@@ -1,3 +1,4 @@
+import { page } from "@vitest/browser/context";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
@@ -483,7 +484,14 @@ async function mountApp(overrides: Record<string, unknown> = {}) {
 // so the boot/login switches to en-GB below are observable against a Spanish starting point rather than
 // a no-op against an already-English default (§1: a switch you cannot observe proves nothing).
 beforeEach(() => setLocale("es-ES"));
-afterEach(cleanupWidgets);
+const initialUrl = location.href;
+afterEach(() => {
+  cleanupWidgets();
+  if (vi.isMockFunction(history.pushState)) vi.mocked(history.pushState).mockRestore();
+  sessionStorage.removeItem("waitron.lastMenu");
+  sessionStorage.removeItem("waitron.dietFilter");
+  history.replaceState(null, "", initialUrl);
+});
 
 describe("till-app", () => {
   it("registers as a custom element", () => {
@@ -647,7 +655,7 @@ describe("till-app", () => {
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
-      // The floor's data source (FP-1) — proving the handheld login LOADS the floor via `#onShowFloor`,
+      // The floor's data source (FP-1) — proving the handheld login LOADS the floor via `#loadFloorData`,
       // not that it merely switches `screen` to an empty one (`<till-floor-screen>` renders purely from
       // these props, which only `#onShowFloor` fetches).
       getTablesState: vi.fn().mockResolvedValue([freeTable]),
@@ -3968,6 +3976,121 @@ describe("till-app", () => {
     const shell = (el: TillApp) =>
       el.shadowRoot!.querySelector<HTMLElement & { activeTabKey?: string }>("till-tab-shell");
 
+    it("restores the URL tab through PIN login and refresh", async () => {
+      const url = new URL(location.href);
+      url.pathname = "/tabs/floor";
+      history.replaceState(null, "", url);
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
+      });
+      await flush(el);
+      expect(shell(el)).toBeNull();
+      await toCounter(el);
+      expect(shell(el)!.activeTabKey).toBe("floor");
+      expect(currentApi.getTablesState).toHaveBeenCalled();
+      el.remove();
+      const { el: refreshed } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
+      });
+      await toCounter(refreshed);
+      expect(shell(refreshed)!.activeTabKey).toBe("floor");
+    });
+
+    it("records tabs and restores their data on browser Back and Forward", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
+      });
+      await toCounter(el);
+      emit(shell(el)!, "tab-select", { key: "floor" });
+      await flush(el);
+      expect(location.pathname).toMatch(/^\/tabs\/floor(?:\/|$)/);
+      emit(shell(el)!, "tab-select", { key: "counter" });
+      await flush(el);
+      const back = new Promise<void>((resolve) =>
+        window.addEventListener("popstate", () => resolve(), { once: true }),
+      );
+      history.back();
+      await back;
+      await flush(el);
+      expect(shell(el)!.activeTabKey).toBe("floor");
+      const forward = new Promise<void>((resolve) =>
+        window.addEventListener("popstate", () => resolve(), { once: true }),
+      );
+      history.forward();
+      await forward;
+      await flush(el);
+      expect(shell(el)!.activeTabKey).toBe("counter");
+    });
+
+    it("uses the latest history destination when the login product load finishes", async () => {
+      let resolve!: (value: Awaited<ReturnType<TillApi["listProducts"]>>) => void;
+      history.replaceState(null, "", "/tabs/floor");
+      history.pushState(null, "", "/tabs/counter");
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
+        listProducts: vi.fn(
+          () =>
+            new Promise<Awaited<ReturnType<TillApi["listProducts"]>>>((done) => {
+              resolve = done;
+            }),
+        ),
+      });
+      await toCounter(el);
+      expect(shell(el)).toBeNull();
+      const back = new Promise<void>((done) =>
+        window.addEventListener("popstate", () => done(), { once: true }),
+      );
+      history.back();
+      await back;
+      expect(location.pathname).toBe("/tabs/floor");
+      resolve({ menus: [], products: [] });
+      await flush(el);
+      expect(shell(el)!.activeTabKey).toBe("floor");
+      expect(location.pathname).toBe("/tabs/floor");
+      expect(currentApi.getTablesState).toHaveBeenCalled();
+    });
+
+    it("uses the latest history destination when the handheld login floor load finishes", async () => {
+      let resolve!: (value: TableState[]) => void;
+      history.replaceState(null, "", "/tabs/floor");
+      history.pushState(null, "", "/tabs/order");
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
+        getTablesState: vi.fn(
+          () =>
+            new Promise<TableState[]>((done) => {
+              resolve = done;
+            }),
+        ),
+      });
+      await toCounter(el);
+      expect(shell(el)).toBeNull();
+      const back = new Promise<void>((done) =>
+        window.addEventListener("popstate", () => done(), { once: true }),
+      );
+      history.back();
+      await back;
+      resolve([]);
+      await flush(el);
+      expect(shell(el)!.activeTabKey).toBe("floor");
+      expect(location.pathname).toBe("/tabs/floor");
+    });
+
+    it("replaces an unavailable URL tab with the canvas default", async () => {
+      const url = new URL(location.href);
+      url.pathname = "/tabs/removed";
+      history.replaceState(null, "", url);
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
+      });
+      await toCounter(el);
+      expect(shell(el)!.activeTabKey).toBe("counter");
+      expect(location.pathname).toMatch(/^\/tabs\/counter(?:\/|$)/);
+    });
+
     it("renders the tab shell with the counter tab active when a canvas is present", async () => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
@@ -4275,12 +4398,14 @@ describe("till-app", () => {
       await flush(el);
       expect(shell(el)!.activeTabKey).toBe("order");
       const before = getTablesState.mock.calls.length;
+      const pushHistory = vi.spyOn(history, "pushState");
       occupied = true; // the tab is now open — the floor read-model would show t1 occupied
       emit(shell(el)!, "tab-select", { key: "floor" }); // the REAL return: tap the Floor tab
       await flush(el);
       expect(shell(el)!.activeTabKey).toBe("floor");
       // The Floor-tab return RE-READ occupancy (a fresh `getTablesState`), not merely switched tabs.
       expect(getTablesState.mock.calls.length).toBeGreaterThan(before);
+      expect(pushHistory).toHaveBeenCalledTimes(1);
       // The Floor tab re-read occupancy (tables-only refresh): t1 now renders the SECOND fetch (occupied),
       // not the stale free one — so a re-tap resumes the open tab instead of re-firing `openTab`.
       const grid = el.shadowRoot!.querySelector("till-card-grid")!;
@@ -4322,6 +4447,7 @@ describe("till-app", () => {
       await flush(el);
       expect(shell(el)!.activeTabKey).toBe("order");
       const before = getTablesState.mock.calls.length;
+      const pushHistory = vi.spyOn(history, "pushState");
       occupied = true; // the tab has been settled server-side; the floor read-model would now reflect it
       emit(shell(el)!, "new-sale"); // the ticket view's "New sale" after settling the tab
       await flush(el);
@@ -4329,6 +4455,7 @@ describe("till-app", () => {
       expect(shell(el)!.activeTabKey).toBe("floor");
       // AND re-read occupancy (a fresh getTablesState), so the just-closed table is no longer stale.
       expect(getTablesState.mock.calls.length).toBeGreaterThan(before);
+      expect(pushHistory).not.toHaveBeenCalled();
     });
   });
 
@@ -4768,13 +4895,12 @@ describe("till-app", () => {
       expect(el.shadowRoot!.textContent).not.toContain("locale.unsupported"); // never leaks the code
     });
 
-    it("renders the language chooser in the shell header so it can load the offered locales", async () => {
+    it("renders the language chooser in the shell alongside the API-backed counter", async () => {
       const { el } = await mountApp();
       const c = await toCounterAs(el, null);
       // The counter is still handed the app's api (threaded by the shell's tab body).
       expect(c.api).toBe(currentApi);
-      // SP-B4: the language chooser relocated from the embedded counter's (suppressed) header into the
-      // shell header, wired to the app's `loadLocales` (which reads getLocales).
+      // The shell owns the chooser while the counter stays embedded.
       expect(shell(el)!.shadowRoot!.querySelector("till-language-chooser")).not.toBeNull();
     });
 
@@ -4833,8 +4959,27 @@ describe("till-app", () => {
 
   // Multi-menu till: the switcher over the counter grid. A location may sell across several accessible
   // menus; the grid shows ONE at a time and the switcher picks it. The app owns `selectedCatalogueId`
-  // (defaulting to the flagged menu at login), so a switcher pick re-filters the grid without touching
+  // (resetting to the default menu at login), so a switcher pick re-filters the grid without touching
   // the working order — an in-flight cart line survives.
+  it("switches a kitchen display's language without writing an operator preference", async () => {
+    const putLocale = vi.fn().mockResolvedValue(undefined);
+    const { el } = await mountApp({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, canvas: kdsCanvasDef, capabilities: ["act-as-kds"] }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "dev-1", kind: "kds_station", stationId: "st-dev" }),
+      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+      putLocale,
+    });
+    await flush(el);
+    emit(shell(el)!, "locale-selected", { code: "en-GB" });
+    await flush(el);
+    expect(putLocale).not.toHaveBeenCalled();
+    expect(currentLocale()).toBe("en-GB");
+  });
+
   describe("multi-menu switcher", () => {
     const foodMenu = { id: "cat-food", name: "Comida", isDefault: true };
     const drinksMenu = { id: "cat-drinks", name: "Bebidas", isDefault: false };
@@ -4880,6 +5025,100 @@ describe("till-app", () => {
           .shadowRoot!.querySelectorAll(".name"),
       ].map((n) => n.textContent);
 
+    it("resets a stored menu on login while menu changes stay out of history and leave the basket intact", async () => {
+      sessionStorage.setItem("waitron.lastMenu", "cat-drinks");
+      const { el } = await mountApp({ listProducts: twoMenuProducts });
+      const c = await toCounter(el);
+      expect(gridNames(el)).toEqual(["Bocadillo"]);
+      expect(sessionStorage.getItem("waitron.lastMenu")).toBe("cat-food");
+      c.store.addProduct(bocadillo, "1");
+      const pushHistory = vi.spyOn(history, "pushState");
+      const path = location.pathname;
+      switcherButtons(el)[1]!.click();
+      await flush(el);
+      expect(location.pathname).toBe(path);
+      expect(pushHistory).not.toHaveBeenCalled();
+      expect(sessionStorage.getItem("waitron.lastMenu")).toBe("cat-drinks");
+      expect(c.store.lines[0]!.product.id).toBe("bocadillo");
+      el.remove();
+      const refreshed = await mountApp({ listProducts: twoMenuProducts });
+      await toCounter(refreshed.el);
+      expect(gridNames(refreshed.el)).toEqual(["Bocadillo"]);
+      expect(sessionStorage.getItem("waitron.lastMenu")).toBe("cat-food");
+      expect(location.pathname).not.toContain("/menu/");
+    });
+
+    it.each(["p1", "p2"])(
+      "resets the menu after logout and a new login as %s",
+      async (personId) => {
+        const { el } = await mountApp({ listProducts: twoMenuProducts });
+        const c = await toCounter(el);
+        switcherButtons(el)[1]!.click();
+        await flush(el);
+        expect(gridNames(el)).toEqual(["Cerveza"]);
+        emit(c, "logout");
+        await flush(el);
+        emit(lock(el)!, "logged-in", {
+          personId,
+          displayName: "Operator",
+          canConfigureTill: false,
+        });
+        await flush(el);
+        expect(gridNames(el)).toEqual(["Bocadillo"]);
+        expect(switcherButtons(el)[0]!.getAttribute("aria-pressed")).toBe("true");
+        expect(sessionStorage.getItem("waitron.lastMenu")).toBe("cat-food");
+      },
+    );
+
+    it("ignores a stale stored menu and selects the default at login", async () => {
+      sessionStorage.setItem("waitron.lastMenu", "removed");
+      const { el } = await mountApp({ listProducts: twoMenuProducts });
+      await toCounter(el);
+      expect(gridNames(el)).toEqual(["Bocadillo"]);
+    });
+
+    it("does not overwrite the live app's remembered menu after a detached login finishes", async () => {
+      let resolve!: (value: Awaited<ReturnType<TillApi["listProducts"]>>) => void;
+      const { el } = await mountApp({
+        listProducts: vi.fn(
+          () =>
+            new Promise<Awaited<ReturnType<TillApi["listProducts"]>>>((done) => {
+              resolve = done;
+            }),
+        ),
+      });
+      await toCounter(el);
+      el.remove();
+      const { el: live } = await mountApp({ listProducts: twoMenuProducts });
+      await toCounter(live);
+      switcherButtons(live)[1]!.click();
+      await flush(live);
+      expect(sessionStorage.getItem("waitron.lastMenu")).toBe("cat-drinks");
+      resolve({ menus: [foodMenu], products: [bocadillo] });
+      await flush(el);
+      expect(sessionStorage.getItem("waitron.lastMenu")).toBe("cat-drinks");
+      expect(gridNames(live)).toEqual(["Cerveza"]);
+    });
+
+    it("keeps ordering usable when session storage is blocked", async () => {
+      const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+        throw new Error("blocked");
+      });
+      const set = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+        throw new Error("blocked");
+      });
+      try {
+        const { el } = await mountApp({ listProducts: twoMenuProducts });
+        await toCounter(el);
+        switcherButtons(el)[1]!.click();
+        await flush(el);
+        expect(gridNames(el)).toEqual(["Cerveza"]);
+      } finally {
+        get.mockRestore();
+        set.mockRestore();
+      }
+    });
+
     it("shows the switcher and only the DEFAULT menu's products on the grid at login", async () => {
       const { el } = await mountApp({ listProducts: twoMenuProducts });
       await toCounter(el);
@@ -4917,9 +5156,7 @@ describe("till-app", () => {
     const selected = (el: TillApp) =>
       (el as unknown as { selectedCatalogueId: string }).selectedCatalogueId;
 
-    it("keeps a mid-order menu switch, then reverts to the location default on the NEXT order (pay → new-sale)", async () => {
-      // Owner decision: switching menus is TEMPORARY — it sticks for the current order but reverts to the
-      // location's default menu when the next order begins.
+    it("keeps the last menu through payment and the next order without adding history", async () => {
       const { el } = await mountApp({ listProducts: twoMenuProducts });
       const c = await toCounter(el);
 
@@ -4934,23 +5171,25 @@ describe("till-app", () => {
       await el.updateComplete;
       expect(selected(el)).toBe("cat-drinks");
 
-      // Complete the sale: the switch STILL sticks across the ticket — the order it belongs to is settled
-      // but the NEXT one has not begun yet.
+      const pushHistory = vi.spyOn(history, "pushState");
+      const path = location.pathname;
+      // Payment and receipt are steps in this order, not browser destinations.
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
       expect(ticket(el)).not.toBeNull();
       expect(selected(el)).toBe("cat-drinks");
 
-      // Start the next order — the temporary switch reverts to the location default.
+      // Start the next order with the last menu still selected.
       emit(ticket(el)!, "new-sale");
       await flush(el);
-      expect(selected(el)).toBe("cat-food");
-      // ...and the switcher + grid reflect the default once more.
-      expect(switcherButtons(el)[0]!.getAttribute("aria-pressed")).toBe("true");
-      expect(gridNames(el)).toEqual(["Bocadillo"]);
+      expect(selected(el)).toBe("cat-drinks");
+      expect(switcherButtons(el)[1]!.getAttribute("aria-pressed")).toBe("true");
+      expect(gridNames(el)).toEqual(["Cerveza"]);
+      expect(pushHistory).not.toHaveBeenCalled();
+      expect(location.pathname).toBe(path);
     });
 
-    it("reverts a temporary menu switch to the location default when the basket is PARKED (a fresh order begins)", async () => {
+    it("keeps the last menu when the basket is parked", async () => {
       const { el } = await mountApp({ listProducts: twoMenuProducts });
       const c = await toCounter(el);
 
@@ -4961,11 +5200,11 @@ describe("till-app", () => {
       await el.updateComplete;
       expect(selected(el)).toBe("cat-drinks");
 
-      // Park it: the basket clears and a fresh working order begins, so the menu reverts to the default.
+      // Parking clears the basket and retains the menu preference.
       emit(c, "park-order", { label: "Mesa 4" });
       await flush(el);
       expect(c.store.lines).toHaveLength(0);
-      expect(selected(el)).toBe("cat-food");
+      expect(selected(el)).toBe("cat-drinks");
     });
 
     it("with a SINGLE menu the switcher renders nothing and the grid shows every product (unchanged)", async () => {
@@ -4979,3 +5218,351 @@ describe("till-app", () => {
     });
   });
 });
+
+it("leaves login and pairing actions clear of the language chooser on a narrow screen", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(375, 667);
+  try {
+    const { el } = await mountApp({
+      listStaff: vi.fn().mockResolvedValue(
+        Array.from({ length: 30 }, (_, i) => ({
+          personId: `p${i}`,
+          displayName: `Operator ${i}`,
+        })),
+      ),
+    });
+    await flush(el);
+    const screen = el.shadowRoot!.querySelector("till-lock-screen")!;
+    const chooser = screen.shadowRoot!.querySelector("till-language-chooser")!;
+    window.scrollTo(0, document.documentElement.scrollHeight);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const trigger = chooser
+      .shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!
+      .getBoundingClientRect();
+    const setup = screen.shadowRoot!.querySelector<HTMLElement>("[data-setup-till]")!;
+    expect(trigger.right).toBeLessThanOrEqual(window.innerWidth);
+    expect(setup.getBoundingClientRect().bottom).toBeLessThanOrEqual(trigger.top);
+    setup.click();
+    await flush(el);
+    const enrol = el.shadowRoot!.querySelector("till-device-enrol-screen")!;
+    window.scrollTo(0, document.documentElement.scrollHeight);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const language = enrol
+      .shadowRoot!.querySelector("till-language-chooser")!
+      .shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!
+      .getBoundingClientRect();
+    expect(
+      enrol.shadowRoot!.querySelector<HTMLElement>("[data-enrol]")!.getBoundingClientRect().bottom,
+    ).toBeLessThanOrEqual(language.top);
+  } finally {
+    await page.viewport(width, height);
+    window.scrollTo(0, 0);
+  }
+});
+
+describe("remembered dietary filters", () => {
+  const salad: TillProduct = {
+    ...cafe,
+    id: "salad",
+    descriptions: { es: "Ensalada" },
+    diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+  };
+  const mixed: TillProduct = {
+    ...cafe,
+    id: "mixed",
+    descriptions: { es: "Mixto" },
+    diet: { vegan: "no", vegetarian: "no", contains: ["meat", "fish"] },
+  };
+  const listProducts = () =>
+    vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [salad, mixed] });
+  const filter = (screen: HTMLElement) => screen.shadowRoot!.querySelector("till-diet-filter")!;
+  const pick = (screen: HTMLElement, predicate: string) =>
+    filter(screen)
+      .shadowRoot!.querySelector<HTMLElement>(`[data-test="diet-filter-${predicate}"]`)!
+      .click();
+  const pressed = (screen: HTMLElement, predicate: string) =>
+    filter(screen)
+      .shadowRoot!.querySelector(`[data-test="diet-filter-${predicate}"]`)!
+      .getAttribute("aria-pressed");
+  const names = (el: TillApp) =>
+    [
+      ...counterGrid(el)!
+        .shadowRoot!.querySelector("till-product-grid")!
+        .shadowRoot!.querySelectorAll(".name"),
+    ].map((n) => n.textContent);
+
+  it.each(["vegetarian", "vegan", "no-meat", "no-fish"])(
+    "remembers %s across screen changes, then clears it on a new login",
+    async (predicate) => {
+      const { el } = await mountApp({ listProducts: listProducts() });
+      const c = await toCounter(el);
+      c.store.addProduct(mixed, "1");
+      const push = vi.spyOn(history, "pushState");
+      const path = location.href;
+      pick(c, predicate);
+      await flush(el);
+      expect(names(el)).toEqual(["Ensalada"]);
+      expect(push).not.toHaveBeenCalled();
+      expect(location.href).toBe(path);
+      selectTab(el, "floor");
+      await flush(el);
+      selectTab(el, "counter");
+      await flush(el);
+      expect(pressed(counter(el)!, predicate)).toBe("true");
+      expect(names(el)).toEqual(["Ensalada"]);
+      expect(counter(el)!.store.lines[0]!.product.id).toBe("mixed");
+      expect(sessionStorage.getItem("waitron.dietFilter")).toBe(predicate);
+      emit(counter(el)!, "logout");
+      await flush(el);
+      await toCounter(el);
+      expect(pressed(counter(el)!, predicate)).toBe("false");
+      expect(names(el)).toEqual(["Ensalada", "Mixto"]);
+      expect(sessionStorage.getItem("waitron.dietFilter")).toBeNull();
+    },
+  );
+
+  it("shares the selection with table ordering and remembers clearing it", async () => {
+    const { el } = await mountApp({
+      listProducts: listProducts(),
+      getTablesState: vi.fn().mockResolvedValue([freeTable]),
+      listZones: vi.fn().mockResolvedValue([floorZone]),
+    });
+    const c = await toCounter(el);
+    pick(c, "vegetarian");
+    await flush(el);
+    selectTab(el, "floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: freeTable.id, hasOpenTab: false });
+    await flush(el);
+    expect(pressed(tableOrder(el)!, "vegetarian")).toBe("true");
+    pick(tableOrder(el)!, "vegetarian");
+    await flush(el);
+    selectTab(el, "counter");
+    await flush(el);
+    expect(pressed(counter(el)!, "vegetarian")).toBe("false");
+    expect(names(el)).toEqual(["Ensalada", "Mixto"]);
+    expect(sessionStorage.getItem("waitron.dietFilter")).toBeNull();
+  });
+
+  it("keeps dietary filtering usable when browser storage is blocked", async () => {
+    const set = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    const remove = vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    try {
+      const { el } = await mountApp({ listProducts: listProducts() });
+      const c = await toCounter(el);
+      pick(c, "vegan");
+      await flush(el);
+      selectTab(el, "floor");
+      await flush(el);
+      selectTab(el, "counter");
+      await flush(el);
+      expect(names(el)).toEqual(["Ensalada"]);
+      pick(counter(el)!, "vegan");
+      await flush(el);
+      expect(names(el)).toEqual(["Ensalada", "Mixto"]);
+    } finally {
+      set.mockRestore();
+      remove.mockRestore();
+    }
+  });
+
+  it("does not clear a live app's filter when a detached login finishes", async () => {
+    let resolve!: (value: Awaited<ReturnType<TillApi["listProducts"]>>) => void;
+    const { el } = await mountApp({
+      listProducts: vi.fn(
+        () =>
+          new Promise<Awaited<ReturnType<TillApi["listProducts"]>>>((done) => {
+            resolve = done;
+          }),
+      ),
+    });
+    await toCounter(el);
+    el.remove();
+    const { el: live } = await mountApp({ listProducts: listProducts() });
+    const c = await toCounter(live);
+    pick(c, "vegetarian");
+    await flush(live);
+    expect(sessionStorage.getItem("waitron.dietFilter")).toBe("vegetarian");
+    resolve({ menus: [defaultMenu], products: [salad, mixed] });
+    await flush(el);
+    expect(sessionStorage.getItem("waitron.dietFilter")).toBe("vegetarian");
+    expect(names(live)).toEqual(["Ensalada"]);
+  });
+
+  it("keeps a filter through payment, new orders and parked orders", async () => {
+    const { el } = await mountApp({ listProducts: listProducts() });
+    const c = await toCounter(el);
+    pick(c, "vegan");
+    c.store.addProduct(salad, "1");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    emit(ticket(el)!, "new-sale");
+    await flush(el);
+    expect(pressed(counter(el)!, "vegan")).toBe("true");
+    counter(el)!.store.addProduct(salad, "1");
+    emit(counter(el)!, "park-order", { label: "Next" });
+    await flush(el);
+    selectTab(el, "floor");
+    await flush(el);
+    selectTab(el, "counter");
+    await flush(el);
+    expect(pressed(counter(el)!, "vegan")).toBe("true");
+    expect(names(el)).toEqual(["Ensalada"]);
+  });
+});
+
+describe("persistent till destinations", () => {
+  async function traverse(direction: "back" | "forward", el: TillApp) {
+    const moved = new Promise<void>((resolve) =>
+      window.addEventListener("popstate", () => resolve(), { once: true }),
+    );
+    history[direction]();
+    await moved;
+    await flush(el);
+  }
+  it.each([
+    ["show-schedule", "schedule", "till-schedule-screen"],
+    ["show-station", "station", "till-station-screen"],
+    ["show-expo", "expo", "till-expo-screen"],
+    ["open-allergens", "allergens", "till-allergen-screen"],
+  ])("restores %s with Back, Forward, login and refresh", async (event, view, selector) => {
+    const { el } = await mountApp();
+    await toCounter(el);
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, event);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector(selector)).not.toBeNull();
+    expect(location.pathname).toContain(`/tabs/counter/view/${view}`);
+    const destination = location.pathname;
+    await traverse("back", el);
+    expect(el.shadowRoot!.querySelector(selector)).toBeNull();
+    expect(location.pathname).toBe("/tabs/counter");
+    await traverse("forward", el);
+    expect(el.shadowRoot!.querySelector(selector)).not.toBeNull();
+    el.remove();
+    const { el: fresh } = await mountApp();
+    await flush(fresh);
+    expect(fresh.shadowRoot!.querySelector(selector)).toBeNull();
+    await toCounter(fresh);
+    expect(fresh.shadowRoot!.querySelector(selector)).not.toBeNull();
+    expect(location.pathname).toBe(destination);
+    emit(
+      fresh.shadowRoot!.querySelector(selector)!,
+      view === "allergens" ? "close-allergens" : "back-to-counter",
+    );
+    await flush(fresh);
+    expect(location.pathname).toBe("/tabs/counter");
+    await traverse("back", fresh);
+    expect(fresh.shadowRoot!.querySelector(selector)).not.toBeNull();
+  });
+
+  it("restores selected stations and ignores a departed station list request", async () => {
+    const second = { ...defaultStation, id: "st-bar", name: "Bar", isDefault: false };
+    const { el } = await mountApp({
+      listStations: vi.fn().mockResolvedValue([defaultStation, second]),
+    });
+    await toCounter(el);
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "show-station");
+    await flush(el);
+    station(el)!.shadowRoot!.querySelector<HTMLElement>('[data-station="st-bar"]')!.click();
+    await flush(el);
+    expect(location.pathname).toBe("/tabs/counter/view/station/station/st-bar");
+    await traverse("back", el);
+    expect(
+      station(el)!.shadowRoot!.querySelector<TillStationQueue>("till-station-queue")!.stationId,
+    ).toBe("st-default");
+    await traverse("forward", el);
+    expect(
+      station(el)!.shadowRoot!.querySelector<TillStationQueue>("till-station-queue")!.stationId,
+    ).toBe("st-bar");
+    el.remove();
+    let resolve!: (value: (typeof defaultStation)[]) => void;
+    const { el: fresh } = await mountApp({
+      listStations: vi.fn(
+        () =>
+          new Promise((done) => {
+            resolve = done;
+          }),
+      ),
+    });
+    await toCounter(fresh);
+    selectTab(fresh, "floor");
+    await flush(fresh);
+    const departed = location.pathname;
+    resolve([defaultStation, second]);
+    await flush(fresh);
+    expect(location.pathname).toBe(departed);
+    expect(station(fresh)).toBeNull();
+  });
+
+  it("uses the current destination when login is pending and leaves history inert after logout", async () => {
+    history.replaceState(null, "", "/tabs/counter/view/expo");
+    history.pushState(null, "", "/tabs/counter/view/schedule");
+    let resolve!: (value: Awaited<ReturnType<TillApi["listProducts"]>>) => void;
+    const { el } = await mountApp({
+      listProducts: vi.fn(
+        () =>
+          new Promise((done) => {
+            resolve = done;
+          }),
+      ),
+    });
+    await toCounter(el);
+    await traverse("back", el);
+    resolve({ menus: [], products: [] });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "logout");
+    await flush(el);
+    await traverse("forward", el);
+    expect(el.shadowRoot!.querySelector("till-tab-shell")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-schedule-screen")).toBeNull();
+  });
+
+  it.each(["ticket", "table-order", "unknown"])("drops non-restorable %s paths", async (view) => {
+    history.replaceState(null, "", `/tabs/counter/view/${view}/station/forbidden`);
+    const { el } = await mountApp();
+    await toCounter(el);
+    expect(location.pathname).toBe("/tabs/counter");
+    expect(el.shadowRoot!.querySelector('[slot="drill"]')).toBeNull();
+  });
+
+  it("does not restore operator destinations on an enrolled kitchen display", async () => {
+    history.replaceState(null, "", "/tabs/kitchen/view/station/station/forbidden");
+    const { el } = await mountApp({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, canvas: kdsCanvasDef, capabilities: ["act-as-kds"] }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "d1", kind: "kds_station", stationId: "st-dev" }),
+      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+    });
+    await flush(el);
+    expect(station(el)!.deviceMode).toBe(true);
+    expect(station(el)!.shadowRoot!.querySelector("[data-station]")).toBeNull();
+    expect(currentApi.listStations).not.toHaveBeenCalled();
+    expect(location.pathname).toBe("/tabs/kitchen");
+  });
+});
+
+it.each(["station", "expo", "schedule"])(
+  "rejects the %s destination on a handheld without hiding its floor",
+  async (view) => {
+    history.replaceState(null, "", `/tabs/floor/view/${view}`);
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "d1", kind: "handheld", stationId: null }),
+    });
+    await toCounter(el);
+    expect(location.pathname).toBe("/tabs/floor");
+    expect(floor(el)).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[slot="drill"]')).toBeNull();
+  },
+);

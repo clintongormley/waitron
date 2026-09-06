@@ -1,3 +1,4 @@
+import { page } from "@vitest/browser/context";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
@@ -19,7 +20,9 @@ async function settle(el: LanguageChooser): Promise<void> {
   await el.updateComplete;
 }
 
-afterEach(() => {
+const viewport = { width: window.innerWidth, height: window.innerHeight };
+afterEach(async () => {
+  await page.viewport(viewport.width, viewport.height);
   cleanupWidgets();
   setLocale("es-ES");
 });
@@ -35,11 +38,11 @@ describe("dashboard-language-chooser", () => {
       loadLocales,
     });
 
-    // Collapsed: no menu, and — with the list unfetched — the trigger falls back to the active code.
+    // The initial label is readable before the options have loaded.
     expect(loadLocales).not.toHaveBeenCalled();
     expect(el.shadowRoot!.querySelector('[role="menu"]')).toBeNull();
     const trigger = el.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!;
-    expect(trigger.textContent).toContain("es-ES");
+    expect(trigger.textContent).toContain("Español");
 
     // Activating the trigger fetches the list once and renders both options as a menu.
     trigger.click();
@@ -50,6 +53,27 @@ describe("dashboard-language-chooser", () => {
     expect(el.shadowRoot!.textContent).toContain("English");
     // Once loaded, the trigger reads the active locale's LABEL, not its bare code.
     expect(trigger.textContent).toContain("Español");
+  });
+
+  it("shows English before opening and anchors its menu above the bottom-right trigger", async () => {
+    await page.viewport(375, 667);
+    setLocale("en-GB");
+    const { el } = await mountWidget<LanguageChooser>("dashboard-language-chooser", {
+      loadLocales: twoLocales,
+    });
+    const trigger = el.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!;
+    expect(trigger.textContent?.trim()).toBe("English");
+    const rect = trigger.getBoundingClientRect();
+    expect(window.innerWidth - rect.right).toBeLessThanOrEqual(32);
+    expect(window.innerHeight - rect.bottom).toBeLessThanOrEqual(32);
+    trigger.click();
+    await settle(el);
+    const menu = el
+      .shadowRoot!.querySelector<HTMLElement>('[role="menu"]')!
+      .getBoundingClientRect();
+    expect(menu.bottom).toBeLessThanOrEqual(rect.top);
+    expect(menu.left).toBeGreaterThanOrEqual(0);
+    expect(menu.right).toBeLessThanOrEqual(window.innerWidth);
   });
 
   it("fetches once and caches — closing then re-opening does not re-fetch", async () => {

@@ -422,3 +422,63 @@ fresh clone — nothing else to set up.
 wrong, blocking on something unrelated to your change, or an environment issue you don't have time
 to fight — CI runs the same checks and will still catch a real problem on the PR either way. The
 hook's own output repeats this on every failure so you're never stuck without it.
+
+### Submit ordinary forms with Enter
+
+When you finish typing a field, Enter should perform the same action as its submit button.
+Bind `submitOnEnter` from `@waitron/ui` to that form's fields or dialog, and pass its specific
+submit control:
+
+```ts
+html`<wt-input
+  @keydown=${(event: KeyboardEvent) =>
+    submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
+></wt-input>`;
+```
+
+For a screen with several editable rows, select the Save button for that row. The helper clicks
+that existing control, so your normal validation still runs. Keep the action's in-flight guard
+and disabled binding: the keyboard path uses the same action as a click.
+
+Only single-line input fields submit implicitly. Enter in a textarea inserts a newline, and
+selectors, switches, file pickers, and keypad buttons retain their own keyboard behavior.
+Composition, held keys, and Enter with Shift, Control, Alt, or Meta do not submit. Leave live
+filters and controls that persist each edit immediately unbound. If a field edits a draft that you
+commit with Save, bind it to that Save even when its preview updates as you type.
+
+
+### Navigation and language controls
+
+Your selected tab belongs in the URL. `UrlStateController` reads path segments, updates them without
+removing unrelated query parameters, and restores the screen on browser Back/Forward. The screen validates
+identifiers against its loaded data and permissions; a URL never establishes authentication. Use
+replacement history for defaults and invalid destinations, and push history for a new selection.
+Keep passwords, PINs, pairing codes and unsaved form contents out of the URL.
+
+Use `/manage/<section>` for dashboard destinations and `/tabs/<key>` for till tabs. Nested views,
+zones and saved canvas tabs extend those paths, such as `/manage/floor/view/plano/zone/<id>`.
+Till Schedule, Kitchen, Pass and Allergens use `/tabs/<key>/view/<destination>`, with destinations
+`schedule`, `station`, `expo` and `allergens`. The operator Kitchen picker adds `/station/<id>`;
+embedded station cards keep their selection local to the enclosing tab. Restore these destinations
+only after login and device validation. Kitchen displays keep their bound station and cannot open
+operator destinations from a path. Unsaved canvas tabs stay out of both URL writes and history,
+including when you reselect them; saved tabs become destinations after persistence.
+Only meaningful navigation pushes history. Payment steps, modifier dialogs and draft edits do not;
+an automatic return home after payment replaces the current entry. Menu choice is a browser-tab
+preference in `sessionStorage`, retained through new and parked orders. Every successful login resets
+it to the location default (or the first available menu). Refresh currently returns to PIN login,
+so logging in after refresh also resets the menu. It belongs in neither the path nor browser history.
+
+Dietary filters (vegan, vegetarian, no meat and no fish) follow the same login boundary. The till app
+owns the selection and passes it to counter and table-order screens, including embedded cards.
+Screen changes, menu changes, payment and new or parked orders retain the selection. Tapping the
+selected filter clears it everywhere; a new login starts with no dietary filter. Changing a filter
+never alters basket contents or browser history. Browser storage being blocked must not stop filtering.
+
+The production server serves app HTML for browser navigation under `/manage` and `/tabs`. APIs and
+static assets keep their own responses; setup continues to use its existing root page.
+
+The till and dashboard language controls display the names from `SUPPORTED_LOCALES` before their
+options load. Place the chooser at the bottom right, open its menu upwards, and leave enough bottom
+padding for the last content and action buttons to scroll clear of it. A signed-in operator's choice
+uses the existing preference write; login, pairing and kitchen-display choices are local UI changes.

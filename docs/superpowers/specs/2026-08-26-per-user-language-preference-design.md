@@ -1,5 +1,7 @@
 # Per-user language preference — design
 
+> **Superseded placement decision, 2026-09-06:** The [UI navigation and controls plan](../plans/2026-09-06-ui-navigation-and-controls.md) places the language chooser at the bottom right, outside the operator header, and keeps it available on kitchen displays. The header-placement and kiosk-removal instructions below record the earlier design.
+
 **Status:** design, awaiting review.
 **Date:** 2026-08-26.
 **Branch:** `feat/per-user-locale`.

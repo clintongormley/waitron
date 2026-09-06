@@ -337,12 +337,17 @@ describe("till-card-grid", () => {
 
   it("renders an embedded table-order screen for a table-order card", async () => {
     const store = new WorkingOrderStore();
-    const { el } = await mountWidget<TillCardGrid>("till-card-grid", { tab: orderTab, store });
-    const to = el.shadowRoot!.querySelector<HTMLElement & { embedded?: boolean }>(
-      "till-table-order-screen",
-    )!;
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: orderTab,
+      selectedDiet: "vegetarian",
+      store,
+    });
+    const to = el.shadowRoot!.querySelector<
+      HTMLElement & { embedded?: boolean; selectedDiet?: string | null }
+    >("till-table-order-screen")!;
     expect(to).not.toBeNull();
     expect(to.embedded).toBe(true);
+    expect(to.selectedDiet).toBe("vegetarian");
   });
 
   it("shows a big card with a visibleWhen gate the host cannot evaluate (fail open, follow-up d)", async () => {

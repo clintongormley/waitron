@@ -5,7 +5,7 @@ import { baseStyles } from "@waitron/ui";
 // `@customElement("wt-button")`) as a side effect — the same way `till-counter-screen` gets it.
 import { t } from "../i18n/t.js";
 import type { TabDef } from "../layout.js";
-// Side-effect import: registers the header's language chooser element (copied from
+// Side-effect import: registers the language chooser element (copied from
 // `till-counter-screen.ts`). It only EMITS a composed `locale-selected`; the shell re-emits it.
 import "./language-chooser.js";
 
@@ -117,11 +117,11 @@ export class TillTabShell extends LitElement {
   @property() operatorName = "";
   /** Which operator affordance buttons to offer (see {@link ShellAffordance}). */
   @property({ attribute: false }) affordances: ShellAffordance[] = [];
-  /** Fetch the offered languages for the header's language chooser — threaded straight through to
+  /** Fetch the offered languages for the language chooser — threaded straight through to
    * `till-language-chooser`'s own `loadLocales` (the app adapts `TillApi.getLocales`). */
   @property({ attribute: false }) loadLocales?: () => Promise<{ code: string; label: string }[]>;
   /** SP-B2.2: when `true`, suppresses the ENTIRE operator `<header>` — tab bar and session chrome
-   * both — leaving only the body slot (and the drill-slot machinery). The kds kitchen-display shape
+   * both — leaving the body slot, drill-slot machinery and language chooser. The kds kitchen-display shape
    * (owner decision 2026-09-04): a board shows just its cards, no operator chrome. Default `false`
    * keeps the B2.1 shell byte-identical. */
   @property({ type: Boolean }) kiosk = false;
@@ -203,17 +203,6 @@ export class TillTabShell extends LitElement {
                       >${t("allergens.open")}</wt-button
                     >
                     <span class="operator">${this.operatorName}</span>
-                    ${
-                      this.loadLocales !== undefined
-                        ? html`<till-language-chooser
-                            .loadLocales=${this.loadLocales}
-                            @locale-selected=${(e: Event) => {
-                              e.stopPropagation();
-                              this.#emit("locale-selected", (e as CustomEvent).detail);
-                            }}
-                          ></till-language-chooser>`
-                        : nothing
-                    }
                     <wt-button
                       class="logout"
                       variant="secondary"
@@ -232,6 +221,17 @@ export class TillTabShell extends LitElement {
             <slot name="drill" @slotchange=${() => this.requestUpdate()}></slot>
           </div>
         </div>
+        ${
+          this.loadLocales !== undefined
+            ? html`<till-language-chooser
+                .loadLocales=${this.loadLocales}
+                @locale-selected=${(e: Event) => {
+                  e.stopPropagation();
+                  this.#emit("locale-selected", (e as CustomEvent).detail);
+                }}
+              ></till-language-chooser>`
+            : nothing
+        }
       </div>
     `;
   }

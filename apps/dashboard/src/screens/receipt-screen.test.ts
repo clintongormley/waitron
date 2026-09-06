@@ -1,3 +1,4 @@
+import { userEvent } from "@vitest/browser/context";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -210,3 +211,48 @@ describe("receipt-screen", () => {
     expect(escapedInput).not.toHaveBeenCalled();
   });
 });
+
+it.each([
+  {
+    method: "putReceipt",
+    field: "[data-test=header-subtitle]",
+    button: "[data-test=save]",
+    result: null,
+  },
+])(
+  "Enter guards pending $method and allows retry after rejection",
+  async ({ method, field, button, result }) => {
+    let reject!: (reason: unknown) => void;
+    const pending = new Promise((_, fail) => {
+      reject = fail;
+    });
+    const request = vi.fn().mockReturnValueOnce(pending).mockResolvedValue(result);
+    const api = stubApi({ [method]: request });
+    const { el } = await mountWidget<ReceiptScreen>("dashboard-receipt-screen", { api });
+    await flush(el);
+
+    const control = el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(field)!;
+    await control.updateComplete;
+    const input = control.shadowRoot!.querySelector("input")!;
+    input.value = "Updated";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    input.focus();
+    await userEvent.keyboard("{Enter}");
+    await userEvent.keyboard("{Enter}");
+    el.shadowRoot!.querySelector<HTMLElement>(button)!.click();
+    expect(request).toHaveBeenCalledTimes(1);
+    expect((el.shadowRoot!.querySelector(button) as import("@waitron/ui").WtButton).disabled).toBe(
+      true,
+    );
+    reject({ code: "management.request_invalid" });
+    await flush(el);
+    input.focus();
+    await userEvent.keyboard("{Enter}");
+    await flush(el);
+    expect(request).toHaveBeenCalledTimes(2);
+    expect((el.shadowRoot!.querySelector(button) as import("@waitron/ui").WtButton).disabled).toBe(
+      false,
+    );
+  },
+);

@@ -27,8 +27,9 @@ const fetchImpl = createInstrumentedFetch(withDevDeviceHeader(fetch), diag);
 // opens `/?dev` to adopt or mint a device for THIS tab, then boots into `/` as it. Lazily imported so
 // the chooser (a dev-only tool) never rides the normal bundle path; the plain boot renders <till-app>.
 if (new URLSearchParams(location.search).has("dev")) {
-  await import("./screens/till-dev-chooser.js");
-  render(html`<till-dev-chooser .api=${new TillApi("", fetchImpl)}></till-dev-chooser>`, app);
+  void import("./screens/till-dev-chooser.js").then(() => {
+    render(html`<till-dev-chooser .api=${new TillApi("", fetchImpl)}></till-dev-chooser>`, app);
+  });
 } else {
   render(html`<till-app .api=${new TillApi("", fetchImpl)}></till-app>`, app);
 }

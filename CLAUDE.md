@@ -302,6 +302,10 @@ unfiltered `main` run, not a wrong hook.
   there: the root project does not typecheck (§2), and a module tested only from there must be in the
   root `coverage.include` and excluded from its package's.
 - **Prove a guard by deletion**, and confirm a negative control fails for the reason you think.
+- **Dispatch events when testing a `composedPath()` guard.** An undispatched `KeyboardEvent` has an
+  empty path, so a missing-action test can pass at the input-type guard without reaching the branch it
+  claims to check. Exercise the event from the real input and prove the target guard by deletion.
+  Receipt: `packages/ui/src/submit-on-enter.test.ts` (UI keyboard review, 2026-09-06).
 - **Vitest's default coverage excludes swallow every dot-prefixed path** (`**/[.]**`), and
   `include`/`exclude` replace rather than merge. The root config's first version measured
   `All files | 0 | 0 | 0 | 0`, wrote `"Unknown"` percentages and **exited 0** with the thresholds

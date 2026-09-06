@@ -1,3 +1,4 @@
+import { page } from "@vitest/browser/context";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { DashboardApp } from "./dashboard-app.js";
@@ -268,8 +269,8 @@ const NAV_GROUP_KEYS = [
   "nav.group.purchasing",
   "nav.group.configuration",
 ] as const;
-/** The chooser in the logged-in header chrome (present only when logged in). */
-const headerChooser = (el: DashboardApp) =>
+/** The chooser in the logged-in shell (present only when logged in). */
+const shellChooser = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("dashboard-language-chooser");
 /** The chooser nested inside the login screen's OWN shadow root (present only on the login screen). */
 const loginChooser = (el: DashboardApp) =>
@@ -325,7 +326,11 @@ function emit(source: Element, type: string, detail?: unknown): void {
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
 
-afterEach(cleanupWidgets);
+const initialUrl = location.href;
+afterEach(() => {
+  cleanupWidgets();
+  history.replaceState(null, "", initialUrl);
+});
 // `setLocale` mutates module-global state that outlives a test, so pin it back to the shipped default
 // around every case — otherwise one test's switch leaks into the next.
 beforeEach(() => setLocale("es-ES"));
@@ -1079,17 +1084,17 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     expect(api.putLocale).not.toHaveBeenCalled(); // but NOT persisted
   });
 
-  it("renders the chooser in the logged-in header, and a pick there persists (putLocale) then switches (setLocale)", async () => {
+  it("renders the chooser in the logged-in shell, and a pick there persists (putLocale) then switches (setLocale)", async () => {
     const putLocale = vi.fn().mockResolvedValue(undefined);
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ putLocale }),
     });
     await flush(el);
     expect(overview(el)).toBeTruthy();
-    expect(headerChooser(el)).toBeTruthy(); // the logged-in header renders the chooser
+    expect(shellChooser(el)).toBeTruthy(); // the logged-in shell renders the chooser
     expect(currentLocale()).toBe("es-ES"); // manager, no stored preference, es-ES venue
 
-    emit(headerChooser(el)!, "locale-selected", { code: "en-GB" });
+    emit(shellChooser(el)!, "locale-selected", { code: "en-GB" });
     await flush(el);
     expect(putLocale).toHaveBeenCalledWith("en-GB");
     expect(currentLocale()).toBe("en-GB"); // the switch happened AFTER the persist resolved
@@ -1105,7 +1110,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     await flush(el);
     expect(currentLocale()).toBe("es-ES");
 
-    emit(headerChooser(el)!, "locale-selected", { code: "en-GB" });
+    emit(shellChooser(el)!, "locale-selected", { code: "en-GB" });
     await flush(el);
     expect(putLocale).toHaveBeenCalledWith("en-GB");
     expect(currentLocale()).toBe("es-ES"); // unchanged — the failed write never switched the UI
@@ -1182,7 +1187,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     await flush(el); // logged in as a manager, es-ES
     expect(currentLocale()).toBe("es-ES");
 
-    emit(headerChooser(el)!, "locale-selected", { code: "en-GB" }); // putLocale now pending
+    emit(shellChooser(el)!, "locale-selected", { code: "en-GB" }); // putLocale now pending
     await el.updateComplete;
     host.remove(); // torn down before putLocale resolves
     resolvePut();
@@ -1217,4 +1222,130 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     await flush(el);
     expect(currentLocale()).toBe("en-GB"); // the revert to es-ES was skipped on the detached app
   });
+});
+
+describe("dashboard URL navigation", () => {
+  it("restores the requested section after a session probe and after refresh", async () => {
+    const url = new URL(location.href);
+    url.pathname = "/manage/staff";
+    url.searchParams.set("dev", "1");
+    history.replaceState(null, "", url);
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-staff-screen")).not.toBeNull();
+    el.remove();
+    const { el: refreshed } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+    await flush(refreshed);
+    expect(refreshed.shadowRoot!.querySelector("dashboard-staff-screen")).not.toBeNull();
+    expect(new URL(location.href).searchParams.get("dev")).toBe("1");
+  });
+
+  it("records navigation once and follows real Back and Forward", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-staff"]')!.click();
+    await flush(el);
+    expect(location.pathname).toBe("/manage/staff");
+    const count = history.length;
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-staff"]')!.click();
+    await flush(el);
+    expect(history.length).toBe(count);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-catalogue"]')!.click();
+    await flush(el);
+    const back = new Promise<void>((resolve) =>
+      window.addEventListener("popstate", () => resolve(), { once: true }),
+    );
+    history.back();
+    await back;
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-staff-screen")).not.toBeNull();
+    const forward = new Promise<void>((resolve) =>
+      window.addEventListener("popstate", () => resolve(), { once: true }),
+    );
+    history.forward();
+    await forward;
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+  });
+
+  it.each([
+    ["manager", "missing", "overview"],
+    ["supervisor", "diagnostics", "overview"],
+    ["staff", "staff", "my-schedule"],
+  ])("validates a %s session's requested %s section", async (role, requested, expected) => {
+    const url = new URL(location.href);
+    url.pathname = `/manage/${requested}`;
+    history.replaceState(null, "", url);
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi
+          .fn()
+          .mockResolvedValue({ personId: "p1", role, locale: null, venueLocale: "es-ES" }),
+      }),
+    });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector(`dashboard-${expected}-screen`)).not.toBeNull();
+    expect(location.pathname).toBe(`/manage/${expected}`);
+  });
+
+  it("keeps a protected destination behind login and ignores history after logout", async () => {
+    const url = new URL(location.href);
+    url.pathname = "/manage/staff";
+    history.replaceState(null, "", url);
+    const getMe = vi.fn().mockRejectedValue({ code: "management_session.required" });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi({ getMe }) });
+    await flush(el);
+    expect(login(el)).not.toBeNull();
+    getMe.mockResolvedValue({
+      personId: "p1",
+      role: "manager",
+      locale: null,
+      venueLocale: "es-ES",
+    });
+    login(el)!.dispatchEvent(new CustomEvent("logged-in", { bubbles: true, composed: true }));
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-staff-screen")).not.toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="logout"]')!.click();
+    await flush(el);
+    history.replaceState(null, "", url);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flush(el);
+    expect(login(el)).not.toBeNull();
+  });
+});
+
+it("leaves long dashboard content clear of the bottom-right language chooser on a narrow screen", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(375, 667);
+  try {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        listStaff: vi.fn().mockResolvedValue(
+          Array.from({ length: 30 }, (_, i) => ({
+            ...people[0]!,
+            personId: `p${i}`,
+            displayName: `Person ${i}`,
+          })),
+        ),
+      }),
+    });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-staff"]')!.click();
+    await flush(el);
+    window.scrollTo(0, document.documentElement.scrollHeight);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const chooser = el.shadowRoot!.querySelector("dashboard-language-chooser")!;
+    const trigger = chooser
+      .shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!
+      .getBoundingClientRect();
+    expect(trigger.right).toBeLessThanOrEqual(window.innerWidth);
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement>("dashboard-staff-screen")!.getBoundingClientRect()
+        .bottom,
+    ).toBeLessThanOrEqual(trigger.top);
+  } finally {
+    await page.viewport(width, height);
+    window.scrollTo(0, 0);
+  }
 });

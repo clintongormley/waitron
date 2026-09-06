@@ -260,3 +260,48 @@ describe("device-profiles-screen editor form", () => {
     expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeTruthy();
   });
 });
+
+it.each(["create", "edit-p1"])(
+  "gates Enter plus an immediate Save click during %s and permits retry",
+  async (action) => {
+    let reject!: (reason: unknown) => void;
+    const save = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, fail) => {
+            reject = fail;
+          }),
+      )
+      .mockResolvedValue(profiles[0]);
+    const el = await mount(stubApi({ createDeviceProfile: save, updateDeviceProfile: save }));
+    el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${action}]`)!.click();
+    await flush(el);
+    change(el, "profile-name", "Retry profile");
+    await el.updateComplete;
+    const field = el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(
+      "[data-test=profile-name]",
+    )!;
+    await field.updateComplete;
+    field.shadowRoot!.querySelector("input")!.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+      }),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+    expect(save).toHaveBeenCalledTimes(1);
+    reject({ code: "device_profile.name_taken" });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=profile-save]")!.hasAttribute("disabled")).toBe(
+      false,
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+    await flush(el);
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
+  },
+);

@@ -1,7 +1,9 @@
+import type { DietPredicate } from "./menu-filter.js";
+import { isTillDestination, type TillDestination, tillPath } from "./navigation.js";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
-import { baseStyles } from "@waitron/ui";
+import { UrlStateController, baseStyles } from "@waitron/ui";
 import { resolveActiveLocale } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { diag } from "./diagnostics.js";
@@ -79,15 +81,8 @@ import type {
 type Screen =
   "lock" | "counter" | "ticket" | "schedule" | "floor" | "table-order" | "station" | "expo";
 
-/**
- * A transient DRILL-IN pushed OVER the canvas tab shell (SP-B2.1 Task 8) — a screen that overlays the
- * active tab's body (which the shell marks inert) and pops back to it, replacing the legacy `screen`-enum
- * transitions WHILE THE SHELL IS ACTIVE. The `kind` selects which screen {@link TillApp.#drillBody}
- * mounts into the shell's `drill` slot; the drill's CONTEXT (the active tab, the tab id, the sale result)
- * already lives in app state, so `kind` is all this carries today. The legacy path (no canvas / handheld
- * / kds) is unchanged — it still drives `screen` through {@link TillApp.#setScreen}.
- */
-type Drill = { kind: "table-order" | "ticket" | "schedule" | "station" | "expo" | "allergens" };
+/** An overlay over the active canvas tab. Sale context remains local; regular destinations have URLs. */
+type Drill = { kind: "table-order" | "ticket" | TillDestination };
 
 /**
  * The phone face-set for a `handheld` device (handheld-tableside spec §6a) — the screens a waiter's
@@ -146,17 +141,9 @@ function displayQuantity(product: TillProduct, quantity: string): string {
  *  - `new-sale` → clear the basket, reset the `"order"`/`"collect"` stage, back to an empty `counter`;
  *  - `logout` → end the server session, back to `lock`, WITHOUT clearing the basket.
  *
- * DISCONNECT SAFETY. `setLocale` mutates module-global locale, so it is the effect that can outlive the
- * element. It runs in four places. THREE run post-await and each carries `if (!this.isConnected) return`
- * before the switch, so a teardown during the await skips it — {@link TillApp.boot} (races a teardown
- * before first paint), {@link TillApp.#onLogout} (the logout round trip) and
- * {@link TillApp.#onLocaleSelected} (the preference write — the durable server write has already landed
- * and the next login re-applies it, so only the pointless local repaint is skipped). The fourth,
- * {@link TillApp.#onLoggedIn}, runs its `setLocale` SYNCHRONOUSLY before its first await, so the element
- * is still connected and needs no guard. Each guarded site is pinned by a deletion-proven disconnect
- * test. Every OTHER event handler writes only reactive state and dispatches nothing upward, so needs no
- * guard — Lit never paints a detached element (`till-lock-screen`'s `#loadStaff` records the same
- * reasoning).
+ * Disconnect guards protect shared browser state: post-await locale switches, menu storage writes,
+ * and URL updates must not overwrite a replacement app's state. Reactive fields belong to this
+ * element; Lit does not paint them after it disconnects.
  */
 @customElement("till-app")
 export class TillApp extends LitElement {
@@ -165,6 +152,12 @@ export class TillApp extends LitElement {
     css`
       :host {
         display: block;
+      }
+
+      .app {
+        padding-bottom: calc(
+          var(--wt-tap-min) + 2 * var(--wt-space-3) + env(safe-area-inset-bottom)
+        );
       }
 
       .error {
@@ -234,7 +227,7 @@ export class TillApp extends LitElement {
   @state() private screen: Screen = "lock";
   /**
    * The key of the tab the canvas shell (SP-B2.1) currently shows — the shell's active tab. Set on
-   * boot from the canvas's first tab ({@link #boot}) and updated by the shell's `tab-select`. Stays
+   * boot from a valid URL tab, falling back to the first canvas tab, and updated by `tab-select`. Stays
    * undefined only before boot resolves a canvas (or on a boot FAILURE, where {@link render} shows the
    * lock screen rather than the shell). Off-lock a successful boot always has a canvas, so the shell
    * renders and this is set. The drill-in nav rerouting (Station/Expo/Schedule/Allergens → overlays) is
@@ -242,7 +235,7 @@ export class TillApp extends LitElement {
    */
   @state() private activeTabKey?: string;
   /**
-   * The transient drill-in stacked OVER the shell's active tab (SP-B2.1 Task 8), or undefined when the
+   * The drill-in stacked OVER the shell's active tab (SP-B2.1 Task 8), or undefined when the
    * tab body itself is on top. Set by {@link #pushDrill} (open-table / a payment success / an affordance),
    * cleared by {@link #popDrill} (a drill's Back/Close/New sale). ONLY consulted on the shell surface
    * ({@link #inShell}); the legacy path never sets it. {@link #drillBody} maps `kind` to the screen it
@@ -322,9 +315,10 @@ export class TillApp extends LitElement {
   /** The location's accessible menus (default first), loaded at login beside {@link products}. Drives the
    * `<till-menu-switcher>`; with one menu the switcher renders nothing and the till looks as before. */
   @state() private menus: TillMenu[] = [];
-  /** The menu (catalogue) the grid currently shows — set to the default menu at login, then to whatever
-   * the switcher's `menu-selected` picks. `""` before login / with no menus, which matches no product. */
+  /** The grid's selected menu, reset to the default at login and changed by the switcher.
+   * An empty selection matches no product. */
   @state() private selectedCatalogueId = "";
+  @state() private selectedDiet: DietPredicate | null = null;
   /** The logged-in operator's display name, shown in the counter header. */
   @state() private operatorName = "";
   /** The logged-in operator's person id — threaded to the schedule screen so it can filter the
@@ -547,6 +541,51 @@ export class TillApp extends LitElement {
    */
   @state() private placing = false;
 
+  readonly #url = new UrlStateController(this, () => this.#onHistory(), tillPath);
+
+  #requestedTab(): string | undefined {
+    const requested = this.#url.read("till-tab");
+    return this.canvas?.tabs.find((tab) => tab.key === requested)?.key ?? this.canvas?.tabs[0]?.key;
+  }
+
+  #setActiveTab(key: string | undefined, replace = false, retainDestination = false): void {
+    this.activeTabKey = key;
+    if (key !== undefined)
+      this.#url.write(
+        {
+          "till-tab": key,
+          ...(retainDestination ? {} : { "till-view": null, "till-station": null }),
+        },
+        replace,
+      );
+  }
+
+  #allowsDestination(destination: TillDestination): boolean {
+    return (
+      !this.deviceMode && (destination === "allergens" || this.#affordances().includes(destination))
+    );
+  }
+
+  #restoreDestination(): void {
+    const requested = this.#url.read("till-view");
+    const destination =
+      isTillDestination(requested) && this.#allowsDestination(requested) ? requested : null;
+    this.drill = destination === null ? undefined : { kind: destination };
+    this.#url.write(
+      {
+        "till-view": destination,
+        "till-station": destination === "station" ? this.#url.read("till-station") : null,
+      },
+      true,
+    );
+  }
+
+  readonly #onHistory = (): void => {
+    if (!this.#inShell()) return;
+    const key = this.#requestedTab();
+    if (key !== undefined) this.#onTabSelect(key, true);
+  };
+
   override firstUpdated(): void {
     void this.#boot();
   }
@@ -623,9 +662,8 @@ export class TillApp extends LitElement {
       // The device's capability set (device-profile §5.3, Task 9) — relocated off the canvas onto the
       // profile, now an explicit payload sibling. Threaded to the card grid's render axis.
       this.capabilities = till.capabilities;
-      // The initial active tab for the canvas tab shell (SP-B2.1) — the first authored tab (the
-      // `counter` tab by convention).
-      this.activeTabKey = till.canvas.tabs[0]?.key;
+      // Validate the requested tab against the device's resolved canvas before retaining it.
+      this.#setActiveTab(this.#requestedTab(), true, true);
     } catch {
       // Any boot failure — server unreachable, or a non-2xx `{ code }` — surfaces the non-fatal `boot.error`
       // banner rather than let the rejection escape unhandled. Needs no isConnected guard — Lit never paints
@@ -679,6 +717,7 @@ export class TillApp extends LitElement {
         this.initialDeviceStation = await this.api.getDeviceStation();
         this.deviceMode = true;
         this.#setScreen("station");
+        this.#onHistory();
       }
     } catch {
       // Not an enrolled device (or a transient probe failure) — remain a normal operator till on `lock`.
@@ -696,21 +735,17 @@ export class TillApp extends LitElement {
     // the counter subtree so it renders in the resolved language. A NULL preference resolves to the
     // venue default, so a new operator with no choice keeps the venue's language.
     setLocale(resolveActiveLocale(locale, this.#venueLocale));
-    // Defense in depth (SP-B2.1 Finding 2): clear any leftover drill and reset to the first tab, BEFORE
-    // the first await below so no render in the login window can paint a prior operator's drill/tab.
-    // Logout already does this — the privacy-critical path — but a login that somehow followed a
-    // non-logout teardown resets here too. App state only meaningful on the shell; reset regardless.
+    // Refresh restores regular destinations only after login; sale context remains local.
     this.drill = undefined;
-    this.activeTabKey = this.canvas?.tabs[0]?.key;
     // A fresh session reloads the floor in full — reset the "already loaded once" flag beside the other
     // per-session resets (SP-B2.1 review). The full load below (or a later floor tab-select) re-sets it.
     this.#floorLoaded = false;
     const { menus, products } = await this.api.listProducts();
     this.products = products;
     this.menus = menus;
-    // Show the location's default menu first. `#defaultCatalogueId` picks it the same way the
-    // per-order reset does, so login and reset can never drift (see its own doc).
-    this.selectedCatalogueId = this.#defaultCatalogueId();
+    // A fresh login starts on the location default, regardless of the previous menu preference.
+    this.#selectMenu(this.#defaultCatalogueId());
+    this.#selectDiet(null);
     this.operatorName = displayName;
     this.operatorPersonId = personId;
     // FP-2: gate the on-till floor editor on the server-computed `till.configure` capability handed down
@@ -720,15 +755,12 @@ export class TillApp extends LitElement {
     // Where the operator lands after login: a handheld waiter goes to the face-set's post-lock face
     // (HANDHELD_FACES[1], the live floor); a normal operator till opens the counter POS.
     const landingFace = this.handheldMode ? HANDHELD_FACES[1] : "counter";
-    if (landingFace === "floor") {
-      // LOAD the floor the way counter→floor navigation does — `<till-floor-screen>` renders purely from
-      // the app-owned `.zones`/`.tables`/`.statuses` props, which ONLY `#onShowFloor` fetches (it then
-      // sets `screen = "floor"`). A handheld's face-set has no counter/`@show-floor` affordance and no
-      // populated table to tap, so a bare `this.screen = "floor"` would strand the waiter on an empty,
-      // unusable floor. `#onShowFloor` swallows a failed load (degrade gracefully), so this never blocks.
-      await this.#onShowFloor();
-    } else {
-      this.#setScreen(landingFace);
+    if (landingFace === "floor") await this.#loadFloorData();
+    // History may change while login data loads and the lock screen still owns the page.
+    this.#setActiveTab(this.#requestedTab(), true, true);
+    this.#setScreen(landingFace);
+    this.#restoreDestination();
+    if (landingFace !== "floor") {
       // The counter's cross-till held list + default-station queue — counter concerns a handheld's floor
       // landing never shows, so they run only on the counter path (mirroring counter→floor nav, which
       // likewise fetches neither).
@@ -748,14 +780,8 @@ export class TillApp extends LitElement {
         // Non-fatal: leave `this.staff` as its `[]` default (degrade gracefully, never rethrow).
       }
     }
-    // SP-B2.1 Finding 1: if the shell BOOTS showing a tab whose cards need the floor read-model (a
-    // canvas whose first tab is the floor), load it now — the tab-select prefetch only fires on a tab
-    // CHANGE, so the INITIAL tab needs its own load. Guarded on `#inShell()` and the tab: a counter-first
-    // till's first tab needs no floor read. `!#floorLoaded` avoids a double-load — a handheld's landing
-    // ran `#onShowFloor` above (which loaded the floor and set the flag), so it is skipped here; only a
-    // NON-handheld floor-first canvas (which landed on the counter, so `#onShowFloor` never ran) still
-    // loads. (Since SP-B2.2 the handheld is IN-SHELL, not legacy — this guard is what keeps its login to
-    // one floor load.)
+    // A restored floor tab needs its data on first paint. The handheld landing already loads it;
+    // avoid repeating that load while still loading a floor tab restored on a counter device.
     if (this.#inShell() && !this.#floorLoaded) {
       const tab = this.#activeTab();
       if (tab !== undefined && this.#tabNeedsFloorData(tab)) await this.#loadFloorData();
@@ -800,27 +826,36 @@ export class TillApp extends LitElement {
     return this.stations.find((station) => station.isDefault)?.id;
   }
 
-  /**
-   * The location's DEFAULT menu id: the {@link TillMenu} the server flagged `isDefault` (it also orders
-   * that one first), else the first accessible menu, else `""` (no menus — the grid shows nothing until
-   * one exists). The single source of the default so login ({@link TillApp.#onLoggedIn}) and the
-   * per-order reset ({@link TillApp.#onNewSale}/{@link TillApp.#onParkOrder}) cannot drift apart.
-   */
+  /** Use the location default at login, or the first accessible menu when none is marked default. */
   #defaultCatalogueId(): string {
     return this.menus.find((menu) => menu.isDefault)?.id ?? this.menus[0]?.id ?? "";
   }
 
-  /** The switcher picked a menu (`menu-selected`): show that menu's products. State-only — it changes
-   * `selectedCatalogueId`, which the screens thread into their grid filter, and NEVER touches the working
-   * order, so an in-flight cart line survives the switch. The screens keep the FULL {@link products} for
-   * name resolution (a tab spans menus) and allergen lookup; only their grid narrows.
-   *
-   * The switch is TEMPORARY (owner decision): it sticks for the current order but reverts to the
-   * location default when the next order begins — see {@link TillApp.#defaultCatalogueId}'s reset call
-   * sites. Nothing here resets it mid-order, so a switch made while ringing a basket survives until that
-   * basket is settled or parked. */
+  /** Menu selection filters the product grid without changing the working order or browser history. */
   #onMenuSelected(event: CustomEvent<{ id: string }>): void {
-    this.selectedCatalogueId = event.detail.id;
+    this.#selectMenu(event.detail.id);
+  }
+
+  #selectDiet(predicate: DietPredicate | null): void {
+    if (!this.isConnected) return;
+    this.selectedDiet = predicate;
+    try {
+      if (predicate === null) sessionStorage.removeItem("waitron.dietFilter");
+      else sessionStorage.setItem("waitron.dietFilter", predicate);
+    } catch {
+      // Filtering remains available when browser storage is blocked.
+    }
+  }
+
+  #selectMenu(id: string): void {
+    if (!this.isConnected) return;
+    if (id !== "" && !this.menus.some((menu) => menu.id === id)) return;
+    this.selectedCatalogueId = id;
+    try {
+      sessionStorage.setItem("waitron.lastMenu", id);
+    } catch {
+      // The current selection still works when browser storage is unavailable.
+    }
   }
 
   /**
@@ -1237,11 +1272,6 @@ export class TillApp extends LitElement {
       }
       this.#store.clear();
       this.cardOutcome = undefined;
-      // A parked basket is set aside and a FRESH working order begins on the counter, so the active menu
-      // reverts to the location default — the temporary-switch boundary (see {@link #onMenuSelected}),
-      // exactly as {@link #onNewSale}. Only on the success path (inside the try): a rejected park keeps
-      // the basket, so the order is still in progress and the switch must still stick. No-op single-menu.
-      this.selectedCatalogueId = this.#defaultCatalogueId();
       await this.#refreshHeldOrders();
     } catch {
       // A rejected park must not lose the order: stay on the counter, basket intact, generic message.
@@ -1420,18 +1450,12 @@ export class TillApp extends LitElement {
     this.overrideError = null;
   }
 
-  /** Start the next sale: empty the basket (and, with it, its `persisted` flag), reset the place/collect
-   * stage back to `"order"`, back to the device's home tab (see below). `cardOutcome` is cleared too — a new, unrelated
-   * basket must never inherit a decline/timeout/network-unavailable banner from the sale before it. The
-   * active menu reverts to the location default: a menu switch is TEMPORARY (see {@link #onMenuSelected})
-   * and a new order is exactly the boundary it must not cross, so a waiter who switched for the last sale
-   * starts the next one on the default. A single-menu venue makes this a no-op. */
+  /** Clear the completed order and return home, retaining this browser tab's menu preference. */
   #onNewSale(): void {
     this.#store.clear();
     this.stage = "order";
     this.errorKey = undefined;
     this.cardOutcome = undefined;
-    this.selectedCatalogueId = this.#defaultCatalogueId();
     // On the shell surface the ticket was a drill-in: pop it and land on the device's HOME tab — the
     // canvas's first tab, a till's `counter` (ready for the next walk-up) or a handheld/tablet's `floor`
     // (ready to pick the next table). NOT a hardcoded `"counter"`: a handheld authors no counter tab, so
@@ -1441,7 +1465,7 @@ export class TillApp extends LitElement {
     // nothing. A till's counter home needs no floor read. The legacy path shows the `counter` screen.
     if (this.#inShell()) {
       const home = this.canvas?.tabs[0];
-      this.activeTabKey = home?.key;
+      this.#setActiveTab(home?.key, true);
       this.#popDrill();
       if (home !== undefined && this.#tabNeedsFloorData(home)) void this.#refreshFloor();
     } else {
@@ -1531,26 +1555,16 @@ export class TillApp extends LitElement {
     );
   }
 
-  /**
-   * The shell's tab bar picked a tab (SP-B2.1). Three things happen, in order:
-   *  - the active tab switches;
-   *  - any OPEN drill is dismissed ({@link #popDrill}) — the tab bar sits in the non-inert header, so a
-   *    tab tap must not switch the surface UNDERNEATH an open drill (Finding 3); this runs AFTER the tab
-   *    switch so `#popDrill`'s nav-diagnostics trail records the tab landed ON, matching the sibling
-   *    handlers {@link #onBackToCounter}/{@link #onNewSale} (SP-B2.1 review);
-   *  - a tab whose cards need the floor read-model loads it — the FIRST visit does the full three-endpoint
-   *    load `#onShowFloor` does ({@link #loadFloorData}), since reaching the Floor tab via the tab bar (not
-   *    the legacy `show-floor` event) would otherwise leave it empty (Finding 1); a REPEAT visit reloads
-   *    only the live table occupancy ({@link #refreshFloor}), because zones + statuses are static within a
-   *    session (exactly the reasoning {@link #refreshFloor} applies after a placement edit), so re-fetching
-   *    them is pure waste. {@link #floorLoaded} is the "already loaded once" signal.
-   * Only ever called from the shell surface ({@link #inShell} is true whenever the shell renders).
-   */
-  #onTabSelect(key: string): void {
-    this.activeTabKey = key;
-    if (this.drill !== undefined) this.#popDrill();
+  /** Select a validated canvas tab and load its floor data when needed. Explicit selection closes the
+   * overlay; history restores a permitted regular destination over the tab. The first floor visit
+   * loads zones and statuses too, while later visits refresh only live occupancy. */
+  #onTabSelect(key: string, fromHistory = false): void {
     const tab = this.canvas?.tabs.find((candidate) => candidate.key === key);
-    if (tab !== undefined && this.#tabNeedsFloorData(tab)) {
+    if (tab === undefined) return;
+    this.#setActiveTab(key, fromHistory, fromHistory);
+    if (fromHistory) this.#restoreDestination();
+    else if (this.drill !== undefined) this.#popDrill();
+    if (this.#tabNeedsFloorData(tab)) {
       if (this.#floorLoaded) void this.#refreshFloor();
       else void this.#loadFloorData();
     }
@@ -1608,7 +1622,7 @@ export class TillApp extends LitElement {
     if (this.#inShell()) {
       const orderTabKey = this.#tableOrderTabKey();
       if (orderTabKey !== undefined)
-        this.activeTabKey = orderTabKey; // card mount (handheld/tablet)
+        this.#setActiveTab(orderTabKey); // card mount (handheld/tablet)
       else this.#pushDrill({ kind: "table-order" }); // drill mount (till)
     } else this.#setScreen("table-order");
   }
@@ -1930,6 +1944,10 @@ export class TillApp extends LitElement {
    * {@link drill}, which {@link render} slots into the shell's `drill` overlay (the tab body goes inert).
    * Only ever called from the shell surface ({@link #inShell}). */
   #pushDrill(drill: Drill): void {
+    if (isTillDestination(drill.kind)) {
+      if (!this.#allowsDestination(drill.kind)) return;
+      this.#url.write({ "till-view": drill.kind, "till-station": null });
+    }
     diag.record("info", "nav", { screen: drill.kind });
     this.drill = drill;
   }
@@ -1938,6 +1956,8 @@ export class TillApp extends LitElement {
    * the tab it returns to (the active tab key, the underlying face) so the trail is symmetric with
    * {@link #pushDrill}, then clears {@link drill}. */
   #popDrill(): void {
+    if (isTillDestination(this.drill?.kind))
+      this.#url.write({ "till-view": null, "till-station": null });
     diag.record("info", "nav", { screen: this.activeTabKey });
     this.drill = undefined;
   }
@@ -1959,7 +1979,7 @@ export class TillApp extends LitElement {
   #onBackToCounter(): void {
     this.errorKey = undefined;
     if (this.#inShell()) {
-      this.activeTabKey = "counter";
+      this.#setActiveTab("counter");
       this.#popDrill();
     } else {
       this.#goToScreen("counter");
@@ -2010,7 +2030,8 @@ export class TillApp extends LitElement {
     // operator B's fresh counter on B's login. This is the PRIVACY-critical reset. App state only
     // meaningful on the shell, reset regardless (the legacy path never reads either).
     this.drill = undefined;
-    this.activeTabKey = this.canvas?.tabs[0]?.key;
+    this.#setActiveTab(this.canvas?.tabs[0]?.key, true);
+    this.#url.write({ "till-zone": null }, true);
     // A new shift reloads the floor in FULL — zones/statuses may have changed between operators (SP-B2.1
     // review), so drop the "already loaded once" flag beside the other per-session resets.
     this.#floorLoaded = false;
@@ -2022,7 +2043,7 @@ export class TillApp extends LitElement {
    * The ONE handler for a language pick (per-user-language-preference). The chooser is presentational —
    * it emits a composed `locale-selected` and nothing more; this decides what the pick MEANS, and that
    * turns entirely on whether anyone is logged in:
-   *  - PRE-LOGIN (`screen === "lock"`): a TRANSIENT switch. Switch the UI (`setLocale`) but write
+   *  - PRE-LOGIN or kitchen display: a TRANSIENT switch. Switch the UI (`setLocale`) but write
    *    nothing — there is no session to attach a preference to. Dropping this guard would `putLocale`
    *    with no session (401) and is what the "transient while on lock" test proves by deletion.
    *  - LOGGED IN: PERSIST the operator's preference (`putLocale`) and only THEN switch the UI. The
@@ -2032,7 +2053,7 @@ export class TillApp extends LitElement {
    */
   async #onLocaleSelected(event: CustomEvent<{ code: string }>): Promise<void> {
     const { code } = event.detail;
-    if (this.screen === "lock") {
+    if (this.screen === "lock" || this.deviceMode) {
       setLocale(code);
       return;
     }
@@ -2115,6 +2136,7 @@ export class TillApp extends LitElement {
         .products=${this.products}
         .menus=${this.menus}
         .selectedMenuId=${this.selectedCatalogueId}
+        .selectedDiet=${this.selectedDiet}
         .heldOrders=${this.heldOrders}
         .stationQueue=${this.stationQueue}
         .defaultStationId=${this.#defaultStationId()}
@@ -2158,6 +2180,7 @@ export class TillApp extends LitElement {
       .initialDeviceStation=${this.initialDeviceStation}
       .menus=${this.menus}
       .selectedMenuId=${this.selectedCatalogueId}
+      .selectedDiet=${this.selectedDiet}
       .statuses=${this.statuses}
       .courses=${this.courses}
       .tabLines=${this.tabLines}
@@ -2191,6 +2214,7 @@ export class TillApp extends LitElement {
           .products=${this.products}
           .menus=${this.menus}
           .selectedMenuId=${this.selectedCatalogueId}
+          .selectedDiet=${this.selectedDiet}
           .statuses=${this.statuses}
           .courses=${this.courses}
           .fireControl=${this.fireControl}
@@ -2288,6 +2312,8 @@ export class TillApp extends LitElement {
         @close-allergens=${() => this.#onCloseAllergens()}
         @logout=${() => void this.#onLogout()}
         @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
+        @diet-filter-selected=${(e: CustomEvent<{ predicate: DietPredicate | null }>) =>
+          this.#selectDiet(e.detail.predicate)}
         @menu-selected=${(e: CustomEvent<{ id: string }>) => this.#onMenuSelected(e)}
       >
         ${this.errorKey ? html`<p class="error" role="alert">${t(this.errorKey)}</p>` : nothing}

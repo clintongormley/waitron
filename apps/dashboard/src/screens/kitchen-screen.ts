@@ -1,6 +1,6 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-card.js";
@@ -153,6 +153,7 @@ export class KitchenScreen extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
 
   // The configured stations as editable rows, loaded on connect and re-synced after every mutation.
+  @state() private submitting = false;
   @state() private stations: EditableStation[] = [];
   // The new-station form's single field.
   @state() private newStation = "";
@@ -217,15 +218,19 @@ export class KitchenScreen extends LitElement {
   /** Create a station from the new-station form, then reload. A blank (whitespace-only) name is a no-op.
    * `displayOrder`/`isDefault` are left to defaults (a manager reorders / picks the default afterwards). */
   async #createStation(): Promise<void> {
+    if (this.submitting) return;
     this.errorKey = null;
     const name = this.newStation.trim();
     if (name === "") return;
+    this.submitting = true;
     try {
       await this.api.createStation({ name });
       this.newStation = "";
       await this.#load();
     } catch (error) {
       this.errorKey = codeOf(error);
+    } finally {
+      this.submitting = false;
     }
   }
 
@@ -242,6 +247,7 @@ export class KitchenScreen extends LitElement {
    * the route itself would raise (design §8) and never reaches `api.updateStation`, a friendly
    * pre-check the route still enforces authoritatively either way. */
   async #saveStation(id: string): Promise<void> {
+    if (this.submitting) return;
     this.errorKey = null;
     const row = this.stations.find((s) => s.id === id);
     if (row === undefined) return;
@@ -249,6 +255,7 @@ export class KitchenScreen extends LitElement {
       this.errorKey = "management.request_invalid";
       return;
     }
+    this.submitting = true;
     try {
       await this.api.updateStation(row.id, {
         name: row.name,
@@ -260,6 +267,8 @@ export class KitchenScreen extends LitElement {
       await this.#load();
     } catch (error) {
       this.errorKey = codeOf(error);
+    } finally {
+      this.submitting = false;
     }
   }
 
@@ -308,15 +317,19 @@ export class KitchenScreen extends LitElement {
   /** Create a course from the new-course form, then reload. A blank name is a no-op. `displayOrder` is
    * left to the default (a manager reorders afterwards); courses have no default concept. */
   async #createCourse(): Promise<void> {
+    if (this.submitting) return;
     this.errorKey = null;
     const name = this.newCourse.trim();
     if (name === "") return;
+    this.submitting = true;
     try {
       await this.api.createCourse({ name });
       this.newCourse = "";
       await this.#load();
     } catch (error) {
       this.errorKey = codeOf(error);
+    } finally {
+      this.submitting = false;
     }
   }
 
@@ -329,14 +342,18 @@ export class KitchenScreen extends LitElement {
   /** Persist the CURRENT name + display order of the course `id` holds, then reload. Reads the row from
    * state at click time (not a captured render closure). A vanished row is a no-op. */
   async #saveCourse(id: string): Promise<void> {
+    if (this.submitting) return;
     this.errorKey = null;
     const row = this.courses.find((c) => c.id === id);
     if (row === undefined) return;
+    this.submitting = true;
     try {
       await this.api.updateCourse(row.id, { name: row.name, displayOrder: row.displayOrder });
       await this.#load();
     } catch (error) {
       this.errorKey = codeOf(error);
+    } finally {
+      this.submitting = false;
     }
   }
 
@@ -368,6 +385,7 @@ export class KitchenScreen extends LitElement {
       <wt-card>
         <div class="row">
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="station-save-${s.id}"]`))}
             label=${t("kitchen.station_name")}
             data-test="station-name-${s.id}"
             .value=${s.name}
@@ -377,6 +395,7 @@ export class KitchenScreen extends LitElement {
             }}
           ></wt-input>
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="station-save-${s.id}"]`))}
             type="number"
             label=${t("kitchen.station_order")}
             data-test="station-order-${s.id}"
@@ -387,6 +406,7 @@ export class KitchenScreen extends LitElement {
             }}
           ></wt-input>
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="station-save-${s.id}"]`))}
             type="number"
             label=${t("kitchen.station_warm")}
             data-test="station-warm-${s.id}"
@@ -397,6 +417,7 @@ export class KitchenScreen extends LitElement {
             }}
           ></wt-input>
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="station-save-${s.id}"]`))}
             type="number"
             label=${t("kitchen.station_overdue")}
             data-test="station-overdue-${s.id}"
@@ -407,6 +428,7 @@ export class KitchenScreen extends LitElement {
             }}
           ></wt-input>
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="station-save-${s.id}"]`))}
             type="number"
             label=${t("kitchen.station_forgotten")}
             data-test="station-forgotten-${s.id}"
@@ -433,6 +455,7 @@ export class KitchenScreen extends LitElement {
             variant="primary"
             size="sm"
             data-test="station-save-${s.id}"
+            ?disabled=${this.submitting}
             @click=${() => void this.#saveStation(s.id)}
             >${t("action.save")}</wt-button
           >
@@ -464,6 +487,7 @@ export class KitchenScreen extends LitElement {
       <wt-card>
         <div class="row">
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="course-save-${c.id}"]`))}
             label=${t("kitchen.course_name")}
             data-test="course-name-${c.id}"
             .value=${c.name}
@@ -473,6 +497,7 @@ export class KitchenScreen extends LitElement {
             }}
           ></wt-input>
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="course-save-${c.id}"]`))}
             type="number"
             label=${t("kitchen.course_order")}
             data-test="course-order-${c.id}"
@@ -486,6 +511,7 @@ export class KitchenScreen extends LitElement {
             variant="primary"
             size="sm"
             data-test="course-save-${c.id}"
+            ?disabled=${this.submitting}
             @click=${() => void this.#saveCourse(c.id)}
             >${t("action.save")}</wt-button
           >
@@ -525,12 +551,17 @@ export class KitchenScreen extends LitElement {
         }
         <div class="new">
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-add-station]"))}
             label=${t("kitchen.new_station")}
             data-new-station
             .value=${this.newStation}
             @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onNewStation(e)}
           ></wt-input>
-          <wt-button variant="primary" data-add-station @click=${() => void this.#createStation()}
+          <wt-button
+            variant="primary"
+            data-add-station
+            ?disabled=${this.submitting}
+            @click=${() => void this.#createStation()}
             >${t("kitchen.add_station")}</wt-button
           >
         </div>
@@ -547,12 +578,17 @@ export class KitchenScreen extends LitElement {
         }
         <div class="new">
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-add-course]"))}
             label=${t("kitchen.new_course")}
             data-new-course
             .value=${this.newCourse}
             @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onNewCourse(e)}
           ></wt-input>
-          <wt-button variant="primary" data-add-course @click=${() => void this.#createCourse()}
+          <wt-button
+            variant="primary"
+            data-add-course
+            ?disabled=${this.submitting}
+            @click=${() => void this.#createCourse()}
             >${t("kitchen.add_course")}</wt-button
           >
         </div>

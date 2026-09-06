@@ -1,6 +1,6 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -118,6 +118,7 @@ export class SetupConnectScreen extends LitElement {
   /** Renders one field as a `wt-input`, bound to `this.values[key]` and its `invalid` state. */
   #field(label: string, key: ConnectField, type = "text"): TemplateResult {
     return html`<wt-input
+      @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]"))}
       class="field"
       label=${label}
       data-test=${key}

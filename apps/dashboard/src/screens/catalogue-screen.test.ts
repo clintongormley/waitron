@@ -1,3 +1,4 @@
+import { userEvent } from "@vitest/browser/context";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -879,4 +880,63 @@ describe("catalogue-screen", () => {
       expect.objectContaining({ dietOverride: { vegan: "yes", addContains: ["meat"] } }),
     );
   });
+});
+
+it("Enter guards pending option-item creation and allows retry after rejection", async () => {
+  let reject!: (reason: unknown) => void;
+  const pending = new Promise((_, fail) => {
+    reject = fail;
+  });
+  const request = vi.fn().mockReturnValueOnce(pending).mockResolvedValue({ id: "oi9" });
+  const api = stubApi({ createOptionGroupItem: request });
+  const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+  await flush(el);
+  const manager = el.shadowRoot!.querySelector<OptionGroupManager>(
+    "dashboard-option-group-manager",
+  )!;
+  await manager.updateComplete;
+  manager.shadowRoot!.querySelector<HTMLElement>("[data-test=toggle-items-og1]")!.click();
+  await flush(el);
+  await manager.updateComplete;
+  const field = manager.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(
+    "[data-test=item-name-es]",
+  )!;
+  await field.updateComplete;
+  const input = field.shadowRoot!.querySelector("input")!;
+  input.value = "Large";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await manager.updateComplete;
+  input.focus();
+  await userEvent.keyboard("{Enter}");
+  await userEvent.keyboard("{Enter}");
+  manager.dispatchEvent(
+    new CustomEvent("create-option-group-item", {
+      detail: {
+        groupId: "og1",
+        name: { es: "Large" },
+        priceDelta: "0.00",
+        maxQuantity: 1,
+        sort: 0,
+        active: true,
+        vatClass: null,
+      },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  expect(request).toHaveBeenCalledTimes(1);
+  expect(
+    (manager.shadowRoot!.querySelector("[data-test=create-item]") as import("@waitron/ui").WtButton)
+      .disabled,
+  ).toBe(true);
+  reject({ code: "options.item_invalid" });
+  await flush(el);
+  input.focus();
+  await userEvent.keyboard("{Enter}");
+  await flush(el);
+  expect(request).toHaveBeenCalledTimes(2);
+  expect(
+    (manager.shadowRoot!.querySelector("[data-test=create-item]") as import("@waitron/ui").WtButton)
+      .disabled,
+  ).toBe(false);
 });

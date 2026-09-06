@@ -1,6 +1,6 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
@@ -456,6 +456,7 @@ export class MyScheduleScreen extends LitElement {
           </select>
         </div>
         <wt-input
+          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=abs-submit]"))}
           data-test="abs-from"
           type="date"
           .label=${t("myschedule.absence_from")}
@@ -466,6 +467,7 @@ export class MyScheduleScreen extends LitElement {
           }}
         ></wt-input>
         <wt-input
+          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=abs-submit]"))}
           data-test="abs-to"
           type="date"
           .label=${t("myschedule.absence_to")}
@@ -476,6 +478,7 @@ export class MyScheduleScreen extends LitElement {
           }}
         ></wt-input>
         <wt-input
+          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=abs-submit]"))}
           data-test="abs-note"
           .label=${t("myschedule.absence_note")}
           .value=${this.absNote}

@@ -1765,6 +1765,17 @@ describe("startServer, against a real container as the deployment role", () => {
       expect(dash.status).toBe(200);
       expect(await dash.text()).toContain("dashboard-spa-root");
 
+      for (const [path, marker] of [
+        ["/manage/floor/view/plano", "dashboard-spa-root"],
+        ["/tabs/counter/menu/lunch", "till-spa-root"],
+      ]) {
+        const page = await fetch(`http://127.0.0.1:${port}${path}`, {
+          headers: { Accept: "text/html" },
+        });
+        expect(page.status).toBe(200);
+        expect(await page.text()).toContain(marker);
+      }
+
       const asset = await fetch(`http://127.0.0.1:${port}/manage/assets/d-1.js`);
       expect(asset.status).toBe(200);
       expect(await asset.text()).toContain("dashboard-spa-asset");

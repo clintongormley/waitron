@@ -236,7 +236,12 @@ export class TillLockScreen extends LitElement {
   }
 
   override render() {
-    return this.selected ? this.#renderPin(this.selected) : this.#renderList();
+    return html`
+      ${this.selected ? this.#renderPin(this.selected) : this.#renderList()}
+      <till-language-chooser
+        .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
+      ></till-language-chooser>
+    `;
   }
 
   #renderList() {
@@ -278,12 +283,6 @@ export class TillLockScreen extends LitElement {
                 </wt-button>
               `
         }
-        <!-- Pre-login language chooser (per-user-language-preference). It only EMITS a bubbling,
-             composed locale-selected event; till-app turns a pre-login pick into a transient setLocale
-             (never a preference write). The lock screen neither handles the event nor switches locale. -->
-        <till-language-chooser
-          .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
-        ></till-language-chooser>
       </div>
     `;
   }

@@ -1,6 +1,6 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
@@ -82,6 +82,7 @@ export class ServiceStatusScreen extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
 
   // The configured statuses as editable rows, loaded on connect and re-synced after every mutation.
+  @state() private submitting = false;
   @state() private statuses: EditableStatus[] = [];
   // The new-status form's fields. `newColor` seeds a sensible default swatch for a never-touched form.
   @state() private newLabel = "";
@@ -131,9 +132,11 @@ export class ServiceStatusScreen extends LitElement {
    * banner; never an unhandled rejection (called via `void`).
    */
   async #create(): Promise<void> {
+    if (this.submitting) return;
     this.errorKey = null;
     const label = this.newLabel.trim();
     if (label === "") return;
+    this.submitting = true;
     try {
       await this.api.createStatus({
         label,
@@ -144,6 +147,8 @@ export class ServiceStatusScreen extends LitElement {
       await this.#load();
     } catch (error) {
       this.errorKey = codeOf(error);
+    } finally {
+      this.submitting = false;
     }
   }
 
@@ -160,9 +165,11 @@ export class ServiceStatusScreen extends LitElement {
    * the `errorKey` banner; never an unhandled rejection (called via `void`).
    */
   async #saveRow(id: string): Promise<void> {
+    if (this.submitting) return;
     this.errorKey = null;
     const row = this.statuses.find((s) => s.id === id);
     if (row === undefined) return;
+    this.submitting = true;
     try {
       await this.api.updateStatus(row.id, {
         label: row.label,
@@ -173,6 +180,8 @@ export class ServiceStatusScreen extends LitElement {
       await this.#load();
     } catch (error) {
       this.errorKey = codeOf(error);
+    } finally {
+      this.submitting = false;
     }
   }
 
@@ -193,6 +202,7 @@ export class ServiceStatusScreen extends LitElement {
       <wt-card>
         <div class="row">
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="save-${s.id}"]`))}
             label=${t("status.label")}
             data-test="label-${s.id}"
             .value=${s.label}
@@ -202,6 +212,7 @@ export class ServiceStatusScreen extends LitElement {
             }}
           ></wt-input>
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="save-${s.id}"]`))}
             type="color"
             label=${t("status.color")}
             data-test="color-${s.id}"
@@ -212,6 +223,7 @@ export class ServiceStatusScreen extends LitElement {
             }}
           ></wt-input>
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="save-${s.id}"]`))}
             type="number"
             label=${t("status.display_order")}
             data-test="order-${s.id}"
@@ -234,6 +246,7 @@ export class ServiceStatusScreen extends LitElement {
             variant="primary"
             size="sm"
             data-test="save-${s.id}"
+            ?disabled=${this.submitting}
             @click=${() => void this.#saveRow(s.id)}
             >${t("action.save")}</wt-button
           >
@@ -259,19 +272,25 @@ export class ServiceStatusScreen extends LitElement {
 
       <div class="new">
         <wt-input
+          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=add]"))}
           label=${t("status.new_label")}
           data-test="new-label"
           .value=${this.newLabel}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onNewLabel(e)}
         ></wt-input>
         <wt-input
+          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=add]"))}
           type="color"
           label=${t("status.new_color")}
           data-test="new-color"
           .value=${this.newColor}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onNewColor(e)}
         ></wt-input>
-        <wt-button variant="primary" data-test="add" @click=${() => void this.#create()}
+        <wt-button
+          variant="primary"
+          data-test="add"
+          ?disabled=${this.submitting}
+          @click=${() => void this.#create()}
           >${t("action.create")}</wt-button
         >
       </div>

@@ -1,6 +1,6 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
@@ -168,6 +168,7 @@ export class CatalogueScreen extends LitElement {
   #savingCategory = false;
   #savingCatalogue = false;
   #savingOptionGroup = false;
+  @state() private savingOptionGroupItem = false;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -522,6 +523,8 @@ export class CatalogueScreen extends LitElement {
     event: CustomEvent<{ groupId: string } & OptionGroupItemInput>,
   ): Promise<void> {
     event.stopPropagation();
+    if (this.savingOptionGroupItem) return;
+    this.savingOptionGroupItem = true;
     const { groupId, ...input } = event.detail;
     this.optionGroupItemError = null;
     try {
@@ -529,6 +532,8 @@ export class CatalogueScreen extends LitElement {
       this.optionGroupItems = await this.api.listOptionGroupItems(groupId);
     } catch (error) {
       this.optionGroupItemError = codeOf(error);
+    } finally {
+      this.savingOptionGroupItem = false;
     }
   }
 
@@ -622,6 +627,7 @@ export class CatalogueScreen extends LitElement {
 
       <section class="new-catalogue">
         <wt-input
+          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=create-catalogue]"))}
           class="field"
           data-test="new-catalogue-name"
           label=${t("catalogue.new")}
@@ -650,6 +656,7 @@ export class CatalogueScreen extends LitElement {
       <section class="option-groups">
         <h2 class="section-title">${t("option_group.section_title")}</h2>
         <dashboard-option-group-manager
+          .itemBusy=${this.savingOptionGroupItem}
           .groups=${this.optionGroups}
           .items=${this.optionGroupItems}
           .expandedGroupId=${this.expandedGroupId}

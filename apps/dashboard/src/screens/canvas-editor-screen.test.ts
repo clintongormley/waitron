@@ -1,3 +1,4 @@
+import { userEvent } from "@vitest/browser/context";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./canvas-editor-screen.js";
@@ -6,7 +7,11 @@ import type { Canvas, DashboardApi } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 
-afterEach(cleanupWidgets);
+const originalUrl = location.href;
+afterEach(() => {
+  cleanupWidgets();
+  history.replaceState(null, "", originalUrl);
+});
 const canvases: Canvas[] = [
   {
     id: "c1",
@@ -772,4 +777,347 @@ describe("canvas-editor-screen property panel + save (B7)", () => {
     const definition = (api.updateCanvas as ReturnType<typeof vi.fn>).mock.calls[0][2];
     expect(definition.tabs[0].columns).toBe(24);
   });
+});
+
+describe("canvas editor URL tabs", () => {
+  it("reopens a saved canvas and its selected tab, then follows tab history", async () => {
+    const canvas = {
+      ...canvases[0]!,
+      definition: {
+        formFactor: "till",
+        tabs: [
+          { key: "counter", title: "Counter", columns: 12, cards: [] },
+          { key: "floor", title: "Floor", columns: 12, cards: [] },
+        ],
+      },
+    };
+    const url = new URL(location.href);
+    url.pathname = "/manage/canvas-editor/canvas/c1/tab/floor";
+    history.replaceState(null, "", url);
+    const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", {
+      api: stubApi({ getCanvas: vi.fn().mockResolvedValue(canvas) }),
+    });
+    await flush(el);
+    expect(
+      el.shadowRoot!.querySelector('[data-test="tab-btn-floor"]')?.getAttribute("variant"),
+    ).toBe("primary");
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="tab-btn-counter"]')!.click();
+    await el.updateComplete;
+    expect(location.pathname).toBe("/manage/canvas-editor/canvas/c1/tab/counter");
+    const back = new Promise<void>((resolve) =>
+      window.addEventListener("popstate", () => resolve(), { once: true }),
+    );
+    history.back();
+    await back;
+    await flush(el);
+    expect(
+      el.shadowRoot!.querySelector('[data-test="tab-btn-floor"]')?.getAttribute("variant"),
+    ).toBe("primary");
+  });
+});
+
+it("Enter in a tab title saves the edited canvas draft", async () => {
+  const api = stubApi({
+    getCanvas: vi.fn().mockResolvedValue({ ...canvases[0], definition: validTillDefinition }),
+  });
+  const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", { api });
+  await flush(el);
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-c1]")!.click();
+  await flush(el);
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=tab-settings]")!.click();
+  await el.updateComplete;
+  const field =
+    el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("[data-test=tab-title]")!;
+  await field.updateComplete;
+  const input = field.shadowRoot!.querySelector("input")!;
+  input.value = "Lunch";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  input.focus();
+  await userEvent.keyboard("{Enter}");
+  await flush(el);
+  expect(api.updateCanvas).toHaveBeenCalledExactlyOnceWith(
+    "c1",
+    "Counter till",
+    expect.objectContaining({
+      formFactor: "till",
+      tabs: [expect.objectContaining({ key: "counter", title: "Lunch", columns: 12 })],
+    }),
+  );
+});
+
+describe("canvas navigation during requests", () => {
+  it.each(["missing", "invalid"])(
+    "returns to the list when history opens a %s canvas",
+    async (failure) => {
+      history.replaceState(null, "", "/manage/canvas-editor/canvas/c2");
+      history.pushState(null, "", "/manage/canvas-editor/canvas/c1");
+      const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", {
+        api: stubApi({
+          getCanvas: vi.fn(async (id: string) => {
+            if (id === "c1") return canvases[0]!;
+            if (failure === "missing") throw { code: "canvas.not_found" };
+            return { id: "c2", name: "Broken canvas", definition: null };
+          }),
+        }),
+      });
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=editor-name]")?.textContent).toBe(
+        "Counter till",
+      );
+      const back = new Promise<void>((done) =>
+        window.addEventListener("popstate", () => done(), { once: true }),
+      );
+      history.back();
+      await back;
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=editor-name]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-test=save]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-test=canvas-row-c1]")).not.toBeNull();
+      expect(location.pathname).toBe("/manage/canvas-editor");
+      expect(el.shadowRoot!.textContent).toContain(
+        codeMessage(failure === "missing" ? "canvas.not_found" : "canvas.invalid"),
+      );
+    },
+  );
+
+  it("keeps the list after Back cancels a pending canvas open", async () => {
+    let resolve!: (value: Canvas) => void;
+    const getCanvas = vi.fn(
+      () =>
+        new Promise<Canvas>((done) => {
+          resolve = done;
+        }),
+    );
+    const list = new URL(location.href);
+    list.pathname = "/manage/canvas-editor";
+    history.replaceState(null, "", list);
+    const editor = new URL(list);
+    editor.pathname = "/manage/canvas-editor/canvas/c1";
+    history.pushState(null, "", editor);
+    const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", {
+      api: stubApi({ getCanvas }),
+    });
+    await flush(el);
+    expect(getCanvas).toHaveBeenCalledWith("c1");
+    const back = new Promise<void>((done) =>
+      window.addEventListener("popstate", () => done(), { once: true }),
+    );
+    history.back();
+    await back;
+    await flush(el);
+    resolve(canvases[0]!);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector('[data-test="editor-name"]')).toBeNull();
+    expect(location.pathname).toBe("/manage/canvas-editor");
+  });
+
+  it("keeps the newer canvas open when an earlier save finishes", async () => {
+    let resolve!: () => void;
+    const updateCanvas = vi.fn(
+      () =>
+        new Promise<void>((done) => {
+          resolve = done;
+        }),
+    );
+    const getCanvas = vi.fn(async (id: string) => ({
+      id,
+      name: id,
+      definition: validTillDefinition,
+    }));
+    const url = new URL(location.href);
+    url.pathname = "/manage/canvas-editor/canvas/c2";
+    history.replaceState(null, "", url);
+    url.pathname = "/manage/canvas-editor/canvas/c1";
+    history.pushState(null, "", url);
+    const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", {
+      api: stubApi({ getCanvas, updateCanvas }),
+    });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+    await flush(el);
+    expect(updateCanvas).toHaveBeenCalledTimes(1);
+    const back = new Promise<void>((done) =>
+      window.addEventListener("popstate", () => done(), { once: true }),
+    );
+    history.back();
+    await back;
+    await flush(el);
+    expect(el.shadowRoot!.querySelector('[data-test="editor-name"]')?.textContent).toBe("c2");
+    resolve();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector('[data-test="editor-name"]')?.textContent).toBe("c2");
+    expect(location.pathname).toMatch(/^\/manage\/canvas-editor\/canvas\/c2(?:\/|$)/);
+  });
+});
+
+it("does not save twice before the disabled state renders", async () => {
+  let resolve!: () => void;
+  const updateCanvas = vi.fn(
+    () =>
+      new Promise<void>((done) => {
+        resolve = done;
+      }),
+  );
+  const url = new URL(location.href);
+  url.pathname = "/manage/canvas-editor/canvas/c1";
+  history.replaceState(null, "", url);
+  const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", {
+    api: stubApi({
+      getCanvas: vi
+        .fn()
+        .mockResolvedValue({ id: "c1", name: "Counter", definition: validTillDefinition }),
+      updateCanvas,
+    }),
+  });
+  await flush(el);
+  const save = el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!;
+  save.click();
+  save.click();
+  try {
+    expect(updateCanvas).toHaveBeenCalledTimes(1);
+  } finally {
+    resolve();
+    await flush(el);
+  }
+});
+
+it("invalidates an outstanding open when history returns to the canvas already displayed", async () => {
+  let resolve!: (value: Canvas) => void;
+  const getCanvas = vi.fn((id: string) =>
+    id === "c2"
+      ? new Promise<Canvas>((done) => {
+          resolve = done;
+        })
+      : Promise.resolve(canvases[0]!),
+  );
+  const url = new URL(location.href);
+  url.pathname = "/manage/canvas-editor/canvas/c1";
+  history.replaceState(null, "", url);
+  const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", {
+    api: stubApi({ getCanvas }),
+  });
+  await flush(el);
+  url.pathname = "/manage/canvas-editor/canvas/c2";
+  history.pushState(null, "", url);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await flush(el);
+  const back = new Promise<void>((done) =>
+    window.addEventListener("popstate", () => done(), { once: true }),
+  );
+  history.back();
+  await back;
+  await flush(el);
+  resolve({ ...canvases[0]!, id: "c2", name: "Other canvas" });
+  await flush(el);
+  expect(el.shadowRoot!.querySelector('[data-test="editor-name"]')?.textContent).toBe(
+    "Counter till",
+  );
+  expect(location.pathname).toMatch(/^\/manage\/canvas-editor\/canvas\/c1(?:\/|$)/);
+});
+
+it("updates the created canvas when its draft was edited during the first save", async () => {
+  let resolve!: (value: { id: string }) => void;
+  const createCanvas = vi.fn(
+    () =>
+      new Promise<{ id: string }>((done) => {
+        resolve = done;
+      }),
+  );
+  const updateCanvas = vi.fn().mockResolvedValue(undefined);
+  const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", {
+    api: stubApi({ createCanvas, updateCanvas }),
+  });
+  await flush(el);
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="create"]')!.click();
+  await el.updateComplete;
+  el.shadowRoot!.querySelector('[data-test="create-name"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "New counter" }, bubbles: true }),
+  );
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="confirm-create"]')!.click();
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+  await flush(el);
+  expect(createCanvas).toHaveBeenCalledTimes(1);
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="canvas-settings"]')!.click();
+  await el.updateComplete;
+  el.shadowRoot!.querySelector('[data-test="canvas-name"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "Renamed while saving" }, bubbles: true }),
+  );
+  await el.updateComplete;
+  resolve({ id: "new-canvas" });
+  await flush(el);
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+  await flush(el);
+  expect(createCanvas).toHaveBeenCalledTimes(1);
+  expect(updateCanvas).toHaveBeenCalledWith(
+    "new-canvas",
+    "Renamed while saving",
+    expect.any(Object),
+  );
+});
+
+it("keeps added and reselected unsaved tabs out of URLs and history", async () => {
+  history.replaceState(null, "", "/manage/canvas-editor/canvas/c1/tab/counter");
+  const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", {
+    api: stubApi(),
+  });
+  await flush(el);
+  const push = vi.spyOn(history, "pushState");
+  const replace = vi.spyOn(history, "replaceState");
+  try {
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-tab]")!.click();
+    await el.updateComplete;
+    const tabs = el.shadowRoot!.querySelectorAll<HTMLElement>('[data-test^="tab-btn-"]');
+    expect(tabs).toHaveLength(2);
+    expect(location.pathname).toBe("/manage/canvas-editor/canvas/c1/tab/counter");
+    tabs[0]!.click();
+    await el.updateComplete;
+    tabs[1]!.click();
+    await el.updateComplete;
+    expect(tabs[1]!.getAttribute("variant")).toBe("primary");
+    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+  } finally {
+    push.mockRestore();
+    replace.mockRestore();
+  }
+});
+
+it("makes persisted tabs navigable while retaining edits made during their save", async () => {
+  history.replaceState(null, "", "/manage/canvas-editor/canvas/c1/tab/counter");
+  let resolve!: () => void;
+  const updateCanvas = vi.fn(
+    () =>
+      new Promise<void>((done) => {
+        resolve = done;
+      }),
+  );
+  const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", {
+    api: stubApi({
+      getCanvas: vi.fn().mockResolvedValue({ ...canvases[0], definition: validTillDefinition }),
+      updateCanvas,
+    }),
+  });
+  await flush(el);
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-tab]")!.click();
+  await el.updateComplete;
+  const savedTab = el.shadowRoot!.querySelectorAll<HTMLElement>('[data-test^="tab-btn-"]')[1]!;
+  const savedKey = savedTab.getAttribute("data-test")!.slice("tab-btn-".length);
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+  await flush(el);
+  expect(updateCanvas).toHaveBeenCalledTimes(1);
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-tab]")!.click();
+  await el.updateComplete;
+  resolve();
+  await flush(el);
+  const tabs = el.shadowRoot!.querySelectorAll<HTMLElement>('[data-test^="tab-btn-"]');
+  expect(tabs).toHaveLength(3);
+  tabs[1]!.click();
+  await el.updateComplete;
+  expect(location.pathname).toBe(`/manage/canvas-editor/canvas/c1/tab/${savedKey}`);
+  tabs[2]!.click();
+  await el.updateComplete;
+  expect(location.pathname).toBe(`/manage/canvas-editor/canvas/c1/tab/${savedKey}`);
 });

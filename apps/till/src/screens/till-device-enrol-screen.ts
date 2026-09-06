@@ -1,7 +1,9 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, type WtInput } from "@waitron/ui";
+import { submitOnEnter, baseStyles, type WtInput } from "@waitron/ui";
 import { t } from "../i18n/t.js";
+import "../widgets/language-chooser.js";
+import { LocaleChangeController } from "../state/locale-controller.js";
 import type { StringKey } from "../i18n/strings.js";
 import type { TillApi } from "../api/client.js";
 
@@ -113,6 +115,11 @@ export class TillDeviceEnrolScreen extends LitElement {
     `,
   ];
 
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
+
   /** The HTTP face of the till. Threaded from the app (the enrol path is unauthenticated — no session
    * yet — but `enrolDevice` rides the same `#request`; see `client.ts`). */
   @property({ attribute: false }) api!: TillApi;
@@ -179,6 +186,7 @@ export class TillDeviceEnrolScreen extends LitElement {
             : nothing
         }
         <wt-input
+          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-enrol]"))}
           class="code"
           data-code
           .label=${t("device.enrol_code")}
@@ -194,6 +202,9 @@ export class TillDeviceEnrolScreen extends LitElement {
           ${t(copy.submit)}
         </wt-button>
       </section>
+      <till-language-chooser
+        .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
+      ></till-language-chooser>
     `;
   }
 }

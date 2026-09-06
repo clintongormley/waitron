@@ -43,8 +43,8 @@ describe("SPA mounting alongside API routes (boot order)", () => {
     app.get("/api/till", (c) => c.json({ api: "till" }));
     app.get("/management-api/staff-roster", (c) => c.json({ api: "management" }));
     // then the SPAs, dashboard (/manage) before till (/), as boot will mount them
-    mountSpa(app, { root: dashDir!, basePath: "/manage" }, noopLog);
-    mountSpa(app, { root: tillDir!, basePath: "" }, noopLog);
+    mountSpa(app, { root: dashDir!, basePath: "/manage", navigationPath: "/manage" }, noopLog);
+    mountSpa(app, { root: tillDir!, basePath: "", navigationPath: "/tabs" }, noopLog);
     return app;
   };
 
@@ -55,6 +55,36 @@ describe("SPA mounting alongside API routes (boot order)", () => {
       api: "management",
     });
     expect((await app.request("/health")).status).toBe(200);
+  });
+
+  it.each([
+    ["/manage/staff", "dashboard"],
+    ["/manage/floor/view/plano/zone/z1", "dashboard"],
+    ["/manage/canvas-editor/canvas/c1/tab/counter", "dashboard"],
+    ["/tabs/counter/menu/lunch", "till"],
+    ["/tabs/floor/zone/~", "till"],
+  ])("serves the app when loading a saved navigation path %s", async (path, marker) => {
+    const res = await build().request(path, { headers: { Accept: "text/html" } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-cache");
+    expect(await res.text()).toBe(`<html>${marker}</html>`);
+  });
+
+  it.each([
+    "/api/typo",
+    "/management-api/typo",
+    "/assets/missing.js",
+    "/manage/assets/missing.js",
+    "/manage/favicon.ico",
+    "/tabs-other/counter",
+  ])("keeps missing APIs and files as 404s: %s", async (path) => {
+    const res = await build().request(path, { headers: { Accept: "text/html" } });
+    expect(res.status).toBe(404);
+    expect(res.headers.get("content-type") ?? "").not.toContain("text/html");
+  });
+
+  it("does not return an app page to a non-HTML request", async () => {
+    expect((await build().request("/tabs/counter")).status).toBe(404);
   });
 
   it("serves the till at / and the dashboard at /manage", async () => {

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { formatMoney } from "../i18n/format.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -352,7 +352,11 @@ const seabass: TillProduct = {
   ],
 };
 
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  if (vi.isMockFunction(history.pushState)) vi.mocked(history.pushState).mockRestore();
+  if (vi.isMockFunction(history.replaceState)) vi.mocked(history.replaceState).mockRestore();
+});
 
 /** The picker the grid opened, or null when none is mounted. */
 function pickerOf(grid: TillProductGrid): TillModifierPicker | null {
@@ -509,6 +513,8 @@ describe("till-modifier-picker", () => {
       products: [burger],
       store,
     });
+    const push = vi.spyOn(history, "pushState");
+    const replace = vi.spyOn(history, "replaceState");
     tapTile(el, "Burger");
     await el.updateComplete;
     const picker = pickerOf(el)!;
@@ -530,6 +536,8 @@ describe("till-modifier-picker", () => {
     ]);
     // The picker tears down after confirming.
     expect(pickerOf(el)).toBeNull();
+    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
   });
 
   // Pinned test 4 — the empty-group carry: a group with items: [] is not rendered and does not block Add.

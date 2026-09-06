@@ -813,3 +813,59 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     expect(api.advanceTicket).not.toHaveBeenCalled();
   });
 });
+
+describe("station destination history", () => {
+  it("restores a validated station after refresh and replaces an unavailable station", async () => {
+    history.replaceState(null, "", "/tabs/counter/view/station/station/st-2");
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api: stubApi({ getStationQueue: vi.fn().mockResolvedValue(barraQueue) }),
+    });
+    await flush(el);
+    expect(queueWidget(el)!.stationId).toBe("st-2");
+    expect(queueWidget(el)!.groups).toEqual(barraQueue);
+    history.replaceState(null, "", "/tabs/counter/view/station/station/missing");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flush(el);
+    expect(queueWidget(el)!.stationId).toBe("st-1");
+    expect(location.pathname).toBe("/tabs/counter/view/station/station/st-1");
+  });
+
+  it("does not let an older queue response replace the station reached through Back", async () => {
+    history.replaceState(null, "", "/tabs/counter/view/station/station/st-1");
+    let resolve!: (value: StationQueueGroup[]) => void;
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api: stubApi({
+        getStationQueue: vi.fn((id: string) =>
+          id === "st-2"
+            ? new Promise((done) => {
+                resolve = done;
+              })
+            : Promise.resolve(cocinaQueue),
+        ),
+      }),
+    });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-station="st-2"]')!.click();
+    await flush(el);
+    history.replaceState(null, "", "/tabs/counter/view/station/station/st-1");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flush(el);
+    resolve(barraQueue);
+    await flush(el);
+    expect(queueWidget(el)!.stationId).toBe("st-1");
+    expect(queueWidget(el)!.groups).toEqual(cocinaQueue);
+  });
+
+  it("keeps an embedded station picker local to its enclosing destination", async () => {
+    history.replaceState(null, "", "/tabs/kitchen/view/schedule");
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api: stubApi(),
+      embedded: true,
+    });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-station="st-2"]')!.click();
+    await flush(el);
+    expect(queueWidget(el)!.stationId).toBe("st-2");
+    expect(location.pathname).toBe("/tabs/kitchen/view/schedule");
+  });
+});

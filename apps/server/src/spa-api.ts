@@ -19,6 +19,8 @@ export interface SpaDeps {
   root: string;
   /** URL prefix this SPA is served under; "" (or "/") for the origin root, else e.g. "/manage" (no trailing slash). */
   basePath: string;
+  /** Absolute path prefix for browser navigation, e.g. /tabs or /manage. */
+  navigationPath?: string;
 }
 
 /** A content-addressed asset name (`app-<hash>.js`) changes only when its bytes change, so its URL is
@@ -76,11 +78,9 @@ export function assertBuiltApp(dir: string, variable: string): void {
  * else claimed (a Hono handler that returns without `next()` ends the chain, so `/api/ping` registered
  * earlier is never shadowed).
  *
- * Behaviour: the base-path root serves index.html; an existing file under it is served with its
- * content-type and cache header; anything else 404s. There is deliberately NO history/SPA fallback —
- * neither front-end uses client-side URL routing (screens are in-memory Lit state; the URL never
- * changes), so a reload only ever lands on the base-path root, and the existence check is what stops a
- * stray unmatched path (e.g. `/api/typo`) from being answered with HTML.
+ * The base path serves index.html; assets retain their file responses. Browser HTML requests under
+ * navigationPath also serve index.html, so saved UI paths survive refresh. Root files and assets
+ * stay outside navigation, and a till navigation prefix never claims unmatched API paths.
  */
 export function mountSpa(app: Hono, deps: SpaDeps, log: Logger): void {
   // Normalise the configured dir ONCE, so `index.html` and every asset are served from the same
@@ -91,8 +91,15 @@ export function mountSpa(app: Hono, deps: SpaDeps, log: Logger): void {
   const indexFile = join(root, "index.html");
 
   const serve = (c: Context, relPath: string): Promise<Response> => {
-    // The base-path root ("/") serves index.html; there is no client-side routing to fall back on.
-    if (relPath === "/") {
+    const navigation = deps.navigationPath;
+    const firstSegment = relPath.split("/")[1] ?? "";
+    const isNavigation =
+      navigation !== undefined &&
+      (c.req.path === navigation || c.req.path.startsWith(`${navigation}/`)) &&
+      firstSegment !== "assets" &&
+      !firstSegment.includes(".") &&
+      (c.req.header("Accept") ?? "").includes("text/html");
+    if (relPath === "/" || isNavigation) {
       return sendFile(c, indexFile, REVALIDATE_CACHE_CONTROL, log);
     }
     const abs = safeResolve(root, relPath);

@@ -665,3 +665,8 @@ matches the existing code's shape (a `reason` field, per the config §2 findings
 (curl smoke) are verification-by-running, not unit tests, because Vite build config and a live HTTP
 bind are not unit-testable logic. All *logic* (the handler, the config read, the mount precedence, the
 missing-index guard) is TDD'd in Tasks 2–3.
+
+
+> **2026-09-06 update:** Till and dashboard now use path navigation. Browser HTML requests under
+> `/tabs` and `/manage` serve the appropriate app page, including nested paths; APIs and assets
+> retain their responses. See [UI navigation and controls](2026-09-06-ui-navigation-and-controls.md).

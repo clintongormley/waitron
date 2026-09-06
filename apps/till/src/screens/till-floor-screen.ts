@@ -1,3 +1,4 @@
+import { tillPath } from "../navigation.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { TimingBand } from "@waitron/shared";
@@ -6,6 +7,7 @@ import type { TimingBand } from "@waitron/shared";
 // tag below. The type-only imports carry the canvas's copy/table/placement-event shapes.
 import {
   baseStyles,
+  UrlStateController,
   buildZoneTabs,
   defaultTraySlot,
   floorTrayStyles,
@@ -396,6 +398,15 @@ export class TillFloorScreen extends LitElement {
   /** Edit mode (FP-2) — passes `.editable` to the canvas; only reachable while {@link canEdit}. */
   @state() private editing = false;
 
+  readonly #url = new UrlStateController(
+    this,
+    () => {
+      const zone = this.#url.read("till-zone");
+      this.activeZone = zone === null ? undefined : zone === "" ? null : zone;
+    },
+    tillPath,
+  );
+
   /** Announce the operator wants this table's tab. The app opens (free) or resumes (occupied) it and
    * moves to the table-ordering screen — this screen never touches a fiscal path (design H2). */
   #openTable(table: TableState): void {
@@ -416,6 +427,7 @@ export class TillFloorScreen extends LitElement {
   /** Select a zone tab (a zone id, or `null` for the "Sin zona" tab). */
   #selectZone(key: string | null): void {
     this.activeZone = key;
+    this.#url.write({ "till-tab": this.#url.read("till-tab") ?? "floor", "till-zone": key ?? "" });
   }
 
   /** Flip the view and PIN it for the session (spec §5b) — from whatever it is showing now. */

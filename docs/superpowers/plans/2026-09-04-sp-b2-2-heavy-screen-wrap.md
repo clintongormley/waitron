@@ -1,5 +1,7 @@
 # SP-B2.2 — Wrap the two heavy screens (station + table-order) + re-enable the handheld/kds shell — Implementation Plan
 
+> **Superseded placement decision, 2026-09-06:** The [UI navigation and controls plan](2026-09-06-ui-navigation-and-controls.md) places the language chooser at the bottom right, outside the operator header, and keeps it available on kitchen displays. The header-placement and kiosk-removal instructions below record the earlier design.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Finish SP-B2 by wrapping the two **heavy** bespoke screens — **station** (`kds-board`, carrying the device-mode/enrol paths) and **table-order** (the largest prop + event surface) — as embedded full-span cards, so the two device classes B2.1 left on the legacy `screen`-enum (**waiter handhelds** and **kds displays**) render their primary card and can move onto the profile tab shell. Land the first **reachable** `kds-board` capability→ABSENT skip (un-skip the two `it.skip` tests in `card-grid.test.ts`) and prove it by deletion.
