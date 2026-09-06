@@ -414,8 +414,9 @@ the global `~/.claude/CLAUDE.md` so every repo shares it. In short: Claude and C
 Opus 4.8 is the default and drives everything the owner reads (spec, plan, execution driver);
 Fable 5.1 is opt-in for the brainstorm plus two short dispatched reads (a spec touching §5, fix
 round five) and never drives execution — a hook denies it; dispatched seats run on Opus 5; Codex
-(`gpt-5.6-sol` — the run-it seat did not need the top tier on the Claude side, so not on this one
-either; the yardstick is the tripwire) holds exactly one seat, `/finish-branch`'s run-it reviewer, dispatched through
+(`gpt-6-astra` at medium effort — measured against Sol on one commit with one bounded brief: faster,
+fewer tokens, and it found the real defect that Sol at low missed; the process log is the tripwire)
+holds exactly one seat, `/finish-branch`'s run-it reviewer, dispatched through
 `~/workspace/tools/codex-seat.sh review-run`, which is the second model family on the diff now that
 Copilot's automatic review is off (its rule was removed from the main ruleset 2026-09-06). The
 repository carries no Codex file: the seat script passes the model, the effort, the doc-size cap
