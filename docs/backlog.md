@@ -164,9 +164,10 @@ coverage run concurrently (measured on a five-package scope: 10s + 113s → 113s
 overlap buys the typecheck's duration; a global push's shape was not measured). Left behind: the
 classifier's fourth output line `root=` is emitted and read by no consumer (the hook routes on
 `scope=root`); the hook's concurrency records the typecheck's status under Husky's `sh -e`, which
-the Sol run-it seat caught before land — first "after" seat of the speed trial: 409s, 11 commands,
-82% model time, so the bounded brief cut the reading, not the per-turn thinking (next lever: effort
-`low`, measured the same way; `~/workspace/tools/process-log.md`). The seat-speed trial (bounded run-it brief, medium effort, rebase before the review
+the run-it seat (Sol at medium, then the default) caught before land — 409s, 11 commands, 82% model
+time. The three-way comparison that followed on the same commit (Sol medium 409s / Astra medium
+323s / Sol low 203s; only the two medium seats found the defect) moved the seat's default to Astra
+at medium (#256; table in `~/workspace/tools/process-log.md`). The seat-speed trial (bounded run-it brief, medium effort, rebase before the review
 wave) and the per-PR process log live in `~/workspace/tools/process-log.md`. **Owner decisions recorded (they supersede older spec text where they
 conflict):**
 
