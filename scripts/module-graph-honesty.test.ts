@@ -38,38 +38,35 @@ import { packageDirOf } from "../packages/module/src/module.js";
  * (`../<pkg>/drizzle`) points at it, so the module NAME (e.g. `fiscal`) is derived from the descriptor
  * rather than assumed equal to the package DIR name (e.g. `fiscal-verifactu`).
  *
- * KNOWN LIMITATIONS, stated rather than papered over (CLAUDE.md §1):
- *   - The SPI-call edge is scoped to the `sync_capture` function SPECIFICALLY, not to arbitrary
- *     cross-module function calls. `EXECUTE_SYNC_CAPTURE` matches only `EXECUTE FUNCTION sync_capture`;
- *     the OWNER of `sync_capture` is auto-resolved from `CREATE FUNCTION` across the tree (so it is
- *     `sync`, not hardcoded), but a trigger calling some OTHER module's function would not surface.
- *     This is deliberate — a general function-call scan would surface unrelated edges (RLS helpers,
- *     shared trigger functions) beyond SP-3a's scope. Extend `EXECUTE_SYNC_CAPTURE` when another
- *     cross-module SPI appears. The `fiscal→sync` vacuous-pass anchor pins that this edge is actually
- *     found in the tree's real spelling.
- *   - It is a regex over comment- and string-stripped text, NOT a SQL parser. `stripSql` blanks
- *     slash-star blocks, `--` line comments, and `'…'` string literals (preserving line numbers), so a
- *     `references`/`create trigger` mention in any of those is ignored — pinned by the detector's
- *     negative controls below. Both trigger forms are matched — plain `CREATE TRIGGER` AND
- *     `CREATE CONSTRAINT TRIGGER` (core's deferrable coverage checks). But a trigger whose
- *     `ON <table>` is separated from the trigger name by content the `.*?` cannot span cleanly, or a
- *     table named with unusual quoting the
- *     `"?(?:public"?\.)?"?(\w+)"?` shape does not cover, could be missed. The defence against that is
- *     not a proof of totality — it is the vacuous-pass anchor, which asserts the scan actually FOUND
- *     the three known real edges (`sync→identity`, `sync→payments`, `workforce→identity`) in the
- *     tree's ACTUAL spelling. If the tree's SQL dialect drifts out from under these regexes, that
- *     anchor goes red rather than the guard passing empty (CLAUDE.md §1, "a measurement where both
- *     answers look alike measures nothing").
- *   - The stripping is single-pass and naive: `--` is treated as a comment start even inside a string
- *     literal (line comments are blanked before strings), and a `'` inside a `--` comment cannot open
- *     a string (comments are blanked first). The real tree is clean under this order — verified by the
- *     anchor and the empty tree-wide result — but a future migration mixing the two on one line could
- *     confuse it. A full tokenizer was not built; the failure mode is a stale anchor, not a silent
- *     pass.
- *   - Like every file under `scripts/`, this is NOT typechecked — `pnpm typecheck` is `pnpm -r
- *     typecheck` and never visits the workspace root (CLAUDE.md §2/§4). So it is kept plain and its
- *     one cross-package import (`ALL_MODULES`) is used only for runtime values, never for a shape only
- *     a typechecker would validate.
+ * KNOWN LIMITATIONS, stated rather than papered over (CLAUDE.md §1): - The SPI-call edge is
+ * scoped to the `sync_capture` function SPECIFICALLY, not to arbitrary cross-module function
+ * calls. `EXECUTE_SYNC_CAPTURE` matches only `EXECUTE FUNCTION sync_capture`; the OWNER of
+ * `sync_capture` is auto-resolved from `CREATE FUNCTION` across the tree (so it is `sync`, not
+ * hardcoded), but a trigger calling some OTHER module's function would not surface. This is
+ * deliberate — a general function-call scan would surface unrelated edges (shared trigger
+ * functions) beyond SP-3a's scope. Extend `EXECUTE_SYNC_CAPTURE` when another cross-module SPI
+ * appears. The `fiscal→sync` vacuous-pass anchor pins that this edge is actually found in the
+ * tree's real spelling. - It is a regex over comment- and string-stripped text, NOT a SQL parser.
+ * `stripSql` blanks slash-star blocks, `--` line comments, and `'…'` string literals (preserving
+ * line numbers), so a `references`/`create trigger` mention in any of those is ignored — pinned
+ * by the detector's negative controls below. Both trigger forms are matched — plain `CREATE
+ * TRIGGER` AND `CREATE CONSTRAINT TRIGGER` (core's deferrable coverage checks). But a trigger
+ * whose `ON <table>` is separated from the trigger name by content the `.*?` cannot span cleanly,
+ * or a table named with unusual quoting the `"?(?:public"?\.)?"?(\w+)"?` shape does not cover,
+ * could be missed. The defence against that is not a proof of totality — it is the vacuous-pass
+ * anchor, which asserts the scan actually FOUND the three known real edges (`sync→identity`,
+ * `sync→payments`, `workforce→identity`) in the tree's ACTUAL spelling. If the tree's SQL dialect
+ * drifts out from under these regexes, that anchor goes red rather than the guard passing empty
+ * (CLAUDE.md §1, "a measurement where both answers look alike measures nothing"). - The stripping
+ * is single-pass and naive: `--` is treated as a comment start even inside a string literal (line
+ * comments are blanked before strings), and a `'` inside a `--` comment cannot open a string
+ * (comments are blanked first). The real tree is clean under this order — verified by the anchor
+ * and the empty tree-wide result — but a future migration mixing the two on one line could
+ * confuse it. A full tokenizer was not built; the failure mode is a stale anchor, not a silent
+ * pass. - Like every file under `scripts/`, this is NOT typechecked — `pnpm typecheck` is `pnpm
+ * -r typecheck` and never visits the workspace root (CLAUDE.md §2/§4). So it is kept plain and
+ * its one cross-package import (`ALL_MODULES`) is used only for runtime values, never for a shape
+ * only a typechecker would validate.
  */
 
 const REPO_ROOT = join(import.meta.dirname, "..");
@@ -91,10 +88,12 @@ const CREATE_TRIGGER =
 
 /** `CREATE [OR REPLACE] FUNCTION ["public".]"<name>"` — to resolve which module DEFINES a function. */
 const CREATE_FUNCTION = /\bcreate\s+(?:or\s+replace\s+)?function\s+"?(?:public"?\.)?"?(\w+)"?/gi;
-/** `EXECUTE (FUNCTION|PROCEDURE) sync_capture` — a trigger calling sync's capture SPI. Scoped to
- * sync_capture deliberately: a general cross-module function-call scan would surface unrelated edges
- * (RLS helper calls, shared trigger functions) beyond SP-3a's scope. Limitation stated, not papered
- * over (CLAUDE.md §1) — extend to other SPIs when one appears. */
+/**
+ * `EXECUTE (FUNCTION|PROCEDURE) sync_capture` — a trigger calling sync's capture SPI. Scoped to
+ * sync_capture deliberately: a general cross-module function-call scan would surface unrelated
+ * edges (shared trigger functions) beyond SP-3a's scope. Limitation stated, not papered over
+ * (CLAUDE.md §1) — extend to other SPIs when one appears.
+ */
 const EXECUTE_SYNC_CAPTURE =
   /\bexecute\s+(?:function|procedure)\s+"?(?:public"?\.)?"?(sync_capture)"?(?!\w)/gi;
 
