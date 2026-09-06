@@ -62,13 +62,13 @@ below). Two structures are known to be out of date and must not be built on:
 1. **FORCE RLS + the multi-role set + the unsquashed migrations** (Track A item 3). Every new table
    written before it lands gets policies, grants and an `*.rls.test.ts` that are deleted weeks
    later, and migration numbers collide on every rebase (#165). **Rule: no new table anywhere —
-   core or module — until step 1 of Track A item 3 lands — LANDED #<step-1 PR>; from here a new
+   core or module — until step 1 of Track A item 3 lands — LANDED #255; from here a new
    table needs CLAUDE.md §3's classification line.** UI corrections are polish and need none; anything
    that does is parked behind A3. Track A therefore goes first and fast: coverage split (an
    afternoon) → prototype (a day) → A3 starts immediately; it is the long pole for everyone.
    **2026-09-05:** the split LANDED (#239), the prototype has reported (item 2), item 4's spec is
    approved, and item 3's spec — one chain that also deletes the outbox (owner: "all at once") — is
-   drafted; its step 1 LANDED (#<step-1 PR>), lifting the no-new-table rule, and steps 2–5 await
+   drafted; its step 1 LANDED (#255), lifting the no-new-table rule, and steps 2–5 await
    owner review.
 2. **The module framework's UI seats** (cards, permissions, i18n arriving with a module) are
    unproven until Track C's `fiscal-none` + bookings-as-a-module land. New product domains wait for
@@ -235,7 +235,7 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    role. **Cross-track (Track C):** module SP-2b's schema-version gate (LANDED #230) rests on
    "deliberate rejection of native logical replication"; item 4's spec retires it (its §5).
 3. **Drop FORCE RLS + the multi-role set, squash the migrations, delete the outbox — STEP 1
-   LANDED #<step-1 PR> (2026-09-06); steps 2–5 pending owner review:**
+   LANDED #255 (2026-09-06); steps 2–5 pending owner review:**
    [drop-rls-squash-and-outbox-deletion-design](superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md).
    Owner decisions: all at once (item 4's swap slices are steps 2–5 of this chain, since nothing is
    deployed); ONE owner signature, on step 4 (where fiscal rows first flow natively and `ENABLE
@@ -249,7 +249,7 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    the standby-first migration check, the link on the box image (with Track B item 2). The
    working-time chain's per-node rekey sits between 2 and 4.
 
-   **Step 1 LANDED (#<step-1 PR>).** Per-module baselines, FORCE RLS and the seven helper roles gone,
+   **Step 1 LANDED (#255).** Per-module baselines, FORCE RLS and the seven helper roles gone,
    the `*.rls.test.ts` suites replaced by per-module grant suites and `privileges.test.ts`, and
    CLAUDE.md §2–§4 rewritten. Proof: old migrations vs new baselines, `pg_dump --schema-only`,
    normalised diff EMPTY. Measurements: real-PG test files 212 → 159; full-suite wall clock
