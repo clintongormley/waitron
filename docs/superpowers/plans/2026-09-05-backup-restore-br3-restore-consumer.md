@@ -1,5 +1,13 @@
 # Backup/Restore BR-3 — the restore consumer — Implementation Plan
 
+> **2026-09-06 (SP-3d):** The empty-hook contract and no-fresh-chain statements below record BR-3 as
+> shipped. `RestoreHookContext` and `invokeRestoreHooks` are removed; `runRestoreHooks` runs typed
+> hooks in one tenant transaction. Cold restore validates identity completeness before setting any
+> identity aside, restores and migrates, runs hooks and settles series, then writes secrets last.
+> Rejoin composes `validateArtifact` and `writeValidated`, migrates, and skips hooks and identity
+> replacement. See the [SP-3d design](../specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md)
+> §4–§5.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
 
 **Goal:** Restore a Waitron node from a BR-2 backup archive — decrypt, verify a compatibility gate, `pg_restore` the DB into a fresh target, restore the media blobs and on-box secrets (path-traversal-guarded), and invoke each module's restore hook (empty in v1). The `pg_restore` consumer that clears the R3-rejoin + promote-Slice-4 gate.

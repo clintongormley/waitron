@@ -1544,6 +1544,10 @@ async function openPostgres(url: string): Promise<{ db: Database; close(): Promi
 
 Rewrite `writeValidated`'s body:
 
+> **2026-09-06 (SP-3d):** The identity-completeness check moved into `validateArtifact` during
+> implementation; an incomplete identity refuses with the target intact. The read below recovers the
+> already-validated identity after migration. See `apps/server/src/restore.ts`.
+
 ```ts
   const { log } = deps;
   const staged = join(deps.stagingDir, DB_DUMP_NAME);
@@ -1818,6 +1822,11 @@ git commit -s -m "test(server): real-Postgres receipt for the fiscal restore hoo
 ---
 
 ### Task 7: Receipts, docs, and the whole-package runs
+
+> **2026-09-06 (SP-3d):** The receipt sweep below preserves quoted history with dated pointers.
+> Until a PR is opened, the backlog says "on branch, PR pending, owner-gated (H2)"; the mechanism is
+> built on the branch, not yet landed. Add the PR number and yardstick measurements after
+> `/finish-branch`.
 
 **Files:**
 - Modify: `CLAUDE.md` (§5), `docs/backlog.md`, `apps/till/README.md` (the operator's series query), `docs/superpowers/plans/2026-08-30-onboarding-slice4b-iii-cold-restore-runbook.md`, `docs/superpowers/specs/2026-09-04-backup-restore-regime-design.md`, `docs/superpowers/specs/2026-09-05-membership-rejoin-r3-wipe-and-restore-design.md`, `docs/superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md` (status line), plus any code comment §11 lists that Tasks 1–6 did not already retire.

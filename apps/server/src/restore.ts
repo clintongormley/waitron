@@ -270,6 +270,7 @@ export async function writeValidated(
         : rewriteTradingEnv(validated.secretEntries, seriesId);
     await restoreSecrets({ entries, stateDir: deps.stateDir, log });
   } finally {
+    // Remove the whole-DB plaintext dump even if pg_restore fails; force tolerates a failure before staging.
     await rm(staged, { force: true });
   }
 }

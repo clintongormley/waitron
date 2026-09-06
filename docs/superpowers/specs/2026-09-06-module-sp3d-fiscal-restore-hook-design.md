@@ -1,7 +1,7 @@
 # SP-3d — The fiscal module's restore hook (fresh SIF, disjoint series; = BR-4)
 
 **Date:** 2026-09-06
-**Status:** design. **Owner-reviewed:** not yet — written in an unattended session, then reviewed
+**Status:** built on feat/module-sp3d-fiscal-restore-hook; owner review at PR. **Owner-reviewed:** not yet — written in an unattended session, then reviewed
 fresh-context by Fable and read-only by Astra (both 2026-09-06; the findings that changed this text
 are folded in and named where they matter). The decisions in §3 are the ones to challenge at PR
 review; each states what it costs to reverse.
@@ -302,6 +302,11 @@ outcome/argument shapes are open sets (BR-2's rule). `@waitron/module` already d
    `restore.identity_incomplete { missing }`. Then check the `nodes` row `(tenantId, nodeId)`
    exists in the restored DB → else `restore.identity_unknown { tenantId, nodeId }`: the identity
    must be one this backup knows.
+
+   > **2026-09-06 (SP-3d):** The identity-completeness check moved into `validateArtifact` during
+   > implementation; an incomplete identity refuses with the target intact. The node lookup still
+   > runs after migration. See `apps/server/src/restore.ts`.
+
 5. **One tenant transaction** on the privileged restore connection: `deps.openDb(databaseUrl)`
    (default `createPostgresDb`, closed in a `finally`) → `withTenant(db, tenantId, fn, { nodeId })`.
    The `{ nodeId }` is not optional (Fable's Major 1 / Astra's Major 8): `registro_sif` and
@@ -590,6 +595,10 @@ unchanged).
 ---
 
 ## 11. Receipts this change retires (edit in the same PR)
+
+> **2026-09-06 (SP-3d):** The historical claims listed below are retired on this branch. Code
+> comments describe the current contract; the earlier plans and specs carry dated pointers to this
+> design. The till query now excludes retired series. PR and whole-branch review remain pending.
 
 - `apps/server/src/restore.ts`: the `RestoreHookContext` header ("Deliberately NO database/chain
   handle … no business touching the fiscal chain"); `writeValidated`'s and `restoreFromArtifact`'s

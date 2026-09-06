@@ -1,5 +1,10 @@
 # Membership Rejoin — Slice 6 R3 (wipe-and-restore) Implementation Plan
 
+> **2026-09-06 (SP-3d):** The `skipSecrets` contract quoted below now also skips setting aside the
+> current identity and running module restore hooks. Rejoin still restores DB and media and now
+> migrates the restored database before returning. See the [SP-3d
+> design](../specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md) §3.3 and §5.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** An operator-run CLI that lets a fenced, fully-drained returned ex-primary discard its diverged database, restore the current primary's baseline (keeping its own identity), and come back up still fenced but streaming the primary's log as a clean subscriber.

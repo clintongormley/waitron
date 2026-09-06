@@ -66,7 +66,7 @@ export interface WaitronModule {
   /** The module's contribution to the fiscal slot — `fiscalSlot` selects exactly one. */
   readonly fiscal?: FiscalContribution;
   readonly routes?: unknown; // incremental
-  readonly backup?: ModuleBackupContribution; // BR-2: non-DB state a backup must capture
+  readonly backup?: ModuleBackupContribution; // The module's non-DB backup sources and restore hook.
 }
 
 /** The dependencies a module declares — its `requires.core` (a dep on "core") plus every

@@ -341,7 +341,11 @@ _Reference_.
   records differing only in it hash identically. In `computeHuella` it would make every chain
   unverifiable under the other environment.
 - **Re-registering a node starts a new chain** and mints a fresh installation number. Correct for a
-  reimaged box, destructive for a working one.
+  reimaged box, destructive for a working one. A cold restore (`waitron-restore`) does it
+  automatically inside the restore: it floors the installation counter by the clock (the counter is in
+  the dump, so an older artifact would otherwise re-mint a number a previous restore used), retires
+  the node's invoice series and opens disjoint ones, and writes the box's identity only after that
+  commits — `docs/superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md`.
 
 ---
 
