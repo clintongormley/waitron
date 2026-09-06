@@ -413,11 +413,12 @@ round five) and never drives execution — a hook denies it; dispatched seats ru
 (`gpt-5.6-sol` — the run-it seat did not need the top tier on the Claude side, so not on this one
 either; the yardstick is the tripwire) holds exactly one seat, `/finish-branch`'s run-it reviewer, dispatched through
 `~/workspace/tools/codex-seat.sh review-run`, which is the second model family on the diff now that
-Copilot's automatic review is off (its rule was removed from the main ruleset 2026-09-06). Codex
-reads `AGENTS.md` (a symlink to this file — one copy of the house rules, and its reviewer needs
-§1–§5 as much as any reader) and `.codex/config.toml`, which names the model, raises the doc-size
-cap above this file's size, and opens the sandbox's network (the Docker socket and DNS are closed by
-default; measured 2026-09-05). What is waitron-specific is the yardstick: each slice against the
+Copilot's automatic review is off (its rule was removed from the main ruleset 2026-09-06). The
+repository carries no Codex file: the seat script passes the model, the effort, the doc-size cap
+(this file exceeds Codex's default and would be silently truncated), the sandbox's network switch
+(the Docker socket and DNS are closed by default; measured 2026-09-05) and the fallback that makes
+Codex read this file when there is no `AGENTS.md` (measured 2026-09-06, with a control). What is
+waitron-specific is the yardstick: each slice against the
 previous five PRs on fix rounds before land, false claims found at whole-branch review, and Codex
 tasks that needed a Claude fix round (the last is zero by construction from here on; the SP-3c and
 SP-3d rows in `docs/backlog.md` hold the two data points taken under the earlier rules). The
