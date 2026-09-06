@@ -55,33 +55,36 @@ let retentionDb: Database; // sync_pruner → sync_retention: mints the peer tok
  * designated ids in AdoptResult shape (seriesId = the standard series, first of applyVenue's seriesIds). */
 async function setupVenue(): Promise<AdoptResult> {
   const venue = await applyVenue(
-    planVenue({
-      country: "ES",
-      taxId: nextNif(),
-      legalName: "Mirror Bundle SL",
-      location: {
-        name: "Sala principal",
-        fiscalTerritory: "ES-common",
-        invoiceLocales: [LOCALE],
-        operationDescription: "Venta en establecimiento",
-        addressLine1: "Calle Mayor 1",
-        addressLine2: null,
-        postalCode: "28013",
-        city: "Madrid",
-        province: "Madrid",
-        timeZone: "Europe/Madrid",
-        dayCutover: "05:00",
+    planVenue(
+      {
+        country: "ES",
+        taxId: nextNif(),
+        legalName: "Mirror Bundle SL",
+        location: {
+          name: "Sala principal",
+          fiscalTerritory: "ES-common",
+          invoiceLocales: [LOCALE],
+          operationDescription: "Venta en establecimiento",
+          addressLine1: "Calle Mayor 1",
+          addressLine2: null,
+          postalCode: "28013",
+          city: "Madrid",
+          province: "Madrid",
+          timeZone: "Europe/Madrid",
+          dayCutover: "05:00",
+        },
+        tillName: "Caja 1",
+        seriesCode: "FA",
+        rectificativeSeriesCode: "RF",
+        admin: {
+          displayName: "Administradora",
+          pinHash: hashPin("1234"),
+          passwordHash: hashPassword("dashPass123"),
+        },
       },
-      tillName: "Caja 1",
-      seriesCode: "FA",
-      rectificativeSeriesCode: "RF",
-      admin: {
-        displayName: "Administradora",
-        pinHash: hashPin("1234"),
-        passwordHash: hashPassword("dashPass123"),
-      },
-    }),
-    { db: suite.admin },
+      ALL_MODULES,
+    ),
+    { db: suite.admin, modules: ALL_MODULES },
   );
   const designated: AdoptResult = {
     tenantId: venue.tenantId,
@@ -158,15 +161,20 @@ describe("assembleMirrorBundle (primary side, real Postgres)", () => {
     // The reserved identity: a fresh installation number, disjoint series (FA/RF suffixed with it,
     // purpose preserved), and an endorsement of the standby's key by the primary node.
     const r = bundle.reservedIdentity;
-    expect(r.numeroInstalacion).toBeGreaterThan(0);
+    const fiscal = r.modules.fiscal as {
+      nif: string;
+      idSistemaInformatico: string;
+      numeroInstalacion: number;
+    };
+    expect(fiscal.numeroInstalacion).toBeGreaterThan(0);
     // The primary's own IdSistemaInformatico — applyVenue registers the SIF under WAITRON_ID_SISTEMA ("W1").
-    expect(r.idSistemaInformatico).toBe("W1");
+    expect(fiscal.idSistemaInformatico).toBe("W1");
     expect(r.series.map((s) => s.code).sort()).toEqual(
-      [`FA-${r.numeroInstalacion}`, `RF-${r.numeroInstalacion}`].sort(),
+      [`FA-${fiscal.numeroInstalacion}`, `RF-${fiscal.numeroInstalacion}`].sort(),
     );
     const byCode = new Map(r.series.map((s) => [s.code, s.purpose]));
-    expect(byCode.get(`FA-${r.numeroInstalacion}`)).toBe("standard");
-    expect(byCode.get(`RF-${r.numeroInstalacion}`)).toBe("rectificative");
+    expect(byCode.get(`FA-${fiscal.numeroInstalacion}`)).toBe("standard");
+    expect(byCode.get(`RF-${fiscal.numeroInstalacion}`)).toBe("rectificative");
     expect(r.endorsement.nodeId).toBe(standby.nodeId);
     expect(r.endorsement.publicKey).toBe(standby.publicKey);
     expect(r.endorsement.endorsedBy).toBe(designated.nodeId);

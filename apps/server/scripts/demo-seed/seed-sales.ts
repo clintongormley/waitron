@@ -361,7 +361,6 @@ export async function seedSales(
           kind: "immediate",
           tenders: [{ method, amount: total, tipAmount: "0.00", settledAt: instant }],
         },
-        fiscalBackend: "verifactu",
         clock: backDating.clock,
       };
 

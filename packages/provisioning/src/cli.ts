@@ -7,6 +7,7 @@ import {
   type DeploymentEnvironment,
 } from "@waitron/db";
 import { assertPasswordLength, assertPinLength, hashPassword, hashPin } from "@waitron/identity";
+import type { WaitronModule } from "@waitron/module";
 import { assertIdentifier } from "./identifiers.js";
 import { applyInstance, withDatabase, type TargetConnection } from "./instance-apply.js";
 import { describeAction, planInstance, type InstanceAction } from "./instance-plan.js";
@@ -50,6 +51,9 @@ export interface CliDeps {
    * they are NOT injected: the tests run the real ones and the summary is rendered from a real plan
    * rather than a fixture that could drift from it, exactly as `planInstance` is treated. */
   applyVenue: typeof applyVenue;
+  /** The composition list (`@waitron/composition`'s `ALL_MODULES`), injected like `applyVenue`: the
+   * CLI has no `modules.json`, so `venue` seeds every module in it. */
+  modules: readonly WaitronModule[];
   /** Reads a target database's deployment stamp. Injected so the "unstamped is refused" path is
    * reachable without a container; the real one (`@waitron/db`) needs the target connection. */
   readEnvironment: typeof readDeploymentEnvironment;
@@ -313,8 +317,9 @@ async function status(argv: string[], deps: CliDeps): Promise<number> {
 }
 
 /**
- * Stands a venue up: a tenant, a location, a till, a node registered as a SIF, and its two invoice
- * series — the whole slice `planVenue`/`applyVenue` compose.
+ * Stands a venue up: a tenant, a location, a till, a node, its two invoice series, and every
+ * injected module's own seed for that node (the fiscal seed is what registers it as a SIF) — the
+ * whole slice `planVenue`/`applyVenue` compose.
  *
  * The ORDER mirrors `instance`: everything that can be resolved and validated WITHOUT a database is
  * done first — including the pure `planVenue`, which refuses an unimplemented territory, a bad
@@ -451,7 +456,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
     // Pure, and the last thing that can refuse the request without touching a database: an
     // unimplemented territory (`fiscal.regime_not_implemented`), a bad locale count, equal series
     // codes. Kept BEFORE `resolveAdminUri` on purpose — see this function's header.
-    const actions = planVenue(request);
+    const actions = planVenue(request, deps.modules);
 
     const adminUri = await resolveAdminUri(deps);
 
@@ -491,11 +496,11 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       }
 
       try {
-        const result = await deps.applyVenue(actions, { db: target });
+        const result = await deps.applyVenue(actions, { db: target, modules: deps.modules });
         deps.io.stdout("");
         deps.io.stdout(`tenant:   ${result.tenantId}`);
         deps.io.stdout(`node:     ${result.nodeId}`);
-        deps.io.stdout(`SIF:      ${result.sif.id} (installation ${result.sif.numeroInstalacion})`);
+        for (const s of result.seeded) deps.io.stdout(`seeded:   ${s.module} — ${s.report}`);
         return 0;
       } catch (error) {
         if (isUniqueViolation(error)) {

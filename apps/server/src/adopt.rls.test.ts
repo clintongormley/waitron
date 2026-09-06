@@ -70,9 +70,15 @@ let reservedCounter = 0;
 function nextReservedIdentity(): ReservedIdentity {
   reservedCounter += 1;
   return {
-    nif: `${String(90_000_000 + reservedCounter).padStart(8, "0")}K`,
-    idSistemaInformatico: "WAITRON-STANDBY",
-    numeroInstalacion: reservedCounter,
+    modules: {
+      fiscal: {
+        nif: `${String(90_000_000 + reservedCounter).padStart(8, "0")}K`,
+        // Two characters: `establish` applies the same `id_sistema_informatico` length rule as
+        // `registerSif`, and refuses a longer reservation with `sif.reservation_invalid`.
+        idSistemaInformatico: "WS",
+        numeroInstalacion: reservedCounter,
+      },
+    },
     series: [
       { code: `SA-${reservedCounter}`, purpose: "standard" },
       { code: `SR-${reservedCounter}`, purpose: "rectificative" },
@@ -90,33 +96,36 @@ function nextReservedIdentity(): ReservedIdentity {
  * designated ids in the `AdoptVenueRows`/`AdoptResult` shape the bundle carries. */
 async function buildBundleParts(): Promise<{ rows: AdoptVenueRows; designated: AdoptResult }> {
   const venue = await applyVenue(
-    planVenue({
-      country: "ES",
-      taxId: nextNif(),
-      legalName: "Adopt Orchestrator SL",
-      location: {
-        name: "Sala principal",
-        fiscalTerritory: "ES-common",
-        invoiceLocales: [LOCALE],
-        operationDescription: "Venta en establecimiento",
-        addressLine1: "Calle Mayor 1",
-        addressLine2: null,
-        postalCode: "28013",
-        city: "Madrid",
-        province: "Madrid",
-        timeZone: "Europe/Madrid",
-        dayCutover: "05:00",
+    planVenue(
+      {
+        country: "ES",
+        taxId: nextNif(),
+        legalName: "Adopt Orchestrator SL",
+        location: {
+          name: "Sala principal",
+          fiscalTerritory: "ES-common",
+          invoiceLocales: [LOCALE],
+          operationDescription: "Venta en establecimiento",
+          addressLine1: "Calle Mayor 1",
+          addressLine2: null,
+          postalCode: "28013",
+          city: "Madrid",
+          province: "Madrid",
+          timeZone: "Europe/Madrid",
+          dayCutover: "05:00",
+        },
+        tillName: "Caja 1",
+        seriesCode: "A",
+        rectificativeSeriesCode: "R",
+        admin: {
+          displayName: "Administradora",
+          pinHash: hashPin("1234"),
+          passwordHash: hashPassword("dashPass123"),
+        },
       },
-      tillName: "Caja 1",
-      seriesCode: "A",
-      rectificativeSeriesCode: "R",
-      admin: {
-        displayName: "Administradora",
-        pinHash: hashPin("1234"),
-        passwordHash: hashPassword("dashPass123"),
-      },
-    }),
-    { db: source.admin },
+      ALL_MODULES,
+    ),
+    { db: source.admin, modules: ALL_MODULES },
   );
   const designated: AdoptResult = {
     tenantId: venue.tenantId,
@@ -382,7 +391,9 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
     expect(reservedSif.rows).toHaveLength(1);
     expect(reservedSif.rows[0]!.node_id).toBe(capturedStandby!.nodeId);
     expect(reservedSif.rows[0]!.node_id).not.toBe(designated.nodeId);
-    expect(reservedSif.rows[0]!.numero_instalacion).toBe(reservedIdentity.numeroInstalacion);
+    expect(reservedSif.rows[0]!.numero_instalacion).toBe(
+      (reservedIdentity.modules.fiscal as { numeroInstalacion: number }).numeroInstalacion,
+    );
 
     // The primary's endorsement of the standby's key is stored on the standby's node row, verbatim.
     const endorsement = await readNodeEndorsement(

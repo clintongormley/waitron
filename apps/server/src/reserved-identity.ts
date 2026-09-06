@@ -7,8 +7,12 @@ import {
   withTenant,
   type Database,
 } from "@waitron/db";
-import { writeReservedSif } from "@waitron/fiscal-verifactu";
-import { nodeId as brandNodeId, tenantId as brandTenantId } from "@waitron/shared";
+import type { WaitronModule } from "@waitron/module";
+import {
+  locationId as brandLocationId,
+  nodeId as brandNodeId,
+  tenantId as brandTenantId,
+} from "@waitron/shared";
 import { NODE_KEY_PURPOSE } from "./node-identity.js";
 import type { ReservedIdentity } from "./mirror-bundle.js";
 import "./errors.js";
@@ -32,10 +36,19 @@ export function generateStandbyIdentity(): StandbyIdentity {
  * Persist the standby's complete dormant identity on the cloud's own database (design §6 R2), all
  * inert until an R3 promotion activates it. IDEMPOTENT (design §8 / Slice-4 follow-up b): if the
  * membership key is already sealed, an earlier adopt attempt already established the identity — return
- * without minting a fresh keypair or a second reserved SIF (a re-fetch may have burned one cheap
- * primary number, which is acceptable; §7). Otherwise ONE owner tenant transaction seals the private
- * key, inserts the standby's own node (public_key + endorsement), persists the reserved SIF with the
- * PRIMARY-supplied number, and inserts the reserved series.
+ * without minting a fresh keypair or re-establishing anything (a re-fetch may have burned one cheap
+ * primary allocation, which is acceptable; §7). Otherwise ONE owner tenant transaction seals the
+ * private key, inserts the standby's own node (public_key + endorsement), hands each module its own
+ * reservation to establish, and inserts the reserved series.
+ *
+ * `args.reserved` is WIRE input from the primary. The carrier never inspects `reserved.modules`: each
+ * module validates its own state inside `establish` and throws there, which rolls this transaction back
+ * — so a malformed reservation leaves no node row behind. Which modules establish is decided by THIS
+ * node's enabled set (`args.modules`), never by the bundle's key set: state for a module disabled here
+ * is ignored, and a module enabled here whose state the bundle does not carry — no entry, or no
+ * `modules` key at all — is handed `undefined` and refuses inside its own `establish`. Hence the
+ * optional chain on `reserved.modules` and the `?? []` on `reserved.series`: a bundle missing either
+ * key must reach the module's refusal, not a `TypeError` from this carrier.
  */
 export async function establishReservedStandbyIdentity(
   deps: { ownerDb: Database; ring: KeyRing },
@@ -46,6 +59,8 @@ export async function establishReservedStandbyIdentity(
     nodeName: string;
     filingModule: string | null;
     taxModule: string | null;
+    /** The enabled set, in composition order — those declaring `provisioning.standby` establish. */
+    modules: readonly WaitronModule[];
     reserved: ReservedIdentity;
   },
 ): Promise<void> {
@@ -72,16 +87,18 @@ export async function establishReservedStandbyIdentity(
       publicKey: args.standby.publicKey,
       endorsement: args.reserved.endorsement,
     });
-    await writeReservedSif(tx, {
+    const standbyNode = {
       tenantId: tenant,
+      locationId: brandLocationId(args.locationId),
       nodeId: brandNodeId(args.standby.nodeId),
-      nif: args.reserved.nif,
-      idSistemaInformatico: args.reserved.idSistemaInformatico,
-      numeroInstalacion: args.reserved.numeroInstalacion,
-    });
+    };
+    for (const m of args.modules) {
+      if (m.provisioning?.standby === undefined) continue;
+      await m.provisioning.standby.establish(tx, standbyNode, args.reserved.modules?.[m.name]);
+    }
     await insertReservedSeriesTx(
       tx,
-      args.reserved.series.map((s) => ({
+      (args.reserved.series ?? []).map((s) => ({
         tenantId: args.tenantId,
         nodeId: args.standby.nodeId,
         code: s.code,

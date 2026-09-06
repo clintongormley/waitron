@@ -12,6 +12,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@waitron/db": "workspace:*",
+    "@waitron/fiscal": "workspace:*",
     "@waitron/migrations": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",

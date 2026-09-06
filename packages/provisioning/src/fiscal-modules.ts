@@ -1,6 +1,5 @@
 import { AppError } from "@waitron/shared";
 import "@waitron/fiscal"; // side-effect: registers fiscal.regime_not_implemented on ErrorParams
-import "./errors.js"; // side-effect: registers provisioning.id_sistema_invalid on ErrorParams
 
 /**
  * A territory's fiscal module set: a filing module (Veri*Factu / TicketBAI / …) and a tax module
@@ -32,35 +31,13 @@ const REGISTRY: Record<string, FiscalModules> = {
   "ES-common": Object.freeze({ filing: "verifactu", tax: "iva" }),
 };
 
+/** The territories the registry resolves — exported so a guard can enumerate the real set. */
+export const FISCAL_TERRITORIES: readonly string[] = Object.keys(REGISTRY);
+
 export function resolveFiscalModules(territory: string): FiscalModules {
   const modules = REGISTRY[territory];
   if (modules === undefined) {
     throw new AppError("fiscal.regime_not_implemented", { territory });
   }
   return modules;
-}
-
-/**
- * Waitron's own AEAT-registered software identifier — a product constant, ≤ 2 chars (FAQ §4), not
- * operator input. It reaches `registro_sif.id_sistema_informatico` via `registerSif` and, through
- * that, `IdSistemaInformatico` on every registro the node files. Config, not a CLI argument, per
- * spec D5 / ground-truth #2. `apps/server/src/provision-till.ts` still takes it as an argument
- * (register-till.ts's shim), duplicating the length rule — converging the two is a noted follow-up.
- */
-export const WAITRON_ID_SISTEMA = "W1";
-const ID_SISTEMA_MAX_LENGTH = 2;
-
-/** Validates the product constant (a programming error if wrong, not operator error).
- *
- * Throws `provisioning.id_sistema_invalid`, not `apps/server`'s `sif.id_sistema_invalid`: the
- * latter is not in scope for this package's type-checker (`apps/server` cannot be imported from a
- * package). See that code's doc comment in `errors.ts` for the receipt and the convergence
- * follow-up. */
-export function assertUsableIdSistema(value: string): void {
-  if (value.length === 0 || value.length > ID_SISTEMA_MAX_LENGTH) {
-    throw new AppError("provisioning.id_sistema_invalid", {
-      value,
-      maxLength: ID_SISTEMA_MAX_LENGTH,
-    });
-  }
 }

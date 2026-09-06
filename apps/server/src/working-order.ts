@@ -3112,7 +3112,6 @@ export async function placeOrder(
           total: priced.total,
           lines: priced.lines,
           vatBreakdown: priced.vatBreakdown,
-          fiscalBackend: "verifactu",
           clock: deps.clock,
           operatorId,
           // A chained invoice with NO tender and NO settlement — the legitimate unsettled steady state

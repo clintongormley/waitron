@@ -1,7 +1,7 @@
 import { setDeploymentMode, stampDeployment, writeMirrorConfig, type Database } from "@waitron/db";
 import { adoptVenue } from "@waitron/provisioning";
 import type { KeyRing } from "@waitron/credentials";
-import { parseModuleOverrides, type ModuleConfig } from "@waitron/module";
+import { enabledModules, parseModuleOverrides, type ModuleConfig } from "@waitron/module";
 import { ALL_MODULES } from "./modules.js";
 import { sealMirrorToken } from "./mirror-token.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
@@ -148,6 +148,7 @@ export async function adoptFromPrimary(
       nodeName: `${(primaryNode?.name as string) ?? "venue"} (standby)`,
       filingModule: (primaryNode?.filingModule as string | null) ?? null,
       taxModule: (primaryNode?.taxModule as string | null) ?? null,
+      modules: enabledModules(ALL_MODULES, moduleConfig),
       reserved: bundle.reservedIdentity,
     },
   );

@@ -100,7 +100,6 @@ function buildInput(
         { method: "card", amount: tender.amount, tipAmount: "0.00", settledAt: tender.settledAt },
       ],
     },
-    fiscalBackend: "fake",
     clock: steadyClock,
   };
 }

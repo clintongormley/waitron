@@ -1,11 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { withTenant, type Database, type Transaction } from "@waitron/db";
-import { registerSif, type SifRegistration } from "@waitron/fiscal-verifactu";
 import { startManagementSession } from "@waitron/identity";
 import { createDeviceProfile, listDeviceProfiles } from "@waitron/layouts";
-import { nodeId as brandNodeId, tenantId as brandTenantId } from "@waitron/shared";
+import {
+  locationId as brandLocationId,
+  nodeId as brandNodeId,
+  tenantId as brandTenantId,
+} from "@waitron/shared";
 import type { CapabilityFlag } from "@waitron/layouts";
+import type { SeedReport, WaitronModule } from "@waitron/module";
 import type { VenueAction } from "./venue-plan.js";
 
 export interface VenueApplyDeps {
@@ -13,6 +17,9 @@ export interface VenueApplyDeps {
    * tables. Task C1's container test proved the owner INSERTs a node under the tenant GUC while a
    * SELECT-only login role cannot, so this runs the whole flow as one role with no grant widened. */
   db: Database;
+  /** The modules whose seeds a `seed-module` action may name — the enabled set, in the composition
+   * list's order. */
+  modules: readonly WaitronModule[];
 }
 
 export interface VenueResult {
@@ -20,12 +27,13 @@ export interface VenueResult {
   locationId: string;
   tillId: string;
   nodeId: string;
-  sif: SifRegistration;
   /** The ids of the series actually inserted, in plan order: `[standard, rectificative]`. planVenue
    * rejects equal standard/rectificative codes, so a valid plan always yields exactly those two, in
    * that order; a hand-built plan whose second series collides yields only `[standard]` (the
    * create-series gate below never returns a phantom id for a row it did not insert). */
   seriesIds: string[];
+  /** One entry per `seed-module` action run, in plan order: the module and its one-line report. */
+  seeded: readonly SeedReport[];
 }
 
 /**
@@ -38,9 +46,9 @@ export interface VenueResult {
  * D8's "insert, treat conflict as already-present" (a bare 23505 catch would poison the
  * transaction). It applies only where a natural key exists: the tenant (country, tax_id) and the
  * series (tenant, node, code). Location/till/node have no business key — a tenant legitimately has
- * many shops — so a re-run ADDS a shop; it never resumes a half-built one, and never re-registers
- * an existing node's SIF (the fiscally load-bearing guard, spec D5): each run creates a FRESH node,
- * so `registerSif` mints a new installation number and starts a new chain rather than forking one.
+ * many shops — so a re-run ADDS a shop; it never resumes a half-built one: each run creates a FRESH
+ * node and runs every module's seed for it, so the fiscal seed mints a new installation number and
+ * starts a new chain rather than forking one.
  */
 export async function applyVenue(
   actions: readonly VenueAction[],
@@ -62,7 +70,7 @@ export async function applyVenue(
     let locationId = "";
     let tillId = "";
     let nodeId = "";
-    let sif: SifRegistration | undefined;
+    const seeded: SeedReport[] = [];
     const seriesIds: string[] = [];
 
     for (const action of actions) {
@@ -163,18 +171,26 @@ export async function applyVenue(
             insert into nodes (id, tenant_id, location_id, name, filing_module, tax_module)
             values (${nodeId}, ${tenantId}, ${locationId}, ${action.name}, ${action.filingModule}, ${action.taxModule})`);
           break;
-        case "register-sif":
-          // register-sif before create-node would register a SIF against an EMPTY node id — fiscally
-          // load-bearing (spec D5: a fresh node starts a new chain), so refuse it as a plan-integrity
-          // error rather than let it reach `registerSif`.
-          if (nodeId === "") throw new Error("applyVenue: register-sif before create-node");
-          // registerSif takes nif as a param, so read it here from the tenant we just ensured
-          // (never an argument, mirroring provisionNode's obligadoNif: an operator-supplied NIF
-          // would file a real tenant's sales under someone else's).
-          sif = await registerSifForNode(tx, tenantId, nodeId, action.idSistemaInformatico);
+        case "seed-module": {
+          // A seed before create-node would run against an EMPTY node id; refuse it as a plan-integrity
+          // error like the other ordering guards.
+          if (nodeId === "") throw new Error("applyVenue: seed-module before create-node");
+          const seed = deps.modules.find((m) => m.name === action.module)?.provisioning?.seed;
+          if (seed === undefined) {
+            throw new Error(
+              `applyVenue: seed-module names ${action.module}, which is not in deps.modules or declares no seed`,
+            );
+          }
+          const report = await seed.run(tx, {
+            tenantId: brandTenantId(tenantId),
+            locationId: brandLocationId(locationId),
+            nodeId: brandNodeId(nodeId),
+          });
+          seeded.push({ module: action.module, report });
           break;
+        }
         case "create-series": {
-          // As register-sif: create-series before create-node would insert an empty node_id.
+          // create-series before create-node would insert an empty node_id.
           if (nodeId === "") throw new Error("applyVenue: create-series before create-node");
           const seriesId = randomUUID();
           const inserted = await tx.execute<{ id: string }>(sql`
@@ -193,14 +209,16 @@ export async function applyVenue(
       }
     }
 
-    if (sif === undefined) throw new Error("applyVenue: register-sif never ran");
-    // Completeness guard for the one id no LATER action depends on: the ordering guards make
-    // locationId/nodeId non-empty whenever a dependent action runs (and a plan with none of them
-    // trips `sif === undefined` above), but nothing downstream reads tillId, so an OMITTED create-till
-    // slips through and would return a "complete" venue with an empty till id — a shop that cannot
-    // sell (recordSale needs a real till). Named here rather than left to fail confusingly later.
+    // Completeness guards for ids the ordering guards above cannot cover. Those guards only fire when
+    // a DEPENDENT action runs, so a plan that omits create-node (and therefore every seed and series
+    // that depends on it) reaches here with an empty nodeId, and a plan that omits create-till reaches
+    // here with an empty tillId — nothing downstream reads it at all. Either way the venue would be
+    // returned as "complete" with an empty id: a node that files nothing, or a shop that cannot sell
+    // (recordSale needs a real till). Named here rather than left to fail confusingly later. Plain
+    // Errors, NOT operator-facing AppError codes: a plan bug, not input.
+    if (nodeId === "") throw new Error("applyVenue: plan is missing create-node");
     if (tillId === "") throw new Error("applyVenue: plan is missing create-till");
-    return { tenantId, locationId, tillId, nodeId, sif, seriesIds };
+    return { tenantId, locationId, tillId, nodeId, seriesIds, seeded };
   });
 }
 
@@ -244,24 +262,4 @@ async function seedDeviceProfiles(
       capabilities: profile.capabilities,
     });
   }
-}
-
-/** Reads the obligado's tax_id (the NIF) from the tenant row and registers the node as its SIF. */
-async function registerSifForNode(
-  tx: Transaction,
-  tenantId: string,
-  nodeId: string,
-  idSistemaInformatico: string,
-): Promise<SifRegistration> {
-  const rows = await tx.execute<{ tax_id: string }>(
-    sql`select tax_id from tenants where id = ${tenantId}`,
-  );
-  const nif = rows.rows[0]?.tax_id;
-  if (nif === undefined) throw new Error("applyVenue: tenant vanished before SIF registration");
-  return registerSif(tx, {
-    tenantId: brandTenantId(tenantId),
-    nodeId: brandNodeId(nodeId),
-    nif,
-    idSistemaInformatico,
-  });
 }

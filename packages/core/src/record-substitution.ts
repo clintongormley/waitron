@@ -77,7 +77,6 @@ export interface RecordSubstitutionInput {
    * till-UI choice, not a property carried from any one substituted ticket. */
   locale: string;
   invoiceLocales: string[];
-  fiscalBackend: string;
   clock: TrustedClock;
 }
 
@@ -260,7 +259,7 @@ export async function recordSubstitution(
       total: input.total,
       locale: input.locale,
       invoiceLocales: input.invoiceLocales,
-      fiscalBackend: input.fiscalBackend,
+      fiscalBackend: backend.id,
       fiscalState: "recorded",
       counterpartyTaxId: input.counterparty.taxId,
       counterpartyLegalName: input.counterparty.legalName,

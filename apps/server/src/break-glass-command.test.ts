@@ -5,6 +5,7 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, verifyPassword } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { runBreakGlassReset } from "./break-glass-command.js";
+import { ALL_MODULES } from "./modules.js";
 
 // Real Postgres, not PGlite: the reset writes `persons` under FORCE ROW LEVEL SECURITY as the
 // non-owner app role, and `withTenant` scoping that write is exactly what PGlite's superuser
@@ -30,33 +31,36 @@ async function setupTenant(
   adminPassword: string = OLD_PASSWORD,
 ): Promise<{ tenantId: string; adminId: string }> {
   const venue = await applyVenue(
-    planVenue({
-      country: "ES",
-      taxId: nextNif(),
-      legalName: "Deli Test SL",
-      location: {
-        name: "Sala principal",
-        fiscalTerritory: "ES-common",
-        invoiceLocales: [LOCALE],
-        operationDescription: "Venta en establecimiento",
-        addressLine1: "Calle Mayor 1",
-        addressLine2: null,
-        postalCode: "28013",
-        city: "Madrid",
-        province: "Madrid",
-        timeZone: "Europe/Madrid",
-        dayCutover: "05:00",
+    planVenue(
+      {
+        country: "ES",
+        taxId: nextNif(),
+        legalName: "Deli Test SL",
+        location: {
+          name: "Sala principal",
+          fiscalTerritory: "ES-common",
+          invoiceLocales: [LOCALE],
+          operationDescription: "Venta en establecimiento",
+          addressLine1: "Calle Mayor 1",
+          addressLine2: null,
+          postalCode: "28013",
+          city: "Madrid",
+          province: "Madrid",
+          timeZone: "Europe/Madrid",
+          dayCutover: "05:00",
+        },
+        tillName: "Caja 1",
+        seriesCode: "A",
+        rectificativeSeriesCode: "R",
+        admin: {
+          displayName: "Administradora",
+          pinHash: hashPin("1234"),
+          passwordHash: hashPassword(adminPassword),
+        },
       },
-      tillName: "Caja 1",
-      seriesCode: "A",
-      rectificativeSeriesCode: "R",
-      admin: {
-        displayName: "Administradora",
-        pinHash: hashPin("1234"),
-        passwordHash: hashPassword(adminPassword),
-      },
-    }),
-    { db: suite.admin },
+      ALL_MODULES,
+    ),
+    { db: suite.admin, modules: ALL_MODULES },
   );
   const adminId = await readSoleAdminId(venue.tenantId);
   return { tenantId: venue.tenantId, adminId };

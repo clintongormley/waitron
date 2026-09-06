@@ -177,6 +177,19 @@ unfiltered `main` run, not a wrong hook.
   suite fails on a clash. `packages/verifactu` is an unlisted library (in no list, never scanned);
   `apps/*` is out of scope by a recorded decision, so Spanish IDENTIFIERS in app UI code are caught
   only by review. Design: `docs/superpowers/specs/2026-09-05-module-sp3b-vocabulary-design.md`.
+- **The composition list lives in `@waitron/composition`, and it is the only place that names every
+  module.** Generic provisioning code imports neither that list nor a REGIME package
+  (`@waitron/fiscal-verifactu`, `@waitron/verifactu`) — `packages/provisioning/src/bin.ts`
+  excepted, it is the CLI's composition root — and no file under `apps/server/src` imports a
+  regime package outside the allowlisted runtime pass. The regime is reached through the
+  descriptor's `provisioning` and `fiscal` seats. The boundary is the swappable SLOT, not "any
+  module": provisioning's `@waitron/identity` and `@waitron/layouts` imports are legitimate.
+  `scripts/module-seams.test.ts` (root project, reads text) pins it, each allowlist entry carrying
+  its deferral reason — shrink that list in `fiscal-none`, never grow it. A module's per-node seed
+  runs INSIDE `applyVenue`'s one transaction: a seed that throws rolls the venue back. Cost of the
+  old shape: the generic venue runner, the node runner, the standby reservation and establishment,
+  and the till's backend construction imported the Spanish regime directly, and `fiscal-none` could
+  not land. Design: `docs/superpowers/specs/2026-09-05-module-sp3c-gated-provisioning-design.md`.
 - **`@waitron/db`'s `exports` map is enumerated, not a wildcard** — `.`, `./testing/postgres.js`,
   `./testing/seed.js`, `./testing/lifecycle.js`, `./testing/shared-container.js`. A wildcard would
   publish the whole harness and give `asAppUser` a second import path. Consequence: `apps/server`

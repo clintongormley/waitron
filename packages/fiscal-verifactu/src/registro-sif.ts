@@ -1,4 +1,4 @@
-// Side-effect only: registers this package's `sif.*` code on the shared `ErrorParams` registry by
+// Side-effect only: registers this package's `sif.*` codes on the shared `ErrorParams` registry by
 // declaration merging. See ./errors.ts for the code and the reasoning, and
 // ./errors.reachability.test.ts for the mechanical check that keeps errors.ts reachable from this
 // package's own public barrel (index.ts). Mirrors packages/db/src/allocate-number.ts's identical
@@ -10,6 +10,31 @@ import type { NodeId, TenantId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { cadenas } from "./schema/cadenas.js";
 import { contadoresInstalacion, registroSif } from "./schema/sif.js";
+
+/**
+ * AEAT caps `IdSistemaInformatico` at two characters (`packages/verifactu`'s `ID_SISTEMA_LENGTH`).
+ *
+ * Exported because the rule is defined once for the whole package: `registro_sif` carries no CHECK
+ * on the column, so the bound is applied in code. Both LOCAL write primitives apply it —
+ * `registerSif` and `writeReservedSif` below each open with `assertUsableIdSistema` — so no caller
+ * of either can put an unusable id into the column. `./provisioning.ts`'s `parseReservedState`
+ * applies the same bound EARLIER on the wire path, reporting `sif.reservation_invalid` for a
+ * malformed bundle before `writeReservedSif` is reached. The sync APPLY lane is the one write into
+ * the column that reaches neither primitive: `registro_sif` is enrolled as a watermark-upsert
+ * (./enrolment.ts), so a replica copies the value the primary already validated, verbatim.
+ */
+export const ID_SISTEMA_MAX_LENGTH = 2;
+
+/**
+ * The database does not enforce this: `registro_sif` carries no CHECK on the column, and every
+ * registro copies the value onto a record that can only be superseded by re-registering onto a
+ * fresh chain. So it is checked HERE, before the registration writes anything.
+ */
+function assertUsableIdSistema(value: string): void {
+  if (value.length === 0 || value.length > ID_SISTEMA_MAX_LENGTH) {
+    throw new AppError("sif.id_sistema_invalid", { value, maxLength: ID_SISTEMA_MAX_LENGTH });
+  }
+}
 
 export interface RegisterSifParams {
   tenantId: TenantId;
@@ -131,6 +156,10 @@ function resetChainHead(tx: Transaction, tenantId: TenantId, nodeId: NodeId): Pr
  * retire — a reserved node is new. The `registro_sif_instalacion_uq` unique on
  * (nif, id_sistema_informatico, numero_instalacion) is the never-reuse backstop; a duplicate number
  * raises 23505.
+ *
+ * Opens with `assertUsableIdSistema`, exactly as `registerSif` does: this is the OTHER write path
+ * into `registro_sif.id_sistema_informatico`, the column carries no CHECK, and applying the bound in
+ * both primitives is what makes it an invariant no caller can skip.
  */
 export async function writeReservedSif(
   tx: Transaction,
@@ -142,6 +171,8 @@ export async function writeReservedSif(
     numeroInstalacion: number;
   },
 ): Promise<{ id: string }> {
+  assertUsableIdSistema(params.idSistemaInformatico);
+
   const [inserted] = await tx
     .insert(registroSif)
     .values({
@@ -186,6 +217,8 @@ export async function registerSif(
   tx: Transaction,
   params: RegisterSifParams,
 ): Promise<SifRegistration> {
+  assertUsableIdSistema(params.idSistemaInformatico);
+
   // Retire any live identity for this node first, so the partial unique index
   // (registro_sif_activo_uq) has room for the new one. The old row is never updated beyond this
   // timestamp: its registros are immutable and must keep pointing at the identity that actually

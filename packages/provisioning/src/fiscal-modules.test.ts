@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
-import {
-  WAITRON_ID_SISTEMA,
-  assertUsableIdSistema,
-  resolveFiscalModules,
-} from "./fiscal-modules.js";
+import { FISCAL_TERRITORIES, resolveFiscalModules } from "./fiscal-modules.js";
 
 describe("resolveFiscalModules", () => {
   it("resolves ES-common to Veri*Factu + IVA", () => {
@@ -29,14 +25,9 @@ describe("resolveFiscalModules", () => {
   });
 });
 
-describe("WAITRON_ID_SISTEMA", () => {
-  it("is a Waitron product code of at most 2 characters", () => {
-    expect(WAITRON_ID_SISTEMA.length).toBeGreaterThan(0);
-    expect(WAITRON_ID_SISTEMA.length).toBeLessThanOrEqual(2);
-    expect(() => assertUsableIdSistema(WAITRON_ID_SISTEMA)).not.toThrow();
-  });
-
-  it("assertUsableIdSistema rejects an over-long id", () => {
-    expect(() => assertUsableIdSistema("ABC")).toThrow();
+describe("FISCAL_TERRITORIES", () => {
+  it("lists the territories the registry resolves, and resolves each of them", () => {
+    expect(FISCAL_TERRITORIES).toEqual(["ES-common"]);
+    for (const t of FISCAL_TERRITORIES) expect(resolveFiscalModules(t).filing).toBe("verifactu");
   });
 });

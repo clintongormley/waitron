@@ -137,7 +137,6 @@ async function main(): Promise<void> {
         },
       ],
       settlement: { kind: "deferred" },
-      fiscalBackend: "verifactu",
       clock,
     };
     const sale = await withTenant(db, tenant, (tx) => recordSale(tx, backend, saleInput));
@@ -189,7 +188,6 @@ async function main(): Promise<void> {
           lineTotal: corrBase,
         },
       ],
-      fiscalBackend: "verifactu",
       clock,
       authz: { sessionId: authorizerSession.id },
     };

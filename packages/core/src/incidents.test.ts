@@ -117,7 +117,6 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
       kind: "immediate",
       tenders: [{ method: "card", amount: "16.31", tipAmount: "1.90", settledAt: BASE }],
     },
-    fiscalBackend: "fake",
     clock: steadyClock,
     ...overrides,
   };

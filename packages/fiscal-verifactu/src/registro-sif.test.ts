@@ -3,7 +3,7 @@ import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { currentSif, esPrimerRegistro, registerSif } from "./registro-sif.js";
+import { currentSif, esPrimerRegistro, registerSif, writeReservedSif } from "./registro-sif.js";
 import { TENANT_A, TENANT_B, seedSoldRegistro, seedTenants } from "../test/fixtures.js";
 
 let db: Awaited<ReturnType<typeof createPgliteDb>>;
@@ -118,6 +118,53 @@ describe("registerSif", () => {
     }
     expect(seen).toEqual([...seen].sort((a, b) => a - b));
     expect(new Set(seen).size).toBe(seen.length);
+  });
+
+  it.each([
+    ["longer than two characters", "WTRN01"],
+    ["empty", ""],
+  ])("refuses an IdSistemaInformatico that is %s, before writing anything", async (_label, bad) => {
+    const err = await withTenant(db, TENANT_A.id, (tx) =>
+      registerSif(tx, {
+        ...SIF_PARAMS,
+        idSistemaInformatico: bad,
+        tenantId: TENANT_A.id,
+        nodeId: TENANT_A.nodeId,
+      }),
+    ).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AppError);
+    expect((err as AppError).code).toBe("sif.id_sistema_invalid");
+    expect((err as AppError).params).toEqual({ value: bad, maxLength: 2 });
+    const written = await db.execute(
+      sql`select 1 from registro_sif where node_id = ${TENANT_A.nodeId}`,
+    );
+    expect(written.rows).toEqual([]);
+  });
+});
+
+describe("writeReservedSif", () => {
+  it("refuses an IdSistemaInformatico longer than two characters, before writing anything", async () => {
+    // The bound is applied by the PRIMITIVE, not only by its callers: `registro_sif` carries no
+    // CHECK on the column, so a caller reaching writeReservedSif directly with an unusable id must
+    // still be refused. Negative control run: with `assertUsableIdSistema` deleted from
+    // writeReservedSif the call returns an inserted `{ id }` instead of throwing, and this fails at
+    // the `toBeInstanceOf(AppError)` line.
+    const err = await withTenant(db, TENANT_A.id, (tx) =>
+      writeReservedSif(tx, {
+        ...SIF_PARAMS,
+        idSistemaInformatico: "WTX",
+        tenantId: TENANT_A.id,
+        nodeId: TENANT_A.nodeId,
+        numeroInstalacion: 7,
+      }),
+    ).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AppError);
+    expect((err as AppError).code).toBe("sif.id_sistema_invalid");
+    expect((err as AppError).params).toEqual({ value: "WTX", maxLength: 2 });
+    const written = await db.execute(
+      sql`select 1 from registro_sif where node_id = ${TENANT_A.nodeId}`,
+    );
+    expect(written.rows).toEqual([]);
   });
 });
 

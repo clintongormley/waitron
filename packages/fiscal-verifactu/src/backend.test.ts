@@ -55,6 +55,12 @@ async function sell() {
   });
 }
 
+describe("id", () => {
+  it("identifies itself as the verifactu backend", () => {
+    expect(backend.id).toBe("verifactu");
+  });
+});
+
 describe("registerNode", () => {
   it("reports the node's live SIF registration", async () => {
     const registration = await withTenant(pg.db, tenantId, (tx) =>

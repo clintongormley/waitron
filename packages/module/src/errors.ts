@@ -45,5 +45,13 @@ declare module "@waitron/shared" {
     /** A `requires` range string is not a valid semver range — a descriptor (code) bug, failed loud
      * rather than silently treated as "any". `module`'s requirement on `dependency` used `range`. */
     "module.requires_invalid": { module: string; dependency: string; range: string };
+    /** No enabled module contributes to the fiscal slot. A trading node needs one; "no regime" is
+     * itself a module, never an absent slot. */
+    "module.fiscal_slot_empty": Record<string, never>;
+    /** More than one enabled module contributes to the fiscal slot; `candidates` names them. */
+    "module.fiscal_slot_ambiguous": { candidates: readonly string[] };
+    /** The node's stamped filing module (`stamped`) is not the enabled slot's id (`enabled`): a node
+     * provisioned under one regime must not boot under another. */
+    "module.fiscal_slot_mismatch": { stamped: string; enabled: string };
   }
 }

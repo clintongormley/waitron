@@ -526,6 +526,12 @@ listed in Step 4; `apps/server/src/provision-till.ts`.
   to `packages/provisioning/src/errors.ts` (domain-appropriate — it is a fact about a provisioning
   input) and throw that. **Verify which during Step 2** by whether `sif.id_sistema_invalid`
   type-checks here; use the provisioning code if it does not.
+
+  _(2026-09-05, SP-3c: both halves of this note are retired. The id-sistema constant and its
+  validator live in `packages/fiscal-verifactu` (`registro-sif.ts`), which declares
+  `sif.id_sistema_invalid` in its own `errors.ts`; `provisioning.id_sistema_invalid` was deleted with
+  the move, and `@waitron/provisioning` no longer knows the software id at all — see
+  `docs/superpowers/specs/2026-09-05-module-sp3c-gated-provisioning-design.md`.)_
 - [ ] **Step 4: Prove the guard by deletion.** Temporarily delete the `if (modules === undefined)`
   throw; confirm `resolveFiscalModules("ES-PV-bizkaia")` returns `undefined` and the test goes red;
   restore it. Record this in the commit body.

@@ -123,7 +123,6 @@ function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
       kind: "immediate",
       tenders: [{ method: "card", amount: "16.31", tipAmount: "1.90", settledAt: BASE }],
     },
-    fiscalBackend: "fake",
     clock: steadyClock,
     ...overrides,
   };
@@ -163,7 +162,6 @@ function substitutionInput(
     ],
     locale: "es-ES",
     invoiceLocales: ["es-ES", "ca-ES"],
-    fiscalBackend: "fake",
     clock: steadyClock,
     ...overrides,
   };
@@ -354,6 +352,17 @@ describe("recordSubstitution — the F3 sale", () => {
     expect(row?.counterpartyCountryCode).toBe("ES");
     expect(row?.locale).toBe("es-ES");
     expect(row?.invoiceLocales).toEqual(["es-ES", "ca-ES"]);
+  });
+
+  it("writes the backend's own id into sales.fiscal_backend", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: ticket } = await sellTicket(backend);
+
+    const { saleId: f3Id } = await substitute(backend, [ticket]);
+
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, f3Id));
+    expect(backend.id).toBe("fake");
+    expect(row?.fiscalBackend).toBe(backend.id);
   });
 
   it("allocates the F3 number from the reused standard series", async () => {

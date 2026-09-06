@@ -89,17 +89,20 @@ deliberately refuses on a restored database (`setup.already_provisioned` — the
 precisely so you cannot accidentally re-onboard on top of live fiscal data. `register-till` is the
 sanctioned re-registration path and is unguarded by design (re-registering a reimaged node is its whole
 purpose). It takes the restored node's own `tenantId` and `nodeId` (read them from the restored
-`trading.env`: `WAITRON_TILL_TENANT_ID` / `WAITRON_TILL_NODE_ID`) plus the box's SIF system identifier:
+`trading.env`: `WAITRON_TILL_TENANT_ID` / `WAITRON_TILL_NODE_ID`), and nothing else:
 
 ```
 pnpm --filter @waitron/server build   # if restoring from source rather than a built image
 DATABASE_URL=<box database connection> node apps/server/dist/register-till.js \
-    <tenantId> <nodeId> <idSistemaInformatico>
+    <tenantId> <nodeId>
 ```
+
+> **2026-09-06 (SP-3c):** `register-till` now takes two arguments — `<tenantId> <nodeId>` — and runs
+> every module's seed; the software identifier is the fiscal package's own constant.
 
 (The connection string is read only from `DATABASE_URL`, never passed as an argument, so it stays out
 of shell history and process listings; the obligado's NIF is read from the tenant row, not supplied.)
-This runs `provisionNode` → `registerSif`.
+This runs `provisionNode`, which runs every module's seed (the fiscal seed registers the SIF).
 
 `registerSif` (`packages/fiscal-verifactu/src/registro-sif.ts`) revokes the restored node's live SIF,
 mints a **fresh installation number** from the never-reused `contadores_instalacion` allocator, and

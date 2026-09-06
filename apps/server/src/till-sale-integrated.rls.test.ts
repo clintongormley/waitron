@@ -36,6 +36,7 @@ import { listOutstandingSales } from "@waitron/core";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import { deploymentEnvironment } from "./config.js";
+import { ALL_MODULES } from "./modules.js";
 import type { OrderFlow, TillConfig } from "./till-config.js";
 import { createOpenOrder, listStationQueue, parkOrder, placeOrder } from "./working-order.js";
 import { collectOrder, payWorkingOrder, payWorkingOrderIntegrated } from "./till-sale.js";
@@ -122,33 +123,36 @@ interface SeededVenue {
  * order-independent (CLAUDE.md §4). */
 async function setupVenue(): Promise<SeededVenue> {
   const venue = await applyVenue(
-    planVenue({
-      country: "ES",
-      taxId: nextNif(),
-      legalName: "Deli Test SL",
-      location: {
-        name: "Sala principal",
-        fiscalTerritory: "ES-common",
-        invoiceLocales: [LOCALE],
-        operationDescription: "Venta en establecimiento",
-        addressLine1: "Calle Mayor 1",
-        addressLine2: null,
-        postalCode: "28013",
-        city: "Madrid",
-        province: "Madrid",
-        timeZone: "Europe/Madrid",
-        dayCutover: "05:00",
+    planVenue(
+      {
+        country: "ES",
+        taxId: nextNif(),
+        legalName: "Deli Test SL",
+        location: {
+          name: "Sala principal",
+          fiscalTerritory: "ES-common",
+          invoiceLocales: [LOCALE],
+          operationDescription: "Venta en establecimiento",
+          addressLine1: "Calle Mayor 1",
+          addressLine2: null,
+          postalCode: "28013",
+          city: "Madrid",
+          province: "Madrid",
+          timeZone: "Europe/Madrid",
+          dayCutover: "05:00",
+        },
+        tillName: "Caja 1",
+        seriesCode: "A",
+        rectificativeSeriesCode: "R",
+        admin: {
+          displayName: "Administradora",
+          pinHash: hashPin("1234"),
+          passwordHash: hashPassword("dashPass123"),
+        },
       },
-      tillName: "Caja 1",
-      seriesCode: "A",
-      rectificativeSeriesCode: "R",
-      admin: {
-        displayName: "Administradora",
-        pinHash: hashPin("1234"),
-        passwordHash: hashPassword("dashPass123"),
-      },
-    }),
-    { db: suite.admin },
+      ALL_MODULES,
+    ),
+    { db: suite.admin, modules: ALL_MODULES },
   );
 
   const cfg = tillConfigFromVenue(venue);

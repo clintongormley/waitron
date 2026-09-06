@@ -132,7 +132,6 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
         locale: "en",
         invoiceLocales: ["en"],
         clock,
-        fiscalBackend: "fake",
         // Deferred: no tenders, so the test needs no settlement wiring and stays on the seam it is
         // about (the invoice is the fiscal event; payment is separate).
         settlement: { kind: "deferred" },

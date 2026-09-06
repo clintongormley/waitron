@@ -3,13 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import {
-  AppError,
-  hasCode,
-  isAppError,
-  nodeId as brandNodeId,
-  tenantId as brandTenantId,
-} from "@waitron/shared";
+import { AppError, hasCode, isAppError } from "@waitron/shared";
 import type { VenueResult } from "@waitron/provisioning";
 import { verifyPassword, verifyPin } from "@waitron/identity";
 import type { ProvisionRequest } from "./provision.js";
@@ -109,17 +103,10 @@ function makeVenueResult(): VenueResult {
     locationId: LOCATION_ID,
     tillId: TILL_ID,
     nodeId: NODE_ID,
-    sif: {
-      id: "55555555-5555-5555-5555-555555555555",
-      tenantId: brandTenantId(TENANT_ID),
-      nodeId: brandNodeId(NODE_ID),
-      nif: "50000000K",
-      idSistemaInformatico: "WT",
-      numeroInstalacion: 1,
-      registradoEn: new Date("2026-01-01T00:00:00Z"),
-      revocadoEn: null,
-    },
     seriesIds: [SERIES_ID_0, SERIES_ID_1],
+    seeded: [
+      { module: "fiscal", report: "SIF 55555555-5555-5555-5555-555555555555 (installation 1)" },
+    ],
   };
 }
 

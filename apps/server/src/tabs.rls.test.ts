@@ -25,6 +25,7 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
+import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
 import { addTabRound, openTab } from "./working-order.js";
@@ -115,33 +116,36 @@ interface SeededVenue {
  */
 async function setupVenue(): Promise<SeededVenue> {
   const venue = await applyVenue(
-    planVenue({
-      country: "ES",
-      taxId: nextNif(),
-      legalName: "Deli Test SL",
-      location: {
-        name: "Sala principal",
-        fiscalTerritory: "ES-common",
-        invoiceLocales: [LOCALE],
-        operationDescription: "Venta en establecimiento",
-        addressLine1: "Calle Mayor 1",
-        addressLine2: null,
-        postalCode: "28013",
-        city: "Madrid",
-        province: "Madrid",
-        timeZone: "Europe/Madrid",
-        dayCutover: "05:00",
+    planVenue(
+      {
+        country: "ES",
+        taxId: nextNif(),
+        legalName: "Deli Test SL",
+        location: {
+          name: "Sala principal",
+          fiscalTerritory: "ES-common",
+          invoiceLocales: [LOCALE],
+          operationDescription: "Venta en establecimiento",
+          addressLine1: "Calle Mayor 1",
+          addressLine2: null,
+          postalCode: "28013",
+          city: "Madrid",
+          province: "Madrid",
+          timeZone: "Europe/Madrid",
+          dayCutover: "05:00",
+        },
+        tillName: "Caja 1",
+        seriesCode: "A",
+        rectificativeSeriesCode: "R",
+        admin: {
+          displayName: "Administradora",
+          pinHash: hashPin("1234"),
+          passwordHash: hashPassword("dashPass123"),
+        },
       },
-      tillName: "Caja 1",
-      seriesCode: "A",
-      rectificativeSeriesCode: "R",
-      admin: {
-        displayName: "Administradora",
-        pinHash: hashPin("1234"),
-        passwordHash: hashPassword("dashPass123"),
-      },
-    }),
-    { db: suite.admin },
+      ALL_MODULES,
+    ),
+    { db: suite.admin, modules: ALL_MODULES },
   );
 
   const cfg = tillConfigFromVenue(venue);
@@ -453,9 +457,10 @@ async function nifOf(cfg: TillConfig): Promise<string> {
  * `setupVenue` provisions tenant B fully (tenant, node, series "A" at next_number 1, catalogue, till,
  * and its OWN SIF under its OWN nif); `registerSif` then RE-registers node B under `nif`, which also
  * resets node B's chain head so its first sale is a primer_registro. It mints a fresh installation
- * number under (`nif`, "W1") — "W1" is `WAITRON_ID_SISTEMA` (the id provisioning uses; not exported
- * from `@waitron/provisioning`, so inlined), and NONE of the SIF identity (IdSistemaInformatico /
- * NumeroInstalacion) enters `computeHuella` (huella.ts:45-58 hashes eight invoice fields only), so the
+ * number under (`nif`, "W1") — "W1" is `WAITRON_ID_SISTEMA` (`@waitron/fiscal-verifactu`, the id the
+ * fiscal seed registers under; inlined so the literal reads beside the tuple it keys), and NONE of
+ * the SIF identity (IdSistemaInformatico / NumeroInstalacion) enters `computeHuella`
+ * (huella.ts:45-58 hashes eight invoice fields only), so the
  * distinct installation numbers do not move the huella. The re-registration is LOAD-BEARING and proven
  * by deletion: remove it and tenant B keeps `setupVenue`'s own-nif SIF, so its filing carries a
  * DIFFERENT `IDEmisorFactura` and the two huellas diverge (verified: `D251…` vs the walk-up's `1E79…`)

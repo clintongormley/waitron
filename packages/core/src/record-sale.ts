@@ -109,15 +109,6 @@ export interface RecordSaleInput {
    * the fiscal record's breakdown and asserted to agree with `total` at the top of `recordSale`
    * (`sale.total_mismatch`) — a defence for an unrepairable record (§5), never a re-derivation. */
   vatBreakdown?: VatBreakdownLine[];
-  /**
-   * Which backend recorded this sale — for the `sales.fiscal_backend` column. Supplied by the
-   * caller rather than read off `backend`'s own return value, because it must be known BEFORE
-   * `backend.recordSale` runs: `sales` (step 4) is written before the module's own registro
-   * (step 5), and `registros_facturacion.sale_id` is a NOT NULL foreign key onto `sales.id`, so
-   * the fiscal record cannot exist before the sale row does. The caller already chose which
-   * `FiscalBackend` to inject here and therefore already knows its identifying string.
-   */
-  fiscalBackend: string;
   clock: TrustedClock;
   /**
    * Pay-first vs invoice-first, chosen per sale (design D5). `immediate` settles in the SAME
@@ -308,7 +299,7 @@ export async function recordSale(
       total: input.total,
       locale: input.locale,
       invoiceLocales: input.invoiceLocales,
-      fiscalBackend: input.fiscalBackend,
+      fiscalBackend: backend.id,
       fiscalState: "recorded",
       operatorId: input.operatorId ?? null,
     })

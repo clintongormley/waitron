@@ -57,6 +57,8 @@ const nextId = (): string => `fake-${String(++counter).padStart(8, "0")}`;
  * and costs one `CREATE TABLE` in a test harness.
  */
 export class FakeFiscalBackend implements FiscalBackend {
+  readonly id = "fake";
+
   private readonly injectedIssues = new Map<string, IntegrityIssue[]>();
   private readonly reportedState = new Map<string, AckState | null>();
 
@@ -136,7 +138,7 @@ export class FakeFiscalBackend implements FiscalBackend {
       values (${nodeId}, ${params.tenantId}, ${registrationId})
       on conflict (node_id) do update set registration_id = excluded.registration_id
     `);
-    return { backend: "fake", nodeId, registrationId, registeredAt: new Date() };
+    return { backend: this.id, nodeId, registrationId, registeredAt: new Date() };
   }
 
   async recordSale(tx: Transaction, sale: SaleForFiscalRecord): Promise<FiscalRecordRef> {
@@ -489,7 +491,7 @@ export class FakeFiscalBackend implements FiscalBackend {
          ${entry.kind}, ${entry.invoiceNumber}, ${entry.total}, 'pending', ${vatBreakdown}::jsonb)
     `);
     return {
-      backend: "fake",
+      backend: this.id,
       recordId,
       state: "pending",
       issuedAt: entry.issuedAt,

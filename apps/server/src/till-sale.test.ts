@@ -38,6 +38,7 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
+import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { payWorkingOrder, recordTillSale } from "./till-sale.js";
 import { addTabRound, createOpenOrder, openTab, voidTabLine } from "./working-order.js";
@@ -113,33 +114,36 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
  */
 async function setupVenue(): Promise<{ cfg: TillConfig; available: AvailableProduct[] }> {
   const venue = await applyVenue(
-    planVenue({
-      country: "ES",
-      taxId: nextNif(),
-      legalName: "Deli Test SL",
-      location: {
-        name: "Sala principal",
-        fiscalTerritory: "ES-common",
-        invoiceLocales: [LOCALE],
-        operationDescription: "Venta en establecimiento",
-        addressLine1: "Calle Mayor 1",
-        addressLine2: null,
-        postalCode: "28013",
-        city: "Madrid",
-        province: "Madrid",
-        timeZone: "Europe/Madrid",
-        dayCutover: "05:00",
+    planVenue(
+      {
+        country: "ES",
+        taxId: nextNif(),
+        legalName: "Deli Test SL",
+        location: {
+          name: "Sala principal",
+          fiscalTerritory: "ES-common",
+          invoiceLocales: [LOCALE],
+          operationDescription: "Venta en establecimiento",
+          addressLine1: "Calle Mayor 1",
+          addressLine2: null,
+          postalCode: "28013",
+          city: "Madrid",
+          province: "Madrid",
+          timeZone: "Europe/Madrid",
+          dayCutover: "05:00",
+        },
+        tillName: "Caja 1",
+        seriesCode: "A",
+        rectificativeSeriesCode: "R",
+        admin: {
+          displayName: "Administradora",
+          pinHash: hashPin("1234"),
+          passwordHash: hashPassword("dashPass123"),
+        },
       },
-      tillName: "Caja 1",
-      seriesCode: "A",
-      rectificativeSeriesCode: "R",
-      admin: {
-        displayName: "Administradora",
-        pinHash: hashPin("1234"),
-        passwordHash: hashPassword("dashPass123"),
-      },
-    }),
-    { db: suite.admin },
+      ALL_MODULES,
+    ),
+    { db: suite.admin, modules: ALL_MODULES },
   );
 
   const cfg = tillConfigFromVenue(venue);
@@ -311,33 +315,36 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
     descriptions: Record<string, string>,
   ): Promise<{ cfg: TillConfig; productId: string }> {
     const venue = await applyVenue(
-      planVenue({
-        country: "ES",
-        taxId: nextNif(),
-        legalName: "Deli Bare SL",
-        location: {
-          name: "Sala principal",
-          fiscalTerritory: "ES-common",
-          invoiceLocales,
-          operationDescription: "Venta en establecimiento",
-          addressLine1: "Calle Mayor 1",
-          addressLine2: null,
-          postalCode: "28013",
-          city: "Madrid",
-          province: "Madrid",
-          timeZone: "Europe/Madrid",
-          dayCutover: "05:00",
+      planVenue(
+        {
+          country: "ES",
+          taxId: nextNif(),
+          legalName: "Deli Bare SL",
+          location: {
+            name: "Sala principal",
+            fiscalTerritory: "ES-common",
+            invoiceLocales,
+            operationDescription: "Venta en establecimiento",
+            addressLine1: "Calle Mayor 1",
+            addressLine2: null,
+            postalCode: "28013",
+            city: "Madrid",
+            province: "Madrid",
+            timeZone: "Europe/Madrid",
+            dayCutover: "05:00",
+          },
+          tillName: "Caja 1",
+          seriesCode: "A",
+          rectificativeSeriesCode: "R",
+          admin: {
+            displayName: "Administradora",
+            pinHash: hashPin("1234"),
+            passwordHash: hashPassword("dashPass123"),
+          },
         },
-        tillName: "Caja 1",
-        seriesCode: "A",
-        rectificativeSeriesCode: "R",
-        admin: {
-          displayName: "Administradora",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
-        },
-      }),
-      { db: suite.admin },
+        ALL_MODULES,
+      ),
+      { db: suite.admin, modules: ALL_MODULES },
     );
     const cfg = tillConfigFromVenue(venue);
     const productId = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
@@ -447,33 +454,36 @@ describe("ordering modifiers — parent + child lines", () => {
    */
   async function setupModifierVenue(): Promise<ModifierVenue> {
     const venue = await applyVenue(
-      planVenue({
-        country: "ES",
-        taxId: nextNif(),
-        legalName: "Deli Mods SL",
-        location: {
-          name: "Sala principal",
-          fiscalTerritory: "ES-common",
-          invoiceLocales: [LOCALE],
-          operationDescription: "Venta en establecimiento",
-          addressLine1: "Calle Mayor 1",
-          addressLine2: null,
-          postalCode: "28013",
-          city: "Madrid",
-          province: "Madrid",
-          timeZone: "Europe/Madrid",
-          dayCutover: "05:00",
+      planVenue(
+        {
+          country: "ES",
+          taxId: nextNif(),
+          legalName: "Deli Mods SL",
+          location: {
+            name: "Sala principal",
+            fiscalTerritory: "ES-common",
+            invoiceLocales: [LOCALE],
+            operationDescription: "Venta en establecimiento",
+            addressLine1: "Calle Mayor 1",
+            addressLine2: null,
+            postalCode: "28013",
+            city: "Madrid",
+            province: "Madrid",
+            timeZone: "Europe/Madrid",
+            dayCutover: "05:00",
+          },
+          tillName: "Caja 1",
+          seriesCode: "A",
+          rectificativeSeriesCode: "R",
+          admin: {
+            displayName: "Administradora",
+            pinHash: hashPin("1234"),
+            passwordHash: hashPassword("dashPass123"),
+          },
         },
-        tillName: "Caja 1",
-        seriesCode: "A",
-        rectificativeSeriesCode: "R",
-        admin: {
-          displayName: "Administradora",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
-        },
-      }),
-      { db: suite.admin },
+        ALL_MODULES,
+      ),
+      { db: suite.admin, modules: ALL_MODULES },
     );
     const cfg = tillConfigFromVenue(venue);
     const available = await withTenant(suite.admin, cfg.tenantId, async (tx) => {

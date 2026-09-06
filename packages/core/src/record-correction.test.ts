@@ -145,7 +145,6 @@ function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
       kind: "immediate",
       tenders: [{ method: "card", amount: "16.31", tipAmount: "1.90", settledAt: BASE }],
     },
-    fiscalBackend: "fake",
     clock: steadyClock,
     ...overrides,
   };
@@ -184,7 +183,6 @@ function correctionInput(
         lineTotal: "-2.10",
       },
     ],
-    fiscalBackend: "fake",
     clock: steadyClock,
     // Default authorizer: the supervisor session opened in `beforeEach`. A supervisor holds
     // `sale.rectify`, so every green-path correction here is authorized on the operator's own role;
@@ -329,6 +327,17 @@ describe("recordCorrection — the corrective sale", () => {
     // supplied on the input.
     expect(row?.locale).toBe("es-ES");
     expect(row?.invoiceLocales).toEqual(["es-ES", "ca-ES"]);
+  });
+
+  it("writes the backend's own id into sales.fiscal_backend", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+
+    const { saleId: correctiveId } = await correct(backend, originalId);
+
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, correctiveId));
+    expect(backend.id).toBe("fake");
+    expect(row?.fiscalBackend).toBe(backend.id);
   });
 
   it("allocates the corrective number from the rectificative series", async () => {

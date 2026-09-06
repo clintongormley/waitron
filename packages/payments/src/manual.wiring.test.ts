@@ -73,7 +73,6 @@ function buildInput(s: SeededForSale, settledAt: Date): RecordSaleInput {
       kind: "immediate",
       tenders: [{ method: "card", amount: "12.10", tipAmount: "0.00", settledAt }],
     },
-    fiscalBackend: "fake",
     clock: steadyClock,
   };
 }

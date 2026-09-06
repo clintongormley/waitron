@@ -52,6 +52,29 @@ declare module "@waitron/shared" {
      * translatable refusal rather than a locally invented installation number. See ./registro-sif.ts. */
     "sif.not_registered": { tenantId: string; nodeId: string };
 
+    /** `IdSistemaInformatico` is empty or longer than AEAT's two-character cap
+     * (`packages/verifactu`'s `ID_SISTEMA_LENGTH`). Thrown by `assertUsableIdSistema`
+     * (./registro-sif.ts), which both LOCAL write primitives — `registerSif` and `writeReservedSif`
+     * — call before writing anything, so no caller of either can put an unusable id into
+     * `registro_sif`. The sync apply lane writes the column too and reaches neither: it copies a
+     * value the primary already validated, verbatim (./enrolment.ts's watermark-upsert).
+     *
+     * `registro_sif.id_sistema_informatico` carries no CHECK and every registro copies the value,
+     * so the bound is a code-side invariant rather than a column constraint.
+     * `FISCAL_PROVISIONING.standby.establish` applies the same `ID_SISTEMA_MAX_LENGTH` EARLIER, in
+     * `parseReservedState`, throwing `sif.reservation_invalid` instead — its value is wire input,
+     * not a local argument — so on that path the reservation code is what a bad id reports. */
+    "sif.id_sistema_invalid": { value: string; maxLength: number };
+
+    /** A standby's reserved SIF state arrived from the primary malformed (the mirror bundle is wire
+     * input) — a missing or non-string field, an installation number that is not a positive integer,
+     * or an `idSistemaInformatico` outside `ID_SISTEMA_MAX_LENGTH` (see `sif.id_sistema_invalid`
+     * above for why that bound is a code-side invariant rather than a column constraint). That last
+     * check is made HERE as well as inside `writeReservedSif`, and it runs first, so a malformed
+     * bundle is reported as a bad RESERVATION rather than as a bad local argument. `reason` is our
+     * own English description, never the payload. */
+    "sif.reservation_invalid": { reason: string };
+
     /**
      * Task 14's brief drafted this as `ErrorCode.FISCAL_CHAIN_APPEND_CONTENTION`, appended
      * directly to `packages/shared/src/errors.ts`'s `ErrorCode` — the same SCREAMING_SNAKE_CASE,

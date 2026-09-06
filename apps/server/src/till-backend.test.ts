@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { VerifactuBackend } from "@waitron/fiscal-verifactu";
+import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
+import type { WaitronModule } from "@waitron/module";
 import type { Database } from "@waitron/db";
-import { makeFiscalBackend, rejectResolveClient, systemClock } from "./till-backend.js";
+import { ALL_MODULES } from "./modules.js";
+import { makeFiscalBackend, systemClock } from "./till-backend.js";
 
-// `makeFiscalBackend` only CONSTRUCTS the backend (its constructor wraps `resolveClient` and stores
-// references — it opens no connection), so a bare stub stands in for the pool the built backend
-// would only touch on `pendingCount`, which this suite never calls.
+// `makeFiscalBackend` only CONSTRUCTS the backend (the slot's factory wraps its dependencies and
+// stores references — it opens no connection), so a bare stub stands in for the pool the built
+// backend would only touch on `pendingCount`, which this suite never calls.
 const STUB_DB = {} as Database;
+
+/** The enabled set with the fiscal slot's only filler removed — the zero-candidate case. */
+const NO_FISCAL: readonly WaitronModule[] = ALL_MODULES.filter((m) => m.fiscal === undefined);
 
 describe("systemClock", () => {
   it("reports the wall clock as already confident and anchored, with a real instant", () => {
@@ -32,32 +37,45 @@ describe("systemClock", () => {
   });
 });
 
-describe("rejectResolveClient", () => {
-  it("rejects — the till's recordSale path never contacts AEAT, so this stub must never resolve", async () => {
-    // `recordSale` reaches `resolveClient` only via `drain`/`reconcile`, which this backend is never
-    // handed to (the server's real drain loop builds its own `aeatClientResolver`). Exercised once
-    // here so the guard is proven to reject rather than silently returning a usable client.
-    await expect(rejectResolveClient()).rejects.toThrow(/never be called/);
-  });
-});
-
 describe("makeFiscalBackend", () => {
-  it("builds a VerifactuBackend without touching the database", () => {
-    const backend = makeFiscalBackend(STUB_DB, { WAITRON_ENV: "preproduction" });
-    expect(backend).toBeInstanceOf(VerifactuBackend);
+  it("builds the enabled slot's backend without touching the database", () => {
+    const backend = makeFiscalBackend(ALL_MODULES, "verifactu", STUB_DB, {
+      WAITRON_ENV: "preproduction",
+    });
+    expect(backend.id).toBe(FISCAL_SLOT.id);
+  });
+
+  it("accepts a node with no stamped filing module (bare fixtures)", () => {
+    expect(makeFiscalBackend(ALL_MODULES, null, STUB_DB, {}).id).toBe("verifactu");
   });
 
   it("defaults the deployment environment to preproduction when WAITRON_ENV is unset", () => {
     // The one default in config.ts whose mistake is irreversible — proven reachable here rather than
     // asserted: an unset environment must not throw at construction, it must resolve the safe value.
-    const backend = makeFiscalBackend(STUB_DB, {});
-    expect(backend).toBeInstanceOf(VerifactuBackend);
+    expect(makeFiscalBackend(ALL_MODULES, null, STUB_DB, {}).id).toBe("verifactu");
+  });
+
+  it("refuses when no enabled module fills the slot", () => {
+    expect(() => makeFiscalBackend(NO_FISCAL, null, STUB_DB, {})).toThrow(
+      expect.objectContaining({ code: "module.fiscal_slot_empty" }),
+    );
+  });
+
+  it("refuses a node stamped for another regime", () => {
+    expect(() => makeFiscalBackend(ALL_MODULES, "other", STUB_DB, {})).toThrow(
+      expect.objectContaining({
+        code: "module.fiscal_slot_mismatch",
+        params: { stamped: "other", enabled: "verifactu" },
+      }),
+    );
   });
 
   it("refuses an unrepresentable WAITRON_ENV, the same guard loadConfig uses", () => {
     // `deploymentEnvironment` (shared with the rest of the host) is what rejects it, so a stray
-    // NODE_ENV or a typo can never reach `VerifactuBackendOptions.deploymentEnvironment` as an
-    // entorno the schema's CHECK constraint would then reject mid-sale.
-    expect(() => makeFiscalBackend(STUB_DB, { WAITRON_ENV: "staging" })).toThrow();
+    // NODE_ENV or a typo can never reach the backend as an entorno the schema's CHECK constraint
+    // would then reject mid-sale.
+    expect(() =>
+      makeFiscalBackend(ALL_MODULES, null, STUB_DB, { WAITRON_ENV: "staging" }),
+    ).toThrow();
   });
 });

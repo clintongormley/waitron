@@ -33,6 +33,7 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
+import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable, createZone, listTables, setTablePlacement } from "./tables.js";
 import {
@@ -170,7 +171,10 @@ interface Shop {
  * owner under the tenant GUC — exactly how applyVenue itself runs registerSif (no asAppUser).
  */
 async function seedShop(emisorNif: string): Promise<Shop> {
-  const venue = await applyVenue(planVenue(venueRequest(nextNif())), { db: suite.admin });
+  const venue = await applyVenue(planVenue(venueRequest(nextNif()), ALL_MODULES), {
+    db: suite.admin,
+    modules: ALL_MODULES,
+  });
   const cfg = tillConfigFromVenue(venue);
   await withTenant(suite.admin, cfg.tenantId, (tx) =>
     registerSif(tx, {

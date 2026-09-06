@@ -17,6 +17,7 @@
     "@waitron/core": "workspace:*",
     "@waitron/db": "workspace:*",
     "@waitron/fiscal": "workspace:*",
+    "@waitron/module": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
     "@waitron/verifactu": "workspace:*",

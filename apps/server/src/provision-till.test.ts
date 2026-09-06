@@ -8,14 +8,15 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { NodeId, TenantId, TillId } from "@waitron/shared";
+import { ALL_MODULES } from "./modules.js";
 import { provisionNode } from "./provision-till.js";
 
 // PGlite, not `startRealPostgres` — deliberately, and against the grain of this package's other
 // database suites. That harness's own refusal message says a container is required because "PGlite
 // runs every connection as a superuser, so it cannot show whether this host works as the
 // non-superuser deployment role"; nothing here ever leaves the superuser connection, so the
-// justification does not apply. `registerSif` itself — the function under test, one layer down — is
-// covered exactly this way (`registro-sif.test.ts`, same two migration sets), as are this
+// justification does not apply. The fiscal seed one layer down — the caller of `registerSif` — is
+// covered exactly this way (`packages/fiscal-verifactu/src/provisioning.test.ts`), as are this
 // directory's `stripe-account.test.ts` and `aeat-transport.test.ts`. `vitest.config.ts` pins
 // `singleFork`, so a container here would be pure additive wall-clock on every run.
 //
@@ -23,10 +24,6 @@ import { provisionNode } from "./provision-till.js";
 // superuser container kill a mutant that drops the guard, because neither applies RLS. Only a
 // container connected as the non-superuser deployment role would let `eq(nodes.tenantId, …)` be
 // deleted unnoticed — RLS would hide the foreign node anyway — and no harness here does that.
-
-// Two characters: `packages/verifactu`'s `validate` caps `IdSistemaInformatico` at that
-// (`ID_SISTEMA_LENGTH`), and every other fixture in the repo uses this exact value.
-const ID_SIF = "WT";
 
 // Well-formed but absent — the shape a mistyped argument actually takes, since a malformed one
 // never survives `tenantId()`'s brand.
@@ -98,17 +95,12 @@ async function bootstrapTenant(): Promise<Bootstrapped> {
 }
 
 describe("provisioning a node that has no SIF registration yet", () => {
-  it("registers it under the tenant's own NIF, which is never an argument", async () => {
+  it("runs every module's seed for the node — fiscal registers it under the tenant's own NIF", async () => {
     const { tenantId, nodeId, nif } = await bootstrapTenant();
 
-    const registration = await provisionNode(suite.db, {
-      tenantId,
-      nodeId,
-      idSistemaInformatico: ID_SIF,
-    });
-
-    expect(registration.nif).toBe(nif);
-    expect(registration.numeroInstalacion).toBe(1);
+    const seeded = await provisionNode(suite.db, { tenantId, nodeId }, ALL_MODULES);
+    expect(seeded.map((s) => s.module)).toEqual(["fiscal"]);
+    expect(seeded[0]!.report).toMatch(/^SIF .* \(installation 1\)$/);
 
     // The row `currentSif` would read back — the thing `recordSale` was missing.
     const live = await suite.db.execute<{
@@ -117,7 +109,7 @@ describe("provisioning a node that has no SIF registration yet", () => {
       numero_instalacion: number;
     }>(sql`select nif, id_sistema_informatico, numero_instalacion from registro_sif
            where tenant_id = ${tenantId} and node_id = ${nodeId} and revocado_en is null`);
-    expect(live.rows).toEqual([{ nif, id_sistema_informatico: ID_SIF, numero_instalacion: 1 }]);
+    expect(live.rows).toEqual([{ nif, id_sistema_informatico: "W1", numero_instalacion: 1 }]);
   });
 
   it("refuses a node belonging to a different tenant, and writes nothing", async () => {
@@ -125,11 +117,7 @@ describe("provisioning a node that has no SIF registration yet", () => {
     const theirs = await bootstrapTenant();
 
     await expect(
-      provisionNode(suite.db, {
-        tenantId: mine.tenantId,
-        nodeId: theirs.nodeId,
-        idSistemaInformatico: ID_SIF,
-      }),
+      provisionNode(suite.db, { tenantId: mine.tenantId, nodeId: theirs.nodeId }, ALL_MODULES),
     ).rejects.toMatchObject({
       code: "node.not_found",
       params: { id: theirs.nodeId, tenantId: mine.tenantId },
@@ -141,37 +129,11 @@ describe("provisioning a node that has no SIF registration yet", () => {
     expect(written.rows).toEqual([]);
   });
 
-  it("refuses a tenant that does not exist", async () => {
+  it("refuses a tenant that does not exist (the node is not its)", async () => {
     const { nodeId } = await bootstrapTenant();
 
     await expect(
-      provisionNode(suite.db, {
-        tenantId: brandTenantId(ABSENT),
-        nodeId,
-        idSistemaInformatico: ID_SIF,
-      }),
-    ).rejects.toMatchObject({ code: "tenant.not_found", params: { id: ABSENT } });
-  });
-
-  // The value AEAT caps at two characters, which nothing else in the repo checks: `validate` has no
-  // production caller, the column has no CHECK, and `registerSif` takes a bare string. An operator
-  // types it once and it lands on every registro the node files.
-  it.each([
-    ["longer than two characters", "WTRN01"],
-    ["empty", ""],
-  ])("refuses an IdSistemaInformatico that is %s, before writing anything", async (_label, bad) => {
-    const { tenantId, nodeId } = await bootstrapTenant();
-
-    await expect(
-      provisionNode(suite.db, { tenantId, nodeId, idSistemaInformatico: bad }),
-    ).rejects.toMatchObject({
-      code: "sif.id_sistema_invalid",
-      params: { value: bad, maxLength: 2 },
-    });
-
-    const written = await suite.db.execute(
-      sql`select 1 from registro_sif where node_id = ${nodeId}`,
-    );
-    expect(written.rows).toEqual([]);
+      provisionNode(suite.db, { tenantId: brandTenantId(ABSENT), nodeId }, ALL_MODULES),
+    ).rejects.toMatchObject({ code: "node.not_found", params: { id: nodeId, tenantId: ABSENT } });
   });
 });

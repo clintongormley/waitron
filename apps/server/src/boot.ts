@@ -127,7 +127,7 @@ import {
 import { servingPrimaryNodeId, type TrustSet } from "@waitron/membership";
 import { adoptMembership as adoptMembershipDocument } from "./membership-adopt.js";
 import { runTunnelClient } from "@waitron/tunnel";
-import { readOrderFlow } from "./till-config.js";
+import { readFilingModule, readOrderFlow } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { readVenueLocale } from "./venue-locale.js";
 import { makeFiscalBackend, systemClock } from "./till-backend.js";
@@ -1080,9 +1080,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   );
   // The till's own HTTP surface (session, roster, boot info, catalogue, sales) on the SAME app —
   // `mountTillApi` "attaches to this app rather than creating a second one", the identical convention
-  // `mountWebhook` above follows. `backend`/`clock` are the till's fiscal pieces, built exactly as
-  // `scripts/record-one-sale.ts` does (see `till-backend.ts`): the till's `recordSale` files the same
-  // Veri*Factu chain, and neither ever contacts AEAT (that is the `drain` loop below's job).
+  // `mountWebhook` above follows. `backend`/`clock` are the till's fiscal pieces: the backend is built
+  // by whichever ENABLED module fills the fiscal slot (`makeFiscalBackend` → `fiscalSlot`), and it
+  // never contacts an authority on the sale path (that is the `drain` loop below's job).
   // `secureCookies` tracks the transport: TRUE only when TLS is configured, so the session cookie is
   // never marked `Secure` on a plain-HTTP loopback host where the browser would then never send it
   // back. Mounting registers routes only — no database work happens here, so a till pointed at an
@@ -1092,7 +1092,17 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // pool is open, and spread it in to form the full `TillConfig` the routes dispatch on — the merge
   // the type demands (`config.till` is `Omit<TillConfig, "orderFlow">`, see `till-config.ts`). A
   // boot-time read, not per request: the mode is stable provisioning-time config.
-  const till: TillConfig = { ...config.till, orderFlow: await readOrderFlow(db, config.till) };
+  //
+  // The regime provisioning stamped this node with (`nodes.filing_module`) is read ONCE here beside
+  // it, for the same reason: it too is provisioning-time config. `makeFiscalBackend` cross-checks it
+  // against the enabled fiscal module, so a node whose records were filed under another regime fails
+  // the boot rather than chaining under the wrong one (§5 — unrepairable). The two reads have no
+  // data dependency on each other, so they run together.
+  const [orderFlow, filingModule] = await Promise.all([
+    readOrderFlow(db, config.till),
+    readFilingModule(db, config.till),
+  ]);
+  const till: TillConfig = { ...config.till, orderFlow };
   // The venue's DEFAULT UI locale, derived ONCE now the pool is open — the DISPLAY counterpart to the
   // fiscal `till.locale`/`invoiceLocales` (left untouched). `readVenueLocale` applies the shared
   // `override → province → country → English` chain, reading the tenant's country + the location's
@@ -1121,7 +1131,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     app,
     {
       db,
-      backend: makeFiscalBackend(db, env),
+      // `setsToMigrate` is the ENABLED module set on this (trading) branch — boot.ts:551 — so the
+      // slot picks from what is enabled, not from ALL_MODULES.
+      backend: makeFiscalBackend(setsToMigrate, filingModule, db, env),
       clock: systemClock(),
       cfg: till,
       secureCookies,

@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { ALL_MODULES } from "../apps/server/src/modules.js";
+import { ALL_MODULES } from "../packages/composition/src/index.js";
 import { packageDirOf } from "../packages/module/src/module.js";
 
 /**
@@ -13,12 +13,12 @@ import { packageDirOf } from "../packages/module/src/module.js";
  * exist first.
  *
  * WHY THIS HAS TO BE A TREE-WIDE ROOT-PROJECT PROGRAM. The `requires` graph lives in one package
- * (`apps/server/src/modules.ts`) but the evidence for it — the `CREATE TABLE`/`REFERENCES`/
+ * (`@waitron/composition`) but the evidence for it — the `CREATE TABLE`/`REFERENCES`/
  * `CREATE TRIGGER` statements — is spread across every domain package's `drizzle/` directory. No
  * per-package suite can see both: a package that under-declares `requires` has, by construction, the
  * SQL in one package and the descriptor in another, and each package's own `test:coverage` loads only
- * its own tree. Only a program that reads `apps/server`'s descriptors AND every `packages/<pkg>/drizzle`
- * at once can cross-check them. That is why it sits in the root Vitest project beside
+ * its own tree. Only a program that reads the composition list's descriptors AND every
+ * `packages/<pkg>/drizzle` at once can cross-check them. That is why it sits in the root Vitest project beside
  * `errors-reachable.test.ts` and `guarded-teardowns.test.ts` (see the repo-root `vitest.config.ts`),
  * not in any package.
  *

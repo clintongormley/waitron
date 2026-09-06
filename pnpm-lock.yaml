@@ -96,6 +96,9 @@ importers:
       '@waitron/catalogue':
         specifier: workspace:*
         version: link:../../packages/catalogue
+      '@waitron/composition':
+        specifier: workspace:*
+        version: link:../../packages/composition
       '@waitron/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -362,6 +365,43 @@ importers:
         specifier: ^3.0.0
         version: 3.2.7(@types/node@24.13.3)(@vitest/browser@3.2.7)(tsx@4.23.1)(yaml@2.9.0)
 
+  packages/composition:
+    dependencies:
+      '@waitron/db':
+        specifier: workspace:*
+        version: link:../db
+      '@waitron/fiscal-verifactu':
+        specifier: workspace:*
+        version: link:../fiscal-verifactu
+      '@waitron/identity':
+        specifier: workspace:*
+        version: link:../identity
+      '@waitron/module':
+        specifier: workspace:*
+        version: link:../module
+      '@waitron/payments':
+        specifier: workspace:*
+        version: link:../payments
+      '@waitron/workforce-es':
+        specifier: workspace:*
+        version: link:../workforce-es
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
+      '@vitest/coverage-v8':
+        specifier: ^3.0.0
+        version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
+      '@waitron/migrations':
+        specifier: workspace:*
+        version: link:../migrations
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.7(@types/node@24.13.3)(@vitest/browser@3.2.7)(tsx@4.23.1)(yaml@2.9.0)
+
   packages/core:
     dependencies:
       '@waitron/db':
@@ -533,6 +573,9 @@ importers:
       '@waitron/fiscal':
         specifier: workspace:*
         version: link:../fiscal
+      '@waitron/module':
+        specifier: workspace:*
+        version: link:../module
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
@@ -727,6 +770,12 @@ importers:
 
   packages/module:
     dependencies:
+      '@waitron/db':
+        specifier: workspace:*
+        version: link:../db
+      '@waitron/fiscal':
+        specifier: workspace:*
+        version: link:../fiscal
       '@waitron/migrations':
         specifier: workspace:*
         version: link:../migrations
@@ -869,15 +918,15 @@ importers:
 
   packages/provisioning:
     dependencies:
+      '@waitron/composition':
+        specifier: workspace:*
+        version: link:../composition
       '@waitron/db':
         specifier: workspace:*
         version: link:../db
       '@waitron/fiscal':
         specifier: workspace:*
         version: link:../fiscal
-      '@waitron/fiscal-verifactu':
-        specifier: workspace:*
-        version: link:../fiscal-verifactu
       '@waitron/identity':
         specifier: workspace:*
         version: link:../identity
@@ -887,6 +936,9 @@ importers:
       '@waitron/migrations':
         specifier: workspace:*
         version: link:../migrations
+      '@waitron/module':
+        specifier: workspace:*
+        version: link:../module
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
@@ -903,6 +955,9 @@ importers:
       '@waitron/core':
         specifier: workspace:*
         version: link:../core
+      '@waitron/fiscal-verifactu':
+        specifier: workspace:*
+        version: link:../fiscal-verifactu
       '@waitron/verifactu':
         specifier: workspace:*
         version: link:../verifactu

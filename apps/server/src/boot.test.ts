@@ -188,9 +188,10 @@ const RUNTIME_PASSWORD = "probe";
 // in this suite carries one; the two config-guard tests at the bottom, which omit `KEY_ENV` on purpose
 // to reach `server.config_invalid` / `credentials.key_missing`, spread it directly to stay in trading
 // mode (a bare `config.till === undefined` would branch to setup mode and never reach either).
-// A minimal tenant + location for these ids IS seeded in `beforeAll` — `startServer` now reads the
-// till's pay-timing mode from its location at boot (`readOrderFlow`, Task 8), so the location must
-// exist for a successful boot. No staff are seeded, so `GET /api/staff` still returns `[]`.
+// A minimal tenant, location and node for these ids IS seeded in `beforeAll` — `startServer` reads
+// the till's pay-timing mode from its location and its filing module from its node at boot
+// (`readOrderFlow`/`readFilingModule`), so both rows must exist for a successful boot. No staff are
+// seeded, so `GET /api/staff` still returns `[]`.
 const TILL_ENV = {
   WAITRON_TILL_TENANT_ID: "11111111-1111-4111-8111-111111111111",
   WAITRON_TILL_TILL_ID: "22222222-2222-4222-8222-222222222222",
@@ -271,9 +272,9 @@ beforeAll(async () => {
   syncPeerToken = (await enrolPeer(suite.admin, { subscriberId: "boot-mirror", name: "boot" }))
     .token;
 
-  // The till's own tenant + location, seeded once as the container superuser (RLS bypassed, exactly as
-  // `seedTenant`/`seedNode` do). `startServer` reads the location's `order_flow` at boot
-  // (`readOrderFlow`, Task 8) to complete the `TillConfig` it hands the routes, so the location must
+  // The till's own tenant, location and node, seeded once as the container superuser (RLS bypassed,
+  // exactly as `seedTenant`/`seedNode` do). `startServer` reads the location's `order_flow` at boot
+  // (`readOrderFlow`) to complete the `TillConfig` it hands the routes, so the location must
   // exist or every successful-boot test would fail at that read. `order_flow` defaults to `prepay`. A
   // distinctive NIF (90M base) stays clear of every other seed generator sharing this database.
   await suite.admin.execute(sql`
@@ -283,6 +284,14 @@ beforeAll(async () => {
     insert into locations (id, tenant_id, name, invoice_locales, operation_description)
     values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID}, 'Barra',
             array['es-ES'], 'Venta en establecimiento')`);
+  // The till's own NODE, stamped with the regime provisioning would have recorded: `startServer`
+  // reads `nodes.filing_module` at boot (`readFilingModule`) and cross-checks it against the enabled
+  // fiscal module, so the row must exist and must agree with `verifactu` or every successful-boot
+  // test would fail there. The unstamped (null) node is covered in `till-config.filing.test.ts`.
+  await suite.admin.execute(sql`
+    insert into nodes (id, tenant_id, location_id, name, filing_module)
+    values (${TILL_ENV.WAITRON_TILL_NODE_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID},
+            ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Boot Till', 'verifactu')`);
 
   // `boot.ts`'s own default migrations root is `<dirname of boot.ts>/drizzle` — under source (this
   // test, not the bundle) that resolves to `apps/server/src/drizzle`, which does not exist; only
@@ -1010,6 +1019,40 @@ describe("startServer, against a real container as the deployment role", () => {
         code: "module.dependency_missing",
         params: { module: "workforce", requires: "identity" },
       });
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("refuses a trading boot whose enabled set fills no fiscal slot (fiscal off) — module.fiscal_slot_empty", async () => {
+    // SP-3c: the till's fiscal backend comes from whichever ENABLED module fills the `fiscal` seat
+    // (boot.ts's `makeFiscalBackend(setsToMigrate, …)` → `fiscalSlot`). Disabling `fiscal` in
+    // modules.json leaves the enabled set with no contributor, and a trading boot must REFUSE rather
+    // than mount the till routes with no way to chain a sale (§5 — a sale needs its record).
+    // `fiscal` is `provision-only`, and nothing `requires` it, so the enabled set stays
+    // dependency-complete: the refusal that fires is the slot's, not SP-1c's.
+    //
+    // The shared suite DB (already migrated + seeded) is enough, exactly as the drift-log case above:
+    // the filtered migration is a no-op for the enabled sets and never drops fiscal's tables, so the
+    // boot gets as far as building the backend. `...KEY_ENV` keeps this in TRADING mode; setup mode
+    // never builds a backend at all.
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-fiscaloff-state-"));
+    try {
+      await writeFile(
+        join(stateDir, "modules.json"),
+        JSON.stringify({ modules: { fiscal: false } }),
+      );
+      await expect(
+        startServer({
+          ...KEY_ENV,
+          DATABASE_URL: databaseUrl,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_ENV: "preproduction",
+        }),
+      ).rejects.toMatchObject({ code: "module.fiscal_slot_empty" });
     } finally {
       await rm(stateDir, { recursive: true, force: true });
     }

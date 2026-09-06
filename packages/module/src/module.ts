@@ -2,6 +2,8 @@ import semver from "semver";
 import { AppError } from "@waitron/shared";
 import type { MigrationSet } from "@waitron/migrations";
 import type { EnrolledTable } from "@waitron/sync-enrolment";
+import type { FiscalContribution } from "@waitron/fiscal";
+import type { ModuleProvisioning } from "./provisioning.js";
 import "./errors.js";
 
 /** A reference to non-DB state a module owns, resolved to a path by the composition root. */
@@ -18,10 +20,9 @@ export interface ModuleBackupContribution {
  * (migrations here; routes/workers/cards/… in later slices) by mapping over it. There is no global
  * registry and no `register()` side effect.
  *
- * Where the descriptors LIVE in SP-1a: centralized in the composition root (`apps/server/src/modules.ts`),
- * not exported by each domain package — the SP-1a descriptors carry only generic fields (no domain
- * knowledge), so centralizing them is harmless. A module exporting its OWN descriptor begins in SP-2, when
- * a descriptor first carries domain content (its sync enrolment) and swappability requires it (spec §2/§8).
+ * The descriptors are assembled in one list, `@waitron/composition`'s `ALL_MODULES`; each owning
+ * package exports the VALUES its seats carry (enrolment, vocabulary, provisioning, fiscal) and never
+ * the descriptor itself.
  */
 export interface WaitronModule {
   /** Stable id; equals the migration-set name (`migrations.name`). NOT the drizzle table suffix —
@@ -58,7 +59,11 @@ export interface WaitronModule {
   readonly permissions?: readonly string[];
   readonly duties?: unknown; // cronjobs
   readonly theme?: unknown;
-  readonly provisioningSeeds?: unknown; // SP-1b
+  /** What this module seeds per node at provisioning, and how it takes part in standing up a
+   * standby. Run by `@waitron/provisioning` and the composition root inside their transactions. */
+  readonly provisioning?: ModuleProvisioning;
+  /** The module's contribution to the fiscal slot — `fiscalSlot` selects exactly one. */
+  readonly fiscal?: FiscalContribution;
   readonly routes?: unknown; // incremental
   readonly backup?: ModuleBackupContribution; // BR-2: non-DB state a backup must capture
 }

@@ -185,6 +185,8 @@ type OriginalAltaForCorrection = Pick<
  * about them.
  */
 export class VerifactuBackend implements FiscalBackend {
+  readonly id = BACKEND_ID;
+
   private readonly db: Database;
   private readonly clock: TrustedClock;
   private readonly resolveClient: (tenantId: TenantId) => Promise<VerifactuClient>;
@@ -237,7 +239,7 @@ export class VerifactuBackend implements FiscalBackend {
   ): Promise<NodeRegistration> {
     const sif = await currentSif(tx, params.tenantId, nodeId);
     return {
-      backend: BACKEND_ID,
+      backend: this.id,
       nodeId,
       registrationId: `${sif.nif}/${sif.idSistemaInformatico}/${String(sif.numeroInstalacion)}`,
       registeredAt: sif.registradoEn,
@@ -311,7 +313,7 @@ export class VerifactuBackend implements FiscalBackend {
     await tx.insert(envios).values({ registroId: appended.id, tenantId: sale.tenantId });
 
     return {
-      backend: BACKEND_ID,
+      backend: this.id,
       recordId: appended.id,
       state: "pending",
       issuedAt: sale.issuedAt,
@@ -485,7 +487,7 @@ export class VerifactuBackend implements FiscalBackend {
     await tx.insert(envios).values({ registroId: appended.id, tenantId });
 
     return {
-      backend: BACKEND_ID,
+      backend: this.id,
       recordId: appended.id,
       state: "pending",
       issuedAt: now.instant,
@@ -608,7 +610,7 @@ export class VerifactuBackend implements FiscalBackend {
     await tx.insert(envios).values({ registroId: appended.id, tenantId: sale.tenantId });
 
     return {
-      backend: BACKEND_ID,
+      backend: this.id,
       recordId: appended.id,
       state: "pending",
       issuedAt: sale.issuedAt,
@@ -770,7 +772,7 @@ export class VerifactuBackend implements FiscalBackend {
     await tx.insert(envios).values({ registroId: appended.id, tenantId: sale.tenantId });
 
     return {
-      backend: BACKEND_ID,
+      backend: this.id,
       recordId: appended.id,
       state: "pending",
       issuedAt: sale.issuedAt,

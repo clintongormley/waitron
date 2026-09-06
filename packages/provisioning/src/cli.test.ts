@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import type { WaitronModule } from "@waitron/module";
+import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { AppError } from "@waitron/shared";
 import type { Database, DeploymentEnvironment } from "@waitron/db";
 import { manifestSets } from "@waitron/migrations";
@@ -13,17 +15,27 @@ import { obligadoTenantId } from "./tenant-id.js";
 const DATABASE = "waitron_demo";
 const ADMIN_URI = "postgres://admin:adminsecret@db.example:5432/postgres";
 
-/** What the injected `applyVenue` hands back — the ids `venue` prints in its result summary. The
- * `sif` is trimmed to the two fields the summary reads (`id`, `numeroInstalacion`); the rest of
- * `SifRegistration` is irrelevant to what this CLI does with the result. */
+/** What the injected `applyVenue` hands back — the ids and seed reports `venue` prints in its result
+ * summary. */
 const VENUE_RESULT = {
   tenantId: "11111111-1111-1111-1111-111111111111",
   locationId: "22222222-2222-2222-2222-222222222222",
   tillId: "33333333-3333-3333-3333-333333333333",
   nodeId: "44444444-4444-4444-4444-444444444444",
-  sif: { id: "55555555-5555-5555-5555-555555555555", numeroInstalacion: 1 },
   seriesIds: ["66666666-6666-6666-6666-666666666666", "77777777-7777-7777-7777-777777777777"],
+  seeded: [
+    { module: "fiscal", report: "SIF 55555555-5555-5555-5555-555555555555 (installation 1)" },
+  ],
 } as unknown as VenueResult;
+
+/** The composition list the CLI injects into `planVenue`/`applyVenue`. Fake, because what `venue`
+ * decides is which list it threads, not what any real module seeds. */
+const MODULES: readonly WaitronModule[] = [
+  fakeModule("core"),
+  fakeModule("probe", {
+    provisioning: { seed: { summary: "seed the probe", run: async () => "done" } },
+  }),
+];
 
 /** Every venue option supplied, so a run reaches the apply with no prompt. `--territory ES-common`
  * is the one implemented set (fiscal-modules.ts); tests that need a refusal swap it out. */
@@ -191,6 +203,7 @@ function harness(
       readState: readState as unknown as CliDeps["readState"],
       apply: apply as unknown as CliDeps["apply"],
       applyVenue: applyVenue as unknown as CliDeps["applyVenue"],
+      modules: MODULES,
       readEnvironment: readEnvironment as unknown as CliDeps["readEnvironment"],
     },
   };
@@ -1035,9 +1048,9 @@ describe("runCli venue", () => {
       "create-location",
       "create-till",
       "create-node",
-      "register-sif",
       "create-series",
       "create-series",
+      "seed-module",
     ]);
 
     // The seed-admin action carries the admin's name and a HASH of the PIN — never the plaintext.
@@ -1063,6 +1076,9 @@ describe("runCli venue", () => {
       "postgres://admin:adminsecret@db.example:5432/waitron_demo",
     );
     expect(applyDeps.db).toBe(await h.connect.mock.results[0].value);
+    // The same composition list the plan was built from reaches the apply, so a seed-module action
+    // always names a module the runner holds.
+    expect(applyDeps.modules).toBe(MODULES);
 
     const printed = h.lines.join("\n");
     expect(printed).toContain("Plan for a venue in waitron_demo (preproduction):");
@@ -1073,9 +1089,11 @@ describe("runCli venue", () => {
     // appears, neither in plaintext nor as a hash.
     expect(printed).toContain("seed admin Owner");
     expect(printed).toContain("create location Centro in ES-common");
-    // The result summary names the node and the SIF the apply returned.
+    // The result summary names the node and one line per module seed the apply ran.
     expect(printed).toContain(`node:     ${VENUE_RESULT.nodeId}`);
-    expect(printed).toContain(`SIF:      ${VENUE_RESULT.sif.id} (installation 1)`);
+    expect(printed).toContain(
+      "seeded:   fiscal — SIF 55555555-5555-5555-5555-555555555555 (installation 1)",
+    );
 
     // No secret anywhere: the admin connection string is never echoed, the admin PIN never appears,
     // the admin dashboard password never appears, and venue mints no connection strings.

@@ -28,6 +28,7 @@ import {
 } from "@waitron/membership";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { establishNodeIdentity } from "./node-identity.js";
+import { ALL_MODULES } from "./modules.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 import { singletonPass } from "./singleton-pass.js";
 import { DRAIN_DUTY } from "./pass.js";
@@ -372,10 +373,9 @@ async function mirror(): Promise<{
       nodeName: "cloud",
       filingModule: "verifactu",
       taxModule: "iva",
+      modules: ALL_MODULES,
       reserved: {
-        nif,
-        idSistemaInformatico: "W1",
-        numeroInstalacion: 7,
+        modules: { fiscal: { nif, idSistemaInformatico: "W1", numeroInstalacion: 7 } },
         series: [{ code: "FA-7", purpose: "standard" }],
         endorsement,
       },

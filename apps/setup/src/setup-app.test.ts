@@ -521,13 +521,13 @@ describe("setup-app", () => {
   it("routes an unlisted provisioning.* code back to venue with a generic message naming the code", async () => {
     const provision = vi
       .fn()
-      .mockRejectedValue({ code: "provisioning.id_sistema_invalid", params: {} });
+      .mockRejectedValue({ code: "provisioning.invalid_country", params: {} });
     const el = await mountSetupApp(stubApi({ provision }));
     provisionRequest(el);
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-venue]")).not.toBeNull();
     expect(await screenText(el, "venue", "[data-test=server-error]")).toContain(
-      "provisioning.id_sistema_invalid",
+      "provisioning.invalid_country",
     );
   });
 

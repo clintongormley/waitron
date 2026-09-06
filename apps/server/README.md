@@ -131,8 +131,9 @@ empty-database recipe deliberately omits (see the note under the SQL — that me
 needed when the same role is also `DATABASE_URL`), and it creates `waitron_app` and
 `waitron_provisioner`, which this recipe is not about at all.
 The SQL below stays as the documented manual fallback for the roles `instance` creates. Creating the
-business rows on top of them — a tenant, a location, a till, a node registered as a SIF, and its
-invoice series — is `waitron-provision venue` (see ["Provisioning a venue"](#provisioning-a-venue)
+business rows on top of them — a tenant, a location, a till, a node, its invoice series, and each
+enabled module's seed for that node (the fiscal seed registers it as a SIF) — is
+`waitron-provision venue` (see ["Provisioning a venue"](#provisioning-a-venue)
 below). That command replaced `apps/server/sql/bootstrap-tenant.sql`, which was **retired on
 2026-08-04** rather than kept as a fallback: it inserted `invoice_series.till_id` (dropped by
 migration `0018`, now `node_id NOT NULL`) so it could no longer run, and it created no node so it
@@ -264,8 +265,8 @@ did not exist. Only a database stamped for the OTHER environment refuses.
 ## Provisioning a venue
 
 `waitron-provision venue` creates the business rows a sellable venue needs — a tenant, a location, a
-till, a node registered as a Veri\*Factu SIF, and a standard plus a rectificative invoice series — in
-one transaction. It replaced the retired `apps/server/sql/bootstrap-tenant.sql` (see "What actually
+till, a node, and a standard plus a rectificative invoice series — and runs every enabled module's
+seed for that node, the fiscal one registering it as a Veri\*Factu SIF, in one transaction. It replaced the retired `apps/server/sql/bootstrap-tenant.sql` (see "What actually
 writes the stamp" above for why that file was removed).
 
 It runs **against a database `instance` has already migrated and stamped**. A venue cannot be filed

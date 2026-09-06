@@ -7,6 +7,7 @@ import { hashPassword, hashPin, startManagementSession } from "@waitron/identity
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { addDecimal, decimal } from "@waitron/shared";
 import type { Logger } from "./logger.js";
+import { ALL_MODULES } from "./modules.js";
 import { mountReportApi } from "./report-api.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
 import { BOX_27, packAeatNumeric } from "./testing/dr303.js";
@@ -126,33 +127,36 @@ interface Venue {
 async function setupVenue(): Promise<Venue> {
   const taxId = nextNif();
   const venue = await applyVenue(
-    planVenue({
-      country: "ES",
-      taxId,
-      legalName: "Deli Test SL",
-      location: {
-        name: "Sala principal",
-        fiscalTerritory: "ES-common",
-        invoiceLocales: [LOCALE],
-        operationDescription: "Venta en establecimiento",
-        addressLine1: "Calle Mayor 1",
-        addressLine2: null,
-        postalCode: "28013",
-        city: "Madrid",
-        province: "Madrid",
-        timeZone: "Europe/Madrid",
-        dayCutover: "05:00",
+    planVenue(
+      {
+        country: "ES",
+        taxId,
+        legalName: "Deli Test SL",
+        location: {
+          name: "Sala principal",
+          fiscalTerritory: "ES-common",
+          invoiceLocales: [LOCALE],
+          operationDescription: "Venta en establecimiento",
+          addressLine1: "Calle Mayor 1",
+          addressLine2: null,
+          postalCode: "28013",
+          city: "Madrid",
+          province: "Madrid",
+          timeZone: "Europe/Madrid",
+          dayCutover: "05:00",
+        },
+        tillName: "Caja 1",
+        seriesCode: "A",
+        rectificativeSeriesCode: "R",
+        admin: {
+          displayName: "Administradora",
+          pinHash: hashPin("1234"),
+          passwordHash: hashPassword("dashPass123"),
+        },
       },
-      tillName: "Caja 1",
-      seriesCode: "A",
-      rectificativeSeriesCode: "R",
-      admin: {
-        displayName: "Administradora",
-        pinHash: hashPin("1234"),
-        passwordHash: hashPassword("dashPass123"),
-      },
-    }),
-    { db: suite.admin },
+      ALL_MODULES,
+    ),
+    { db: suite.admin, modules: ALL_MODULES },
   );
 
   const { managerSid, staffSid } = await withTenant(suite.admin, venue.tenantId, async (tx) => {

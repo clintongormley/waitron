@@ -24,6 +24,7 @@ import {
 } from "@waitron/membership";
 import { applyVenue, planVenue, type AdoptResult } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
+import { ALL_MODULES } from "./modules.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
@@ -73,33 +74,36 @@ async function setupVenue(): Promise<{
   primaryPublicKey: string;
 }> {
   const venue = await applyVenue(
-    planVenue({
-      country: "ES",
-      taxId: nextNif(),
-      legalName: "Mirror Bundle API SL",
-      location: {
-        name: "Sala principal",
-        fiscalTerritory: "ES-common",
-        invoiceLocales: [LOCALE],
-        operationDescription: "Venta en establecimiento",
-        addressLine1: "Calle Mayor 1",
-        addressLine2: null,
-        postalCode: "28013",
-        city: "Madrid",
-        province: "Madrid",
-        timeZone: "Europe/Madrid",
-        dayCutover: "05:00",
+    planVenue(
+      {
+        country: "ES",
+        taxId: nextNif(),
+        legalName: "Mirror Bundle API SL",
+        location: {
+          name: "Sala principal",
+          fiscalTerritory: "ES-common",
+          invoiceLocales: [LOCALE],
+          operationDescription: "Venta en establecimiento",
+          addressLine1: "Calle Mayor 1",
+          addressLine2: null,
+          postalCode: "28013",
+          city: "Madrid",
+          province: "Madrid",
+          timeZone: "Europe/Madrid",
+          dayCutover: "05:00",
+        },
+        tillName: "Caja 1",
+        seriesCode: "FA",
+        rectificativeSeriesCode: "RF",
+        admin: {
+          displayName: "Administradora",
+          pinHash: hashPin("1234"),
+          passwordHash: hashPassword(ADMIN_PASSWORD),
+        },
       },
-      tillName: "Caja 1",
-      seriesCode: "FA",
-      rectificativeSeriesCode: "RF",
-      admin: {
-        displayName: "Administradora",
-        pinHash: hashPin("1234"),
-        passwordHash: hashPassword(ADMIN_PASSWORD),
-      },
-    }),
-    { db: suite.admin },
+      ALL_MODULES,
+    ),
+    { db: suite.admin, modules: ALL_MODULES },
   );
   const designated: AdoptResult = {
     tenantId: venue.tenantId,
@@ -442,27 +446,28 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
     expect(res.status).toBe(200);
     const bundle = (await res.json()) as {
       reservedIdentity: {
-        nif: string;
-        idSistemaInformatico: string;
-        numeroInstalacion: number;
+        modules: {
+          fiscal: { nif: string; idSistemaInformatico: string; numeroInstalacion: number };
+        };
         series: { code: string; purpose: string }[];
         endorsement: { nodeId: string; publicKey: string; endorsedBy: string; signature: string };
       };
     };
     const r = bundle.reservedIdentity;
+    const fiscal = r.modules.fiscal;
     // A fresh installation number the primary reserved (past its own — applyVenue's registerSif took 1).
-    expect(r.numeroInstalacion).toBeGreaterThan(0);
-    expect(typeof r.nif).toBe("string");
+    expect(fiscal.numeroInstalacion).toBeGreaterThan(0);
+    expect(typeof fiscal.nif).toBe("string");
     // The primary's own IdSistemaInformatico — applyVenue registers the SIF under WAITRON_ID_SISTEMA ("W1").
-    expect(r.idSistemaInformatico).toBe("W1");
+    expect(fiscal.idSistemaInformatico).toBe("W1");
     // Disjoint series: one per primary series (FA + RF), each suffixed with the reserved number.
     expect(r.series.map((s) => s.code).sort()).toEqual(
-      [`FA-${r.numeroInstalacion}`, `RF-${r.numeroInstalacion}`].sort(),
+      [`FA-${fiscal.numeroInstalacion}`, `RF-${fiscal.numeroInstalacion}`].sort(),
     );
     // Purpose is preserved alongside the derived code.
     const byCode = new Map(r.series.map((s) => [s.code, s.purpose]));
-    expect(byCode.get(`FA-${r.numeroInstalacion}`)).toBe("standard");
-    expect(byCode.get(`RF-${r.numeroInstalacion}`)).toBe("rectificative");
+    expect(byCode.get(`FA-${fiscal.numeroInstalacion}`)).toBe("standard");
+    expect(byCode.get(`RF-${fiscal.numeroInstalacion}`)).toBe("rectificative");
     // The endorsement vouches for THIS standby, by the primary node.
     expect(r.endorsement.nodeId).toBe(standby.nodeId);
     expect(r.endorsement.publicKey).toBe(standby.publicKey);
