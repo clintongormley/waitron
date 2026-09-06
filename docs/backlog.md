@@ -155,10 +155,16 @@ Rule text: `~/.claude/CLAUDE.md`, CLAUDE.md §6. **LANDED #251 and #252 (2026-09
 code-gated job reads (`.codex/`, `.vscode/`, root `.gitignore`, `.editorconfig`) is inert, not a
 global run; its Codex seat falsified three of the change's own claims ("no gate reads" — Prettier
 reads two of them; the nested-`.gitignore` rationale; a twin in ci.yml), all fixed before land.
-Left in flight: `fix/root-scope-parallel-hook`, stacked on #252
-(`scripts/`, `.husky/`, `.github/` become ROOT scope — root project only, never the whole workspace —
-and the hook runs typecheck, coverage and the root suite concurrently, measured; implementer running
-at land time). The seat-speed trial (bounded run-it brief, medium effort, rebase before the review
+**#254 LANDED too (2026-09-06):** `scripts/`, `.husky/` and `.github/` are ROOT scope (a
+root-only push runs the repo-level suite, lint and format — measured 417s → 23s on the branch's own
+push; CI's `changes` job skips the shards the same way), and the hook runs typecheck and the
+coverage run concurrently (measured on a five-package scope: 10s + 113s → 113s wall, i.e. the
+overlap buys the typecheck's duration; a global push's shape was not measured). Left behind: the
+classifier's fourth output line `root=` is emitted and read by no consumer (the hook routes on
+`scope=root`); the hook's concurrency records the typecheck's status under Husky's `sh -e`, which
+the Sol run-it seat caught before land — first "after" seat of the speed trial: 409s, 11 commands,
+82% model time, so the bounded brief cut the reading, not the per-turn thinking (next lever: effort
+`low`, measured the same way; `~/workspace/tools/process-log.md`). The seat-speed trial (bounded run-it brief, medium effort, rebase before the review
 wave) and the per-PR process log live in `~/workspace/tools/process-log.md`. **Owner decisions recorded (they supersede older spec text where they
 conflict):**
 
