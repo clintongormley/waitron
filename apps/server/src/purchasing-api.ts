@@ -192,6 +192,10 @@ function screenLines(v: unknown): PurchaseInvoiceLineInput[] {
  * this database. The `purchase.manage` gate runs on every route through one constant.
  */
 export function mountPurchasingApi(app: Hono, deps: PurchasingApiDeps, log: Logger): void {
+  // Brand the tenant id ONCE per mount rather than per write route — a stable value for the life
+  // of the mount (cfg.tenantId is fixed), the low-risk form of the dedup (deps keeps cfg: { tenantId:
+  // string }, the sibling convention).
+  const tenantId = brandTenantId(deps.cfg.tenantId);
   // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries
   // PURCHASE_WRITE_PERMISSION, then run `fn`. Every route funnels its DB work through here so the gate
   // is applied identically and in exactly one place — the catalogue §3 seam.
@@ -245,7 +249,7 @@ export function mountPurchasingApi(app: Hono, deps: PurchasingApiDeps, log: Logg
       const header = screenHeaderCreate(body.header);
       const lines = screenLines(body.lines);
       const created = await gated(sessionId, (tx) =>
-        createPurchaseInvoice(tx, brandTenantId(deps.cfg.tenantId), { header, lines }),
+        createPurchaseInvoice(tx, tenantId, { header, lines }),
       );
       return c.json(created, 201);
     }),
@@ -263,9 +267,7 @@ export function mountPurchasingApi(app: Hono, deps: PurchasingApiDeps, log: Logg
       const patch: UpdatePurchaseInvoiceInput = {};
       if (body.header !== undefined) patch.header = screenHeaderPatch(body.header);
       if (body.lines !== undefined) patch.lines = screenLines(body.lines);
-      await gated(sessionId, (tx) =>
-        updatePurchaseInvoice(tx, brandTenantId(deps.cfg.tenantId), id, patch),
-      );
+      await gated(sessionId, (tx) => updatePurchaseInvoice(tx, tenantId, id, patch));
       return c.body(null, 204);
     }),
   );

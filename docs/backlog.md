@@ -816,7 +816,7 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
     [sp-3a](superpowers/specs/2026-09-05-module-sp3a-fiscal-record-lane-design.md); plan:
     [sp-3a plan](superpowers/plans/2026-09-05-module-sp3a-fiscal-record-lane.md).
     - *Deferred (surfaced by the whole-branch review, NOT done — do-anytime):* (a) the ~300-line two-clone
-      apply-harness duplication across the four `apps/server/src/fiscal-*.rls.test.ts` suites → extract a
+      apply-harness duplication across the four `apps/server/src/fiscal-*.test.ts` suites → extract a
       shared `useFiscalMirrorPair()` helper (kept per-suite for now to avoid a vacuous-pass risk in the
       fiscal gates); (b) generalise the graph-honesty SPI detector from the `sync_capture`-specific match to
       **all** trigger `EXECUTE FUNCTION` cross-module edges — would also catch the currently-undetected
@@ -825,7 +825,7 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
     - *Flake stabilised, not just re-run (owner directive):* the CI `test-server` shard's documented
       `boot.test.ts` 503-not-200 flake (a wall-clock `/health` readiness race) was root-caused and fixed
       with condition-based-waiting (`fetchHealthOk` poll-until-200); ci.yml now uploads shard blobs on
-      failure so a future flake names its exact test. Sibling `mirror-e2e.rls.test.ts:~381` remains a
+      failure so a future flake names its exact test. Sibling `mirror-e2e.test.ts:~381` remains a
       candidate if it recurs. See memory `test-server-e2e-timing-flakes`.
   - **SP-3b — module-owned vocabulary — LANDED #240 (2026-09-05).** Fiscal's and workforce-es's Spanish
     terms live in `FISCAL_VOCABULARY` / `WORKFORCE_ES_VOCABULARY`, declared on each descriptor's

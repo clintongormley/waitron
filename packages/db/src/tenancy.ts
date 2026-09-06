@@ -7,9 +7,12 @@ export interface TenantTxOptions {
 }
 
 /**
- * Runs the caller's work in one transaction. The tenant parameter keeps write paths explicit.
- * The optional node setting is transaction-local and bound through set_config, because SET
- * utility statements do not accept bound parameters.
+ * Runs the caller's work in one transaction. One tenant per database is the isolation boundary
+ * (row-level security is gone), so the tenant needs no per-transaction binding: `tenantId` sets no
+ * GUC and is not read here. It is retained deliberately as a stable, explicit write-path parameter —
+ * the call surface every write path already threads. The optional `nodeId` sets the
+ * transaction-local `app.node_id` the sync capture triggers read, bound through set_config because
+ * SET utility statements do not accept bound parameters.
  */
 export async function withTenant<T>(
   db: Database,

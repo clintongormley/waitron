@@ -40,7 +40,7 @@ OUT=$(cd "$3" && pwd)
 # A run that aborts part-way — a migration that will not apply is the common one — must not leave a
 # postgres process and its volume behind: interrupted container suites are how this repo starves
 # PGlite hooks (CLAUDE.md §4). The label is `pnpm reap`'s, as the backstop.
-cleanup() { docker rm -f waitron-schemaeq-old waitron-schemaeq-new >/dev/null 2>&1 || true; }
+cleanup() { docker rm -fv waitron-schemaeq-old waitron-schemaeq-new >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
 order() { # migration files of a checkout, in manifest + journal order
@@ -67,7 +67,7 @@ run() { # run <old|new> <root>: fresh container, migrate as waitron_migrator, du
   name=$1
   root=$2
   container="waitron-schemaeq-$name"
-  docker rm -f "$container" >/dev/null 2>&1 || true
+  docker rm -fv "$container" >/dev/null 2>&1 || true
   docker run -d --name "$container" --label com.waitron.reapable=true -e POSTGRES_PASSWORD=pg \
     -v "$root":/repo:ro postgres:18-alpine >/dev/null
   # -h 127.0.0.1, not the default unix socket: initdb's bootstrap server listens on the socket
@@ -105,7 +105,7 @@ run() { # run <old|new> <root>: fresh container, migrate as waitron_migrator, du
   docker exec "$container" psql -U postgres -d waitron -Atc \
     "select rolname from pg_roles where rolname not like 'pg_%' and rolname not in ('postgres','waitron_migrator') order by 1" \
     </dev/null >"$OUT/$name.roles"
-  docker rm -f "$container" >/dev/null
+  docker rm -fv "$container" >/dev/null
 }
 
 run old "$OLD_ROOT"

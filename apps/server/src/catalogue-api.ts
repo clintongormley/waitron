@@ -277,6 +277,10 @@ const UPLOAD_BODY_HEADROOM = 16 * 1024;
  * one constant.
  */
 export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger): void {
+  // Brand the tenant id ONCE per mount rather than per write route — a stable value for the life
+  // of the mount (cfg.tenantId is fixed), the low-risk form of the dedup (deps keeps cfg: { tenantId:
+  // string }, the sibling convention).
+  const tenantId = brandTenantId(deps.cfg.tenantId);
   // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries
   // CATALOGUE_WRITE_PERMISSION, then run `fn`. Every route funnels its DB work through here so the gate
   // is applied identically and in exactly one place — the design §3 seam.
@@ -314,9 +318,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         throw new AppError("management.request_invalid", { field: "name" });
       }
       const { name } = body;
-      const created = await gated(sessionId, (tx) =>
-        createCatalogue(tx, brandTenantId(deps.cfg.tenantId), { name }),
-      );
+      const created = await gated(sessionId, (tx) => createCatalogue(tx, tenantId, { name }));
       return c.json(created, 201);
     }),
   );
@@ -352,7 +354,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const catalogueId = await requireCatalogueIdBody(c);
       await gated(sessionId, async (tx) => {
         await assertCatalogueVisible(tx, catalogueId);
-        await addCatalogueToLocation(tx, brandTenantId(deps.cfg.tenantId), locationId, catalogueId);
+        await addCatalogueToLocation(tx, tenantId, locationId, catalogueId);
       });
       return c.body(null, 204);
     }),
@@ -375,12 +377,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const catalogueId = await requireCatalogueIdBody(c);
       await gated(sessionId, async (tx) => {
         await assertCatalogueVisible(tx, catalogueId);
-        await setLocationDefaultCatalogue(
-          tx,
-          brandTenantId(deps.cfg.tenantId),
-          locationId,
-          catalogueId,
-        );
+        await setLocationDefaultCatalogue(tx, tenantId, locationId, catalogueId);
       });
       return c.body(null, 204);
     }),
@@ -403,9 +400,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         throw new AppError("management.request_invalid", { field: "name" });
       }
       const { name } = body;
-      const created = await gated(sessionId, (tx) =>
-        createCategory(tx, brandTenantId(deps.cfg.tenantId), { name }),
-      );
+      const created = await gated(sessionId, (tx) => createCategory(tx, tenantId, { name }));
       return c.json(created, 201);
     }),
   );
@@ -490,14 +485,9 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         ...(body.active === undefined ? {} : { active: body.active }),
       };
       const created = await gated(sessionId, async (tx) => {
-        const product = await createProduct(tx, brandTenantId(deps.cfg.tenantId), input);
+        const product = await createProduct(tx, tenantId, input);
         if (optionGroupIds !== undefined) {
-          await setProductOptionGroups(
-            tx,
-            brandTenantId(deps.cfg.tenantId),
-            product.id,
-            optionGroupIds,
-          );
+          await setProductOptionGroups(tx, tenantId, product.id, optionGroupIds);
         }
         return product;
       });
@@ -587,12 +577,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       await gated(sessionId, async (tx) => {
         await updateProduct(tx, productId, patch);
         if (optionGroupIds !== undefined) {
-          await setProductOptionGroups(
-            tx,
-            brandTenantId(deps.cfg.tenantId),
-            productId,
-            optionGroupIds,
-          );
+          await setProductOptionGroups(tx, tenantId, productId, optionGroupIds);
         }
       });
       return c.body(null, 204);
@@ -657,9 +642,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         ...(sort === undefined ? {} : { sort }),
         ...(body.active === undefined ? {} : { active: body.active }),
       };
-      const created = await gated(sessionId, (tx) =>
-        createOptionGroup(tx, brandTenantId(deps.cfg.tenantId), input),
-      );
+      const created = await gated(sessionId, (tx) => createOptionGroup(tx, tenantId, input));
       return c.json(created, 201);
     }),
   );
@@ -777,7 +760,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       // tenant-consistent (tenant_id, group_id) FK raise 23503 → the opaque 500 the STATUS map documents
       // for a foreign id, the same posture the product routes take on a foreign catalogueId.
       const created = await gated(sessionId, (tx) =>
-        createOptionGroupItem(tx, brandTenantId(deps.cfg.tenantId), groupId, input),
+        createOptionGroupItem(tx, tenantId, groupId, input),
       );
       return c.json(created, 201);
     }),
