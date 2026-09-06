@@ -18,7 +18,6 @@ import { getTenantTheme, putTenantTheme } from "./theme-store.js";
 // (docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md §4), not this
 // suite's. Seeds run as the owner (pure setup); the `core_identity` template pairs core + identity
 // migrations so authorizeManager's tables and `tenant_themes` both exist.
-// This suite is also the ONLY place in the repo that writes and reads back `tenant_themes.theme`.
 
 const suite = useTemplateDb({ template: "core_identity" });
 

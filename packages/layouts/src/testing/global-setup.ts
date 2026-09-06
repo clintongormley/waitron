@@ -21,13 +21,13 @@ import { IDENTITY_MIGRATIONS } from "@waitron/identity";
  * collision: each handle is provided/injected within its own package's run, so the key is scoped to
  * this package.
  *
- * NO `roles` here, unlike the RLS-probe packages (credentials, workforce-es, db). Those create a
- * non-superuser LOGIN role per suite and connect AS it (`pg.connectAs`); layouts' one real-PG suite
- * instead reaches the non-superuser path with `asAppUser(tx)`, which `SET ROLE`s the admin connection
+ * NO `roles` here, unlike the probe-role packages (credentials, payments-stripe, identity). Those
+ * create a non-superuser LOGIN role and connect AS it (`pg.connectAs`); layouts' FOUR real-PG suites
+ * instead reach the non-superuser path with `asAppUser(tx)`, which `SET ROLE`s the admin connection
  * to the `app_user` GROUP role that CORE's `0001_tenancy_rls.sql` already creates inside the template.
- * A superuser that has `SET ROLE`d to non-superuser `app_user` is itself subject to FORCE ROW LEVEL
- * SECURITY — the very thing the cross-tenant isolation assertion verifies — so no additional cluster
- * LOGIN role has to be created.
+ * That is enough for what those suites depend on — the grants `app_user` holds on `canvases`,
+ * `device_profiles`, `tenant_themes` and `tenant_receipts`, and on the `persons`/`management_sessions`
+ * reads `authorizeManager` performs — so no additional cluster LOGIN role has to be created.
  *
  * A globalSetup's return value is its globalTeardown, so returning `teardown` stops the container
  * once the run finishes.

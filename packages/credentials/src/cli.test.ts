@@ -316,6 +316,28 @@ describe("waitron-credentials list", () => {
     expect(printed).not.toContain("sk_test_cli");
   });
 
+  it("lists a tenant holding two purposes exactly once each — the no---tenant de-duplication", async () => {
+    // `list` without --tenant enumerates through `credentialTenants` ONCE PER PURPOSE and flattens
+    // the results, so a tenant holding BOTH purposes is in that list twice before `cli.ts`'s
+    // `new Set(...)` collapses it. What makes the duplicate visible is an otherwise EMPTY table:
+    // `listCredentials` carries no tenant predicate (store.ts), so each visit prints every row it can
+    // see. With the Set the tenant is visited once and prints its 2 rows; without it, twice and 4.
+    // Truncating first is the fixture shape rotate.test.ts uses for the same reason — every test in
+    // this file seeds its own tenant and credential, so nothing later depends on the rows dropped
+    // here. Proven by deletion: removing the `new Set(...)` from cli.ts's no---tenant branch makes
+    // this read 4.
+    await suite.db.execute(sql`truncate tenant_credentials cascade`);
+    const tenantId = await seedTenant(suite.db);
+    const stripe = harness(STRIPE_JSON);
+    await runCli(["set", "--tenant", tenantId, "--purpose", "payments.stripe"], stripe.deps);
+    const aeat = harness(JSON.stringify({ pfxBase64: "AAAA", passphrase: "p", certKind: "sello" }));
+    await runCli(["set", "--tenant", tenantId, "--purpose", "fiscal.aeat"], aeat.deps);
+
+    const h = harness();
+    expect(await runCli(["list"], h.deps)).toBe(0);
+    expect(h.out.filter((line) => line.startsWith(`${tenantId}\t`))).toHaveLength(2);
+  });
+
   it("rejects a malformed --tenant instead of throwing out of runCli", async () => {
     const h = harness();
     const code = await runCli(["list", "--tenant", "not-a-uuid"], h.deps);

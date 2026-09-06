@@ -197,7 +197,7 @@ describe("layout canvas store on real Postgres, as the app role", () => {
     expect(await rowCount(tenantId)).toBe(1); // the canvas survived the refused delete (RESTRICT)
   });
 
-  it("throws canvas.not_found when updating an id the tenant does not own", async () => {
+  it("throws canvas.not_found when updating an absent id", async () => {
     // The write-path no-row guard: `.returning({ id })` comes back empty, so updateCanvas throws
     // rather than reporting a silent success. Proof-by-deletion: drop the `updated.length === 0` check
     // and this call resolves, failing the assertion. A well-formed uuid that names no row hits it.
@@ -217,7 +217,7 @@ describe("layout canvas store on real Postgres, as the app role", () => {
     expect(code).toBe("canvas.not_found");
   });
 
-  it("throws canvas.not_found when deleting an id the tenant does not own", async () => {
+  it("throws canvas.not_found when deleting an absent id", async () => {
     const tenantId = await seedTenant(suite.admin);
     const session = await seedSession(tenantId, "manager");
     const code = await codeOf(() =>

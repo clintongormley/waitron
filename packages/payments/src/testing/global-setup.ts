@@ -37,8 +37,8 @@ import { PAYMENTS_MIGRATIONS } from "../migrations.js";
  * @waitron/payments suite (its PGlite-only and hermetic files included) with it, not only the real-PG
  * suites — a real broadening of what needs Docker, the same one db and apps/server accepted. What
  * makes it acceptable is not an assumption that every machine has Docker, but that this package's
- * reason to be in the real-PG tier at all — five concurrency suites racing two backend processes
- * against one row — needs Docker regardless: PGlite serialises every query onto one backend, so a
+ * reason to be in the real-PG tier at all — its concurrency suites, which race two backend
+ * processes against one row — needs Docker regardless: PGlite serialises every query onto one backend, so a
  * contention test there is a false pass (CLAUDE.md §4). CLAUDE.md §4 documents that this repo's real-Postgres test
  * tier needs a local Docker daemon (plus TESTCONTAINERS_RYUK_DISABLED); `dockerRequired` turns the raw
  * testcontainers daemon error into guidance when Docker is absent.

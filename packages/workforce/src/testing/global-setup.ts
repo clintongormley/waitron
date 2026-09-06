@@ -21,18 +21,17 @@ import { WORKFORCE_MIGRATIONS } from "../migrations.js";
  * beyond nothing — CORE + IDENTITY + WORKFORCE — following the `core_<schema>` convention (#116) and
  * matching apps/server's `core_identity` shape for its larger stack.
  *
- * TWO non-superuser probe roles are the only cluster roles any suite here creates:
- * `workforce_rls_probe` for `rls.test.ts`, and `workforce_clock_probe` for the
- * `clocking.concurrency` TOCTOU suite, where being non-superuser proves the app role is PERMITTED its
- * `FOR NO KEY UPDATE` lock. They are created ONCE
- * here, idempotently, in place of the per-file `probeRole` those suites passed to `useRealPostgres`.
+ * ONE non-superuser probe role is the only cluster role any suite here creates:
+ * `workforce_clock_probe`, for the `clocking.concurrency` TOCTOU suite, where being non-superuser
+ * proves the app role is PERMITTED its `FOR NO KEY UPDATE` lock. It is created ONCE
+ * here, idempotently, in place of the per-file `probeRole` that suite passed to `useRealPostgres`.
  * Roles are CLUSTER-global: a shared container is one cluster and every suite clones its own DATABASE
- * from the template but shares that cluster's roles, so both coexist. That is why a per-file
+ * from the template but shares that cluster's roles. That is why a per-file
  * `CREATE ROLE` cannot stay — `probeRoleStatement` emits a bare `create role …`, so the moment two
  * files created a role of the same name against the shared cluster the second would fail
- * `role … already exists`. (A third, `workforce_planning_rls_probe`, went with
- * `scheduling-planning.rls.test.ts`; `scheduling.rls.test.ts` shared `workforce_rls_probe` and went
- * too — their grant facts are the privilege matrix's now.) Each role inherits `app_user`'s grants via `inRole`;
+ * `role … already exists`. (Two more, `workforce_rls_probe` and `workforce_planning_rls_probe`, went
+ * with `rls.test.ts`, `scheduling.rls.test.ts` and `scheduling-planning.rls.test.ts` — their grant
+ * facts are the privilege matrix's now.) It inherits `app_user`'s grants via `inRole`;
  * `app_user` exists by the time the roles run because CORE's `0001_tenancy_rls.sql` creates it and
  * roles run AFTER the templates migrate.
  *
@@ -44,7 +43,7 @@ import { WORKFORCE_MIGRATIONS } from "../migrations.js";
  * real-PG suites — a real broadening of what needs Docker, the same one db and apps/server accepted.
  * What makes it acceptable is not an assumption that every machine has Docker, but that this
  * package's reason to be in the real-PG tier at all — its chain/clocking/scheduling concurrency
- * suites, `rls.test.ts` and `immutability.test.ts` — needs Docker regardless: they reach it through
+ * suites and `immutability.test.ts` — needs Docker regardless: they reach it through
  * `useTemplateDb` and cannot run under PGlite, which serialises every query onto one backend (so a
  * contention test is a false pass) and whose superuser holds every grant (so the append-only
  * privilege floor is invisible). CLAUDE.md §4
@@ -65,11 +64,10 @@ export default async function ({ provide }: GlobalSetupContext) {
         runMigrationSets(uri, [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS]),
     },
     roles: [
-      // Non-superuser LOGIN roles inheriting app_user's grants. Being non-superuser is the point:
-      // for clocking.concurrency (workforce_clock_probe) it proves the app role is PERMITTED its row
-      // lock, not merely that it serialises. (Which role serves which suite is in the docblock.)
+      // A non-superuser LOGIN role inheriting app_user's grants. Being non-superuser is the point:
+      // for clocking.concurrency it proves the app role is PERMITTED its row lock, not merely that
+      // it serialises.
       { name: "workforce_clock_probe", password: "probe", inRole: "app_user" },
-      { name: "workforce_rls_probe", password: "probe", inRole: "app_user" },
     ],
   });
   provide("sharedPg", handle);

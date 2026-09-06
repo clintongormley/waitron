@@ -43,13 +43,14 @@ const PERIOD = { from: new Date("2026-07-01T00:00:00Z"), to: new Date("2026-07-0
  * starts both full sweeps together and lets Postgres decide who wins; every assertion below checks
  * only that exactly one of them did, never which.
  *
- * The settlement report below deliberately MATCHES the local row (same reference, same amount),
- * rather than the empty report reconcile.test.ts uses against this same OLD_SETTLED/PERIOD fixture.
- * An empty report makes the row genuinely BOTH `orphan` and `unsettled` (classify()'s classes are
- * independent predicates, not a switch); reusing it here would race TWO
- * independent single-winner incident codes at once and dilute this suite's one job: isolating the
- * orphan-reversal race alone, exactly as reconcile.test.ts's own orphan-remediation tests do with a
- * matching `settlement()`.
+ * The settlement report below deliberately MATCHES the local row (same reference, same amount) — the
+ * shape reconcile.test.ts's own orphan-remediation tests use, `auto-reverses an orphan on an
+ * ABANDONED order and stamps the marker` among them, against this same OLD_SETTLED/PERIOD fixture. A
+ * report that does NOT mention the reference makes the row genuinely BOTH `orphan` and `unsettled`
+ * (classify()'s classes are independent predicates, not a switch — reconcile.test.ts's
+ * `still claims and reverses an abandoned orphan whose reference matches NOTHING in the report` is
+ * where that overlap is asserted). Reusing that shape here would race TWO independent single-winner
+ * incident codes at once and dilute this suite's one job: isolating the orphan-reversal race alone.
  */
 describe("concurrent reconcile sweeps", () => {
   it("reverse an orphan exactly once and raise one incident, however they interleave", async () => {
