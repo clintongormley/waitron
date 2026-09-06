@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { ALL_MODULES } from "@waitron/composition";
 import { createPostgresDb, readDeploymentEnvironment } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
-import { formatAppError, runCli } from "./cli.js";
+import { formatAppError, readTenantIdentities, runCli } from "./cli.js";
 import { applyInstance } from "./instance-apply.js";
 import { readInstanceState } from "./instance-state.js";
 import { applyVenue } from "./venue-apply.js";
@@ -63,6 +63,7 @@ async function main(): Promise<number> {
       applyVenue,
       modules: ALL_MODULES,
       readEnvironment: readDeploymentEnvironment,
+      readTenants: readTenantIdentities,
     });
   } catch (error) {
     // `runCli` (cli.ts) resolves with a number for every EXPECTED failure — a bad database name, an

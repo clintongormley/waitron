@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { sql } from "drizzle-orm";
 import { AppError, isAppError } from "@waitron/shared";
 import {
   isUniqueViolation,
@@ -57,6 +58,23 @@ export interface CliDeps {
   /** Reads a target database's deployment stamp. Injected so the "unstamped is refused" path is
    * reachable without a container; the real one (`@waitron/db`) needs the target connection. */
   readEnvironment: typeof readDeploymentEnvironment;
+  /** Reads the fiscal identity of every tenant already in the target database. Injected like
+   * `readEnvironment` so the foreign-tenant refusal is reachable without a container; the real one
+   * (`readTenantIdentities` below) needs the target connection. */
+  readTenants: typeof readTenantIdentities;
+}
+
+/** The `(country, tax_id)` of every tenant in the target database. `venue` reads this before it
+ * applies and refuses a SECOND, DIFFERENT obligado (`provisioning.foreign_tenant`): one tenant per
+ * database is the post-RLS isolation boundary (§5). Runs over the owner-admin connection, which
+ * owns `tenants` and so may read it. */
+export async function readTenantIdentities(
+  target: Database,
+): Promise<{ country: string; taxId: string }[]> {
+  const rows = await target.execute<{ country: string; tax_id: string }>(
+    sql`select country, tax_id from tenants`,
+  );
+  return rows.rows.map((row) => ({ country: row.country, taxId: row.tax_id }));
 }
 
 const ENVIRONMENTS: DeploymentEnvironment[] = ["production", "preproduction"];
@@ -477,6 +495,21 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
         // `instance`'s job, and one database per environment is a fiscal invariant. Refused, not
         // stamped here.
         throw new AppError("provisioning.database_unstamped", { database });
+      }
+
+      // One tenant per database is the post-RLS isolation boundary (§5). `venue` is the only
+      // production tenant-creation path, so it refuses standing up a SECOND, DIFFERENT obligado
+      // here, before it prints or applies: with row-level security gone, `withTenant` no longer
+      // filters by tenant, so a foreign `(country, tax_id)` in this database would expose one
+      // business's rows to the other. The SAME identity proceeds — `applyVenue`'s ON CONFLICT DO
+      // NOTHING reuses the obligado and adds a shop (D8) — and an empty database proceeds as the
+      // first tenant. The identity applied is the ensure-tenant action's, canonicalized by planVenue.
+      const ensure = actions.find((a) => a.kind === "ensure-tenant");
+      if (ensure !== undefined && ensure.kind === "ensure-tenant") {
+        const present = await deps.readTenants(target);
+        if (present.some((t) => t.country !== ensure.country || t.taxId !== ensure.taxId)) {
+          throw new AppError("provisioning.foreign_tenant", { database });
+        }
       }
 
       deps.io.stdout(`Plan for a venue in ${database} (${environment}):`);

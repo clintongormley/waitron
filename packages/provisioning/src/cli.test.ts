@@ -135,6 +135,7 @@ interface Harness {
   readState: ReturnType<typeof vi.fn>;
   applyVenue: ReturnType<typeof vi.fn>;
   readEnvironment: ReturnType<typeof vi.fn>;
+  readTenants: ReturnType<typeof vi.fn>;
   connect: ReturnType<typeof vi.fn>;
   closes: () => number;
 }
@@ -149,6 +150,7 @@ function harness(
     readState?: () => Promise<InstanceState>;
     applyVenue?: CliDeps["applyVenue"];
     readEnvironment?: () => Promise<DeploymentEnvironment | null>;
+    readTenants?: () => Promise<{ country: string; taxId: string }[]>;
   } = {},
 ): Harness {
   const lines: string[] = [];
@@ -169,6 +171,9 @@ function harness(
   const readEnvironment = vi.fn(
     options.readEnvironment ?? (async () => "preproduction" as DeploymentEnvironment),
   );
+  // Empty by default: a fresh, single-tenant database, so the foreign-tenant guard proceeds. Tests
+  // exercising the refusal supply an existing identity.
+  const readTenants = vi.fn(options.readTenants ?? (async () => []));
 
   return {
     lines,
@@ -180,6 +185,7 @@ function harness(
     readState,
     applyVenue,
     readEnvironment,
+    readTenants,
     connect,
     deps: {
       io: {
@@ -203,6 +209,7 @@ function harness(
       applyVenue: applyVenue as unknown as CliDeps["applyVenue"],
       modules: MODULES,
       readEnvironment: readEnvironment as unknown as CliDeps["readEnvironment"],
+      readTenants: readTenants as unknown as CliDeps["readTenants"],
     },
   };
 }
@@ -1227,6 +1234,41 @@ describe("runCli venue", () => {
     expect(h.readEnvironment).toHaveBeenCalledTimes(1);
     expect(h.applyVenue).not.toHaveBeenCalled();
     expect(h.closes()).toBe(1);
+  });
+
+  it("refuses a SECOND, DIFFERENT fiscal identity in the same database, before applying (§5)", async () => {
+    // One tenant per database is the post-RLS isolation boundary: this branch dropped row-level
+    // security, so `withTenant` no longer filters by tenant and a second obligado would leak one
+    // business's rows to the other. `venue` is the only production tenant-creation path, so it reads
+    // the existing `(country, tax_id)` set and refuses any identity but the one already present. Here
+    // the database already holds ES/B99999999 while the request is ES/B12345678 (VENUE_ARGS), so the
+    // apply is refused — never reached — leaving no second tenant.
+    const h = harness({
+      env: VENUE_ENV,
+      readTenants: async () => [{ country: "ES", taxId: "B99999999" }],
+    });
+    const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
+    expect(code).toBe(1);
+    expect(h.lines.join("\n")).toContain('provisioning.foreign_tenant {"database":"waitron_demo"}');
+    // The identities were read — that is how the foreign obligado was learnt — and nothing was
+    // applied: no second tenant can be written.
+    expect(h.readTenants).toHaveBeenCalledTimes(1);
+    expect(h.applyVenue).not.toHaveBeenCalled();
+    expect(h.closes()).toBe(1);
+  });
+
+  it("re-provisions when the SAME fiscal identity is already present (D8 second shop)", async () => {
+    // The guard refuses only a FOREIGN identity, never an idempotent re-run: a database already
+    // holding ES/B12345678 (the VENUE_ARGS identity) proceeds to apply, where `applyVenue`'s
+    // `ON CONFLICT DO NOTHING` reuses the obligado and adds a shop.
+    const h = harness({
+      env: VENUE_ENV,
+      readTenants: async () => [{ country: "ES", taxId: "B12345678" }],
+    });
+    const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
+    expect(code).toBe(0);
+    expect(h.readTenants).toHaveBeenCalledTimes(1);
+    expect(h.applyVenue).toHaveBeenCalledTimes(1);
   });
 
   it("refuses a country that is not two ASCII letters, before connecting", async () => {

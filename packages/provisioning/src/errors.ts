@@ -181,6 +181,21 @@ declare module "@waitron/shared" {
      * statement back in its message, and this file's header forbids a param that could carry one.
      * `database` is operator-typed configuration and never a secret. */
     "provisioning.venue_conflict": { database: string };
+    /** `venue` was asked to stand up a SECOND, DIFFERENT fiscal obligado in a database that already
+     * holds one. Refused: one tenant per database is the post-RLS isolation boundary. This branch
+     * dropped row-level security on the premise that each database carries a single tenant, so
+     * `withTenant` no longer filters rows by tenant (`packages/db/src/tenancy.ts`); a second
+     * `(country, tax_id)` in the same database would therefore expose one business's rows to the
+     * other — a cross-tenant leak a hash-chained fiscal record (§5) cannot take back. `venue` is the
+     * only production tenant-creation path, so it is where the invariant is enforced: it reads the
+     * existing `(country, tax_id)` set before applying and refuses any identity but the one already
+     * present. The SAME identity re-provisions (spec D8 second shop); an empty database proceeds as
+     * the first tenant. This is NOT `venue_conflict` (a concurrent unique-key race on ONE identity);
+     * it is a refusal of a FOREIGN identity.
+     *
+     * `database` only, and never the driver's own error: the same discipline `venue_conflict` keeps
+     * — `database` is operator-typed configuration and never a secret. */
+    "provisioning.foreign_tenant": { database: string };
     /** `adoptVenue` finished its inserts but one of the five DESIGNATED ids the mirror bundle names
      * for `trading.env` is not present among the rows it inserted — a malformed or incomplete bundle
      * (spec §5). `adoptVenue` inserts the primary's tenant/location/node/till/series rows VERBATIM
