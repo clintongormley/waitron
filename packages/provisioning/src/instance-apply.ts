@@ -159,22 +159,10 @@ export async function applyInstance(
           break;
         }
         case "migrate":
-          // Over the ADMIN string against the target database, not the migrator role's: on a
-          // first provision `waitron_migrator` was created seconds ago and this tool holds its
-          // password only in memory — composing a URL from it here would be the one place a
-          // generated password travels somewhere it need not.
-          //
-          // `ApplyDeps.admin`'s own contract is CREATEDB + CREATEROLE (this file's doc comment;
-          // spec table, "an admin connection with CREATEDB and CREATEROLE"), not superuser — and on
-          // a first provision `admin` is also the very connection that just ran `create-database`
-          // above, which makes it that database's OWNER. Verified directly against a throwaway
-          // `postgres:18-alpine` container: a role created with only `login createdb createrole`,
-          // with no further grant, created a database as itself and then created a table in that
-          // database's `public` schema without error — ownership of the database is enough,
-          // independent of any grant this file issues. That is what lets the migrations below
-          // (CREATE TABLE, CREATE ROLE for `app_user`/`tenant_provisioner`, etc.) run directly over
-          // this connection. A re-run against a database `admin` did NOT create is a narrower case
-          // this comment does not cover.
+          // Migrate as the admin against the target database. On a first provision
+          // that admin just created the database and owns it; the deployment logins
+          // are created only after the migrations create their app_user membership target.
+          // Re-running against a database owned by another admin requires explicit grants.
           //
           // The database name comes from `deps`, NOT from a `create-database` action in the list:
           // on a re-run that action is absent (the database already exists) while `migrate` can

@@ -5,12 +5,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { adoptVenue, type AdoptResult, type AdoptVenueRows } from "./venue-adopt.js";
 
-// PGlite's default connection is a SUPERUSER, so it BYPASSES row-level security (ENABLE and FORCE
-// alike). That is acceptable here: `adoptVenue`'s inserts run in-test as superuser, and this suite
-// exercises the wiring, FK order, idempotency and the designated-id assertion. The role-split apply
-// path — the non-superuser OWNER inserting these parent rows under the tenant GUC — is proven by a
-// LATER task's real-Postgres e2e (the container end-to-end that runs adopt over the owner
-// connection), the same split `venue-apply.test.ts` documents for `applyVenue`.
+// PGlite is sufficient for wiring, FK order, idempotency and the designated-id assertion;
+// this suite does not measure role privileges or contention.
 //
 // CORE → IDENTITY → FISCAL, the manifest order (`venue-apply.test.ts:19-21`): the FISCAL set is what
 // creates `registro_sif`/`cadenas`/`contadores_instalacion`, which the sibling no-sif suite asserts

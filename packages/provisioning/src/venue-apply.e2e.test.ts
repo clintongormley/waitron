@@ -29,11 +29,10 @@ import { applyVenue } from "./venue-apply.js";
  * reaches through `ALL_MODULES`. This package's production code no longer imports it at all: the
  * runner takes the module list as an argument and calls whatever seed the list carries.
  *
- * PGlite's default connection is a SUPERUSER, so it bypasses RLS; that is fine here for the same
- * reason as `venue-apply.test.ts` — the FORCE-RLS privilege path is proven by the container suite.
+ * PGlite is sufficient for sale chaining and login behavior; venue-apply.pg.test.ts
+ * exercises provisioning as a non-superuser owner on real Postgres.
  *
- * The full manifest is migrated (identity before fiscal; sync before fiscal, which fiscal's SP-3a
- * 0014 capture migration needs): the real
+ * The full manifest is migrated in dependency order. The real
  * `applyVenue` now seeds an admin `persons` row, which carries a foreign key onto `tenants`.
  */
 const suite = usePgliteDb({

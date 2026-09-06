@@ -40,8 +40,7 @@ const FIXED_PW = "fixedpw"; // a fixed generator, so `applyInstance` is determin
 // The one place `applyVenue` runs end to end against a real, migrated, stamped database over a
 // connection that is NOT a superuser — so the grants and triggers the venue write path passes
 // through are genuinely enforced, which PGlite (every connection a superuser holding every grant,
-// CLAUDE.md §4) cannot do. `.pg` rather than `.rls`: venue-apply.test.ts and venue-apply.e2e.test.ts
-// are both PGlite and hold the name.
+// CLAUDE.md §4) cannot do. The other venue-apply suites use PGlite.
 describe("applyVenue against a real container, as the non-superuser owner", () => {
   let pg: RealPostgres;
   let superuser: Database;
@@ -57,7 +56,7 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
     const admin = await createPostgresDb(adminUri);
     try {
       // Stand up the whole deployment as prov_admin: create db, migrate every set, create the
-      // three login roles (each with FIXED_PW), stamp. prov_admin ends up owning the tables.
+      // two login roles (each with FIXED_PW), stamp. prov_admin ends up owning the tables.
       const before = await readInstanceState(admin, DATABASE, null);
       await applyInstance(
         planInstance(before, { database: DATABASE, environment: "preproduction" }, () => FIXED_PW),
@@ -86,12 +85,15 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
   });
 
   it("prov_admin is a non-superuser (the negative control for the run below)", async () => {
-    const rows = await owner.execute<{ me: string; rolsuper: boolean; rolbypassrls: boolean }>(
-      sql`select current_user as me, rolsuper, rolbypassrls from pg_roles where rolname = current_user`,
+    const rows = await owner.execute<{ me: string; rolsuper: boolean }>(
+      sql`select current_user as me, rolsuper from pg_roles where rolname = current_user`,
     );
     expect(rows.rows[0]?.me).toBe("prov_admin");
     expect(rows.rows[0]?.rolsuper).toBe(false);
-    expect(rows.rows[0]?.rolbypassrls).toBe(false);
+    const ownership = await owner.execute<{ owns: boolean }>(sql`
+      select relowner = (select oid from pg_roles where rolname = current_user) as owns
+      from pg_class where oid = 'public.tenants'::regclass`);
+    expect(ownership.rows).toEqual([{ owns: true }]);
   });
 
   it("the REAL applyVenue provisions a complete sellable venue over the owner connection, end to end", async () => {
@@ -108,12 +110,7 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
       { module: "fiscal", report: expect.stringMatching(/^SIF .* \(installation \d+\)$/) },
     ]);
 
-    // The read-back happens INSIDE the tenant scope because today's schema still forces row-level
-    // security on the OWNER: the USING policy `tenant_id = current_tenant_id()` hides every row from
-    // a session with no GUC set, so an unscoped `owner.execute(...)` count returns 0 for rows that
-    // were in fact written (measured: all four counts came back 0 against a venue `applyVenue` had
-    // just committed). `withTenant` is the transaction primitive here regardless of that, so this
-    // read stays as written when the policies go.
+    // Read the committed venue back in one transaction with explicit tenant and node predicates.
     const { counts, node, sif, profiles } = await withTenant(owner, result.tenantId, async (tx) => {
       const counts = await tx.execute<{
         tenants: number;

@@ -5,7 +5,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { adoptVenue, type AdoptResult, type AdoptVenueRows } from "./venue-adopt.js";
 
-// PGlite superuser (RLS bypassed) is acceptable here for the same reason as `venue-adopt.test.ts`:
+// PGlite is sufficient here for the same reason as `venue-adopt.test.ts`:
 // this suite is about WHICH tables `adoptVenue` writes, not about the role that writes them. CORE →
 // IDENTITY → FISCAL so `registro_sif`/`cadenas`/`contadores_instalacion` exist to be counted.
 const suite = usePgliteDb({

@@ -10,7 +10,7 @@ import { describeAction, type InstanceAction } from "./instance-plan.js";
  *
  * What these tests exercise is how `applyInstance` CLASSIFIES a failure its admin connection hands
  * back — which `code` it rethrows, and what it keeps of the original. None of that involves
- * privileges, RLS or concurrency, so neither PGlite nor a container is needed: a fake `admin` whose
+ * privileges or concurrency, so neither PGlite nor a container is needed: a fake `admin` whose
  * `execute` throws exactly the error under test reaches the branch directly, and is the only way to
  * reach the "the driver gave us no SQLSTATE at all" branch at all — a real Postgres always gives
  * one.
@@ -299,10 +299,8 @@ describe("applyInstance's post-apply grant verification", () => {
   });
 
   it("treats a bare C as missing when the plan asked for WITH GRANT OPTION", async () => {
-    // The `*` is not cosmetic: the empty-database migrations re-grant CREATE ON SCHEMA public to
-    // each support role they create and then revoke it, and a grant this role cannot pass on fails
-    // partway through that dance (instance-plan.ts). A check that ignored the option would call a
-    // half-provisioned deployment good.
+    // The plan promises WITH GRANT OPTION; a bare CREATE privilege does not
+    // satisfy that promise even when the grantee can use the schema itself.
     await expect(
       applyInstance(SCHEMA_GRANT, cluster({ nspacl: ["waitron_migrator=C/pg_database_owner"] })),
     ).rejects.toMatchObject({ code: "provisioning.grant_ineffective" });

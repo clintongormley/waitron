@@ -224,7 +224,7 @@ async function instance(argv: string[], deps: CliDeps): Promise<number> {
         // would have declined on learning this learnt it too late to decline. The plan is pure and
         // `created` falls straight out of it, so nothing has to be reached to know it.
         //
-        // The case is a second database on a cluster that already carries the three roles — the
+        // The case is a second database on a cluster that already carries the two roles — the
         // roles are cluster-global while the database is not — and the reason no string can be
         // printed is the one `reportRoles` gives: this tool did not generate those passwords and
         // cannot read one back out of `pg_authid`.
@@ -328,7 +328,7 @@ async function status(argv: string[], deps: CliDeps): Promise<number> {
  * a malformed request"). Only then is the admin URI asked for and the target opened.
  *
  * Unlike `instance`, the connection is to the TARGET database as the OWNER-admin, not to the cluster
- * admin: `applyVenue` inserts under RLS as the role that owns the tables (Task C1), so there is no
+ * admin: `applyVenue` inserts as the role that owns the tables, so there is no
  * second role and no grant to widen. The whole apply is one transaction (`applyVenue`), which a
  * partial venue must never be.
  */

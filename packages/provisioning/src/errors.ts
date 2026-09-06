@@ -38,7 +38,7 @@ import "@waitron/shared";
  *
  * - `role_over_privileged`, `role_unusable`, `role_creation_failed`, `membership_grant_failed`,
  *   `grant_ineffective`: none is a general fact about a role or about a grant. Each is a refusal or
- *   a failure OF THIS ACTIVITY — "a role this tool would adopt carries BYPASSRLS", "a grant this
+ *   a failure OF THIS ACTIVITY — "a role this tool would adopt carries SUPERUSER", "a grant this
  *   run issued did not take". A `role.*` or `grant.*` code should be true of any role or grant
  *   anywhere, and none of these is.
  * - `state_unreadable` is the one worth arguing, because its own text opens with "reading what a
@@ -131,7 +131,7 @@ declare module "@waitron/shared" {
      * `roleUri(uri, "waitron_app", "pw", "waitron_prod")` both threw `TypeError: Invalid URL`. On
      * the `instance` path that throw landed in `reportRoles`, i.e. AFTER `create database`,
      * `migrate` and `stamp` had run, and reached the operator as `unexpected failure (TypeError)`
-     * (`bin.ts`'s catch-all) with three generated passwords lost.
+     * (`bin.ts`'s catch-all) with the generated passwords lost.
      *
      * Supporting the non-URL forms properly was the alternative and was rejected: re-pointing a
      * libpq keyword/value string at a different database, user and password means parsing and
@@ -253,10 +253,9 @@ declare module "@waitron/shared" {
     "provisioning.territory_country_mismatch": { country: string; fiscalTerritory: string };
     /** The CSPRNG returned the wrong number of bytes. `byteLength` is a size, never material. */
     "provisioning.key_generation_failed": { byteLength: number };
-    /** A role this tool would use already exists carrying SUPERUSER or BYPASSRLS. Refused rather
-     * than adopted: every grant `instance` is about to make sits behind an RLS policy that such a
-     * role ignores outright — the same refusal `0001_tenancy_rls.sql` makes for `app_user`. */
-    "provisioning.role_over_privileged": { role: string; superuser: boolean; bypassRls: boolean };
+    /** A role this tool would use already exists carrying SUPERUSER. Refused rather
+     * than adopted: a superuser can disable the append-only triggers. */
+    "provisioning.role_over_privileged": { role: string; superuser: boolean };
     /** A role exists but cannot log in, or lacks an attribute it needs. Refused rather than
      * altered: this tool did not create it, does not know its password, and `ALTER ROLE` on
      * something an operator made by hand is not its call. */

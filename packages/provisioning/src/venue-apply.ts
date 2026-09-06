@@ -14,8 +14,7 @@ import type { VenueAction } from "./venue-plan.js";
 
 export interface VenueApplyDeps {
   /** The OWNER connection to the TARGET database — the admin that ran `instance` and so owns the
-   * tables. Task C1's container test proved the owner INSERTs a node under the tenant GUC while a
-   * SELECT-only login role cannot, so this runs the whole flow as one role with no grant widened. */
+   * tables. The owner inserts the venue scaffold without widening app_user grants. */
   db: Database;
   /** The modules whose seeds a `seed-module` action may name — the enabled set, in the composition
    * list's order. */
@@ -39,8 +38,7 @@ export interface VenueResult {
 /**
  * Runs one plan as ONE transaction under `withTenant`, mirroring provisionNode (NOT applyInstance:
  * there is no cluster DDL here, and a single transaction is what a partial venue must never be).
- * The tenant scope is adopted from the ensure-tenant action's deterministic id, so every WITH CHECK
- * (`tenant_id = current_tenant_id()`) is satisfied by the row this run inserts.
+ * Every insert uses the ensure-tenant action's deterministic tenant id.
  *
  * Idempotency is `ON CONFLICT DO NOTHING` on the natural keys — the transaction-safe form of spec
  * D8's "insert, treat conflict as already-present" (a bare 23505 catch would poison the
@@ -76,8 +74,7 @@ export async function applyVenue(
     for (const action of actions) {
       switch (action.kind) {
         case "ensure-tenant":
-          // Deterministic id + explicit id satisfies WITH CHECK (id = current_tenant_id()); DO
-          // NOTHING reuses an existing obligado (spec D8). No tax_id lookup — RLS forbids it.
+          // The deterministic id and DO NOTHING reuse an existing obligado (spec D8).
           await tx.execute(sql`
             insert into tenants (id, country, tax_id, legal_name)
             values (${action.tenantId}, ${action.country}, ${action.taxId}, ${action.legalName})
@@ -89,8 +86,7 @@ export async function applyVenue(
           // shop, so the D8 second-shop re-run (create-location/create-till/create-node deliberately
           // ADD a shop each run) must not add a duplicate admin each time. A plain insert did exactly
           // that. `insert … select … where not exists` seeds the admin only if the tenant has none
-          // yet (the `role='admin'` predicate, RLS-scoped to this tenant; the explicit tenant_id is
-          // redundant under RLS but guards a non-scoped connection, as elsewhere here). Raw SQL like
+          // yet (the explicit tenant_id and role='admin' predicates). Raw SQL like
           // every other insert — no @waitron/identity import; the `persons` table exists because the
           // identity migrations run before a venue is applied. `pin_hash` (till) and `password_hash`
           // (dashboard) are already scrypt hashes, hashed at the CLI boundary, never a plaintext
@@ -111,10 +107,8 @@ export async function applyVenue(
           // first (the admin is the only person who can open that session); a hand-built plan that
           // runs this before seed-admin is refused as a plan-integrity error, mirroring the ordering
           // guards below. Idempotent: find-or-create by name, so a D8 second-shop re-run adds no
-          // duplicate (profiles belong to the tenant, not a shop). Runs on the caller's owner tx under
-          // the tenant GUC — device_profiles/management_sessions are FORCE-RLS, satisfied because
-          // withTenant set current_tenant_id() to this tenant, exercised under the owner role in
-          // venue-apply.pg.test.ts.
+          // duplicate (profiles belong to the tenant, not a shop). Runs on the caller's owner
+          // transaction, exercised by venue-apply.pg.test.ts.
           await seedDeviceProfiles(tx, tenantId, action.profiles);
           break;
         case "create-location": {
@@ -140,10 +134,8 @@ export async function applyVenue(
           // KDS-1: seed this location's DEFAULT kitchen station so firing (placeOrder / sendToPrep / a
           // tab's round-send → fireLines) has a fallback the instant the venue exists. Spec §2a ("one
           // default") + §2b: a location with NO default station makes firing a fail-loud
-          // `station.no_default` misconfiguration, so a fresh venue must ship one. Owner-role INSERT under
-          // the tenant GUC — the same tx/role that just inserted the location, so the FORCE-RLS
-          // `kitchen_stations_tenant_isolation` WITH CHECK passes (tenant_id = current_tenant_id()). The
-          // operator can rename it later via updateStation; `station.no_default` then guards any venue
+          // `station.no_default` misconfiguration, so a fresh venue must ship one. The owner
+          // inserts it in the location's transaction. The operator can rename it later via updateStation; `station.no_default` then guards any venue
           // left with no ACTIVE default station — including one whose sole default was DEACTIVATED
           // (fireLines' fallback requires `is_default AND active`) — not a fresh venue, which always ships
           // this one.
@@ -202,7 +194,7 @@ export async function applyVenue(
           // a collision, and returning the un-inserted id would put a PHANTOM id in the result — a
           // row that does not exist. planVenue now rejects equal standard/rectificative codes
           // up front, so a valid plan never collides here; this keeps VenueResult honest even for a
-          // hand-built plan that does (defense in depth, proven by venue-apply.test.ts).
+          // hand-built plan that does (exercised by venue-apply.test.ts).
           if (inserted.rows.length > 0) seriesIds.push(seriesId);
           break;
         }

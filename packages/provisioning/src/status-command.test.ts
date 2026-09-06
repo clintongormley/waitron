@@ -10,14 +10,12 @@ const PROVISIONED: InstanceState = {
       canLogin: true,
       createRole: true,
       superuser: false,
-      bypassRls: false,
       memberOf: ["app_user"],
     },
     waitron_app: {
       canLogin: true,
       createRole: false,
       superuser: false,
-      bypassRls: false,
       memberOf: ["app_user"],
     },
   },
@@ -26,12 +24,15 @@ const PROVISIONED: InstanceState = {
 
 describe("formatStatus", () => {
   it("names every role, present or absent", () => {
-    const text = formatStatus(PROVISIONED).join("\n");
+    const text = formatStatus({
+      ...PROVISIONED,
+      roles: { waitron_app: PROVISIONED.roles.waitron_app! },
+    }).join("\n");
     expect(text).toContain("waitron_migrator");
     expect(text).toContain("waitron_app");
     // The ABSENT one is the useful line: a status that listed only what exists would leave an
     // operator to remember what the full set is.
-    expect(text).toMatch(/waitron_provisioner.*absent/);
+    expect(text).toMatch(/waitron_migrator.*absent/);
   });
 
   it("reports the stamp", () => {
@@ -52,14 +53,12 @@ describe("formatStatus", () => {
           canLogin: false,
           createRole: false,
           superuser: false,
-          bypassRls: false,
           memberOf: [],
         },
         waitron_app: {
           canLogin: true,
           createRole: false,
           superuser: true,
-          bypassRls: true,
           memberOf: ["app_user"],
         },
       },
@@ -68,7 +67,6 @@ describe("formatStatus", () => {
 
     expect(text).toContain("role waitron_migrator: present — NOLOGIN, member of nothing");
     expect(text).toContain("SUPERUSER");
-    expect(text).toContain("BYPASSRLS");
     // Unstamped is a real, common state — every database provisioned before the stamp existed —
     // and is reported as such rather than as an empty field.
     expect(text).toContain("deployment stamp: unstamped");

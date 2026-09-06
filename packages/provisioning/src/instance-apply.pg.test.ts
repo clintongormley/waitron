@@ -18,16 +18,13 @@ describe("applyInstance against a blank container", () => {
   /** The container's own default superuser. Used ONLY to mint `admin` below, never as `ApplyDeps.admin`. */
   let superuser: Database;
   /**
-   * A NON-SUPERUSER admin: exactly `login createdb createrole`, no `SUPERUSER`, no `BYPASSRLS` —
+   * A NON-SUPERUSER admin: exactly `login createdb createrole`, no `SUPERUSER` —
    * the privilege `docs/superpowers/specs/2026-07-29-provisioning-tool-design.md` §2 says this
    * command needs, and no more.
    *
-   * Every test below runs `applyInstance` over THIS connection, and `adminUri` is what the
-   * `migrate` action composes the migrator's URL from, so the five migration sets are applied by
-   * this role too. That is the whole point: `apps/server/README.md`'s empty-database recipe is
-   * about a dedicated non-superuser role bootstrapping a brand-new database, and a suite that
-   * connected as the container's superuser would exercise a real but DIFFERENT shape — the exact
-   * gap that README admitted about itself.
+   * The initial full-manifest apply runs as this role, so the blank-cluster test
+   * measures provisioning without a superuser. Refusal tests pass their own probe
+   * connections and, when migrating, the matching connection string.
    */
   let admin: Database;
   let adminUri: string;
@@ -84,17 +81,16 @@ describe("applyInstance against a blank container", () => {
     if (pg !== undefined) await pg.stop();
   });
 
-  it("holds no superuser and no BYPASSRLS", async () => {
+  it("is not a superuser", async () => {
     // The negative control for every test below. Without it, a future change to
     // `startBarePostgres` or to `roleUrl` that silently connected as the superuser again would
     // leave the whole suite passing while proving nothing about the privilege level — which is the
     // one property `apps/server/README.md` now cites this file for.
-    const rows = await admin.execute<{ rolsuper: boolean; rolbypassrls: boolean; me: string }>(
-      sql`select current_user as me, rolsuper, rolbypassrls from pg_roles where rolname = current_user`,
+    const rows = await admin.execute<{ rolsuper: boolean; me: string }>(
+      sql`select current_user as me, rolsuper from pg_roles where rolname = current_user`,
     );
     expect(rows.rows[0]?.me).toBe("prov_admin");
     expect(rows.rows[0]?.rolsuper).toBe(false);
-    expect(rows.rows[0]?.rolbypassrls).toBe(false);
   });
 
   it("takes a blank cluster to a migrated, stamped, granted database — and then plans only the idempotent grants and a migrate", async () => {
@@ -121,17 +117,10 @@ describe("applyInstance against a blank container", () => {
         "sync",
         "fiscal",
       ]);
-      expect(Object.keys(after.roles).sort()).toEqual([
-        "waitron_app",
-        "waitron_migrator",
-        "waitron_provisioner",
-      ]);
+      expect(Object.keys(after.roles).sort()).toEqual(["waitron_app", "waitron_migrator"]);
       expect(after.roles.waitron_migrator?.createRole).toBe(true);
       expect(after.roles.waitron_app?.createRole).toBe(false);
-      expect(after.roles.waitron_provisioner?.memberOf.sort()).toEqual([
-        "app_user",
-        "tenant_provisioner",
-      ]);
+      expect(after.roles.waitron_app?.memberOf).toEqual(["app_user"]);
 
       // The "granted" half of the test's own title, proven rather than implied by non-throwing
       // SQL: `RoleFacts` carries no grant field, so nothing above actually checks that
@@ -201,33 +190,26 @@ describe("applyInstance against a blank container", () => {
     // by anything above: dropping that `case` from applyInstance's switch would leave every test up
     // to this point green. Proven end to end here instead: revoke a membership, confirm the planner
     // notices, apply, confirm it comes back.
-    await admin.execute(sql.raw(`revoke tenant_provisioner from waitron_provisioner`));
+    await admin.execute(sql.raw(`revoke app_user from waitron_app`));
     try {
       const drifted = await readInstanceState(admin, DATABASE, null);
-      expect(drifted.roles.waitron_provisioner?.memberOf).not.toContain("tenant_provisioner");
+      expect(drifted.roles.waitron_app?.memberOf).not.toContain("app_user");
 
       const request = { database: DATABASE, environment: "preproduction" } as const;
       const repair = planInstance(drifted, request);
       expect(repair).toContainEqual({
         kind: "grant-membership",
-        role: "waitron_provisioner",
-        memberOf: "tenant_provisioner",
+        role: "waitron_app",
+        memberOf: "app_user",
       });
 
       await applyInstance(repair, deps(admin));
 
       const repaired = await readInstanceState(admin, DATABASE, null);
-      expect(repaired.roles.waitron_provisioner?.memberOf).toContain("tenant_provisioner");
+      expect(repaired.roles.waitron_app?.memberOf).toContain("app_user");
     } finally {
-      // The repair under test is what normally puts this back, so a failure ANYWHERE above it
-      // leaves the membership revoked for every test that follows. `GRANT` is idempotent, so this
-      // is a no-op on the passing path. Originally left out on the grounds that this was the last
-      // test in its `describe`; several have been appended since, and it is safe today only because
-      // none of them reads `waitron_provisioner`'s memberships — which is a property of those
-      // tests, not of this one. (Named rather than numbered: every in-file `:NN` this comment and
-      // the one below carried was already pointing at an unrelated line by the time the file was
-      // renamed.)
-      await admin.execute(sql.raw(`grant tenant_provisioner to waitron_provisioner`));
+      // Restore the shared fixture even if an assertion or the repair fails.
+      await admin.execute(sql.raw(`grant app_user to waitron_app`));
     }
   });
 
@@ -338,7 +320,7 @@ describe("applyInstance against a blank container", () => {
       await delegate.close();
       // In a `finally` so the suite stays order-independent — these grants belong to no plan.
       //
-      // CASCADE, and the order, are both load-bearing. Stated as the experiments that were run,
+      // CASCADE and the cleanup order both matter. Stated as the experiments that were run,
       // because the general rule they suggest is one I did NOT isolate (see the last paragraph).
       //
       // Against a standalone `postgres:18-alpine`, with `datacl` reading
@@ -377,29 +359,11 @@ describe("applyInstance against a blank container", () => {
     // of this line cited a heading called "When the admin cannot grant `app_user`", which that file
     // has never had; `errors.ts`'s `provisioning.state_unreadable` cites the real one correctly.
     //
-    // `prov_admin` created `app_user`, and can therefore grant it. The narrow claim this test needs
-    // is about ONE call, not about the file: the `applyInstance` in `takes a blank cluster to a
-    // migrated, stamped, granted database` — the only one that runs a `migrate` action — was passed
-    // `admin`, and this block's `beforeAll` binds `admin` and `adminUri` to `prov_admin`, not to
-    // the container's superuser. `migrate` composes the migrator's URL from that same `adminUri`,
-    // so the `CREATE ROLE app_user` inside the core migration set ran as `prov_admin`. Postgres
-    // grants a role admin option on a role it creates (`instance-plan.ts`'s REQUIREMENTS comment
-    // says the same about `waitron_migrator`), which is where `prov_admin`'s ability to grant
-    // `app_user` comes from.
-    //
-    // Deliberately NOT claimed, because an earlier version of this comment claimed both and both
-    // are false. (a) "Every `applyInstance` call in this file passes `admin`" — the
-    // `grant_probe_admin`, `delegate_admin` and `probe_admin` calls each pass a purpose-built
-    // under-privileged probe precisely so a refusal can be forced; none of them runs a `migrate`,
-    // so none affects who owns `app_user`. (b) "The container's superuser is never
-    // `ApplyDeps.admin`" — the second `describe` in this file, `applyInstance's create-role failure
-    // handling`, binds its own `admin` to `pg.connect()`, which
-    // `packages/db/src/testing/postgres.ts:52-54` documents as the container's superuser, and hands
-    // it to `applyInstance`. That block is a separate bare container and has no bearing on this
-    // one; the mistake was scoping a per-block fact to the whole file.
+    // The initial migration creates app_user as prov_admin. Its ADMIN OPTION permits the
+    // control grant below; another administrator without that option must be refused.
     //
     // A SECOND admin, holding exactly the attributes this tool's spec asks for — `login createdb
-    // createrole`, no superuser, no BYPASSRLS — did not create `app_user`, holds no ADMIN OPTION on
+    // createrole`, no superuser — did not create `app_user`, holds no ADMIN OPTION on
     // it, and is refused. That admin is a completely ordinary thing for an operator to hand this
     // tool on the second or third run: the cluster is already migrated, so whoever migrated it is
     // not necessarily who is running `instance` now.
@@ -471,7 +435,7 @@ describe("applyInstance against a blank container", () => {
     // and cannot be — `MigrationSet` carries `name`, `table` and `from` (manifest.ts:9-14) and no
     // list of what each set creates, so there is nothing to derive `registros_facturacion` from.
     // This assertion is what keeps the hardcoded half honest: `registros_facturacion` is created by
-    // `packages/fiscal-verifactu/drizzle/0000_esquema_fiscal.sql`, which is the `fiscal` set (now
+    // `packages/fiscal-verifactu/drizzle/0000_baseline.sql`, which is the `fiscal` set (now
     // last, since SP-3a: fiscal's capture triggers will call sync's `sync_capture()` SPI, so the
     // `sync` set must migrate first). Append a further set to the manifest and this fails here,
     // loudly, instead of silently probing a table that belongs to a set which was never the one
@@ -602,8 +566,7 @@ describe("applyInstance against a blank container", () => {
       // NOT wrapped as a `provisioning.*` `AppError`: `instance-apply.ts` wraps only `create-role`
       // and `grant-membership` in a `try`/`catch` — `create-database`, `grant-database-create`,
       // `grant-schema-create`, `migrate` and `stamp` are all uncaught — so the raw driver failure
-      // and its SQLSTATE are what actually reaches a caller. Pre-existing and shared, not opened by
-      // the branch that added this test: `instance-apply.ts` is byte-identical to `main`.
+      // and its SQLSTATE reach the caller.
       // `bin.ts` prints
       // `unexpected failure (${error.name})`, and `error.name` — NOT `error.constructor.name` —
       // is `"Error"` for a `DrizzleQueryError`: `drizzle-orm@0.45.2/errors.js`'s
@@ -631,20 +594,63 @@ describe("applyInstance against a blank container", () => {
       // speak to. The message pins WHICH statement.
       expect(sqlStateOf(thrown)).toBe("42501");
       expect((thrown as Error).message).toContain('CREATE SCHEMA IF NOT EXISTS "public"');
+
+      // The README's delegation procedure repairs this already-migrated database.
+      const grantor = await createPostgresDb(withDatabase(adminUri, DATABASE));
+      try {
+        await grantor.execute(sql`grant select on all tables in schema public to partial_admin`);
+        await grantor.execute(sql`grant app_user to partial_admin with admin option`);
+        await grantor.execute(
+          sql.raw(
+            `grant create on database ${quoteIdent(DATABASE)} to partial_admin with grant option`,
+          ),
+        );
+        await grantor.execute(
+          sql`grant create on schema public to partial_admin with grant option`,
+        );
+        const grants = await grantor.execute<{
+          object: string;
+          privilege: string;
+          grantable: boolean;
+        }>(sql`
+          select 'database' as object, a.privilege_type as privilege, a.is_grantable as grantable
+          from pg_database d cross join lateral aclexplode(d.datacl) a
+          where d.datname = ${DATABASE} and a.grantee = 'partial_admin'::regrole and a.privilege_type = 'CREATE'
+          union all
+          select 'schema', a.privilege_type, a.is_grantable
+          from pg_namespace n cross join lateral aclexplode(n.nspacl) a
+          where n.nspname = 'public' and a.grantee = 'partial_admin'::regrole and a.privilege_type = 'CREATE'
+          union all
+          select 'deployment', a.privilege_type, a.is_grantable
+          from pg_class c cross join lateral aclexplode(c.relacl) a
+          where c.oid = 'deployment'::regclass and a.grantee = 'partial_admin'::regrole
+          order by object`);
+        expect(grants.rows).toEqual([
+          { object: "database", privilege: "CREATE", grantable: true },
+          { object: "deployment", privilege: "SELECT", grantable: false },
+          { object: "schema", privilege: "CREATE", grantable: true },
+        ]);
+        const membership = await grantor.execute<{ admin_option: boolean }>(sql`
+          select admin_option from pg_auth_members
+          where roleid = 'app_user'::regrole and member = 'partial_admin'::regrole`);
+        expect(membership.rows).toEqual([{ admin_option: true }]);
+      } finally {
+        await grantor.close();
+      }
+      await applyInstance(actions, deps(probe, DATABASE, probeUri));
+      expect((await readInstanceState(probe, DATABASE, probe)).inside?.stamp).toBe("preproduction");
     } finally {
       await probe.close();
-      // Both grants below were made BY `admin` (`prov_admin`, the database's real owner) — the
-      // first over `admin`'s own connection (database-level, needs no particular database selected),
-      // the second over a fresh connection to `DATABASE` itself, since a table-level REVOKE has to
-      // run against the database the table lives in. Without both, `drop role` below fails 2BP01
-      // ("role ... cannot be dropped because some objects depend on it") — reproduced once, before
-      // this cleanup existed.
+      // Revoke the probe's object grants and onward grants before dropping its role.
       await admin.execute(
-        sql.raw(`revoke connect on database ${quoteIdent(DATABASE)} from partial_admin`),
+        sql.raw(`revoke all on database ${quoteIdent(DATABASE)} from partial_admin cascade`),
       );
       const cleanupOwner = await createPostgresDb(withDatabase(adminUri, DATABASE));
       try {
-        await cleanupOwner.execute(sql.raw(`revoke select on deployment from partial_admin`));
+        await cleanupOwner.execute(
+          sql`revoke all on all tables in schema public from partial_admin`,
+        );
+        await cleanupOwner.execute(sql`revoke all on schema public from partial_admin cascade`);
       } finally {
         await cleanupOwner.close();
       }
@@ -655,9 +661,9 @@ describe("applyInstance against a blank container", () => {
 
 describe("applyInstance's create-role failure handling", () => {
   // Its own bare container, deliberately not the one above: `action.role` is typed `InstanceRole`
-  // — one of the three real role names, never an arbitrary probe string — so forcing a `CREATE
+  // — one of the two real role names, never an arbitrary probe string — so forcing a `CREATE
   // ROLE` failure without colliding with "role already exists" (the OTHER suite's container has
-  // already created all three by the time its tests run) needs a cluster where none of them exist
+  // already created both by the time its tests run) needs a cluster where none of them exist
   // yet.
   let pg: RealPostgres;
   let admin: Database;

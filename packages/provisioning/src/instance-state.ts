@@ -3,14 +3,8 @@ import { readDeploymentEnvironment, type Database, type DeploymentEnvironment } 
 import { manifestSets } from "@waitron/migrations";
 import { assertIdentifier } from "./identifiers.js";
 
-/**
- * The three LOGIN roles a deployment needs. `waitron_migrator` and `waitron_app` are the names
- * `apps/server/README.md` already uses (e.g. lines 83, 104, 137 — checked directly, not assumed).
- * `waitron_provisioner` does not appear anywhere in that file; it originates in
- * `docs/superpowers/specs/2026-07-29-provisioning-tool-design.md` (§2's "a third role", and §4's
- * idempotency table), which is where this package's own third role first comes from.
- */
-export const INSTANCE_ROLES = ["waitron_migrator", "waitron_app", "waitron_provisioner"] as const;
+/** The two LOGIN roles used by the deployment host. */
+export const INSTANCE_ROLES = ["waitron_migrator", "waitron_app"] as const;
 export type InstanceRole = (typeof INSTANCE_ROLES)[number];
 
 /**
@@ -24,7 +18,6 @@ export interface RoleFacts {
   canLogin: boolean;
   createRole: boolean;
   superuser: boolean;
-  bypassRls: boolean;
   /** Direct memberships only, by role name. `pg_auth_members`, not the recursive closure: the
    * planner grants a specific membership and needs to know whether that exact edge is present. */
   memberOf: string[];
@@ -74,24 +67,16 @@ export async function readInstanceState(
   );
   const databaseExists = dbRows.rows[0]?.exists === true;
 
-  // The two `::text`/`::text[]` casts below are load-bearing, not decoration. `pg_roles.rolname`
-  // is Postgres's `name` type, so an uncast `array(select g.rolname ...)` is `name[]` — OID 1003 —
-  // and node-postgres's driver has no default parser for that OID: it hands back the wire literal
-  // (e.g. `"{app_user_probe}"`, or `"{}"` when empty) as a raw STRING, not an array. Confirmed
-  // against a real container: the uncast version of this query returned `member_of: "{}"` typeof
-  // "string" for every row, populated or not. OID 1009 (`_text`) IS one of the array types `pg`
-  // parses natively, so casting every element — and the `coalesce` fallback — to `text` is what
-  // makes `member_of` an actual `string[]` rather than a value that only looks like one until a
-  // caller reads it.
+  // Cast membership names to text[] so node-postgres decodes an array, not
+  // the wire literal for name[]. The planner compares exact membership names.
   const roleRows = await admin.execute<{
     rolname: string;
     rolcanlogin: boolean;
     rolcreaterole: boolean;
     rolsuper: boolean;
-    rolbypassrls: boolean;
     member_of: string[];
   }>(sql`
-    select r.rolname, r.rolcanlogin, r.rolcreaterole, r.rolsuper, r.rolbypassrls,
+    select r.rolname, r.rolcanlogin, r.rolcreaterole, r.rolsuper,
            coalesce(
              array(select g.rolname::text from pg_auth_members m
                    join pg_roles g on g.oid = m.roleid
@@ -108,7 +93,6 @@ export async function readInstanceState(
       canLogin: row.rolcanlogin,
       createRole: row.rolcreaterole,
       superuser: row.rolsuper,
-      bypassRls: row.rolbypassrls,
       memberOf: row.member_of,
     };
   }

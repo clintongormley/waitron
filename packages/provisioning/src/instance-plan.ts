@@ -30,15 +30,11 @@ export interface InstanceRequest {
 }
 
 /**
- * What each role must be, as data rather than as three branches.
- *
- * `waitron_migrator` needs `CREATEROLE` because the empty-database migrations run
- * `CREATE ROLE app_user NOLOGIN` and four more, and — because Postgres grants the creating role
- * admin option on a role it just created — that same attribute is what lets each migration's
- * `GRANT <support_role> TO CURRENT_USER WITH INHERIT FALSE` / `REVOKE` pair work with no further
- * grant. `apps/server/README.md`'s empty-database section is the source; this encodes it.
+ * The two deployment logins and their required grants.
+ * The migrator needs CREATEROLE to create app_user on an empty cluster;
+ * the app inherits app_user and receives no database or schema CREATE grant.
  */
-const REQUIREMENTS: Record<
+export const REQUIREMENTS: Record<
   InstanceRole,
   {
     createRole: boolean;
@@ -51,25 +47,12 @@ const REQUIREMENTS: Record<
     createRole: true,
     memberOf: ["app_user"],
     databaseCreate: true,
-    // WITH GRANT OPTION, and it did not matter for the already-migrated case: the empty-database
-    // migrations temporarily re-grant CREATE ON SCHEMA public to each support role they create so
-    // it can own a function, then revoke it. A grant this role cannot itself pass on fails
-    // partway through that dance.
+    // Retain the migrator's direct, grantable schema CREATE privilege.
     schemaCreate: { withGrantOption: true },
   },
-  // Least privilege — spec §10 of the server design. Membership of `app_user` and nothing else, so
-  // every tenant-isolation policy applies to the connection every duty pass runs over.
   waitron_app: {
     createRole: false,
     memberOf: ["app_user"],
-    databaseCreate: false,
-    schemaCreate: false,
-  },
-  // `app_user` for locations/tills/invoice_series, which it already grants; `tenant_provisioner`
-  // for the one grant it deliberately does not (INSERT on tenants, 0011_provisioner_role.sql).
-  waitron_provisioner: {
-    createRole: false,
-    memberOf: ["app_user", "tenant_provisioner"],
     databaseCreate: false,
     schemaCreate: false,
   },
@@ -100,7 +83,7 @@ export function planInstance(
   request: InstanceRequest,
   password: () => string = generatePassword,
 ): InstanceAction[] {
-  // Refusals first, before a single action is emitted. A plan that created a database and three
+  // Refusals first, before a single action is emitted. A plan that created a database and two
   // roles and THEN discovered the stamp disagrees would leave the operator to clean up.
   if (
     state.inside !== null &&
@@ -120,15 +103,8 @@ export function planInstance(
   const actions: InstanceAction[] = [];
   if (!state.databaseExists) actions.push({ kind: "create-database", database: request.database });
 
-  // Migrate before any LOGIN role is created — not merely before the stamp. `app_user` and
-  // `tenant_provisioner`, the two NOLOGIN roles every REQUIREMENTS entry below names in `memberOf`,
-  // are themselves created by the "core" migration set (0001_tenancy_rls.sql line 18,
-  // 0011_provisioner_role.sql line 58), not by this tool. Emitting `create-role … IN ROLE app_user`
-  // before migrate runs is not a style choice: on a blank cluster `app_user` does not exist yet, and
-  // Postgres refuses the grant outright. Verified directly against a real container with this
-  // ordering reversed: `create role "waitron_migrator" ... in role "app_user"` raised
-  // `error: role "app_user" does not exist` (SQLSTATE 42704, acl.c:get_rolespec_tuple) — the tool
-  // failed on its very first end-to-end run against a blank database.
+  // Migrate before creating logins: the core baseline creates app_user, which
+  // CREATE ROLE ... IN ROLE requires to exist.
   //
   // UNCONDITIONAL, for the reason the two grants at the bottom of this function already are. This
   // was gated on `state.inside.migratedSets`, which is journal-TABLE existence and NOT "the set
@@ -165,9 +141,7 @@ export function planInstance(
         memberOf: need.memberOf,
       });
     } else {
-      // The role exists and is usable. Its memberships may still have drifted — an operator who
-      // created `waitron_provisioner` by hand from the README, before 0011 existed, has one
-      // holding `app_user` alone. That is repairable without touching the password.
+      // Repair direct memberships without changing an existing role's password.
       for (const of of need.memberOf) {
         if (!facts.memberOf.includes(of)) {
           actions.push({ kind: "grant-membership", role, memberOf: of });
@@ -205,20 +179,16 @@ export function planInstance(
 /**
  * Refuses a role this tool must not adopt.
  *
- * SUPERUSER or BYPASSRLS is refused rather than repaired: every grant `instance` makes sits behind
- * an RLS policy such a role ignores outright, so adopting one would produce a deployment that
- * looks provisioned and isolates nothing — the identical refusal `0001_tenancy_rls.sql` makes for
- * a pre-existing `app_user`.
+ * A superuser can DISABLE TRIGGER; the append-only guarantee is the triggers. Refused, never repaired.
  *
  * A missing attribute is refused rather than ALTERed: this tool did not create the role, does not
  * know its password, and silently widening a role an operator made by hand is not its call.
  */
-function assertUsable(role: InstanceRole, facts: RoleFacts): void {
-  if (facts.superuser || facts.bypassRls) {
+export function assertUsable(role: InstanceRole, facts: RoleFacts): void {
+  if (facts.superuser) {
     throw new AppError("provisioning.role_over_privileged", {
       role,
-      superuser: facts.superuser,
-      bypassRls: facts.bypassRls,
+      superuser: true,
     });
   }
   const missing: string[] = [];

@@ -1,13 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { isAppError } from "@waitron/shared";
-import { planInstance } from "./instance-plan.js";
-import type { InstanceState, RoleFacts } from "./instance-state.js";
+import { assertUsable, REQUIREMENTS, planInstance } from "./instance-plan.js";
+import { INSTANCE_ROLES, type InstanceState, type RoleFacts } from "./instance-state.js";
 
 const HEALTHY: RoleFacts = {
   canLogin: true,
   createRole: false,
   superuser: false,
-  bypassRls: false,
   memberOf: ["app_user"],
 };
 
@@ -22,7 +21,6 @@ function provisioned(): InstanceState {
     roles: {
       waitron_migrator: { ...HEALTHY, createRole: true },
       waitron_app: HEALTHY,
-      waitron_provisioner: { ...HEALTHY, memberOf: ["app_user", "tenant_provisioner"] },
     },
     inside: {
       migratedSets: ["core", "fiscal", "payments", "scheduler", "credentials"],
@@ -42,12 +40,7 @@ describe("planInstance against a blank cluster", () => {
     // and the stamp needs the `deployment` table that only migrating creates.
     expect(kinds.indexOf("migrate")).toBeLessThan(kinds.indexOf("stamp"));
     expect(kinds.indexOf("create-database")).toBeLessThan(kinds.indexOf("migrate"));
-    // Pins the ordering bug 12af388 fixed, in the pure planner itself rather than only in the
-    // container suite that found it: `app_user`/`tenant_provisioner` are created BY migrate, and
-    // every `create-role` action below bakes a membership in one of them straight into `CREATE
-    // ROLE ... IN ROLE`, so a create-role emitted before migrate runs fails on a real blank
-    // cluster. `indexOf("create-role")` returns the FIRST of the three — exactly the one this
-    // ordering matters for.
+    // Membership creation requires app_user to exist before either login.
     expect(kinds.indexOf("migrate")).toBeLessThan(kinds.indexOf("create-role"));
   });
 
@@ -60,24 +53,10 @@ describe("planInstance against a blank cluster", () => {
       createRole: true,
       memberOf: ["app_user"],
     });
-    // WITH GRANT OPTION: the empty-database migrations temporarily re-grant CREATE ON SCHEMA
-    // public to each support role they create, then revoke it. A grant this role cannot pass on
-    // fails partway through that dance — apps/server/README.md's own finding.
     expect(actions).toContainEqual({
       kind: "grant-schema-create",
       role: "waitron_migrator",
       withGrantOption: true,
-    });
-  });
-
-  it("makes the provisioner a member of tenant_provisioner and app_user, and nothing else", () => {
-    const actions = planInstance(blank(), REQUEST, () => "pw");
-    expect(actions).toContainEqual({
-      kind: "create-role",
-      role: "waitron_provisioner",
-      password: "pw",
-      createRole: false,
-      memberOf: ["app_user", "tenant_provisioner"],
     });
   });
 
@@ -120,21 +99,11 @@ describe("planInstance against a provisioned deployment", () => {
 
   it("still plans a missing membership on an existing role", () => {
     const state = provisioned();
-    state.roles.waitron_provisioner = { ...HEALTHY, memberOf: ["app_user"] };
-    // Corrected beyond the brief: `migrate` is now unconditional (this task's own change — see
-    // instance-plan.ts's comment on the `migrate` push), so it leads every plan including this one,
-    // not only the ones with a gap in `state.inside.migratedSets`. The brief's expectation of a bare
-    // membership grant also omits the two migrator grants (grant-database-create,
-    // grant-schema-create) that the implementation always re-issues regardless of what else changed
-    // in the plan — see the "re-issued, not diffed" comment on REQUIREMENTS in instance-plan.ts.
-    // Order confirmed empirically by running this suite: `migrate` comes first; then
-    // `grant-membership` for waitron_provisioner, from the create-role/grant-membership loop over
-    // INSTANCE_ROLES; then the migrator's two grants, from the separate, unconditional grants loop
-    // that runs after it. (This fixture's `state.inside` is already stamped for REQUEST's
-    // environment, so `stamp` does not appear here — the check that would emit it never fires.)
+    state.roles.waitron_app = { ...HEALTHY, memberOf: [] };
+    // Migration precedes membership repair and the unconditional migrator grants.
     expect(planInstance(state, REQUEST, () => "pw")).toEqual([
       { kind: "migrate" },
-      { kind: "grant-membership", role: "waitron_provisioner", memberOf: "tenant_provisioner" },
+      { kind: "grant-membership", role: "waitron_app", memberOf: "app_user" },
       { kind: "grant-database-create", role: "waitron_migrator", database: "waitron" },
       { kind: "grant-schema-create", role: "waitron_migrator", withGrantOption: true },
     ]);
@@ -173,7 +142,7 @@ describe("planInstance refusals", () => {
     if (!isAppError(thrown)) return;
     // The same code stampDeployment throws for the same condition — not a near-synonym. Raised
     // HERE so the refusal happens before anything is written, rather than after the database and
-    // three roles already exist.
+    // two roles already exist.
     expect(thrown.code).toBe("deployment.already_stamped");
     expect(thrown.params).toEqual({ stamped: "preproduction", requested: "production" });
   });
@@ -190,7 +159,7 @@ describe("planInstance refusals", () => {
     expect(isAppError(thrown)).toBe(true);
     if (!isAppError(thrown)) return;
     expect(thrown.code).toBe("provisioning.role_over_privileged");
-    expect(thrown.params).toEqual({ role: "waitron_app", superuser: true, bypassRls: false });
+    expect(thrown.params).toEqual({ role: "waitron_app", superuser: true });
   });
 
   it("refuses a role that cannot log in, naming what it is missing", () => {
@@ -221,11 +190,22 @@ describe("planInstance's injected password()", () => {
 
     const fresh = planInstance(blank(), REQUEST, password);
     const created = fresh.filter((a) => a.kind === "create-role");
-    expect(created).toHaveLength(3);
-    expect(password).toHaveBeenCalledTimes(3);
+    expect(created).toHaveLength(2);
+    expect(password).toHaveBeenCalledTimes(2);
 
     password.mockClear();
     planInstance(provisioned(), REQUEST, password);
     expect(password).not.toHaveBeenCalled();
   });
+});
+
+it("refuses a superuser and ignores unrelated role attributes", () => {
+  const ordinary = { ...HEALTHY, superuser: false, bypassRls: true };
+  const superuser = { ...HEALTHY, superuser: true, bypassRls: false };
+  expect(() => assertUsable("waitron_app", ordinary)).not.toThrow();
+  expect(() => assertUsable("waitron_app", superuser)).toThrow(/role_over_privileged/);
+});
+it("plans exactly two logins: the migrator and the app", () => {
+  expect(INSTANCE_ROLES).toEqual(["waitron_migrator", "waitron_app"]);
+  expect(REQUIREMENTS.waitron_app.memberOf).toEqual(["app_user"]);
 });
