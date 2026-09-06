@@ -211,6 +211,19 @@ smoke/assertion steps. Gated on `code`, since a Markdown edit cannot change an e
 > lint-relevant escapes. The path-allowlist-not-extension principle below is unchanged. The receipt
 > is the commit that widened `INERT_ROOT_PREFIXES` / `INERT_ROOT_FILES` and its PR thread.
 
+> **Dated pointer, 2026-09-06 — a FOURTH scope, `root`.** Two outcomes below (`documentation`,
+> `global`, `packages`) have become four. The repository's own machinery — `scripts/`, `.husky/`,
+> `.github/` — is code, but code no workspace member reads, so it no longer forces the `global` run
+> §3.5 describes. `scopeForPaths` reports `kind: "root"` when every changed code path is one of
+> those, plus a `root=true|false` line that is true whenever any is; `formatScope` answers `code`
+> false for it, so ci.yml's `code`-gated jobs skip while the ungated `lint` job still runs eslint,
+> `format:check` and the repo-level Vitest project — the one suite that does read the machinery.
+> `.husky/pre-push` runs that project and stops. Truly global root config (`pnpm-lock.yaml`, the root
+> `package.json`, `pnpm-workspace.yaml`, `tsconfig*.json`, `eslint.config.js`, `vitest.config.ts`,
+> `.prettierrc*`, `.prettierignore`) is unchanged and still global. Measured on this branch's own
+> push, which is exactly that shape: 417s as `global`, 23s as `root`. Receipt: the commit adding
+> `isRootScopePath` and its PR thread.
+
 **A change is docs-only when every changed path is under `docs/` or is a root-level `*.md`.**
 Anything under `packages/` or `apps/` is code, Markdown or not.
 

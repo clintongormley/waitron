@@ -152,18 +152,66 @@ describe("scopeForPaths", () => {
   // The whole point of the `global` outcome: these paths can affect anything, so nothing may be
   // narrowed away on account of them.
   it.each([
-    ".github/workflows/ci.yml",
-    "scripts/changed-scope.mjs",
-    ".husky/pre-push",
     "pnpm-workspace.yaml",
     "pnpm-lock.yaml",
     "tsconfig.base.json",
     "eslint.config.js",
     "vitest.config.ts",
     "package.json",
-    "scripts/changed-packages.mjs",
+    ".prettierrc.json",
+    ".prettierignore",
   ])("reports a global run for %s, which belongs to no package", (path) => {
     expect(scopeForPaths([path], workspace()).kind).toBe("global");
+  });
+
+  // The repository's own machinery is ROOT scope, not global: no `pnpm -r` job reads it, so it
+  // gives the repo-level Vitest project work and gives no package any. It used to fall through to
+  // `global`, which ran the whole workspace's typecheck and coverage — ten minutes for a change to
+  // the classifier that decides what runs.
+  it.each([
+    ".github/workflows/ci.yml",
+    "scripts/changed-scope.mjs",
+    ".husky/pre-push",
+    "scripts/changed-packages.mjs",
+  ])("reports a root run for %s", (path) => {
+    expect(scopeForPaths([path], workspace())).toMatchObject({
+      kind: "root",
+      packages: [],
+      root: true,
+    });
+  });
+
+  // Root and package work COMPOSE: the root project runs and the packages are still narrowed to.
+  it("keeps narrowing to packages when a root path changed too", () => {
+    expect(
+      scopeForPaths(["scripts/changed-scope.mjs", "packages/db/src/y.ts"], workspace()),
+    ).toMatchObject({ kind: "packages", packages: ["@waitron/db"], root: true });
+  });
+
+  // Global wins over root — it already runs the repo-level project — but `root` still reports what
+  // changed.
+  it("reports a global run, still flagged root, when a root path changed beside global config", () => {
+    expect(
+      scopeForPaths(["scripts/changed-scope.mjs", "pnpm-lock.yaml"], workspace()),
+    ).toMatchObject({ kind: "global", packages: [], root: true });
+  });
+
+  // ROOT-ONLY, exactly as the inert-config rule is. A package's own `scripts/` belongs to that
+  // package, and its suite is what covers it.
+  it("attributes a package's own scripts/ directory to the package, not to root scope", () => {
+    expect(scopeForPaths(["packages/db/scripts/x.ts"], workspace())).toMatchObject({
+      kind: "packages",
+      packages: ["@waitron/db"],
+      root: false,
+    });
+  });
+
+  // Prose does not stop a root push being one, the same way it does not widen a package push.
+  it("reports a root run when the rest of the push is documentation", () => {
+    expect(scopeForPaths(["docs/backlog.md", ".husky/pre-push"], workspace())).toMatchObject({
+      kind: "root",
+      root: true,
+    });
   });
 
   // `kind` and the package list are not two answers to be combined by the caller — the list is
@@ -173,6 +221,7 @@ describe("scopeForPaths", () => {
     expect(scopeForPaths(["packages/db/src/index.ts", "tsconfig.base.json"], workspace())).toEqual({
       kind: "global",
       packages: [],
+      root: false,
       reason: expect.stringContaining("tsconfig.base.json"),
     });
   });
@@ -232,6 +281,15 @@ describe("scopeForPaths", () => {
   it("does not read the workspace when no changed path could be determined either", () => {
     const load = workspace();
     expect(scopeForPaths([""], load).kind).toBe("global");
+    expect(load.called).toBe(false);
+  });
+
+  // The same property the documentation path has, for the same reason: `pnpm ls -r --depth -1
+  // --json` is 191-200ms (timed in scripts/changed-packages.mjs's own comment) and a push with no
+  // package path to attribute has no use for it.
+  it("does not read the workspace at all for a root-only push", () => {
+    const load = loader(WORKSPACE);
+    expect(scopeForPaths([".husky/pre-push"], load).kind).toBe("root");
     expect(load.called).toBe(false);
   });
 
@@ -313,7 +371,7 @@ describe("scopeForPaths", () => {
   });
 
   it("names the path that forced a global run", () => {
-    expect(scopeForPaths([".husky/pre-push"], workspace()).reason).toContain(".husky/pre-push");
+    expect(scopeForPaths(["pnpm-lock.yaml"], workspace()).reason).toContain("pnpm-lock.yaml");
   });
 
   it("names the packages it attributed", () => {
@@ -324,15 +382,15 @@ describe("scopeForPaths", () => {
 });
 
 describe("formatScope", () => {
-  it("emits the docs verdict, the outcome and the package list, in that order", () => {
+  it("emits the docs verdict, the outcome, the package list and the root flag, in that order", () => {
     expect(formatScope(scopeForPaths(["packages/db/src/index.ts"], workspace()))).toBe(
-      "code=true\nscope=packages\npackages=@waitron/db",
+      "code=true\nscope=packages\npackages=@waitron/db\nroot=false",
     );
   });
 
   it("emits an empty package list for a global run", () => {
-    expect(formatScope(scopeForPaths([".husky/pre-push"], workspace()))).toBe(
-      "code=true\nscope=global\npackages=",
+    expect(formatScope(scopeForPaths(["pnpm-lock.yaml"], workspace()))).toBe(
+      "code=true\nscope=global\npackages=\nroot=false",
     );
   });
 
@@ -340,15 +398,31 @@ describe("formatScope", () => {
   // running format:check. It must not be spelled the same as a global run.
   it("emits its own line for a documentation-only push", () => {
     expect(formatScope(scopeForPaths(["docs/backlog.md"], workspace()))).toBe(
-      "code=false\nscope=documentation\npackages=",
+      "code=false\nscope=documentation\npackages=\nroot=false",
     );
   });
 
-  // `code` is ci.yml's docs gate: `bundle-smoke`, `typecheck`, both test shards and both mutation
-  // jobs are gated on it. It is the SAME verdict as `scope=documentation`, emitted here rather than
-  // computed by the workflow's shell so the two cannot drift — that is the whole point of CI and the
-  // hook sharing one classifier. Asserted as an equivalence, in both directions, rather than as two
-  // separate expectations that could agree by accident.
+  // The FOURTH outcome. `code=false` is what makes a pure-root pull request skip every code-gated
+  // job in ci.yml — the ungated `lint` job runs the repo-level project there — and `scope=root` is
+  // what makes the hook skip the scoped typecheck and coverage while still running it.
+  it("emits its own line for a root-only push", () => {
+    expect(formatScope(scopeForPaths([".husky/pre-push"], workspace()))).toBe(
+      "code=false\nscope=root\npackages=\nroot=true",
+    );
+  });
+
+  it("reports root=true on a push that mixes root paths with package paths", () => {
+    expect(
+      formatScope(
+        scopeForPaths(["scripts/changed-scope.mjs", "packages/db/src/y.ts"], workspace()),
+      ),
+    ).toBe("code=true\nscope=packages\npackages=@waitron/db\nroot=true");
+  });
+
+  // `code` is ci.yml's gate on every job that builds, typechecks, tests or mutates a PACKAGE. For
+  // everything `classify` can answer about it is the same verdict, emitted here rather than
+  // computed by the workflow's shell so the two cannot drift. Asserted as an equivalence, in both
+  // directions, rather than as two separate expectations that could agree by accident.
   it.each([
     [["docs/backlog.md", "CLAUDE.md"], false],
     [["packages/db/src/index.ts"], true],
@@ -360,6 +434,16 @@ describe("formatScope", () => {
     expect(classify(paths).code).toBe(expected);
   });
 
+  // The one place the two part company, and the reason `code` is not simply `classify`'s verdict
+  // any more. A root path IS code — `isInertPath` says so, and it can break the repo-level suite —
+  // but it gives no `code`-gated job in ci.yml anything to do.
+  it("emits code=false for a root-only push, where classify says code", () => {
+    expect(classify([".husky/pre-push"]).code).toBe(true);
+    expect(formatScope(scopeForPaths([".husky/pre-push"], workspace())).split("\n")[0]).toBe(
+      "code=false",
+    );
+  });
+
   // The hook splits this on whitespace to build one `--filter "...<pkg>"` argument per name, so the
   // separator is part of the contract.
   it("separates several packages with a single space", () => {
@@ -367,7 +451,7 @@ describe("formatScope", () => {
       formatScope(
         scopeForPaths(["packages/db/src/a.ts", "packages/payments/src/b.ts"], workspace()),
       ),
-    ).toBe("code=true\nscope=packages\npackages=@waitron/db @waitron/payments");
+    ).toBe("code=true\nscope=packages\npackages=@waitron/db @waitron/payments\nroot=false");
   });
 });
 
@@ -496,29 +580,35 @@ describe("the CLI", () => {
 
   it("resolves this workspace and attributes a real package directory", () => {
     expect(run("packages/db/src/index.ts\n").stdout).toBe(
-      "code=true\nscope=packages\npackages=@waitron/db\n",
+      "code=true\nscope=packages\npackages=@waitron/db\nroot=false\n",
     );
   });
 
   it("attributes several real package directories", () => {
     expect(run("packages/db/src/index.ts\napps/server/src/boot.ts\n").stdout).toBe(
-      "code=true\nscope=packages\npackages=@waitron/db @waitron/server\n",
+      "code=true\nscope=packages\npackages=@waitron/db @waitron/server\nroot=false\n",
     );
   });
 
   it("reports a global run for root configuration", () => {
-    expect(run("tsconfig.base.json\n").stdout).toBe("code=true\nscope=global\npackages=\n");
+    expect(run("tsconfig.base.json\n").stdout).toBe(
+      "code=true\nscope=global\npackages=\nroot=false\n",
+    );
+  });
+
+  it("reports a root run for the repository\u2019s own machinery", () => {
+    expect(run(".husky/pre-push\n").stdout).toBe("code=false\nscope=root\npackages=\nroot=true\n");
   });
 
   it("reports a documentation-only push through the CLI too", () => {
     expect(run("docs/backlog.md\nCLAUDE.md\n").stdout).toBe(
-      "code=false\nscope=documentation\npackages=\n",
+      "code=false\nscope=documentation\npackages=\nroot=false\n",
     );
   });
 
   it("fails closed on empty stdin", () => {
-    expect(run("").stdout).toBe("code=true\nscope=global\npackages=\n");
-    expect(run("\n").stdout).toBe("code=true\nscope=global\npackages=\n");
+    expect(run("").stdout).toBe("code=true\nscope=global\npackages=\nroot=false\n");
+    expect(run("\n").stdout).toBe("code=true\nscope=global\npackages=\nroot=false\n");
   });
 
   it("puts the reason on stderr, where the hook's sed cannot reach it", () => {

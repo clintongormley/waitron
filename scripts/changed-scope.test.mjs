@@ -15,6 +15,7 @@ import {
   classify,
   gateOutputs,
   isInertPath,
+  isRootScopePath,
   packagesInScope,
 } from "./changed-scope.mjs";
 
@@ -70,6 +71,50 @@ describe("isInertPath", () => {
     "treats %s as code, because the root-config rule does not reach inside a package",
     (path) => {
       expect(isInertPath(path)).toBe(false);
+    },
+  );
+});
+
+describe("isRootScopePath", () => {
+  // The repository's own machinery. It is CODE — isInertPath says so — but no `pnpm -r` job reads
+  // it, so it gives the ROOT Vitest project work and gives no package any.
+  it.each([
+    "scripts/changed-scope.mjs",
+    "scripts/english-only.test.ts",
+    ".husky/pre-push",
+    ".github/workflows/ci.yml",
+  ])("treats %s as root scope", (path) => {
+    expect(isRootScopePath(path)).toBe(true);
+  });
+
+  // Root config every package inherits. Each of these can change what every package builds, lints
+  // or tests, so it must keep forcing a global run rather than resolving to the root project.
+  it.each([
+    "pnpm-lock.yaml",
+    "package.json",
+    "pnpm-workspace.yaml",
+    "tsconfig.base.json",
+    "eslint.config.js",
+    "vitest.config.ts",
+    ".prettierrc.json",
+    ".prettierignore",
+  ])("treats the global root config %s as NOT root scope", (path) => {
+    expect(isRootScopePath(path)).toBe(false);
+  });
+
+  // ROOT-ONLY, exactly as the inert-config rule is: a package's own `scripts/` is that package's,
+  // and its files belong to its suite rather than to the repo-level one.
+  it.each(["packages/db/scripts/copy-migrations.mjs", "apps/server/scripts/dev-setup.ts"])(
+    "treats %s as NOT root scope, because the rule does not reach inside a package",
+    (path) => {
+      expect(isRootScopePath(path)).toBe(false);
+    },
+  );
+
+  it.each(["packages/db/src/index.ts", "docs/backlog.md"])(
+    "treats %s as NOT root scope",
+    (path) => {
+      expect(isRootScopePath(path)).toBe(false);
     },
   );
 });
