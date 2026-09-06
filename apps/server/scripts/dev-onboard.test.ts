@@ -1,3 +1,4 @@
+// Real PostgreSQL: exercises onboarding through a PostgreSQL URL that opens its own connections.
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";

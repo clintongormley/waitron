@@ -10,8 +10,7 @@ import { tenants } from "./tenants.js";
 
 // Real Postgres (a template clone), not PGlite: every write below runs as the non-owner
 // `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
-// constraints themselves would fire on either target — a candidate for the PGlite tier once the
-// suites are re-tagged.
+// cases retain the role switch so the reads and writes still exercise app_user grants.
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
@@ -40,8 +39,8 @@ describe("location_catalogues schema (multi-menu accessibility map — PK + comp
     });
   }
 
-  // Seed a catalogue under the app role, scoped to `tenant` — exercises catalogues' own grant + WITH
-  // CHECK (0027). The catalogue is the OTHER menu a location may sell, beyond its default.
+  // Seed under the app role to exercise catalogues' INSERT grant. This is an additional menu
+  // the location may sell, beyond its default.
   async function seedCatalogue(tenant: string, name: string): Promise<string> {
     return asApp(tenant, async (tx) => {
       const r = await tx.execute<{ id: string }>(

@@ -1,3 +1,4 @@
+// Real PostgreSQL exercises peer writes and token reads through app_user member logins.
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";

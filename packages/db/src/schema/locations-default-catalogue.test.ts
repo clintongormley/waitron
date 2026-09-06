@@ -9,7 +9,7 @@ import { tenants } from "./tenants.js";
 
 // Real Postgres (a template clone), not PGlite: the app role that performs the UPDATE only exists
 // under real Postgres (PGlite is a superuser). The composite FK itself would fire on either target —
-// a candidate for the PGlite tier once the suites are re-tagged. `locations.catalogue_id` (a location's
+// this suite retains the app_user UPDATE check. `locations.catalogue_id` (a location's
 // DEFAULT menu) originally carried a single-column FK to catalogues(id) — global, not tenant-scoped —
 // so a cross-tenant catalogue could be set as a location's default (the app-layer guard in
 // catalogue-api.ts caught it at the route, but the DB accepted it). This suite pins the tenant-consistent

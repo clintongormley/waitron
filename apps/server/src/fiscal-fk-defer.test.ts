@@ -37,8 +37,8 @@ import {
 //   2. RESERVED-SIF (R2) COEXISTENCE — a standby seeded at adopt (memory: reserved-sif-seeded-at-join)
 //      carries its OWN dormant fiscal identity keyed to its OWN nodeId. Applying the PRIMARY's
 //      node-keyed identity onto such a mirror must not collide, because the activo/PK constraints are
-//      node-keyed: `registro_sif_activo_uq (tenant_id, node_id) WHERE revocado_en IS NULL` (0013) and
-//      `cadenas` PK `(tenant_id, node_id)` (0013). The measurement is placed exactly where a node-keyed
+//      node-keyed: `registro_sif_activo_uq (tenant_id, node_id) WHERE revocado_en IS NULL` and
+//      `cadenas` PK `(tenant_id, node_id)`. The measurement is placed exactly where a node-keyed
 //      constraint and a non-node-keyed one DIFFER: `registro_sif_instalacion_uq (nif,
 //      id_sistema_informatico, numero_instalacion)` is NOT node-keyed, so the reserved SIF is given a
 //      DISTINCT numero_instalacion — the negative control below applies a primary SIF whose numero

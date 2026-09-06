@@ -1,3 +1,4 @@
+// Real PostgreSQL exercises management reads and writes after SET ROLE app_user.
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";

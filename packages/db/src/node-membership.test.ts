@@ -1,3 +1,4 @@
+// Real PostgreSQL: checks JSONB decoding through the node-postgres driver alongside PGlite logic tests.
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { SignedMembershipDocument } from "@waitron/membership";

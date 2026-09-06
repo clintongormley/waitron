@@ -21,9 +21,7 @@ import {
 // (`withTenant` + `asAppUser`), the shape the management routes use. PGlite connects as a superuser
 // holding every grant, so a missing GRANT on `device_profiles` — or on the
 // `persons`/`management_sessions` reads `authorizeManager` performs — is invisible there (CLAUDE.md
-// §4). Whether that alone still warrants a container is the per-suite target review's question
-// (docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md §4), not this
-// suite's. Seeds run as the owner (pure setup); the `core_identity` template pairs core + identity
+// §4). The suite retains these app-role grant checks. Seeds run as the owner (pure setup); the `core_identity` template pairs core + identity
 // migrations so authorizeManager's tables and `device_profiles` both exist.
 // It also exercises the tenant-consistent composite FK `device_profiles_canvas_fk`, which rejects a
 // canvas row keyed to a different tenant — a constraint, not a policy.

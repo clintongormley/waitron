@@ -23,7 +23,7 @@ import { provisionNode } from "./provision-till.js";
 // never survives `tenantId()`'s brand.
 const ABSENT = "00000000-0000-0000-0000-000000000000";
 
-// The full manifest, not just [core, fiscal]: fiscal's SP-3a capture migration (0014) needs sync's
+// The full manifest, not just [core, fiscal]: fiscal's SP-3a capture migration needs sync's
 // `sync_capture()`, so the whole manifest is applied (sync before fiscal) — the production order.
 const suite = usePgliteDb({
   migrations: migrationOptionsFor(manifestSets(), null),

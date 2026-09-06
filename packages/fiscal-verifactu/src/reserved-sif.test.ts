@@ -1,6 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { sql } from "drizzle-orm";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Transaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   currentSif,
   esPrimerRegistro,
@@ -9,33 +11,40 @@ import {
 } from "./registro-sif.js";
 import { seedNodesForSifContention, type SifContentionFixture } from "./testing/seed.js";
 
-/**
- * Real PostgreSQL via a clone of the shared container's `manifest` template, like every other
- * real-Postgres suite in this package (see chain.concurrency.test.ts's own note on why Docker
- * absence throws rather than skips). `reserveInstallationNumber`'s whole point is the atomic
- * `contadores_instalacion` bump, which PGlite serialises onto one backend and so cannot exercise
- * (registro-sif.ts:50-57).
- */
-const suite = useTemplateDb({ template: "manifest" });
+const suite = usePgliteDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
 const SISTEMA = "W1";
 
 let fixture: SifContentionFixture;
 
-// A fresh tenant (therefore a fresh NIF, via seedNodesForSifContention → freshNif) plus two bare,
-// UNregistered nodes on every test — so each test's (NIF, IdSistema) counter starts empty and the
-// pre-increment values are deterministically 1, then 2. No truncate: registros_facturacion's
-// append-only trigger blocks it (chain.concurrency.test.ts's own note), and a fresh NIF per test
-// makes each run's rows independent of the last.
+// Each case starts with unregistered nodes and an empty installation counter.
 beforeEach(async () => {
-  fixture = await seedNodesForSifContention(suite.admin, 2);
+  fixture = await seedNodesForSifContention(suite.db, 2);
+});
+
+afterEach(async () => {
+  // These fixtures have no filed records; clear only their mutable identity and capture rows.
+  await suite.db.transaction(async (tx) => {
+    await tx.execute(sql`set local app.sync_apply = 'on'`);
+    for (const table of [
+      "cadenas",
+      "registro_sif",
+      "contadores_instalacion",
+      "nodes",
+      "locations",
+      "tenants",
+      "sync_log",
+    ]) {
+      await tx.execute(sql`delete from ${sql.identifier(table)}`);
+    }
+  });
 });
 
 function withTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return suite.admin.transaction(fn);
+  return suite.db.transaction(fn);
 }
 
-describe("reserved-sif primitives (real Postgres)", () => {
+describe("reserved-sif primitives", () => {
   it("reserveInstallationNumber advances the counter and hands back the pre-increment value", async () => {
     // First reservation for a fresh (nif, idSistema) returns 1, the next returns 2 (never-reuse).
     const first = await withTx((tx) =>

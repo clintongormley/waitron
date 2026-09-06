@@ -8,12 +8,7 @@ import type { PersonRoleValue } from "./permissions.js";
 import { hashPin } from "./verify-pin.js";
 import { listActivePersonsWithPermission } from "./staff.js";
 
-// `.pg` rather than `.rls`, and rather than joining staff.test.ts, which is PGlite: the case below
-// runs through `identity_rls_probe`, a cluster-wide login globalSetup creates as a member of
-// `app_user` (`inRole: "app_user"`, testing/global-setup.ts), and a PGlite connection is a superuser
-// holding every grant (CLAUDE.md §4). What the case actually pins — the permission and status
-// filters, the name ordering and the returned key set — needs no particular role, so this file is a
-// candidate for the PGlite tier once the suites are re-tagged.
+// Real PostgreSQL reads filtered person rows through an app_user member login.
 const PROBE_ROLE = "identity_rls_probe";
 const PROBE_PASSWORD = "probe";
 const PIN = hashPin("1234");

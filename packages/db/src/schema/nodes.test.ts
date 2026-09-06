@@ -2,9 +2,19 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
-import { describeEachTarget } from "../testing/harness.js";
+import { usePgliteDb } from "../testing/lifecycle.js";
+import { CORE_MIGRATIONS } from "../migrations.js";
 import { nodes } from "./nodes.js";
 import { locations, tenants } from "./tenants.js";
+
+const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+
+// Each case gets empty mutable fixture tables while sharing the migrated database.
+afterEach(async () => {
+  await suite.db.execute(sql`delete from nodes`);
+  await suite.db.execute(sql`delete from locations`);
+  await suite.db.execute(sql`delete from tenants`);
+});
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
@@ -14,13 +24,7 @@ const NODE_A1 = "aaaaaaaa-2222-4000-8000-000000000001";
 // Never seeded — the FK target for the "location does not exist" rejection below.
 const LOCATION_MISSING = "cccccccc-0000-4000-8000-000000000009";
 
-/**
- * Both drivers expose `.rows`, but the pglite driver returns its own Results
- * object rather than node-postgres's QueryResult. Normalising here keeps the
- * introspection tests identical across targets instead of forking on driver.
- * (Same helper as series.test.ts — copied deliberately rather than shared, so
- * each schema suite reads standalone.)
- */
+/** Normalise the query result before reading catalog rows. */
 async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]> {
   const result = (await db.execute(query)) as unknown as { rows: T[] } | T[];
   return Array.isArray(result) ? result : result.rows;
@@ -49,18 +53,12 @@ async function seed(db: Database): Promise<void> {
   ]);
 }
 
-describeEachTarget("nodes schema", (target) => {
+describe("nodes schema", () => {
   let db: Database;
 
   beforeEach(async () => {
-    db = await target.create();
+    db = suite.db;
     await seed(db);
-  });
-
-  // Without it, a pg Pool per test is left open when the postgres target's
-  // container stops at describe-level teardown (see series.test.ts / tenancy.test.ts).
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
   });
 
   it("inserts a node under its tenant", async () => {

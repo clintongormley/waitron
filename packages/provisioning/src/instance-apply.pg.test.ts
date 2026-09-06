@@ -1,3 +1,4 @@
+// Real PostgreSQL: checks role membership, grant options, failed grants and least-privileged provisioning.
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";

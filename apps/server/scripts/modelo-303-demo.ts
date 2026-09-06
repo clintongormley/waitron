@@ -6,7 +6,7 @@
 // trade through the REAL write path (`recordSale` / `recordCorrection` from `@waitron/core`) against
 // the fake `FiscalBackend` from `@waitron/fiscal` — no external Postgres, no AEAT, no SIF
 // registration. Both functions read only `sales.vat_breakdown` (a queryable copy of the filed
-// desglose, migration 0032), so CORE_MIGRATIONS alone suffices; the fiscal chain is never read.
+// desglose), so CORE_MIGRATIONS alone suffices; the fiscal chain is never read.
 //
 // It then produces the SUBMITTABLE output end-to-end: `mapModelo303` maps the reconciled aggregate
 // onto the modelo 303 casillas and `toDr303Record` serializes it to the AEAT sede "por fichero"

@@ -1,11 +1,20 @@
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "./client.js";
 import { locations, tenants } from "./schema/tenants.js";
 import { withTenant } from "./tenancy.js";
 import { pgErrorMessage } from "./testing/errors.js";
-import { describeEachTarget } from "./testing/harness.js";
+import { usePgliteDb } from "./testing/lifecycle.js";
+import { CORE_MIGRATIONS } from "./migrations.js";
+
+const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+
+// Each case gets empty mutable fixture tables while sharing the migrated database.
+afterEach(async () => {
+  await suite.db.execute(sql`delete from locations`);
+  await suite.db.execute(sql`delete from tenants`);
+});
 
 /** Match the underlying PostgreSQL error, not Drizzle's SQL wrapper message. */
 async function rejectsWithCauseMatching(promise: Promise<unknown>, pattern: RegExp): Promise<void> {
@@ -21,19 +30,15 @@ async function rejectsWithCauseMatching(promise: Promise<unknown>, pattern: RegE
   );
 }
 
-describeEachTarget("invoice_locales", (target) => {
+describe("invoice_locales", () => {
   const tenantId = randomUUID();
   let db: Database;
 
   beforeEach(async () => {
-    db = await target.create();
+    db = suite.db;
     await db
       .insert(tenants)
       .values({ id: tenantId, country: "ES", taxId: "B44444447", legalName: "Bar Gamma SL" });
-  });
-
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
   });
 
   const insertLocales = async (invoiceLocales: string[]): Promise<unknown> => {
@@ -77,17 +82,13 @@ describeEachTarget("invoice_locales", (target) => {
   });
 });
 
-describeEachTarget("app.node_id origin context", (target) => {
+describe("app.node_id origin context", () => {
   const tenantId = randomUUID();
   const nodeId = randomUUID();
   let db: Database;
 
   beforeEach(async () => {
-    db = await target.create();
-  });
-
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
+    db = suite.db;
   });
 
   const nodeSetting = (

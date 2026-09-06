@@ -248,7 +248,7 @@ beforeAll(async () => {
 
   await seedTillIdentity(suite.admin);
   // Stamp production (matching WAITRON_ENV so the boot guard passes); singleton_role keeps its column
-  // default 'primary' (migration 0071) — so this clone is a PRIMARY, the state a returned ex-primary is
+  // default 'primary' (the baseline) — so this clone is a PRIMARY, the state a returned ex-primary is
   // in before its held fence is reconciled.
   await stampDeployment(suite.admin, "production");
 

@@ -1,13 +1,34 @@
 import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
-import { describeEachTarget } from "../testing/harness.js";
+import { usePgliteDb } from "../testing/lifecycle.js";
+import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedNode } from "../testing/seed.js";
 import { catalogues, optionGroupItems, optionGroups, products } from "./catalogue.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
 import { locations, tenants, tills } from "./tenants.js";
+
+const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+
+afterEach(async () => {
+  await suite.db.transaction(async (tx) => {
+    // Fixture cleanup uses the sync gate to remove lines whose parent is already terminal.
+    // SET LOCAL restores the gate before the next case exercises the ordinary write path.
+    await tx.execute(sql`set local app.sync_apply = 'on'`);
+    await tx.execute(sql`delete from working_order_lines`);
+    await tx.execute(sql`delete from working_orders`);
+    await tx.execute(sql`delete from option_group_items`);
+    await tx.execute(sql`delete from option_groups`);
+    await tx.execute(sql`delete from products`);
+    await tx.execute(sql`delete from catalogues`);
+    await tx.execute(sql`delete from nodes`);
+    await tx.execute(sql`delete from tills`);
+    await tx.execute(sql`delete from locations`);
+    await tx.execute(sql`delete from tenants`);
+  });
+});
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
@@ -115,25 +136,12 @@ const LINE = {
   lineTotal: "1.30",
 };
 
-describeEachTarget("working_orders", (target) => {
+describe("working_orders", () => {
   let db: Database;
 
   beforeEach(async () => {
-    // No truncate before seed(): target.create() already returns a freshly
-    // migrated, empty database per test (see allocate-number.test.ts's
-    // beforeEach for why the truncate that used to run here was always a
-    // no-op, and why Task 8 made it an active problem rather than harmless
-    // boilerplate).
-    db = await target.create();
+    db = suite.db;
     await seed(db);
-  });
-
-  // This package's convention (see tenancy.test.ts): without it, a pg Pool
-  // per test is left open when the postgres target's container stops at
-  // describe-level teardown, and it surfaces as an unhandled FATAL 57P01
-  // rejection rather than a test failure.
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
   });
 
   it("opens an order in the open state with no settled_at", async () => {
@@ -353,21 +361,12 @@ describeEachTarget("working_orders", (target) => {
   });
 });
 
-describeEachTarget("working_order_lines", (target) => {
+describe("working_order_lines", () => {
   let db: Database;
 
   beforeEach(async () => {
-    // No truncate before seed(): target.create() already returns a freshly
-    // migrated, empty database per test (see allocate-number.test.ts's
-    // beforeEach for why the truncate that used to run here was always a
-    // no-op, and why Task 8 made it an active problem rather than harmless
-    // boilerplate).
-    db = await target.create();
+    db = suite.db;
     await seed(db);
-  });
-
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
   });
 
   it("adds a line to an open order", async () => {
@@ -575,16 +574,12 @@ describeEachTarget("working_order_lines", (target) => {
  *   working_order_lines only, never on the filed sale_lines (which stay decoupled from the mutable
  *   catalogue).
  */
-describeEachTarget("working_order_lines — modifier links", (target) => {
+describe("working_order_lines — modifier links", () => {
   let db: Database;
 
   beforeEach(async () => {
-    db = await target.create();
+    db = suite.db;
     await seed(db);
-  });
-
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
   });
 
   // Raw insert so the RED phase fails on the missing column, not a TypeScript compile error against

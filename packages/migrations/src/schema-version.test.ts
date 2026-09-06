@@ -1,3 +1,4 @@
+// Real PostgreSQL: checks real node-postgres error propagation after closing its pool.
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

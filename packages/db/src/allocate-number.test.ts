@@ -1,3 +1,4 @@
+// Real PostgreSQL checks app_user allocation grants and competing backends.
 import { afterEach, beforeEach, expect, it } from "vitest";
 import {
   AppError,

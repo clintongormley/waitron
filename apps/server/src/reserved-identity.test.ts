@@ -24,7 +24,7 @@ const RING: KeyRing = loadKeyRing({
 const ENDORSEMENT: Endorsement = { nodeId: "n", publicKey: "p", endorsedBy: "e", signature: "s" };
 
 describe("establishReservedStandbyIdentity", () => {
-  // The full manifest, not just [core, credentials, fiscal]: fiscal's SP-3a capture migration (0014)
+  // The full manifest, not just [core, credentials, fiscal]: fiscal's SP-3a capture migration
   // needs sync's `sync_capture()`, so the whole manifest is applied (sync before fiscal) — the
   // production order.
   const suite = usePgliteDb({

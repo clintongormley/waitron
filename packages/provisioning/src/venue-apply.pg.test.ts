@@ -1,3 +1,4 @@
+// Real PostgreSQL: provisions a sellable venue as a verified non-superuser owner.
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";

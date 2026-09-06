@@ -1,3 +1,4 @@
+// Real PostgreSQL: exercises the node-postgres driver, including connection and close behavior.
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

@@ -1,3 +1,4 @@
+// Real PostgreSQL: exercises reads/writes or triggers after SET ROLE app_user.
 import { mkdtempSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";

@@ -18,8 +18,7 @@ import "./errors.js";
 // the `report.view` case asserts the refusal without one. The route mechanics (year/period/
 // declarationType screens, STATUS map, the 2944-byte ISO-8859-1 body) are already proven in-process on
 // PGlite (`report-api.test.ts`), and the overview tile in `report-api.overview.test.ts` — so with the
-// two gates as its only remaining subject this file is a candidate for the PGlite tier once the suites
-// are re-tagged.
+// two gates retain their database reads under app_user's grants.
 const LOCALE = "es-ES";
 
 const suite = useTemplateDb({ template: "manifest" });

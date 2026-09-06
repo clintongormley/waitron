@@ -15,10 +15,10 @@ import type { Logger } from "./logger.js";
 
 export interface RetireDeps {
   /** The app pool — `node_membership` read/write and the identity-key read, all app-role. `app_user`
-   * holds SELECT on `node_membership` (0096) and, via `readNodeIdentityKey`, SELECT on
+   * holds SELECT on `node_membership` and, via `readNodeIdentityKey`, SELECT on
    * `tenant_credentials` (0001_credentials_baseline_sql.sql); `evicted` flips no deployment axis, so unlike the
-   * promote paths this action needs NO owner pool — `app_user` holds INSERT/UPDATE on `node_membership`
-   * (0097), which is all the term-guarded persist requires. */
+   * promote paths this action needs NO owner pool — `app_user` holds INSERT/UPDATE on `node_membership`,
+   * which is all the term-guarded persist requires. */
   readonly appDb: Database;
   /** The box key ring — unseals this node's identity private key to sign the minted document. */
   readonly ring: KeyRing;
@@ -56,7 +56,7 @@ export interface RetireResult {
  * A fenced (`sell-only`) node that has fully drained onto its carrier SELF-EVICTS (retire/evict R3;
  * decommission design §3, §6): it mints a `sell-only → evicted` membership document signed with its
  * OWN identity key and persists it term-guarded. No HTTP, no owner-pool write — `evicted` flips no
- * deployment axis, and `app_user` holds INSERT/UPDATE on `node_membership` (0097).
+ * deployment axis, and `app_user` holds INSERT/UPDATE on `node_membership`.
  *
  * ABORT-BEFORE-WRITE (promote's discipline): every gate throws BEFORE any write, and the document is
  * built and signed in memory BEFORE the persist, so a refusal or a signing failure leaves the node

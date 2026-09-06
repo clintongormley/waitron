@@ -1,3 +1,4 @@
+// Real PostgreSQL: checks app_user table and column privileges against the captured matrix.
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";

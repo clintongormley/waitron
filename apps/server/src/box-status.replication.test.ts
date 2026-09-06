@@ -1,3 +1,4 @@
+// Real PostgreSQL exercises authorization and replication reads after SET ROLE app_user.
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";

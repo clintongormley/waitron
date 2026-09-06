@@ -1,18 +1,14 @@
+import { CORE_MIGRATIONS } from "../migrations.js";
 import { sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
-import { useTemplateDb } from "../testing/lifecycle.js";
+import { usePgliteDb } from "../testing/lifecycle.js";
 import { seedNode } from "../testing/seed.js";
 import { catalogues, products } from "./catalogue.js";
 import { invoiceSeries } from "./series.js";
 import { locations, tenants, tills } from "./tenants.js";
-
-// Real Postgres (a template clone), not PGlite. These are engine constraints (a UNIQUE, a composite
-// FK, a constraint definition read back from pg_catalog) that PGlite would also enforce; they run
-// against the container because the whole fixture — a node, an invoice series, a priced product —
-// is the shared `core` template's.
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
@@ -53,10 +49,10 @@ async function openOrder(admin: Database, orderNumber: number): Promise<string> 
 }
 
 describe("park & retrieve schema", () => {
-  const suite = useTemplateDb({ template: "core" });
+  const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
 
   beforeAll(async () => {
-    const admin = suite.admin;
+    const admin = suite.db;
     await admin
       .insert(tenants)
       .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
@@ -96,23 +92,30 @@ describe("park & retrieve schema", () => {
     productA = product.id;
   });
 
+  afterEach(async () => {
+    await suite.db.execute(sql`delete from working_order_lines`);
+    // Keep the parked order referenced by the append-only sale; remove unreferenced draft orders.
+    await suite.db.execute(sql`delete from working_orders
+      where id not in (select working_order_id from sales where working_order_id is not null)`);
+  });
+
   it("rejects two sales sharing a working_order_id (the sale idempotency key)", async () => {
     // Two sales that both try to file against one parked order — the double-submit the
     // UNIQUE(tenant_id, working_order_id) prevents. Distinct invoice numbers so the collision is on
     // sales_working_order_id_key, not on sales_series_invoice_number_key.
-    const wo = await openOrder(suite.admin, 10);
-    await suite.admin.execute(insertSaleSql({ invoiceNumber: 100, workingOrderId: wo }));
+    const wo = await openOrder(suite.db, 10);
+    await suite.db.execute(insertSaleSql({ invoiceNumber: 100, workingOrderId: wo }));
     const error = await captureError(() =>
-      suite.admin.execute(insertSaleSql({ invoiceNumber: 101, workingOrderId: wo })),
+      suite.db.execute(insertSaleSql({ invoiceNumber: 101, workingOrderId: wo })),
     );
     expect(pgErrorCode(error)).toBe("23505");
   });
 
   it("accepts a draft line with a real product and rejects one pointing at a missing product", async () => {
-    const wo = await openOrder(suite.admin, 11);
+    const wo = await openOrder(suite.db, 11);
     // Positive control: a valid, tenant-consistent product_id is accepted — so the rejection below
     // is the FK biting, not the line being malformed for some other reason.
-    await suite.admin.execute(
+    await suite.db.execute(
       sql`insert into working_order_lines
         (tenant_id, working_order_id, line_no, product_id, descriptions,
          quantity, unit_price, unit_price_gross, vat_rate, line_total)
@@ -123,7 +126,7 @@ describe("park & retrieve schema", () => {
     // (require_open_parent, check_locales) pass first — open parent, matching locales — so the row
     // reaches the composite (tenant_id, product_id) → products FK, which is what rejects it.
     const error = await captureError(() =>
-      suite.admin.execute(
+      suite.db.execute(
         sql`insert into working_order_lines
           (tenant_id, working_order_id, line_no, product_id, descriptions,
            quantity, unit_price, unit_price_gross, vat_rate, line_total)
@@ -139,7 +142,7 @@ describe("park & retrieve schema", () => {
     // not the bare id PK: it is what makes working_order_lines_product_fk tenant-consistent. Read
     // the constraint definition directly rather than trusting that the FK's mere existence implies
     // its shape.
-    const result = await suite.admin.execute<{ def: string }>(
+    const result = await suite.db.execute<{ def: string }>(
       sql`select pg_get_constraintdef(oid) as def from pg_constraint
           where conrelid = 'products'::regclass and conname = 'products_tenant_id_key'`,
     );

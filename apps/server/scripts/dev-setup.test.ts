@@ -1,3 +1,4 @@
+// Real PostgreSQL: exercises setup through PostgreSQL URLs and a reader denied inspection privileges.
 import { sql } from "drizzle-orm";
 import { idempotentRoleStatement } from "@waitron/db/testing/shared-container.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

@@ -1,18 +1,10 @@
+import { CORE_MIGRATIONS } from "../migrations.js";
 import { sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
-import { useTemplateDb } from "../testing/lifecycle.js";
+import { usePgliteDb } from "../testing/lifecycle.js";
 
-// Real Postgres (a template clone), not PGlite: the tenant-consistent composite FKs are enforced by
-// the engine regardless of the connected role, but the sibling suite (devices.test.ts) already runs on real PG,
-// so this stays on the same target for a single template. The composite FKs are hand-written in the
-// --custom migration (a bare uuid column carries no FK), the `devices.station_id` idiom. These tests
-// pin that a device's till/receipt-printer/device-profile binding cannot point at ANOTHER
-// tenant's row, that a NULL binding is unconstrained (MATCH SIMPLE skips the check on any NULL column),
-// and that a device_profiles row a device references cannot be hard-deleted (ON DELETE RESTRICT).
-// (The direct device→canvas binding was dropped in 0110 — a device now resolves its canvas only
-// through its device_profile, whose own composite canvas FK is covered by the device_profiles suite.)
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
@@ -26,11 +18,11 @@ const PROFILE_B = "22222222-0000-4000-8000-0000000000b4";
 const TOKEN_HASH = "scrypt$00$00";
 
 describe("devices + device_pairing_codes composite FKs (till / receipt_printer / device_profile)", () => {
-  const suite = useTemplateDb({ template: "core" });
+  const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
   let admin: Database;
 
   beforeAll(async () => {
-    admin = suite.admin;
+    admin = suite.db;
     await admin.execute(sql`
       insert into tenants (id, country, tax_id, legal_name) values
         (${TENANT_A}, 'ES', 'B00000000', 'Fixture Tenant A'),
@@ -62,6 +54,14 @@ describe("devices + device_pairing_codes composite FKs (till / receipt_printer /
   });
 
   // ---- devices ------------------------------------------------------------------------------
+
+  afterEach(async () => {
+    await suite.db.execute(sql`delete from devices`);
+    await suite.db.execute(sql`delete from device_pairing_codes`);
+    await suite.db.execute(
+      sql`delete from device_profiles where id not in (${PROFILE_A}, ${PROFILE_B})`,
+    );
+  });
 
   it("devices: rejects a till_id naming a DIFFERENT tenant's till (composite FK)", async () => {
     // Only till_id is cross-tenant; receipt_printer_id is NULL, so the ONLY

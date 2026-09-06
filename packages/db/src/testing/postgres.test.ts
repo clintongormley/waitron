@@ -1,3 +1,4 @@
+// Real PostgreSQL: tests distinct backend processes, probe-role authentication and container lifecycle.
 import { execFileSync } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";

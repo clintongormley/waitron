@@ -1,12 +1,24 @@
 import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
-import { describeEachTarget } from "../testing/harness.js";
+import { usePgliteDb } from "../testing/lifecycle.js";
+import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedNode } from "../testing/seed.js";
 import { invoiceSeries } from "./series.js";
 import { locations, tenants, tills } from "./tenants.js";
+
+const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+
+// Each case gets empty mutable fixture tables while sharing the migrated database.
+afterEach(async () => {
+  await suite.db.execute(sql`delete from invoice_series`);
+  await suite.db.execute(sql`delete from nodes`);
+  await suite.db.execute(sql`delete from tills`);
+  await suite.db.execute(sql`delete from locations`);
+  await suite.db.execute(sql`delete from tenants`);
+});
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
@@ -24,11 +36,7 @@ let nodeA1 = "";
 let nodeA2 = "";
 let nodeB1 = "";
 
-/**
- * Both drivers expose `.rows`, but the pglite driver returns its own Results
- * object rather than node-postgres's QueryResult. Normalising here keeps the
- * introspection tests identical across targets instead of forking on driver.
- */
+/** Normalise the query result before reading catalog rows. */
 async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]> {
   const result = (await db.execute(query)) as unknown as { rows: T[] } | T[];
   return Array.isArray(result) ? result : result.rows;
@@ -65,25 +73,12 @@ async function seed(db: Database): Promise<void> {
   nodeB1 = await seedNode(db, brandTenantId(TENANT_B), brandLocationId(LOCATION_B));
 }
 
-describeEachTarget("invoice_series schema", (target) => {
+describe("invoice_series schema", () => {
   let db: Database;
 
   beforeEach(async () => {
-    // No truncate before seed(): target.create() already returns a freshly
-    // migrated, empty database per test (see allocate-number.test.ts's
-    // beforeEach for why the truncate that used to run here was always a
-    // no-op, and why Task 8 made it an active problem rather than harmless
-    // boilerplate).
-    db = await target.create();
+    db = suite.db;
     await seed(db);
-  });
-
-  // This package's convention (see tenancy.test.ts): without it, a pg Pool
-  // per test is left open when the postgres target's container stops at
-  // describe-level teardown, and it surfaces as an unhandled FATAL 57P01
-  // rejection rather than a test failure.
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
   });
 
   it("holds several series on one node", async () => {

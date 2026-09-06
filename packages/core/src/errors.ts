@@ -74,7 +74,7 @@ import "@waitron/shared";
  * only move available. `sale.tender_shortfall`'s identity is now `sum(amount) = total +
  * sum(corrections) + sum(tip_amount)`: the tip moved off the sale and onto each tender
  * (`tenders.tip_amount`), and `due` nets in every rectificativa correcting the sale (invoice-first
- * slice, 2026-08-03 — in lockstep with migration 0021's coverage trigger).
+ * slice, 2026-08-03 — in lockstep with the baseline's coverage trigger).
  *
  * **Catalogue slice addition (2026-08-05).** `sale.total_mismatch`, by the same `declare module`
  * mechanism and for the same reason as every code above: it names a DOMAIN concept ("the supplied
@@ -99,7 +99,7 @@ declare module "@waitron/shared" {
      * per tender (`tenders.tip_amount`), not on the sale, and `due` nets in every rectificativa
      * correcting this sale (signed `sales.total` where `corrects_sale_id = saleId`; usually
      * negative), so a corrected-down sale settles at the corrected amount (invoice-first slice,
-     * 2026-08-03). This matches migration 0021's coverage trigger identity in lockstep, so the app
+     * 2026-08-03). This matches the baseline's coverage trigger identity in lockstep, so the app
      * check and the trigger cannot drift. Despite the name it still fires in BOTH directions:
      * `charged` under OR over `due`. Kept distinct from
      * `sale.tender_unsettled` so a translator can tell "still waiting on a payment" from "the

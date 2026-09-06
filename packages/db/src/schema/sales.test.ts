@@ -1,3 +1,4 @@
+// Real PostgreSQL: checks node-postgres monetary decoding alongside the PGlite driver.
 import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
@@ -97,9 +98,8 @@ function saleValues(overrides: Record<string, unknown> = {}) {
  * Writes a sale — header, lines and tenders — in one transaction. Every test
  * that needs a sale on disk goes through here.
  *
- * Since migration 0012 the tender-coverage check no longer fires at sale COMMIT
- * (both deferred constraint triggers were dropped); it runs when settlement is
- * DECLARED, on the `sale_settlements` INSERT, tested in sale-settlements.test.ts.
+ * Tender coverage is checked when settlement is declared, on the `sale_settlements`
+ * INSERT, tested in sale-settlements.test.ts.
  * So a sale written here can stand legitimately uncovered — an unsettled sale is
  * a valid steady state under invoice-first (design §3). The default tender is
  * coherent anyway (amount = total, no tip) so callers can settle it if they
@@ -162,7 +162,7 @@ describeEachTarget("sales — the commercial record", (target) => {
   });
 
   it("keeps total as the sale's only money, with the tip on the tender", async () => {
-    // Since 0012 the sale drops to one number: `total`. The tip moved to
+    // The sale carries one money value: `total`. The tip belongs to
     // `tenders.tip_amount` (attributed to the payer who left it) and
     // amount_charged is derived, never stored (design §3). Here a €1.00 sale is
     // paid with a €1.50 tender carrying a €0.50 tip — three still-distinct
@@ -657,7 +657,7 @@ describeEachTarget("sales — fiscal_state", (target) => {
 });
 
 /**
- * The rectificativa link (migration 0013). `corrects_sale_id` is the generic-layer
+ * The rectificativa link. `corrects_sale_id` is the generic-layer
  * projection of "this sale corrects that one" — nullable, tenant-consistent FK back onto
  * `sales`, NOT unique (a sale may be corrected more than once), and it is what relaxes
  * `sales_total_ck` to permit the negative total a rectificativa por diferencias carries

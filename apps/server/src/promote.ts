@@ -42,14 +42,14 @@ export interface PromoteDeps {
    * reads, all app-role: `readNodeIdentityKey` unseals the signing key under `withTenant` as `app_user`,
    * which holds SELECT on `tenant_credentials` (0001_credentials_baseline_sql.sql) — the same role and path
    * `readMirrorToken` uses at mirror boot; `readNodeMembership` reads the held org chart via `app_user`'s
-   * SELECT on `node_membership` (0097).
+   * SELECT on `node_membership`.
    */
   readonly appDb: Database;
   /**
    * The owner/provisioning pool. The `singleton_role` flip is owner-role — `app_user` holds no UPDATE on
    * `deployment` — so the membership-document write shares its ONE transaction (CLAUDE.md §3: the flip and
    * the new document commit together, or neither does). That shared transaction is why the write runs here,
-   * NOT a privilege gap: `app_user` DOES hold INSERT/UPDATE on `node_membership` (migration 0097), but the
+   * NOT a privilege gap: `app_user` DOES hold INSERT/UPDATE on `node_membership` (the baseline), but the
    * plain-upsert accessor (`writeNodeMembership`/`writeNodeMembershipTx`) is reserved for the owner/promote
    * paths by convention: every APP-POOL write — gossip adoption, retire, the adopt handshake's org-chart
    * append — uses the term-guarded `persistNodeMembershipIfNewer` instead (see `node-membership.ts`).

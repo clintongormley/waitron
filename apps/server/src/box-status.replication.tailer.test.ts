@@ -1,3 +1,4 @@
+// Real PostgreSQL: exercises the database path through a non-superuser LOGIN and its grants.
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withTenant, type Database } from "@waitron/db";

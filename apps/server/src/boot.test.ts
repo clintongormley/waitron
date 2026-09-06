@@ -1,3 +1,4 @@
+// Real PostgreSQL checks startup through app_user connections and contending backends.
 import { createServer } from "node:net";
 import type { AddressInfo } from "node:net";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -2197,7 +2198,7 @@ describe("startServer, against a real container as the deployment role", () => {
     await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow(); // listener gone
   }, 60_000);
 
-  it("boots and TRADES when the backup DB is unreachable — the RLS probe failure disables backup, never aborts boot (§5)", async () => {
+  it("boots and TRADES when the backup DB is unreachable — the read-privilege probe failure disables backup, never aborts boot (§5)", async () => {
     // The strict CLAUDE.md §5 case, driven through startServer rather than reasoned about: WAITRON_BACKUP_DIR
     // is set (so loadBackupConfig returns a config and the probe runs) but WAITRON_BACKUP_DATABASE_URL points
     // at a REFUSED port (127.0.0.1:1 — connection refused, resolves fast and deterministically, not a hang).

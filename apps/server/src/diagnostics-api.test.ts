@@ -1,3 +1,4 @@
+// Real PostgreSQL: exercises reads/writes or triggers after SET ROLE app_user.
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";

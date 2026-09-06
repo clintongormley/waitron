@@ -1,3 +1,4 @@
+// Real PostgreSQL: exercises reads/writes or triggers after SET ROLE app_user.
 import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";

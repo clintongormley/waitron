@@ -21,10 +21,7 @@ import {
 // Real Postgres, not PGlite: every store call below runs as a non-superuser member of `app_user`
 // (`withTenant` + `asAppUser`), the shape the management routes use. PGlite connects as a superuser
 // holding every grant, so a missing GRANT on `canvases` — or on the `persons`/`management_sessions`
-// reads `authorizeManager` performs — is invisible there (CLAUDE.md §4). Whether that alone still
-// warrants a container is the per-suite target review's question
-// (docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md §4), not this
-// suite's. Seeds run as the owner (pure setup); the `core_identity` template pairs core + identity
+// reads `authorizeManager` performs — is invisible there (CLAUDE.md §4). The suite retains these app-role grant checks. Seeds run as the owner (pure setup); the `core_identity` template pairs core + identity
 // migrations so authorizeManager's tables and `canvases` both exist.
 
 const suite = useTemplateDb({ template: "core_identity" });

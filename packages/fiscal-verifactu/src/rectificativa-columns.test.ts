@@ -7,7 +7,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
 
 /**
- * The four AEAT rectificativa columns on `registros_facturacion` (migration 0010) and their two
+ * The four AEAT rectificativa columns on `registros_facturacion` (the baseline) and their two
  * CHECK constraints. docs/superpowers/plans/2026-08-02-rectificativas.md §2.2.
  *
  * PGlite (via usePgliteDb), matching this package's own `inmutabilidad.test.ts`: these are CHECK,
@@ -97,9 +97,7 @@ describe("registros_tipo_rectificativa_ck — the value domain", () => {
   });
 
   it("rejects an unknown tipo_rectificativa", async () => {
-    // PROVEN BY DELETION (manual, recorded in this task's report): with
-    // registros_tipo_rectificativa_ck removed from migration 0010, this exact insert succeeds.
-    // The check is what rejects a value outside {S, I}.
+    // registros_tipo_rectificativa_ck rejects values outside {S, I}.
     const error = await captureError(() =>
       insertRegistro(pg.db, { tipoFactura: "R5", tipoRectificativa: "X" }),
     );

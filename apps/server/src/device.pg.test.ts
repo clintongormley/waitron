@@ -312,7 +312,7 @@ describe("device binding fields: device profile / till / hardware (real Postgres
   });
 
   it("translates a 23503 on each device-binding FK to device.binding_invalid naming the field", async () => {
-    // A well-formed binding id that names no row of THIS tenant trips its composite FK (0095) with 23503,
+    // A well-formed binding id that names no row of THIS tenant trips its composite FK with 23503,
     // translated by CONSTRAINT NAME to `device.binding_invalid` naming the FIELD (never the id). Only ONE
     // bad binding per mint so the field is deterministic; the others are valid or null. THE GUARD, proven
     // by deletion: dropping the 23503 branch in generatePairingCode's catch lets each raw driver error

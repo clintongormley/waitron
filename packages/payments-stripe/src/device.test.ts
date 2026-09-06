@@ -1,3 +1,4 @@
+// Real PostgreSQL: exercises the database path through a non-superuser LOGIN and its grants.
 import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";

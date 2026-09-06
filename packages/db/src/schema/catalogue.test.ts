@@ -1,25 +1,33 @@
 import { sql } from "drizzle-orm";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
-import { describeEachTarget } from "../testing/harness.js";
+import { usePgliteDb } from "../testing/lifecycle.js";
+import { CORE_MIGRATIONS } from "../migrations.js";
 import { catalogues, optionGroups } from "./catalogue.js";
 import { tenants } from "./tenants.js";
+
+const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+
+// Each case gets empty mutable fixture tables while sharing the migrated database.
+afterEach(async () => {
+  await suite.db.execute(sql`delete from option_group_items`);
+  await suite.db.execute(sql`delete from option_groups`);
+  await suite.db.execute(sql`delete from products`);
+  await suite.db.execute(sql`delete from catalogues`);
+  await suite.db.execute(sql`delete from tenants`);
+});
 
 async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]> {
   const result = (await db.execute(query)) as unknown as { rows: T[] } | T[];
   return Array.isArray(result) ? result : result.rows;
 }
 
-describeEachTarget("catalogue — menu, taxonomy and priced items", (target) => {
+describe("catalogue — menu, taxonomy and priced items", () => {
   let db: Database;
 
   beforeEach(async () => {
-    db = await target.create();
-  });
-
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
+    db = suite.db;
   });
 
   it("rejects a bad pricing_unit and a bad vat_class, each on its own CHECK", async () => {

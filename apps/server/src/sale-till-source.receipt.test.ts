@@ -1,3 +1,4 @@
+// Real PostgreSQL exercises sale writes and receipt reads after SET ROLE app_user.
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";

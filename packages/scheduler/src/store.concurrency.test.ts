@@ -1,3 +1,4 @@
+// Real PostgreSQL: exercises competing PostgreSQL backends and their locking or commit visibility.
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withTenant, type Database } from "@waitron/db";

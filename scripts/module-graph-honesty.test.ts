@@ -265,7 +265,7 @@ describe("the detector itself", () => {
   // A complete CONSTRAINT-trigger spelling, including deferred timing. Pins that the regex
   // matches this DDL form. Owner here is a different module than the file's, so it must surface
   // as a cross-module edge.
-  it("matches the real CREATE CONSTRAINT TRIGGER spelling from 0005_sales.sql", () => {
+  it("accepts the CREATE CONSTRAINT TRIGGER spelling", () => {
     const sql = `CREATE CONSTRAINT TRIGGER sales_check_tender_coverage\n  AFTER INSERT ON sales\n  DEFERRABLE INITIALLY DEFERRED\n  FOR EACH ROW EXECUTE FUNCTION sales_check_tender_coverage();`;
     const owner = new Map([["sales", "core"]]);
     expect([...edgesFor(sql, "sync", owner)]).toEqual(["core"]);

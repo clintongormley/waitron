@@ -1,7 +1,8 @@
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import type { ProvisionedNode } from "@waitron/module";
 import { appendToChain } from "./chain.js";
@@ -9,16 +10,13 @@ import { currentSif, esPrimerRegistro } from "./registro-sif.js";
 import { installationFloor, restoreFiscal } from "./restore.js";
 import { altaFor, seedSale, seedTill } from "./testing/seed.js";
 
-// On real PostgreSQL as the superuser-class admin, checks a fresh live SIF identity, an installation
-// number at least the clock floor, an empty chain head, the retained ledger count and derived series
-// codes. It does not test preserving a counter above the floor, nor a least-privileged role.
-const suite = useTemplateDb({ template: "manifest" });
+const suite = usePgliteDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const NOW = new Date("2026-09-06T10:00:00.000Z");
 
-describe("restoreFiscal on real PostgreSQL", () => {
+describe("restoreFiscal", () => {
   it("re-registers a sold node onto a fresh, floored SIF with an empty chain head", async () => {
-    const till = await seedTill(suite.admin);
-    const { rows } = await suite.admin.execute<{ location_id: string }>(
+    const till = await seedTill(suite.db);
+    const { rows } = await suite.db.execute<{ location_id: string }>(
       sql`select location_id from nodes where id = ${till.nodeId}`,
     );
     const node: ProvisionedNode = {
@@ -26,29 +24,27 @@ describe("restoreFiscal on real PostgreSQL", () => {
       locationId: brandLocationId(rows[0]!.location_id),
       nodeId: till.nodeId,
     };
-    const sale = await seedSale(suite.admin, till, 1);
-    await suite.admin.transaction((tx) =>
+    const sale = await seedSale(suite.db, till, 1);
+    await suite.db.transaction((tx) =>
       appendToChain(tx, till.tenantId, till.nodeId, altaFor(till.tillId, sale, 1, 1)),
     );
-    const before = await withTenant(suite.admin, till.tenantId, (tx) =>
+    const before = await withTenant(suite.db, till.tenantId, (tx) =>
       currentSif(tx, till.tenantId, till.nodeId),
     );
 
-    const outcome = await withTenant(suite.admin, till.tenantId, (tx) =>
-      restoreFiscal(tx, node, NOW),
-    );
+    const outcome = await withTenant(suite.db, till.tenantId, (tx) => restoreFiscal(tx, node, NOW));
 
-    const after = await withTenant(suite.admin, till.tenantId, (tx) =>
+    const after = await withTenant(suite.db, till.tenantId, (tx) =>
       currentSif(tx, till.tenantId, till.nodeId),
     );
     expect(after.id).not.toBe(before.id);
     expect(after.numeroInstalacion).toBeGreaterThanOrEqual(installationFloor(NOW));
     expect(
-      await withTenant(suite.admin, till.tenantId, (tx) =>
+      await withTenant(suite.db, till.tenantId, (tx) =>
         esPrimerRegistro(tx, till.tenantId, till.nodeId),
       ),
     ).toBe(true);
-    const { rows: ledger } = await suite.admin.execute<{ n: number }>(
+    const { rows: ledger } = await suite.db.execute<{ n: number }>(
       sql`select count(*)::int as n from registros_facturacion where node_id = ${till.nodeId}`,
     );
     expect(ledger[0]?.n).toBe(1);

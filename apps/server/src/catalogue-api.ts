@@ -331,7 +331,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   // add, PUT default) guard it with `catalogueExists` FIRST — an absent id is refused
   // `catalogue.not_found` (404). The lookup is by id. This is defense-in-depth, not the sole
   // protection: BOTH write targets carry a tenant-consistent composite FK —
-  // `locations.catalogue_id` → catalogues(tenant_id,id) (0078), `location_catalogues` → (0074) —
+  // `locations.catalogue_id` → catalogues(tenant_id,id), `location_catalogues.catalogue_id` → catalogues(tenant_id,id) —
   // that 23503-rejects a foreign-tenant id at the DATA layer. The guard gives an absent id a
   // clean error. A foreign row seeded into the same database passes that by-id lookup, but the
   // composite FK still rejects the write with 23503. DELETE needs no guard: removing a non-member

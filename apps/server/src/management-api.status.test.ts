@@ -1,3 +1,4 @@
+// Real PostgreSQL exercises configuration and authorization queries after SET ROLE app_user.
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";

@@ -1,14 +1,9 @@
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { ALL_SYNC_ENROLMENTS } from "./modules.js";
 
-// Real Postgres, not PGlite: this suite reads the pg_trigger catalog of a FULLY-MIGRATED database.
-// The `manifest` template runs the whole migration manifest (sync last), so the clone carries every
-// per-table `CREATE TRIGGER … sync_capture()` the sync migrations install. PGlite would migrate the
-// same manifest, but the invariant here is about the catalog the production migration path produces,
-// so the suite stays on the same real-PG template the other sync gate suites clone.
-//
 // The invariant (survey §4, SP-2a): SP-2a moved the enrolment metadata out of @waitron/sync into
 // each owning package (CORE_ENROLMENT/IDENTITY_ENROLMENT/PAYMENTS_ENROLMENT), assembled by
 // apps/server as `ALL_SYNC_ENROLMENTS` (`ALL_MODULES.flatMap((m) => m.sync ?? [])`). The capture-trigger DDL still lives in
@@ -16,14 +11,14 @@ import { ALL_SYNC_ENROLMENTS } from "./modules.js";
 // installed triggers still agree — the manual convention a human kept in sync is now unguarded. This
 // suite reads the ACTUAL catalog (not a hardcoded list) so any drift between the TS enrolment set and
 // the DDL — a table enrolled with no trigger, or a trigger with no enrolment — fails here.
-const postgres = useTemplateDb({ template: "manifest" });
+const postgres = usePgliteDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
 describe("the assembled enrolment set equals the installed sync_capture triggers", () => {
   it("every enrolled table carries a sync_capture trigger, and vice versa (no drift)", async () => {
     // The distinct tables carrying a non-internal AFTER trigger whose function is `sync_capture`.
     // pg_trigger → pg_class (the table) → pg_proc (the trigger function); `not tgisinternal` drops
     // the constraint-backed system triggers, leaving only the ones the sync migrations declared.
-    const rows = await postgres.admin.execute<{ table_name: string }>(sql`
+    const rows = await postgres.db.execute<{ table_name: string }>(sql`
       select distinct c.relname as table_name
       from pg_trigger t
       join pg_class c on c.oid = t.tgrelid

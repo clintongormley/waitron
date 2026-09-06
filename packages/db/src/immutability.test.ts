@@ -1,8 +1,15 @@
 import { sql } from "drizzle-orm";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "./client.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "./testing/errors.js";
-import { describeEachTarget } from "./testing/harness.js";
+import { usePgliteDb } from "./testing/lifecycle.js";
+import { CORE_MIGRATIONS } from "./migrations.js";
+
+const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+
+afterEach(async () => {
+  await suite.db.execute(sql`drop table if exists immutability_probe`);
+});
 
 /*
  * The pattern is proved against a table this task owns outright, created and
@@ -40,26 +47,18 @@ async function createProtectedProbe(db: Database): Promise<void> {
   `);
 }
 
-describeEachTarget("immutability", (target) => {
+describe("immutability", () => {
   const tenantId = "11111111-1111-4111-8111-111111111111";
   const rowId = "22222222-2222-4222-8222-222222222222";
   let db: Database;
 
   beforeEach(async () => {
-    db = await target.create();
+    db = suite.db;
     await createProtectedProbe(db);
     await db.execute(
       sql`insert into immutability_probe (id, tenant_id, note)
           values (${rowId}, ${tenantId}, 'original')`,
     );
-  });
-
-  // This package's convention (see tenancy.test.ts): without it, a pg Pool
-  // per test is left open when the postgres target's container stops at
-  // describe-level teardown, and it surfaces as an unhandled FATAL 57P01
-  // rejection rather than a test failure.
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
   });
 
   it("rejects an UPDATE from the table owner on trigger grounds", async () => {

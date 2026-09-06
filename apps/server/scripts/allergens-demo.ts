@@ -3,8 +3,8 @@
 // headless. Modelled on `daily-close-demo.ts` (in-memory PGlite, self-migrating, tsx-run) rather
 // than `catalogue-demo.ts` (real Postgres) — this demo never writes a fiscal record, so it needs
 // neither a real backend nor a proof of the non-superuser grants used by catalogue-demo.
-// `CORE_MIGRATIONS` alone suffices: it creates the catalogue tables (0026) and the
-// `products.allergens` jsonb column (0031), which is everything read here.
+// `CORE_MIGRATIONS` alone suffices: it creates the catalogue tables and the
+// `products.allergens` jsonb column, which is everything read here.
 //
 // It:
 // 1. boots an in-memory PGlite and applies `CORE_MIGRATIONS`;

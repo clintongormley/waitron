@@ -1297,7 +1297,7 @@ describe("C1 — the dining_tables FK-closure enrolment (the ordered-lane hard g
     }
   });
 
-  it("replicates a settle's status clear: the working_orders→dining_tables cascade (0050) applies and echo-suppresses", async () => {
+  it("replicates a settle's status clear: the working_orders→dining_tables cascade applies and echo-suppresses", async () => {
     // Models the REAL source→mirror flow for a tab settling on a laid-out floor. On the SOURCE a single
     // settle UPDATE of the working_order fires working_orders_clear_table_status
     // (packages/db/drizzle/0001_db_baseline_sql.sql:389-393 — AFTER UPDATE, NOT gated on

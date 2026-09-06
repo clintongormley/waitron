@@ -1,3 +1,4 @@
+// Real PostgreSQL: runs pg_dump/pg_restore and checks the restored fiscal ledger and triggers.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createPostgresDb } from "@waitron/db";

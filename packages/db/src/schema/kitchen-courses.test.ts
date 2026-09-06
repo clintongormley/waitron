@@ -11,8 +11,7 @@ import { tenants } from "./tenants.js";
 
 // Real Postgres (a template clone), not PGlite: every write below runs as the non-owner
 // `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
-// constraints themselves would fire on either target — a candidate for the PGlite tier once the
-// suites are re-tagged.
+// cases retain the role switch so the reads and writes still exercise app_user grants.
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
@@ -118,7 +117,6 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
   });
 
   it("fire_control_mode accepts the new 'expo' label (KDS-3 ALTER TYPE ADD VALUE applied)", async () => {
-    // Task-1 receipt that `ALTER TYPE fire_control_mode ADD VALUE 'expo'` (0059) applied to the template.
     // The label is present in pg_enum, and a literal casts to the type without raising. Setting the
     // locations column to 'expo' is the config verb's job (a later KDS-3 task), NOT exercised here — this
     // is purely the enum-type receipt. Cast as the owner (enum validity is not tenant- or grant-scoped).

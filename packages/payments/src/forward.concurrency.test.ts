@@ -1,3 +1,4 @@
+// Real PostgreSQL checks SKIP LOCKED claims across independent backends.
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";

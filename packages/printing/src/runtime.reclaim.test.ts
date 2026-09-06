@@ -10,14 +10,8 @@ import { enqueuePrintJob } from "./outbox.js";
 import { FakeSink } from "./transport.js";
 import type { PrintConfig } from "./printers.js";
 
-// Real Postgres (a `core` template clone), NOT PGlite: the lease reclaim is a TIME-based property of the
-// pull predicate (`claimed_at < now() - PRINT_JOB_LEASE_MS`), and it depends on the claim being COMMITTED
-// and the row UNLOCKED between transactions — the exact "an agent claimed, committed, then died" shape.
-// PGlite serialises onto one backend and would not exercise the committed-and-unlocked interaction the
-// way separate committed transactions do here (CLAUDE.md §4). The reclaim branch of the pull predicate
-// (`j.status = 'printing' and j.claimed_at < now() - <lease>` in runtime.ts) is PROVEN load-bearing by
-// deletion: remove it and the stuck `printing` job below is never re-selected and stays stuck; restore it
-// and the second run reclaims and delivers it. See lease-reclaim-report.md for the recorded RED/GREEN.
+// Real PostgreSQL exercises claims and lease updates after SET ROLE app_user.
+// These cases use sequential transactions; competing agents are covered by runtime.race.test.ts.
 const suite = useTemplateDb({ template: "core" });
 
 async function setup(): Promise<PrintConfig> {

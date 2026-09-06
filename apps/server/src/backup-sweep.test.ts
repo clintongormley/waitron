@@ -1,3 +1,4 @@
+// Real PostgreSQL: runs pg_dump against the migrated database and checks the custom-format artifact.
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";

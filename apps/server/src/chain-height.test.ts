@@ -10,7 +10,7 @@ import { ALL_MODULES } from "./modules.js";
 
 // This suite retains the real-Postgres manifest fixture and reads cadenas as app_user. The cases
 // check the node-id lookup and absent-row fallback. The deployment holds one tenant per database.
-// Target selection is deferred to Task 9 (§4).
+// Real PostgreSQL retains the app_user read-privilege check.
 const LOCALE = "es-ES";
 
 const suite = useTemplateDb({ template: "manifest" });

@@ -97,7 +97,7 @@ function parseDbTarget(url: string): { host: string; port: string; database: str
  * Returns a process exit code: 0 on success, 1 on an expected disaster-recovery failure (a
  * missing or empty env var, an unprovisioned box, an unreadable artifact, an invalid
  * `WAITRON_ENV`, a restore URL with no db name, or ANY error out of the orchestrator — a
- * `rejoin.*`/`restore.*`/`recovery.*`/ `backup.*` `AppError` reported by code, a decrypt-phase
+ * `rejoin.*`/`restore.*`/`recovery.*`/`backup.*` `AppError` reported by code, a decrypt-phase
  * code collapsed to one non-oracle message, and anything else reported generically), 2 on a usage
  * error. The orchestrator's error is NEVER rethrown and its `.message` is NEVER printed:
  * `bin-rejoin.ts`'s `.then(process.exit)` has no `.catch`, so a raw rejection here would dump a

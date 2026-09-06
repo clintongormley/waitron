@@ -99,7 +99,8 @@ declare module "@waitron/shared" {
      * whoever asked.
      *
      * This is enforced by comparing `nodes.tenant_id` in `ownedNodeLocation`, called by
-     * `provisionNode`, including on a superuser connection. `node.*`, not `server.*`: it is a fact about a node, the rule
+     * `provisionNode`, including on a superuser connection. `node.*`, not `server.*`:
+     * it is a fact about a node, the rule
      * `tenant.not_found`'s own note gives.
      *
      * (The former `till.not_found` was removed with the rekey — pre-production, no bwc — since its
@@ -368,7 +369,7 @@ declare module "@waitron/shared" {
      * 409 in Task 8, the mutation counterpart to `not_found`'s 404: the id may be perfectly
      * valid, but the order's state forbids the edit.
      *
-     * The database is the backstop, not this code: `working_orders_enforce_transition` (0004) rejects
+     * The database is the backstop, not this code: `working_orders_enforce_transition` rejects
      * any UPDATE of a non-open row and `working_order_lines_require_open_parent` rejects a line
      * write under a non-open parent, so an update that slipped past the app check would still fail —
      * just with a raw trigger error instead of this actionable one. `updateHeldOrder` and
@@ -430,7 +431,7 @@ declare module "@waitron/shared" {
      * handover — KDS-1 §3e) is ALREADY collected: its order-level `collected_at` marker is set. The old
      * order-level `advancePrep('collected')` refused a repeat the same way; `markCollected` catches it
      * HERE, before the write, because `working_orders_enforce_transition` permits the collected_at stamp
-     * only on a NULL → non-null transition (0056), so a second stamp would RAISE (P0001) and surface as an
+     * only on a NULL → non-null transition, so a second stamp would RAISE (P0001) and surface as an
      * opaque `server.internal` 500. This gives it a clean domain code instead. Distinct from
      * `working_order.not_settled`: an already-collected order IS settled, so that code would mislabel the
      * state (CLAUDE.md §1). Mapped to 409 (the id is valid, but the order's handover state forbids a
@@ -734,7 +735,8 @@ declare module "@waitron/shared" {
      * No such kitchen station for this tenant + venue (KDS-1), OR one that is DEACTIVATED.
      * `createStation` maps only a NAME collision (above); `updateStation` and `deactivateStation`
      * update by id and reject a zero-row result. The deployment holds one tenant per database.
-     * `setDefaultStation` and the routing verbs `setCategoryStation`/`setProductStation` also require an active station
+     * `setDefaultStation` and the routing verbs `setCategoryStation`/`setProductStation`
+     * also require an active station
      * in `cfg.locationId`. All of those fold into the one code, the same fail-closed shape
      * `zone.not_found`/`status.not_found`/`table.not_found` use — to a caller picking a
      * routing/default target, "gone", "foreign" and "retired" are the same fact ("there is no

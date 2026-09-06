@@ -327,7 +327,7 @@ function docAtTerm(term: number, nodeId: string): SignedMembershipDocument {
 // mint, and the term-guard): none has a privilege/concurrency dependency here — the reserved
 // SIF's `currentSif` behaviour on reboot is Task 5's real-PG e2e. Migrates the FULL manifest
 // because `establishReservedStandbyIdentity` writes the reserved SIF (`registro_sif`), and
-// fiscal's SP-3a capture migration (0014) needs sync's `sync_capture()` — so the whole manifest
+// fiscal's SP-3a capture migration needs sync's `sync_capture()` — so the whole manifest
 // is applied (sync before fiscal), the production order.
 async function mirror(): Promise<{
   db: Database;

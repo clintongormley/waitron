@@ -52,6 +52,11 @@ export async function insertReservedSeriesTx(
   await tx.insert(invoiceSeries).values([...series]);
 }
 
+/**
+ * Returns the node's endorsement, or null when the row or endorsement is absent.
+ * A provisioned primary with no endorsement trusts its own key; mirror promotion includes a
+ * stored endorsement when signing its new membership document.
+ */
 export function readNodeEndorsement(
   db: Database,
   tenantId: string,
@@ -116,7 +121,7 @@ export function readStandardSeriesId(
 /**
  * Retire every LIVE series of a node (`retired_at = now()`), returning how many were retired.
  * Owner-role only: `app_user`'s UPDATE on this table is column-scoped to `next_number`
- * (`0003_invoice_series.sql`), and no runtime path retires a series — a restore does, on its
+ * (`drizzle/0001_db_baseline_sql.sql`), and no runtime path retires a series — a restore does, on its
  * privileged connection, before opening the node's replacement series.
  */
 export async function retireNodeSeriesTx(

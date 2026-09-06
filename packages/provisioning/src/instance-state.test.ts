@@ -1,3 +1,4 @@
+// Real PostgreSQL: inspects database existence and PostgreSQL role attributes.
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createPostgresDb, type Database } from "@waitron/db";

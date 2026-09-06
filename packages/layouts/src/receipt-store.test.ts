@@ -15,9 +15,7 @@ import type { ReceiptConfig } from "./types.js";
 // (`withTenant` + `asAppUser`), the shape the management routes use. PGlite connects as a superuser
 // holding every grant, so a missing GRANT on `tenant_receipts` — or on the
 // `persons`/`management_sessions` reads `authorizeManager` performs — is invisible there (CLAUDE.md
-// §4). Whether that alone still warrants a container is the per-suite target review's question
-// (docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md §4), not this
-// suite's. Seeds run as the owner (pure setup); the `core_identity` template pairs core + identity
+// §4). The suite retains these app-role grant checks. Seeds run as the owner (pure setup); the `core_identity` template pairs core + identity
 // migrations so authorizeManager's tables and `tenant_receipts` both exist.
 
 const suite = useTemplateDb({ template: "core_identity" });

@@ -7,10 +7,7 @@ import { hashPin } from "./verify-pin.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 
-// The subject is the functional partial index persons_tenant_email_uq: case-insensitive
-// (lower(email)), keyed on tenant_id, and NULL-permissive. An index is enforced on any target, so
-// this file is a candidate for the PGlite tier once the suites are re-tagged; it runs through the
-// probe login below only because that is the connection this suite already had.
+// Real PostgreSQL checks INSERT and unique-index behavior through an app_user member login.
 const PROBE_ROLE = "identity_rls_probe";
 const PROBE_PASSWORD = "probe";
 

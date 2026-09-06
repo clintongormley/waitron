@@ -1,3 +1,4 @@
+// Real PostgreSQL: tests real database lifecycle helpers and authentication as a probe role.
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "../migrations.js";

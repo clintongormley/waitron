@@ -1,18 +1,12 @@
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 import { CORE_ENROLMENT } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { readDrainProgress } from "./disposal.js";
 import { tablesForLane, type EnrolledTable } from "@waitron/sync-enrolment";
 
-// Real Postgres, not PGlite (CLAUDE.md §4 — say WHY the heavier target when its usual justification
-// doesn't apply): this suite exercises no privilege and no concurrency — only the drain arithmetic —
-// so it seeds and reads as the OWNER (`postgres.admin`). Real PG is used purely to match this
-// package's harness convention: every `@waitron/sync` gate suite runs on `useTemplateDb` and there is
-// no PGlite harness wired here. `readDrainProgress` on the pool a running server actually hands it is
-// exercised end to end by `apps/server/src/boot.fence.test.ts` Case E (a fenced node's box-status
-// disposal verdict), not here.
-const postgres = useTemplateDb({ template: "manifest" });
+const postgres = usePgliteDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
 const SELF = "11111111-1111-4111-8111-111111111111"; // the returned/fenced node's own origin
 const CARRIER = "carrier-node"; // the current serving-primary (subscriber_id is text)
@@ -48,22 +42,22 @@ const ENROLMENTS: readonly EnrolledTable[] = [
 const ORDERED_TABLE = tablesForLane(ENROLMENTS, "ordered")[0]; // a real ordered-lane table (products)
 const FAST_TABLE = tablesForLane(ENROLMENTS, "fast")[0]; // a real fast-lane table (payments)
 
-// Each test seeds a fresh slice of sync_log/sync_cursor and clears it after, so the shared container
+// Each test seeds a fresh slice of sync_log/sync_cursor and clears it after, so the shared database
 // stays order-independent (CLAUDE.md §4 — clean up in a finally / afterEach).
 afterEach(async () => {
-  await postgres.admin.execute(sql`delete from sync_log where origin_id = ${SELF}::uuid`);
-  await postgres.admin.execute(sql`delete from sync_cursor where origin_id = ${SELF}::uuid`);
+  await postgres.db.execute(sql`delete from sync_log where origin_id = ${SELF}::uuid`);
+  await postgres.db.execute(sql`delete from sync_cursor where origin_id = ${SELF}::uuid`);
 });
 
 async function seedOwnRow(seq: number, table: string): Promise<void> {
-  await postgres.admin.execute(
+  await postgres.db.execute(
     sql`insert into sync_log (seq, origin_id, table_name, op, tenant_id, row_image)
         overriding system value
         values (${seq}, ${SELF}::uuid, ${table}, 'insert', ${TENANT}::uuid, '{}'::jsonb)`,
   );
 }
 async function seedCarrierCursor(lane: string, seq: number): Promise<void> {
-  await postgres.admin.execute(
+  await postgres.db.execute(
     sql`insert into sync_cursor (subscriber_id, origin_id, lane, last_applied_seq, alive)
         values (${CARRIER}, ${SELF}::uuid, ${lane}, ${seq}, true)`,
   );
@@ -71,7 +65,7 @@ async function seedCarrierCursor(lane: string, seq: number): Promise<void> {
 
 describe("readDrainProgress", () => {
   it("is drained with a null tail when this node has produced no own-origin rows", async () => {
-    const p = await readDrainProgress(postgres.admin, {
+    const p = await readDrainProgress(postgres.db, {
       selfNodeId: SELF,
       carrierNodeId: CARRIER,
       enrolments: ENROLMENTS,
@@ -81,7 +75,7 @@ describe("readDrainProgress", () => {
 
   it("is NOT drained when the carrier has never reported a cursor for a lane that has own rows", async () => {
     await seedOwnRow(100, ORDERED_TABLE);
-    const p = await readDrainProgress(postgres.admin, {
+    const p = await readDrainProgress(postgres.db, {
       selfNodeId: SELF,
       carrierNodeId: CARRIER,
       enrolments: ENROLMENTS,
@@ -94,7 +88,7 @@ describe("readDrainProgress", () => {
   it("is NOT drained when the carrier's cursor lags this node's own tail on a lane", async () => {
     await seedOwnRow(100, ORDERED_TABLE);
     await seedCarrierCursor("ordered", 50);
-    const p = await readDrainProgress(postgres.admin, {
+    const p = await readDrainProgress(postgres.db, {
       selfNodeId: SELF,
       carrierNodeId: CARRIER,
       enrolments: ENROLMENTS,
@@ -108,7 +102,7 @@ describe("readDrainProgress", () => {
     await seedOwnRow(120, FAST_TABLE);
     await seedCarrierCursor("ordered", 50);
     await seedCarrierCursor("fast", 120);
-    const p = await readDrainProgress(postgres.admin, {
+    const p = await readDrainProgress(postgres.db, {
       selfNodeId: SELF,
       carrierNodeId: CARRIER,
       enrolments: ENROLMENTS,
@@ -126,7 +120,7 @@ describe("readDrainProgress", () => {
     await seedOwnRow(50, FAST_TABLE);
     await seedCarrierCursor("ordered", 200);
     await seedCarrierCursor("fast", 50);
-    const p = await readDrainProgress(postgres.admin, {
+    const p = await readDrainProgress(postgres.db, {
       selfNodeId: SELF,
       carrierNodeId: CARRIER,
       enrolments: ENROLMENTS,
@@ -148,7 +142,7 @@ describe("readDrainProgress", () => {
     expect(tablesForLane(CORE_ENROLMENT, "fast")).toEqual([]); // the fast lane is genuinely empty
     await seedOwnRow(70, orderedTable);
     await seedCarrierCursor("ordered", 70);
-    const p = await readDrainProgress(postgres.admin, {
+    const p = await readDrainProgress(postgres.db, {
       selfNodeId: SELF,
       carrierNodeId: CARRIER,
       enrolments: CORE_ENROLMENT,
@@ -161,7 +155,7 @@ describe("readDrainProgress", () => {
     await seedOwnRow(120, FAST_TABLE); // fast behind
     await seedCarrierCursor("ordered", 50);
     await seedCarrierCursor("fast", 90);
-    const p = await readDrainProgress(postgres.admin, {
+    const p = await readDrainProgress(postgres.db, {
       selfNodeId: SELF,
       carrierNodeId: CARRIER,
       enrolments: ENROLMENTS,

@@ -1,3 +1,4 @@
+// Real PostgreSQL checks competing order-number allocators on distinct backends.
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
