@@ -30,15 +30,18 @@ import { FISCAL_TERRITORIES, resolveFiscalModules } from "../packages/provisioni
  * fiscal-fixtures.ts` is the fixture nearest the line: it seeds `registros_facturacion` rows with
  * raw SQL and imports no regime package at all.
  *
- * DEFERRED, allowlisted with the reason: the runtime fiscal pass still imports the Spanish regime
- * directly until the `fiscal-none` slice designs the runtime-duty seat (SP-3c spec §12). Shrink this
- * list there; do not grow it. `apps/server/src/aeat-credential.ts` is deferred by that spec too but
- * is not listed: it seals the AEAT certificate and names no regime package itself, reaching the
- * transport only through `./aeat-transport.js`, so the assertion below already holds for it.
+ * DEFERRED, allowlisted with the reason: `apps/server/src/aeat-credential.ts` still reaches the
+ * regime directly. The `fiscal-none` slice moved the runtime drain behind the fiscal contribution's
+ * `drain` seat (`boot.ts` now names no regime package) and relocated the AEAT transport into the
+ * regime, so those two entries are gone. What remains is `aeat-credential.ts`: it validates and seals
+ * the AEAT certificate and imports `CertKind`/`isCertKind` from `@waitron/fiscal-verifactu` until Task
+ * 5 moves the whole file into the regime and empties this list. Shrink this list; do not grow it.
  */
 const DEFERRED_RUNTIME_PASS = new Map<string, string>([
-  ["apps/server/src/boot.ts", "drain: the fiscal pass builds a per-pass AEAT transport"],
-  ["apps/server/src/aeat-transport.ts", "AEAT SOAP endpoints and mTLS"],
+  [
+    "apps/server/src/aeat-credential.ts",
+    "cert validate/seal not yet behind a seat; reaches CertKind via the regime — moved in Task 5",
+  ],
 ]);
 
 const REPO_ROOT = join(import.meta.dirname, "..");

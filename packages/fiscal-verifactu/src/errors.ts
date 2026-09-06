@@ -46,6 +46,17 @@ import "@waitron/shared";
 declare module "@waitron/shared" {
   interface ErrorParams {
     /**
+     * The AEAT transport (`./aeat-transport.ts`, relocated here in the fiscal-none slice) throws this
+     * at the credential READ site when a decrypted `fiscal.aeat` payload's `certKind`, `pfxBase64`
+     * or `passphrase` is absent or unusable. Declared here because this package now throws the code;
+     * `apps/server/src/errors.ts` keeps its own identical declaration for the code's other throwers
+     * (`stripe-account.ts`, `webhook.ts`). Codes are never renamed once shipped, so the `server.*`
+     * string stands (design note above and CLAUDE.md §3); the two declarations carry identical params
+     * so TypeScript's declaration merging accepts both when `apps/server` compiles them together.
+     */
+    "server.credential_unusable": { tenantId: string; purpose: string; field: string };
+
+    /**
      * A restore or standby reservation rejects a base over `MAX_BASE_CODE_LENGTH`, leaving room
      * within the 60-character `NumSerieFactura` cap for `-<installation number>/<counter>` with
      * ten digits each. The restore hook throws inside its transaction; on rollback, nothing it

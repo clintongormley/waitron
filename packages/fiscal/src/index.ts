@@ -9,7 +9,12 @@ export type {
   TrustedTimeAnchor,
   TrustedTimeSource,
 } from "./clock.js";
-export type { FiscalBackendDeps, FiscalContribution } from "./contribution.js";
+export type {
+  FiscalBackendDeps,
+  FiscalContribution,
+  FiscalDutyDeps,
+  FiscalDutyLog,
+} from "./contribution.js";
 export type {
   AckState,
   Counterparty,

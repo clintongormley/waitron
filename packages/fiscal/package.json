@@ -13,6 +13,7 @@
     "mutation": "stryker run"
   },
   "dependencies": {
+    "@waitron/credentials": "workspace:*",
     "@waitron/db": "workspace:*",
     "@waitron/shared": "workspace:*",
     "drizzle-orm": "^0.45.2"

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SOAP_ENDPOINTS, createClient } from "@waitron/verifactu";
-import { mtlsFetch } from "./aeat-transport.js";
+import { mtlsFetch } from "@waitron/fiscal-verifactu/src/aeat-transport.js";
 
 // Supplied by the operator at run time, never committed and never defaulted. Absent means the
 // suite has nothing to prove, so it skips rather than inventing material.

@@ -1,12 +1,13 @@
 import { putCredential, type KeyRing } from "@waitron/credentials";
 import { withTenant, type Database } from "@waitron/db";
 import { AppError, tenantId as brandTenantId } from "@waitron/shared";
-import { isCertKind, type CertKind } from "./aeat-transport.js";
+import { isCertKind, type CertKind } from "@waitron/fiscal-verifactu";
 import "./errors.js";
 
-// `CertKind` and its runtime membership check (`isCertKind`) have ONE source, `aeat-transport.ts`,
-// where the type is derived FROM the `CERT_KINDS` array so the two can never drift. Re-exported here
-// so `setup-api.ts`'s existing `import { CertKind } from "./aeat-credential.js"` keeps resolving.
+// `CertKind` and its runtime membership check (`isCertKind`) have ONE source, the regime's
+// `aeat-transport.ts` (`@waitron/fiscal-verifactu`), where the type is derived FROM the `CERT_KINDS`
+// array so the two can never drift. Re-exported here so `setup-api.ts`'s existing
+// `import { CertKind } from "./aeat-credential.js"` keeps resolving.
 export type { CertKind };
 
 export interface AeatCert {

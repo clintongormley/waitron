@@ -6,6 +6,10 @@ export { FISCAL_ENROLMENT } from "./enrolment.js";
 export { FISCAL_VOCABULARY } from "./vocabulary.js";
 export { FISCAL_PROVISIONING, WAITRON_ID_SISTEMA } from "./provisioning.js";
 export { FISCAL_SLOT } from "./slot.js";
+// The AEAT transport moved into the regime (fiscal-none slice). `CertKind`/`isCertKind` are exported
+// so `apps/server/src/aeat-credential.ts` can still reach them until Task 5 moves that file here too.
+export { isCertKind } from "./aeat-transport.js";
+export type { CertKind } from "./aeat-transport.js";
 export {
   cadenas,
   contadoresInstalacion,

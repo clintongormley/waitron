@@ -22,13 +22,11 @@ import {
   StripeTerminalProvider,
 } from "@waitron/payments-stripe";
 import type { PaymentProvider } from "@waitron/payments";
-import { drain } from "@waitron/fiscal-verifactu";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
-import { enabledModules, orderedMigrationSets, reconcile } from "@waitron/module";
+import { enabledModules, fiscalSlot, orderedMigrationSets, reconcile } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { ALL_MODULES, ALL_SYNC_ENROLMENTS, MODULE_BY_TABLE } from "./modules.js";
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
-import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { parseEnvFile } from "./env-file.js";
 import {
   loadConfig,
@@ -1114,6 +1112,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     readOrderFlow(db, config.till),
     readFilingModule(db, config.till),
   ]);
+  // The enabled module that fills the fiscal slot, resolved ONCE for the runtime `drain` seat below.
+  // `fiscalSlot` (generic `@waitron/module`, not a regime package) refuses zero, two, or a node
+  // stamped for another regime — the same guard `makeFiscalBackend` runs for the sale-path backend.
+  // The regime's transport now lives behind this contribution's `drain`, so `boot.ts` names no regime
+  // package (`scripts/module-seams.test.ts`).
+  const enabledFiscal = fiscalSlot(setsToMigrate, filingModule);
   const till: TillConfig = { ...config.till, orderFlow };
   // The venue's DEFAULT UI locale, derived ONCE now the pool is open — the DISPLAY counterpart to the
   // fiscal `till.locale`/`invoiceLocales` (left untouched). `readVenueLocale` applies the shared
@@ -1891,42 +1895,23 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       (at) =>
         runPass(
           {
-            // Per pass, not once at boot: `closeAll` below must release exactly the transports THIS
-            // pass built. Each holds a TLS connection pool keyed to one tenant's client certificate,
-            // and nothing closed them before — they accumulated for the process lifetime.
-            drain: async (at2) => {
-              const resolver = aeatClientResolver(
+            // The regime owns the submission transport: `enabledFiscal.drain` builds a per-pass mTLS
+            // resolver (one TLS pool per tenant with due work, released in its own `finally`) and runs
+            // the pass. The host injects only the vault ring, the deployment identity and the cadence —
+            // `config.environment` is the `WAITRON_ENV`-derived value `deployment-guard.ts` pinned
+            // against the database at boot, and the regime's `entorno` guard refuses any due registro
+            // whose own `entorno` disagrees or is unrecorded. `boot.ts` names no regime package.
+            drain: (at2) =>
+              enabledFiscal.drain(
                 {
                   db,
                   ring,
-                  endpointFor: aeatEndpointFor(config.environment),
-                  // `mtlsFetch` directly, not a wrapping arrow: its own second parameter (`ca`, for a
-                  // private trust root) is optional, so `mtlsFetch` already has the exact shape
-                  // `fetchFor` wants when called with one argument. A wrapper here would be one more
-                  // never-invoked closure.
-                  fetchFor: mtlsFetch,
+                  environment: config.environment,
+                  skipRetryMs: config.skipRetryMs,
+                  log: (l, e, f) => log(l, e, f),
                 },
-                log,
-              );
-              try {
-                return await drain(
-                  {
-                    db,
-                    resolveClient: resolver.resolve,
-                    skipRetryMs: config.skipRetryMs,
-                    // Which deployment THIS host is — the same `WAITRON_ENV`-derived value
-                    // `config.environment` already is (`deployment-guard.ts` pins it against the
-                    // database at boot). `drain`'s guard (`@waitron/fiscal-verifactu`'s `claimBatch`)
-                    // refuses any due registro whose own `entorno` disagrees, or is unrecorded,
-                    // rather than ever submitting it to AEAT.
-                    environment: config.environment,
-                  },
-                  at2,
-                );
-              } finally {
-                await resolver.closeAll();
-              }
-            },
+                at2,
+              ),
             // Enumerated per pass, not at boot: a tenant provisioned while the host runs is served
             // on the next pass rather than after a restart.
             reconcile: async (at2) =>

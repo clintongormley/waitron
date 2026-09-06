@@ -1,5 +1,7 @@
 import type { FiscalContribution } from "@waitron/fiscal";
 import { VerifactuBackend } from "./backend.js";
+import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
+import { drain as runDrain } from "./drain.js";
 
 /**
  * The sale path never contacts AEAT — only `drain`/`reconcile` do, and the backend built here is
@@ -23,4 +25,19 @@ export const FISCAL_SLOT: FiscalContribution = {
       deploymentEnvironment: environment,
       resolveClient: rejectResolveClient,
     }),
+  // The runtime submission pass. The regime OWNS its transport: it builds a per-pass mTLS resolver
+  // (one TLS pool per tenant with due work, released in `finally`) and hands `runDrain` only the
+  // vault-scoped `resolveClient`. `environment` doubles as `runDrain`'s `Entorno` guard and
+  // `aeatEndpointFor`'s host selector — the same `"production" | "preproduction"` union — so no cast.
+  drain: async ({ db, ring, environment, skipRetryMs, log }, now) => {
+    const resolver = aeatClientResolver(
+      { db, ring, endpointFor: aeatEndpointFor(environment), fetchFor: mtlsFetch },
+      log,
+    );
+    try {
+      return await runDrain({ db, resolveClient: resolver.resolve, skipRetryMs, environment }, now);
+    } finally {
+      await resolver.closeAll();
+    }
+  },
 };
