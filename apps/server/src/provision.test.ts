@@ -89,7 +89,7 @@ describe("provisionVenue", () => {
     expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 0, nodes: 0, registros: 0 });
 
     const result = await provisionVenue(
-      { ownerDb: db, moduleConfig: ALL_ENABLED },
+      { ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" },
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     );
 
@@ -131,7 +131,7 @@ describe("provisionVenue", () => {
       },
     ) as never;
     const err = await provisionVenue(
-      { ownerDb, moduleConfig },
+      { ownerDb, moduleConfig, database: "waitron" },
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     ).catch((e: unknown) => e);
     expect(isAppError(err)).toBe(true);
@@ -142,18 +142,49 @@ describe("provisionVenue", () => {
     const db = ownerDb();
     const request = { environment: "preproduction" as const, venue: venueRequest(nextNif()) };
 
-    await provisionVenue({ ownerDb: db, moduleConfig: ALL_ENABLED }, request);
+    await provisionVenue({ ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" }, request);
     const afterFirst = await fiscalCounts(db);
     expect(afterFirst).toEqual({ sif: 1, series: 2, nodes: 1, registros: 0 });
 
     // A second provision with the SAME NIF is refused BEFORE any fiscal write.
-    const error = await provisionVenue({ ownerDb: db, moduleConfig: ALL_ENABLED }, request).catch(
-      (e: unknown) => e,
-    );
+    const error = await provisionVenue(
+      { ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" },
+      request,
+    ).catch((e: unknown) => e);
     expect(isAppError(error)).toBe(true);
     expect(isAppError(error) && error.code).toBe("setup.already_provisioned");
 
     // No second SIF, series or node — the guard prevented a duplicate hash chain.
+    expect(await fiscalCounts(db)).toEqual(afterFirst);
+  });
+
+  it("refuses a FOREIGN obligado in an occupied database and mints no second tenant (§5)", async () => {
+    // The production gap: `POST /setup-api/provision` reaches this function, and one tenant per
+    // database is the post-RLS isolation boundary — with row-level security gone a second
+    // `(country, tax_id)` would expose one business's rows to the other (§5). A DIFFERENT obligado in
+    // an occupied database is refused BEFORE stamping or applyVenue, exactly as the `venue` CLI does.
+    const db = ownerDb();
+    await provisionVenue(
+      { ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" },
+      { environment: "preproduction", venue: venueRequest(nextNif()) },
+    );
+    const afterFirst = await fiscalCounts(db);
+    const firstTenants = await db.execute<{ n: number }>(
+      sql`select count(*)::int as n from tenants`,
+    );
+    expect(firstTenants.rows[0]!.n).toBe(1);
+
+    // A DIFFERENT business (a fresh NIF) against the SAME database is refused as a foreign tenant.
+    const error = await provisionVenue(
+      { ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" },
+      { environment: "preproduction", venue: venueRequest(nextNif()) },
+    ).catch((e: unknown) => e);
+    expect(isAppError(error)).toBe(true);
+    expect(isAppError(error) && error.code).toBe("provisioning.foreign_tenant");
+
+    // Still exactly one tenant — and no second SIF/series/node/chain.
+    const tenants = await db.execute<{ n: number }>(sql`select count(*)::int as n from tenants`);
+    expect(tenants.rows[0]!.n).toBe(1);
     expect(await fiscalCounts(db)).toEqual(afterFirst);
   });
 
@@ -180,7 +211,7 @@ describe("provisionVenue", () => {
 
     // First: provision in the CANONICAL casing.
     await provisionVenue(
-      { ownerDb: db, moduleConfig: ALL_ENABLED },
+      { ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" },
       { environment: env, venue: venueRequest(nif) },
     );
     const afterFirst = await fiscalCounts(db);
@@ -189,7 +220,7 @@ describe("provisionVenue", () => {
     // Second: re-provision the SAME business in a NON-canonical casing (lowercase country + NIF).
     const nonCanonical = { ...venueRequest(nif), country: "es", taxId: nif.toLowerCase() };
     const error = await provisionVenue(
-      { ownerDb: db, moduleConfig: ALL_ENABLED },
+      { ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" },
       { environment: env, venue: nonCanonical },
     ).catch((e: unknown) => e);
     expect(isAppError(error)).toBe(true);
@@ -209,7 +240,7 @@ describe("provisionVenue", () => {
 
     // ... so provisioning it for preproduction is refused at the stamp step, before any venue mint.
     const error = await provisionVenue(
-      { ownerDb: db, moduleConfig: ALL_ENABLED },
+      { ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" },
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     ).catch((e: unknown) => e);
     expect(isAppError(error)).toBe(true);

@@ -6,7 +6,7 @@ import { createPostgresDb, withTenant, type Database } from "@waitron/db";
 import { applyInstance, withDatabase } from "./instance-apply.js";
 import { planInstance } from "./instance-plan.js";
 import { readInstanceState } from "./instance-state.js";
-import { readTenantIdentities } from "./cli.js";
+import { readTenantIdentities } from "./tenant-guard.js";
 import { applyVenue } from "./venue-apply.js";
 import { planVenue, type VenueRequest } from "./venue-plan.js";
 import { roleUrl, startBarePostgres, type RealPostgres } from "./testing/postgres.js";

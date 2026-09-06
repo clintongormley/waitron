@@ -2,8 +2,10 @@ import { sql } from "drizzle-orm";
 import { stampDeployment, withTenant, type Database } from "@waitron/db";
 import {
   applyVenue,
+  assertNoForeignTenant,
   obligadoTenantId,
   planVenue,
+  readTenantIdentities,
   type VenueRequest,
   type VenueResult,
 } from "@waitron/provisioning";
@@ -28,12 +30,18 @@ export interface ProvisionDeps {
    * that is off — and the enabled set is what `planVenue`/`applyVenue` draw the per-node seeds from,
    * so a disabled module's seed cannot run. */
   readonly moduleConfig: ModuleConfig;
+  /** The name of the target database `ownerDb` writes — echoed by `provisioning.foreign_tenant` when
+   * a foreign obligado is refused (operator-typed configuration, never a secret). Boot derives it
+   * from `config.migrationsDatabaseUrl`. */
+  readonly database: string;
 }
 
 /**
- * Validate the module set and venue, refuse an existing derived tenant id, then stamp and provision.
- * Callers must serialize provisioning: the existence check and applyVenue use separate transactions.
- * The setup route supplies a process-local latch; this check rejects sequential retries.
+ * Validate the module set and venue, refuse a FOREIGN or already-present obligado, then stamp and
+ * provision. This is the UI production tenant-creation path (`POST /setup-api/provision`); the `venue`
+ * CLI is the other, and both share `assertNoForeignTenant` (one tenant per database, §5).
+ * Callers must serialize provisioning: the existence checks and applyVenue use separate transactions.
+ * The setup route supplies a process-local latch; these checks reject sequential retries.
  * applyVenue commits the tenant, venue rows and enabled module seeds together. The caller
  * persists configuration and seals credentials after this function returns.
  */
@@ -58,7 +66,19 @@ export async function provisionVenue(
   const plan = planVenue(req.venue, modules);
   const tenantId = obligadoTenantId(req.venue.country, req.venue.taxId);
 
-  // Refuse a tenant id already present before stamping or minting another venue.
+  // One tenant per database is the post-RLS isolation boundary (§5), enforced here and in the `venue`
+  // CLI — the two production tenant-creation paths — through the shared `assertNoForeignTenant` guard.
+  // Read every existing identity ONCE, then decide in order: a FOREIGN obligado is refused first
+  // (`provisioning.foreign_tenant`), because with row-level security gone a second `(country, tax_id)`
+  // would expose one business's rows to the other; only then, if the SAME identity is already present,
+  // is it a re-provision (`setup.already_provisioned`). The applied identity is the plan's
+  // `ensure-tenant` action, canonicalized by planVenue, so it compares like-for-like with the stored
+  // rows. Both reads run before stamping or minting another venue.
+  const ensure = plan.find((a) => a.kind === "ensure-tenant");
+  const present = await readTenantIdentities(deps.ownerDb);
+  if (ensure !== undefined && ensure.kind === "ensure-tenant") {
+    assertNoForeignTenant(present, { country: ensure.country, taxId: ensure.taxId }, deps.database);
+  }
   const alreadyProvisioned = await withTenant(deps.ownerDb, tenantId, async (tx) => {
     const rows = await tx.execute(sql`select 1 from tenants where id = ${tenantId}`);
     return rows.rows.length > 0;

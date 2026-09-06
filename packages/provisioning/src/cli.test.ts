@@ -1239,8 +1239,9 @@ describe("runCli venue", () => {
   it("refuses a SECOND, DIFFERENT fiscal identity in the same database, before applying (§5)", async () => {
     // One tenant per database is the post-RLS isolation boundary: this branch dropped row-level
     // security, so `withTenant` no longer filters by tenant and a second obligado would leak one
-    // business's rows to the other. `venue` is the only production tenant-creation path, so it reads
-    // the existing `(country, tax_id)` set and refuses any identity but the one already present. Here
+    // business's rows to the other. `venue` is one of the two production tenant-creation paths (the
+    // setup-api `provisionVenue` is the other), and both call the shared `assertNoForeignTenant`:
+    // each reads the existing `(country, tax_id)` set and refuses any identity but the one present. Here
     // the database already holds ES/B99999999 while the request is ES/B12345678 (VENUE_ARGS), so the
     // apply is refused — never reached — leaving no second tenant.
     const h = harness({

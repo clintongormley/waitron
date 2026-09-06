@@ -713,6 +713,18 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         const persistTrading = async (cfg: TradingConfig): Promise<void> => {
           await writeTradingEnv(config.stateDir, cfg);
         };
+        // The NAME of the database `ownerDb` writes — echoed by `provisioning.foreign_tenant` if a
+        // fresh venue is pointed at a database already holding a different obligado. Parsed from the
+        // owner URL, but never the URL itself (it can carry a password, and that code param is
+        // operator-typed configuration, never a secret): an unparseable string (a bare Unix-socket
+        // path throws in `new URL` — cli.ts's socket note) falls back to a neutral label.
+        let ownerDatabaseName = "the target database";
+        try {
+          const parsed = new URL(config.migrationsDatabaseUrl).pathname.replace(/^\//, "");
+          if (parsed !== "") ownerDatabaseName = parsed;
+        } catch {
+          // Keep the neutral label — a malformed/socket URL must not leak into the error param.
+        }
         // The setup surface, now with the slice-2b provisioning deps bound. `provision`/`sealAeat`
         // capture `ownerDb` + `ring`; `persistTrading` writes `<stateDir>/trading.env`; `requestRestart`
         // SIGTERMs this process so the supervisor restarts it into trading mode (`bin.ts`'s latch does
@@ -726,7 +738,8 @@ export async function startServer(env: Record<string, string | undefined>): Prom
           app,
           {
             environment: config.environment,
-            provision: (req) => provisionVenue({ ownerDb, moduleConfig }, req),
+            provision: (req) =>
+              provisionVenue({ ownerDb, moduleConfig, database: ownerDatabaseName }, req),
             adopt: (req) => {
               // Ruling 1 (fail loud at adopt, not at reboot): an adopted mirror MUST end up with
               // WAITRON_SYNC_DATABASE_URL in `trading.env`, because the next (mirror) boot's

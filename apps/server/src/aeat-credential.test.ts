@@ -84,7 +84,7 @@ function ownerDb(): Database {
 /** Provision a fresh venue and return its tenant id — the FK target the seal needs. */
 async function provisionTenant(target: Database): Promise<string> {
   const result = await provisionVenue(
-    { ownerDb: target, moduleConfig: ALL_ENABLED },
+    { ownerDb: target, moduleConfig: ALL_ENABLED, database: "waitron" },
     { environment: "preproduction", venue: venueRequest(nextNif()) },
   );
   return result.tenantId;

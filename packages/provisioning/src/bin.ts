@@ -7,9 +7,10 @@ import { fileURLToPath } from "node:url";
 import { ALL_MODULES } from "@waitron/composition";
 import { createPostgresDb, readDeploymentEnvironment } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
-import { formatAppError, readTenantIdentities, runCli } from "./cli.js";
+import { formatAppError, runCli } from "./cli.js";
 import { applyInstance } from "./instance-apply.js";
 import { readInstanceState } from "./instance-state.js";
+import { readTenantIdentities } from "./tenant-guard.js";
 import { applyVenue } from "./venue-apply.js";
 
 /**

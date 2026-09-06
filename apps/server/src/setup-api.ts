@@ -31,9 +31,9 @@ export interface SetupDeps {
   /** The deployment environment (`production` / `preproduction`) this box booted under, echoed by
    * `/setup-api/status` so slice 2's wizard can warn before it provisions a real production venue. */
   environment: DeploymentEnvironment;
-  /** `provisionVenue({ ownerDb, moduleConfig })` bound in boot: stamps the environment then mints the venue,
-   * returning the five ids the trading boot needs. Plaintext admin secrets never reach it — the
-   * provision route hashes them at the boundary. */
+  /** `provisionVenue({ ownerDb, moduleConfig, database })` bound in boot: refuses a foreign/existing
+   * obligado, stamps the environment, then mints the venue, returning the five ids the trading boot
+   * needs. Plaintext admin secrets never reach it — the provision route hashes them at the boundary. */
   provision?: (req: ProvisionRequest) => Promise<VenueResult>;
   /** `adoptFromPrimary({ ownerDb, ring, fetchBundle, persistTrading, … })` bound in boot: the
    * mirror-side sibling of `provision`. Fetches the primary's bundle SERVER-SIDE (so the admin

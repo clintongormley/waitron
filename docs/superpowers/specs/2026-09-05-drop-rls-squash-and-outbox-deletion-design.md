@@ -59,13 +59,16 @@ matrix.
 
 **Correction (2026-09-06, finish-branch fix wave).** "Enforced where tenants are created" was
 aspirational, not real, when the line above was first written: nothing refused a second obligado.
-The `venue` command — the only production tenant-creation path — now reads the existing
-`(country, tax_id)` set before it applies and throws `provisioning.foreign_tenant` for any identity
-but the one already present (the same identity re-provisions, D8; an empty database is the first
-tenant). The guard lives at the `venue` command, NOT in `applyVenue`: ~50 real-PG suites provision
-many distinct obligados through `applyVenue` into one shared container by design ("each test gets its
-own tenant so its state is order-independent"), and a guard inside `applyVenue` would break all of
-them while enforcing nothing production does not already route through `venue`.
+There are TWO production tenant-creation paths — the setup-api provision handler (`provisionVenue`,
+the UI's `POST /setup-api/provision`) and the `venue` CLI (ops/dev) — and the first fix guarded only
+the CLI, so the UI gap stood. Both now read the existing `(country, tax_id)` set before applying and
+throw `provisioning.foreign_tenant` for any identity but the one already present (the same identity
+re-provisions, D8; an empty database is the first tenant), through ONE shared decision —
+`assertNoForeignTenant` (`packages/provisioning/src/tenant-guard.ts`). The guard lives at those two
+entry points, NOT in `applyVenue`: ~50 real-PG suites provision many distinct obligados through
+`applyVenue` into one shared container by design ("each test gets its own tenant so its state is
+order-independent"), and a guard inside `applyVenue` would break all of them while enforcing nothing
+production does not already route through the two entry points.
 
 **Gone.** All 95 policies and 190 `ENABLE`/`FORCE` switches; `current_tenant_id()`; the
 `sync_log` / `sync_cursor` / `sync_peers` / `sync_config_conflicts` tables, `sync_capture()` and
