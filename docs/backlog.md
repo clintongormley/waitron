@@ -819,6 +819,17 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
       with condition-based-waiting (`fetchHealthOk` poll-until-200); ci.yml now uploads shard blobs on
       failure so a future flake names its exact test. Sibling `mirror-e2e.rls.test.ts:~381` remains a
       candidate if it recurs. See memory `test-server-e2e-timing-flakes`.
+
+    - ***FIX the `test-server (1)` mirror/promotion CI timing flake (owner directive 2026-09-06 — flaky
+      tests waste time; fix, don't re-run).*** It RECURRED on PR #255: `test-server` shard 1 failed once
+      in the real-PG mirror/promotion/e2e suites (`mirror-e2e`, `boot.mirror`, `boot.promote`,
+      `adopt-e2e`, `promote`) with the signature `sync.stream_stalled` + a ~90 s gap before a vitest
+      timeout, while the same suite passed locally and on CI re-run. Not branch-specific — the drop-RLS
+      branch's server changes touch the provisioning guard / boot db-name / brandTenantId, none of the
+      sync/mirror path. **Root-cause the timing race and replace wall-clock waits with condition-based
+      waiting**, exactly as the `boot.test` 503 flake above was fixed (`fetchHealthOk` poll-until-200);
+      `ci.yml` already uploads the shard blob on failure (artifact `server-blob-1`) to name the exact
+      test. Memory: `test-server-e2e-timing-flakes`.
   - **SP-3b — module-owned vocabulary — LANDED #240 (2026-09-05).** Fiscal's and workforce-es's Spanish
     terms live in `FISCAL_VOCABULARY` / `WORKFORCE_ES_VOCABULARY`, declared on each descriptor's
     `vocabulary` seat; `packages/db/src/english-only.ts` keeps a 23-word base list and `findSpanish(source,
