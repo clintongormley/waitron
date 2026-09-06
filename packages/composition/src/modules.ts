@@ -2,6 +2,7 @@ import { CORE_ENROLMENT } from "@waitron/db";
 import {
   FISCAL_ENROLMENT,
   FISCAL_PROVISIONING,
+  FISCAL_RESTORE,
   FISCAL_SLOT,
   FISCAL_VOCABULARY,
 } from "@waitron/fiscal-verifactu";
@@ -26,7 +27,7 @@ import { WORKFORCE_ES_VOCABULARY } from "@waitron/workforce-es";
  * `CREATE TRIGGER … ON <table>` and the `sync_capture()` SPI call — which the root
  * `module-graph-honesty` guard cross-checks against the migrations. Populated seats today: `sync` on
  * every enrolling module (SP-2a/3a), `vocabulary` on the Spanish-by-design modules (SP-3b),
- * `backup.nonDbState` on `core` (BR-2), and `provisioning` + `fiscal` on `fiscal` (SP-3c). The
+ * `backup.nonDbState` on `core`, and `provisioning`, `fiscal` + `backup.restore` on `fiscal`. The
  * remaining seats stay declared on the contract and empty until their slices land.
  */
 export const ALL_MODULES: readonly WaitronModule[] = [
@@ -36,8 +37,8 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     tier: "mandatory",
     migrations: { name: "core", table: "__drizzle_migrations_db", from: "../db/drizzle" },
     sync: CORE_ENROLMENT,
-    // BR-2: the content-addressed media store is core's non-DB state; a backup must capture it
-    // alongside the DB. `restore` is a later slice's seat (BR-3/BR-4) — unpopulated here.
+    // The content-addressed media store is core's non-DB state; a backup must capture it
+    // alongside the DB.
     backup: { nonDbState: [{ kind: "content-addressed-dir", source: "media" }] },
   },
   {
@@ -130,5 +131,6 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     vocabulary: FISCAL_VOCABULARY,
     provisioning: FISCAL_PROVISIONING,
     fiscal: FISCAL_SLOT,
+    backup: { restore: FISCAL_RESTORE },
   },
 ];

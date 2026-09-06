@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { FISCAL_PROVISIONING, FISCAL_SLOT, FISCAL_VOCABULARY } from "@waitron/fiscal-verifactu";
+import {
+  FISCAL_RESTORE,
+  FISCAL_PROVISIONING,
+  FISCAL_SLOT,
+  FISCAL_VOCABULARY,
+} from "@waitron/fiscal-verifactu";
 import { manifestSets } from "@waitron/migrations";
 import { orderedMigrationSets } from "@waitron/module";
 import { WORKFORCE_ES_VOCABULARY } from "@waitron/workforce-es";
@@ -15,6 +20,12 @@ describe("ALL_MODULES is the migration source of truth", () => {
 });
 
 describe("ALL_MODULES backup contribution", () => {
+  it("fiscal declares its restore hook, by reference", () => {
+    const fiscal = ALL_MODULES.find((m) => m.name === "fiscal")!;
+    expect(FISCAL_RESTORE).toBeTypeOf("function");
+    expect(fiscal.backup?.restore).toBe(FISCAL_RESTORE);
+  });
+
   it("core declares the media store as non-DB backup state", () => {
     const core = ALL_MODULES.find((m) => m.name === "core");
     expect(core?.backup?.nonDbState).toEqual([{ kind: "content-addressed-dir", source: "media" }]);

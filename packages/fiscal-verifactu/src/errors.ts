@@ -45,6 +45,15 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    /**
+     * A restore (or a standby reservation) cannot open a disjoint series for this base code:
+     * `NumSerieFactura` is capped at 60 characters (`packages/verifactu` validate) and the base plus
+     * one `-<installation number>` suffix plus `/<counter>` would not fit. A base over
+     * `MAX_BASE_CODE_LENGTH` is not a real code; refused BEFORE anything is minted. `series.*` names
+     * the concept (the `series.not_found` prefix), never the package. Never renamed once shipped.
+     */
+    "series.code_too_long": { code: string };
+
     /** Thrown by `currentSif` for a node with no LIVE `registro_sif` row — never provisioned, or
      * provisioned once and then revoked by a re-registration that has not yet completed (node-id
      * rekey, 2026-08-03: the SIF is the node, #33). The concrete encoding of "a node cannot be
