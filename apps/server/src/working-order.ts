@@ -2516,7 +2516,12 @@ export async function listHeldOrders(
             eq(workingOrderLines.tenantId, workingOrders.tenantId),
           ),
         )
-        .where(and(eq(workingOrders.status, "open"), eq(workingOrders.nodeId, cfg.nodeId)))
+        // Venue-wide, not node-scoped (till-reroute design §3.6): under warm standby one node sells at a time,
+        // and a promoted node inherits the venue's open tabs tagged with the dead node's id (swap spec §4.3).
+        // `node_id` is still written at create — the writer's id, for replication — and never filtered on here.
+        // Scoped to the tenant (the venue), the way report-api's venue-wide reads are: `withTenant` no longer
+        // isolates SELECTs since RLS was dropped, so the tenant predicate is the read's own scope.
+        .where(and(eq(workingOrders.tenantId, cfg.tenantId), eq(workingOrders.status, "open")))
         .groupBy(
           workingOrders.id,
           workingOrders.orderNumber,
@@ -2529,8 +2534,8 @@ export async function listHeldOrders(
 }
 
 /**
- * Read an open parked order on this node. Return product ids and quantities in
- * line-number order so the till can rebuild and re-price the basket.
+ * Read an open parked order anywhere in the venue (venue-wide, till-reroute §3.6 — not node-scoped).
+ * Return product ids and quantities in line-number order so the till can rebuild and re-price the basket.
  */
 export async function getHeldOrder(
   deps: WorkingOrderDeps,
@@ -2547,13 +2552,7 @@ export async function getHeldOrder(
         label: workingOrders.label,
       })
       .from(workingOrders)
-      .where(
-        and(
-          eq(workingOrders.id, id),
-          eq(workingOrders.status, "open"),
-          eq(workingOrders.nodeId, cfg.nodeId),
-        ),
-      );
+      .where(and(eq(workingOrders.id, id), eq(workingOrders.status, "open")));
 
     if (order === undefined) {
       throw new AppError("working_order.not_found", { workingOrderId: id });
@@ -2586,8 +2585,8 @@ export interface UpdateHeldOrderRequest {
 }
 
 /**
- * Update an open held order on this node using the current catalogue prices.
- * The caller's transaction keeps the order and replacement lines together.
+ * Update an open held order anywhere in the venue (venue-wide, till-reroute §3.6) using the current
+ * catalogue prices. The caller's transaction keeps the order and replacement lines together.
  */
 export async function updateHeldOrder(
   deps: WorkingOrderDeps,
@@ -2601,15 +2600,15 @@ export async function updateHeldOrder(
     async (tx) => {
       await asAppUser(tx);
 
-      // Lock the order row for the life of the tx, then read its status off the locked copy. Absent,
-      // on another node, or not-open → `working_order.not_open`; the DB triggers (enforce_transition on
-      // the label update, require_open_parent on the line delete/insert) are the backstop if this app
-      // check is ever wrong. `node_id` joins `id` in the lock predicate (node scope, the by-id family);
+      // Lock the order row for the life of the tx, then read its status off the locked copy. Absent or
+      // not-open → `working_order.not_open`; the DB triggers (enforce_transition on the label update,
+      // require_open_parent on the line delete/insert) are the backstop if this app check is ever wrong.
+      // The lock predicate is `id` alone (venue-wide, till-reroute §3.6 — any node's open tab is editable);
       // `status` stays off the WHERE so a closed order is told from an absent one only inside the tx.
       const [order] = await tx
         .select({ status: workingOrders.status })
         .from(workingOrders)
-        .where(and(eq(workingOrders.id, id), eq(workingOrders.nodeId, cfg.nodeId)))
+        .where(eq(workingOrders.id, id))
         .for("update");
 
       if (order === undefined || order.status !== "open") {
@@ -2644,8 +2643,8 @@ export async function updateHeldOrder(
 }
 
 /**
- * Abandon an open held order on this node. The conditional status update leaves
- * settled_at null because abandonment does not settle an order.
+ * Abandon an open held order anywhere in the venue (venue-wide, till-reroute §3.6). The conditional
+ * status update leaves settled_at null because abandonment does not settle an order.
  */
 export async function abandonHeldOrder(
   deps: WorkingOrderDeps,
@@ -2661,13 +2660,7 @@ export async function abandonHeldOrder(
       const updated = await tx
         .update(workingOrders)
         .set({ status: "abandoned" })
-        .where(
-          and(
-            eq(workingOrders.id, id),
-            eq(workingOrders.status, "open"),
-            eq(workingOrders.nodeId, cfg.nodeId),
-          ),
-        )
+        .where(and(eq(workingOrders.id, id), eq(workingOrders.status, "open")))
         .returning({ id: workingOrders.id });
 
       if (updated.length === 0) {
@@ -3184,16 +3177,11 @@ export interface StationQueueGroup {
  * order's queued/preparing/ready lines alike (the Nuevo/Preparando/Listo columns are a client lens).
  *
  * Ordered by `ticket_items.queued_at` ascending, so within the grouping the oldest line seen for an
- * order fixes that group's position (oldest-first) and its `queuedAt`. Node-scoped
- * (`node_id = cfg.nodeId`) exactly as `listPrepQueue` was — the queue is one node's — so `cfg` is used
- * here (unlike the advance verbs). Runs on the CALLER's transaction under its tenant/app_user scope.
- * PGlite proves the join, the exclusions, the grouping and the ordering; the NODE scoping is
- * real-Postgres's job (working-order.pg.test.ts), the same split `listPrepQueue` used (CLAUDE.md §4).
- *
- * On a mirror this `cfg.nodeId` filter is the mirror's OWN reserved id, not the origin whose replicated
- * rows carry the primary's — see the latent-mirror-trap comment on the `GET /api/working-orders` cluster
- * in till-api.ts (membership promotion R3a) for why that is safe today and what must change before it
- * is not.
+ * order fixes that group's position (oldest-first) and its `queuedAt`. Venue-wide (till-reroute §3.6 —
+ * not node-scoped): the station's queue is the whole venue's, so a promoted node keeps serving the
+ * dead node's fired items. Runs on the CALLER's transaction under its tenant/app_user scope. PGlite
+ * proves the join, the exclusions, the grouping and the ordering; the venue-wide, cross-node read is
+ * real-Postgres's job (working-order.pg.test.ts), the CLAUDE.md §4 split.
  */
 /**
  * Read modifier descriptions and allergen overlays for the supplied parent lines,
@@ -3407,7 +3395,7 @@ export async function listStationQueue(
     )
     .where(
       and(
-        eq(ticketItems.nodeId, cfg.nodeId),
+        eq(ticketItems.tenantId, cfg.tenantId),
         eq(ticketItems.stationId, stationId),
         ne(workingOrders.status, "abandoned"),
         isNull(workingOrders.collectedAt),
@@ -3598,19 +3586,17 @@ export interface ExpoOrder {
  *  A SURVIVING order still carries ALL its items — including away ones — so a per-course `away` flag can
  *  be rolled up; the SCREEN (a later task) hides fully-away courses, the READ does not.
  *
- * Node-scoped (`ticket_items.node_id = cfg.nodeId`, spec §3a — the pass is one node's, exactly as
- * `listStationQueue`'s queue is). `locationId` (default `cfg.locationId`) scopes only the dining-table
- * label lookup, keeping the `(tx, cfg, locationId?)` signature symmetric with `listTablesWithState`; a
- * node sits in one location, so the default is the till's own venue.
+ * Venue-wide (till-reroute §3.6 — not node-scoped, so a promoted node keeps expediting the dead node's
+ * live orders), exactly as `listStationQueue`'s queue now is. `locationId` (default `cfg.locationId`)
+ * scopes only the dining-table label lookup, keeping the `(tx, cfg, locationId?)` signature symmetric
+ * with `listTablesWithState`; a node sits in one location, so the default is the till's own venue.
  *
  * Ordered by `opened_at` (oldest order first — the most urgent to dispatch), then course `display_order`
  * NULLS FIRST (the null course fires earliest), then `line_no`/item id for a stable within-course order.
  * Runs on the CALLER's transaction under its tenant/`app_user` scope. PGlite proves the join, the
  * exclusions, the course grouping and the fired/away roll-ups — plain SQL a single backend proves; the
- * NODE scoping is real-Postgres's job (working-order.pg.test.ts), the same split `listStationQueue`
- * uses (CLAUDE.md §4).
- *
- * Same mirror caveat as `listStationQueue`'s own `cfg.nodeId` filter above — see that comment.
+ * venue-wide, cross-node read is real-Postgres's job (working-order.pg.test.ts), the same split
+ * `listStationQueue` uses (CLAUDE.md §4).
  */
 export async function listExpoQueue(
   tx: Transaction,
@@ -3667,7 +3653,7 @@ export async function listExpoQueue(
       // order) or a counter DELIVERY (`working_orders.delivery_table_id` points at the table). Scoped to
       // `loc` (the expo's location, the `locationId?` param defaulting to the till's own venue) — the one
       // place this read consumes the location, keeping the (tx, cfg, locationId?) signature symmetric with
-      // listTablesWithState while the READ itself stays node-scoped. The `order by` — a seated-tab match
+      // listTablesWithState while the READ itself is venue-wide (§3.6). The `order by` — a seated-tab match
       // (`dt.tab_id = ` the order) first, then the unique `dt.id` as a total tiebreak — makes the single
       // label deterministic (a bare `limit 1` is NOT: two rows can match — the order's own tab table AND
       // a table it delivers to — and PostgreSQL could then return either label across calls).
@@ -3718,19 +3704,19 @@ export async function listExpoQueue(
     )
     .where(
       and(
-        eq(ticketItems.nodeId, cfg.nodeId),
+        eq(ticketItems.tenantId, cfg.tenantId),
         ne(workingOrders.status, "abandoned"),
         isNull(workingOrders.collectedAt),
         // Fully-away exclusion, order-level, computed at query time (there is no per-order "done"
-        // column): keep the order while ANY of its items on this node is still not-away, drop it once
-        // every item carries `away_at` (§2a — `away` is KDS-3's dispatch marker; `served_at` is a
-        // separate floor ack, not consulted). A surviving order still returns ALL its items (away ones
-        // included) so a per-course `away` roll-up can be formed; the screen hides fully-away courses.
+        // column): keep the order while ANY of its items is still not-away, drop it once every item
+        // carries `away_at` (§2a — `away` is KDS-3's dispatch marker; `served_at` is a separate floor
+        // ack, not consulted). Venue-wide like the outer read (till-reroute §3.6), so items from any
+        // node count. A surviving order still returns ALL its items (away ones included) so a per-course
+        // `away` roll-up can be formed; the screen hides fully-away courses.
         sql`exists (
           select 1 from ${ticketItems} tix
           where tix.tenant_id = ${workingOrders.tenantId}
             and tix.working_order_id = ${workingOrders.id}
-            and tix.node_id = ${cfg.nodeId}
             and tix.away_at is null)`,
       ),
     )
