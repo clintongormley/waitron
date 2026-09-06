@@ -123,7 +123,8 @@ describe("reserved-identity accessors", () => {
   });
 
   it("readStandardSeriesIdTx refuses a node belonging to a different tenant argument", async () => {
-    // PGlite bypasses RLS, so the helper's own tenant predicate must reject this mismatched pair.
+    // Nothing but the helper's own tenant predicate scopes this read, so it must reject the
+    // mismatched pair itself.
     const node = await seedNode(suite.db, tenantId, locationId);
     const otherTenant = await seedTenant(suite.db);
     await withTenant(suite.db, tenantId, (tx) =>
