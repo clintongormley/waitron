@@ -42,8 +42,9 @@ export function stripOwnSuffixes(code: string, registered: ReadonlySet<number>):
 
 /**
  * A node's live series, ordered by original code and stripped of the tenant's own suffixes:
- * one base per (code, purpose) pair, preserving first-seen order. Retired series remain history.
- * Throws `series.code_too_long` for a base that cannot carry a suffix within the cap.
+ * Same-purpose duplicates collapse; if a stripped base is claimed by another purpose, keep the
+ * original code as the base. Preserves first-seen order; retired series remain history.
+ * Throws `series.code_too_long` after disambiguation if the base cannot carry a suffix within the cap.
  */
 export async function liveSeriesBases(
   tx: Transaction,
@@ -66,15 +67,18 @@ export async function liveSeriesBases(
     .where(eq(registroSif.tenantId, node.tenantId));
   const registered = new Set(numbers.map((r) => r.n));
   const seen = new Set<string>();
+  const claimed = new Set<string>();
   const bases: { code: string; purpose: string }[] = [];
   for (const series of live) {
-    const code = stripOwnSuffixes(series.code, registered);
+    let code = stripOwnSuffixes(series.code, registered);
     const key = JSON.stringify([code, series.purpose]);
     if (seen.has(key)) continue;
+    if (claimed.has(code)) code = series.code;
     if (code.length > MAX_BASE_CODE_LENGTH) {
       throw new AppError("series.code_too_long", { code });
     }
     seen.add(key);
+    claimed.add(code);
     bases.push({ code, purpose: series.purpose });
   }
   return bases;

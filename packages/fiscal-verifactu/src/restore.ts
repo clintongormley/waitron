@@ -49,6 +49,7 @@ export async function raiseInstallationFloor(
  * the orchestrator to open. An overlong base throws inside the restore transaction; on rollback,
  * nothing the hook wrote persists. Without a live SIF, mint nothing and omit `series`:
  * the restore does not make the node a filing node. Writes nothing to `invoice_series`.
+ * Requires a stopped server and a fresh restore database before boot: its lock order reverses live SIF registration.
  */
 export async function restoreFiscal(
   tx: Transaction,

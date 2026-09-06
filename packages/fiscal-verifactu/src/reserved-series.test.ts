@@ -60,12 +60,35 @@ describe("liveSeriesBases", () => {
       await tx.execute(sql`
         insert into invoice_series (tenant_id, node_id, code, purpose) values
           (${node.tenantId}, ${node.nodeId}, 'RE', 'rectificative'),
-          (${node.tenantId}, ${node.nodeId}, 'FA-2-2', 'rectificative')
+          (${node.tenantId}, ${node.nodeId}, 'FA-2-2', 'rectificative'),
+          (${node.tenantId}, ${node.nodeId}, 'FA-2-2-2', 'rectificative')
       `);
       expect(await liveSeriesBases(tx, node)).toEqual([
         { code: "FA", purpose: "standard" },
-        { code: "FA", purpose: "rectificative" },
+        { code: "FA-2-2", purpose: "rectificative" },
         { code: "RE", purpose: "rectificative" },
+      ]);
+    });
+  });
+});
+
+describe("liveSeriesBases across purposes", () => {
+  // Each fixture owns its database so registration counters and live codes cannot depend on test order.
+  const suite = usePgliteDb({ migrations: [...TEST_MIGRATIONS], setup: seedTenants });
+
+  it("keeps FA standard and FA-1 rectificative distinct when installation 1 is registered", async () => {
+    await withTenant(suite.db, TENANT_A.id, async (tx) => {
+      const node = { tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId };
+      const sif = await registerSif(tx, { ...node, nif: "89890001K", idSistemaInformatico: "WT" });
+      expect(sif.numeroInstalacion).toBe(1);
+      await tx.execute(sql`
+          insert into invoice_series (tenant_id, node_id, code, purpose) values
+            (${node.tenantId}, ${node.nodeId}, 'FA', 'standard'),
+            (${node.tenantId}, ${node.nodeId}, 'FA-1', 'rectificative')
+        `);
+      expect(await liveSeriesBases(tx, node)).toEqual([
+        { code: "FA", purpose: "standard" },
+        { code: "FA-1", purpose: "rectificative" },
       ]);
     });
   });

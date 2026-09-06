@@ -1,10 +1,13 @@
-import { mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { sql } from "drizzle-orm";
+import { withTenant } from "@waitron/db";
+import { nodeId as brandNodeId, tenantId as brandTenantId } from "@waitron/shared";
+import { FISCAL_RESTORE, currentSif, registerSif } from "@waitron/fiscal-verifactu";
 import { AppError } from "@waitron/shared";
 import type { RestoreHook, WaitronModule } from "@waitron/module";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
@@ -452,6 +455,99 @@ describe("restore steps (R3 composition)", () => {
 describe("restore hooks (identity phase)", () => {
   useTempDirs("waitron-hooks-");
   beforeEach(resetSeries);
+
+  it("restores FA standard and FA-1 rectificative through the real fiscal hook", async () => {
+    await withTenant(suite.db, brandTenantId(T.tenantId), async (tx) => {
+      const sif = await registerSif(tx, {
+        ...T,
+        tenantId: brandTenantId(T.tenantId),
+        nodeId: brandNodeId(T.nodeId),
+        nif: "89890001K",
+        idSistemaInformatico: "WT",
+      });
+      expect(sif.numeroInstalacion).toBe(1);
+      await tx.execute(sql`insert into invoice_series (tenant_id, node_id, code, purpose)
+        values (${T.tenantId}, ${T.nodeId}, 'FA-1', 'rectificative')`);
+    });
+    await restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ fiscal: FISCAL_RESTORE }) }));
+    const sif = await withTenant(suite.db, brandTenantId(T.tenantId), (tx) =>
+      currentSif(tx, brandTenantId(T.tenantId), brandNodeId(T.nodeId)),
+    );
+    const { rows } = await suite.db.execute<{ id: string; code: string; purpose: string }>(sql`
+      select id, code, purpose from invoice_series where node_id = ${T.nodeId} and retired_at is null order by purpose desc
+    `);
+    expect(rows.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
+      { code: `FA-${sif.numeroInstalacion}`, purpose: "standard" },
+      { code: `FA-1-${sif.numeroInstalacion}`, purpose: "rectificative" },
+    ]);
+    expect(
+      parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8")).WAITRON_TILL_SERIES_ID,
+    ).toBe(rows[0]!.id);
+  });
+
+  it("canonicalizes a sole identity alias before rewriting and publishing it", async () => {
+    const entries = FULL_ENTRIES.map((entry) =>
+      entry.name === "secrets/trading.env" ? { ...entry, name: "secrets/./trading.env" } : entry,
+    );
+    const deps = makeRestoreDeps({
+      artifact: buildArtifact(entries),
+      modules: withHooks({
+        fiscal: async () => ({
+          report: "ok",
+          series: [{ code: "FA-9", purpose: "standard" }],
+        }),
+      }),
+    });
+    const validated = await validateArtifact(deps);
+    expect(validated.secretEntries.map((entry) => entry.name)).toEqual([
+      "secrets/secrets.env",
+      "secrets/trading.env",
+    ]);
+    await writeValidated(validated, deps);
+    const written = parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8"));
+    const { rows } = await suite.db.execute<{ id: string }>(
+      sql`select id from invoice_series where node_id = ${T.nodeId} and code = 'FA-9'`,
+    );
+    expect(written.WAITRON_TILL_SERIES_ID).toBe(rows[0]!.id);
+  });
+
+  it("rejects duplicate identity destinations during validation before set-aside", async () => {
+    await writeFile(join(stateDir, "trading.env"), TRADING_ENV);
+    const runRestore = vi.fn(async () => {});
+    const migrate = vi.fn(async () => {});
+    const deps = makeRestoreDeps({
+      artifact: buildArtifact([
+        ...FULL_ENTRIES,
+        { name: "secrets/./trading.env", bytes: Buffer.from(TRADING_ENV) },
+      ]),
+      runRestore,
+      migrate,
+    });
+    const error = { code: "restore.unsafe_entry_path" };
+    await expect(validateArtifact(deps)).rejects.toMatchObject(error);
+    await expect(restoreFromArtifact(deps)).rejects.toMatchObject(error);
+    expect(runRestore).not.toHaveBeenCalled();
+    expect(migrate).not.toHaveBeenCalled();
+    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV);
+    await expect(stat(join(stateDir, "trading.env.replaced"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("leaves no trading.env when a later TLS secret write fails with EISDIR", async () => {
+    await mkdir(join(stateDir, "tls/server.key"), { recursive: true });
+    await expect(
+      restoreFromArtifact(
+        makeRestoreDeps({
+          artifact: buildArtifact([
+            ...FULL_ENTRIES,
+            { name: "secrets/tls/server.key", bytes: Buffer.from("KEY") },
+          ]),
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "EISDIR" });
+    await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
 
   it("migrates after pg_restore and BEFORE any hook; hooks run BEFORE secrets are written", async () => {
     const order: string[] = [];

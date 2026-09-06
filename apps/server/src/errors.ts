@@ -1667,7 +1667,8 @@ declare module "@waitron/shared" {
      */
     "restore.schema_too_new": { module: string; backup: number; target: number };
     /**
-     * An archive entry name failed BR-3's traversal guard (`restore-entry-guard.ts`) before ANY
+     * An archive entry name is unsafe or repeats a destination already named in the archive.
+     * Duplicate destinations are refused by `validateArtifact`; traversal by `restore-entry-guard.ts` before ANY
      * write happened. Two layers, mirroring `unpackBundleToDir`'s (`state-secrets.ts`): a LEXICAL
      * one — `name` is absolute, or `resolve(join(destRoot, name))` does not land under `destRoot`
      * (a `../` escape) — and a SYMLINK-aware one that catches what the lexical check cannot: a

@@ -11,7 +11,9 @@ import "./errors.js";
  * guard `unpackBundleToDir` uses — applied to a whole archive's entry names (`db.dump`,
  * `media/<file>`, `secrets/<path>`) rather than the fixed `RECOVERY_FILES` set. GCM/tar integrity
  * proves the archive's BYTES are authentic, never that its entry NAMES stay inside `destRoot`, so a
- * crafted-but-authentic archive must still be refused here before any write.
+ * crafted-but-authentic archive must still be refused here before any write. The archive validator
+ * rejects repeated destination paths and normalizes accepted names before identity reads or writes;
+ * this single-entry guard permits aliases that stay inside the destination root.
  *
  * `destRoot` must already exist (or be creatable as an ancestor of the entry's parent) for the
  * guard's `realpath` to succeed — the restore CLI creates it before validating any entry, matching

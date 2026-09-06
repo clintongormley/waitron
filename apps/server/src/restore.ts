@@ -1,5 +1,5 @@
 import { mkdir, realpath, rename, rm } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, posix, resolve } from "node:path";
 import { and, eq } from "drizzle-orm";
 import {
   AppError,
@@ -43,7 +43,7 @@ const MEDIA_PREFIX = "media/";
 const SECRETS_PREFIX = "secrets/";
 const TRADING_ENV_ENTRY = `${SECRETS_PREFIX}trading.env`;
 const TRADING_ENV_FILE = "trading.env";
-/** Where a pre-existing identity is moved before the restore; boot reads only `trading.env`. */
+/** Retains only the last replaced identity, overwriting any prior copy; boot reads only `trading.env`. */
 const REPLACED_SUFFIX = ".replaced";
 const IDENTITY_KEYS = [
   "WAITRON_TILL_TENANT_ID",
@@ -129,7 +129,7 @@ export interface ValidatedArtifact {
  * `restore.identity_incomplete` for missing identity keys/file when secrets are restored,
  * `restore.unexpected_entry` for a top-level entry it cannot route,
  * `restore.environment_mismatch`/`restore.schema_too_new` from the gate, or
- * `restore.unsafe_entry_path` from the guard (plus `recovery.passphrase_invalid`/`backup.*` from
+ * `restore.unsafe_entry_path` for an unsafe or duplicate destination (plus `recovery.passphrase_invalid`/`backup.*` from
  * decrypt/unpack).
  */
 export async function validateArtifact(deps: RestoreDeps): Promise<ValidatedArtifact> {
@@ -201,12 +201,25 @@ export async function validateArtifact(deps: RestoreDeps): Promise<ValidatedArti
   // stagingDir, media/* to mediaDir, secrets/* to stateDir; each is guarded against the root it
   // will actually be written under, with the same prefix-stripping the writes use, so the guard
   // validates the real target and a crafted name aborts before pg_restore or any file write.
-  await assertSafeEntryName(DB_DUMP_NAME, deps.stagingDir);
-  for (const entry of mediaEntries) {
-    await assertSafeEntryName(entry.name.slice(MEDIA_PREFIX.length), deps.mediaDir);
-  }
-  for (const entry of secretEntries) {
-    await assertSafeEntryName(entry.name.slice(SECRETS_PREFIX.length), deps.stateDir);
+  const destinations = new Set<string>();
+  for (const entry of entries) {
+    const prefix = entry.name.startsWith(MEDIA_PREFIX)
+      ? MEDIA_PREFIX
+      : entry.name.startsWith(SECRETS_PREFIX)
+        ? SECRETS_PREFIX
+        : "";
+    const root =
+      prefix === MEDIA_PREFIX
+        ? deps.mediaDir
+        : prefix === SECRETS_PREFIX
+          ? deps.stateDir
+          : deps.stagingDir;
+    const target = await assertSafeEntryName(entry.name.slice(prefix.length), root);
+    if (destinations.has(target)) {
+      throw new AppError("restore.unsafe_entry_path", { name: entry.name });
+    }
+    destinations.add(target);
+    entry.name = posix.normalize(entry.name);
   }
 
   if (!deps.skipSecrets) readArtifactIdentity(secretEntries);
@@ -350,7 +363,8 @@ export async function restoreMedia(args: {
  * which re-applies the same traversal guard AND writes each file 0600 atomically, exactly as the
  * recovery-bundle unpack does. Exposed for R3 (which SKIPS this step: a mirror restore keeps its own
  * identity). Secret contents are utf8 text (`RECOVERY_FILES` are `.env`/PEM), matching the utf8 they
- * were read as into the archive.
+ * were read as into the archive. `trading.env` is written last, after every other secret succeeds;
+ * failure during that final atomic write can leave a temporary file, but cannot publish a partial identity.
  */
 export async function restoreSecrets(args: {
   entries: readonly ArchiveEntry[];
@@ -359,8 +373,12 @@ export async function restoreSecrets(args: {
 }): Promise<void> {
   const files: BundleFiles = {};
   for (const entry of args.entries) {
+    if (entry.name === TRADING_ENV_ENTRY) continue;
     files[entry.name.slice(SECRETS_PREFIX.length)] = Buffer.from(entry.bytes).toString("utf8");
   }
+  const identity = args.entries.find((entry) => entry.name === TRADING_ENV_ENTRY);
+  if (identity !== undefined)
+    files[TRADING_ENV_FILE] = Buffer.from(identity.bytes).toString("utf8");
   await unpackBundleToDir(files, args.stateDir);
   args.log("info", "restore.secrets.done", { count: args.entries.length });
 }

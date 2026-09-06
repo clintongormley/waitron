@@ -185,6 +185,18 @@ describe("reserved-identity accessors", () => {
     ).toBe(0);
   });
 
+  it("insertNodeSeriesTx refuses duplicate codes within a batch with a domain error", async () => {
+    const node = await seedNode(suite.db, tenantId, locationId);
+    await expect(
+      withTenant(suite.db, tenantId, (tx) =>
+        insertNodeSeriesTx(tx, tenantId, node, [
+          { code: "FA-7", purpose: "standard" },
+          { code: "FA-7", purpose: "rectificative" },
+        ]),
+      ),
+    ).rejects.toMatchObject({ code: "series.code_collision", params: { code: "FA-7" } });
+  });
+
   it("insertNodeSeriesTx inserts at next_number 1 and refuses a code the node holds, live OR retired", async () => {
     const node = await seedNode(suite.db, tenantId, locationId);
     await withTenant(suite.db, tenantId, (tx) =>

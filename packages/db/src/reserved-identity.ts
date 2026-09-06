@@ -157,6 +157,11 @@ export async function insertNodeSeriesTx(
   series: readonly { code: string; purpose: string }[],
 ): Promise<void> {
   if (series.length === 0) return;
+  const codes = new Set<string>();
+  for (const { code } of series) {
+    if (codes.has(code)) throw new AppError("series.code_collision", { code });
+    codes.add(code);
+  }
   const [held] = await tx
     .select({ code: invoiceSeries.code })
     .from(invoiceSeries)
