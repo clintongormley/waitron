@@ -12,7 +12,7 @@ const postgres = useTemplateDb({ template: "manifest" });
 // A producing node's id — capture writes it into sync_log.origin_id from the app.node_id GUC.
 const NODE_A = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
-/** Runs the callback in one transaction with app.node_id set for capture’s producing origin. */
+/** Runs the callback in one transaction with app.node_id set for capture's producing origin. */
 async function withNode<T>(
   db: Database,
   nodeId: string,

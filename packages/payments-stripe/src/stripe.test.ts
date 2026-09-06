@@ -10,11 +10,12 @@ import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { FakeStripe } from "./testing/fake-stripe.js";
 import { StripeTerminalProvider } from "./provider.js";
 
-// A non-superuser LOGIN role that inherits app_user's grants. The app_user membership is what lets
-// it SELECT/INSERT/UPDATE `payments` at all (0001_payments_baseline_sql.sql's REVOKE ALL + targeted GRANT);
-// PGlite connects as a superuser holding every grant, so a missing one is invisible there. The role
-// is created once, cluster-wide, in the package's globalSetup (`src/testing/global-setup.ts`) — not
-// per file, because a shared container is one cluster; this suite connects AS it with `pg.connectAs`.
+// `rls_probe` is a historical fixture name. A non-superuser LOGIN role that inherits app_user's
+// grants. The app_user membership is what lets it SELECT/INSERT/UPDATE `payments` at all
+// (0001_payments_baseline_sql.sql's REVOKE ALL + targeted GRANT); PGlite connects as a superuser
+// holding every grant, so a missing one is invisible there. The role is created once,
+// cluster-wide, in the package's globalSetup (`src/testing/global-setup.ts`) — not per file,
+// because a shared container is one cluster; this suite connects AS it with `pg.connectAs`.
 const PROBE_ROLE = "rls_probe";
 const PROBE_PASSWORD = "probe";
 

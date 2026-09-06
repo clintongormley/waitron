@@ -280,7 +280,8 @@ describe("recordSubstitution — error propagation", () => {
     const foreignTicket = await seedBareSale(suite.db, other);
 
     const error = await captureError(() =>
-      // The composite FK must reject a ticket from a different tenant.
+      // Use the caller's transaction so the failed association insert rolls back with the
+      // substitution.
       withTenant(suite.db, tenantId, (tx) =>
         recordSubstitution(tx, backend, substitutionInput([foreignTicket])),
       ),

@@ -17,8 +17,10 @@ import "./errors.js";
 // these rows.
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
 
-/** A fresh tenant + venue per test, seeded on the superuser connection (RLS bypassed for setup). Each
- * test gets its OWN tenant (via seedTenant's fresh NIF) so rows are order-independent. */
+/**
+ * A fresh tenant + venue per test, seeded on the superuser connection. Each test gets its OWN
+ * tenant (via seedTenant's fresh NIF) so rows are order-independent.
+ */
 async function setup(): Promise<PrintConfig> {
   const tenantId = await seedTenant(suite.db);
   const { rows } = await suite.db.execute<{ id: string }>(sql`

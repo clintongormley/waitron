@@ -318,9 +318,8 @@ export interface FiscalBackend {
   /**
    * How many records this node has not yet had confirmed. The UI reads this, never the module's
    * own tables. Takes `tenantId` and NO transaction: the unsent-count read happens outside any
-   * sale transaction, and the backend needs the tenant to establish the row-level-security scope
-   * itself (a query with no tenant scope silently counts zero under RLS). `nodeId` because the
-   * chain is per-node (node-id rekey, 2026-08-03).
+   * sale transaction, so the backend opens its own transaction and receives the tenant id
+   * explicitly. `nodeId` because the chain is per-node (node-id rekey, 2026-08-03).
    */
   pendingCount(tenantId: TenantId, nodeId: NodeId): Promise<number>;
 

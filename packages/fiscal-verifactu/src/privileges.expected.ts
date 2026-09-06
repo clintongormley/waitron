@@ -1,11 +1,11 @@
 /**
- * app_user's table privileges. Letters: S=SELECT I=INSERT U=UPDATE D=DELETE T=TRUNCATE.
- * The matrix preserves the original grants except for the four sync tables, whose reader and
+ * app_user's table privileges. Letters: S=SELECT I=INSERT U=UPDATE D=DELETE T=TRUNCATE. The
+ * matrix preserves the original grants except for the four sync tables, whose reader and
  * retention grants fold into app_user while the outbox remains. The design is
- * docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md §1.
- * A deliberate grant change edits this file in the same commit, with the reason in the message.
+ * docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md §1. A
+ * deliberate grant change edits this file in the same commit, with the reason in the message.
  * Runnable receipts: scripts/schema-equivalence.md describes the dump/ACL comparison, and
- * privileges.test.ts reads every table’s privileges back from the live catalog.
+ * privileges.test.ts reads every table's privileges back from the live catalog.
  *
  * has_table_privilege measures table grants only: UPDATE(next_number) on invoice_series does not
  * produce a U here. The suite beside this file guards the column privileges that need a standing

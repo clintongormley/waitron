@@ -12,7 +12,7 @@ const postgres = useTemplateDb({ template: "manifest" });
 // A producing node's id — capture writes it into sync_log.origin_id from the app.node_id GUC.
 const NODE_A = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
-/** Runs the callback in one transaction with app.node_id set for capture’s producing origin. */
+/** Runs the callback in one transaction with app.node_id set for capture's producing origin. */
 async function withNode<T>(
   db: Database,
   nodeId: string,
@@ -330,7 +330,7 @@ describe("the generic capture trigger over the commercial lane", () => {
     // its stations/courses/tickets. Control in the other direction: each insert produces exactly one
     // op='insert' sync_log row carrying the app.node_id origin, in seq order.
     const base = await seedBase(postgres.admin);
-    // Seed the ticket item’s FK parents as admin: a node, product, working order and line.
+    // Seed the ticket item's FK parents as admin: a node, product, working order and line.
     // Deleting the line cascades to its ticket items.
     const node = await postgres.admin.execute<{ id: string }>(
       sql`insert into nodes (tenant_id, location_id, name)

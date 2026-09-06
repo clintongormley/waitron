@@ -75,13 +75,14 @@ export interface CreatePrinterInput {
 
 /**
  * The connection fields each transport's adapter REQUIRES present (printing subsystem §2b) — the
- * app-layer mirror of the `printers_transport_fields_ck` CHECK in 0063_printing_rls.sql: usb needs an
- * agent + a device path; network_tcp needs an agent + a host (port defaults to 9100); cloud_poll needs
- * a poll id (no agent — it self-polls). The DB CHECK + the composite FK remain the INTEGRITY backstop;
- * this pre-check exists only to turn a missing field into a friendly `printer.invalid_config` instead
- * of a raw 23514 constraint violation. It asserts required fields are PRESENT, not that the others are
- * absent — matching the CHECK exactly (a transport none of the three is already unrepresentable: the
- * `transport` column is the `print_transport` enum).
+ * app-layer mirror of the `printers_transport_fields_ck` CHECK in
+ * packages/db/drizzle/0001_db_baseline_sql.sql: usb needs an agent + a device path; network_tcp
+ * needs an agent + a host (port defaults to 9100); cloud_poll needs a poll id (no agent — it
+ * self-polls). The DB CHECK + the composite FK remain the INTEGRITY backstop; this pre-check
+ * exists only to turn a missing field into a friendly `printer.invalid_config` instead of a raw
+ * 23514 constraint violation. It asserts required fields are PRESENT, not that the others are
+ * absent — matching the CHECK exactly (a transport none of the three is already unrepresentable:
+ * the `transport` column is the `print_transport` enum).
  */
 const REQUIRED_FIELDS: Record<PrintTransport, readonly (keyof CreatePrinterInput)[]> = {
   usb: ["agentId", "usbPath"],
@@ -173,12 +174,13 @@ export interface PrinterRow {
 }
 
 /**
- * Apply a partial edit to a printer (design §6). Only the fields PRESENT in `patch` are written — an
- * absent field is left unchanged, an explicit `null` clears a nullable one — so the caller's screen
- * decides what changes. `0` rows updated (an id in no visible row, RLS-hidden or unknown) →
- * `printer.not_found`. The transport-fields CHECK / agent FK are the DB backstop, translated to
- * `printer.invalid_config` / `agent.not_found` (`createPrinter`'s reasoning, for the update path).
- * The tenant predicate is belt-and-braces beside the tx's RLS scoping; all values bind as `$n`.
+ * Apply a partial edit to a printer (design §6). Only the fields PRESENT in `patch` are written —
+ * an absent field is left unchanged, an explicit `null` clears a nullable one — so the caller's
+ * screen decides what changes. `0` rows updated (an unknown id or one excluded by the tenant
+ * predicate) → `printer.not_found`. The transport-fields CHECK / agent FK are the DB backstop,
+ * translated to `printer.invalid_config` / `agent.not_found` (`createPrinter`'s reasoning, for
+ * the update path). The explicit tenant predicate limits the update to `cfg.tenantId`; all values
+ * bind as `$n`.
  */
 export async function updatePrinter(
   tx: Transaction,
@@ -223,9 +225,10 @@ export async function updatePrinter(
 }
 
 /**
- * Deactivate a printer (design §2b/§6) — flip `active = false`, NEVER a hard DELETE: a `print_jobs`
- * history references it and `app_user` holds no DELETE on `printers`. `0` rows (unknown or RLS-hidden
- * id) → `printer.not_found`. The tenant predicate is belt-and-braces beside RLS; values bind as `$n`.
+ * Deactivate a printer (design §2b/§6) — flip `active = false`, NEVER a hard DELETE: a
+ * `print_jobs` history references it and `app_user` holds no DELETE on `printers`. `0` rows
+ * (unknown id or one excluded by the tenant predicate) → `printer.not_found`. The explicit tenant
+ * predicate limits the update to `cfg.tenantId`; values bind as `$n`.
  *
  * `active = false` DISABLES the printer for both directions, not a soft-hide from the list: enqueue
  * rejects it as `printer.not_found` (`enqueuePrintJob`'s `active = true` pre-check) and the agent stops
@@ -247,10 +250,10 @@ export async function deactivatePrinter(
 
 /**
  * List this tenant's printers by name (design §6, the Impresoras surface). `printers` carries no
- * created_at, so the stable order for a config list is `name` rather than an insertion proxy. No
- * explicit tenant filter is needed for isolation — the tx's RLS scoping confines the read — but the
- * tenant predicate is kept belt-and-braces beside it, the `authenticateAgent`/`enqueuePrintJob` shape.
- * Returns both active and deactivated printers so the surface can show and reactivate them.
+ * created_at, so the stable order for a config list is `name` rather than an insertion proxy. The
+ * explicit tenant predicate limits the read to `cfg.tenantId`, matching `authenticateAgent` and
+ * `enqueuePrintJob`. Returns both active and deactivated printers so the surface can show and
+ * reactivate them.
  */
 export async function listPrinters(tx: Transaction, cfg: PrintConfig): Promise<PrinterRow[]> {
   return tx

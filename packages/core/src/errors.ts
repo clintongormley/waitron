@@ -142,9 +142,11 @@ declare module "@waitron/shared" {
      * the same way `record-sale.test.ts`'s "never reissues a number" test already does — neither
      * `recordSale` nor `recordVoid` catches and translates that violation into this code. */
     "sale.number_reused": { seriesId: string; invoiceNumber: number };
-    /** Thrown by `recordVoid` (`./record-void.ts`) when `saleId` names no row in `sales`. An operational failure, not a fiscal one: NO FISCAL
-     * CONDITION BLOCKS a void applies to a chain-integrity failure, never to "there is nothing
-     * here to void". */
+    /**
+     * Thrown by `recordVoid` (`./record-void.ts`) when `saleId` names no row in `sales`. An
+     * operational failure, not a fiscal one: NO FISCAL CONDITION BLOCKS a void applies to a
+     * chain-integrity failure, never to "there is nothing here to void".
+     */
     "sale.not_found": { saleId: string };
     /** Thrown by `recordVoid` when `sale_voids.sale_id` already carries a row for this sale — the
      * translation of `sale_voids_sale_id_key`'s unique violation (`packages/db/src/schema/

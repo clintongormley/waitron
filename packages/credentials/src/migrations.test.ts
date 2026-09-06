@@ -96,7 +96,10 @@ describe("the credentials migration set", () => {
   });
 });
 
-/** The enumeration function pins its search path; functional cases are in credentials.test.ts. */
+/**
+ * The enumeration function pins its search path and grants EXECUTE to app_user while revoking
+ * PUBLIC's default EXECUTE. Functional cases are in credentials.test.ts.
+ */
 describe("credential_tenants enumeration seam", () => {
   it("names EXECUTE to app_user only — PUBLIC's default grant was revoked", async () => {
     // Check the app role grant and the absence of PUBLIC's default EXECUTE grant independently.

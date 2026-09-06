@@ -75,11 +75,11 @@ export interface PrintAgentConfig {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Mint a single-use pairing code for a new print agent (§3a). Stores only the code's SHA-256 (never
- * the plaintext) plus the label to stamp on the enrolled agent, scoped to `cfg`'s tenant + venue, and
- * returns the plaintext code ONCE for the operator to read into the agent's config. The caller runs
- * this as `app_user` inside `withTenant` (the `printer.manage` route), so RLS + the grant fence the
- * insert to this tenant.
+ * Mint a single-use pairing code for a new print agent (§3a). Stores only the code's SHA-256
+ * (never the plaintext) plus the label to stamp on the enrolled agent, scoped to `cfg`'s tenant +
+ * venue, and returns the plaintext code ONCE for the operator to read into the agent's config.
+ * The caller runs this as `app_user` inside `withTenant` (the `printer.manage` route), so the app
+ * role grants govern the insert to this tenant.
  */
 export async function generateAgentCode(
   tx: Transaction,
@@ -201,8 +201,8 @@ export async function authenticateAgent(
     .select({ tokenHash: printAgents.tokenHash })
     .from(printAgents)
     // `active = true` is the revocation filter: a revoked agent is simply not found. The explicit
-    // `tenant_id` predicate is belt-and-braces beside the tx's RLS scoping — the same explicit tenant
-    // predicate `enrolAgent`'s consume-DELETE carries. All bind as `$n`, never string-concatenated.
+    // `tenant_id` predicate limits the lookup to `cfg.tenantId`, matching the `enrolAgent`'s
+    // consume-DELETE carries. All bind as `$n`, never string-concatenated.
     .where(
       and(
         eq(printAgents.id, agentId),

@@ -45,8 +45,10 @@ async function seedAgent(cfg: PrintConfig): Promise<string> {
   return rows[0]!.id;
 }
 
-/** Read the outbox row directly as the (superuser) admin, bypassing RLS — a plain observation of the
- * lease columns, not part of the behaviour under test. */
+/**
+ * Read the outbox row directly as the (superuser) admin — a plain observation of the lease
+ * columns, not part of the behaviour under test.
+ */
 async function jobRow(jobId: string): Promise<{
   status: string;
   claimed_at: string | null;

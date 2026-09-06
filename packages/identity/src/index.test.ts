@@ -10,10 +10,11 @@ describe("@waitron/identity barrel", () => {
 });
 
 /**
- * drizzle invokes each table's `(t) => [...]` extraConfig callback LAZILY — a plain import never runs
- * it, which is why persons.ts's FK/index/check block shows as uncovered even though the barrel imports
- * the table. Calling `getTableConfig` forces the callback to run, and the assertions below are the
- * meaningful check that persons' constraints exist under the names the baseline uses — not a coverage stunt. Mirrors packages/credentials/src/index.test.ts.
+ * drizzle invokes each table's `(t) => [...]` extraConfig callback LAZILY — a plain import never
+ * runs it, which is why persons.ts's FK/index/check block shows as uncovered even though the
+ * barrel imports the table. Calling `getTableConfig` forces the callback to run, and the
+ * assertions below are the meaningful check that persons' constraints exist under the names the
+ * baseline uses — not a coverage stunt. Mirrors packages/credentials/src/index.test.ts.
  */
 describe("persons constraint declarations (forces the lazy extraConfig callback)", () => {
   it("declares persons' primary key, foreign key and check constraints", () => {
@@ -35,9 +36,9 @@ describe("persons constraint declarations (forces the lazy extraConfig callback)
 });
 
 /**
- * Same mechanism for sessions — its FK/index block is in the lazy extraConfig callback, so this both
- * forces it to run and pins the names the generated baseline uses. sessions keys to the TILL, not the node: the three FKs are to
- * tenants, persons and tills.
+ * Same mechanism for sessions — its FK/index block is in the lazy extraConfig callback, so this
+ * both forces it to run and pins the names the generated baseline uses. sessions keys to the
+ * TILL, not the node: the three FKs are to tenants, persons and tills.
  */
 describe("sessions constraint declarations (forces the lazy extraConfig callback)", () => {
   it("declares sessions' primary key, its three foreign keys, and its tenant/open indexes", () => {
@@ -57,9 +58,10 @@ describe("sessions constraint declarations (forces the lazy extraConfig callback
 });
 
 /**
- * Same mechanism for management_sessions — its FK/index block is in the lazy extraConfig callback, so
- * this both forces it to run and pins the names the generated baseline references. A management session belongs to a person within a tenant
- * (browser dashboard login), so its two FKs are to tenants and persons — no till.
+ * Same mechanism for management_sessions — its FK/index block is in the lazy extraConfig
+ * callback, so this both forces it to run and pins the names the generated baseline references. A
+ * management session belongs to a person within a tenant (browser dashboard login), so its two
+ * FKs are to tenants and persons — no till.
  */
 describe("management_sessions constraint declarations (forces the lazy extraConfig callback)", () => {
   it("declares management_sessions' primary key, its two foreign keys, and its tenant/open indexes", () => {
@@ -79,9 +81,9 @@ describe("management_sessions constraint declarations (forces the lazy extraConf
 
 /**
  * Same mechanism for webauthn_credentials — its FK/unique/index block is in the lazy extraConfig
- * callback, so this both forces it to run and pins the names the generated baseline uses. A registered
- * passkey belongs to a person within a tenant, so its two FKs are to tenants and persons; the
- * credential id is unique per tenant.
+ * callback, so this both forces it to run and pins the names the generated baseline uses. A
+ * registered passkey belongs to a person within a tenant, so its two FKs are to tenants and
+ * persons; the credential id is unique per tenant.
  */
 describe("webauthn_credentials constraint declarations (forces the lazy extraConfig callback)", () => {
   it("declares webauthn_credentials' primary key, its two foreign keys, its per-tenant unique credential id and its person index", () => {

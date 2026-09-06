@@ -29,6 +29,8 @@ export const sessions = pgTable(
       name: "sessions_tenant_fk",
     }).onDelete("restrict"),
     // Plain single-column FK to persons.id; persons carries no (tenant_id, id) composite unique.
+    // This checks person existence only: nothing here enforces tenant consistency for person_id.
+    // The deployment holds one tenant per database.
     foreignKey({
       columns: [t.personId],
       foreignColumns: [persons.id],

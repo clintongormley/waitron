@@ -42,7 +42,7 @@ async function seedAgent(cfg: PrintConfig): Promise<string> {
   return rows[0]!.id;
 }
 
-/** Observe one outbox row's status directly as the (superuser) admin, bypassing RLS. */
+/** Observe one outbox row's status directly as the (superuser) admin. */
 async function jobStatus(jobId: string): Promise<string> {
   const { rows } = await suite.admin.execute<{ status: string }>(
     sql`select status from print_jobs where id = ${jobId}`,

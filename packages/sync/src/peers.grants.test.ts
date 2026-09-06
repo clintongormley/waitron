@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { captureError, pgErrorCode } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 
-// PostgreSQL exercises app_user's peer grants through a LOGIN member. Peers deactivate via active;
+// PostgreSQL exercises app_user's peer grants through a LOGIN member. The `pruner` connection
+// below is named for the retention use case and inherits app_user. Peers deactivate via active;
 // DELETE remains refused. PGlite's superuser sessions cannot check these privileges. SQLSTATE is
 // read from the wrapped PostgreSQL error, rather than Drizzle's generic query-error message.
 const postgres = useTemplateDb({ template: "manifest" });

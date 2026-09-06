@@ -18,15 +18,16 @@ import { IDENTITY_MIGRATIONS } from "../migrations.js";
  * not a collision: each handle is provided/injected within its own package's run, so the key is scoped
  * to this package.
  *
- * `identity_rls_probe` is the only cluster role any suite here creates: a non-superuser LOGIN
- * inheriting `app_user`'s grants, shared by persons.email.test.ts and staff.pg.test.ts — its only
- * two consumers. It is created ONCE here, idempotently, because roles are CLUSTER-global — a
- * shared container is one cluster, and every suite clones its own DATABASE from a template but
- * shares that cluster's roles. A per-file `CREATE ROLE` could not do it: `probeRoleStatement` emits
- * a bare `create role …`, so a second file naming the same role would fail `role … already exists`,
- * and `useTemplateDb` offers no per-file `probeRole` at all. `app_user` exists by the time the roles
- * run because CORE's `0001_db_baseline_sql.sql` creates it and `startSharedContainer` runs `roles` AFTER
- * the templates migrate.
+ * `identity_rls_probe` (a historical fixture name; an `app_user` member) is the only cluster role
+ * any suite here creates: a non-superuser LOGIN inheriting `app_user`'s grants, shared by
+ * persons.email.test.ts and staff.pg.test.ts — its only two consumers. It is created ONCE here,
+ * idempotently, because roles are CLUSTER-global — a shared container is one cluster, and every
+ * suite clones its own DATABASE from a template but shares that cluster's roles. A per-file
+ * `CREATE ROLE` could not do it: `probeRoleStatement` emits a bare `create role …`, so a second
+ * file naming the same role would fail `role … already exists`, and `useTemplateDb` offers no
+ * per-file `probeRole` at all. `app_user` exists by the time the roles run because CORE's
+ * `0001_db_baseline_sql.sql` creates it and `startSharedContainer` runs `roles` AFTER the
+ * templates migrate.
  *
  * A globalSetup's return value is its globalTeardown, so returning `teardown` stops the container
  * once the run finishes.

@@ -3,17 +3,17 @@ import { sql } from "drizzle-orm";
 
 /**
  * The cloud mirror's connection config (sync cloud-mirror C2b). A whole-database operational
- * singleton — NO tenant_id, NO RLS — like `deployment`. Non-secret parts only (the per-peer sync
- * token lives in the credentials vault, never here).
+ * singleton with no tenant_id, like `deployment`. Non-secret parts only (the per-peer sync token
+ * lives in the credentials vault, never here).
  *
  * Deliberately NOT re-exported from `./schema/index.ts` (the barrel `drizzle.config.ts` reads and
  * `client.ts` derives its `Schema` type from), for the same reason `deployment.ts` is kept out of
- * it: `0072_mirror_config.sql` is a hand-written custom migration, so drizzle-kit never diffed this
- * table into any `drizzle/meta/*.json` snapshot. Adding it to the schema barrel would make
+ * it: `0001_db_baseline_sql.sql` is a hand-written custom migration, so drizzle-kit never diffed
+ * this table into any `drizzle/meta/*.json` snapshot. Adding it to the schema barrel would make
  * drizzle-kit aware of a table its snapshot chain has never recorded, and the next plain
  * (non-`--custom`) `drizzle-kit generate` could then emit a second `CREATE TABLE "mirror_config"`
- * that fails against any database that already ran 0072. The accessors are exported from the
- * package barrel (`../index.ts`, via `../mirror-config.ts`); that surface is unaffected.
+ * that fails against any database that already ran the baseline. The accessors are exported from
+ * the package barrel (`../index.ts`, via `../mirror-config.ts`); that surface is unaffected.
  */
 export const mirrorConfig = pgTable(
   "mirror_config",

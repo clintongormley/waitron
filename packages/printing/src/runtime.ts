@@ -59,7 +59,7 @@ export const PRINT_JOB_LEASE_MS = 60_000;
 export interface AgentRuntimeDeps {
   /** A tenant-scoped transaction (the Task-6 route wraps this in `withTenant` + `asAppUser`). */
   tx: Transaction;
-  /** The tenant the agent belongs to — the pull's explicit scope beside RLS. */
+  /** The tenant the agent belongs to, enforced by the pull's explicit tenant predicate. */
   cfg: { tenantId: string };
   /** The calling agent. The pull claims ONLY jobs on printers this agent serves (authorization
    * scope): a cross-agent pull matches no printer and claims nothing. */

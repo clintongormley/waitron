@@ -385,8 +385,9 @@ export async function recordSale(
   if (location === undefined) {
     // Structurally unreachable given the schema's own invariants: `tills.location_id` is a NOT
     // NULL foreign key onto `locations.id`, so a till that exists at all always joins to exactly
-    // one location. Reaching here means `input.tillId` does not exist, or the tenant predicate excluded it — a caller programming error, not a fiscal condition, so there
-    // is no `sale.*` code reserved for it.
+    // one location. Reaching here means `input.tillId` does not exist, or the tenant predicate
+    // excluded it — a caller programming error, not a fiscal condition, so there is no `sale.*`
+    // code reserved for it.
     throw new Error(`recordSale: no location found for till ${input.tillId}`);
   }
   /* v8 ignore stop */

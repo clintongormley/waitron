@@ -11,7 +11,10 @@ declare module "@waitron/shared" {
   interface ErrorParams {
     /** No open session for this id — unknown or already ended. */
     "session.not_open": { sessionId: string };
-    /** No live management session for this id — unknown or already ended. The browser must sign in again. */
+    /**
+     * No live management session for this id — unknown or already ended. The browser must sign in
+     * again.
+     */
     "management_session.required": Record<string, never>;
     /** The management session idled past the timeout and is no longer live. Sign in again. */
     "management_session.expired": Record<string, never>;

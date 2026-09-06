@@ -19,8 +19,10 @@ import "./errors.js";
 const LOCALE = "es-ES";
 const suite = useTemplateDb({ template: "core" });
 
-/** A fresh tenant + venue, seeded on the superuser admin connection (RLS bypassed for setup). Each
- * test gets its OWN tenant so agent/code counts are order-independent across the shared clone. */
+/**
+ * A fresh tenant + venue, seeded on the superuser admin connection. Each test gets its OWN tenant
+ * so agent/code counts are order-independent across the shared clone.
+ */
 async function setup(): Promise<PrintAgentConfig> {
   const admin = suite.admin;
   const tenantId = await seedTenant(admin);
@@ -122,8 +124,8 @@ describe("generateAgentCode + enrolAgent", () => {
 
   it("an expired code (past its TTL) → agent.pairing_expired", async () => {
     const cfg = await setup();
-    // Seed a code whose created_at is well past PAIRING_TTL_MS (bypassing RLS on the admin
-    // connection), then redeem it: the row matches but the TTL check rejects it.
+    // Seed a code whose created_at is well past PAIRING_TTL_MS (using the admin connection), then
+    // redeem it: the row matches but the TTL check rejects it.
     const code = randomBytes(15).toString("base64url");
     const codeSha256 = createHash("sha256").update(code).digest("hex");
     const staleCreatedAt = new Date(Date.now() - PAIRING_TTL_MS - 60_000).toISOString();
@@ -205,17 +207,10 @@ describe("authenticateAgent", () => {
     const own = await asApp(suite.admin, cfgA, (tx) => authenticateAgent(tx, cfgA, token));
     expect(own.agentId).toBe(agentId);
 
-    // Under tenant B's cfg the SAME token is refused. Run through the RLS-BYPASSING superuser
-    // connection: `withTenant` sets only the `app.tenant_id` GUC — it does NOT `set role app_user`, so
-    // RLS is not enforced here — which leaves `authenticateAgent`'s explicit `tenant_id = cfg.tenantId`
-    // predicate as the SOLE guard under test, the thing that makes it provable by deletion. In
-    // production `authenticateAgent` always runs under `withTenant` + `asAppUser`, where RLS is a
-    // redundant SECOND layer (agent.ts: "belt-and-braces beside the tx's RLS scoping"); running this
-    // through `asApp` would let RLS reject the cross-tenant read on its own and MASK whether the
-    // predicate does any work — the CLAUDE.md §1 "both answers look alike" false pass. Proven
-    // load-bearing by deletion: drop the `eq(printAgents.tenantId, cfg.tenantId)` clause from
-    // `authenticateAgent`'s SELECT and this cross-tenant auth WRONGLY SUCCEEDS (the row is found on the
-    // RLS-free connection and its secret verifies), flipping this assertion red; restore and it is green.
+    // Under tenant B's cfg the SAME token is refused by `authenticateAgent`'s explicit `tenant_id
+    // = cfg.tenantId` predicate. The superuser connection and `withTenant` add no tenant
+    // filtering. The control uses a valid token for tenant A: removing the predicate would let
+    // that row and its matching secret authenticate under tenant B's cfg.
     expect(
       await codeOf(() =>
         withTenant(suite.admin, cfgB.tenantId, (tx) => authenticateAgent(tx, cfgB, token)),
