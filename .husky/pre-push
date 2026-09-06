@@ -49,15 +49,21 @@
 #                                              by construction — see the step's own comment for why
 #                                              it is not on the documentation path and why it is a
 #                                              step of its own rather than part of the run below.
-#   pnpm typecheck                  code       scoped to the changed packages and their dependents
+#   pnpm typecheck                  package    scoped to the changed packages and their dependents
 #   scope is runnable               scoped     199-202ms (5 runs, `...@waitron/ui` scope) — one
 #                                              `pnpm <the same filters> ls` piped into node. Only on
 #                                              a scoped push. Refuses a scope that would run no test
 #                                              at all — see the step's own comment.
-#   pnpm -r test:coverage           code       ditto — and `test:coverage`, NOT `test`: CI's shards
+#   pnpm -r test:coverage           package    ditto — and `test:coverage`, NOT `test`: CI's shards
 #                                              run coverage thresholds and a plain `pnpm test` does
 #                                              not, so a threshold regression used to pass here and
 #                                              fail there (CLAUDE.md §2)
+#
+# The `package` steps are the ones a ROOT-SCOPE push skips: `scripts/`, `.husky/` and `.github/` are
+# read by the repo-level project and by no workspace member (the receipt is beside
+# `isRootScopePath` in scripts/changed-scope.mjs), so such a push runs lint, format:check and that
+# project and stops. It used to run the whole workspace's typecheck and coverage — ten minutes to
+# change the classifier that decides what runs.
 #
 # A DOCUMENTATION-ONLY push stops after `format:check`, and that split is measured, not assumed:
 #
@@ -94,10 +100,10 @@
 # SCOPING. That script maps the push's changed paths onto workspace packages; this hook turns each
 # into `--filter "...<pkg>"`, whose LEFT-hand ellipsis selects that package AND ITS DEPENDENTS
 # (measured in this worktree on 2026-07-31: `--filter "...@waitron/shared"` lists 12 packages,
-# `--filter "@waitron/shared..."` lists 1). Any path outside every package directory — root config,
-# `.github/`, `.husky/`, `scripts/`, the lockfile — makes the run GLOBAL, and so does a push range we
-# could not work out. Fail closed, always: a run that was not needed costs a minute, a skip that was
-# needed pushes something broken.
+# `--filter "@waitron/shared..."` lists 1). Any path outside every package directory that is not the
+# repository's own machinery — root config, the lockfile — makes the run GLOBAL, and so does a push
+# range we could not work out. Fail closed, always: a run that was not needed costs a minute, a skip
+# that was needed pushes something broken.
 #
 # The obvious implementation, pnpm's own `--filter "...[<ref>]"`, is NOT usable here. Run in both
 # directions on 2026-07-31 with one commit touching `packages/db/README.md` on top of `main`, and
@@ -358,8 +364,14 @@ run_step "sign-off (DCO)" "git rebase --signoff <base>   (or: git commit -s --am
 # goes to stderr, where it has already been printed by the time this reads the result.
 #
 #   scope=documentation   every changed path is inert: prose, or root config no code-gated job reads
+#   scope=root            the repository's own machinery only — the repo-level suite, nothing scoped
 #   scope=global          run everything
 #   scope=packages        `packages=` names what to narrow to
+#
+# `root=true|false` is a fourth line, orthogonal to the scope: true whenever ANY changed path is that
+# machinery, so a push touching `scripts/` and `packages/db` is `scope=packages root=true`. The
+# repo-level suite is unscoped and runs on every non-documentation push, so nothing here reads it
+# today; it is emitted for the same reason `code=` is — one classifier, one answer.
 #
 # It runs AFTER the sign-off check, which it does not feed: `check_signoff` reads `$commits` alone,
 # and the ref loop above has already determined that. Run on 2026-08-01 against a crafted push
@@ -454,14 +466,6 @@ fi
 
 run_step "lint" "pnpm lint" pnpm lint
 
-# Reap STALE waitron testcontainers left by earlier interrupted runs, before this push's own test phase.
-# Scoped by the `com.waitron.reapable` label (so another project's containers are never touched) AND a 2h
-# age filter (so a watch-mode session's container is spared — unless that one session has itself run past
-# the threshold, the accepted residual edge). See the script's own header (scripts/reap-testcontainers.mjs)
-# for WHY they leak, what it costs, and the two guards. Manual equivalent is `pnpm reap`. Best-effort: the
-# script exits 0 even with Docker absent or nothing to reap, and `|| true` guarantees it never blocks a push.
-node scripts/reap-testcontainers.mjs || true
-
 # The REPO-LEVEL Vitest project, and the only step here that no scope can narrow. It holds the two
 # classifiers under `scripts/` — if either is wrong every gating decision above it is wrong — the
 # tests for check-signoff.sh, which the first step of this file runs, and, since 2026-08-01, the
@@ -486,6 +490,24 @@ node scripts/reap-testcontainers.mjs || true
 # fail for something already on `main`. CI runs it there anyway — ci.yml's `lint` job is ungated —
 # so that half is covered.
 run_step "repo-level suite" "pnpm vitest run --coverage" pnpm vitest run --coverage
+
+# Everything below is PACKAGE work, and a root-scope push has none: `scripts/`, `.husky/` and
+# `.github/` are read by the step above and by no workspace member. Compared against the literal
+# `root` so every other value — `packages`, `global`, an empty string, a node that could not run —
+# falls through to the full scoped run, which is the fail-closed direction.
+if [ "$scope_kind" = "root" ]; then
+  end_ts=$(date +%s)
+  echo "pre-push: repository machinery only — typecheck and package tests skipped, $((end_ts - start_ts))s"
+  exit 0
+fi
+
+# Reap STALE waitron testcontainers left by earlier interrupted runs, before this push's own test phase.
+# Scoped by the `com.waitron.reapable` label (so another project's containers are never touched) AND a 2h
+# age filter (so a watch-mode session's container is spared — unless that one session has itself run past
+# the threshold, the accepted residual edge). See the script's own header (scripts/reap-testcontainers.mjs)
+# for WHY they leak, what it costs, and the two guards. Manual equivalent is `pnpm reap`. Best-effort: the
+# script exits 0 even with Docker absent or nothing to reap, and `|| true` guarantees it never blocks a push.
+node scripts/reap-testcontainers.mjs || true
 
 run_step "typecheck ($scope_label)" "pnpm$repro_filters typecheck" pnpm "$@" typecheck
 

@@ -35,10 +35,44 @@ import { readFileSync } from "node:fs";
  *
  * Root config a `code`-gated job reads is deliberately absent and stays code: `.github/`, `.husky/`,
  * `scripts/`, the lockfile, the root manifests, `eslint.config.js`, `.prettierrc*`, `tsconfig*.json`
- * and `pnpm-workspace.yaml` can each affect a package's typecheck or tests.
+ * and `pnpm-workspace.yaml` can each affect a package's typecheck or tests. The first three of those
+ * are ROOT SCOPE rather than global — `isRootScopePath` below.
  */
 const INERT_ROOT_PREFIXES = [".codex/", ".vscode/"];
 const INERT_ROOT_FILES = [".gitignore", ".editorconfig"];
+
+/**
+ * The repository's own machinery: the two classifiers and the guards under `scripts/`, the pre-push
+ * hook, and the workflows. Code — `isInertPath` says so, and a wrong classifier breaks every gating
+ * decision — but code NO WORKSPACE MEMBER READS, so it gives the root Vitest project work and gives
+ * no package any.
+ *
+ * Verified in this worktree on 2026-09-06: `rg -n "scripts/" packages apps --glob '!node_modules'`
+ * matches only each package's OWN `scripts/` directory (`apps/server/scripts/dev-setup.ts`,
+ * `packages/provisioning/scripts/copy-migrations.mjs`) plus two comments naming
+ * `scripts/reap-testcontainers.mjs` — no import, config reference or fixture path reaches the root
+ * `scripts/`. `.husky/` is run by git alone; `.github/` is read by `scripts/ci-workflow.test.mjs`
+ * and `scripts/check-signoff.test.mjs`, which are themselves in the root project.
+ *
+ * ROOT-ONLY, the same rule INERT_ROOT_PREFIXES carries: `packages/db/scripts/x.ts` is that
+ * package's, and its own suite is what covers it.
+ */
+const ROOT_SCOPE_PREFIXES = ["scripts/", ".husky/", ".github/"];
+
+/**
+ * True when `path` gives the ROOT Vitest project work and no workspace member any.
+ *
+ * The complement inside root config is what stays GLOBAL, because each of these can change what
+ * every package builds, lints or tests: `pnpm-lock.yaml` and the root `package.json` (what is
+ * installed), `pnpm-workspace.yaml` (which members exist), `tsconfig*.json` (how every package
+ * compiles), `eslint.config.js`, `.prettierrc*` and `.prettierignore` (what lint and format:check
+ * accept), and `vitest.config.ts`. None is under a prefix here, so each falls through
+ * `scopeForPaths`'s "belongs to no package" branch and forces a global run — the fail-closed
+ * default that also catches a root file nobody has thought about yet.
+ */
+export function isRootScopePath(path) {
+  return ROOT_SCOPE_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
 
 /**
  * True when a change to `path` cannot affect any test, build or type-check result.

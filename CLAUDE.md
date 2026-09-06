@@ -83,9 +83,11 @@ pnpm lint && pnpm typecheck && pnpm format:check && pnpm test
 That is the shallow, whole-workspace check. The pre-push hook (`.husky/pre-push`) is deeper but
 narrower: `pnpm reap`, `pnpm install --frozen-lockfile`, `format:check`, then `typecheck` and
 `test:coverage` over the CHANGED packages and their dependents (resolved by
-`scripts/changed-packages.mjs`, the same script CI's `changes` job uses). CI adds mutation testing
-and `bundle-smoke`, which nothing local runs. A green from any one of the three is evidence about
-what it ran.
+`scripts/changed-packages.mjs`, the same script CI's `changes` job uses). A push that touches only
+the repository's own machinery — `scripts/`, `.husky/`, `.github/`, which no workspace member reads
+— is `scope=root`: lint, format:check and the repo-level Vitest project, no package typecheck or
+tests. CI adds mutation testing and `bundle-smoke`, which nothing local runs. A green from any one
+of the three is evidence about what it ran.
 
 **Coverage thresholds** are split (owner decision 2026-09-05): `statements 98 / lines 98 /
 functions 98 / branches 95` in `verifactu`, `fiscal-verifactu`, `core`, `db`, `sync` and `payments`
@@ -110,13 +112,15 @@ Traps, each of which cost a round trip:
   count.
 - **CI does not run every check on every push.** The `changes` job skips the expensive `code`-gated
   jobs when every changed path is inert — documentation, or root config no `code`-gated job reads
-  (`.codex/`, `.vscode/`, the root `.gitignore`, the root `.editorconfig`) — and on a pull request
-  narrows the shards and mutation jobs to the changed packages and their dependents. `lint` and
-  `format:check` are ungated and run on every push, so a lint or formatting regression in an inert
-  path is still caught. A merge to `main` runs the unfiltered suite whenever anything outside that
-  inert set changed — that run verifies the narrowing. Read the `changes` job's `code`, `scope` and
-  `packages` outputs before treating a green PR as evidence about the workspace.
-  Design: `docs/superpowers/specs/2026-07-31-scoped-ci-design.md`.
+  (`.codex/`, `.vscode/`, the root `.gitignore`, the root `.editorconfig`) — or is the repository's
+  own machinery (`scope=root`: `scripts/`, `.husky/`, `.github/`), and on a pull request narrows the
+  shards and mutation jobs to the changed packages and their dependents. `lint` is ungated and runs
+  on every push — eslint, `format:check` AND the repo-level Vitest project, which is the suite that
+  does read the machinery — so a regression in a skipped path is still caught there. A merge to
+  `main` runs the unfiltered suite whenever anything outside those two sets changed; that run
+  verifies the narrowing, and a root-only or docs-only merge does not get one. Read the `changes`
+  job's `code`, `scope` and `packages` outputs before treating a green PR as evidence about the
+  workspace. Design: `docs/superpowers/specs/2026-07-31-scoped-ci-design.md`.
 - **A cheap job can still be the critical path.** `mutation-verifactu` was ungated because a mutant
   is cheap; on run 30650089655 it was 3m26s of a 4m8s run. Sort a run's jobs by duration before
   calling a job cheap enough to leave ungated.

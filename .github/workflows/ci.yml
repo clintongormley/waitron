@@ -49,8 +49,11 @@ jobs:
   #
   # Two independent decisions, deliberately not merged into one (design §3.2):
   #   `code`  — does anything here reach a code-gated job? If not, only the `lint` job runs (eslint
-  #             AND format:check, both ungated), on pull requests AND on main, so an inert change —
-  #             prose, or root config no code-gated job reads — costs nothing in either place.
+  #             AND format:check AND the repo-level Vitest project, all ungated), on pull requests
+  #             AND on main, so an inert change — prose, or root config no code-gated job reads —
+  #             costs nothing in either place, and neither does a change to the repository's OWN
+  #             machinery (`scripts/`, `.husky/`, `.github/`, `scope=root`): no package reads it,
+  #             and the one suite that does is in that ungated job.
   #   `scope` — on a pull request, narrow the test shards to the packages that changed and the
   #             packages that depend on them. On main, run everything, because that unfiltered run
   #             is what verifies the narrowing was right.
@@ -79,8 +82,8 @@ jobs:
   # root-config-only or lockfile-only pull request, no package's suite ran at all.
   #
   # scripts/changed-packages.mjs attributes each path to the workspace member whose directory
-  # contains it and fails CLOSED — anything outside every member is `scope=global`, which is no
-  # filter at all. Expanding a changed package to its DEPENDENTS is still pnpm's job, via the
+  # contains it and fails CLOSED — anything outside every member, bar the repository's own
+  # machinery, is `scope=global`, which is no filter at all. Expanding a changed package to its DEPENDENTS is still pnpm's job, via the
   # `--filter "...<pkg>"` arguments built below.
   changes:
     runs-on: ubuntu-latest
@@ -166,8 +169,10 @@ jobs:
             esac
           fi
 
-          # Three lines out — `code=`, `scope=` (one of documentation, global, packages) and
-          # `packages=` — from ONE classifier call, which is also the one `.husky/pre-push` makes.
+          # Four lines out — `code=`, `scope=` (one of documentation, root, global, packages),
+          # `packages=` and `root=` — from ONE classifier call, which is also the one
+          # `.husky/pre-push` makes. Only the first three become job outputs: `root=` tells the hook
+          # whether the repo-level suite has work, and here that suite is ungated anyway.
           # Its reason goes to stderr, so it lands in this job's log rather than in $GITHUB_OUTPUT.
           #
           # `set -e` is what makes a classifier that cannot run FAIL this step rather than quietly
@@ -225,8 +230,9 @@ jobs:
       # wrong set). Only the attribution moved out of pnpm's hands.
       #
       # Anything that is not `scope=packages` runs unscoped: `global` because an unattributable path
-      # could affect anything, `documentation` because the gates are ANDed with `code` anyway, and an
-      # empty or unexpected value because a scope nobody can read is not a reason to skip a suite.
+      # could affect anything, `documentation` and `root` because the gates are ANDed with `code`
+      # anyway, and an empty or unexpected value because a scope nobody can read is not a reason to
+      # skip a suite.
       # The `--unscoped` flag emits every gate as true from the script's own SCOPE_GATES list, so a
       # gate added there does not also need adding here. Getting that wrong would leave a new job
       # never running on main, which is the direction nothing else would notice.

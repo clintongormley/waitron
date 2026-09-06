@@ -1,7 +1,12 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
-import { PACKAGES_WITHOUT_TESTS, classify, isInertPath } from "./changed-scope.mjs";
+import {
+  PACKAGES_WITHOUT_TESTS,
+  classify,
+  isInertPath,
+  isRootScopePath,
+} from "./changed-scope.mjs";
 
 // Answers, in ONE call, the only question either gate asks about a diff: is this documentation, is
 // it something that could reach anything, or is it a specific set of packages? BOTH gates ask it
@@ -146,8 +151,8 @@ function owningPackage(path, packages) {
 }
 
 /**
- * The whole verdict on a push's changed paths, from ONE call: `{ kind, packages, reason }`, where
- * `kind` is one of THREE outcomes and the hook does something different for each.
+ * The whole verdict on a push's changed paths, from ONE call: `{ kind, packages, root, reason }`,
+ * where `kind` is one of FOUR outcomes and the hook does something different for each.
  *
  *   "documentation"  every changed path is inert — prose, or the root config no `code`-gated job
  *                    reads (see `isInertPath`). format:check still reads it (`.prettierignore` excludes
@@ -156,9 +161,17 @@ function owningPackage(path, packages) {
  *                    `--file-info CLAUDE.md` is `"ignored": false, "inferredParser": "markdown"`,
  *                    and appending a mis-formatted heading to CLAUDE.md makes `prettier --check`
  *                    exit 1). Nothing else can read it.
- *   "global"         run everything: a path outside every package, an unreadable workspace, or a
- *                    push whose contents could not be determined at all.
+ *   "root"           every changed CODE path is the repository's own machinery (`isRootScopePath`).
+ *                    The repo-level Vitest project is the only suite that reads it, so that is the
+ *                    only suite that runs; no package is typechecked or tested.
+ *   "global"         run everything: a path outside every package that is not root scope, an
+ *                    unreadable workspace, or a push whose contents could not be determined at all.
  *   "packages"       `packages` names the members to narrow to. Non-empty exactly here.
+ *
+ * `root` is orthogonal to `kind` and true whenever ANY changed path is root scope — so a push of
+ * `scripts/x.mjs` beside `packages/db/src/y.ts` is `kind: "packages"` with `root: true`, and both
+ * the repo-level project and `@waitron/db`'s suite have work. It is the fourth line `formatScope`
+ * emits.
  *
  * The predecessor returned ONE object for the first two — `{packages: [], global: true, reason: "no
  * changed code path could be determined — running everything"}` — so a documentation-only push read
@@ -190,35 +203,52 @@ export function scopeForPaths(changedPaths, loadPackages) {
   const { code, reason } = classify(meaningful);
 
   // Prose only. `classify`'s own reason already says so — "all N changed path(s) are documentation".
-  if (!code) return { kind: "documentation", packages: [], reason };
+  if (!code) return { kind: "documentation", packages: [], root: false, reason };
 
   // Fails CLOSED, the same principle as `classify` itself and as the hook's deletion guard: an empty
   // list means we could not work out what is being pushed, not that nothing is. `classify` says
   // "no changed paths could be determined — running everything", which is what this does.
-  if (meaningful.length === 0) return { kind: "global", packages: [], reason };
+  if (meaningful.length === 0) return { kind: "global", packages: [], root: false, reason };
+
+  const codePaths = meaningful.filter((path) => !isInertPath(path));
+  const rootPaths = codePaths.filter(isRootScopePath);
+  const root = rootPaths.length > 0;
+  const attributable = codePaths.filter((path) => !isRootScopePath(path));
+
+  // Nothing for any package to run. Returning before `loadPackages` is what keeps a hook-only or
+  // workflow-only push off the 191-200ms `pnpm ls -r`, the same saving the documentation path takes.
+  if (attributable.length === 0) {
+    return {
+      kind: "root",
+      packages: [],
+      root: true,
+      reason: `${rootPaths.length} changed path(s) are the repository's own machinery — repo-level suite only`,
+    };
+  }
 
   const packages = loadPackages();
   if (packages === null) {
     return {
       kind: "global",
       packages: [],
+      root,
       reason: "the workspace layout could not be read — running everything",
     };
   }
 
-  const codePaths = meaningful.filter((path) => !isInertPath(path));
   const attributed = new Set();
 
-  for (const path of codePaths) {
+  for (const path of attributable) {
     const owner = owningPackage(path, packages);
-    // `.github/`, `.husky/`, `scripts/`, `pnpm-workspace.yaml`, `tsconfig.base.json`, the root
-    // manifest and the lockfile all land here. Those can affect anything. Root config no
-    // `code`-gated job reads does NOT reach here — `isInertPath` classifies it out of `codePaths`
-    // above.
+    // `pnpm-workspace.yaml`, `tsconfig.base.json`, the root manifest, the lockfile and the lint and
+    // format config all land here. Those can affect anything. The two other kinds of root path are
+    // already gone: `isInertPath` filtered out the config no `code`-gated job reads, and
+    // `isRootScopePath` the machinery no package reads.
     if (owner === undefined) {
       return {
         kind: "global",
         packages: [],
+        root,
         reason: `${path} belongs to no package — running everything`,
       };
     }
@@ -229,18 +259,21 @@ export function scopeForPaths(changedPaths, loadPackages) {
   return {
     kind: "packages",
     packages: names,
-    reason: `${codePaths.length} changed code path(s) map to ${names.join(", ")}`,
+    root,
+    reason: `${attributable.length} changed code path(s) map to ${names.join(", ")}`,
   };
 }
 
 /**
- * Renders a scope as the three lines its two callers read.
+ * Renders a scope as the four lines its two callers read.
  *
- * `code` is ci.yml's documentation gate — `bundle-smoke`, `typecheck`, both test shards and both
- * mutation jobs are gated on it — and it is the SAME verdict as `kind === "documentation"`, which
- * is why it is emitted from here rather than recomputed by the workflow's shell. ci.yml appends all
- * three lines straight to `$GITHUB_OUTPUT`; the hook reads two of them with `sed` and ignores this
- * one, because a documentation-only push is `scope=documentation` to it.
+ * `code` is ci.yml's gate on every job that builds, typechecks, tests or mutates a PACKAGE, which
+ * is why `kind: "root"` answers it false alongside `documentation`: a change to `scripts/`,
+ * `.husky/` or `.github/` gives none of them work, and ci.yml's UNGATED `lint` job is what runs the
+ * repo-level project that does read it. It is emitted from here rather than recomputed by the
+ * workflow's shell so the two cannot drift. ci.yml appends the first three lines to
+ * `$GITHUB_OUTPUT`; the hook reads `scope=` and `packages=` with `sed`, plus `root=` to decide
+ * whether the repo-level suite has work.
  *
  * A single space separates the package names, and that separator is the contract between this file
  * and its callers, asserted as such below. Both still WORD-SPLIT that line — `for pkg in
@@ -255,8 +288,9 @@ export function scopeForPaths(changedPaths, loadPackages) {
  * +f` for that, which is the guard the sentence used to claim was unnecessary — receipts beside the
  * loop in .husky/pre-push.
  */
-export function formatScope({ kind, packages }) {
-  return `code=${kind !== "documentation"}\nscope=${kind}\npackages=${packages.join(" ")}`;
+export function formatScope({ kind, packages, root }) {
+  const code = kind === "packages" || kind === "global";
+  return `code=${code}\nscope=${kind}\npackages=${packages.join(" ")}\nroot=${root}`;
 }
 
 /**
