@@ -94,7 +94,6 @@ import { adoptFromPrimary } from "./adopt.js";
 import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
-import { sealAeatCredential } from "./aeat-credential.js";
 import { writeTradingEnv, type TradingConfig } from "./trading-config.js";
 import { mountDiscovery } from "./discovery-api.js";
 import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
@@ -725,8 +724,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         } catch {
           // Keep the neutral label — a malformed/socket URL must not leak into the error param.
         }
-        // The setup surface, now with the slice-2b provisioning deps bound. `provision`/`sealAeat`
-        // capture `ownerDb` + `ring`; `persistTrading` writes `<stateDir>/trading.env`; `requestRestart`
+        // The setup surface, now with the slice-2b provisioning deps bound. `provision` captures
+        // `ownerDb`; `db`/`ring` are handed to the fiscal contribution's provisioning-secret seal seat
+        // (so boot imports no regime); `persistTrading` writes `<stateDir>/trading.env`; `requestRestart`
         // SIGTERMs this process so the supervisor restarts it into trading mode (`bin.ts`'s latch does
         // the graceful shutdown). `databaseUrl`/`migrationsDatabaseUrl` become `trading.env`'s own
         // connection strings for the next boot. `adopt` is the MIRROR-side sibling (C2b): it fetches the
@@ -785,7 +785,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
                 nodeId,
                 config.advertisedOrigin,
               ),
-            sealAeat: (tenantId, cert) => sealAeatCredential(ownerDb, ring, tenantId, cert),
+            // The owner DB + vault ring the setup surface seals the regime's provisioning secret with,
+            // through the fiscal contribution's `provisioningSecret.seal` seat — so BOOT imports no
+            // regime package (module-seams). The seal fires only for a provision whose regime demands
+            // a secret (Veri*Factu: a production provision's AEAT cert).
+            db: ownerDb,
+            ring,
             persistTrading,
             databaseUrl: config.databaseUrl,
             migrationsDatabaseUrl: config.migrationsDatabaseUrl,
@@ -1828,7 +1833,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         appDb: db,
         retentionDb,
         // The box vault key `assembleMirrorBundle` uses to unseal the primary's identity key and endorse
-        // the standby's key (membership promotion R2). Already in scope for `sealAeat`/identity above.
+        // the standby's key (membership promotion R2). Already in scope for the provisioning-secret seal / identity above.
         ring,
         stateDir: config.stateDir,
         // A FULL https URL, not bare host:port: the mirror consumes this as its `peer.url` and

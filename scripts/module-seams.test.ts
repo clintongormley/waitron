@@ -30,19 +30,13 @@ import { FISCAL_TERRITORIES, resolveFiscalModules } from "../packages/provisioni
  * fiscal-fixtures.ts` is the fixture nearest the line: it seeds `registros_facturacion` rows with
  * raw SQL and imports no regime package at all.
  *
- * DEFERRED, allowlisted with the reason: `apps/server/src/aeat-credential.ts` still reaches the
- * regime directly. The `fiscal-none` slice moved the runtime drain behind the fiscal contribution's
- * `drain` seat (`boot.ts` now names no regime package) and relocated the AEAT transport into the
- * regime, so those two entries are gone. What remains is `aeat-credential.ts`: it validates and seals
- * the AEAT certificate and imports `CertKind`/`isCertKind` from `@waitron/fiscal-verifactu` until Task
- * 5 moves the whole file into the regime and empties this list. Shrink this list; do not grow it.
+ * The allowlist is now EMPTY. The `fiscal-none` slice moved the runtime drain behind the fiscal
+ * contribution's `drain` seat, relocated the AEAT transport into the regime, and finally moved the
+ * cert validate/seal into the regime behind the `provisioningSecret` seat — so no file under
+ * `apps/server/src` reaches a regime package. It is kept as a Map (not deleted) so a future deferral
+ * has to name itself and its reason here; shrink this list, never grow it.
  */
-const DEFERRED_RUNTIME_PASS = new Map<string, string>([
-  [
-    "apps/server/src/aeat-credential.ts",
-    "cert validate/seal not yet behind a seat; reaches CertKind via the regime — moved in Task 5",
-  ],
-]);
+const DEFERRED_RUNTIME_PASS = new Map<string, string>([]);
 
 const REPO_ROOT = join(import.meta.dirname, "..");
 const REGIME_PACKAGES = ["@waitron/fiscal-verifactu", "@waitron/verifactu"];
@@ -92,7 +86,12 @@ describe("apps/server imports the Spanish regime only from the deferred runtime 
     if (DEFERRED_RUNTIME_PASS.has(rel)) return;
     expect(imports(file, REGIME_PACKAGES)).toEqual([]);
   });
-  it("the allowlist names only files that still import the regime (no stale entries)", () => {
+  it("the deferred-runtime-pass allowlist is EMPTY (the fiscal-none slice's end state)", () => {
+    // Task 5 relocated the last regime-reaching file (aeat-credential.ts) into
+    // packages/fiscal-verifactu, so nothing under apps/server/src imports a regime package. Asserted
+    // as an empty list rather than deleted so a future entry has to justify itself; and, should the
+    // list ever regrow, each entry must still GENUINELY import the regime (no stale entries).
+    expect([...DEFERRED_RUNTIME_PASS.keys()]).toEqual([]);
     for (const rel of DEFERRED_RUNTIME_PASS.keys()) {
       expect(imports(join(REPO_ROOT, rel), REGIME_PACKAGES).length, rel).toBeGreaterThan(0);
     }

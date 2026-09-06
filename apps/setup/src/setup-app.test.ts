@@ -374,8 +374,11 @@ describe("setup-app", () => {
     expect(await screenText(el, "review", "[data-test=error]")).toContain("rejected the details");
   });
 
-  it("routes setup.aeat_cert_required back to the cert screen", async () => {
-    const provision = vi.fn().mockRejectedValue({ code: "setup.aeat_cert_required", params: {} });
+  it("routes setup.provisioning_secret_required back to the cert screen", async () => {
+    const provision = vi.fn().mockRejectedValue({
+      code: "setup.provisioning_secret_required",
+      params: { module: "verifactu" },
+    });
     const el = await mountSetupApp(stubApi({ provision }));
     provisionRequest(el);
     await flush(el);

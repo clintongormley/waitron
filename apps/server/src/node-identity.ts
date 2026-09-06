@@ -11,7 +11,7 @@ export const NODE_KEY_PURPOSE = "membership.node_key";
  * Establish this node's membership identity (design §4) at setup: generate an Ed25519 keypair, then in
  * ONE tenant transaction seal the PRIVATE half in the box vault under `membership.node_key` and stamp
  * the PUBLIC half on `nodes.public_key` — the trust anchor boot reads (readMembershipTrustSet). Called
- * ONLY on the fresh-primary provision path (setup-api provision handler, beside sealAeat): a cloud
+ * ONLY on the fresh-primary provision path (setup-api provision handler, beside the provisioning-secret seal): a cloud
  * mirror runs as the primary's nodeId and never signs, so it seals no key and inherits the primary's
  * anchor through the node row adoptVenue replicates.
  *

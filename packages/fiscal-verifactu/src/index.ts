@@ -6,10 +6,19 @@ export { FISCAL_ENROLMENT } from "./enrolment.js";
 export { FISCAL_VOCABULARY } from "./vocabulary.js";
 export { FISCAL_PROVISIONING, WAITRON_ID_SISTEMA } from "./provisioning.js";
 export { FISCAL_SLOT } from "./slot.js";
-// The AEAT transport moved into the regime (fiscal-none slice). `CertKind`/`isCertKind` are exported
-// so `apps/server/src/aeat-credential.ts` can still reach them until Task 5 moves that file here too.
+// The AEAT transport lives in the regime (fiscal-none slice). `CertKind`/`isCertKind` are the
+// transport's own cert-kind vocabulary, shared with the provisioning-secret validator below.
 export { isCertKind } from "./aeat-transport.js";
 export type { CertKind } from "./aeat-transport.js";
+// The provision-time secret: the AEAT signing certificate the host seals into a fresh venue's vault,
+// reached through `FISCAL_SLOT.provisioningSecret`. `sealAeatSecret`/`parseAeatCert`/`validateAeatCert`
+// are exported for the seat wiring and for tests (the host reaches them only via the seat).
+export {
+  parseAeatCert,
+  sealAeatSecret,
+  validateAeatCert,
+  type AeatCert,
+} from "./provisioning-secret.js";
 export {
   cadenas,
   contadoresInstalacion,

@@ -42,4 +42,20 @@ export interface FiscalContribution {
   /** One runtime submission pass. A regime with nothing to submit (id "none") returns the empty
    * DrainResult. The sale-path backend (makeBackend) never contacts an authority; this does. */
   drain(deps: FiscalDutyDeps, now: Date): Promise<DrainResult>;
+  /** The provision-time secret this regime seals into a fresh venue's vault (a Veri*Factu venue's
+   * AEAT signing certificate; absent for a regime that files nothing). The host holds the opaque
+   * blob and the vault ring but does not know the regime's shape, so it reaches the regime through
+   * this seat: `required` decides whether the environment demands the secret, `validate` refuses a
+   * malformed one WITHOUT any write, and `seal` writes it under the tenant's transaction. */
+  readonly provisioningSecret?: {
+    /** Whether a provision in `environment` must carry the secret (Veri*Factu: production only). */
+    required(environment: DeploymentEnvironment): boolean;
+    /** Validate the opaque secret's SHAPE, throwing `setup.request_invalid` naming the offending
+     * field, and writing NOTHING. Run BEFORE `provisionVenue` mints the unrepairable SIF/hash chain
+     * (CLAUDE.md §5) so a malformed secret is refused with nothing stamped or minted. */
+    validate(raw: unknown): void;
+    /** Seal the (validated) secret into the tenant's vault under `withTenant`. Runs AFTER the tenant
+     * is minted — the vault row FK-restricts to it — and re-validates as defense-in-depth. */
+    seal(deps: { db: Database; ring: KeyRing }, tenantId: string, raw: unknown): Promise<void>;
+  };
 }

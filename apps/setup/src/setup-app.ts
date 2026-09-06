@@ -75,9 +75,10 @@ function deepMerge(base: unknown, patch: unknown): unknown {
  * Provision, and the demo path skips the cert screen but the draft still holds the cert. Without the
  * mode gate, `assembleBody` would POST that stale certificate onto a DEMO/preproduction tenant and the
  * server would seal a real AEAT signing certificate into it — unrepairable (CLAUDE.md §5). The server
- * also distinguishes "no certificate" from "malformed" by the key's ABSENCE (`body.aeatCert ===
- * undefined ? … : parseCert(...)`, `apps/server/src/setup-api.ts`) and answers a live ES-common venue
- * with no cert `setup.aeat_cert_required` (which the shell routes back to `cert`).
+ * distinguishes "no certificate" from "malformed" by the key's ABSENCE (the symmetric presence gate in
+ * `apps/server/src/setup-api.ts`, which reaches the regime's secret validator through the fiscal
+ * contribution's `provisioningSecret` seat) and answers a live production venue with no cert
+ * `setup.provisioning_secret_required` (which the shell routes back to `cert`).
  */
 export function assembleBody(draft: DeepPartial<ProvisionBody>): ProvisionBody {
   const body = { ...draft } as ProvisionBody & { aeatCert?: ProvisionBody["aeatCert"] };
@@ -363,7 +364,7 @@ export class SetupApp extends LitElement {
    *   not retrying in place.
    * - `setup.request_invalid` → back to `review` with a banner naming `params.field` (the field's own
    *   screen already validates the same rule, so this is a belt-and-suspenders path).
-   * - `setup.aeat_cert_required` → back to `cert` to add the certificate.
+   * - `setup.provisioning_secret_required` → back to `cert` to add the certificate.
    * - `setup.already_provisioning` → an in-progress notice, no retry (a concurrent provision is
    *   running); offers a plain "Reload" so the operator isn't stranded on a dead-end alert.
    * - `setup.already_provisioned` / `deployment.already_stamped` → "already set up", NO retry: these
@@ -399,7 +400,7 @@ export class SetupApp extends LitElement {
         this.screen = "review";
         return;
       }
-      case "setup.aeat_cert_required":
+      case "setup.provisioning_secret_required":
         this.screen = "cert";
         return;
       case "setup.already_provisioning":

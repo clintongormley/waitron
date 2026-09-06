@@ -2,6 +2,7 @@ import type { FiscalContribution } from "@waitron/fiscal";
 import { VerifactuBackend } from "./backend.js";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { drain as runDrain } from "./drain.js";
+import { parseAeatCert, sealAeatSecret } from "./provisioning-secret.js";
 
 /**
  * The sale path never contacts AEAT — only `drain`/`reconcile` do, and the backend built here is
@@ -39,5 +40,17 @@ export const FISCAL_SLOT: FiscalContribution = {
     } finally {
       await resolver.closeAll();
     }
+  },
+  // The provision-time secret: a Veri*Factu venue's AEAT signing certificate. Required only for a
+  // PRODUCTION provision (a preproduction box records its chain locally and never submits, so the
+  // cert is optional there — spec §10). `validate` refuses a malformed blob with `setup.request_invalid`
+  // and writes nothing, run by the host BEFORE `provisionVenue` mints the unrepairable SIF/chain
+  // (CLAUDE.md §5); `seal` writes it under the tenant's transaction after the mint.
+  provisioningSecret: {
+    required: (environment) => environment === "production",
+    validate: (raw) => {
+      parseAeatCert(raw);
+    },
+    seal: (deps, tenantId, raw) => sealAeatSecret(deps, tenantId, raw),
   },
 };

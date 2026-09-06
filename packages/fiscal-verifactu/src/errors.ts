@@ -57,6 +57,18 @@ declare module "@waitron/shared" {
     "server.credential_unusable": { tenantId: string; purpose: string; field: string };
 
     /**
+     * The provision-time secret validator/sealer (`./provisioning-secret.ts`, relocated here in the
+     * fiscal-none slice) throws this when the opaque AEAT-cert blob's `certKind`, `pfxBase64` or
+     * `passphrase` is absent, the wrong type, or fails its shape check — naming the offending field,
+     * never its value. Declared here because this package now throws the code;
+     * `apps/server/src/errors.ts` keeps its own identical declaration for the setup surface's own
+     * throwers (`setup-api.ts`'s venue/adopt field screens). The two declarations carry identical
+     * params so TypeScript's declaration merging accepts both when `apps/server` compiles them
+     * together — the same dual-declaration shape `server.credential_unusable` above documents.
+     */
+    "setup.request_invalid": { field: string };
+
+    /**
      * A restore or standby reservation rejects a base over `MAX_BASE_CODE_LENGTH`, leaving room
      * within the 60-character `NumSerieFactura` cap for `-<installation number>/<counter>` with
      * ten digits each. The restore hook throws inside its transaction; on rollback, nothing it

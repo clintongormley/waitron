@@ -1562,9 +1562,10 @@ describe("startServer, against a real container as the deployment role", () => {
   it("setup mode: a LIVE ES-common provision WITH an AEAT cert seals it into the tenant's fiscal.aeat vault, stamps production, restarts", async () => {
     // The legitimate seal path end-to-end — the assertion the (now-inverted) demo+cert test used to
     // make, moved onto the CORRECT path. A LIVE ES-common venue files to the real AEAT, so its cert
-    // IS expected (`certExpected` in setup-api.ts): the endpoint accepts it and `sealAeat` seals it via
-    // boot.ts's real `sealAeatCredential(ownerDb, ring, …)` wiring — the ONLY full-boot exercise of
-    // that binding, and of the ring `boot.ts` reads back off `secrets.env` (a broken recovery would
+    // IS expected (`expected` in setup-api.ts): the endpoint accepts it and seals it through the fiscal
+    // contribution's `provisioningSecret.seal` seat, wired to boot.ts's real `db: ownerDb` + `ring`
+    // injection — the ONLY full-boot exercise of that binding, and of the ring `boot.ts` reads back off
+    // `secrets.env` (a broken recovery would
     // throw here). Reuses `mintMtlsMaterial`'s PKCS#12 fixture, as the mTLS-transport test does.
     //
     // No real AEAT call is made and none can be: a FRESH provision seeds NO `envios`, and a box in
@@ -1622,7 +1623,7 @@ describe("startServer, against a real container as the deployment role", () => {
           expect(await readDeploymentEnvironment(check)).toBe("production");
 
           // Exactly one `fiscal.aeat` credential was sealed, for the tenant just provisioned — the real
-          // `sealAeatCredential` wiring (boot.ts:529) ran end-to-end.
+          // provisioning-secret seal seat (fed boot.ts's `db: ownerDb` + `ring`) ran end-to-end.
           const sealed = await check.execute<{ n: number; tenant: string }>(
             sql`select count(*)::int as n, max(tenant_id::text) as tenant
                 from tenant_credentials where purpose = 'fiscal.aeat'`,

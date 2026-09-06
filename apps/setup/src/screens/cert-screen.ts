@@ -27,7 +27,7 @@ import type { AeatCertDraft, ProvisionBody } from "../api/client.js";
  * `apps/setup/src/screens/venue-screen.ts` for the field/`wt-change`/banner + seed-once idiom.
  */
 
-/** The certificate kinds the server accepts (`isCertKind`, `apps/server/src/aeat-credential.ts`);
+/** The certificate kinds the server accepts (`isCertKind`, `packages/fiscal-verifactu/src/aeat-transport.ts`);
  * the Spanish terms are the API contract values, shown with an English gloss. */
 const CERT_KINDS: ReadonlyArray<{ value: AeatCertDraft["certKind"]; label: string }> = [
   { value: "sello", label: "Company seal (sello)" },

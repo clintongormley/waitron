@@ -360,7 +360,7 @@ beforeAll(async () => {
   };
 
   // A real trading primary establishes its own membership identity at setup (the setup-api provision
-  // handler calls this beside sealAeat). `applyVenue` alone does not, so seal it here under RING — the
+  // handler calls this beside the provisioning-secret seal). `applyVenue` alone does not, so seal it here under RING — the
   // key `assembleMirrorBundle` unseals to endorse the standby's key (membership promotion R2). Without
   // it the bundle mint throws `credentials.missing`.
   await establishNodeIdentity(

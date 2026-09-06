@@ -19,7 +19,7 @@ const CERT_KINDS = ["sello", "representante"] as const;
 export type CertKind = (typeof CERT_KINDS)[number];
 
 /** The single runtime membership check for `CertKind`, derived from the same `CERT_KINDS` array the
- * type is — exported so `aeat-credential.ts`'s cert validation checks membership against THIS list
+ * type is — exported so `provisioning-secret.ts`'s cert validation checks membership against THIS list
  * rather than redeclaring its own. */
 export function isCertKind(value: string): value is CertKind {
   // Cast to a plain string array: `readonly ["sello", "representante"]` only accepts a `CertKind`
