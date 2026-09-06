@@ -21,12 +21,7 @@ import { listDeviceProfiles } from "@waitron/layouts";
 import { createErrorBoundary } from "./error-boundary.js";
 import { readJsonBody } from "./read-json-body.js";
 import { requireManagementSession } from "./management-session.js";
-import {
-  clearDeviceCookie,
-  cookieDomainFor,
-  requireDevice,
-  setDeviceCookie,
-} from "./device-session.js";
+import { clearDeviceCookie, requireDevice, setDeviceCookie } from "./device-session.js";
 import { bindingFkField, enrolDevice, generatePairingCode, kindRequiresStation } from "./device.js";
 import { enrolDevTill, isDevPairingCode } from "./dev-pairing.js";
 import { listStations } from "./kitchen.js";
@@ -76,12 +71,10 @@ export interface DeviceApiDeps {
    */
   devMode?: boolean;
   /**
-   * The venue's registrable domain (till-reroute §3.5) — when the request host is under it, the enrol
-   * cookie is scoped to it (`Domain=<it>`) so the same httpOnly credential rides to every one of the
-   * venue's servers after a promotion, and the un-enrol/reset clear expires that same domain-scoped
-   * cookie. OPTIONAL: absent OR a host outside it → host-only, the loopback-dev default. Boot wires
-   * `config.tenantDomain`; each cookie call resolves the effective domain per request via
-   * `cookieDomainFor(c.req.header("host"), deps.tenantDomain)`.
+   * The venue's registrable domain (till-reroute §3.5; see ServerConfig.tenantDomain for the
+   * invariant) — passed straight to `setDeviceCookie`/`clearDeviceCookie`, which resolve the effective
+   * `Domain` per request from it and the host. OPTIONAL: absent OR a host outside it → host-only, the
+   * loopback-dev default. Boot wires `config.tenantDomain`.
    */
   tenantDomain?: string;
 }
@@ -230,7 +223,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         c,
         `${enrolled.deviceId}.${enrolled.token}`,
         deps.secureCookies,
-        cookieDomainFor(c.req.header("host"), deps.tenantDomain),
+        deps.tenantDomain,
       );
       return c.json(
         {
@@ -616,7 +609,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     // untouched (still active) — only the browser's copy of the cookie is cleared.
     app.post("/api/device/reset", (c) =>
       run(c, log, async () => {
-        clearDeviceCookie(c, cookieDomainFor(c.req.header("host"), deps.tenantDomain));
+        clearDeviceCookie(c, deps.tenantDomain);
         return c.body(null, 204);
       }),
     );

@@ -375,10 +375,9 @@ describe("loadConfig", () => {
     expect(config.advertisedOrigin).toBe("https://box.deli.waitron.app");
   });
 
-  // WAITRON_TENANT_DOMAIN scopes the device cookie's `Domain` to the venue's registrable domain
-  // (till-reroute §3.5), so the httpOnly credential rides to every one of the venue's servers after a
-  // promotion. Unset OR empty → undefined (host-only cookies, loopback dev); a set value is lower-cased
-  // for the case-insensitive host comparison `cookieDomainFor` makes.
+  // WAITRON_TENANT_DOMAIN scopes the device cookie's `Domain` (§3.5; see ServerConfig.tenantDomain).
+  // Unset OR empty → undefined (host-only cookies, loopback dev); a set value is lower-cased for the
+  // case-insensitive host comparison `cookieDomainFor` makes.
   it("reads WAITRON_TENANT_DOMAIN into config.tenantDomain (lower-cased), else undefined", () => {
     expect(loadConfig(MIN_ENV, ROOT, MEDIA_ROOT, STATE_ROOT).tenantDomain).toBeUndefined();
     expect(

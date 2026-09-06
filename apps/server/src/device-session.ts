@@ -40,11 +40,10 @@ export const DEV_DEVICE_HEADER = "x-waitron-dev-device";
 const DEVICE_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
 
 /**
- * The `Domain` a device cookie is scoped to (till-reroute design §3.5): the tenant domain when the
- * request host is it or a subdomain of it — so the same httpOnly credential rides to every one of the
- * venue's servers (`box.<tenant>…`, `cloud.<tenant>…`) — and host-only otherwise (`waitron.local`,
- * loopback dev). The comparison strips the port and ignores case; the leading-dot check is what stops
- * `notdeli.waitron.app` from matching `deli.waitron.app`.
+ * The `Domain` a device cookie is scoped to (till-reroute design §3.5; the invariant lives on
+ * ServerConfig.tenantDomain): the tenant domain when the request host is it or a subdomain of it, and
+ * host-only otherwise (`waitron.local`, loopback dev). The comparison strips the port and ignores
+ * case; the leading-dot check is what stops `notdeli.waitron.app` from matching `deli.waitron.app`.
  */
 export function cookieDomainFor(
   host: string | undefined,
@@ -62,10 +61,19 @@ export function cookieDomainFor(
  * "Strict"` so it never rides a cross-site request, `path: "/"` so it covers the whole till app.
  * `secure` is caller-supplied — TRUE on a production HTTPS host, FALSE on loopback dev where there is
  * no TLS to attach it to. The `maxAge` is the ONE deviation from `setManagementCookie`/`setSessionCookie`
- * (long-lived — see `DEVICE_COOKIE_MAX_AGE_SECONDS`). `domain` is the tenant scope from
- * {@link cookieDomainFor} — present ⇒ `Domain=<it>`, absent ⇒ host-only (§3.5).
+ * (long-lived — see `DEVICE_COOKIE_MAX_AGE_SECONDS`). The `Domain` is resolved HERE from `tenantDomain`
+ * and the request host via {@link cookieDomainFor} — present ⇒ `Domain=<it>`, absent ⇒ host-only (§3.5)
+ * — so the set and {@link clearDeviceCookie} compute the SAME scope by construction, not by two call
+ * sites repeating one expression (an un-enrol that cleared a differently-scoped cookie would fail to
+ * delete it).
  */
-export function setDeviceCookie(c: Context, value: string, secure: boolean, domain?: string): void {
+export function setDeviceCookie(
+  c: Context,
+  value: string,
+  secure: boolean,
+  tenantDomain?: string,
+): void {
+  const domain = cookieDomainFor(c.req.header("host"), tenantDomain);
   setCookie(c, DEVICE_COOKIE, value, {
     httpOnly: true,
     secure,
@@ -77,11 +85,13 @@ export function setDeviceCookie(c: Context, value: string, secure: boolean, doma
 }
 
 /**
- * Clears the device cookie (un-enrol / revoke on this browser). `path` — and `domain`, when the set
- * cookie carried one (till-reroute §3.5) — must match what `setDeviceCookie` wrote with, or the
- * browser keeps the original alongside the expiry the delete emits.
+ * Clears the device cookie (un-enrol / revoke on this browser). `path` — and `Domain`, resolved from
+ * `tenantDomain` and the request host the SAME way {@link setDeviceCookie} resolves it (till-reroute
+ * §3.5) — must match what the set wrote, or the browser keeps the original alongside the expiry the
+ * delete emits.
  */
-export function clearDeviceCookie(c: Context, domain?: string): void {
+export function clearDeviceCookie(c: Context, tenantDomain?: string): void {
+  const domain = cookieDomainFor(c.req.header("host"), tenantDomain);
   deleteCookie(c, DEVICE_COOKIE, { path: "/", ...(domain === undefined ? {} : { domain }) });
 }
 

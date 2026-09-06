@@ -318,11 +318,10 @@ function bareOrigin(value: string, variable: string): string {
   return value;
 }
 
-/** `WAITRON_TENANT_DOMAIN` as the cookie `Domain` (till-reroute §3.5): unset OR empty → undefined
- * (host-only cookies), a set value lower-cased for the case-insensitive host comparison. A cookie
- * `Domain` is a bare registrable domain — a value carrying `/`, `:` or whitespace is a URL, a
- * host:port, or a typo, refused loudly at boot (`server.config_invalid`, `reason: "not_a_domain"`)
- * rather than handed to a Set-Cookie malformed. */
+/** `WAITRON_TENANT_DOMAIN` as the cookie `Domain` (see ServerConfig.tenantDomain): unset OR empty →
+ * undefined, a set value lower-cased, and a value carrying `/`, `:` or whitespace refused loudly at
+ * boot (`server.config_invalid`, `reason: "not_a_domain"`) rather than handed to a Set-Cookie
+ * malformed. */
 function loadTenantDomain(env: Env): string | undefined {
   const raw = env.WAITRON_TENANT_DOMAIN;
   if (isUnset(raw)) return undefined;
@@ -793,10 +792,8 @@ export function loadConfig(
     advertisedOrigin: isUnset(env.WAITRON_ADVERTISED_ORIGIN)
       ? managementOrigin
       : bareOrigin(env.WAITRON_ADVERTISED_ORIGIN, "WAITRON_ADVERTISED_ORIGIN"),
-    // The registrable domain the device cookie's `Domain` is scoped to (till-reroute §3.5). Unset OR
-    // empty → undefined (host-only cookies); a set value is lower-cased and refused loudly if it is
-    // not a bare domain. Present-but-undefined when absent, the shape `settlementLagMs`/`tillAppDir`
-    // above take.
+    // The registrable domain the device cookie's `Domain` is scoped to (see ServerConfig.tenantDomain).
+    // Present-but-undefined when absent, the shape `settlementLagMs`/`tillAppDir` above take.
     tenantDomain: loadTenantDomain(env),
     // The built front-end dirs the box serves same-origin (slice 1a). Absent OR empty → undefined
     // (the same `isUnset` rule `settlementLagMs` above and every other optional here follow): dev

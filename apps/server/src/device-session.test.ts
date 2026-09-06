@@ -362,22 +362,36 @@ describe("device cookie helpers", () => {
     expect(cookie).not.toMatch(/Secure/i);
   });
 
-  // The optional `domain` (till-reroute §3.5): present ⇒ the cookie carries `Domain=<it>` so the same
-  // credential rides to every one of the venue's servers; absent ⇒ host-only (no `Domain` attribute).
-  it("setDeviceCookie writes Domain only when a domain is passed", async () => {
+  // The optional `tenantDomain` (till-reroute §3.5): the helper resolves the effective `Domain` from
+  // it and the request host via `cookieDomainFor`, so a host UNDER the tenant domain carries
+  // `Domain=<it>` (see ServerConfig.tenantDomain) and a host outside it stays host-only (no `Domain`).
+  it("setDeviceCookie writes Domain only when the host is under the tenant domain", async () => {
     const app = new Hono();
-    app.get("/scoped", (c) => {
+    app.get("/set", (c) => {
       setDeviceCookie(c, COOKIE_VALUE, true, "deli.waitron.app");
       return c.body(null, 204);
     });
-    app.get("/host-only", (c) => {
+    const scoped =
+      (await app.request("/set", { headers: { host: "box.deli.waitron.app" } })).headers.get(
+        "set-cookie",
+      ) ?? "";
+    expect(scoped).toMatch(/Domain=deli\.waitron\.app/i);
+    const hostOnly =
+      (await app.request("/set", { headers: { host: "waitron.local" } })).headers.get(
+        "set-cookie",
+      ) ?? "";
+    expect(hostOnly).not.toMatch(/Domain=/i);
+    // No tenantDomain at all ⇒ host-only regardless of the host.
+    const app2 = new Hono();
+    app2.get("/set", (c) => {
       setDeviceCookie(c, COOKIE_VALUE, true);
       return c.body(null, 204);
     });
-    const scoped = (await (await app.request("/scoped")).headers.get("set-cookie")) ?? "";
-    expect(scoped).toMatch(/Domain=deli\.waitron\.app/i);
-    const hostOnly = (await (await app.request("/host-only")).headers.get("set-cookie")) ?? "";
-    expect(hostOnly).not.toMatch(/Domain=/i);
+    const none =
+      (await app2.request("/set", { headers: { host: "box.deli.waitron.app" } })).headers.get(
+        "set-cookie",
+      ) ?? "";
+    expect(none).not.toMatch(/Domain=/i);
   });
 
   it("clearDeviceCookie expires the cookie (Max-Age=0, matching Path)", async () => {
@@ -393,18 +407,21 @@ describe("device cookie helpers", () => {
     expect(cookie).toMatch(/Path=\//i);
   });
 
-  // The clearing Set-Cookie must carry the SAME `Domain` the set one did, or the browser keeps the
-  // domain-scoped cookie alongside the host-only expiry (the `Path` reasoning, applied to `Domain`).
-  it("clearDeviceCookie writes Domain only when a domain is passed", async () => {
+  // The clearing Set-Cookie must carry the SAME `Domain` the set one did — resolved from the same
+  // `tenantDomain` + host inputs (§3.5) — or the browser keeps the domain-scoped cookie alongside the
+  // host-only expiry (the `Path` reasoning, applied to `Domain`).
+  it("clearDeviceCookie writes Domain only when the host is under the tenant domain", async () => {
     const app = new Hono();
     app.get("/clear", (c) => {
       clearDeviceCookie(c, "deli.waitron.app");
       return c.body(null, 204);
     });
-    const res = await app.request("/clear");
-    const cookie = res.headers.get("set-cookie") ?? "";
-    expect(cookie).toMatch(/Domain=deli\.waitron\.app/i);
-    expect(cookie).toMatch(/Max-Age=0/i);
+    const scoped = await app.request("/clear", { headers: { host: "box.deli.waitron.app" } });
+    const scopedCookie = scoped.headers.get("set-cookie") ?? "";
+    expect(scopedCookie).toMatch(/Domain=deli\.waitron\.app/i);
+    expect(scopedCookie).toMatch(/Max-Age=0/i);
+    const hostOnly = await app.request("/clear", { headers: { host: "waitron.local" } });
+    expect(hostOnly.headers.get("set-cookie") ?? "").not.toMatch(/Domain=/i);
   });
 
   describe("cookieDomainFor", () => {

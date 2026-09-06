@@ -396,9 +396,8 @@ function enrolHandheld(
 
 describe("Device API over real Postgres", () => {
   // The enrolment cookie's `Domain` is scoped to the tenant domain when the request host is under it
-  // (till-reroute §3.5), so the httpOnly credential rides to every one of the venue's servers
-  // (`box.<tenant>…`, `cloud.<tenant>…`) after a promotion. A host outside the tenant domain
-  // (`waitron.local`, loopback dev) stays host-only — no `Domain` attribute.
+  // (§3.5; see ServerConfig.tenantDomain). A host outside it (`waitron.local`, loopback dev) stays
+  // host-only — no `Domain` attribute.
   it("enrol scopes the cookie Domain to the tenant host, host-only otherwise", async () => {
     const venue = await setupVenue();
     const app = new Hono();
