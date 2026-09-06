@@ -46,6 +46,13 @@ declare module "@waitron/shared" {
      */
     "series.no_standard_for_node": { tenantId: string; nodeId: string };
     /**
+     * A series code being opened for a node is one the node already holds — live or retired: the
+     * natural key `(tenant_id, node_id, code)` covers both, so a retired code can never be reopened.
+     * Reached only by a restore deriving a code that a human had chosen earlier; the restore is
+     * redone. `series.*` names the domain concept; never renamed once shipped.
+     */
+    "series.code_collision": { code: string };
+    /**
      * A database already belongs to a different environment. Never overwritten: the rows written
      * under the first stamp cannot be moved to the second — an invoice series that filed to
      * pre-production has a numbering hole in production that nothing can fill.

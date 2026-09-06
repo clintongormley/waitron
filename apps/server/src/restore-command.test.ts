@@ -16,6 +16,9 @@ import { runRestore } from "./restore-command.js";
 const RECOVERY_KEY = "s3cr3t-recovery-key-value";
 const DATABASE_URL = "postgres://admin:hunter2@localhost/restore_target";
 
+const COLD_RESTORE_NOTICE =
+  "cold restore: use only when no peer (mirror or local secondary) survived — a survivor holds more history and is promoted, not overwritten (promotion runbook §5d)";
+
 function makeArtifact(dir: string): Promise<string> {
   const artifactPath = join(dir, "backup.wrb");
   return writeFile(artifactPath, "not a real artifact, never decrypted in this suite").then(
@@ -119,7 +122,11 @@ describe("waitron-restore restore", () => {
     expect(Buffer.from(received!.artifact).toString("utf8")).toBe(
       "not a real artifact, never decrypted in this suite",
     );
-    expect(out.some((line) => line.includes("restore.db.staged"))).toBe(true);
+    expect(out).toEqual([
+      COLD_RESTORE_NOTICE,
+      expect.stringContaining("restore.db.staged"),
+      `restored ${artifactPath}`,
+    ]);
     // Neither secret ever reaches the operator-facing output.
     const printed = out.join("\n");
     expect(printed).not.toContain(RECOVERY_KEY);
@@ -169,7 +176,10 @@ describe("waitron-restore restore", () => {
       out: (line) => out.push(line),
     });
     expect(code).toBe(1);
-    expect(out).toEqual([expect.stringContaining("restore.environment_mismatch")]);
+    expect(out).toEqual([
+      COLD_RESTORE_NOTICE,
+      expect.stringContaining("restore.environment_mismatch"),
+    ]);
   });
 
   it("resolves overridden media/state/migrations dirs and environment from env, like boot does", async () => {
@@ -240,7 +250,10 @@ describe("waitron-restore restore", () => {
       },
     });
     expect(code).toBe(1);
-    expect(out).toEqual(["restore failed: wrong recovery key or corrupt artifact"]);
+    expect(out).toEqual([
+      COLD_RESTORE_NOTICE,
+      "restore failed: wrong recovery key or corrupt artifact",
+    ]);
   });
 
   it("reports a gate/guard AppError by code and returns 1", async () => {
@@ -262,7 +275,10 @@ describe("waitron-restore restore", () => {
       },
     });
     expect(code).toBe(1);
-    expect(out).toEqual([expect.stringContaining("restore.environment_mismatch")]);
+    expect(out).toEqual([
+      COLD_RESTORE_NOTICE,
+      expect.stringContaining("restore.environment_mismatch"),
+    ]);
   });
 
   it("reports an AppError outside restore/recovery/backup namespaces generically, never rethrown", async () => {
@@ -287,7 +303,7 @@ describe("waitron-restore restore", () => {
       },
     });
     expect(code).toBe(1);
-    expect(out).toEqual(["restore failed"]);
+    expect(out).toEqual([COLD_RESTORE_NOTICE, "restore failed"]);
   });
 
   it("never echoes a raw error's .message — a failed pg_restore's message can carry the admin password", async () => {
@@ -315,6 +331,32 @@ describe("waitron-restore restore", () => {
     const printed = out.join("\n");
     expect(printed).not.toContain("S3CR3T-ADMIN-PASSWORD");
     expect(printed).not.toContain(leakedConnectionString);
-    expect(out).toEqual(["restore failed"]);
+    expect(out).toEqual([COLD_RESTORE_NOTICE, "restore failed"]);
+  });
+
+  it("reports restore.hook_failed with the module and the inner code, never a message", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "restore-command-hook-"));
+    const artifactPath = await makeArtifact(dir);
+    const out: string[] = [];
+    const code = await runRestore({
+      argv: ["restore", artifactPath],
+      env: {
+        WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
+        WAITRON_RESTORE_DATABASE_URL: DATABASE_URL,
+        WAITRON_ENV: "preproduction",
+      },
+      out: (line) => out.push(line),
+      restore: async () => {
+        throw new AppError("restore.hook_failed", {
+          module: "fiscal",
+          code: "series.code_too_long",
+        });
+      },
+    });
+    expect(code).toBe(1);
+    expect(out).toEqual([
+      expect.stringMatching(/^cold restore: use only when no peer/),
+      "restore failed: restore.hook_failed (module fiscal: series.code_too_long)",
+    ]);
   });
 });

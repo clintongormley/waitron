@@ -112,24 +112,21 @@ describe("adoptVenue", () => {
   });
 
   it("revives an ISO-string created_at (the JSON round-trip shape) into a Date the insert accepts", async () => {
-    // A real mirror bundle crosses HTTP as JSON (`assembleMirrorBundle` selects full rows including every
-    // date-mode timestamp(mode:"date") column — `created_at` on `tenants`, `nodes` AND `tills`; the
-    // endpoint `c.json`s them and `fetchMirrorBundle` `response.json()`s them back), so `createdAt` arrives
-    // as an ISO STRING, not a Date. Without `reviveRow` Drizzle's date-mode insert calls `.toISOString()`
-    // on that string and throws `TypeError: value.toISOString is not a function` — the bug the headline
-    // adopt e2e surfaced, invisible to the hand-built fixtures above (they omit `createdAt`). `reviveRow`
-    // is schema-driven (`getTableColumns`, `dataType === "date"`), so every parent table with a date-mode
-    // column is covered; this pins the three that have one (`tills` included), and that a table WITHOUT a
-    // date column (`locations`/`invoice_series` here) passes through untouched. Deletion-proof: make
-    // `reviveRow` return its row unchanged and this throws the TypeError.
+    // Bundle timestamps arrive as ISO strings. Drizzle's date-mode inserts need Dates, so
+    // schema-driven revival covers created_at on tenants, nodes and tills, plus retired_at on
+    // invoice_series. Locations has no date column and passes through unchanged.
+    // Deletion-proof: make `reviveRow` return its row unchanged and this throws `TypeError: value.toISOString is not a function`.
     const { rows, designated } = makeRows();
     const stamp = "2026-01-02T03:04:05.000Z";
     rows.tenant.createdAt = stamp;
     rows.nodes[0]!.createdAt = stamp;
     rows.tills[0]!.createdAt = stamp;
+    rows.invoiceSeries[0]!.retiredAt = stamp;
 
-    await expect(adoptVenue(rows, designated, { db: suite.db })).resolves.toEqual(designated);
-    // The three date-mode tables, each read back by its own id (tenants keys on id, not tenant_id).
+    await expect(
+      adoptVenue(JSON.parse(JSON.stringify(rows)) as typeof rows, designated, { db: suite.db }),
+    ).resolves.toEqual(designated);
+    // The three created_at values, each read back by its own id (tenants keys on id, not tenant_id).
     for (const [table, id] of [
       ["tenants", designated.tenantId],
       ["nodes", designated.nodeId],
@@ -140,15 +137,17 @@ describe("adoptVenue", () => {
       );
       expect(new Date(r.rows[0]!.ts).toISOString()).toBe(stamp);
     }
-    // The no-date-column rows (locations, invoice_series) were inserted unchanged — the pass-through path.
+    // `locations` has no date column — the pass-through path.
     const l = await suite.db.execute(
       sql`select id from locations where id = ${designated.locationId}`,
     );
     expect(l.rows).toHaveLength(1);
-    const s = await suite.db.execute<{ n: number }>(
-      sql`select count(*)::int as n from invoice_series where tenant_id = ${designated.tenantId}`,
+    // `invoice_series.retired_at` crosses the bundle as an ISO string and lands as a timestamp.
+    const s = await suite.db.execute<{ n: number; ts: string | null }>(
+      sql`select count(*)::int as n, min(retired_at)::text as ts from invoice_series where tenant_id = ${designated.tenantId}`,
     );
-    expect(s.rows[0].n).toBe(2);
+    expect(s.rows[0]!.n).toBe(2);
+    expect(new Date(s.rows[0]!.ts!).toISOString()).toBe(stamp);
   });
 
   it("nulls the out-of-scope FK columns (locations.catalogue_id, tills.receipt_printer_id) even when the bundle carried non-null values", async () => {

@@ -1,5 +1,16 @@
 # Cold-restore runbook — rebuild a single box after total loss (onboarding slice 4b-iii)
 
+> **2026-09-06 (SP-3d):** This is the historical manual procedure. For an encrypted `.backup.enc`
+> archive, use `waitron-restore restore <artifact-path>` into a fresh database before booting; it
+> restores the database and media, migrates, opens a fresh chain and disjoint series for a node that
+> was filing, and writes `trading.env` last. Do not run step 3 after the CLI. The restored
+> `trading.env` carries the DEAD box's connection strings: after the restore and before boot, edit
+> them for the replacement box (editing before the restore is lost — the CLI writes the artifact's
+> file back). `WAITRON_ADVERTISED_ORIGIN` is process environment, not a `trading.env` key: set it on
+> the replacement box yourself; the CLI never touches it. See the [SP-3d
+> design](../specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md) §2 and §5. The manual steps
+> below remain as history, not the current procedure.
+
 > **This is an operator runbook, executed by a human at a terminal during a disaster.** It turns the
 > approved design (`docs/superpowers/specs/2026-08-29-promotion-runbook-design.md` §5d) into a concrete
 > step-by-step procedure against the tooling that is **actually built today** (4b-i recovery bundle
@@ -83,6 +94,12 @@ stamp disagrees with the host's `WAITRON_ENV` — this is the environment handsh
 legitimate fence, not an obstacle: restore into the **same** environment the box ran in.
 
 ### 3. Mint a FRESH SIF — THE POINT OF NO RETURN
+
+> **2026-09-06 (SP-3d):** `waitron-restore` now performs the fresh-chain step inside restore, floors
+> the installation allocator by the clock, retires the old series and selects a fresh live series in
+> `trading.env`. Do not follow it with `register-till`; see the [SP-3d
+> design](../specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md) §3–§5.
+
 Before the box serves a single sale, mint a new fiscal identity for the node. Use the standalone
 **`register-till`** script — **not** the setup wizard. The wizard's `POST /setup-api/provision`
 deliberately refuses on a restored database (`setup.already_provisioned` — the tenant already exists),
@@ -131,6 +148,13 @@ casually — each run mints yet another installation number and starts yet anoth
 > same-day post-backup invoices as at risk of a number collision and reconcile them at month-end
 > alongside the lost tail (step 6). *(Backlog follow-up: a disjoint-series option for the cold-restore
 > re-registration path.)*
+
+> **2026-09-06 (SP-3d):** The gap above is closed by `waitron-restore` on this branch. Its statement
+> that error `3000` backstops collisions overstates the protection: our parser maps a duplicate
+> reported as `Correcta` to accepted without comparing the hash. Fresh, disjoint series prevent
+> reusing that invoice identity; see the [SP-3d
+> design](../specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md) §3.2 and the code
+> references there.
 
 ### 4. Unlock the key ring (only if you set a boot passphrase)
 If the box was configured with an optional boot passphrase, enter it now so the vault unseals and the

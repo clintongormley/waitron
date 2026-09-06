@@ -871,6 +871,24 @@ describe("recordSale — series validation", () => {
       params: { seriesId: rectSeriesId, expected: "standard", actual: "rectificative" },
     });
   });
+
+  it("rejects a RETIRED series: a restored box must never number from the series it was restored with", async () => {
+    // A cold restore retires the node's series and opens fresh ones; a stale `WAITRON_TILL_SERIES_ID`
+    // (spec 2026-09-06-module-sp3d §5) must fail LOUD here, never issue a number the tax agency saw.
+    const retiredAt = new Date("2026-09-06T10:00:00.000Z");
+    await suite.db.update(invoiceSeries).set({ retiredAt }).where(eq(invoiceSeries.id, seriesId));
+    try {
+      await expect(run(new FakeFiscalBackend(suite.db))).rejects.toMatchObject({
+        code: "sale.series_retired",
+        params: { seriesId, retiredAt: retiredAt.toISOString() },
+      });
+    } finally {
+      await suite.db
+        .update(invoiceSeries)
+        .set({ retiredAt: null })
+        .where(eq(invoiceSeries.id, seriesId));
+    }
+  });
 });
 
 describe("recordSale — working order linkage", () => {

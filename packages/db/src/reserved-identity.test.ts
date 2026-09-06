@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { isAppError, locationId as brandLocationId } from "@waitron/shared";
 import type { LocationId, TenantId } from "@waitron/shared";
@@ -11,6 +11,9 @@ import {
   readMembershipTrustSet,
   readNodeEndorsement,
   readStandardSeriesId,
+  readStandardSeriesIdTx,
+  retireNodeSeriesTx,
+  insertNodeSeriesTx,
   withTenant,
 } from "./index.js";
 import { invoiceSeries } from "./schema/series.js";
@@ -118,9 +121,126 @@ describe("reserved-identity accessors", () => {
     expect(row).toEqual({ code: "F-42", purpose: "standard" });
   });
 
+  it("readStandardSeriesIdTx refuses a node belonging to a different tenant argument", async () => {
+    // PGlite bypasses RLS, so the helper's own tenant predicate must reject this mismatched pair.
+    const node = await seedNode(suite.db, tenantId, locationId);
+    const otherTenant = await seedTenant(suite.db);
+    await withTenant(suite.db, tenantId, (tx) =>
+      insertReservedSeriesTx(tx, [{ tenantId, nodeId: node, code: "FA", purpose: "standard" }]),
+    );
+    await expect(
+      withTenant(suite.db, tenantId, (tx) => readStandardSeriesIdTx(tx, otherTenant, node)),
+    ).rejects.toMatchObject({
+      code: "series.no_standard_for_node",
+      params: { tenantId: otherTenant, nodeId: node },
+    });
+    await expect(
+      withTenant(suite.db, tenantId, (tx) => readStandardSeriesIdTx(tx, tenantId, node)),
+    ).resolves.toEqual(expect.any(String));
+  });
+
   it("readStandardSeriesId throws series.no_standard_for_node when the node has none", async () => {
     const bareNode = await seedNode(suite.db, tenantId, locationId);
     const err = await captureError(() => readStandardSeriesId(suite.db, tenantId, bareNode));
     expect(isAppError(err) && err.code).toBe("series.no_standard_for_node");
+  });
+
+  it("readStandardSeriesId ignores a RETIRED standard series (a cold restore retires the old one)", async () => {
+    const node = await seedNode(suite.db, tenantId, locationId);
+    await withTenant(suite.db, tenantId, (tx) =>
+      insertReservedSeriesTx(tx, [
+        { tenantId, nodeId: node, code: "FA", purpose: "standard" },
+        { tenantId, nodeId: node, code: "FA-210441234", purpose: "standard" },
+      ]),
+    );
+    await suite.db
+      .update(invoiceSeries)
+      .set({ retiredAt: new Date() })
+      .where(and(eq(invoiceSeries.nodeId, node), eq(invoiceSeries.code, "FA")));
+    const id = await readStandardSeriesId(suite.db, tenantId, node);
+    const [row] = await suite.db
+      .select({ code: invoiceSeries.code })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.id, id));
+    expect(row?.code).toBe("FA-210441234");
+  });
+
+  it("readStandardSeriesId is LOUD on two live standard series (a data-integrity corruption)", async () => {
+    const node = await seedNode(suite.db, tenantId, locationId);
+    await withTenant(suite.db, tenantId, (tx) =>
+      insertReservedSeriesTx(tx, [
+        { tenantId, nodeId: node, code: "X1", purpose: "standard" },
+        { tenantId, nodeId: node, code: "X2", purpose: "standard" },
+      ]),
+    );
+    await expect(readStandardSeriesId(suite.db, tenantId, node)).rejects.toThrow(
+      /more than one standard series/,
+    );
+  });
+
+  it("retireNodeSeriesTx retires every LIVE series of the node and only those", async () => {
+    const node = await seedNode(suite.db, tenantId, locationId);
+    const other = await seedNode(suite.db, tenantId, locationId);
+    await withTenant(suite.db, tenantId, (tx) =>
+      insertReservedSeriesTx(tx, [
+        { tenantId, nodeId: node, code: "FA", purpose: "standard" },
+        { tenantId, nodeId: node, code: "RE", purpose: "rectificative" },
+        { tenantId, nodeId: other, code: "FA", purpose: "standard" },
+      ]),
+    );
+    const retired = await withTenant(suite.db, tenantId, (tx) =>
+      retireNodeSeriesTx(tx, tenantId, node),
+    );
+    expect(retired).toBe(2);
+    const rows = await suite.db
+      .select({ nodeId: invoiceSeries.nodeId, retiredAt: invoiceSeries.retiredAt })
+      .from(invoiceSeries)
+      .where(inArray(invoiceSeries.nodeId, [node, other]));
+    expect(rows.filter((r) => r.nodeId === node).every((r) => r.retiredAt !== null)).toBe(true);
+    expect(rows.filter((r) => r.nodeId === other).every((r) => r.retiredAt === null)).toBe(true);
+    // Idempotent on the already-retired: nothing left to retire.
+    expect(
+      await withTenant(suite.db, tenantId, (tx) => retireNodeSeriesTx(tx, tenantId, node)),
+    ).toBe(0);
+  });
+
+  it("insertNodeSeriesTx refuses duplicate codes within a batch with a domain error", async () => {
+    const node = await seedNode(suite.db, tenantId, locationId);
+    await expect(
+      withTenant(suite.db, tenantId, (tx) =>
+        insertNodeSeriesTx(tx, tenantId, node, [
+          { code: "FA-7", purpose: "standard" },
+          { code: "FA-7", purpose: "rectificative" },
+        ]),
+      ),
+    ).rejects.toMatchObject({ code: "series.code_collision", params: { code: "FA-7" } });
+  });
+
+  it("insertNodeSeriesTx inserts at next_number 1 and refuses a code the node holds, live OR retired", async () => {
+    const node = await seedNode(suite.db, tenantId, locationId);
+    await withTenant(suite.db, tenantId, (tx) =>
+      insertReservedSeriesTx(tx, [{ tenantId, nodeId: node, code: "FA", purpose: "standard" }]),
+    );
+    await withTenant(suite.db, tenantId, (tx) => retireNodeSeriesTx(tx, tenantId, node));
+    await withTenant(suite.db, tenantId, (tx) =>
+      insertNodeSeriesTx(tx, tenantId, node, [{ code: "FA-7", purpose: "standard" }]),
+    );
+    const [fresh] = await suite.db
+      .select({ nextNumber: invoiceSeries.nextNumber, retiredAt: invoiceSeries.retiredAt })
+      .from(invoiceSeries)
+      .where(and(eq(invoiceSeries.nodeId, node), eq(invoiceSeries.code, "FA-7")));
+    expect(fresh).toEqual({ nextNumber: 1, retiredAt: null });
+    // Both the retired FA and the live FA-7 reserve their codes.
+    for (const code of ["FA", "FA-7"]) {
+      const err = await captureError(() =>
+        withTenant(suite.db, tenantId, (tx) =>
+          insertNodeSeriesTx(tx, tenantId, node, [{ code, purpose: "standard" }]),
+        ),
+      );
+      expect(isAppError(err) && err.code).toBe("series.code_collision");
+      expect(isAppError(err) && err.params).toEqual({ code });
+    }
+    // An empty list is a no-op, not an INSERT with no rows.
+    await withTenant(suite.db, tenantId, (tx) => insertNodeSeriesTx(tx, tenantId, node, []));
   });
 });

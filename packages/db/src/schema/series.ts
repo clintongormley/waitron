@@ -6,6 +6,7 @@ import {
   integer,
   pgTable,
   text,
+  timestamp,
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -61,6 +62,10 @@ export const invoiceSeries = pgTable(
     code: text("code").notNull(),
     purpose: text("purpose").notNull().default("standard"),
     nextNumber: integer("next_number").notNull().default(1),
+    // Set when the series stops numbering: a cold restore retires every live series of the node and
+    // opens fresh ones (spec 2026-09-06-module-sp3d §3.2). A retired series stays for history — sales
+    // reference it by id — and the write paths refuse to number from it.
+    retiredAt: timestamp("retired_at", { withTimezone: true, mode: "date" }),
   },
   (t) => [
     unique("invoice_series_node_code_key").on(t.tenantId, t.nodeId, t.code),

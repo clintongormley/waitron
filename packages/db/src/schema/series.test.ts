@@ -159,6 +159,7 @@ describeEachTarget("invoice_series schema", (target) => {
       "next_number",
       "node_id",
       "purpose",
+      "retired_at",
       "tenant_id",
     ]);
   });

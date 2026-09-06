@@ -6,7 +6,7 @@ import type { ProvisionedNode } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TENANT_A, seedTenants } from "../test/fixtures.js";
 import { FISCAL_PROVISIONING, WAITRON_ID_SISTEMA } from "./provisioning.js";
-import { ID_SISTEMA_MAX_LENGTH, currentSif } from "./registro-sif.js";
+import { ID_SISTEMA_MAX_LENGTH, currentSif, registerSif } from "./registro-sif.js";
 
 let db: Awaited<ReturnType<typeof createPgliteDb>>;
 
@@ -82,6 +82,31 @@ describe("FISCAL_PROVISIONING.standby", () => {
       insert into invoice_series (tenant_id, node_id, code, purpose) values
         (${TENANT_A.id}, ${TENANT_A.nodeId}, 'FA', 'standard'),
         (${TENANT_A.id}, ${TENANT_A.nodeId}, 'RF', 'rectificative')`);
+  });
+
+  it("reserve derives from the primary's LIVE series bases: a restored primary's `FA-<n>` gives the standby `FA-<m>`, not `FA-<n>-<m>`", async () => {
+    await db.execute(sql`delete from invoice_series where node_id = ${TENANT_A.nodeId}`);
+    const primarySif = await withTenant(db, TENANT_A.id, (tx) =>
+      registerSif(tx, {
+        tenantId: TENANT_A.id,
+        nodeId: TENANT_A.nodeId,
+        nif: "89890001K",
+        idSistemaInformatico: WAITRON_ID_SISTEMA,
+      }),
+    );
+    // What a restored primary holds: `FA` retired, `FA-<its installation number>` and `RE-<n>` live.
+    await db.execute(sql`
+      insert into invoice_series (tenant_id, node_id, code, purpose, retired_at) values
+        (${TENANT_A.id}, ${TENANT_A.nodeId}, 'FA', 'standard', now()),
+        (${TENANT_A.id}, ${TENANT_A.nodeId}, ${`FA-${primarySif.numeroInstalacion}`}, 'standard', null),
+        (${TENANT_A.id}, ${TENANT_A.nodeId}, ${`RE-${primarySif.numeroInstalacion}`}, 'rectificative', null)
+    `);
+    const reservation = await withTenant(db, TENANT_A.id, (tx) => standby.reserve(tx, NODE));
+    const m = (reservation.state as { numeroInstalacion: number }).numeroInstalacion;
+    expect(reservation.series).toEqual([
+      { code: `FA-${m}`, purpose: "standard" },
+      { code: `RE-${m}`, purpose: "rectificative" },
+    ]);
   });
 
   it("reserves a fresh number and derives disjoint series codes from the primary's", async () => {

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
-import { orderedMigrationSets, packageDirOf, type WaitronModule } from "./index.js";
+import {
+  orderedMigrationSets,
+  packageDirOf,
+  type RestoreHook,
+  type WaitronModule,
+} from "./index.js";
 
 const mod = (name: string, requires?: WaitronModule["requires"]): WaitronModule => ({
   name,
@@ -19,6 +24,31 @@ function thrownCode(fn: () => unknown): string | false {
     return isAppError(error) ? error.code : false;
   }
 }
+
+describe("backup.restore seat", () => {
+  it("is a typed hook: (tx, node) => RestoreOutcome, and a module may omit it", async () => {
+    const hook: RestoreHook = async (_tx, node) => ({
+      report: `restored ${node.nodeId}`,
+      series: [{ code: "A-1", purpose: "standard" }],
+    });
+    const withHook: WaitronModule = {
+      ...mod("x"),
+      backup: { restore: hook },
+    };
+    const without: WaitronModule = { ...withHook, backup: {} };
+    expect(typeof withHook.backup?.restore).toBe("function");
+    expect(without.backup?.restore).toBeUndefined();
+    const outcome = await withHook.backup!.restore!({} as never, {
+      tenantId: "t" as never,
+      locationId: "l" as never,
+      nodeId: "n" as never,
+    });
+    expect(outcome).toEqual({
+      report: "restored n",
+      series: [{ code: "A-1", purpose: "standard" }],
+    });
+  });
+});
 
 describe("orderedMigrationSets", () => {
   it("maps dependency-free modules in list order (no edges → input order preserved)", () => {

@@ -64,6 +64,11 @@ a set you only ever add to, and restore is set-reconciliation.
 
 ## 2. Scope
 
+> **2026-09-06 (SP-3d):** The deferred fiscal restore body and context-only hook shape below are
+> superseded on this branch: the fiscal module fills a typed `RestoreHook(tx, node)` contribution.
+> See the [SP-3d design](2026-09-06-module-sp3d-fiscal-restore-hook-design.md) §4 and §6; owner
+> approval is still required before land.
+
 **Build now: the generic backup/restore mechanism, complete for the box's own state, with the module and
 storage seams in place — but not the fiscal fresh-chain reintegration.** Concretely: pluggable storage
 with fan-out, recovery-key encryption, the manifest, a `backup` contribution kind on the module contract,
@@ -197,6 +202,13 @@ backend → prune per `retain` → report per-destination freshness to `/health`
 
 ### The restore consumer (new)
 
+> **2026-09-06 (SP-3d):** The order below is historical. The consumer validates identity
+> completeness before setting the old identity aside, restores DB and media, migrates, runs typed
+> module hooks and settles series in one transaction, then writes secrets last. Rejoin migrates but
+> skips the identity changes and hooks. See the [SP-3d
+> design](2026-09-06-module-sp3d-fiscal-restore-hook-design.md) §4–§5; this also supersedes the
+> restore-order bullet in §5 below.
+
 Read + verify the manifest → compatibility gate → decrypt → `pg_restore` into the fresh database →
 restore blobs into `mediaDir` → restore secrets into `stateDir` → run each enabled module's `restore`
 hook. Exposed as a CLI verb and as the programmatic entry that R3 rejoin and the onboarding/adopt paths
@@ -241,6 +253,11 @@ call.
 
 ## 7. Decomposition and build order
 
+> **2026-09-06 (SP-3d):** BR-4 is built on `feat/module-sp3d-fiscal-restore-hook`, pending PR and
+> owner approval (H2). It fills the module hook with fresh-chain and disjoint-series creation;
+> promote-Slice-4's remaining work is the operator surface. See the [SP-3d
+> design](2026-09-06-module-sp3d-fiscal-restore-hook-design.md) §2 and §6.
+
 Each is its own spec → plan → build → PR. Build order BR-1 → BR-2 → BR-3, each landing standalone value.
 
 - **BR-1 — Storage abstraction + fan-out + encryption.** Extract today's local-dir write behind
@@ -263,6 +280,13 @@ Each is its own spec → plan → build → PR. Build order BR-1 → BR-2 → BR
   `docs/backlog.md`: `registerSif` does not freshen the invoice **series**, and AEAT dedups on
   `(NIF, series, date, número)`, so a same-day post-backup number collision needs a **disjoint-series
   option** on the re-registration path, backstopped by AEAT error `3000`). Delivered in BR-4 / with SP-3.
+
+  > **2026-09-06 (SP-3d):** The hook body is built on this branch. The error-`3000` claim above
+  > overstates the protection: our parser accepts a duplicate reported as `Correcta` without
+  > comparing the hash. The hook opens disjoint series to avoid reusing that identity; see the
+  > [SP-3d design](2026-09-06-module-sp3d-fiscal-restore-hook-design.md) §3.2 and its code
+  > references.
+
 - **Incremental backups** — base + `sync_log` deltas; content-addressed blobs are already dedupable. The
   artifact model and `manifest.baseRef` keep it open; v1 is full snapshots.
 - **Offsite `StorageBackend` implementations** — S3 / object-store / SFTP / cloud. The interface ships;

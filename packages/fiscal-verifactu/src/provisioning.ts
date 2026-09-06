@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { invoiceSeries, tenants, type Transaction } from "@waitron/db";
+import { tenants, type Transaction } from "@waitron/db";
 import type { ModuleProvisioning, ProvisionedNode, StandbyReservation } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 // Side-effect only: registers this package's `sif.*` codes on the shared registry. See ./errors.ts.
@@ -11,7 +11,7 @@ import {
   reserveInstallationNumber,
   writeReservedSif,
 } from "./registro-sif.js";
-import { deriveReservedSeriesCodes } from "./reserved-series.js";
+import { deriveReservedSeriesCodes, liveSeriesBases } from "./reserved-series.js";
 
 /** Waitron's own AEAT-registered software identifier (FAQ §4, ≤ 2 chars): a product constant, never
  * operator input. It reaches `registro_sif.id_sistema_informatico` through `registerSif` and, from
@@ -102,20 +102,17 @@ export const FISCAL_PROVISIONING: ModuleProvisioning = {
   standby: {
     async reserve(tx, primary): Promise<StandbyReservation> {
       const primarySif = await currentSif(tx, primary.tenantId, primary.nodeId);
+      const bases = await liveSeriesBases(tx, primary);
       const numeroInstalacion = await reserveInstallationNumber(tx, {
         nif: primarySif.nif,
         idSistemaInformatico: primarySif.idSistemaInformatico,
       });
-      const primarySeries = await tx
-        .select({ code: invoiceSeries.code, purpose: invoiceSeries.purpose })
-        .from(invoiceSeries)
-        .where(eq(invoiceSeries.nodeId, primary.nodeId));
       const state: ReservedSifState = {
         nif: primarySif.nif,
         idSistemaInformatico: primarySif.idSistemaInformatico,
         numeroInstalacion,
       };
-      return { state, series: deriveReservedSeriesCodes(primarySeries, numeroInstalacion) };
+      return { state, series: deriveReservedSeriesCodes(bases, numeroInstalacion) };
     },
     async establish(tx, standby, state) {
       const reserved = parseReservedState(state);

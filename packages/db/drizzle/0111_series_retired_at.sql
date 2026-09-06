@@ -1,0 +1,1 @@
+ALTER TABLE "invoice_series" ADD COLUMN "retired_at" timestamp with time zone;

@@ -45,6 +45,14 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    /**
+     * A restore or standby reservation rejects a base over `MAX_BASE_CODE_LENGTH`, leaving room
+     * within the 60-character `NumSerieFactura` cap for `-<installation number>/<counter>` with
+     * ten digits each. The restore hook throws inside its transaction; on rollback, nothing it
+     * wrote persists. `series.*` names the concept, never the package.
+     */
+    "series.code_too_long": { code: string };
+
     /** Thrown by `currentSif` for a node with no LIVE `registro_sif` row — never provisioned, or
      * provisioned once and then revoked by a re-registration that has not yet completed (node-id
      * rekey, 2026-08-03: the SIF is the node, #33). The concrete encoding of "a node cannot be

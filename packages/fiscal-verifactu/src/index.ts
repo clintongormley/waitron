@@ -30,3 +30,11 @@ export type {
   RegistroRowInsert,
 } from "./registro-row.js";
 export { verifyChain } from "./verify.js";
+
+export {
+  FISCAL_RESTORE,
+  installationFloor,
+  raiseInstallationFloor,
+  restoreFiscal,
+} from "./restore.js";
+export { liveSeriesBases, MAX_BASE_CODE_LENGTH, stripOwnSuffixes } from "./reserved-series.js";

@@ -41,9 +41,11 @@ The till is a same-origin front end: run the server's till API on `:8080` and th
    join locations l on l.tenant_id = t.id
    join tills ti on ti.tenant_id = t.id and ti.location_id = l.id
    join nodes n on n.tenant_id = t.id and n.location_id = l.id
-   join invoice_series s on s.tenant_id = t.id and s.node_id = n.id and s.purpose = 'standard'
+   join invoice_series s on s.tenant_id = t.id and s.node_id = n.id and s.purpose = 'standard' and s.retired_at is null
    where t.tax_id = '50000000K';
    ```
+
+   A cold restore rewrites `trading.env` with your new live series id automatically.
 
 3. **Boot the server** with those ids as the `WAITRON_TILL_*` env. This is the normal server boot
    ([server README](../server/README.md#running-it)) — the credential key ring, migrations database

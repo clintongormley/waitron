@@ -333,7 +333,7 @@ All three decisions are now taken.
 screens, `apps/server/src/modules.ts` (the maps derived from that list), and the control-plane docs):
 
 1. **Finish fiscal as a module:** SP-3b vocabulary (landed #240), SP-3c gated-provisioning seam (landed #245),
-   SP-3d backup/restore hook (= BR-4) — the queued slices under
+   SP-3d backup/restore hook (= BR-4), on branch with PR pending and owner-gated (H2); see
    *Waitron module system*.
 2. **`fiscal-none` module** (tiny; the UK case; forces every chain/huella/`entorno` assumption
    through the `FiscalBackend` seam — a better pluggability proof than TicketBAI). Put the two agreed
@@ -858,7 +858,10 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
       "unreachable" sentence would be true. (d) `packages/verifactu` still states the software-id cap as a
       bare `2` inside `validate` and exports no constant; `ID_SISTEMA_MAX_LENGTH` now lives once in
       `packages/fiscal-verifactu/src/registro-sif.ts` — export the cap from `packages/verifactu` when
-      either is next touched. **Yardstick data (built under the seat rule in force when the branch started
+      either is next touched. (e) The provisioning seed opens `withTenant` without `{ nodeId }`
+      (`packages/provisioning/src/venue-apply.ts`), so its captured fiscal rows carry the all-zero origin;
+      same class as the SP-3d review's Major 1. Fix with the first standby that adopts from a freshly
+      provisioned primary. **Yardstick data (built under the seat rule in force when the branch started
       — Opus implementers, Fable reviewers — before the 2026-09-06 Codex rule):** fix rounds before land:
       Task 4 ×3 (wire-input validation and its doc wording), Tasks 6 and 9 ×1 each, one simplify wave (13
       items), one whole-branch fix wave (23 findings across two reviewers); false claims found at
@@ -866,9 +869,14 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
       imports invisible to the seams guard, an over-claiming composition header, a bare `TypeError` on a
       keyless bundle, an "unreachable" that a misconfigured env reaches) plus the convention reviewer's
       "every write path" and "no caller can" absolutes — all fixed on the branch. Copilot: off.
-  - **SP-3d — fiscal backup/restore contribution (= BR-4).** Fill the module `backup.restore` seat with the
-    fresh-chain / disjoint-series behaviour that lets a restored box trade again as primary (cold-DR),
-    never resuming the dead chain. Unblocked by SP-3a's module seams (see the Backup & restore section).
+  - **SP-3d — on branch, PR pending, owner-gated (H2).** Fiscal backup/restore contribution (= BR-4):
+    for a node that was filing, the module `backup.restore` hook floors the installation counter by
+    the clock, mints a fresh chain and derives disjoint series codes. The restore orchestrator retires
+    the old series, opens the replacements and writes the restored identity after the transaction
+    commits. Built on
+    `feat/module-sp3d-fiscal-restore-hook`; [design](superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md).
+    **Yardstick pending `/finish-branch`:** record fix rounds per task and false claims found at
+    whole-branch review, then add the PR number.
 - **SP-4 — module UI surface** (card-registry inversion + self-sourcing cards + fiscal's cards) — **after
   B3.2** (shares `@waitron/layouts` / `apps/till` card-grid).
 
@@ -881,8 +889,7 @@ receipt each time: nothing is genuinely toggleable yet, so there is no live case
 against) — both are built alongside the first genuinely-toggleable module. **SP-3a (fiscal-record sync
 lane) LANDED #238 (2026-09-05)** — H2's fiscal-record lane is delivered. **SP-3b (vocabulary) LANDED
 #240 (2026-09-05)** and **SP-3c (gated-provisioning seam) LANDED #245
-(2026-09-06)**, leaving **SP-3d (backup-restore hook = BR-4)** as the open
-module slice. `fiscal-none` (Track C item 2) follows SP-3c: it fills the same two seats and designs the
+(2026-09-06)**, leaving **SP-3d (backup-restore hook = BR-4)** on branch, PR pending and owner-gated (H2). `fiscal-none` (Track C item 2) follows SP-3c: it fills the same two seats and designs the
 runtime-duty seat SP-3c deferred. **SP-4** waits for B3.2.
 
 ### Product work still open (beneath the two tracks)
@@ -1415,7 +1422,7 @@ vs gated on an unbuilt foundation or an external dependency:
   (on-device agent); and the **owner-gated fiscal H2** hash-chain sync lane — never landed without
   owner sign-off.
 
-### Backup & restore regime (BR-1 #226 + BR-2 #228 + BR-3 #232 LANDED; only BR-4 remains — now = SP-3d, UNBLOCKED by SP-3a #238)
+### Backup & restore regime (BR-1 #226 + BR-2 #228 + BR-3 #232 LANDED; BR-4 = SP-3d — on branch, PR pending, owner-gated (H2))
 
 A generic core backup/restore service (storage-media plugins + module hooks), decomposed BR-1..BR-4.
 Design: [backup-restore-regime](superpowers/specs/2026-09-04-backup-restore-regime-design.md); BR-1 plan:
@@ -1444,12 +1451,18 @@ Design: [backup-restore-regime](superpowers/specs/2026-09-04-backup-restore-regi
   `collectModuleNonDbState`; the orchestrator collects manifest+secrets+media **before** the dump
   (fail-fast, no wasted dump) and encrypts once. Rebased cleanly onto **SP-2** (`core` carries both `sync`
   and `backup`). `restore` stays a seat (BR-3/BR-4).
+
+  > **2026-09-06 (SP-3d):** The restore contribution is now a typed transaction hook, populated by
+  > the fiscal module on this branch; see the [SP-3d
+  > design](superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md) §4.
+
   - *BR-2 carry-forwards:* **BR-3 must add path-traversal guards on archive entry NAMES at unpack-to-disk
     time** (like `unpackBundleToDir`/`state-secrets.ts`), plus BR-1's deferred `StorageBackend`-key guard.
     Deferred edges (note-only): a working-backup boot success-path integration test; scope the flat
     `resolvers` map by module when a 2nd `nonDbState` module lands; `packArchive` pack-time `entries.length`
     bound.
-- **BR-3 — the restore consumer — LANDED #232 (2026-09-05).** `decrypt` → `unpackArchive` → **compatibility
+- **BR-3 — the restore consumer — LANDED #232 (2026-09-05).** (Superseded; see the SP-3d note below.)
+  `decrypt` → `unpackArchive` → **compatibility
   gate** (env + module schema-version vs the restoring binary) → **entry-name path-traversal guard**
   (lexical + realpath, shared with `unpackBundleToDir`, all entries before any write) → `pg_restore`
   (`--no-owner`, password via `PGPASSWORD` env not argv) into a fresh DB → restore media/secrets → invoke
@@ -1465,12 +1478,18 @@ Design: [backup-restore-regime](superpowers/specs/2026-09-04-backup-restore-regi
     pre-created fresh DB); a manifest-shape coded refusal (fails safe under GCM auth today); generalizing
     entry routing off declared source ids (a fail-visible `restore.unexpected_entry` reject is in; full
     generalization when a 2nd non-DB `nonDbState` source lands).
-- **BR-4 — fiscal restore hook (fresh chain / disjoint series) — the ONLY remaining backup-regime slice;
-  now scoped as SP-3d (folded into SP-3, owner decision 2026-09-05). UNBLOCKED — SP-3a (#238) landed the
-  fiscal module seams it was gated on.** Fills the empty v1 restore-hook seat BR-3 ships (the module
-  `backup.restore` seat); mints a fresh chain / disjoint series so a restored box trades again as primary
-  without resuming the dead chain; unblocks promote-Slice-4 cold-DR trading-again-as-primary. Owner-gated
-  (H2). Built as SP-3d — see the module-system section's SP-3 breakdown.
+
+  > **2026-09-06 (SP-3d):** The BR-3 description above records its shipped behaviour. Cold restore
+  > now migrates, runs hooks and settles fresh series in one transaction, then writes the identity
+  > last. Rejoin uses `validateArtifact` + `writeValidated` around its wipe, migrates, and skips
+  > identity replacement and hooks. `invokeRestoreHooks` has been replaced by `runRestoreHooks`; see
+  > the [SP-3d design](superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md) §5.
+
+- **BR-4 = SP-3d — on branch, PR pending, owner-gated (H2).** For a node that was filing, the fiscal
+  `backup.restore` hook mints a fresh chain and derives disjoint series codes; the restore orchestrator
+  opens those series. The mechanism is built on the branch;
+  promote-Slice-4 still needs its operator surface. See the module-system SP-3d row and
+  [design](superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md).
 
 **Remaining, each its own design pass:**
 
@@ -1652,11 +1671,7 @@ the config export/import surface for mode 3 (and its fresh-chain guarantee), how
 `WAITRON_ENV` / `devMode` / provisioning, and where the Square/CSV importer slots in. Modes 1–2 are
 mostly a UX wrapper over built paths; modes 3–4 carry the real new work.
 
-**Cold-restore follow-up (from 4b-iii):** `register-till`/`registerSif` do NOT freshen the invoice
-**series**, but AEAT dedup keys on `(NIF, series, date, número)` (not the installation number), so the
-design's "disjoint series on re-mint" is unmet — a same-day post-backup invoice-number **collision**
-risk (non-catastrophic, backstopped by AEAT error `3000`; NOT the chain fork). Add a **disjoint-series
-option** for the cold-restore re-registration path.
+**Cold-restore follow-up (from 4b-iii):** closed by SP-3d on branch; [fresh chain and disjoint series](superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md), owner-gated (H2).
 
 **Load-bearing constraints for the firmware slices (5–7, parked — AP-mode / OS image / paid real-cert):**
 
@@ -1750,7 +1765,9 @@ the re-gating of the singleton duties onto `isSingletonPrimary` (#168) are lande
   admin connection (gated on the break-glass mint; the write today uses `migrationsDatabaseUrl`,
   dev-correct only); **Slice 3** — mirror→primary + the worker-lifecycle manager that starts the
   primary-only workers on an in-process promotion (gated on reserved-SIF staging); **Slice 4** — cold
-  restore (gated on the backup regime's BR-3 restore consumer; BR-1 LANDED #226); **Slice 5** — rejoin-as-secondary + the conflict watcher (gated
+  restore (mechanism built on branch with SP-3d; remaining: the operator surface, §2 of the
+  [SP-3d spec](superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md): connection rebinding,
+  advertised origin, an authenticated entry); **Slice 5** — rejoin-as-secondary + the conflict watcher (gated
   on the membership wire-protocol).
 - **Split-brain** — largely worked through by the 2026-08-29 spec (server-level fencing §3.5, per-tab
   single-writer ownership §8, bounded worst case §8.4). Remaining seams: the promoted-node side while

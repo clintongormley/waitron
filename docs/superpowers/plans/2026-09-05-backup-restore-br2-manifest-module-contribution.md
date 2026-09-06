@@ -1,5 +1,10 @@
 # Backup/Restore BR-2 — manifest + module `backup` contribution (media + secrets capture) — Implementation Plan
 
+> **2026-09-06 (SP-3d):** The `restore?: unknown` seat shown below has become `RestoreHook(tx,
+> node): Promise<RestoreOutcome>` and is populated by the fiscal descriptor. The backup contribution
+> holds both non-DB sources and a restore hook; see the [SP-3d
+> design](../specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md) §4.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make a backup **complete** — a single encrypted archive per destination containing a manifest (module→schemaVersion + environment), the DB dump, the media blob store, and the on-box secrets — driven by a new `backup` contribution kind on the `WaitronModule` contract.

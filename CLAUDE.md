@@ -153,7 +153,11 @@ Traps, each of which cost a round trip:
 - **The four browser packages run vitest in real headless Chromium.** Never run two browser-mode
   gates at once, and never background `pnpm -r test:coverage` beside running subagents — two 65 GB
   RAM spikes and a force-quit on 2026-08-30. Lean on the scoped hook and CI; a whole-workspace local
-  run, if genuinely needed, runs alone with `--workspace-concurrency=2`.
+  run, if genuinely needed, runs alone with `--workspace-concurrency=1`. Chromium cannot launch
+  inside Codex's macOS sandbox
+  (`bootstrap_check_in org.chromium.Chromium.MachPortRendezvousServer: Permission denied (1100)`,
+  measured 2026-09-06), so a run that reaches a browser package is driven from the host, never
+  from a Codex seat.
 
 Bypassing the hook with `--no-verify` is for emergencies; the failure still has to be fixed because
 CI runs the same checks. A hook failure the PR does not reproduce is a check CI has deferred to the
@@ -341,7 +345,11 @@ _Reference_.
   records differing only in it hash identically. In `computeHuella` it would make every chain
   unverifiable under the other environment.
 - **Re-registering a node starts a new chain** and mints a fresh installation number. Correct for a
-  reimaged box, destructive for a working one.
+  reimaged box, destructive for a working one. A cold restore (`waitron-restore`) does it
+  automatically for a node that was filing: it floors the installation counter by the clock (the counter is in
+  the dump, so an older artifact would otherwise re-mint a number a previous restore used), retires
+  the node's invoice series and opens disjoint ones, and writes the box's identity only after that
+  commits — `docs/superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md`.
 
 ---
 

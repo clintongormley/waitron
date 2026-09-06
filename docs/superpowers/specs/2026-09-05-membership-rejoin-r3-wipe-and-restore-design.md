@@ -104,6 +104,12 @@ Only past the ladder:
    pass and only elides the secrets write. (BR-3 already exposes the composable steps and its
    `restoreSecrets` header notes "R3 … SKIPS this step"; the `skipSecrets` flag is the cleaner
    realisation of that intent, keeping the gate + guard as one source of truth.)
+
+   > **2026-09-06 (SP-3d):** `skipSecrets` also skips setting aside the existing identity and
+   > running module restore hooks. The shared write phase migrates the restored database before
+   > returning; rejoin still keeps its own identity. See the [SP-3d
+   > design](2026-09-06-module-sp3d-fiscal-restore-hook-design.md) §3.3 and §5.
+
 5. **Finish** — clean the staging dump (whether or not restore succeeded — it holds whole-DB
    plaintext), then instruct the operator to restart the node. On reboot the node reads its held
    membership document, finds itself still `sell-only`, and **fences again (R1)** — but now over the
@@ -184,6 +190,11 @@ fail-closed tripwire to enforce an ordering pre-production does not need (owner,
 - **Fiscal immutability survives the round-trip** — the BR-3 receipt shape, re-pinned here: a
   `registros_facturacion` row present in the restored baseline rejects a post-restore `UPDATE` with
   `WT001` (the trigger is restored active). Restore mints no chain and makes the box no trade-readier.
+
+  > **2026-09-06 (SP-3d):** The no-new-chain statement applies to rejoin with `skipSecrets:true`.
+  > Cold restore now runs the fiscal hook and opens disjoint series before writing the identity; see
+  > the [SP-3d design](2026-09-06-module-sp3d-fiscal-restore-hook-design.md) §5–§6.
+
 - **Package suites unfiltered** — run `@waitron/fiscal-verifactu`'s `inmutabilidad` suite after any
   schema-touching change and the full `apps/server` suite (a wire-body or boot change is invisible to a
   name-filtered run — CLAUDE.md §2/§4). This slice adds **no migration** (it reads existing membership /

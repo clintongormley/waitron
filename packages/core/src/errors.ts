@@ -130,6 +130,11 @@ declare module "@waitron/shared" {
      * purposes so a translator can say which was wanted. Matches `sale.series_wrong_node`'s shape
      * on purpose (both are "the series you named is real but unusable here"). */
     "sale.series_wrong_purpose": { seriesId: string; expected: string; actual: string };
+    /** Thrown when the series is real, on the right node and of the right kind, but RETIRED
+     * (`invoice_series.retired_at` set): a restore retired it and opened a replacement, so numbering
+     * from it would re-issue an invoice identity the tax agency may already hold. `retiredAt` is the
+     * ISO timestamp, for the operator's message. Same shape as its `sale.series_*` siblings. */
+    "sale.series_retired": { seriesId: string; retiredAt: string };
     /** Reserved for the constraint-violation translation `UNIQUE (tenant_id, series_id,
      * invoice_number)` produces when something outside the ordinary write path tries to reuse a
      * number that already reached a committed sale. Still not thrown anywhere in this package:

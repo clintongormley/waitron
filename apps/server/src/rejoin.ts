@@ -34,7 +34,8 @@ export interface RejoinDeps {
    * manifest/entry refuses with the database still intact — never wiped-but-not-restored. */
   readonly validate: () => Promise<ValidatedArtifact>;
   /** The destructive write phase of the restore (`writeValidated`), fed the validated pieces. Run
-   * AFTER the wipe with `skipSecrets:true` (the returning node keeps its own identity). */
+   * AFTER the wipe with `skipSecrets:true` (the returning node keeps its own identity:
+   * no set-aside, no secrets write, no module restore hook); migrates the restored database before returning. */
   readonly write: (validated: ValidatedArtifact) => Promise<void>;
   readonly log: Logger;
 }

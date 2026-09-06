@@ -300,6 +300,13 @@ and concatenating `series`. The fiscal module's `reserve` is today's inline bloc
 returning `{ state: { nif, idSistemaInformatico, numeroInstalacion }, series }`. The endorsement stays
 in the composition root (it is membership, not fiscal).
 
+> **2026-09-06 (SP-3d):** Standby reserve now reads the primary's live series bases before
+> reserving a number. It strips registered installation suffixes, deduplicates same-purpose
+> bases, keeps the original code when another purpose claims the stripped base, and checks the
+> resulting base length. An overlong base throws `series.code_too_long` before reservation.
+> See [SP-3d](2026-09-06-module-sp3d-fiscal-restore-hook-design.md) and
+> `packages/fiscal-verifactu/src/provisioning.ts` / `reserved-series.ts`.
+
 **Wire shape.** `ReservedIdentity` becomes
 
 ```ts

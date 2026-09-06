@@ -4,15 +4,16 @@ import type { MigrationSet } from "@waitron/migrations";
 import type { EnrolledTable } from "@waitron/sync-enrolment";
 import type { FiscalContribution } from "@waitron/fiscal";
 import type { ModuleProvisioning } from "./provisioning.js";
+import type { RestoreHook } from "./restore.js";
 import "./errors.js";
 
 /** A reference to non-DB state a module owns, resolved to a path by the composition root. */
 export type NonDbSource = { readonly kind: "content-addressed-dir"; readonly source: string };
 
-/** A module's backup contribution: what non-DB state it owns and (later) how to restore it. */
+/** A module's backup contribution: the non-DB state it owns, and what it does after a restore. */
 export interface ModuleBackupContribution {
   readonly nonDbState?: readonly NonDbSource[];
-  readonly restore?: unknown; // seat — a root-wired hook; body lands in BR-3/BR-4
+  readonly restore?: RestoreHook;
 }
 
 /**
@@ -41,10 +42,7 @@ export interface WaitronModule {
   /** Manifest-shaped migration info — NOT an import.meta.url-derived folder (spec §4). */
   readonly migrations: MigrationSet;
 
-  // --- Seats for later slices; declared now, unpopulated here. ---
-  // Typed `unknown` on purpose: keeping @waitron/module from depending on layouts/scheduler/identity
-  // yet. Each slice tightens its own field's type when it lands. NOT sloppiness — the spec
-  // (§3) records these as the deferred slices' seats.
+  // Optional module capabilities are assembled by composition without importing domain packages here.
   /** SP-2a: the tables this module enrols into @waitron/sync, declared BY the owning package. The
    * first deferred seat to gain its real type; the composition root assembles every module's enrolment
    * and injects it, so @waitron/sync imports no domain schema (spec §2/§5). */
@@ -65,7 +63,7 @@ export interface WaitronModule {
   /** The module's contribution to the fiscal slot — `fiscalSlot` selects exactly one. */
   readonly fiscal?: FiscalContribution;
   readonly routes?: unknown; // incremental
-  readonly backup?: ModuleBackupContribution; // BR-2: non-DB state a backup must capture
+  readonly backup?: ModuleBackupContribution; // The module's non-DB backup sources and restore hook.
 }
 
 /** The dependencies a module declares — its `requires.core` (a dep on "core") plus every

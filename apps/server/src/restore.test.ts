@@ -1,8 +1,16 @@
-import { mkdtemp, readFile, rm, stat, symlink } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { WaitronModule } from "@waitron/module";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { sql } from "drizzle-orm";
+import { withTenant } from "@waitron/db";
+import { nodeId as brandNodeId, tenantId as brandTenantId } from "@waitron/shared";
+import { FISCAL_RESTORE, currentSif, registerSif } from "@waitron/fiscal-verifactu";
+import { AppError } from "@waitron/shared";
+import type { RestoreHook, WaitronModule } from "@waitron/module";
+import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { ALL_MODULES } from "./modules.js";
 import { type ArchiveEntry, packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
@@ -10,7 +18,7 @@ import type { BackupManifest } from "./backup-manifest.js";
 import type { PgRestoreRunner } from "./pg-restore.js";
 import type { Logger } from "./logger.js";
 import {
-  invokeRestoreHooks,
+  type RestoreDeps,
   restoreDatabase,
   restoreFromArtifact,
   restoreMedia,
@@ -18,6 +26,68 @@ import {
   validateArtifact,
   writeValidated,
 } from "./restore.js";
+
+// PGlite exercises transaction rollback here; these tests make no privilege or concurrency claim.
+const suite = usePgliteDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 120_000,
+});
+
+const T = {
+  tenantId: "c0000000-0000-4000-8000-000000000001",
+  locationId: "c0000000-0000-4000-8000-000000000002",
+  tillId: "c0000000-0000-4000-8000-000000000003",
+  seriesId: "c0000000-0000-4000-8000-000000000004",
+  nodeId: "c0000000-0000-4000-8000-000000000008",
+};
+const TRADING_ENV = formatEnvFile({
+  WAITRON_TILL_TENANT_ID: T.tenantId,
+  WAITRON_TILL_TILL_ID: T.tillId,
+  WAITRON_TILL_NODE_ID: T.nodeId,
+  WAITRON_TILL_SERIES_ID: T.seriesId,
+  WAITRON_TILL_LOCATION_ID: T.locationId,
+  DATABASE_URL: "postgres://app@localhost/waitron",
+  WAITRON_MIGRATIONS_DATABASE_URL: "postgres://owner@localhost/waitron",
+  WAITRON_ENV: "preproduction",
+});
+
+beforeAll(async () => {
+  const db = suite.db;
+  await db.execute(
+    sql`insert into tenants (id, country, tax_id, legal_name) values (${T.tenantId}, 'ES', '89890001K', 'Waitron SL')`,
+  );
+  await db.execute(
+    sql`insert into locations (id, tenant_id, name, invoice_locales, operation_description) values (${T.locationId}, ${T.tenantId}, 'Local', array['es'], 'Venta')`,
+  );
+  await db.execute(
+    sql`insert into tills (id, tenant_id, location_id, name) values (${T.tillId}, ${T.tenantId}, ${T.locationId}, 'Caja 1')`,
+  );
+  await db.execute(
+    sql`insert into nodes (id, tenant_id, location_id, name) values (${T.nodeId}, ${T.tenantId}, ${T.locationId}, 'Node 1')`,
+  );
+  await db.execute(
+    sql`insert into invoice_series (id, tenant_id, node_id, code) values (${T.seriesId}, ${T.tenantId}, ${T.nodeId}, 'FA')`,
+  );
+});
+
+/** Re-arm the node's series between tests: FA live, anything a hook opened removed. */
+async function resetSeries(): Promise<void> {
+  await suite.db.execute(
+    sql`delete from invoice_series where node_id = ${T.nodeId} and id <> ${T.seriesId}`,
+  );
+  await suite.db.execute(sql`update invoice_series set retired_at = null where id = ${T.seriesId}`);
+}
+
+const openDb = async () => ({ db: suite.db, close: async () => {} });
+
+/** ALL_MODULES with every real `migrations` kept (the gate and the migrate step resolve them) and the
+ * restore hooks replaced: named modules get the given hook, every other module none. */
+function withHooks(hooks: Partial<Record<string, RestoreHook>>): WaitronModule[] {
+  return ALL_MODULES.map((m) => ({
+    ...m,
+    backup: { ...m.backup, restore: hooks[m.name] },
+  }));
+}
 
 const KEY = "correct horse battery staple";
 const noopLog: Logger = () => {};
@@ -49,15 +119,32 @@ const FULL_ENTRIES: ArchiveEntry[] = [
   { name: "db.dump", bytes: DUMP },
   { name: "media/abc123.jpg", bytes: MEDIA },
   { name: "secrets/secrets.env", bytes: Buffer.from(SECRET) },
+  { name: "secrets/trading.env", bytes: Buffer.from(TRADING_ENV) },
 ];
 
-// Shared per-test temp dirs for the two describe blocks below. `useTempDirs` is called inside each
-// describe body, so the beforeEach/afterEach it registers bind to THAT suite; the blocks differ only
-// in the mkdtemp prefix. Module-level so bare `mediaDir`/`stateDir`/`stagingDir` references in both
-// blocks resolve here — the tempdir setup lives in one place, not two byte-identical copies.
+// Each describe registers its own temp-directory lifecycle while sharing these path bindings.
 let mediaDir: string;
 let stateDir: string;
 let stagingDir: string;
+
+function makeRestoreDeps(overrides: Partial<RestoreDeps> = {}): RestoreDeps {
+  return {
+    artifact: buildArtifact(FULL_ENTRIES),
+    recoveryKey: KEY,
+    databaseUrl: "postgres://admin@localhost/fresh",
+    mediaDir,
+    stateDir,
+    stagingDir,
+    migrationsRoot: null,
+    modules: withHooks({}),
+    environment: "preproduction",
+    runRestore: vi.fn(async () => {}),
+    openDb,
+    migrate: vi.fn(async () => {}),
+    log: noopLog,
+    ...overrides,
+  };
+}
 
 function useTempDirs(prefix: string): void {
   beforeEach(async () => {
@@ -85,21 +172,8 @@ describe("restoreFromArtifact", () => {
     });
   });
 
-  function deps(overrides: Partial<Parameters<typeof restoreFromArtifact>[0]> = {}) {
-    return {
-      artifact: buildArtifact(FULL_ENTRIES),
-      recoveryKey: KEY,
-      databaseUrl: "postgres://admin@localhost/fresh",
-      mediaDir,
-      stateDir,
-      stagingDir,
-      migrationsRoot: null as string | null,
-      modules: ALL_MODULES,
-      environment: "preproduction" as const,
-      runRestore,
-      log: noopLog,
-      ...overrides,
-    };
+  function deps(overrides: Partial<RestoreDeps> = {}): RestoreDeps {
+    return makeRestoreDeps({ runRestore, ...overrides });
   }
 
   it("restores db dump, media and secrets, then cleans staging", async () => {
@@ -115,6 +189,8 @@ describe("restoreFromArtifact", () => {
 
     // Secret landed in stateDir (prefix stripped).
     expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toBe(SECRET);
+
+    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV);
 
     // Staging cleaned in finally.
     await expect(stat(join(stagingDir, "db.dump"))).rejects.toMatchObject({ code: "ENOENT" });
@@ -231,27 +307,14 @@ describe("restoreFromArtifact", () => {
 
 describe("validateArtifact / writeValidated (R3 validate-before-wipe split)", () => {
   useTempDirs("waitron-validate-");
-  let runRestore: ReturnType<typeof vi.fn>;
+  let runRestore: PgRestoreRunner;
 
   beforeEach(() => {
     runRestore = vi.fn(async () => {});
   });
 
-  function deps(overrides: Partial<Parameters<typeof validateArtifact>[0]> = {}) {
-    return {
-      artifact: buildArtifact(FULL_ENTRIES),
-      recoveryKey: KEY,
-      databaseUrl: "postgres://admin@localhost/fresh",
-      mediaDir,
-      stateDir,
-      stagingDir,
-      migrationsRoot: null as string | null,
-      modules: ALL_MODULES,
-      environment: "preproduction" as const,
-      runRestore: runRestore as unknown as PgRestoreRunner,
-      log: noopLog,
-      ...overrides,
-    };
+  function deps(overrides: Partial<RestoreDeps> = {}): RestoreDeps {
+    return makeRestoreDeps({ runRestore, ...overrides });
   }
 
   it("validateArtifact throws on a wrong recovery key and writes NOTHING", async () => {
@@ -297,7 +360,10 @@ describe("validateArtifact / writeValidated (R3 validate-before-wipe split)", ()
     const validated = await validateArtifact(deps());
     expect(validated.dumpEntry.bytes).toEqual(DUMP);
     expect(validated.mediaEntries.map((e) => e.name)).toEqual(["media/abc123.jpg"]);
-    expect(validated.secretEntries.map((e) => e.name)).toEqual(["secrets/secrets.env"]);
+    expect(validated.secretEntries.map((e) => e.name)).toEqual([
+      "secrets/secrets.env",
+      "secrets/trading.env",
+    ]);
 
     await writeValidated(validated, deps({ runRestore: capturing }));
     expect(staged).toEqual(DUMP);
@@ -386,31 +452,402 @@ describe("restore steps (R3 composition)", () => {
   });
 });
 
-describe("invokeRestoreHooks", () => {
-  it("calls each module's backup.restore hook (v1: none in ALL_MODULES)", async () => {
-    const hook = vi.fn();
-    const withHook = { name: "x", backup: { restore: hook } } as unknown as WaitronModule;
-    const withoutHook = { name: "y", backup: {} } as unknown as WaitronModule;
-    const bare = { name: "z" } as unknown as WaitronModule;
+describe("restore hooks (identity phase)", () => {
+  useTempDirs("waitron-hooks-");
+  beforeEach(resetSeries);
 
-    await invokeRestoreHooks({
-      modules: [withHook, withoutHook, bare],
-      mediaDir: "/m",
-      stateDir: "/s",
-      log: () => {},
+  it("restores FA standard and FA-1 rectificative through the real fiscal hook", async () => {
+    await withTenant(suite.db, brandTenantId(T.tenantId), async (tx) => {
+      const sif = await registerSif(tx, {
+        ...T,
+        tenantId: brandTenantId(T.tenantId),
+        nodeId: brandNodeId(T.nodeId),
+        nif: "89890001K",
+        idSistemaInformatico: "WT",
+      });
+      expect(sif.numeroInstalacion).toBe(1);
+      await tx.execute(sql`insert into invoice_series (tenant_id, node_id, code, purpose)
+        values (${T.tenantId}, ${T.nodeId}, 'FA-1', 'rectificative')`);
     });
+    await restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ fiscal: FISCAL_RESTORE }) }));
+    const sif = await withTenant(suite.db, brandTenantId(T.tenantId), (tx) =>
+      currentSif(tx, brandTenantId(T.tenantId), brandNodeId(T.nodeId)),
+    );
+    const { rows } = await suite.db.execute<{ id: string; code: string; purpose: string }>(sql`
+      select id, code, purpose from invoice_series where node_id = ${T.nodeId} and retired_at is null order by purpose desc
+    `);
+    expect(rows.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
+      { code: `FA-${sif.numeroInstalacion}`, purpose: "standard" },
+      { code: `FA-1-${sif.numeroInstalacion}`, purpose: "rectificative" },
+    ]);
+    expect(
+      parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8")).WAITRON_TILL_SERIES_ID,
+    ).toBe(rows[0]!.id);
+  });
 
-    expect(hook).toHaveBeenCalledTimes(1);
-    expect(hook).toHaveBeenCalledWith({
-      mediaDir: "/m",
-      stateDir: "/s",
-      log: expect.any(Function),
+  it("canonicalizes a sole identity alias before rewriting and publishing it", async () => {
+    const entries = FULL_ENTRIES.map((entry) =>
+      entry.name === "secrets/trading.env" ? { ...entry, name: "secrets/./trading.env" } : entry,
+    );
+    const deps = makeRestoreDeps({
+      artifact: buildArtifact(entries),
+      modules: withHooks({
+        fiscal: async () => ({
+          report: "ok",
+          series: [{ code: "FA-9", purpose: "standard" }],
+        }),
+      }),
+    });
+    const validated = await validateArtifact(deps);
+    expect(validated.secretEntries.map((entry) => entry.name)).toEqual([
+      "secrets/secrets.env",
+      "secrets/trading.env",
+    ]);
+    await writeValidated(validated, deps);
+    const written = parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8"));
+    const { rows } = await suite.db.execute<{ id: string }>(
+      sql`select id from invoice_series where node_id = ${T.nodeId} and code = 'FA-9'`,
+    );
+    expect(written.WAITRON_TILL_SERIES_ID).toBe(rows[0]!.id);
+  });
+
+  it("rejects duplicate identity destinations during validation before set-aside", async () => {
+    await writeFile(join(stateDir, "trading.env"), TRADING_ENV);
+    const runRestore = vi.fn(async () => {});
+    const migrate = vi.fn(async () => {});
+    const deps = makeRestoreDeps({
+      artifact: buildArtifact([
+        ...FULL_ENTRIES,
+        { name: "secrets/./trading.env", bytes: Buffer.from(TRADING_ENV) },
+      ]),
+      runRestore,
+      migrate,
+    });
+    const error = { code: "restore.unsafe_entry_path" };
+    await expect(validateArtifact(deps)).rejects.toMatchObject(error);
+    await expect(restoreFromArtifact(deps)).rejects.toMatchObject(error);
+    expect(runRestore).not.toHaveBeenCalled();
+    expect(migrate).not.toHaveBeenCalled();
+    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV);
+    await expect(stat(join(stateDir, "trading.env.replaced"))).rejects.toMatchObject({
+      code: "ENOENT",
     });
   });
 
-  it("is a no-op for an empty module list", async () => {
+  it("leaves no trading.env when a later TLS secret write fails with EISDIR", async () => {
+    await mkdir(join(stateDir, "tls/server.key"), { recursive: true });
     await expect(
-      invokeRestoreHooks({ modules: [], mediaDir: "/m", stateDir: "/s", log: () => {} }),
-    ).resolves.toBeUndefined();
+      restoreFromArtifact(
+        makeRestoreDeps({
+          artifact: buildArtifact([
+            ...FULL_ENTRIES,
+            { name: "secrets/tls/server.key", bytes: Buffer.from("KEY") },
+          ]),
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "EISDIR" });
+    await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("migrates after pg_restore and BEFORE any hook; hooks run BEFORE secrets are written", async () => {
+    const order: string[] = [];
+    const migrate = vi.fn(async () => {
+      order.push("migrate");
+    });
+    const hook: RestoreHook = async () => {
+      order.push("hook");
+      await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
+      return { report: "ok" };
+    };
+    await restoreFromArtifact(
+      makeRestoreDeps({
+        migrate,
+        modules: withHooks({ fiscal: hook }),
+        runRestore: vi.fn(async () => {
+          order.push("pg_restore");
+        }),
+      }),
+    );
+    expect(order).toEqual(["pg_restore", "migrate", "hook"]);
+    expect(migrate).toHaveBeenCalledWith("postgres://admin@localhost/fresh", expect.any(Array));
+    expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toBe(SECRET);
+  });
+
+  it("skipSecrets:true runs NO hook and reads no identity — an artifact with no trading.env restores fine", async () => {
+    const hook = vi.fn(async () => ({ report: "must not run" }));
+    const noIdentity = FULL_ENTRIES.filter((e) => e.name !== "secrets/trading.env");
+    await restoreFromArtifact(
+      makeRestoreDeps({
+        skipSecrets: true,
+        artifact: buildArtifact(noIdentity),
+        modules: withHooks({ fiscal: hook }),
+      }),
+    );
+    expect(hook).not.toHaveBeenCalled();
+  });
+
+  it("hands each hook (tx, node) with the ids from the ARTIFACT's trading.env, not the target's", async () => {
+    await writeFile(
+      join(stateDir, "trading.env"),
+      formatEnvFile({
+        WAITRON_TILL_TENANT_ID: "stale",
+        WAITRON_TILL_NODE_ID: "stale",
+        WAITRON_TILL_LOCATION_ID: "stale",
+        WAITRON_TILL_SERIES_ID: "stale",
+      }),
+    );
+    const hook = vi.fn(async () => ({ report: "ok" }));
+    await restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ fiscal: hook }) }));
+    expect(hook).toHaveBeenCalledWith(expect.anything(), {
+      tenantId: T.tenantId,
+      locationId: T.locationId,
+      nodeId: T.nodeId,
+    });
+    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV); // the artifact's, restored over the stale one
+  });
+
+  it("a pre-existing VALID identity is set aside BEFORE pg_restore runs, so a failed hook leaves NO trading.env", async () => {
+    // The target already holds a bootable identity (the artifact's own shape, with a different node).
+    const existing = formatEnvFile({
+      ...parseEnvFile(TRADING_ENV),
+      WAITRON_TILL_NODE_ID: "c0000000-0000-4000-8000-0000000000aa",
+    });
+    await writeFile(join(stateDir, "trading.env"), existing);
+    let goneWhenRestoreRan = false;
+    const runRestore: PgRestoreRunner = vi.fn(async () => {
+      goneWhenRestoreRan = await stat(join(stateDir, "trading.env")).then(
+        () => false,
+        () => true,
+      );
+    });
+    const boom: RestoreHook = async () => {
+      throw new AppError("restore.unexpected_entry", { name: "boom" });
+    };
+    await expect(
+      restoreFromArtifact(makeRestoreDeps({ runRestore, modules: withHooks({ fiscal: boom }) })),
+    ).rejects.toMatchObject({
+      code: "restore.hook_failed",
+      params: { module: "fiscal", code: "restore.unexpected_entry" },
+    });
+    expect(goneWhenRestoreRan).toBe(true); // set aside before the first irreversible step
+    await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(join(stateDir, "trading.env.replaced"), "utf8")).toBe(existing);
+  });
+
+  it("a pre-existing identity is UNTOUCHED under skipSecrets (the rejoin shape keeps its own)", async () => {
+    const own = formatEnvFile({ WAITRON_TILL_NODE_ID: "own" });
+    await writeFile(join(stateDir, "trading.env"), own);
+    await restoreFromArtifact(makeRestoreDeps({ skipSecrets: true }));
+    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(own);
+    await expect(stat(join(stateDir, "trading.env.replaced"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("series returned → old retired + new opened in the SAME transaction, trading.env rewritten in exactly one key", async () => {
+    const hook: RestoreHook = async () => ({
+      report: "ok",
+      series: [{ code: "FA-9", purpose: "standard" }],
+    });
+    await restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ fiscal: hook }) }));
+    const rows = await suite.db.execute<{ code: string; retired: boolean; next: number }>(
+      sql`select code, retired_at is not null as retired, next_number as next from invoice_series where node_id = ${T.nodeId} order by code`,
+    );
+    expect(rows.rows).toEqual([
+      { code: "FA", retired: true, next: 1 },
+      { code: "FA-9", retired: false, next: 1 },
+    ]);
+    const written = parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8"));
+    const original = parseEnvFile(TRADING_ENV);
+    expect(written.WAITRON_TILL_SERIES_ID).not.toBe(T.seriesId);
+    expect({ ...written, WAITRON_TILL_SERIES_ID: original.WAITRON_TILL_SERIES_ID }).toEqual(
+      original,
+    );
+    expect(Object.keys(written)).toEqual(Object.keys(original)); // order preserved
+  });
+
+  it("no series returned → the node must still hold one live standard series, and trading.env is byte-identical", async () => {
+    await restoreFromArtifact(
+      makeRestoreDeps({ modules: withHooks({ fiscal: async () => ({ report: "ok" }) }) }),
+    );
+    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV);
+    // The restored node has NO live standard series (retired in the backup) → refuse, no identity written.
+    await suite.db.execute(
+      sql`update invoice_series set retired_at = now() where id = ${T.seriesId}`,
+    );
+    await expect(
+      restoreFromArtifact(makeRestoreDeps({ modules: withHooks({}) })),
+    ).rejects.toMatchObject({
+      code: "restore.hook_failed",
+      params: { module: "core", code: "series.no_standard_for_node" },
+    });
+    await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("no series returned but the artifact's series id is not the live standard one → env is corrected", async () => {
+    await suite.db.execute(
+      sql`insert into invoice_series (tenant_id, node_id, code) values (${T.tenantId}, ${T.nodeId}, 'FB')`,
+    );
+    await suite.db.execute(
+      sql`update invoice_series set retired_at = now() where id = ${T.seriesId}`,
+    );
+    await restoreFromArtifact(makeRestoreDeps({ modules: withHooks({}) }));
+    const written = parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8"));
+    const [fb] = (
+      await suite.db.execute<{ id: string }>(sql`select id from invoice_series where code = 'FB'`)
+    ).rows;
+    expect(written.WAITRON_TILL_SERIES_ID).toBe(fb!.id);
+  });
+
+  it("no series returned and TWO live standard series in the restored db → refused (loud), no identity written", async () => {
+    await suite.db.execute(
+      sql`insert into invoice_series (tenant_id, node_id, code) values (${T.tenantId}, ${T.nodeId}, 'FB')`,
+    );
+    await expect(restoreFromArtifact(makeRestoreDeps({ modules: withHooks({}) }))).rejects.toThrow(
+      /more than one standard series/,
+    );
+    await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("a failure AFTER the replacement series were inserted rolls the inserts and the retire back", async () => {
+    // Two standard replacements insert fine; the settling read then finds two live standard series
+    // and aborts — the inserts and the retire must both be gone.
+    const hook: RestoreHook = async () => ({
+      report: "ok",
+      series: [
+        { code: "FA-9", purpose: "standard" },
+        { code: "FA-10", purpose: "standard" },
+      ],
+    });
+    await expect(
+      restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ fiscal: hook }) })),
+    ).rejects.toThrow(/more than one standard series/);
+    const rows = await suite.db.execute<{ code: string; retired: boolean }>(
+      sql`select code, retired_at is not null as retired from invoice_series where node_id = ${T.nodeId} order by code`,
+    );
+    expect(rows.rows).toEqual([{ code: "FA", retired: false }]);
+    await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("a colliding replacement code fails AFTER the retire started and rolls everything back", async () => {
+    // `FA` is the node's own live code; returning it collides with the retired row → the whole
+    // transaction (the retire included) rolls back, and no identity is written.
+    const hook: RestoreHook = async () => ({
+      report: "ok",
+      series: [{ code: "FA", purpose: "standard" }],
+    });
+    await expect(
+      restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ fiscal: hook }) })),
+    ).rejects.toMatchObject({
+      code: "restore.hook_failed",
+      params: { module: "fiscal", code: "series.code_collision" },
+    });
+    const rows = await suite.db.execute<{ code: string; retired: boolean }>(
+      sql`select code, retired_at is not null as retired from invoice_series where node_id = ${T.nodeId}`,
+    );
+    expect(rows.rows).toEqual([{ code: "FA", retired: false }]);
+    await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("two modules returning series → restore.series_conflict; an empty list → hook_failed wrapping no_standard_for_node", async () => {
+    const a: RestoreHook = async () => ({
+      report: "a",
+      series: [{ code: "FA-1", purpose: "standard" }],
+    });
+    const b: RestoreHook = async () => ({
+      report: "b",
+      series: [{ code: "FA-2", purpose: "standard" }],
+    });
+    await expect(
+      restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ core: a, fiscal: b }) })),
+    ).rejects.toMatchObject({
+      code: "restore.series_conflict",
+      params: { modules: "core,fiscal" },
+    });
+    const empty: RestoreHook = async () => ({ report: "a", series: [] });
+    await expect(
+      restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ fiscal: empty }) })),
+    ).rejects.toMatchObject({
+      code: "restore.hook_failed",
+      params: { module: "fiscal", code: "series.no_standard_for_node" },
+    });
+  });
+
+  it.each(["key", "file"] as const)(
+    "refuses a missing identity %s during validation, with the target intact",
+    async (missing) => {
+      const existing = formatEnvFile({
+        ...parseEnvFile(TRADING_ENV),
+        WAITRON_TILL_NODE_ID: "c0000000-0000-4000-8000-0000000000aa",
+      });
+      await writeFile(join(stateDir, "trading.env"), existing);
+      const entries = FULL_ENTRIES.filter((e) => e.name !== "secrets/trading.env");
+      if (missing === "key") {
+        entries.push({
+          name: "secrets/trading.env",
+          bytes: Buffer.from(
+            formatEnvFile({ ...parseEnvFile(TRADING_ENV), WAITRON_TILL_NODE_ID: "" }),
+          ),
+        });
+      }
+      const runRestore = vi.fn(async () => {});
+      const migrate = vi.fn(async () => {});
+      const restoreDeps = makeRestoreDeps({
+        artifact: buildArtifact(entries),
+        runRestore,
+        migrate,
+      });
+      const error = {
+        code: "restore.identity_incomplete",
+        params: { missing: missing === "key" ? "WAITRON_TILL_NODE_ID" : "trading.env" },
+      };
+
+      await expect(restoreFromArtifact(restoreDeps)).rejects.toMatchObject(error);
+      expect.soft(runRestore).not.toHaveBeenCalled();
+      expect.soft(migrate).not.toHaveBeenCalled();
+      await expect(readFile(join(stateDir, "trading.env"), "utf8")).resolves.toBe(existing);
+      await expect(stat(join(stateDir, "trading.env.replaced"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      await expect(validateArtifact(restoreDeps)).rejects.toMatchObject(error);
+    },
+  );
+
+  it("identity_incomplete on a missing key or file; identity_unknown on a node the restored db lacks", async () => {
+    const base = FULL_ENTRIES.filter((e) => e.name !== "secrets/trading.env");
+    const withEnv = (body: string) =>
+      buildArtifact([...base, { name: "secrets/trading.env", bytes: Buffer.from(body) }]);
+    await expect(
+      restoreFromArtifact(
+        makeRestoreDeps({
+          artifact: withEnv(
+            formatEnvFile({ ...parseEnvFile(TRADING_ENV), WAITRON_TILL_NODE_ID: "" }),
+          ),
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "restore.identity_incomplete",
+      params: { missing: "WAITRON_TILL_NODE_ID" },
+    });
+    await expect(
+      restoreFromArtifact(makeRestoreDeps({ artifact: buildArtifact(base) })),
+    ).rejects.toMatchObject({
+      code: "restore.identity_incomplete",
+      params: { missing: "trading.env" },
+    });
+    await expect(
+      restoreFromArtifact(
+        makeRestoreDeps({
+          artifact: withEnv(
+            formatEnvFile({
+              ...parseEnvFile(TRADING_ENV),
+              WAITRON_TILL_NODE_ID: "c0000000-0000-4000-8000-0000000000ff",
+            }),
+          ),
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "restore.identity_unknown" });
+    await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

@@ -252,6 +252,27 @@ describe("recordCorrection — series purpose guard (§5)", () => {
     });
   });
 
+  it("rejects a RETIRED series: a restored box must never number from the series it was restored with", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId } = await sell(backend);
+    const retiredAt = new Date("2026-09-06T10:00:00.000Z");
+    await suite.db
+      .update(invoiceSeries)
+      .set({ retiredAt })
+      .where(eq(invoiceSeries.id, rectSeriesId));
+    try {
+      await expect(correct(backend, saleId)).rejects.toMatchObject({
+        code: "sale.series_retired",
+        params: { seriesId: rectSeriesId, retiredAt: retiredAt.toISOString() },
+      });
+    } finally {
+      await suite.db
+        .update(invoiceSeries)
+        .set({ retiredAt: null })
+        .where(eq(invoiceSeries.id, rectSeriesId));
+    }
+  });
+
   it("rejects a series that does not exist", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
