@@ -86,8 +86,9 @@ starts all three processes in parallel:
 | Server    | http://localhost:8080 |
 
 Each front-end proxies its API to the server (the till's `/api`, the dashboard's `/management-api`).
-Log in at the till with the **cashier PIN 5555**; the dashboard admin PIN is **1234**
-(`pnpm dev:setup` prints both).
+Enrol the till once per browser with the pairing code **DEMO** (accepted in dev mode only), then log
+in with the **cashier PIN 5555**; the dashboard owner login is **owner@demo.waitron.local /
+dashPass123** (`pnpm dev:setup` prints all three).
 
 To start over from a clean database (throwaway preproduction data), `pnpm dev:reset` wipes the Docker
 volume and re-provisions.

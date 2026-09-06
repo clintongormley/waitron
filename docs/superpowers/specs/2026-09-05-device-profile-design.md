@@ -369,6 +369,10 @@ Update `dev-setup.test.ts` accordingly.
 
 ---
 
+> **2026-09-06:** `dev:setup` no longer mints or stamps a pairing code. Provisioning seeds the starter
+> profiles and, under `WAITRON_ENV=dev`, the fixed pairing code `DEMO` binds the seeded till profile at
+> enrol time (`apps/server/src/dev-pairing.ts`).
+
 ## 11. Error codes (CLAUDE.md §3 — domain concept, never the package; never renamed once shipped)
 
 New family **`device_profile.*`** registered in **`packages/layouts/src/errors.ts`** (beside the
