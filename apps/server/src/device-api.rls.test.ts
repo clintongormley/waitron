@@ -13,6 +13,7 @@ import {
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
+import { listDeviceProfiles } from "@waitron/layouts";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import {
@@ -35,6 +36,7 @@ import {
   type EnrolRateLimiter,
 } from "./enrol-rate-limit.js";
 import { DEVICE_COOKIE } from "./device-session.js";
+import { DEV_PAIRING_CODE, tillDeviceProfileName } from "./dev-pairing.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
@@ -1382,6 +1384,86 @@ describe("Device API over real Postgres", () => {
       const app = mountDevApp(venue.cfg, false);
       const res = await send(app, "POST", "/api/dev/devices", { body: { kind: "till" } });
       expect(res.status).toBe(404);
+    });
+  });
+
+  describe("POST /api/device/enrol with the fixed dev pairing code (dev-only)", () => {
+    /** The seeded till profile, read under the same tenant and role as enrolment. */
+    async function counterProfileId(cfg: TillConfig): Promise<string> {
+      const profiles = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return listDeviceProfiles(tx, cfg.tenantId);
+      });
+      const name = tillDeviceProfileName(LOCALE);
+      return profiles.find((p) => p.name === name)!.id;
+    }
+
+    it("enrols a counter till bound to the configured till + the Counter profile, setting the cookie", async () => {
+      const venue = await setupVenue();
+      const app = mountDevApp(venue.cfg, true);
+      // Lowercased on purpose: the fixed code rides the same transcription leniency as a minted one.
+      const enrol = await send(app, "POST", "/api/device/enrol", {
+        body: { code: DEV_PAIRING_CODE.toLowerCase() },
+      });
+      expect(enrol.status).toBe(200);
+      const jar = deviceCookieFrom(enrol);
+      const me = (await (await send(app, "GET", "/api/device/me", { cookie: jar })).json()) as {
+        deviceId: string;
+        kind: string;
+        tillId: string | null;
+      };
+      expect(me.kind).toBe("till");
+      expect(me.tillId).toBe(venue.cfg.tillId);
+      // The boot probe omits the profile; check the stored binding.
+      expect((await deviceBindings(me.deviceId)).device_profile_id).toBe(
+        await counterProfileId(venue.cfg),
+      );
+    });
+
+    it("is reusable — a second fresh browser enrols a second device with the same code", async () => {
+      const venue = await setupVenue();
+      const app = mountDevApp(venue.cfg, true);
+      const ids: string[] = [];
+      for (let i = 0; i < 2; i += 1) {
+        const enrol = await send(app, "POST", "/api/device/enrol", {
+          body: { code: DEV_PAIRING_CODE },
+        });
+        expect(enrol.status).toBe(200);
+        ids.push(((await enrol.json()) as { deviceId: string }).deviceId);
+      }
+      expect(new Set(ids).size).toBe(2);
+    });
+
+    it("is refused (400 device.pairing_invalid) when devMode is false", async () => {
+      const venue = await setupVenue();
+      const app = mountDevApp(venue.cfg, false);
+      const enrol = await send(app, "POST", "/api/device/enrol", {
+        body: { code: DEV_PAIRING_CODE },
+      });
+      expect(enrol.status).toBe(400);
+      expect(((await enrol.json()) as { error: { code: string } }).error.code).toBe(
+        "device.pairing_invalid",
+      );
+    });
+
+    it("is refused when devMode is omitted — fail-closed production shape", async () => {
+      const venue = await setupVenue();
+      const app = mountApp(venue.cfg);
+      const enrol = await send(app, "POST", "/api/device/enrol", {
+        body: { code: DEV_PAIRING_CODE },
+      });
+      expect(enrol.status).toBe(400);
+    });
+
+    it("fails loudly (500) when the seeded till profile is missing, rather than enrol a till that cannot sell", async () => {
+      const venue = await setupVenue();
+      const app = mountDevApp(venue.cfg, true);
+      const profileId = await counterProfileId(venue.cfg);
+      await suite.admin.execute(sql`delete from device_profiles where id = ${profileId}`);
+      const enrol = await send(app, "POST", "/api/device/enrol", {
+        body: { code: DEV_PAIRING_CODE },
+      });
+      expect(enrol.status).toBe(500);
     });
   });
 });

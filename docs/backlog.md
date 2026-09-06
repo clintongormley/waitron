@@ -407,7 +407,9 @@ editor + rendering) is the sole remaining sub-project of this track.**
   bindings, enrolment extension (carries profile/`till_id`/hardware; `device.till_required`/
   `device.binding_invalid`), management API for profiles + tenant theme, server-side capability enforcement
   (`assertDeviceCapability` for pay/drawer; `assertNotHandheld` kept for place/reprint/collect/cancel),
-  theme storage, dashboard Add-device UI, `apps/till` till-enrol screen, `dev:setup` mints a till code.
+  theme storage, dashboard Add-device UI, `apps/till` till-enrol screen, `dev:setup` mints a till code
+  (2026-09-06: the mint is gone — in `WAITRON_ENV=dev` the fixed code `DEMO` enrols the counter till,
+  `apps/server/src/dev-pairing.ts`).
   The fiscal cutover — a sale's `till_id` now resolves from the authenticated device — passed its §7/§16.4
   container+mutation receipt (`till_id` inert to the huella; `nodeId`/series stay on the node; only
   `sales.till_id` moved). SP-A.1 deferrals (a)-(d) all folded in.

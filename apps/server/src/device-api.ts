@@ -23,6 +23,7 @@ import { readJsonBody } from "./read-json-body.js";
 import { requireManagementSession } from "./management-session.js";
 import { clearDeviceCookie, requireDevice, setDeviceCookie } from "./device-session.js";
 import { bindingFkField, enrolDevice, generatePairingCode, kindRequiresStation } from "./device.js";
+import { enrolDevTill, isDevPairingCode } from "./dev-pairing.js";
 import { listStations } from "./kitchen.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import {
@@ -192,9 +193,12 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // run first).
       const body = await readJsonBody<{ code?: unknown }>(c);
       const code = requireString(body.code, "code");
+      // In devMode ONLY, the fixed dev code enrols this browser as the counter till (dev-pairing.ts).
+      // Outside devMode the word is hashed like any other and misses — `device.pairing_invalid`.
+      const devTill = deps.devMode === true && isDevPairingCode(code);
       const enrolled = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
-        return enrolDevice(tx, deps.cfg, { code });
+        return devTill ? enrolDevTill(tx, deps.cfg) : enrolDevice(tx, deps.cfg, { code });
       });
       // The cookie is `${deviceId}.${token}` — a selector plus the scrypt-checked validator. The token
       // is the ONLY secret and leaves the process ONLY here, in the Set-Cookie header; it is NEVER echoed

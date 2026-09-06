@@ -8,13 +8,11 @@ import { readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../src/config.js";
-import { createPostgresDb } from "@waitron/db";
 import {
   ADMIN_PIN,
   buildDevEnv,
   devSetup,
   inspectVenues,
-  mintTillPairingCode,
   parseEnvFile,
   renderEnvFile,
   resolveSeedLocale,
@@ -270,37 +268,17 @@ describe("devSetup against real Postgres", () => {
     expect(second.env.WAITRON_TILL_LOCATION_ID).toBe(first.env.WAITRON_TILL_LOCATION_ID);
   });
 
-  it("mints a single-use `till` pairing code bound to the provisioned till, carrying the default profile", async () => {
-    // SP-A.2 device unification: dev:setup mints a `till`-kind pairing code so the dev can enrol the
-    // counter till (the sale routes now require a `waitron_device` cookie carrying a till_id). The code
-    // is bound to the provisioned till via generatePairingCode's till gate — a `till` kind with a
-    // non-null till_id — so the enrolled device rings against the real register.
-    const db = await createPostgresDb(suite.pg.uri);
-    let result: { code: string };
-    try {
-      result = await mintTillPairingCode(db, first.env);
-    } finally {
-      await db.close();
-    }
-    // A plaintext code the operator reads into the pairing screen (never stored in plaintext).
-    expect(result.code).toMatch(/^[0-9A-Z-]{4,}$/);
-    // task-3 follow-on b: provisioning (applyVenue) now seeds the whole starter device-profile set —
-    // Counter (till) / Kitchen (kds) / Handheld (phone-portrait) — for every new tenant, not just the
-    // one "Counter" profile dev:setup used to create. The demo default locale is en-GB, so the English
-    // names. Each binds no canvas (falls back to the form-factor default) and carries its form-factor
-    // capabilities. Read as the RLS-bypassing admin.
+  it("does not mint a pairing code — the fixed dev code enrols the till — but provisioning seeds the starter profiles", async () => {
+    // The en-GB demo gets localized starter profiles, with default capabilities and no canvas binding.
     const { rows: profiles } = await suite.admin.execute<{
-      id: string;
       name: string;
       canvas_id: string | null;
       capabilities: string[];
     }>(
-      sql`select id, name, canvas_id, capabilities from device_profiles
+      sql`select name, canvas_id, capabilities from device_profiles
           where tenant_id = ${first.env.WAITRON_TILL_TENANT_ID} order by name`,
     );
-    expect(
-      profiles.map((p) => ({ name: p.name, canvas_id: p.canvas_id, capabilities: p.capabilities })),
-    ).toEqual([
+    expect(profiles).toEqual([
       {
         name: "Counter",
         canvas_id: null,
@@ -309,18 +287,11 @@ describe("devSetup against real Postgres", () => {
       { name: "Handheld", canvas_id: null, capabilities: [] },
       { name: "Kitchen", canvas_id: null, capabilities: ["act-as-kds"] },
     ]);
-    // The minted till code binds to the COUNTER (till) profile so the enrolled counter till resolves its
-    // canvas + capabilities through it. Exactly one till-kind code row, bound to the provisioned till AND
-    // that profile (read as the RLS-bypassing admin).
-    const counter = profiles.find((p) => p.name === "Counter")!;
     const { rows } = await suite.admin.execute<{ n: number }>(
       sql`select count(*)::int as n from device_pairing_codes
-          where tenant_id = ${first.env.WAITRON_TILL_TENANT_ID}
-            and device_kind = 'till'
-            and till_id = ${first.env.WAITRON_TILL_TILL_ID}
-            and device_profile_id = ${counter.id}`,
+          where tenant_id = ${first.env.WAITRON_TILL_TENANT_ID}`,
     );
-    expect(rows[0]!.n).toBe(1);
+    expect(rows[0]!.n).toBe(0);
   });
 
   it("refuses to provision a second venue when the .env no longer names the DB's venue", async () => {
