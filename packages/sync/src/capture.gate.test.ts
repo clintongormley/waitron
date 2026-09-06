@@ -12,15 +12,13 @@ const postgres = useTemplateDb({ template: "manifest" });
 // A producing node's id — capture writes it into sync_log.origin_id from the app.node_id GUC.
 const NODE_A = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
-/** Sets app.node_id in the write transaction so capture records the producing origin. */
-async function withTenantNode<T>(
+/** Runs the callback in one transaction with app.node_id set for capture’s producing origin. */
+async function withNode<T>(
   db: Database,
-  tenantId: string,
   nodeId: string,
   fn: (tx: Transaction) => Promise<T>,
 ): Promise<T> {
   return db.transaction(async (tx) => {
-    await tx.execute(sql`select set_config('app.tenant_id', ${tenantId}, true)`);
     await tx.execute(sql`select set_config('app.node_id', ${nodeId}, true)`);
     return fn(tx);
   });
@@ -69,7 +67,7 @@ describe("the generic capture trigger over the commercial lane", () => {
     const { tenantId, catalogueId } = await seedBase(postgres.admin);
     const probe = await postgres.pg.connectAs("app_login", "app_pw");
     try {
-      const inserted = await withTenantNode(probe, tenantId, NODE_A, (tx) =>
+      const inserted = await withNode(probe, NODE_A, (tx) =>
         tx.execute<{ id: string }>(
           sql`insert into products
                 (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
@@ -137,7 +135,6 @@ describe("the generic capture trigger over the commercial lane", () => {
 
     async function applyStyleInsert(price: string): Promise<void> {
       await probe.transaction(async (tx) => {
-        await tx.execute(sql`select set_config('app.tenant_id', ${tenantId}, true)`);
         await tx.execute(sql`select set_config('app.sync_apply', 'on', true)`);
         await tx.execute(
           sql`insert into products
@@ -259,7 +256,7 @@ describe("the generic capture trigger over the commercial lane", () => {
         "22222222-2222-4222-8222-222222222222",
         "33333333-3333-4333-8333-333333333333",
       ];
-      await withTenantNode(app, base.tenantId, NODE_A, async (tx) => {
+      await withNode(app, NODE_A, async (tx) => {
         await tx.execute(
           sql`insert into floor_zones (id, tenant_id, location_id, name)
               values (${zone}, ${base.tenantId}, ${base.locationId}, 'Dining Room')`,
@@ -371,7 +368,7 @@ describe("the generic capture trigger over the commercial lane", () => {
         "55555555-5555-4555-8555-555555555555",
         "66666666-6666-4666-8666-666666666666",
       ];
-      await withTenantNode(app, base.tenantId, NODE_A, async (tx) => {
+      await withNode(app, NODE_A, async (tx) => {
         await tx.execute(
           sql`insert into kitchen_stations (id, tenant_id, location_id, name)
               values (${station}, ${base.tenantId}, ${base.locationId}, 'Cocina')`,

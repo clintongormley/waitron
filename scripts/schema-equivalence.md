@@ -39,7 +39,9 @@ It also makes one **representational** change, and only one: the column definiti
 differs for a table that is otherwise identical, and every query in the app names its columns.
 pg_dump's inline `CHECK` constraints follow the columns in NAME order rather than creation order
 (measured on PostgreSQL 18.6: a table created with `CONSTRAINT z_chk` inline and `a_chk` added
-afterwards dumps `a_chk` first), so that trailing run is already canonical and is left alone. **Outside these documented rules, fix differences in the baseline.**
+afterwards dumps `a_chk` first), so that trailing run is already canonical and is left alone.
+**Any other difference is fixed in the baseline, never here.** Adding a normalisation is not a baseline
+fix: it requires its own negative control and a recorded reason.
 
 ## How the sync grants fold into app_user
 
@@ -48,13 +50,20 @@ privileges move into `app_user`, alongside its existing INSERT grants. If you st
 grants before comparing, a correct baseline differs on `sync_log`, `sync_cursor`, `sync_peers` and
 `sync_config_conflicts`. The proof must compare that union so a missing folded privilege fails.
 
-Before the deleted-role strip, both dumps rewrite GRANT/REVOKE statements on `public` tables naming
+Before the deleted-role strip, both dumps rewrite GRANT statements on `public` tables naming
 `sync_tailer` or `sync_retention` as grantee to name `app_user`. Table-level GRANTs to `app_user` on the
-same table merge into the union of their verbs, in pg_dump order: SELECT, INSERT, DELETE, UPDATE,
-TRUNCATE, REFERENCES, TRIGGER, MAINTAIN. Column grants such as UPDATE(last_seen_at) remain separate
-statements. Other references to those roles, including policies, membership and ownership, are still
+same table merge into the union of their verbs, in the order observed in both prefix dumps:
+SELECT, INSERT, DELETE, UPDATE. Other explicit verbs (TRUNCATE, REFERENCES, TRIGGER, MAINTAIN)
+raise `ValueError` if encountered; their order has not been measured. ALL remains ALL.
+Column grants such as UPDATE(last_seen_at) remain separate statements. Other references to those
+roles, including policies, membership and ownership, are still
 stripped and counted in the residue table. Applying the fold to both dumps preserves OLD-vs-OLD as a
 control; on a NEW baseline no grantee needs rewriting.
+
+A REVOKE on a `public` table from either folded role raises `ValueError` naming the original
+statement. No such statement appears in the current OLD prefix dump; rewriting it without resolving
+the resulting privileges would not represent the final union. The edge checks run with
+`python3 scripts/schema-equivalence-fold.test.py`, including column REVOKEs and unmeasured verbs.
 
 For example, old `sync_log` grants of INSERT to `app_user`, SELECT to `sync_tailer`, and SELECT,DELETE
 to `sync_retention` compare as `GRANT SELECT,INSERT,DELETE ON TABLE public.sync_log TO app_user;`.

@@ -5,9 +5,10 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
 /**
  * Boots one shared PostgreSQL container and migrates the manifest prefix through sync with
- * runMigrationSets. Every enrolled table's owner precedes sync in the manifest; the fiscal module
- * follows it and is outside this commercial-outbox fixture. Suites clone the `manifest` template
- * once per file with useTemplateDb and manage each case's fixture state.
+ * runMigrationSets. The full-manifest coverage run failed with 42883 when fiscal's old migrations
+ * called the deleted current_tenant_id(), so this temporary prefix returns to the whole manifest
+ * when Task 7 baselines fiscal. Suites clone the `manifest` template once per file with useTemplateDb
+ * and manage each case's fixture state.
  *
  * Roles are cluster-wide, so the LOGIN fixtures are created once after migration. Each inherits
  * app_user: app_login captures, sync_reader and tailer_login read, sync_applier applies rows and

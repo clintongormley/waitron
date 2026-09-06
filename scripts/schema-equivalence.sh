@@ -244,7 +244,7 @@ def sort_table_columns(stmt, counts):
 
 
 # pg_dump's table privilege order, as emitted in the raw dumps (SELECT,INSERT,DELETE,UPDATE).
-TABLE_VERBS = ["SELECT", "INSERT", "DELETE", "UPDATE", "TRUNCATE", "REFERENCES", "TRIGGER", "MAINTAIN"]
+TABLE_VERBS = ["SELECT", "INSERT", "DELETE", "UPDATE"]
 FOLD_ACL_RE = re.compile(
     r"^((?:GRANT|REVOKE) [^;\n]+ ON TABLE public\.[^;\n]+ (?:TO|FROM) )"
     r"(" + "|".join(FOLD) + r");$", re.M
@@ -258,6 +258,9 @@ def fold_table_grants(statements):
     """Fold table ACL grantees and union table privileges; keep column ACLs separate."""
     folded, grants = [], {}
     for stmt in statements:
+        folded_acl = FOLD_ACL_RE.search(stmt)
+        if folded_acl and folded_acl[1].startswith("REVOKE "):
+            raise ValueError(f"unsupported folded REVOKE: {folded_acl[0]}")
         stmt = FOLD_ACL_RE.sub(lambda m: m[1] + FOLD[m[2]] + ";", stmt)
         match = APP_TABLE_GRANT_RE.search(stmt)
         if match:

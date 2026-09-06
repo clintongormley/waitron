@@ -12,15 +12,13 @@ const postgres = useTemplateDb({ template: "manifest" });
 // A producing node's id — capture writes it into sync_log.origin_id from the app.node_id GUC.
 const NODE_A = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
-/** Sets app.node_id in the write transaction so capture records the producing origin. */
-async function withTenantNode<T>(
+/** Runs the callback in one transaction with app.node_id set for capture’s producing origin. */
+async function withNode<T>(
   db: Database,
-  tenantId: string,
   nodeId: string,
   fn: (tx: Transaction) => Promise<T>,
 ): Promise<T> {
   return db.transaction(async (tx) => {
-    await tx.execute(sql`select set_config('app.tenant_id', ${tenantId}, true)`);
     await tx.execute(sql`select set_config('app.node_id', ${nodeId}, true)`);
     return fn(tx);
   });
@@ -68,14 +66,14 @@ describe("identity CONFIG tables capture; ephemeral auth tables do NOT (spec §2
     const tenantId = await seedTenant(postgres.admin);
     const probe = await postgres.pg.connectAs("app_login", "app_pw");
     try {
-      const ins = await withTenantNode(probe, tenantId, NODE_A, (tx) =>
+      const ins = await withNode(probe, NODE_A, (tx) =>
         tx.execute<{ id: string }>(
           sql`insert into persons (tenant_id, display_name, pin_hash, role)
               values (${tenantId}, 'Ada', 'hash', 'staff') returning id`,
         ),
       );
       const personId = ins.rows[0]!.id;
-      await withTenantNode(probe, tenantId, NODE_A, (tx) =>
+      await withNode(probe, NODE_A, (tx) =>
         tx.execute(sql`update persons set role = 'manager' where id = ${personId}`),
       );
       const rows = await postgres.admin.execute<{ op: string; origin: string }>(sql`
@@ -94,14 +92,14 @@ describe("identity CONFIG tables capture; ephemeral auth tables do NOT (spec §2
     const { tenantId, personId } = await seedTenantPersonTill(postgres.admin);
     const probe = await postgres.pg.connectAs("app_login", "app_pw");
     try {
-      const cred = await withTenantNode(probe, tenantId, NODE_A, (tx) =>
+      const cred = await withNode(probe, NODE_A, (tx) =>
         tx.execute<{ id: string }>(
           sql`insert into webauthn_credentials (tenant_id, person_id, credential_id, public_key)
               values (${tenantId}, ${personId}, 'cred-1', 'pk-1') returning id`,
         ),
       );
       const credId = cred.rows[0]!.id;
-      await withTenantNode(probe, tenantId, NODE_A, (tx) =>
+      await withNode(probe, NODE_A, (tx) =>
         tx.execute(sql`delete from webauthn_credentials where id = ${credId}`),
       );
       const del = await postgres.admin.execute<{ id: string }>(sql`
@@ -156,7 +154,6 @@ describe("identity CONFIG tables capture; ephemeral auth tables do NOT (spec §2
     const probe = await postgres.pg.connectAs("app_login", "app_pw");
     async function applyStyleInsert(name: string): Promise<void> {
       await probe.transaction(async (tx) => {
-        await tx.execute(sql`select set_config('app.tenant_id', ${tenantId}, true)`);
         await tx.execute(sql`select set_config('app.sync_apply', 'on', true)`);
         await tx.execute(sql`insert into persons (tenant_id, display_name, pin_hash, role)
                              values (${tenantId}, ${name}, 'hash', 'staff')`);
