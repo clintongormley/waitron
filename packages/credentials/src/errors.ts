@@ -57,8 +57,7 @@ declare module "@waitron/shared" {
      * `{tenantId, purpose}` — never the plaintext itself, which is exactly what a raw
      * `JSON.parse` `SyntaxError` would otherwise embed. */
     "credentials.malformed_payload": { tenantId: string; purpose: string };
-    /** No row for this (tenant, purpose). Either never provisioned, or RLS hid another tenant's
-     * row — identical from here. */
+    /** No row for this (tenant, purpose). Not provisioned. */
     "credentials.missing": { tenantId: string; purpose: string };
     /** Not a purpose this package knows. `known` lets a CLI print the legal set. */
     "credentials.unknown_purpose": { purpose: string; known: string[] };

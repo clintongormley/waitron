@@ -6,12 +6,8 @@ import { credentialTenants, putCredential } from "./store.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 
-// A non-superuser LOGIN role inheriting app_user's grants, which this suite connects AS
-// (`pg.connectAs`). `credential_tenants` is a SECURITY DEFINER function owned by a helper role, so
-// what it may read is not what the CALLER may read — running these cases as the app role rather than
-// as the container's superuser is what keeps that distinction real. The role is created once,
-// cluster-wide, in the package's globalSetup (`src/testing/global-setup.ts`) — not per file, because
-// a shared container is one cluster; see that file's header.
+// Call the enumeration function as a non-superuser LOGIN inheriting app_user's grants.
+// The shared container creates this cluster-wide role once in src/testing/global-setup.ts.
 const PROBE_ROLE = "credentials_rls_probe";
 const PROBE_PASSWORD = "probe";
 

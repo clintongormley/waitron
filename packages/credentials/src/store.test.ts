@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import { hasCode } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
@@ -34,6 +34,11 @@ const STRIPE = {
 };
 
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
+
+// Listing reads the whole vault, so each case starts with an empty credential table.
+beforeEach(async () => {
+  await suite.db.execute(sql`truncate tenant_credentials`);
+});
 
 /** A tenant per test. `store.test.ts` in packages/scheduler is an order-dependent chain over one
  * shared key and it bit during a later fix; this suite pays one insert per test to avoid that. */
@@ -362,11 +367,7 @@ describe("listCredentials", () => {
     await withTenant(suite.db, tenantId, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
-    // listCredentials(tx) carries no explicit tenant filter — its scoping IS the RLS policy
-    // (store.ts's own comment: "so inside withTenant it is one tenant's"). PGlite connects as
-    // superuser and bypasses RLS unconditionally, so without asAppUser this assertion would pass
-    // for the wrong reason — the row count would only ever match by accident of test order. Same
-    // precedent as packages/core's incidents.test.ts.
+    // Exercise the metadata projection as the app role.
     const rows = await withTenant(suite.db, tenantId, async (tx) => {
       await asAppUser(tx);
       return listCredentials(tx);

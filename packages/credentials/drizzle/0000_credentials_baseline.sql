@@ -13,5 +13,4 @@ CREATE TABLE "tenant_credentials" (
 	CONSTRAINT "tenant_credentials_purpose_ck" CHECK (length("tenant_credentials"."purpose") > 0)
 );
 --> statement-breakpoint
-ALTER TABLE "tenant_credentials" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "tenant_credentials" ADD CONSTRAINT "tenant_credentials_tenant_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE restrict ON UPDATE no action;

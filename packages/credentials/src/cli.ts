@@ -39,10 +39,6 @@ const USAGE = [
   `purposes: ${Object.keys(PURPOSES).join(", ")}`,
   "",
   "There is no `get`: this tool never prints a decrypted credential.",
-  "",
-  "`rotate` needs a non-superuser DATABASE_URL (a connection authenticated as app_user, or a role",
-  "that inherits it) to report truthful counts — a superuser/migration connection bypasses",
-  "row-level security and double-counts every tenant's rows.",
 ].join("\n");
 
 /**
@@ -172,7 +168,7 @@ async function list(argv: string[], deps: CliDeps): Promise<number> {
     if (typeof tenantId !== "string") return tenantId;
     tenants = [tenantId];
   } else {
-    // No --tenant: enumerate through the SECURITY DEFINER seam, once per purpose, and
+    // No --tenant: enumerate through credential_tenants, once per purpose, and
     // de-duplicate — a tenant holding two purposes would otherwise be visited twice below, and
     // print every one of its rows twice. There is no untenanted read of the table itself.
     tenants = [

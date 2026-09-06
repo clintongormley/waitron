@@ -37,7 +37,7 @@ describe("the public surface", () => {
  * runs it, which is why tenant-credentials.ts's PK/FK/check block shows as uncovered even though
  * every other test in this package imports the table. Calling `getTableConfig` forces the callback
  * to run, and the assertions below are the meaningful check that tenant_credentials' constraints
- * actually exist under the names the migration, the RLS policy and later tasks' cipher/store depend
+ * actually exist under the names the migration and cipher/store depend
  * on — not a coverage stunt. Mirrors packages/scheduler/src/index.test.ts and
  * packages/payments/src/index.test.ts.
  */

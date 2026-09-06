@@ -35,33 +35,8 @@ const STRIPE = {
 
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
 
-/**
- * `rotateCredentials` is the one function in this package whose declared job is to sweep the WHOLE
- * vault, not one tenant, which is what makes the file's shared `tenant_credentials` state a problem
- * this file's tests cannot ignore the way `store.test.ts`'s do: `credentialTenants` legitimately
- * returns every tenant ANY earlier test in the file gave a credential to, and PGlite's connection is
- * a Postgres SUPERUSER (packages/db/src/tenancy.ts), which bypasses RLS unconditionally — so
- * `listCredentials`, called once per tenant inside `rotateCredentials`, returns the WHOLE table on
- * EVERY call regardless of which `tenantId` `withTenant` was asked to scope, not just that tenant's
- * own rows. Verified directly: running this file's "interrupted rotation" case against a
- * never-truncated shared `db` (the brief's literal layout) reported `rotated: 2` instead of the `1`
- * a single fresh tenant should produce, because an unrelated row left over from an earlier test got
- * swept in and mis-attributed to whichever tenant the outer loop happened to be visiting at the time.
- *
- * `beforeEach` truncating `tenant_credentials` (NOT a fresh PGlite instance per test) is what fixes
- * this, at a fraction of the cost: `credentialTenants` and `listCredentials` both read only this one
- * table, so an empty table gives every test the same clean slate a fresh database would, without
- * paying for a new WASM boot + two migration runs each time (measured: this file's seven tests run
- * in roughly 600ms total under `truncate`, versus ~2.5s for the fresh-instance equivalent this file
- * used before this round). `tenants` itself is left to accumulate for the suite's life, same as
- * every other file in this package (`test/seed.ts`'s own comment) — nothing here reads across
- * tenant rows outside `tenant_credentials`, so a stale `tenants` row is inert.
- *
- * A real, non-superuser Postgres connection would not help either: `credentialTenants` enumerates
- * every tenant holding the purpose (that is its entire purpose — see store.ts's own doc comment), so
- * without the truncate it would keep returning every tenant an earlier `it` in the same file
- * created, however faithfully the per-tenant table read is scoped.
- */
+/** Rotation enumerates the whole vault. Clear credentials between cases while reusing the
+ * migrated database; stale tenant rows have no credentials to enumerate. */
 beforeEach(async () => {
   await suite.db.execute(sql`truncate tenant_credentials cascade`);
 });
@@ -213,19 +188,10 @@ describe("rotateCredentials", () => {
     expect(legacy?.key_version).toBe(1);
   });
 
-  it("does not count a row that vanished between listing it and re-sealing it (M6)", async () => {
-    // `rotateCredentials` snapshots each tenant's rows via `listCredentials`, then re-seals each
-    // one in its OWN later `withTenant` call — so `tryGetCredential` can legitimately find nothing
-    // for a row the snapshot just saw, if that row is gone by the time its turn comes. In
-    // production that needs a genuinely concurrent `delete` racing the gap between the two reads —
-    // not deterministically constructible under this package's "real database, never mocked"
-    // convention (see store.ts's own comment on this branch). PGlite's superuser bypass gives a
-    // DIFFERENT, fully deterministic way to reach the identical code path: with two tenants each
-    // holding a different single purpose, `listCredentials` — scoped only by RLS, which PGlite does
-    // not enforce — returns the WHOLE table on every per-tenant call, so tenant P's pass sees
-    // tenant Q's row too, looks it up as `{tenantId: P, purpose: Q's purpose}`, and finds nothing.
-    // This is the SAME `value === null` branch the production race would hit, reached by a
-    // different, deterministic route — not a claim that this test represents concurrent deletion.
+  it("does not count listed metadata whose tenant-purpose lookup finds no row", async () => {
+    // Synthetic fixture for the absent-read branch: listCredentials returns both rows, then
+    // each tenant's pass tries the other purpose, whose tenant-purpose pair is absent.
+    // This exercises the count rule without claiming to simulate concurrent deletion.
     const p = await seedTenant(suite.db);
     const q = await seedTenant(suite.db);
     await withTenant(suite.db, p, (tx) =>

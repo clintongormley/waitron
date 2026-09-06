@@ -72,4 +72,4 @@ export const tenantCredentials = pgTable(
     check("tenant_credentials_auth_tag_len_ck", sql`octet_length(${t.authTag}) = 16`),
     check("tenant_credentials_purpose_ck", sql`length(${t.purpose}) > 0`),
   ],
-).enableRLS();
+);

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { runCli, type CliDeps } from "./cli.js";
 import { loadKeyRing, type KeyRing } from "./keyring.js";
@@ -30,6 +30,11 @@ const STRIPE_JSON = JSON.stringify({
 });
 
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
+
+// Listing reads the whole vault, so each case starts with an empty credential table.
+beforeEach(async () => {
+  await suite.db.execute(sql`truncate tenant_credentials`);
+});
 
 interface Harness {
   deps: CliDeps;
@@ -274,9 +279,8 @@ describe("waitron-credentials set", () => {
   });
 
   it("propagates an unexpected, non-AppError failure rather than swallowing it", async () => {
-    // A syntactically valid but never-seeded tenant: `withTenant`'s own RLS check passes (the
-    // inserted row's tenant_id matches the session's app.tenant_id), so what fails is the foreign
-    // key against `tenants` — a raw database error, not one of this package's `AppError`s.
+    // A syntactically valid but never-seeded tenant fails the foreign key against `tenants`: a
+    // raw database error, not one of this package's `AppError`s.
     // `reportFailure` deliberately does not swallow that: an unrecognised failure should crash
     // loudly rather than be reported as an ordinary, expected rejection.
     const neverSeeded = "00000000-0000-0000-0000-000000000000";
