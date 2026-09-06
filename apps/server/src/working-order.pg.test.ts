@@ -443,10 +443,10 @@ async function addTill(cfg: TillConfig, name: string): Promise<TillConfig> {
 
 /**
  * The deployment holds one tenant per database. A SECOND node under the SAME tenant + location —
- * a `cfg` differing only in `node_id`. It never sells here; it exists so `listHeldOrders` on it
- * proves the `node_id = cfg.nodeId` filter within this database. Inserted as the owner under
- * `withTenant`, the way `applyVenue`'s create-node does; `filing_module`/`tax_module` are
- * nullable and unused for a listing-only node, so they are left out.
+ * a `cfg` differing only in `node_id`. It never sells here; it exists so reads run under it prove
+ * they are venue-wide (till-reroute §3.6): a node reaches the venue's open tabs regardless of the
+ * `node_id` they carry. Inserted as the owner under `withTenant`, the way `applyVenue`'s create-node
+ * does; `filing_module`/`tax_module` are nullable and unused for a listing-only node, so left out.
  */
 async function addNode(cfg: TillConfig, name: string): Promise<TillConfig> {
   const id = randomUUID();
@@ -997,7 +997,7 @@ describe("cross-till end-to-end", () => {
   it("parks on till A, lists + retrieves + pays on till B (same node), and the chain across two sales verifies", async () => {
     const { cfg: tillA, cafe, agua } = await setupVenue();
     // A SECOND register on the SAME node. It differs from till A ONLY in `till_id`: same tenant, node,
-    // series and location. That shared node is the whole point — the held list is node-scoped.
+    // series and location — the shared node is the whole point of this cross-till, same-node path.
     const tillB = await addTill(tillA, "Caja 2");
     expect(tillB.tillId).not.toBe(tillA.tillId);
     expect(tillB.nodeId).toBe(tillA.nodeId);
@@ -1087,10 +1087,10 @@ describe("cross-till end-to-end", () => {
     expect(report.checked).toBe(2);
   });
 
-  it("node scope: a same-tenant register on a DIFFERENT node does not list an order parked on node A", async () => {
+  it("venue-wide reads: a same-tenant register on a DIFFERENT node lists an order parked on node A (till-reroute §3.6)", async () => {
     const { cfg: nodeA, cafe } = await setupVenue();
-    // A second node under the SAME tenant. The `node_id = cfg.nodeId` filter does, which is what
-    // this asserts. Same state, opposite answers: node A lists it, node B does not.
+    // A second node under the SAME tenant. Reads are venue-wide, so both nodes see the order — a
+    // promoted node inherits the venue's open tabs regardless of the `node_id` they carry.
     const nodeB = await addNode(nodeA, "Servidor 2");
 
     const orderId = randomUUID();
@@ -1100,15 +1100,14 @@ describe("cross-till end-to-end", () => {
     });
 
     expect((await listHeldOrders({ db: suite.admin }, nodeA)).map((o) => o.id)).toContain(orderId);
-    expect(await listHeldOrders({ db: suite.admin }, nodeB)).toEqual([]);
+    expect((await listHeldOrders({ db: suite.admin }, nodeB)).map((o) => o.id)).toContain(orderId);
   });
 
-  it("node scope: the by-id family (get/update/abandon) fails closed on a foreign-node order", async () => {
+  it("venue-wide reads: the by-id family (get/update/abandon) reaches a foreign-node order (till-reroute §3.6)", async () => {
     const { cfg: nodeA, cafe } = await setupVenue();
-    // A second register under the SAME tenant + location, differing only in node_id. The `node_id
-    // = cfg.nodeId` filter now in each by-id lookup does. Same state, opposite answers: node A
-    // reaches it, node B is refused by all three (getHeldOrder/updateHeldOrder/abandonHeldOrder —
-    // the whole by-id family, 7b).
+    // A second register under the SAME tenant + location, differing only in node_id. Reads are
+    // venue-wide, so every by-id lookup on node B reaches node A's order — a promoted node serves
+    // the tabs it inherited (getHeldOrder/updateHeldOrder/abandonHeldOrder — the whole by-id family).
     const nodeB = await addNode(nodeA, "Servidor 2");
 
     const orderId = randomUUID();
@@ -1117,30 +1116,108 @@ describe("cross-till end-to-end", () => {
       lines: [{ productId: cafe.id, quantity: "1" }],
     });
 
-    // The owning node reaches it — the order is perfectly usable, so node B's refusals below are the
-    // node filter, not a broken order.
-    expect((await getHeldOrder({ db: suite.admin }, nodeA, orderId)).id).toBe(orderId);
-
-    // Node B is refused by every by-id lookup, each with its own fail-closed code.
-    await expect(getHeldOrder({ db: suite.admin }, nodeB, orderId)).rejects.toMatchObject({
-      code: "working_order.not_found",
-      params: { workingOrderId: orderId },
-    });
+    // Node B retrieves the foreign-node order and edits it like its own.
+    expect((await getHeldOrder({ db: suite.admin }, nodeB, orderId)).id).toBe(orderId);
     await expect(
       updateHeldOrder({ db: suite.admin }, nodeB, orderId, {
         lines: [{ productId: cafe.id, quantity: "2" }],
       }),
-    ).rejects.toMatchObject({
-      code: "working_order.not_open",
+    ).resolves.toBeUndefined();
+
+    // The edit landed on the shared row: node A sees node B's rewritten basket (quantity 1 → 2).
+    const afterEdit = await getHeldOrder({ db: suite.admin }, nodeA, orderId);
+    expect(afterEdit.lines).toHaveLength(1);
+    expect(afterEdit.lines[0]!.productId).toBe(cafe.id);
+    expect(Number(afterEdit.lines[0]!.quantity)).toBe(2);
+
+    // Node B abandons it; the order flips terminal for the whole venue.
+    await expect(abandonHeldOrder({ db: suite.admin }, nodeB, orderId)).resolves.toBeUndefined();
+    await expect(getHeldOrder({ db: suite.admin }, nodeA, orderId)).rejects.toMatchObject({
+      code: "working_order.not_found",
       params: { workingOrderId: orderId },
     });
-    await expect(abandonHeldOrder({ db: suite.admin }, nodeB, orderId)).rejects.toMatchObject({
-      code: "working_order.not_open",
-      params: { workingOrderId: orderId },
+  });
+});
+
+// Two tenants in ONE database. Production holds one tenant per database, but tenant isolation is
+// enforced at the QUERY, never left to the deployment invariant (#255): `withTenant` stopped isolating
+// SELECTs when RLS was dropped, so a by-id read's own tenant predicate is its only scope, and the
+// harness + dev DBs really are multi-tenant. Venue-wide (§3.6) means every NODE of one tenant, never
+// across tenants — the six S3 read sites are uniformly `eq(tenantId, cfg.tenantId)`. Real Postgres
+// as `app_user` (rolsuper=f): on PGlite every connection is a superuser and the leak would pass silently.
+describe("cross-tenant isolation — a by-id read never reaches another tenant's order (#255, till-reroute §3.6)", () => {
+  it("getHeldOrder against a FOREIGN tenant's order id throws not_found — never the other tenant's basket", async () => {
+    const { cfg: tenantA } = await setupVenue();
+    const { cfg: tenantB, cafe: cafeB } = await setupVenue();
+    expect(tenantB.tenantId).not.toBe(tenantA.tenantId);
+
+    const bOrderId = randomUUID();
+    await parkOrder({ db: suite.admin }, tenantB, {
+      id: bOrderId,
+      lines: [{ productId: cafeB.id, quantity: "1" }],
+      label: "B private",
     });
 
-    // Node B's refused attempts had NO side effect: node A's order is still open and still retrievable.
-    expect((await getHeldOrder({ db: suite.admin }, nodeA, orderId)).id).toBe(orderId);
+    // As tenant A the foreign id is invisible, exactly as a non-existent id is.
+    await expect(getHeldOrder({ db: suite.admin }, tenantA, bOrderId)).rejects.toMatchObject({
+      code: "working_order.not_found",
+      params: { workingOrderId: bOrderId },
+    });
+
+    // B's order is untouched: still open, one line, still labelled — read back as B.
+    const stillOpen = await getHeldOrder({ db: suite.admin }, tenantB, bOrderId);
+    expect(stillOpen.label).toBe("B private");
+    expect(stillOpen.lines).toHaveLength(1);
+  });
+
+  it("abandonHeldOrder against a FOREIGN tenant's order id throws not_open — never abandons the other tenant's order", async () => {
+    const { cfg: tenantA } = await setupVenue();
+    const { cfg: tenantB, cafe: cafeB } = await setupVenue();
+
+    const bOrderId = randomUUID();
+    await parkOrder({ db: suite.admin }, tenantB, {
+      id: bOrderId,
+      lines: [{ productId: cafeB.id, quantity: "1" }],
+      label: "B private",
+    });
+
+    await expect(abandonHeldOrder({ db: suite.admin }, tenantA, bOrderId)).rejects.toMatchObject({
+      code: "working_order.not_open",
+      params: { workingOrderId: bOrderId },
+    });
+
+    // B's order stays OPEN — the abandon did not cross the tenant boundary.
+    expect((await getHeldOrder({ db: suite.admin }, tenantB, bOrderId)).id).toBe(bOrderId);
+  });
+
+  it("updateHeldOrder against a FOREIGN tenant's order id throws not_open — never a raw 23503, never mutates it", async () => {
+    const { cfg: tenantA, cafe: cafeA } = await setupVenue();
+    const { cfg: tenantB, cafe: cafeB } = await setupVenue();
+
+    const bOrderId = randomUUID();
+    await parkOrder({ db: suite.admin }, tenantB, {
+      id: bOrderId,
+      lines: [{ productId: cafeB.id, quantity: "1" }],
+      label: "B private",
+    });
+
+    // `cafeA` is tenant A's own product, so pricing succeeds under A and — before the fix — the lock
+    // finds B's row by id alone and the path runs on to the line insert, failing only at the composite
+    // FK (23503). After the fix the tenant predicate makes the lock miss, so it is a clean not_open.
+    await expect(
+      updateHeldOrder({ db: suite.admin }, tenantA, bOrderId, {
+        lines: [{ productId: cafeA.id, quantity: "2" }],
+      }),
+    ).rejects.toMatchObject({
+      code: "working_order.not_open",
+      params: { workingOrderId: bOrderId },
+    });
+
+    // B's basket is unchanged: one line, its original label — the aborted tx touched nothing.
+    const afterAttempt = await getHeldOrder({ db: suite.admin }, tenantB, bOrderId);
+    expect(afterAttempt.label).toBe("B private");
+    expect(afterAttempt.lines).toHaveLength(1);
+    expect(Number(afterAttempt.lines[0]!.quantity)).toBe(1);
   });
 });
 
@@ -1953,13 +2030,12 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     expect(await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).toEqual([]);
   });
 
-  it("listStationQueue node scope is SYMMETRIC: each node sees only its own order's items, both non-empty", async () => {
+  it("listStationQueue is VENUE-WIDE: each node sees the venue's items, regardless of node (till-reroute §3.6)", async () => {
     const { cfg: nodeA, cafe } = await modeVenue("ticket_then_pay");
-    // A second node under the SAME tenant + location — `addNode`'s established 7b shape: it
-    // differs only in `node_id`, so only `listStationQueue`'s `node_id = cfg.nodeId` filter does.
-    // BOTH nodes fire a genuine order, so this proves "A shows A, B shows B" rather than "one
-    // empty, one not" — a measurement where both answers look alike measures nothing (CLAUDE.md
-    // §1). Both nodes share the location's one default station.
+    // A second node under the SAME tenant + location — `addNode`'s established 7b shape: it differs
+    // only in `node_id`. Reads are venue-wide, so BOTH nodes fire a genuine order and BOTH queues show
+    // both — a measurement where each side holds two orders, not "one empty, one not" (CLAUDE.md §1).
+    // Both nodes share the location's one default station.
     const nodeB = await addNode(nodeA, "Servidor 2");
     const station = await defaultStationId(nodeA);
 
@@ -1982,9 +2058,10 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     const queueA = await asTenant(nodeA, (tx) => listStationQueue(tx, nodeA, station));
     const queueB = await asTenant(nodeB, (tx) => listStationQueue(tx, nodeB, station));
 
-    // Same station on both sides, each with exactly one order's items, opposite membership.
-    expect(queueA.map((g) => g.orderId)).toEqual([idA]);
-    expect(queueB.map((g) => g.orderId)).toEqual([idB]);
+    // Same station on both sides, each holding BOTH orders (oldest-first: A fired before B) — the
+    // reads no longer separate by node.
+    expect(queueA.map((g) => g.orderId)).toEqual([idA, idB]);
+    expect(queueB.map((g) => g.orderId)).toEqual([idA, idB]);
   });
 
   it("sendToPrep refuses to fire an order it may not (working_order.not_settled) — an open one and an absent id", async () => {
@@ -2014,18 +2091,17 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
 });
 
 // KDS-3 Task 3 (folded in per the Task-2 review) — the cross-station expo/pass read over real Postgres.
-// `listExpoQueue` gathers a node's OPEN orders (with a not-yet-away item) across ALL stations; unlike the
-// per-station `listStationQueue` it takes NO station arg, so its only scoping is `node_id = cfg.nodeId`.
-// PGlite proves the join/grouping/exclusions (working-order.test.ts); this case takes the SAME
-// node-symmetry shape the `listStationQueue` tests above use, retargeted at `listExpoQueue`. The reads
-// run through {@link asTenant} (a `withTenant` + `asAppUser` scope), as `app_user`.
-describe("listExpoQueue (KDS-3 cross-station expo/pass read) — node scope", () => {
-  it("node scope is SYMMETRIC: each node's expo board shows only its own order, both non-empty", async () => {
+// `listExpoQueue` gathers the venue's OPEN orders (with a not-yet-away item) across ALL stations; unlike
+// the per-station `listStationQueue` it takes NO station arg, and since till-reroute §3.6 it is not
+// node-scoped either. PGlite proves the join/grouping/exclusions (working-order.test.ts); this case takes
+// the SAME venue-wide shape the `listStationQueue` test above uses, retargeted at `listExpoQueue`. The
+// reads run through {@link asTenant} (a `withTenant` + `asAppUser` scope), as `app_user`.
+describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", () => {
+  it("is VENUE-WIDE: each node's expo board shows the venue's orders, regardless of node (till-reroute §3.6)", async () => {
     const { cfg: nodeA, cafe } = await modeVenue("ticket_then_pay");
-    // A second node under the SAME tenant + location (addNode's 7b shape) — only
-    // `listExpoQueue`'s `node_id = cfg.nodeId` filter does. BOTH nodes fire a genuine order, so
-    // this proves "A shows A, B shows B", not "one empty, one not" — a measurement where both
-    // answers look alike measures nothing (CLAUDE.md §1).
+    // A second node under the SAME tenant + location (addNode's 7b shape). Reads are venue-wide, so
+    // BOTH nodes fire a genuine order and BOTH expo boards show both — a measurement where each side
+    // holds two orders, not "one empty, one not" (CLAUDE.md §1).
     const nodeB = await addNode(nodeA, "Servidor 2");
 
     const idA = randomUUID();
@@ -2047,10 +2123,10 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read) — node scope", ()
     const expoA = await asTenant(nodeA, (tx) => listExpoQueue(tx, nodeA));
     const expoB = await asTenant(nodeB, (tx) => listExpoQueue(tx, nodeB));
 
-    // Same tenant + location on both sides, each expo board holding exactly its own order,
-    // opposite membership — the node filter is what separates them.
-    expect(expoA.map((o) => o.orderId)).toEqual([idA]);
-    expect(expoB.map((o) => o.orderId)).toEqual([idB]);
+    // Same tenant + location on both sides, each expo board holding BOTH orders (oldest-first: A
+    // fired before B) — the reads no longer separate by node.
+    expect(expoA.map((o) => o.orderId)).toEqual([idA, idB]);
+    expect(expoB.map((o) => o.orderId)).toEqual([idA, idB]);
   });
 });
 
