@@ -184,10 +184,12 @@ the new standard series. A module that returns no `series` leaves the series alo
 
 Ordering is the safety mechanism (Astra's Critical 2): the hooks and series writes commit **before**
 `restoreSecrets` runs, and the orchestrator writes `trading.env` from the artifact's entry with the
-series key already rewritten. A restore that fails anywhere before the secrets write leaves the box
-with **no** `trading.env` — it cannot boot into trading at all, so the verbatim ledger is never
-tradable under the old identity. The only remaining non-atomic step is the secrets write after the
-commit (§5).
+series key already rewritten. A pre-existing `trading.env` on the target (a box that was partly
+provisioned before the restore) is **set aside first** — renamed to `trading.env.replaced`, which
+boot never reads — before anything irreversible (the plan review's Critical 1). A restore that fails
+anywhere before the secrets write therefore leaves the box with **no** `trading.env` at all — neither
+the artifact's nor the target's old one — so the verbatim ledger is never tradable under any
+identity. The only remaining non-atomic step is the secrets write after the commit (§5).
 
 Boot-time series resolution (a `config.till.seriesId` that is retired → the node's live standard
 series) would make even that step unnecessary and would also close R3b's power-loss carry-in. It is
@@ -280,7 +282,9 @@ outcome/argument shapes are open sets (BR-2's rule). `@waitron/module` already d
 
 `writeValidated` (`apps/server/src/restore.ts`), in order:
 
-1. `restoreDatabase` → `restoreMedia` — unchanged.
+1. **Set aside any existing identity** (unless `skipSecrets`): `<stateDir>/trading.env` →
+   `trading.env.replaced` (boot reads only the former; a missing file is the normal fresh-box
+   case). Then `restoreDatabase` → `restoreMedia` — unchanged.
 2. **Migrate the restored database to this binary's schema** (Astra's Major 3): the compatibility
    gate admits an artifact whose module schema versions are *older* than the target's
    (`restore-gate.ts` refuses only newer), and a hook written against today's schema — this one
@@ -308,16 +312,21 @@ outcome/argument shapes are open sets (BR-2's rule). `@waitron/module` already d
    files under. Inside the transaction, for each module in list order with a `backup.restore` hook:
    `outcome = await hook(tx, node)`; collect the report; if `outcome.series` is present, remember
    it with the module name. After the loop: more than one module returned `series` →
-   `restore.series_conflict { modules }`; exactly one → `retireNodeSeries(tx, node)` then
-   `insertNodeSeries(tx, node, series)` (both new in `@waitron/db`, beside `insertReservedSeriesTx`;
-   the insert refuses a code the node already holds, live or retired, with
+   `restore.series_conflict { modules }`; exactly one → `retireNodeSeriesTx(tx, node)` then
+   `insertNodeSeriesTx(tx, node, series)` (both new in `@waitron/db`, beside
+   `insertReservedSeriesTx`; the insert refuses a code the node already holds, live or retired, with
    `series.code_collision { code }` — the unique key includes retired rows, so this is a check, not
-   a constraint surprise) → then `readStandardSeriesIdTx(tx, node)` (the live-filtered read of §7,
-   in-transaction) — zero or two live standard series aborts the transaction, so the commit never
-   leaves a node that cannot sell. The resolved standard series id is the transaction's result.
+   a constraint surprise). Then, **on every path**, `readStandardSeriesIdTx(tx, node)` (the
+   live-filtered read of §7, in-transaction) — zero or two live standard series aborts the
+   transaction whether or not a module returned series, so the commit never leaves a node that
+   cannot sell (the plan review's Major 2). A failure in this settling step is reported as
+   `restore.hook_failed` naming the module that returned the series, or `core` when none did —
+   `invoice_series` is core's contract. The resolved standard series id is the transaction's result.
 6. **Write the secrets** — `restoreSecrets` as today, except that the `trading.env` entry is
-   rewritten in memory first: `WAITRON_TILL_SERIES_ID` = the id from step 5 (byte-identical when no
-   module returned series). Every other key and the line order are preserved.
+   rewritten in memory first when the id from step 5 differs from the artifact's
+   `WAITRON_TILL_SERIES_ID` (so an artifact whose env named a series that is not the node's live
+   standard one is corrected too); byte-identical otherwise. Every other key and the line order are
+   preserved.
 7. Staging cleanup in the `finally` — unchanged.
 
 The **role**. `WAITRON_RESTORE_DATABASE_URL` is the superuser/BYPASSRLS-class role the backup was
@@ -407,7 +416,7 @@ grep and lists any new hit in the PR):
 | --- | --- |
 | `recordSale` / `recordCorrection` / `recordSubstitution` (`packages/core`) series guard | + `retired_at IS NULL`, else **`sale.series_retired { seriesId, retiredAt }`** — the write path is where a stale env is caught, loudly |
 | `readStandardSeriesId` (`packages/db/src/reserved-identity.ts`) | live standard series only; the >1 guard stays, its `v8 ignore` dropped because §9 makes it reachable; a `Tx` variant for §5 step 5 |
-| `FISCAL_PROVISIONING.standby.reserve` (`fiscal-verifactu/src/provisioning.ts`) | live series only — a standby reserved after a restore derives from `FA-210441234`; with §6's base rule that is `FA-<m>` |
+| `FISCAL_PROVISIONING.standby.reserve` (`fiscal-verifactu/src/provisioning.ts`) | derives from the node's live series **bases** — the same `liveSeriesBases` the hook uses (§6 step 5), so a standby reserved after a restore holds `FA-<m>`, never `FA-210441234-<m>` (the plan review's Major 3) |
 | `promote.ts` (`readStandardSeriesId` for the promoting mirror) | unchanged code; benefits from the live filter |
 | `allocateInvoiceNumber` (`packages/db/src/allocate-number.ts`) | unchanged: only the three guarded write paths call it, after their check |
 | `till-config.ts` (`WAITRON_TILL_SERIES_ID`), `device-session.ts`, `till-api.ts`, `working-order.ts` (sale config) | unchanged: they read the env this slice rewrites; a device carries no series |
@@ -473,29 +482,45 @@ core-only harness and does not apply here):
   greater than every number in the seeded rows, the chain head is both-null (`esPrimerRegistro`
   true), `cadenas.secuencia` is **not** reset, the registro row is untouched, and `series` is
   `[FA-<n> standard, RE-<n> rectificative]`.
-- **The reuse experiment** (§3.5): register at counter 1, snapshot the counter row, register again
-  (2), restore the snapshot, run the hook → the minted number is not 2 and exceeds it. Delete the
-  floor statement → the test mints 2 → red.
+- **The reuse experiment** (§3.5): register at counter 1 (state A, the backup); register again (2 —
+  a previous restore's minting); then rebuild state A exactly — delete the row for 2, un-revoke 1,
+  reset the counter (what restoring the older artifact does; leaving the row for 2 in place would
+  make the unique index, not the floor, refuse the reuse); run the hook → the minted number is not
+  2 and exceeds it. Delete the floor statement → the hook mints 2 → red.
 - Without a live SIF: no new row, no `series`, a report that says so. Delete the `currentSif`
   branch → red.
 - The base rule: live `FA-7` (7 a revoked number of this tenant) derives `FA-<n>`; live `FA-2026`
   (no such number) derives `FA-2026-<n>`; a 39-character base → `series.code_too_long`.
 - The live-series read ignores a retired series.
-- The first post-restore record: append through `VerifactuBackend.recordSale` after the hook —
-  `primer_registro = true`, null `anterior_*`, `verifyChain` ok across the boundary (the shape
-  `registro-sif.test.ts` "re-registration begins a new chain" already pins for the seed path).
+- The first post-restore record, through the **real append path** (`appendToChain`, which computes
+  the huella and derives `primer_registro`) both before and after the hook — never a fixture that
+  writes the hash by hand, which the verifier would reject as a predecessor-hash mismatch:
+  `primer_registro = true`, null `anterior_*`, `sif_id` = the fresh SIF, the sequence continued,
+  `verifyChain` ok across the boundary.
+- A real-Postgres leg (`restore.rls.test.ts`, `useTemplateDb({ template: "manifest" })`) runs the
+  happy path once on real PostgreSQL — the `greatest(...)` upsert, the partial unique index, the
+  head reset — as the superuser-class role the production restore is.
 
 **`apps/server`** (`restore.test.ts`, unit; fake modules, `openDb` and `migrate` seams):
 
 - Order: migrate runs after `restoreDatabase` and before any hook; hooks run before
-  `restoreSecrets`; `skipSecrets: true` runs neither hooks nor the identity read (delete the gate
-  → red).
+  `restoreSecrets`; `skipSecrets: true` runs neither hooks nor the identity read — proven with an
+  artifact that carries **no** `trading.env` at all (delete the gate → red).
+- A pre-existing `trading.env` on the target is set aside before anything irreversible: after a
+  failing hook the box holds no `trading.env` and `trading.env.replaced` holds the old bytes; under
+  `skipSecrets` the existing file is untouched (delete the set-aside → red).
 - The hook receives `(tx, node)` with the ids parsed from the **artifact's** `trading.env`, not the
   target's (seed a different file in the target `stateDir` → the hook sees the artifact's).
 - Two modules returning `series` → `restore.series_conflict`; `[]` → the transaction aborts with the
-  no-standard code wrapped in `restore.hook_failed`.
+  no-standard code wrapped in `restore.hook_failed`; no module returning series while the restored
+  node has no live standard series → the same refusal naming `core`; a returned code the node
+  already holds → `series.code_collision` **after** the retire started, and the retire rolls back
+  with it (a real PGlite transaction, not a fake).
 - `series` present → the written `trading.env` differs from the artifact's in exactly
-  `WAITRON_TILL_SERIES_ID`; absent → byte-identical.
+  `WAITRON_TILL_SERIES_ID`; absent and the artifact's id is the live standard one → byte-identical;
+  absent but the artifact's id is not the live standard one → corrected.
+- The CLI prints `restore.hook_failed` with the module and the inner code, and prints the §2
+  operator precondition before restoring.
 - Missing key → `restore.identity_incomplete`; unknown node → `restore.identity_unknown`; a hook
   `AppError` → `restore.hook_failed` with the inner code; the CLI reports each by code.
 
@@ -511,6 +536,13 @@ fixture: `W1`, the counter row seeded, a `trading.env` entry in the artifact):
   `sync_log` rows carry `origin_id = nodeId` (delete `{ nodeId }` → all-zero → red); the migrated
   module versions equal the binary's (`schemaVersionsByModule`); a throwing second hook rolls the
   SIF and series back (real transaction, not a fake).
+- **An older artifact** (a second baseline downgraded one core migration — `retired_at` dropped and
+  the last journal row deleted — which the gate admits) is migrated before the hook runs and restores
+  cleanly; with the migrate step stubbed out, the same artifact fails at the hook and leaves no
+  `trading.env` — the receipt that migration is what makes the hook safe.
+- **A failure after the fiscal hook minted and the series were retired** (the real hook's outcome
+  replaced by a code the node already holds) rolls back the SIF row, the counter floor and the
+  retire together, and writes no identity.
 - **Negative control:** the same artifact restored with `skipSecrets: true` (the rejoin shape)
   leaves the SIF, series and `trading.env` untouched.
 - The e2e connects as the shared container's superuser — the class the production restore role is

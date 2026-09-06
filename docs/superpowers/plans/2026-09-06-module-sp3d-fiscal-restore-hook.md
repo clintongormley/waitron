@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make the disaster-recovery CLI (`waitron-restore restore <artifact>`) leave a restored box fiscally trade-ready as the same node: a fresh SIF (installation number floored by the clock, chain head reset), the node's invoice series retired and replaced by disjoint ones, and `trading.env` pointing at the new standard series — with no bootable identity written until all of that has committed.
+**Goal:** Make the disaster-recovery CLI (`waitron-restore restore <artifact>`) leave a restored box fiscally trade-ready as the same node: a fresh SIF (installation number floored by the clock, chain head reset), the node's invoice series retired and replaced by disjoint ones, and `trading.env` pointing at the new standard series — with no bootable identity on disk unless all of that has committed.
 
-**Architecture:** `@waitron/module`'s `backup.restore` seat becomes a typed `RestoreHook = (tx, node) => Promise<RestoreOutcome>`. The fiscal package exports `FISCAL_RESTORE` (re-register via `registerSif` after raising the counter floor; derive series codes from stripped bases). `apps/server/src/restore.ts`'s `writeValidated` gains: migrate-after-`pg_restore`, an identity gate (`skipSecrets` ⇒ no hooks), one origin-stamped `withTenant` transaction that runs every hook and then retires/inserts the node's series through new `@waitron/db` helpers, and a secrets write whose `trading.env` is rewritten in memory. `invoice_series` gains `retired_at`; the three `packages/core` write paths refuse a retired series.
+**Architecture:** `@waitron/module`'s `backup.restore` seat becomes a typed `RestoreHook = (tx, node) => Promise<RestoreOutcome>`. The fiscal package exports `FISCAL_RESTORE` (re-register via `registerSif` after raising the counter floor; derive series codes from stripped bases — a rule the standby reservation now shares). `apps/server/src/restore.ts`'s `writeValidated` gains: set-aside of any pre-existing identity, migrate-after-`pg_restore`, an identity gate (`skipSecrets` ⇒ no hooks), one origin-stamped `withTenant` transaction that runs every hook, retires/inserts the node's series through new `@waitron/db` helpers and checks the node has exactly one live standard series, and a secrets write whose `trading.env` is rewritten in memory. `invoice_series` gains `retired_at`; the three `packages/core` write paths refuse a retired series.
 
 **Tech Stack:** TypeScript, Vitest (PGlite via `createPgliteDb`/`usePgliteDb`; real PostgreSQL via the shared Testcontainers container + `docker exec pg_dump`/`pg_restore`), drizzle-orm + drizzle-kit (`db:generate`), pnpm workspace. One new core migration, no new dependency.
 
@@ -14,26 +14,27 @@
 
 - **Worktree:** all work happens in `/Users/clintongormley/workspace/worktrees/waitron-feat-module-sp3d-fiscal-restore-hook` on branch `feat/module-sp3d-fiscal-restore-hook`. Never commit to `main`.
 - **Every commit is `git commit -s`** (DCO; CI's `dco` job walks the whole PR range).
-- **TDD:** failing test first, watch it fail, minimal implementation, watch it pass. Every guard is proven by deletion (delete the check → the test goes red → restore it) and the task's verification step names which test proves which guard.
-- **Generic packages stay English.** `packages/module`, `packages/db` and `packages/core` are scanned by the english-only guard (`GENERIC_PACKAGES`, `packages/db/src/english-only.ts`) against the base list plus every module's `vocabulary` — the fiscal tokens include `sif`, `registro`, `instalacion`, `numero`, `serie`, `huella`, `cadena`. Nothing you add to those three packages may contain them (identifiers OR comments). `series` (English) is fine. Fiscal words live in `packages/fiscal-verifactu`, `packages/composition`, `apps/server`, tests and `docs/`.
-- **Names are fixed:** `RestoreHook`, `RestoreOutcome` (`@waitron/module`); `FISCAL_RESTORE`, `restoreFiscal`, `installationFloor`, `raiseInstallationFloor`, `stripOwnSuffixes`, `MAX_BASE_CODE_LENGTH` (`@waitron/fiscal-verifactu`); `retireNodeSeriesTx`, `insertNodeSeriesTx`, `readStandardSeriesIdTx` (`@waitron/db`); `runRestoreHooks`, `readArtifactIdentity`, `rewriteTradingEnv` (`apps/server/src/restore.ts`); `RestoreDeps.openDb` / `RestoreDeps.migrate` seams.
+- **TDD:** failing test first, watch it fail, minimal implementation, watch it pass. Every guard is proven by deletion (delete the check → the named test goes red → restore it); each task's verification step names which test proves which guard.
+- **Fiscal vocabulary stays in the fiscal package.** The automated guard (`english-only`, root project) scans identifiers and string literals in the generic packages (`GENERIC_PACKAGES`, `packages/db/src/english-only.ts`) — `packages/module`, `packages/db`, `packages/core` and `packages/composition` among them, tests included — and strips comments. The house writing rule is stronger: comments in those packages also stay free of the fiscal tokens (`SIF`, `registro`, `instalacion`, `numero`, `serie`, `huella`, `cadena`, `NumSerieFactura`) — say "invoice number", "installation number", "series", "chain". `packages/fiscal-verifactu`, `apps/server`, `docs/` and `scripts/` may use them.
+- **Names are fixed:** `RestoreHook`, `RestoreOutcome` (`@waitron/module`); `FISCAL_RESTORE`, `restoreFiscal`, `installationFloor`, `raiseInstallationFloor` (`fiscal-verifactu/src/restore.ts`); `stripOwnSuffixes`, `liveSeriesBases`, `MAX_BASE_CODE_LENGTH` (`fiscal-verifactu/src/reserved-series.ts`); `retireNodeSeriesTx`, `insertNodeSeriesTx`, `readStandardSeriesIdTx` (`@waitron/db`); `runRestoreHooks`, `readArtifactIdentity`, `rewriteTradingEnv`, `setAsideExistingIdentity` (`apps/server/src/restore.ts`); `RestoreDeps.openDb` / `RestoreDeps.migrate` seams.
 - **Error codes (never renamed once shipped):** `series.code_collision { code }` (`packages/db`); `sale.series_retired { seriesId, retiredAt }` (`packages/core`); `series.code_too_long { code }` (`packages/fiscal-verifactu`); `restore.identity_incomplete { missing }`, `restore.identity_unknown { tenantId, nodeId }`, `restore.series_conflict { modules }`, `restore.hook_failed { module, code }` (`apps/server`). Every file that throws a code imports its registry (`import "./errors.js"`).
 - **Never widen a grant.** `app_user`'s UPDATE on `invoice_series` stays column-scoped to `next_number` (`packages/db/drizzle/0003_invoice_series.sql`); the retire runs on the privileged restore connection only.
-- **The migration is generated, never hand-written:** `pnpm --filter @waitron/db db:generate --name series_retired_at`. Commit `packages/db/drizzle/0111_series_retired_at.sql` and the `meta/` snapshot + journal it updates together. (If `main` gains a `0111` before this lands, regenerate at the rebase — CLAUDE.md §3 — never hand-edit the journal.)
-- **Per-task verification** = `pnpm format:check` (whole workspace, fast) + the named package's `lint`, `typecheck` and `test:coverage`. Real-PG suites need `TESTCONTAINERS_RYUK_DISABLED=true`. `apps/server`'s whole `test:coverage` is heavy (three CI shards): run the named suites per task and the whole package once in Task 7.
-- **Coverage bars:** `db`, `core`, `fiscal-verifactu` hold `98/98/98/95`; `module`, `composition`, `apps/server` hold `90/90/85/85`. New code lands with its tests in the same task so the bar never dips.
+- **The migration is generated, never hand-written:** `pnpm --filter @waitron/db db:generate --name series_retired_at`. Commit `packages/db/drizzle/0111_series_retired_at.sql` and the `meta/` snapshot + journal together. (If `main` gains a `0111` before this lands, regenerate at the rebase — CLAUDE.md §3 — never hand-edit the journal.)
+- **Root guards run with `pnpm exec vitest run <name>` from the repo root** (the root project). Never `pnpm test` at the root for a targeted check: root `package.json`'s `test` is `vitest run && pnpm -r test` — the whole workspace, browser packages included.
+- **Per-task verification** = `pnpm format:check` (whole workspace, fast) + the named package's `lint`, `typecheck` and `test:coverage`. Real-PG suites need `TESTCONTAINERS_RYUK_DISABLED=true`. `apps/server`'s whole `test:coverage` is heavy: run the named suites per task and the whole package once in Task 7, alone.
+- **Coverage bars:** `db`, `core`, `fiscal-verifactu` hold `98/98/98/95`; `module`, `composition`, `apps/server`, `provisioning` hold `90/90/85/85`. New code lands with its tests in the same task.
 - **Comments state the invariant, not the history** (CLAUDE.md §1). No "added in SP-3d" narratives; at most a one-line spec pointer. Thin the comments you touch, and delete every receipt §11 lists in the task that changes the behaviour it described.
 - **Never run two browser-mode gates at once; never background `pnpm -r test:coverage`.** Before any `git push`, `pgrep -f .husky/pre-push` must print nothing.
 - **Do not open the PR from a task.** Task 7 ends with the branch ready; `/finish-branch` opens it. This slice is owner-gated (H2): never land it.
 
 ---
 
-### Task 1: `invoice_series.retired_at` and the core series helpers (`@waitron/db`)
+### Task 1: `invoice_series.retired_at`, the core series helpers, and the bundle round trip (`@waitron/db`, `@waitron/provisioning`)
 
 **Files:**
 - Modify: `packages/db/src/schema/series.ts` (column), `packages/db/src/errors.ts` (code), `packages/db/src/reserved-identity.ts` (helpers), `packages/db/src/index.ts` (exports)
 - Create: `packages/db/drizzle/0111_series_retired_at.sql` + `meta/` updates (generated)
-- Test: `packages/db/src/reserved-identity.test.ts`
+- Test: `packages/db/src/reserved-identity.test.ts`, `packages/provisioning/src/venue-adopt.test.ts`
 
 **Interfaces:**
 - Produces:
@@ -45,7 +46,7 @@
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `describe("reserved-identity accessors", …)` in `packages/db/src/reserved-identity.test.ts` (imports to add: `retireNodeSeriesTx`, `insertNodeSeriesTx`, `readStandardSeriesIdTx` from `./index.js`; `isNull` is not needed):
+Append to `describe("reserved-identity accessors", …)` in `packages/db/src/reserved-identity.test.ts`. Add `retireNodeSeriesTx`, `insertNodeSeriesTx` to the `./index.js` import (NOT `readStandardSeriesIdTx` — nothing here calls it and an unused import fails typecheck) and `and`, `inArray` to the `drizzle-orm` import:
 
 ```ts
   it("readStandardSeriesId ignores a RETIRED standard series (a cold restore retires the old one)", async () => {
@@ -130,12 +131,26 @@ Append to `describe("reserved-identity accessors", …)` in `packages/db/src/res
   });
 ```
 
-Add `and`, `inArray` to the `drizzle-orm` import at the top of the test file.
+In `packages/provisioning/src/venue-adopt.test.ts`, extend the test "revives an ISO-string created_at (the JSON round-trip shape)…": after `rows.tills[0]!.createdAt = stamp;` add `rows.invoiceSeries[0]!.retiredAt = stamp;` (the first timestamp column on `invoice_series` — `reviveRow` is schema-driven, so this pins that it is covered), and replace the trailing "no-date-column rows (locations, invoice_series)" assertion block with:
+
+```ts
+    // `locations` has no date column — the pass-through path.
+    const l = await suite.db.execute(sql`select id from locations where id = ${designated.locationId}`);
+    expect(l.rows).toHaveLength(1);
+    // `invoice_series.retired_at` crosses the bundle as an ISO string and lands as a timestamp.
+    const s = await suite.db.execute<{ n: number; ts: string | null }>(
+      sql`select count(*)::int as n, min(retired_at)::text as ts from invoice_series where tenant_id = ${designated.tenantId}`,
+    );
+    expect(s.rows[0]!.n).toBe(2);
+    expect(new Date(s.rows[0]!.ts!).toISOString()).toBe(stamp);
+```
+
+Update that test's comment so it no longer claims `invoice_series` has no date column.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `pnpm --filter @waitron/db test reserved-identity`
-Expected: FAIL — `retiredAt` does not exist on `invoiceSeries`; the three helpers are not exported.
+Run: `pnpm --filter @waitron/db test reserved-identity && pnpm --filter @waitron/provisioning test venue-adopt`
+Expected: FAIL — `retiredAt` does not exist on `invoiceSeries`; the helpers are not exported.
 
 - [ ] **Step 3: Add the column and generate the migration**
 
@@ -177,7 +192,7 @@ In `packages/db/src/reserved-identity.ts`, change the imports to `import { and, 
  * Reads only `retired_at IS NULL` rows — a retired series is history, never the one to number from.
  * Caps the read at TWO rows and fails LOUD on a second live standard series rather than picking one
  * silently: nothing enforces one standard series per node (the natural key is `(tenant_id, node_id,
- * code)`, not purpose), and two would make `NumSerieFactura` non-deterministic. Reachable only by a
+ * code)`, not purpose), and two would make the invoice number non-deterministic. Reachable only by a
  * corrupt write; a plain `Error`, not a code, because it is a programming-level invariant.
  */
 export async function readStandardSeriesIdTx(
@@ -282,16 +297,16 @@ Delete the old `/* v8 ignore */` markers around the ">1" guard (the new test rea
 
 - [ ] **Step 6: Run the tests to verify they pass**
 
-Run: `pnpm --filter @waitron/db test reserved-identity`
-Expected: PASS. Then prove by deletion: remove `isNull(invoiceSeries.retiredAt)` from `readStandardSeriesIdTx` → the "ignores a RETIRED" test fails (the loud >1 guard fires); restore it.
+Run: `pnpm --filter @waitron/db test reserved-identity && pnpm --filter @waitron/provisioning test venue-adopt`
+Expected: PASS. Prove by deletion: remove `isNull(invoiceSeries.retiredAt)` from `readStandardSeriesIdTx` → the "ignores a RETIRED" test fails (the loud >1 guard fires); restore it.
 
 - [ ] **Step 7: Verify and commit**
 
-Run: `pnpm format:check && pnpm --filter @waitron/db lint && pnpm --filter @waitron/db typecheck && TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/db test:coverage`
+Run: `pnpm format:check && pnpm --filter @waitron/db lint && pnpm --filter @waitron/db typecheck && TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/db test:coverage && pnpm --filter @waitron/provisioning test:coverage`
 Also: `pnpm --filter @waitron/fiscal-verifactu test inmutabilidad` (a column on a `tenant_id` table — the FORCE-RLS scan must stay green).
 
 ```bash
-git add packages/db
+git add packages/db packages/provisioning
 git commit -s -m "feat(db): invoice_series.retired_at; live-only readStandardSeriesId; retire/insert node series helpers"
 ```
 
@@ -313,7 +328,7 @@ In `packages/core/src/record-sale.test.ts`, inside `describe("recordSale — ser
 ```ts
   it("rejects a RETIRED series: a restored box must never number from the series it was restored with", async () => {
     // A cold restore retires the node's series and opens fresh ones; a stale `WAITRON_TILL_SERIES_ID`
-    // (spec 2026-09-06-module-sp3d §5) must fail LOUD here, never issue a number AEAT already saw.
+    // (spec 2026-09-06-module-sp3d §5) must fail LOUD here, never issue a number the tax agency saw.
     const retiredAt = new Date("2026-09-06T10:00:00.000Z");
     await suite.db.update(invoiceSeries).set({ retiredAt }).where(eq(invoiceSeries.id, seriesId));
     try {
@@ -329,12 +344,12 @@ In `packages/core/src/record-sale.test.ts`, inside `describe("recordSale — ser
 
 (`seriesId` is the suite-level standard series the surrounding tests already use; keep the `finally` so later tests see it live again.)
 
-In `record-correction.test.ts` and `record-substitution.test.ts`, beside each file's existing `sale.series_wrong_purpose` test (L~250 and L~330), add the same shape: retire the series that test's happy path uses (the rectificative one for corrections, the standard one for substitutions) with a direct `update(invoiceSeries).set({ retiredAt })`, expect `sale.series_retired` with `params: { seriesId, retiredAt: retiredAt.toISOString() }`, and un-retire in a `finally`.
+In `record-correction.test.ts` and `record-substitution.test.ts`, beside each file's existing `sale.series_wrong_purpose` test (~L250 and ~L330), add the same shape: retire the series that test's HAPPY path uses (the rectificative one for corrections, the standard one for substitutions) with a direct `update(invoiceSeries).set({ retiredAt })`, expect `sale.series_retired` with `params: { seriesId, retiredAt: retiredAt.toISOString() }`, and un-retire in a `finally`.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `pnpm --filter @waitron/core test "series_retired"` (or the three files by name)
-Expected: FAIL — the sale succeeds (no such code).
+Run: `pnpm --filter @waitron/core test record-sale record-correction record-substitution`
+Expected: the three new tests FAIL — the write succeeds (no such code); everything else passes.
 
 - [ ] **Step 3: Register the code and add the guard**
 
@@ -359,10 +374,10 @@ In each of the three files, add `retiredAt: invoiceSeries.retiredAt` to the seri
   }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [ ] **Step 4: Run the tests to verify they pass, and prove each guard by deletion**
 
 Run: `pnpm --filter @waitron/core test`
-Expected: PASS. Prove by deletion in ONE file (delete the guard in `record-sale.ts` → its test fails → restore).
+Expected: PASS. Then, ONE FILE AT A TIME: delete the guard in `record-sale.ts` → only its test fails → restore; the same for `record-correction.ts` and `record-substitution.ts`. Three controls, not one — each predicate is its own guard.
 
 - [ ] **Step 5: Verify and commit**
 
@@ -481,7 +496,7 @@ Expected: PASS.
 
 - [ ] **Step 5: Verify and commit**
 
-Run: `pnpm format:check && pnpm --filter @waitron/module lint && pnpm --filter @waitron/module test:coverage && pnpm test english-only` (root project: the new file is English).
+Run: `pnpm format:check && pnpm --filter @waitron/module lint && pnpm --filter @waitron/module test:coverage && pnpm exec vitest run english-only`
 
 ```bash
 git add packages/module
@@ -490,24 +505,36 @@ git commit -s -m "feat(module): type the backup.restore seat — RestoreHook(tx,
 
 ---
 
-### Task 4: `FISCAL_RESTORE` — fresh SIF, clock-floored number, bounded disjoint series (`@waitron/fiscal-verifactu` + composition)
+### Task 4: `FISCAL_RESTORE` — fresh SIF, clock-floored number, bounded disjoint series shared with the standby reservation (`@waitron/fiscal-verifactu` + composition)
 
 **Files:**
-- Create: `packages/fiscal-verifactu/src/restore.ts`, `packages/fiscal-verifactu/src/restore.test.ts`
-- Modify: `packages/fiscal-verifactu/src/errors.ts` (code), `packages/fiscal-verifactu/src/provisioning.ts` (`standby.reserve` reads live series only), `packages/fiscal-verifactu/src/provisioning.test.ts`, `packages/fiscal-verifactu/src/index.ts` (export), `packages/composition/src/modules.ts` (wire `backup: { restore: FISCAL_RESTORE }`), `packages/composition/src/composition.test.ts`
+- Create: `packages/fiscal-verifactu/src/restore.ts`, `packages/fiscal-verifactu/src/restore.test.ts` (PGlite), `packages/fiscal-verifactu/src/restore.rls.test.ts` (real Postgres)
+- Modify: `packages/fiscal-verifactu/src/reserved-series.ts` (the base rule lives with the derivation), `packages/fiscal-verifactu/src/reserved-series.test.ts`, `packages/fiscal-verifactu/src/errors.ts` (code), `packages/fiscal-verifactu/src/provisioning.ts` (`standby.reserve` derives from bases), `packages/fiscal-verifactu/src/provisioning.test.ts`, `packages/fiscal-verifactu/src/index.ts` (export), `packages/composition/src/modules.ts` (wire `backup: { restore: FISCAL_RESTORE }`), `packages/composition/src/composition.test.ts`
 
 **Interfaces:**
 - Consumes: `RestoreHook`/`RestoreOutcome` (Task 3); `invoiceSeries.retiredAt` (Task 1).
 - Produces:
-  - `FISCAL_RESTORE: RestoreHook`
-  - `restoreFiscal(tx, node, now: Date): Promise<RestoreOutcome>` (the testable body; `FISCAL_RESTORE` = `restoreFiscal(tx, node, new Date())`)
-  - `installationFloor(now: Date): number` — whole seconds since 2020-01-01T00:00:00Z
-  - `raiseInstallationFloor(tx, { nif, idSistemaInformatico, floor }): Promise<void>`
-  - `stripOwnSuffixes(code: string, registered: ReadonlySet<number>): string`
-  - `MAX_BASE_CODE_LENGTH = 38`
+  - `reserved-series.ts`: `MAX_BASE_CODE_LENGTH = 38`; `stripOwnSuffixes(code: string, registered: ReadonlySet<number>): string`; `liveSeriesBases(tx: Transaction, node: { tenantId: string; nodeId: string }): Promise<{ code: string; purpose: string }[]>` — the node's live series, each code stripped of the tenant's registered installation-number suffixes, ordered by code; throws `series.code_too_long { code }` when a base exceeds the bound
+  - `restore.ts`: `FISCAL_RESTORE: RestoreHook`; `restoreFiscal(tx, node, now: Date): Promise<RestoreOutcome>`; `installationFloor(now: Date): number`; `raiseInstallationFloor(tx, { nif, idSistemaInformatico, floor }): Promise<void>`
   - `series.code_too_long { code: string }`
 
 - [ ] **Step 1: Write the failing tests**
+
+`packages/fiscal-verifactu/src/reserved-series.test.ts` — append:
+
+```ts
+describe("stripOwnSuffixes", () => {
+  it("strips only trailing -<digits> groups that are registered installation numbers", () => {
+    const registered = new Set([7, 210441234]);
+    expect(stripOwnSuffixes("FA", registered)).toBe("FA");
+    expect(stripOwnSuffixes("FA-7", registered)).toBe("FA");
+    expect(stripOwnSuffixes("FA-210441234", registered)).toBe("FA");
+    expect(stripOwnSuffixes("FA-7-210441234", registered)).toBe("FA");
+    expect(stripOwnSuffixes("FA-2026", registered)).toBe("FA-2026");
+    expect(stripOwnSuffixes("FA-2026-7", registered)).toBe("FA-2026");
+  });
+});
+```
 
 `packages/fiscal-verifactu/src/restore.test.ts` (the fresh-PGlite-per-test shape of `provisioning.test.ts`):
 
@@ -519,14 +546,11 @@ import { isAppError, locationId as brandLocationId } from "@waitron/shared";
 import type { ProvisionedNode } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TENANT_A, seedSoldRegistro, seedTenants } from "../test/fixtures.js";
+import { appendToChain } from "./chain.js";
 import { currentSif, esPrimerRegistro, registerSif, type SifRegistration } from "./registro-sif.js";
-import {
-  FISCAL_RESTORE,
-  MAX_BASE_CODE_LENGTH,
-  installationFloor,
-  restoreFiscal,
-  stripOwnSuffixes,
-} from "./restore.js";
+import { MAX_BASE_CODE_LENGTH } from "./reserved-series.js";
+import { FISCAL_RESTORE, installationFloor, restoreFiscal } from "./restore.js";
+import { altaFor, seedSale, seedTill } from "./testing/seed.js";
 import { verifyChain } from "./verify.js";
 
 let db: Awaited<ReturnType<typeof createPgliteDb>>;
@@ -570,24 +594,20 @@ async function liveSeriesCodes(): Promise<string[]> {
   return rows.map((r) => r.code);
 }
 
+function counterOf() {
+  return db
+    .execute<{ proximo_numero: number }>(
+      sql`select proximo_numero from contadores_instalacion where nif = ${SIF.nif} and id_sistema_informatico = ${SIF.idSistemaInformatico}`,
+    )
+    .then((r) => r.rows[0]?.proximo_numero);
+}
+
 describe("installationFloor", () => {
   it("is whole seconds since 2020-01-01T00:00:00Z", () => {
     expect(installationFloor(new Date("2020-01-01T00:00:00.000Z"))).toBe(0);
     expect(installationFloor(new Date("2020-01-01T00:01:00.999Z"))).toBe(60);
     // Fits `integer` until 2088.
     expect(installationFloor(new Date("2088-01-01T00:00:00Z"))).toBeLessThan(2 ** 31);
-  });
-});
-
-describe("stripOwnSuffixes", () => {
-  it("strips only trailing -<digits> groups that are registered installation numbers", () => {
-    const registered = new Set([7, 210441234]);
-    expect(stripOwnSuffixes("FA", registered)).toBe("FA");
-    expect(stripOwnSuffixes("FA-7", registered)).toBe("FA");
-    expect(stripOwnSuffixes("FA-210441234", registered)).toBe("FA");
-    expect(stripOwnSuffixes("FA-7-210441234", registered)).toBe("FA");
-    expect(stripOwnSuffixes("FA-2026", registered)).toBe("FA-2026");
-    expect(stripOwnSuffixes("FA-2026-7", registered)).toBe("FA-2026");
   });
 });
 
@@ -633,22 +653,25 @@ describe("restoreFiscal", () => {
     expect(await liveSeriesCodes()).toEqual(["FA", "RE", "S7"]);
   });
 
-  it("THE REUSE EXPERIMENT: restoring an older counter cannot re-mint a number a later restore used", async () => {
-    // Spec §3.5. Snapshot the counter after the first registration, register again (as a previous
-    // restore would have), roll the counter back to the snapshot (what restoring the older artifact
-    // does), and run the hook: the minted number must exceed the one the intervening registration used.
+  it("THE REUSE EXPERIMENT: restoring an older artifact cannot re-mint a number a later restore used", async () => {
+    // Spec §3.5. State A = the backup (installation 1 live, counter 2). A previous restore of A
+    // minted 2 (revoking 1). Now rebuild state A EXACTLY — no row for 2, 1 live again, counter back —
+    // which is what restoring the older artifact does, and run the hook: it must not mint 2 again.
     await seedLiveNode();
-    const { rows: snap } = await db.execute<{ proximo_numero: number }>(
-      sql`select proximo_numero from contadores_instalacion where nif = ${SIF.nif} and id_sistema_informatico = ${SIF.idSistemaInformatico}`,
-    );
+    const counterAtBackup = await counterOf();
     const later = await withTenant(db, TENANT_A.id, (tx) =>
       registerSif(tx, { ...SIF, tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId }),
     );
+    await db.execute(sql`delete from registro_sif where id = ${later.id}`);
+    await db.execute(sql`update registro_sif set revocado_en = null where node_id = ${TENANT_A.nodeId}`);
     await db.execute(
-      sql`update contadores_instalacion set proximo_numero = ${snap[0]!.proximo_numero} where nif = ${SIF.nif} and id_sistema_informatico = ${SIF.idSistemaInformatico}`,
+      sql`update contadores_instalacion set proximo_numero = ${counterAtBackup} where nif = ${SIF.nif} and id_sistema_informatico = ${SIF.idSistemaInformatico}`,
     );
+
     await withTenant(db, TENANT_A.id, (tx) => restoreFiscal(tx, NODE, NOW));
+
     const fresh = await withTenant(db, TENANT_A.id, (tx) => currentSif(tx, TENANT_A.id, TENANT_A.nodeId));
+    // Control (run it once): delete `raiseInstallationFloor` from restoreFiscal → this mints 2 → red.
     expect(fresh.numeroInstalacion).not.toBe(later.numeroInstalacion);
     expect(fresh.numeroInstalacion).toBeGreaterThan(later.numeroInstalacion);
   });
@@ -675,14 +698,14 @@ describe("restoreFiscal", () => {
   it("derives from live series only, stripping our own suffixes, and ignores retired ones", async () => {
     const first = await seedLiveNode();
     await db.execute(sql`update invoice_series set retired_at = now() where code = 'RE'`);
-    // A previous restore's derived code, live; `FA` retired by that restore.
+    // A previous restore's derived code, live (the unique key is per code, so the rename is allowed).
     await db.execute(sql`update invoice_series set code = ${`FA-${first.numeroInstalacion}`} where code = 'FA'`);
     const outcome = await withTenant(db, TENANT_A.id, (tx) => restoreFiscal(tx, NODE, NOW));
     const fresh = await withTenant(db, TENANT_A.id, (tx) => currentSif(tx, TENANT_A.id, TENANT_A.nodeId));
     expect(outcome.series).toEqual([{ code: `FA-${fresh.numeroInstalacion}`, purpose: "standard" }]);
   });
 
-  it("refuses a base code that cannot carry a suffix within NumSerieFactura's 60 characters, BEFORE minting", async () => {
+  it("refuses a base code that cannot carry a suffix within the 60-character invoice-number cap, BEFORE minting", async () => {
     await seedLiveNode();
     const long = "L".repeat(MAX_BASE_CODE_LENGTH + 1);
     await db.execute(sql`update invoice_series set code = ${long} where code = 'FA'`);
@@ -693,16 +716,27 @@ describe("restoreFiscal", () => {
     expect(rows[0]?.n).toBe(1);
   });
 
-  it("the first post-restore record verifies as a chain start", async () => {
-    const first = await seedLiveNode();
-    await seedSoldRegistro(db, { tenantId: TENANT_A.id, tillId: TENANT_A.tillId, nodeId: TENANT_A.nodeId, sifId: first.id, nif: SIF.nif, secuencia: 1, huella: "A".repeat(64) });
-    await withTenant(db, TENANT_A.id, (tx) => restoreFiscal(tx, NODE, NOW));
-    const fresh = await withTenant(db, TENANT_A.id, (tx) => currentSif(tx, TENANT_A.id, TENANT_A.nodeId));
-    // One record under the NEW SIF, `primer_registro = true` (what the real append derives from
-    // `esPrimerRegistro`, pinned by registro-sif.test.ts), then the verifier over the boundary.
-    await seedSoldRegistro(db, { tenantId: TENANT_A.id, tillId: TENANT_A.tillId, nodeId: TENANT_A.nodeId, sifId: fresh.id, nif: SIF.nif, secuencia: 2, huella: "B".repeat(64) });
-    const report = await withTenant(db, TENANT_A.id, (tx) => verifyChain(tx, TENANT_A.id, TENANT_A.nodeId));
-    expect(report.ok).toBe(true);
+  it("the first record appended after the restore is a chain start under the new SIF, and the chain verifies", async () => {
+    // Through the REAL append path (appendToChain computes the hash and derives primer_registro),
+    // before and after the hook — never a fixture that writes the hash by hand.
+    const till = await seedTill(db);
+    const { rows } = await db.execute<{ location_id: string }>(sql`select location_id from nodes where id = ${till.nodeId}`);
+    const node: ProvisionedNode = { tenantId: till.tenantId, locationId: brandLocationId(rows[0]!.location_id), nodeId: till.nodeId };
+    const sale1 = await seedSale(db, till, 1);
+    const before = await db.transaction((tx) => appendToChain(tx, till.tenantId, till.nodeId, altaFor(till.tillId, sale1, 1, 1)));
+
+    await withTenant(db, till.tenantId, (tx) => restoreFiscal(tx, node, NOW));
+    const fresh = await withTenant(db, till.tenantId, (tx) => currentSif(tx, till.tenantId, till.nodeId));
+
+    const sale2 = await seedSale(db, till, 2);
+    const after = await db.transaction((tx) => appendToChain(tx, till.tenantId, till.nodeId, altaFor(till.tillId, sale2, 2, 2)));
+    const { rows: rec } = await db.execute<{ primer_registro: boolean; anterior_huella: string | null; sif_id: string }>(
+      sql`select primer_registro, anterior_huella, sif_id from registros_facturacion where id = ${after.id}`,
+    );
+    expect(rec[0]).toEqual({ primer_registro: true, anterior_huella: null, sif_id: fresh.id });
+    expect(after.secuencia).toBe(before.secuencia + 1); // the sequence is ours and continues
+    const report = await withTenant(db, till.tenantId, (tx) => verifyChain(tx, till.tenantId, till.nodeId));
+    expect(report).toMatchObject({ ok: true, issues: [] });
   });
 
   it("FISCAL_RESTORE is restoreFiscal with the wall clock", async () => {
@@ -715,18 +749,72 @@ describe("restoreFiscal", () => {
 });
 ```
 
-In `provisioning.test.ts`, add under `describe("FISCAL_PROVISIONING.standby")` (find its existing `reserve` test for the setup shape and reuse it):
+`packages/fiscal-verifactu/src/restore.rls.test.ts` — the real-Postgres leg (the `acks.rls.test.ts` shape):
 
 ```ts
-  it("reserve derives from the primary's LIVE series only — a retired series is history", async () => {
-    // Seed the primary exactly as the sibling reserve test does, then retire one of its series.
-    await db.execute(sql`update invoice_series set retired_at = now() where node_id = ${NODE.nodeId} and code = ${"<the retired code>"}`);
+import { sql } from "drizzle-orm";
+import { describe, expect, it } from "vitest";
+import { withTenant } from "@waitron/db";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { locationId as brandLocationId } from "@waitron/shared";
+import type { ProvisionedNode } from "@waitron/module";
+import { appendToChain } from "./chain.js";
+import { currentSif, esPrimerRegistro } from "./registro-sif.js";
+import { installationFloor, restoreFiscal } from "./restore.js";
+import { altaFor, seedSale, seedTill } from "./testing/seed.js";
+
+// The PGlite suite proves the logic; this leg proves the same transaction on real PostgreSQL — the
+// `greatest(...)` upsert on the counter, the partial unique index on the live SIF row, and the
+// chain-head reset — as the superuser-class role the production restore runs as. No RLS claim.
+const suite = useTemplateDb({ template: "manifest" });
+const NOW = new Date("2026-09-06T10:00:00.000Z");
+
+describe("restoreFiscal on real PostgreSQL", () => {
+  it("re-registers a sold node onto a fresh, floored SIF with an empty chain head", async () => {
+    const till = await seedTill(suite.admin);
+    const { rows } = await suite.admin.execute<{ location_id: string }>(sql`select location_id from nodes where id = ${till.nodeId}`);
+    const node: ProvisionedNode = { tenantId: till.tenantId, locationId: brandLocationId(rows[0]!.location_id), nodeId: till.nodeId };
+    const sale = await seedSale(suite.admin, till, 1);
+    await suite.admin.transaction((tx) => appendToChain(tx, till.tenantId, till.nodeId, altaFor(till.tillId, sale, 1, 1)));
+    const before = await withTenant(suite.admin, till.tenantId, (tx) => currentSif(tx, till.tenantId, till.nodeId));
+
+    const outcome = await withTenant(suite.admin, till.tenantId, (tx) => restoreFiscal(tx, node, NOW));
+
+    const after = await withTenant(suite.admin, till.tenantId, (tx) => currentSif(tx, till.tenantId, till.nodeId));
+    expect(after.id).not.toBe(before.id);
+    expect(after.numeroInstalacion).toBeGreaterThanOrEqual(installationFloor(NOW));
+    expect(await withTenant(suite.admin, till.tenantId, (tx) => esPrimerRegistro(tx, till.tenantId, till.nodeId))).toBe(true);
+    const { rows: ledger } = await suite.admin.execute<{ n: number }>(sql`select count(*)::int as n from registros_facturacion where node_id = ${till.nodeId}`);
+    expect(ledger[0]?.n).toBe(1);
+    expect(outcome.series?.map((s) => s.code)).toEqual([`GA-${after.numeroInstalacion}`]); // seedTill's `GA` standard series
+  });
+});
+```
+
+In `provisioning.test.ts`, add under `describe("FISCAL_PROVISIONING.standby")`:
+
+```ts
+  it("reserve derives from the primary's LIVE series bases: a restored primary's `FA-<n>` gives the standby `FA-<m>`, not `FA-<n>-<m>`", async () => {
+    const primarySif = await withTenant(db, TENANT_A.id, (tx) =>
+      registerSif(tx, { tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId, nif: "89890001K", idSistemaInformatico: WAITRON_ID_SISTEMA }),
+    );
+    // What a restored primary holds: `FA` retired, `FA-<its installation number>` and `RE-<n>` live.
+    await db.execute(sql`
+      insert into invoice_series (tenant_id, node_id, code, purpose, retired_at) values
+        (${TENANT_A.id}, ${TENANT_A.nodeId}, 'FA', 'standard', now()),
+        (${TENANT_A.id}, ${TENANT_A.nodeId}, ${`FA-${primarySif.numeroInstalacion}`}, 'standard', null),
+        (${TENANT_A.id}, ${TENANT_A.nodeId}, ${`RE-${primarySif.numeroInstalacion}`}, 'rectificative', null)
+    `);
     const reservation = await withTenant(db, TENANT_A.id, (tx) => standby.reserve(tx, NODE));
-    expect(reservation.series.map((s) => s.code)).not.toContainEqual(expect.stringMatching(/^<the retired code>-/));
+    const m = (reservation.state as { numeroInstalacion: number }).numeroInstalacion;
+    expect(reservation.series).toEqual([
+      { code: `FA-${m}`, purpose: "standard" },
+      { code: `RE-${m}`, purpose: "rectificative" },
+    ]);
   });
 ```
 
-(Replace `<the retired code>` with the code the sibling test seeds.)
+(`registerSif` and `sql` are already imported there; add them if not.)
 
 In `packages/composition/src/composition.test.ts`, in `describe("ALL_MODULES backup contribution")`:
 
@@ -741,8 +829,8 @@ In `packages/composition/src/composition.test.ts`, in `describe("ALL_MODULES bac
 
 - [ ] **Step 2: Run to verify they fail**
 
-Run: `pnpm --filter @waitron/fiscal-verifactu test restore provisioning && pnpm --filter @waitron/composition test`
-Expected: FAIL — `./restore.js` does not exist; `FISCAL_RESTORE` not exported.
+Run: `pnpm --filter @waitron/fiscal-verifactu test restore reserved-series provisioning && pnpm --filter @waitron/composition test`
+Expected: FAIL — `./restore.js` does not exist; `stripOwnSuffixes`/`FISCAL_RESTORE` not exported; the reserve test gets `FA-<n>-<m>`.
 
 - [ ] **Step 3: Register the code**
 
@@ -750,29 +838,26 @@ Expected: FAIL — `./restore.js` does not exist; `FISCAL_RESTORE` not exported.
 
 ```ts
     /**
-     * A restore cannot open a disjoint series for this base code: `NumSerieFactura` is capped at 60
-     * characters (`packages/verifactu` validate) and the base plus one `-<installation number>` suffix
-     * plus `/<counter>` would not fit. A base over `MAX_BASE_CODE_LENGTH` is not a real code; refused
-     * BEFORE anything is minted. `series.*` names the concept (the `series.not_found` prefix), never
-     * the package. Never renamed once shipped.
+     * A restore (or a standby reservation) cannot open a disjoint series for this base code:
+     * `NumSerieFactura` is capped at 60 characters (`packages/verifactu` validate) and the base plus
+     * one `-<installation number>` suffix plus `/<counter>` would not fit. A base over
+     * `MAX_BASE_CODE_LENGTH` is not a real code; refused BEFORE anything is minted. `series.*` names
+     * the concept (the `series.not_found` prefix), never the package. Never renamed once shipped.
      */
     "series.code_too_long": { code: string };
 ```
 
-- [ ] **Step 4: Implement the hook**
+- [ ] **Step 4: Implement**
 
-`packages/fiscal-verifactu/src/restore.ts`:
+Replace `packages/fiscal-verifactu/src/reserved-series.ts` with:
 
 ```ts
 // Side-effect only: registers this package's codes on the shared registry. See ./errors.ts.
 import "./errors.js";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { invoiceSeries, type Transaction } from "@waitron/db";
-import type { ProvisionedNode, RestoreHook, RestoreOutcome } from "@waitron/module";
-import { AppError, isAppError } from "@waitron/shared";
-import { currentSif, registerSif, type SifRegistration } from "./registro-sif.js";
-import { deriveReservedSeriesCodes } from "./reserved-series.js";
-import { contadoresInstalacion, registroSif } from "./schema/sif.js";
+import { AppError } from "@waitron/shared";
+import { registroSif } from "./schema/sif.js";
 
 /** `NumSerieFactura` (`<code>/<counter>`) is capped at 60 characters (packages/verifactu validate). A
  * base must leave room for one `-<installation number>` suffix and the counter, each at most ten
@@ -780,6 +865,82 @@ import { contadoresInstalacion, registroSif } from "./schema/sif.js";
 const NUM_SERIE_MAX = 60;
 const MAX_INT_DIGITS = 10;
 export const MAX_BASE_CODE_LENGTH = NUM_SERIE_MAX - (1 + MAX_INT_DIGITS) - (1 + MAX_INT_DIGITS);
+
+/**
+ * Derive DISJOINT invoice-series codes from base codes by suffixing each with an installation number,
+ * preserving purpose. The installation number is unique and never reused per NIF, so the codes are
+ * provably disjoint from every code the tenant's nodes use on the AEAT identity
+ * (NIF, NumSerieFactura, Fecha). Used for a reserved standby (design 2026-09-03 §6 R2) and for a
+ * restored primary's replacement series (design 2026-09-06 §6).
+ */
+export function deriveReservedSeriesCodes(
+  bases: readonly { code: string; purpose: string }[],
+  numeroInstalacion: number,
+): { code: string; purpose: string }[] {
+  return bases.map((s) => ({ code: `${s.code}-${numeroInstalacion}`, purpose: s.purpose }));
+}
+
+/**
+ * The base of a code: `code` with every trailing `-<digits>` group whose digits are an installation
+ * number this tenant has registered (any node, live or revoked) removed. `FA-7` from a promoted standby
+ * and `FA-210441234` from an earlier restore both give `FA`; a human's `FA-2026` stays unless 2026 was
+ * an installation number. Keeps every derived code to ONE suffix however many restores or
+ * reservations a lineage goes through.
+ */
+export function stripOwnSuffixes(code: string, registered: ReadonlySet<number>): string {
+  let base = code;
+  for (;;) {
+    const match = /^(.*)-(\d{1,10})$/.exec(base);
+    if (match === null || !registered.has(Number(match[2]))) return base;
+    base = match[1]!;
+  }
+}
+
+/**
+ * A node's LIVE series as bases for derivation — retired series are history — ordered by code,
+ * each stripped of the tenant's own suffixes. Refuses (`series.code_too_long`) a base that cannot
+ * carry a suffix within the cap, before the caller mints anything.
+ */
+export async function liveSeriesBases(
+  tx: Transaction,
+  node: { tenantId: string; nodeId: string },
+): Promise<{ code: string; purpose: string }[]> {
+  const live = await tx
+    .select({ code: invoiceSeries.code, purpose: invoiceSeries.purpose })
+    .from(invoiceSeries)
+    .where(
+      and(
+        eq(invoiceSeries.tenantId, node.tenantId),
+        eq(invoiceSeries.nodeId, node.nodeId),
+        isNull(invoiceSeries.retiredAt),
+      ),
+    )
+    .orderBy(invoiceSeries.code);
+  const numbers = await tx
+    .select({ n: registroSif.numeroInstalacion })
+    .from(registroSif)
+    .where(eq(registroSif.tenantId, node.tenantId));
+  const registered = new Set(numbers.map((r) => r.n));
+  const bases = live.map((s) => ({ code: stripOwnSuffixes(s.code, registered), purpose: s.purpose }));
+  for (const base of bases) {
+    if (base.code.length > MAX_BASE_CODE_LENGTH) {
+      throw new AppError("series.code_too_long", { code: base.code });
+    }
+  }
+  return bases;
+}
+```
+
+`packages/fiscal-verifactu/src/restore.ts`:
+
+```ts
+import { sql } from "drizzle-orm";
+import type { Transaction } from "@waitron/db";
+import type { ProvisionedNode, RestoreHook, RestoreOutcome } from "@waitron/module";
+import { isAppError } from "@waitron/shared";
+import { currentSif, registerSif, type SifRegistration } from "./registro-sif.js";
+import { deriveReservedSeriesCodes, liveSeriesBases } from "./reserved-series.js";
+import { contadoresInstalacion } from "./schema/sif.js";
 
 const FLOOR_EPOCH_MS = Date.UTC(2020, 0, 1);
 
@@ -819,35 +980,12 @@ export async function raiseInstallationFloor(
 }
 
 /**
- * The base a restore derives a fresh code from: `code` with every trailing `-<digits>` group whose
- * digits are an installation number this tenant has registered (any node, live or revoked) removed.
- * `FA-7` from a promoted standby and `FA-210441234` from an earlier restore both give `FA`; a human's
- * `FA-2026` stays unless 2026 was an installation number. Keeps a code to one suffix regardless of
- * how many restores a node survives (`NumSerieFactura`'s 60-character cap).
- */
-export function stripOwnSuffixes(code: string, registered: ReadonlySet<number>): string {
-  let base = code;
-  for (;;) {
-    const match = /^(.*)-(\d{1,10})$/.exec(base);
-    if (match === null || !registered.has(Number(match[2]))) return base;
-    base = match[1]!;
-  }
-}
-
-async function registeredNumbers(tx: Transaction, tenantId: string): Promise<Set<number>> {
-  const rows = await tx
-    .select({ n: registroSif.numeroInstalacion })
-    .from(registroSif)
-    .where(eq(registroSif.tenantId, tenantId));
-  return new Set(rows.map((r) => r.n));
-}
-
-/**
- * The fiscal module's restore hook body (spec §6). With a live SIF: read the node's live series, refuse
- * a base that cannot carry a suffix, raise the counter floor, `registerSif` under the identity IN USE
- * (the live row's NIF + software id — the counter is keyed by that pair), and return the derived
- * disjoint codes for the orchestrator to open. Without one the node is not a filing node and the
- * restore does not make it one: nothing minted, `series` absent. Writes nothing to `invoice_series`.
+ * The fiscal module's restore hook body (spec §6). With a live SIF: read the node's live series bases
+ * (refusing one that cannot carry a suffix, before anything is minted), raise the counter floor,
+ * `registerSif` under the identity IN USE (the live row's NIF + software id — the counter is keyed by
+ * that pair), and return the derived disjoint codes for the orchestrator to open. Without a live SIF
+ * the node is not a filing node and the restore does not make it one: nothing minted, `series`
+ * absent. Writes nothing to `invoice_series`.
  */
 export async function restoreFiscal(
   tx: Transaction,
@@ -865,29 +1003,7 @@ export async function restoreFiscal(
     }
     throw err;
   }
-
-  const liveSeries = await tx
-    .select({ code: invoiceSeries.code, purpose: invoiceSeries.purpose })
-    .from(invoiceSeries)
-    .where(
-      and(
-        eq(invoiceSeries.tenantId, node.tenantId),
-        eq(invoiceSeries.nodeId, node.nodeId),
-        isNull(invoiceSeries.retiredAt),
-      ),
-    )
-    .orderBy(invoiceSeries.code);
-  const registered = await registeredNumbers(tx, node.tenantId);
-  const bases = liveSeries.map((s) => ({
-    code: stripOwnSuffixes(s.code, registered),
-    purpose: s.purpose,
-  }));
-  for (const base of bases) {
-    if (base.code.length > MAX_BASE_CODE_LENGTH) {
-      throw new AppError("series.code_too_long", { code: base.code });
-    }
-  }
-
+  const bases = await liveSeriesBases(tx, node);
   await raiseInstallationFloor(tx, {
     nif: live.nif,
     idSistemaInformatico: live.idSistemaInformatico,
@@ -910,38 +1026,46 @@ export async function restoreFiscal(
 export const FISCAL_RESTORE: RestoreHook = (tx, node) => restoreFiscal(tx, node, new Date());
 ```
 
-`packages/fiscal-verifactu/src/index.ts`: add
-`export { FISCAL_RESTORE, restoreFiscal, installationFloor, raiseInstallationFloor, stripOwnSuffixes, MAX_BASE_CODE_LENGTH } from "./restore.js";`.
+In `provisioning.ts`'s `standby.reserve`, replace the `primarySeries` select and the return with:
 
-In `provisioning.ts`'s `standby.reserve`, change the series read to
-`.where(and(eq(invoiceSeries.nodeId, primary.nodeId), isNull(invoiceSeries.retiredAt)))` (add `and`, `isNull` to the `drizzle-orm` import).
+```ts
+      const bases = await liveSeriesBases(tx, primary);
+      const state: ReservedSifState = { nif: primarySif.nif, idSistemaInformatico: primarySif.idSistemaInformatico, numeroInstalacion };
+      return { state, series: deriveReservedSeriesCodes(bases, numeroInstalacion) };
+```
+
+(import `liveSeriesBases` from `./reserved-series.js`; drop the now-unused `invoiceSeries`/`eq` imports if nothing else in the file uses them).
+
+`packages/fiscal-verifactu/src/index.ts`: add
+`export { FISCAL_RESTORE, installationFloor, raiseInstallationFloor, restoreFiscal } from "./restore.js";` and
+`export { liveSeriesBases, MAX_BASE_CODE_LENGTH, stripOwnSuffixes } from "./reserved-series.js";`.
 
 In `packages/composition/src/modules.ts`: import `FISCAL_RESTORE` and add `backup: { restore: FISCAL_RESTORE },` to the `fiscal` descriptor; update the header's "Populated seats today" sentence to include `backup.restore` on `fiscal`, and delete `core`'s "`restore` is a later slice's seat (BR-3/BR-4) — unpopulated here" note.
 
 - [ ] **Step 5: Run to verify they pass**
 
-Run: `pnpm --filter @waitron/fiscal-verifactu test restore provisioning && pnpm --filter @waitron/composition test`
-Expected: PASS. Prove by deletion: comment out the `raiseInstallationFloor` call → "THE REUSE EXPERIMENT" and "creates the counter row" go red; restore. Comment out the `sif.not_registered` branch → "does nothing for a node with no live SIF" goes red; restore.
+Run: `pnpm --filter @waitron/fiscal-verifactu test restore reserved-series provisioning && TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/fiscal-verifactu test restore.rls && pnpm --filter @waitron/composition test`
+Expected: PASS. Prove by deletion: comment out the `raiseInstallationFloor` call in `restoreFiscal` → "THE REUSE EXPERIMENT" mints 2 and goes red, "creates the counter row" goes red; restore. Comment out the `sif.not_registered` branch → "does nothing for a node with no live SIF" goes red; restore.
 
 - [ ] **Step 6: Verify and commit**
 
-Run: `pnpm format:check && pnpm --filter @waitron/fiscal-verifactu lint && pnpm --filter @waitron/fiscal-verifactu typecheck && TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/fiscal-verifactu test:coverage && pnpm --filter @waitron/composition test:coverage && pnpm test module-seams errors-reachable english-only` (root project).
+Run: `pnpm format:check && pnpm --filter @waitron/fiscal-verifactu lint && pnpm --filter @waitron/fiscal-verifactu typecheck && TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/fiscal-verifactu test:coverage && pnpm --filter @waitron/composition test:coverage && pnpm exec vitest run module-seams errors-reachable english-only`
 
 ```bash
 git add packages/fiscal-verifactu packages/composition
-git commit -s -m "feat(fiscal): FISCAL_RESTORE — clock-floored fresh SIF, bounded disjoint series; standby.reserve reads live series; wired on the fiscal descriptor"
+git commit -s -m "feat(fiscal): FISCAL_RESTORE — clock-floored fresh SIF, bounded disjoint series shared with the standby reservation; wired on the fiscal descriptor"
 ```
 
 ---
 
-### Task 5: The orchestrator — migrate, identity gate, one origin-stamped transaction, secrets last (`apps/server`)
+### Task 5: The orchestrator — set-aside, migrate, identity gate, one origin-stamped transaction, secrets last (`apps/server`)
 
 **Files:**
-- Modify: `apps/server/src/restore.ts`, `apps/server/src/errors.ts`, `apps/server/src/restore-command.ts` (doc + the operator precondition line), `apps/server/src/rejoin.ts` and `rejoin-command.ts` (the `skipSecrets` wording only)
+- Modify: `apps/server/src/restore.ts`, `apps/server/src/errors.ts`, `apps/server/src/restore-command.ts` (header, the operator precondition line, `restore.hook_failed` reporting), `apps/server/src/rejoin.ts` and `rejoin-command.ts` (the `skipSecrets` wording only)
 - Test: `apps/server/src/restore.test.ts`, `apps/server/src/restore-command.test.ts`
 
 **Interfaces:**
-- Consumes: `retireNodeSeriesTx`, `insertNodeSeriesTx`, `readStandardSeriesIdTx`, `withTenant`, `createPostgresDb`, `nodes` (`@waitron/db`); `RestoreHook`, `orderedMigrationSets` (`@waitron/module`); `applyMigrations`, `migrationOptionsFor` (`@waitron/migrations`); `parseEnvFile`, `formatEnvFile` (`./env-file.js`); `isUnset` (`./env-value.js`).
+- Consumes: `retireNodeSeriesTx`, `insertNodeSeriesTx`, `readStandardSeriesIdTx`, `withTenant`, `createPostgresDb`, `nodes` (`@waitron/db`); `RestoreHook`, `orderedMigrationSets` (`@waitron/module`); `applyMigrations`, `migrationOptionsFor` (`@waitron/migrations`); `parseEnvFile`, `formatEnvFile` (`./env-file.js`); `isUnset` (`./env-value.js`); `hasCode`, `isAppError` (`@waitron/shared`).
 - Produces (exact):
 
 ```ts
@@ -949,13 +1073,10 @@ git commit -s -m "feat(fiscal): FISCAL_RESTORE — clock-floored fresh SIF, boun
 readonly openDb?: (url: string) => Promise<{ db: Database; close(): Promise<void> }>;
 readonly migrate?: typeof applyMigrations;
 
-export function readArtifactIdentity(secretEntries: readonly ArchiveEntry[]): {
-  node: ProvisionedNode; seriesId: string;
-};
+export function readArtifactIdentity(secretEntries: readonly ArchiveEntry[]): { node: ProvisionedNode; seriesId: string };
 export function rewriteTradingEnv(entries: readonly ArchiveEntry[], seriesId: string): ArchiveEntry[];
-export async function runRestoreHooks(args: {
-  db: Database; modules: readonly WaitronModule[]; node: ProvisionedNode; log: Logger;
-}): Promise<{ seriesId: string | undefined; reports: readonly string[] }>;
+export async function setAsideExistingIdentity(stateDir: string, log: Logger): Promise<void>;
+export async function runRestoreHooks(args: { db: Database; modules: readonly WaitronModule[]; node: ProvisionedNode; log: Logger }): Promise<{ seriesId: string; reports: readonly string[] }>;
 ```
 `invokeRestoreHooks` and `RestoreHookContext` are deleted.
 
@@ -963,14 +1084,15 @@ export async function runRestoreHooks(args: {
 
 Rework `apps/server/src/restore.test.ts`:
 
-1. Add a PGlite suite at module level (the `membership-mint.test.ts` shape), migrated with the whole manifest, and seed one identity:
+1. Module-level: a PGlite suite migrated with the whole manifest, one seeded identity, a `trading.env` body, an `openDb` seam, and a helper that gives fake hooks to REAL descriptors (every module keeps its real `migrations`, which the gate and the migrate step both resolve; the real fiscal hook is stripped so no SIF is needed):
 
 ```ts
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { sql } from "drizzle-orm";
-import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { AppError } from "@waitron/shared";
+import type { RestoreHook, WaitronModule } from "@waitron/module";
+import { formatEnvFile, parseEnvFile } from "./env-file.js";
 
 const suite = usePgliteDb({ migrations: migrationOptionsFor(manifestSets(), null), timeoutMs: 120_000 });
 
@@ -1008,39 +1130,94 @@ async function resetSeries(): Promise<void> {
 }
 
 const openDb = async () => ({ db: suite.db, close: async () => {} });
+
+/** ALL_MODULES with every real `migrations` kept (the gate and the migrate step resolve them) and the
+ * restore hooks replaced: named modules get the given hook, every other module none. */
+function withHooks(hooks: Partial<Record<string, RestoreHook>>): WaitronModule[] {
+  return ALL_MODULES.map((m) => ({
+    ...m,
+    backup: { ...m.backup, restore: hooks[m.name] },
+  }));
+}
 ```
 
-2. `FULL_ENTRIES` gains `{ name: "secrets/trading.env", bytes: Buffer.from(TRADING_ENV) }`; every `deps()` helper gains `openDb` and `migrate: vi.fn(async () => {})`.
+2. `FULL_ENTRIES` gains `{ name: "secrets/trading.env", bytes: Buffer.from(TRADING_ENV) }`. Every existing `deps()` helper gains `openDb`, `migrate: vi.fn(async () => {})` and `modules: withHooks({})`. Update the existing exact assertions: "validateArtifact returns the classified pieces…" now expects `secretEntries` names `["secrets/secrets.env", "secrets/trading.env"]`; "restores db dump, media and secrets" also asserts `trading.env` landed byte-identical.
 
-3. Replace the `describe("invokeRestoreHooks")` block with `describe("restore hooks (identity phase)")`, `beforeEach(resetSeries)`, and these tests (each builds a module via `{ name, backup: { restore } } as unknown as WaitronModule`, passing `modules: [fake]` in `deps`; `runRestore` is the recording fake):
+3. Replace the `describe("invokeRestoreHooks")` block with a self-contained block that registers its own temp dirs and deps builder:
 
 ```ts
+describe("restore hooks (identity phase)", () => {
+  useTempDirs("waitron-hooks-");
+  beforeEach(resetSeries);
+
+  function deps(overrides: Partial<RestoreDeps> = {}): RestoreDeps {
+    return {
+      artifact: buildArtifact(FULL_ENTRIES),
+      recoveryKey: KEY,
+      databaseUrl: "postgres://admin@localhost/fresh",
+      mediaDir,
+      stateDir,
+      stagingDir,
+      migrationsRoot: null,
+      modules: withHooks({}),
+      environment: "preproduction",
+      runRestore: vi.fn(async () => {}),
+      openDb,
+      migrate: vi.fn(async () => {}),
+      log: noopLog,
+      ...overrides,
+    };
+  }
+
   it("migrates after pg_restore and BEFORE any hook; hooks run BEFORE secrets are written", async () => {
     const order: string[] = [];
     const migrate = vi.fn(async () => { order.push("migrate"); });
-    const hook = vi.fn(async () => { order.push("hook"); await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" }); return { report: "ok" }; });
-    await restoreFromArtifact(deps({ migrate, modules: [mod("x", hook)], runRestore: vi.fn(async () => { order.push("pg_restore"); }) }));
+    const hook: RestoreHook = async () => {
+      order.push("hook");
+      await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
+      return { report: "ok" };
+    };
+    await restoreFromArtifact(deps({ migrate, modules: withHooks({ fiscal: hook }), runRestore: vi.fn(async () => { order.push("pg_restore"); }) }));
     expect(order).toEqual(["pg_restore", "migrate", "hook"]);
     expect(migrate).toHaveBeenCalledWith("postgres://admin@localhost/fresh", expect.any(Array));
     expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toBe(SECRET);
   });
 
-  it("skipSecrets:true runs NO hook and reads no identity (the rejoin shape)", async () => {
+  it("skipSecrets:true runs NO hook and reads no identity — an artifact with no trading.env restores fine", async () => {
     const hook = vi.fn(async () => ({ report: "must not run" }));
-    await restoreFromArtifact(deps({ skipSecrets: true, modules: [mod("x", hook)] }));
+    const noIdentity = FULL_ENTRIES.filter((e) => e.name !== "secrets/trading.env");
+    await restoreFromArtifact(deps({ skipSecrets: true, artifact: buildArtifact(noIdentity), modules: withHooks({ fiscal: hook }) }));
     expect(hook).not.toHaveBeenCalled();
   });
 
   it("hands each hook (tx, node) with the ids from the ARTIFACT's trading.env, not the target's", async () => {
     await writeFile(join(stateDir, "trading.env"), formatEnvFile({ WAITRON_TILL_TENANT_ID: "stale", WAITRON_TILL_NODE_ID: "stale", WAITRON_TILL_LOCATION_ID: "stale", WAITRON_TILL_SERIES_ID: "stale" }));
     const hook = vi.fn(async () => ({ report: "ok" }));
-    await restoreFromArtifact(deps({ modules: [mod("x", hook)] }));
+    await restoreFromArtifact(deps({ modules: withHooks({ fiscal: hook }) }));
     expect(hook).toHaveBeenCalledWith(expect.anything(), { tenantId: T.tenantId, locationId: T.locationId, nodeId: T.nodeId });
+    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV); // the artifact's, restored over the stale one
+  });
+
+  it("a pre-existing identity is set aside BEFORE anything irreversible, so a failed hook leaves NO trading.env", async () => {
+    const existing = formatEnvFile({ WAITRON_TILL_TENANT_ID: "old", WAITRON_TILL_NODE_ID: "old", WAITRON_TILL_LOCATION_ID: "old", WAITRON_TILL_SERIES_ID: "old" });
+    await writeFile(join(stateDir, "trading.env"), existing);
+    const boom: RestoreHook = async () => { throw new AppError("restore.unexpected_entry", { name: "boom" }); };
+    await expect(restoreFromArtifact(deps({ modules: withHooks({ fiscal: boom }) }))).rejects.toMatchObject({ code: "restore.hook_failed", params: { module: "fiscal", code: "restore.unexpected_entry" } });
+    await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(join(stateDir, "trading.env.replaced"), "utf8")).toBe(existing);
+  });
+
+  it("a pre-existing identity is UNTOUCHED under skipSecrets (the rejoin shape keeps its own)", async () => {
+    const own = formatEnvFile({ WAITRON_TILL_NODE_ID: "own" });
+    await writeFile(join(stateDir, "trading.env"), own);
+    await restoreFromArtifact(deps({ skipSecrets: true }));
+    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(own);
+    await expect(stat(join(stateDir, "trading.env.replaced"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("series returned → old retired + new opened in the SAME transaction, trading.env rewritten in exactly one key", async () => {
-    const hook = async () => ({ report: "ok", series: [{ code: "FA-9", purpose: "standard" }] });
-    await restoreFromArtifact(deps({ modules: [mod("x", hook)] }));
+    const hook: RestoreHook = async () => ({ report: "ok", series: [{ code: "FA-9", purpose: "standard" }] });
+    await restoreFromArtifact(deps({ modules: withHooks({ fiscal: hook }) }));
     const rows = await suite.db.execute<{ code: string; retired: boolean; next: number }>(sql`select code, retired_at is not null as retired, next_number as next from invoice_series where node_id = ${T.nodeId} order by code`);
     expect(rows.rows).toEqual([{ code: "FA", retired: true, next: 1 }, { code: "FA-9", retired: false, next: 1 }]);
     const written = parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8"));
@@ -1050,15 +1227,29 @@ const openDb = async () => ({ db: suite.db, close: async () => {} });
     expect(Object.keys(written)).toEqual(Object.keys(original)); // order preserved
   });
 
-  it("no series returned → trading.env is byte-identical to the artifact's", async () => {
-    await restoreFromArtifact(deps({ modules: [mod("x", async () => ({ report: "ok" }))] }));
+  it("no series returned → the node must still hold one live standard series, and trading.env is byte-identical", async () => {
+    await restoreFromArtifact(deps({ modules: withHooks({ fiscal: async () => ({ report: "ok" }) }) }));
     expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV);
+    // The restored node has NO live standard series (retired in the backup) → refuse, no identity written.
+    await suite.db.execute(sql`update invoice_series set retired_at = now() where id = ${T.seriesId}`);
+    await expect(restoreFromArtifact(deps({ modules: withHooks({}) }))).rejects.toMatchObject({ code: "restore.hook_failed", params: { module: "core", code: "series.no_standard_for_node" } });
+    await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("a throwing second hook rolls the first hook's series writes back and writes NO secrets", async () => {
-    const first = mod("a", async () => ({ report: "a", series: [{ code: "FA-9", purpose: "standard" }] }));
-    const second = mod("b", async () => { throw new AppError("restore.unexpected_entry", { name: "boom" }); });
-    await expect(restoreFromArtifact(deps({ modules: [first, second] }))).rejects.toMatchObject({ code: "restore.hook_failed", params: { module: "b", code: "restore.unexpected_entry" } });
+  it("no series returned but the artifact's series id is not the live standard one → env is corrected", async () => {
+    await suite.db.execute(sql`insert into invoice_series (tenant_id, node_id, code) values (${T.tenantId}, ${T.nodeId}, 'FB')`);
+    await suite.db.execute(sql`update invoice_series set retired_at = now() where id = ${T.seriesId}`);
+    await restoreFromArtifact(deps({ modules: withHooks({}) }));
+    const written = parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8"));
+    const [fb] = (await suite.db.execute<{ id: string }>(sql`select id from invoice_series where code = 'FB'`)).rows;
+    expect(written.WAITRON_TILL_SERIES_ID).toBe(fb!.id);
+  });
+
+  it("a colliding replacement code fails AFTER the retire started and rolls everything back", async () => {
+    // `FA` is the node's own live code; returning it collides with the retired row → the whole
+    // transaction (the retire included) rolls back, and no identity is written.
+    const hook: RestoreHook = async () => ({ report: "ok", series: [{ code: "FA", purpose: "standard" }] });
+    await expect(restoreFromArtifact(deps({ modules: withHooks({ fiscal: hook }) }))).rejects.toMatchObject({ code: "restore.hook_failed", params: { module: "fiscal", code: "series.code_collision" } });
     const rows = await suite.db.execute<{ code: string; retired: boolean }>(sql`select code, retired_at is not null as retired from invoice_series where node_id = ${T.nodeId}`);
     expect(rows.rows).toEqual([{ code: "FA", retired: false }]);
     await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
@@ -1066,32 +1257,51 @@ const openDb = async () => ({ db: suite.db, close: async () => {} });
   });
 
   it("two modules returning series → restore.series_conflict; an empty list → hook_failed wrapping no_standard_for_node", async () => {
-    const a = mod("a", async () => ({ report: "a", series: [{ code: "FA-1", purpose: "standard" }] }));
-    const b = mod("b", async () => ({ report: "b", series: [{ code: "FA-2", purpose: "standard" }] }));
-    await expect(restoreFromArtifact(deps({ modules: [a, b] }))).rejects.toMatchObject({ code: "restore.series_conflict", params: { modules: "a,b" } });
-    const empty = mod("a", async () => ({ report: "a", series: [] }));
-    await expect(restoreFromArtifact(deps({ modules: [empty] }))).rejects.toMatchObject({ code: "restore.hook_failed", params: { module: "a", code: "series.no_standard_for_node" } });
+    const a: RestoreHook = async () => ({ report: "a", series: [{ code: "FA-1", purpose: "standard" }] });
+    const b: RestoreHook = async () => ({ report: "b", series: [{ code: "FA-2", purpose: "standard" }] });
+    await expect(restoreFromArtifact(deps({ modules: withHooks({ core: a, fiscal: b }) }))).rejects.toMatchObject({ code: "restore.series_conflict", params: { modules: "core,fiscal" } });
+    const empty: RestoreHook = async () => ({ report: "a", series: [] });
+    await expect(restoreFromArtifact(deps({ modules: withHooks({ fiscal: empty }) }))).rejects.toMatchObject({ code: "restore.hook_failed", params: { module: "fiscal", code: "series.no_standard_for_node" } });
   });
 
-  it("identity_incomplete on a missing key; identity_unknown on a node the restored db lacks", async () => {
-    const noNode = formatEnvFile({ ...parseEnvFile(TRADING_ENV), WAITRON_TILL_NODE_ID: "" });
-    const entries = [FULL_ENTRIES[0]!, FULL_ENTRIES[1]!, { name: "secrets/trading.env", bytes: Buffer.from(noNode) }];
-    await expect(restoreFromArtifact(deps({ artifact: buildArtifact(entries) }))).rejects.toMatchObject({ code: "restore.identity_incomplete", params: { missing: "WAITRON_TILL_NODE_ID" } });
-    const noFile = [FULL_ENTRIES[0]!, FULL_ENTRIES[1]!, FULL_ENTRIES[2]!]; // no trading.env at all
-    await expect(restoreFromArtifact(deps({ artifact: buildArtifact(noFile) }))).rejects.toMatchObject({ code: "restore.identity_incomplete", params: { missing: "trading.env" } });
-    const strangeNode = formatEnvFile({ ...parseEnvFile(TRADING_ENV), WAITRON_TILL_NODE_ID: "c0000000-0000-4000-8000-0000000000ff" });
-    await expect(restoreFromArtifact(deps({ artifact: buildArtifact([FULL_ENTRIES[0]!, FULL_ENTRIES[1]!, { name: "secrets/trading.env", bytes: Buffer.from(strangeNode) }]) }))).rejects.toMatchObject({ code: "restore.identity_unknown" });
+  it("identity_incomplete on a missing key or file; identity_unknown on a node the restored db lacks", async () => {
+    const base = FULL_ENTRIES.filter((e) => e.name !== "secrets/trading.env");
+    const withEnv = (body: string) => buildArtifact([...base, { name: "secrets/trading.env", bytes: Buffer.from(body) }]);
+    await expect(restoreFromArtifact(deps({ artifact: withEnv(formatEnvFile({ ...parseEnvFile(TRADING_ENV), WAITRON_TILL_NODE_ID: "" })) }))).rejects.toMatchObject({ code: "restore.identity_incomplete", params: { missing: "WAITRON_TILL_NODE_ID" } });
+    await expect(restoreFromArtifact(deps({ artifact: buildArtifact(base) }))).rejects.toMatchObject({ code: "restore.identity_incomplete", params: { missing: "trading.env" } });
+    await expect(restoreFromArtifact(deps({ artifact: withEnv(formatEnvFile({ ...parseEnvFile(TRADING_ENV), WAITRON_TILL_NODE_ID: "c0000000-0000-4000-8000-0000000000ff" })) }))).rejects.toMatchObject({ code: "restore.identity_unknown" });
+    await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
+});
 ```
 
-with `function mod(name: string, restore: unknown): WaitronModule { return { name, backup: { restore } } as unknown as WaitronModule; }` and `writeFile` added to the fs imports. Keep the existing tests; the "restores db dump, media and secrets" one now also asserts `trading.env` landed.
+(`writeFile` joins the fs imports; `RestoreDeps` the `./restore.js` type imports.)
 
-In `restore-command.test.ts`, extend the existing success-path test (the one with a fake `restore` that resolves) to assert `out` contains a line matching `/no peer .* survived/` and that it precedes the `restored` line; add a case where the fake `restore` rejects with `new AppError("restore.hook_failed", { module: "fiscal", code: "series.code_too_long" })` → exit 1 and `out` contains `restore.hook_failed`.
+In `restore-command.test.ts`: the CLI now prints the operator precondition line right before calling `restore`, so every test whose `out` is asserted EXACTLY after the restore seam is reached gains it as the first element — the four `expect(out).toEqual([...])` at ~L243, ~L265, ~L290, ~L318 become `["cold restore: use only when no peer (mirror or local secondary) survived — a survivor holds more history and is promoted, not overwritten (promotion runbook §5d)", <the existing line>]`; the success-path test likewise. Keep the "never echoes a raw error's .message" assertions exactly as they are. Add:
+
+```ts
+  it("reports restore.hook_failed with the module and the inner code, never a message", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "restore-command-hook-"));
+    const artifactPath = await makeArtifact(dir);
+    const out: string[] = [];
+    const code = await runRestore({
+      argv: ["restore", artifactPath],
+      env: { WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY, WAITRON_RESTORE_DATABASE_URL: DATABASE_URL, WAITRON_ENV: "preproduction" },
+      out: (line) => out.push(line),
+      restore: async () => { throw new AppError("restore.hook_failed", { module: "fiscal", code: "series.code_too_long" }); },
+    });
+    expect(code).toBe(1);
+    expect(out).toEqual([
+      expect.stringMatching(/^cold restore: use only when no peer/),
+      "restore failed: restore.hook_failed (module fiscal: series.code_too_long)",
+    ]);
+  });
+```
 
 - [ ] **Step 2: Run to verify they fail**
 
 Run: `pnpm --filter @waitron/server test restore`
-Expected: FAIL — `openDb`/`migrate` unknown, no identity phase, `invokeRestoreHooks` still the old shape.
+Expected: FAIL — `openDb`/`migrate` unknown on `RestoreDeps`, no identity phase, `invokeRestoreHooks` still the old shape, the CLI prints no precondition line.
 
 - [ ] **Step 3: Register the codes**
 
@@ -1109,8 +1319,9 @@ Expected: FAIL — `openDb`/`migrate` unknown, no identity phase, `invokeRestore
     /** More than one module's restore hook returned replacement series; only one may own the node's
      * numbering. `modules` is the comma-joined list of their names. Never renamed once shipped. */
     "restore.series_conflict": { modules: string };
-    /** A module's restore hook, or the series write for its outcome, threw an `AppError`: `module` is
-     * the module's name and `code` the inner code, so the CLI's `restore.*` reporting shows both
+    /** A module's restore hook, or the series work its outcome led to, threw an `AppError`: `module`
+     * is the module's name (`core` when the node's own series contract failed with no module
+     * returning series) and `code` the inner code, so the CLI's `restore.*` reporting shows both
      * without learning any module's namespaces. A non-`AppError` throw is not wrapped. Never renamed
      * once shipped. */
     "restore.hook_failed": { module: string; code: string };
@@ -1120,12 +1331,15 @@ Expected: FAIL — `openDb`/`migrate` unknown, no identity phase, `invokeRestore
 
 In `apps/server/src/restore.ts`:
 
-Imports to add: `import { and, eq } from "drizzle-orm";`, `import { AppError, isAppError, locationId as brandLocationId, nodeId as brandNodeId, tenantId as brandTenantId } from "@waitron/shared";` (replace the existing `AppError` import), `import { createPostgresDb, insertNodeSeriesTx, nodes, readStandardSeriesIdTx, retireNodeSeriesTx, withTenant, type Database } from "@waitron/db";`, `import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";` (keep `expectedSchemaVersion`), `import { orderedMigrationSets, type ProvisionedNode, type WaitronModule } from "@waitron/module";`, `import { formatEnvFile, parseEnvFile } from "./env-file.js";`, `import { isUnset } from "./env-value.js";`.
+Imports to add: `rename` to the `node:fs/promises` import; `import { and, eq } from "drizzle-orm";`; replace the `AppError` import with `import { AppError, isAppError, locationId as brandLocationId, nodeId as brandNodeId, tenantId as brandTenantId } from "@waitron/shared";`; `import { createPostgresDb, insertNodeSeriesTx, nodes, readStandardSeriesIdTx, retireNodeSeriesTx, withTenant, type Database } from "@waitron/db";`; `import { applyMigrations, expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";`; `import { orderedMigrationSets, type ProvisionedNode, type WaitronModule } from "@waitron/module";`; `import { formatEnvFile, parseEnvFile } from "./env-file.js";`; `import { isUnset } from "./env-value.js";`.
 
 Constants beside the existing ones:
 
 ```ts
 const TRADING_ENV_ENTRY = `${SECRETS_PREFIX}trading.env`;
+const TRADING_ENV_FILE = "trading.env";
+/** Where a pre-existing identity is moved before the restore; boot reads only `trading.env`. */
+const REPLACED_SUFFIX = ".replaced";
 const IDENTITY_KEYS = [
   "WAITRON_TILL_TENANT_ID",
   "WAITRON_TILL_NODE_ID",
@@ -1134,7 +1348,7 @@ const IDENTITY_KEYS = [
 ] as const;
 ```
 
-`RestoreDeps` gains (with the `skipSecrets` doc rewritten to "Skip restoring `secrets/*` AND the restore hooks: a returning node keeps its OWN identity, and a hook exists only to make an ASSUMED identity trade-safe (spec §3.3)."):
+`RestoreDeps` gains (with the `skipSecrets` doc rewritten to "Skip restoring `secrets/*`, the set-aside of any existing identity, AND the restore hooks: a returning node keeps its OWN identity, and a hook exists only to make an ASSUMED identity trade-safe (spec §3.3)."):
 
 ```ts
   /** Opens the privileged connection the hook transaction runs on. Default `createPostgresDb`;
@@ -1145,9 +1359,25 @@ const IDENTITY_KEYS = [
   readonly migrate?: typeof applyMigrations;
 ```
 
-Delete `RestoreHookContext`, `RestoreHook` (local type) and `invokeRestoreHooks`. Add:
+Delete `RestoreHookContext`, the local `RestoreHook` type and `invokeRestoreHooks`. Add:
 
 ```ts
+/**
+ * Move a pre-existing identity aside before anything irreversible: `<stateDir>/trading.env` →
+ * `trading.env.replaced` (boot reads only the former). With the artifact's identity written only
+ * after the hook transaction commits, a failed restore then leaves NO bootable identity on the box —
+ * neither the target's old one nor the artifact's. A missing file is the normal fresh-box case.
+ */
+export async function setAsideExistingIdentity(stateDir: string, log: Logger): Promise<void> {
+  const path = join(stateDir, TRADING_ENV_FILE);
+  try {
+    await rename(path, `${path}${REPLACED_SUFFIX}`);
+    log("info", "restore.identity.set_aside", {});
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
+}
+
 /**
  * The identity the restored box will take, read from the ARTIFACT's `secrets/trading.env` — never the
  * target box's file, which may hold a stale or foreign identity. Every key is required and non-empty
@@ -1159,7 +1389,7 @@ export function readArtifactIdentity(secretEntries: readonly ArchiveEntry[]): {
 } {
   const entry = secretEntries.find((e) => e.name === TRADING_ENV_ENTRY);
   if (entry === undefined) {
-    throw new AppError("restore.identity_incomplete", { missing: "trading.env" });
+    throw new AppError("restore.identity_incomplete", { missing: TRADING_ENV_FILE });
   }
   const env = parseEnvFile(Buffer.from(entry.bytes).toString("utf8"));
   for (const key of IDENTITY_KEYS) {
@@ -1201,20 +1431,20 @@ function wrapHookError(module: string, err: unknown): unknown {
 }
 
 /**
- * Run every module's `backup.restore` hook and open the node's replacement series, in ONE tenant
- * transaction stamped with the node as sync origin (`registro_sif`/`cadenas` are enrolled on the
- * ordered lane; a later standby pulls only rows whose origin is this node). Order: check the node
- * exists → hooks in list order → at most one module may return `series` → retire the node's live
- * series, open the returned ones, and read the live standard series id — zero or two live standard
- * series aborts the transaction, so a commit never leaves a node that cannot sell. Returns the new
- * standard series id (undefined when no module returned series) and the hooks' reports.
+ * Run every module's `backup.restore` hook and settle the node's series, in ONE tenant transaction
+ * stamped with the node as sync origin (`registro_sif`/`cadenas` are enrolled on the ordered lane; a
+ * later standby pulls only rows whose origin is this node). Order: check the node exists → hooks in
+ * list order → at most one module may return `series` → if one did, retire the node's live series and
+ * open the returned ones → on EVERY path read the live standard series id — zero or two live standard
+ * series aborts the transaction, so a commit never leaves a node that cannot sell. Returns that id
+ * (the env is pointed at it) and the hooks' reports.
  */
 export async function runRestoreHooks(args: {
   db: Database;
   modules: readonly WaitronModule[];
   node: ProvisionedNode;
   log: Logger;
-}): Promise<{ seriesId: string | undefined; reports: readonly string[] }> {
+}): Promise<{ seriesId: string; reports: readonly string[] }> {
   const { node } = args;
   return withTenant(
     args.db,
@@ -1255,18 +1485,27 @@ export async function runRestoreHooks(args: {
           replacement = { module: m.name, series: outcome.series };
         }
       }
-      if (replacement === undefined) return { seriesId: undefined, reports };
+      // `core` owns `invoice_series`: a failure here with no module returning series is the node's own
+      // series contract failing, so that is the module named.
+      const owner = replacement?.module ?? "core";
       try {
-        await retireNodeSeriesTx(tx, node.tenantId, node.nodeId);
-        await insertNodeSeriesTx(tx, node.tenantId, node.nodeId, replacement.series);
+        if (replacement !== undefined) {
+          await retireNodeSeriesTx(tx, node.tenantId, node.nodeId);
+          await insertNodeSeriesTx(tx, node.tenantId, node.nodeId, replacement.series);
+        }
         const seriesId = await readStandardSeriesIdTx(tx, node.tenantId, node.nodeId);
         return { seriesId, reports };
       } catch (err) {
-        throw wrapHookError(replacement.module, err);
+        throw wrapHookError(owner, err);
       }
     },
     { nodeId: node.nodeId },
   );
+}
+
+async function openPostgres(url: string): Promise<{ db: Database; close(): Promise<void> }> {
+  const db = await createPostgresDb(url);
+  return { db, close: () => db.close() };
 }
 ```
 
@@ -1276,7 +1515,14 @@ Rewrite `writeValidated`'s body:
   const { log } = deps;
   const staged = join(deps.stagingDir, DB_DUMP_NAME);
   try {
-    await restoreDatabase({ dumpBytes: validated.dumpEntry.bytes, stagingDir: deps.stagingDir, databaseUrl: deps.databaseUrl, runRestore: deps.runRestore ?? realPgRestore, log });
+    if (!deps.skipSecrets) await setAsideExistingIdentity(deps.stateDir, log);
+    await restoreDatabase({
+      dumpBytes: validated.dumpEntry.bytes,
+      stagingDir: deps.stagingDir,
+      databaseUrl: deps.databaseUrl,
+      runRestore: deps.runRestore ?? realPgRestore,
+      log,
+    });
     await restoreMedia({ entries: validated.mediaEntries, mediaDir: deps.mediaDir, log });
     // The gate admits an OLDER schema; a hook written against today's must not run against
     // yesterday's. Every module, as setup mode migrates — the CLI has no enabled-set config.
@@ -1291,14 +1537,19 @@ Rewrite `writeValidated`'s body:
     }
     const identity = readArtifactIdentity(validated.secretEntries);
     const opened = await (deps.openDb ?? openPostgres)(deps.databaseUrl);
-    let seriesId: string | undefined;
+    let seriesId: string;
     try {
-      ({ seriesId } = await runRestoreHooks({ db: opened.db, modules: deps.modules, node: identity.node, log }));
+      ({ seriesId } = await runRestoreHooks({
+        db: opened.db,
+        modules: deps.modules,
+        node: identity.node,
+        log,
+      }));
     } finally {
       await opened.close();
     }
     const entries =
-      seriesId === undefined || seriesId === identity.seriesId
+      seriesId === identity.seriesId
         ? validated.secretEntries
         : rewriteTradingEnv(validated.secretEntries, seriesId);
     await restoreSecrets({ entries, stateDir: deps.stateDir, log });
@@ -1307,9 +1558,11 @@ Rewrite `writeValidated`'s body:
   }
 ```
 
-with `async function openPostgres(url: string) { const db = await createPostgresDb(url); return { db, close: () => db.close() }; }`. Rewrite the `writeValidated` and `restoreFromArtifact` doc comments to state the new order and delete every "mints NO fresh chain … no trade-readier" sentence (§11): the truth is now "runs each module's restore hook inside one transaction BEFORE the identity is written, so a failed hook leaves no bootable identity".
+Rewrite the `writeValidated` and `restoreFromArtifact` doc comments to state the new order and delete every "mints NO fresh chain … no trade-readier" sentence (§11): the truth is now "sets any existing identity aside, restores, migrates, runs each module's restore hook inside one transaction, and writes the artifact's identity LAST, so a failed restore leaves no bootable identity".
 
-In `restore-command.ts`: replace the "`modules` is always `ALL_MODULES` … the restore-hook seat is empty in v1" paragraph with "`modules` is always `ALL_MODULES`: a restore hook must run for every module whose tables are in the backup, and the descriptor list is that set." Before `await restore(restoreDeps)`, print:
+In `restore-command.ts`:
+- Rewrite the header paragraph (~L30-53) that describes "secrets then empty hooks": the flow is now `validate → set aside any existing identity → db → media → migrate → hooks (one transaction) → secrets (identity last)`; keep the `modules: ALL_MODULES` sentence but its reason is "a restore hook must run for every module whose tables are in the backup, and the descriptor list is that set".
+- Before `await restore(restoreDeps)`:
 
 ```ts
   deps.out(
@@ -1317,20 +1570,31 @@ In `restore-command.ts`: replace the "`modules` is always `ALL_MODULES` … the 
   );
 ```
 
-In `rejoin.ts:36-37` and `rejoin-command.ts:86`, extend the `skipSecrets:true` remark: "(the returning node keeps its own identity, and no module restore hook runs)".
+- In the `catch`, before the prefix check (`hasCode`, `isAppError` from `@waitron/shared`):
+
+```ts
+      if (hasCode(err, "restore.hook_failed")) {
+        deps.out(
+          `restore failed: restore.hook_failed (module ${err.params.module}: ${err.params.code})`,
+        );
+        return 1;
+      }
+```
+
+In `rejoin.ts:36-37` and `rejoin-command.ts:86`, extend the `skipSecrets:true` remark: "(the returning node keeps its own identity: no set-aside, no secrets write, no module restore hook)".
 
 - [ ] **Step 5: Run to verify they pass**
 
 Run: `pnpm --filter @waitron/server test restore rejoin`
-Expected: PASS (rejoin suites unchanged in behaviour). Prove by deletion: remove the `if (deps.skipSecrets) return;` gate → the "skipSecrets:true runs NO hook" test fails; restore. Remove `{ nodeId: node.nodeId }` from `withTenant` → nothing here fails (Task 6's e2e is what catches it); leave it in.
+Expected: PASS (rejoin suites unchanged in behaviour). Prove by deletion: remove the `if (deps.skipSecrets) return;` gate → "skipSecrets:true runs NO hook" fails; restore. Remove the `setAsideExistingIdentity` call → "a pre-existing identity is set aside" fails; restore. Remove `{ nodeId: node.nodeId }` from `withTenant` → nothing here fails (Task 6's e2e is what catches it); leave it in.
 
 - [ ] **Step 6: Verify and commit**
 
-Run: `pnpm format:check && pnpm --filter @waitron/server lint && pnpm --filter @waitron/server typecheck && pnpm --filter @waitron/server test restore rejoin backup && pnpm test module-seams errors-reachable`
+Run: `pnpm format:check && pnpm --filter @waitron/server lint && pnpm --filter @waitron/server typecheck && pnpm --filter @waitron/server test restore rejoin backup && pnpm exec vitest run module-seams errors-reachable`
 
 ```bash
 git add apps/server
-git commit -s -m "feat(server): restore runs module hooks in one origin-stamped transaction — migrate first, identity from the artifact, secrets written last"
+git commit -s -m "feat(server): restore runs module hooks in one origin-stamped transaction — identity set aside first, migrate before hooks, secrets written last"
 ```
 
 ---
@@ -1341,16 +1605,55 @@ git commit -s -m "feat(server): restore runs module hooks in one origin-stamped 
 - Create: `apps/server/src/restore-fiscal-e2e.rls.test.ts`
 
 **Interfaces:**
-- Consumes everything above through the shipped `restoreFromArtifact`; `schemaVersionsByModule` (`./backup-manifest.js`); `expectedSchemaVersion` (`@waitron/migrations`); `locateSharedContainer`; `readStandardSeriesId` (`@waitron/db`).
+- Consumes everything above through the shipped `restoreFromArtifact` / `validateArtifact` + `writeValidated`; `schemaVersionsByModule` (`./backup-manifest.js`); `expectedSchemaVersion` (`@waitron/migrations`); `locateSharedContainer`; `readStandardSeriesId`, `createPostgresDb` (`@waitron/db`); `FISCAL_RESTORE`, `installationFloor` (`@waitron/fiscal-verifactu` — a test file, exempt from `module-seams`).
 
 - [ ] **Step 1: Write the suite**
 
 Model it on `rejoin-e2e.rls.test.ts` (copy its `containerPgRestore`, `internalUrl`, artifact-building `beforeAll`, LOUD-skip and teardown shapes verbatim) with these differences:
 
-1. `seedFiscalRegistro(admin)` seeds `F` with a **realistic** identity: `registro_sif` row `('89890001K', 'W1', 1)`, the counter row `insert into contadores_instalacion (nif, id_sistema_informatico, proximo_numero) values ('89890001K', 'W1', 2)`, series `FA` (standard, `next_number` 5) as `F.seriesId` plus `RE` (rectificative), one `registros_facturacion` row (`num_serie_factura 'FA/4'`, huella `'A'.repeat(64)`), and `cadenas` pointed at it (`seedSoldRegistro`'s final UPDATE shape).
-2. The artifact's secrets are `secrets/trading.env` = `formatEnvFile({ WAITRON_TILL_TENANT_ID: F.tenantId, WAITRON_TILL_TILL_ID: F.tillId, WAITRON_TILL_NODE_ID: F.nodeId, WAITRON_TILL_SERIES_ID: F.seriesId, WAITRON_TILL_LOCATION_ID: F.locationId, DATABASE_URL: "postgres://app@localhost/waitron", WAITRON_MIGRATIONS_DATABASE_URL: "postgres://owner@localhost/waitron", WAITRON_ENV: "preproduction" })` and `secrets/secrets.env` = `"WAITRON_CREDENTIALS_KEY=deadbeef\n"`.
-3. **Targets are FRESH databases**, not template clones: `makeFreshTarget()` runs `docker exec <id> psql <internal("postgres")> -v ON_ERROR_STOP=1 -c "create database <name>"` (`pg-restore.test.ts`'s step 4) with `name = \`restore_fiscal_${process.pid}_${n++}\``, records it for `drop database … with (force)` in `afterAll`, and returns `databaseUrl(adminUri, name)`.
-4. `drive(targetUrl, dirs, over = {})` calls the shipped `restoreFromArtifact({ artifact: await readFile(artifactPath), recoveryKey: RECOVERY_KEY, databaseUrl: targetUrl, ...dirs, stagingDir: join(dirs.stateDir, "restore-staging"), migrationsRoot, modules: ALL_MODULES, environment: "preproduction", runRestore: containerPgRestore(containerId!), log: noopLog, ...over })` — the real `applyMigrations` and the real `createPostgresDb` (no `migrate`/`openDb` override).
+1. **Fixture** `seedFiscalRegistro(admin)` seeds `F` with a **realistic** identity, every statement quoted here:
+
+```ts
+  await admin.execute(sql`insert into tenants (id, country, tax_id, legal_name) values (${F.tenantId}, 'ES', '89890001K', 'Waitron SL')`);
+  await admin.execute(sql`insert into locations (id, tenant_id, name, invoice_locales, operation_description) values (${F.locationId}, ${F.tenantId}, 'Local principal', array['es'], 'Venta en establecimiento')`);
+  await admin.execute(sql`insert into tills (id, tenant_id, location_id, name) values (${F.tillId}, ${F.tenantId}, ${F.locationId}, 'Caja 1')`);
+  await admin.execute(sql`insert into nodes (id, tenant_id, location_id, name) values (${F.nodeId}, ${F.tenantId}, ${F.locationId}, 'Node 1')`);
+  await admin.execute(sql`insert into invoice_series (id, tenant_id, node_id, code, purpose, next_number) values (${F.seriesId}, ${F.tenantId}, ${F.nodeId}, 'FA', 'standard', 5)`);
+  await admin.execute(sql`insert into invoice_series (tenant_id, node_id, code, purpose) values (${F.tenantId}, ${F.nodeId}, 'RE', 'rectificative')`);
+  await admin.execute(sql`insert into contadores_instalacion (nif, id_sistema_informatico, proximo_numero) values ('89890001K', 'W1', 2)`);
+  await admin.execute(sql`insert into registro_sif (id, tenant_id, node_id, nif, id_sistema_informatico, numero_instalacion) values (${F.sifId}, ${F.tenantId}, ${F.nodeId}, '89890001K', 'W1', 1)`);
+  await admin.execute(sql`insert into sales (id, tenant_id, till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${F.saleId}, ${F.tenantId}, ${F.tillId}, ${F.nodeId}, ${F.seriesId}, 4, '2026-07-20T19:20:30+01:00', 60, '0.00', '[]'::jsonb, 'es', array['es'], 'verifactu', 'recorded')`);
+  const registro = await admin.execute<{ id: string }>(sql`
+    insert into registros_facturacion (tenant_id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
+      id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
+      tipo_factura, descripcion_operacion, desglose, cuota_total, importe_total,
+      primer_registro, sistema_informatico, fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella)
+    values (${F.tenantId}, ${F.tillId}, ${F.nodeId}, ${F.sifId}, ${F.saleId}, 1, 'alta',
+      '89890001K', 'FA/4', '2026-07-20', 'Waitron SL',
+      'F2', 'Venta en establecimiento', '[]'::jsonb, '12.35', '123.45',
+      true, '{}'::jsonb, '2026-07-20T19:20:30+01:00', 60, '01', ${HUELLA})
+    returning id`);
+  // The chain head: no row exists until an append or a registration creates one — insert it
+  // explicitly, pointing at the record, at sequence 1 (both pointers set: `cadenas_puntero_ck`).
+  await admin.execute(sql`insert into cadenas (tenant_id, node_id, secuencia, ultimo_registro_id, ultima_huella) values (${F.tenantId}, ${F.nodeId}, 1, ${registro.rows[0]!.id}, ${HUELLA})`);
+```
+
+Assert the seeded head right after seeding (`select secuencia, ultima_huella from cadenas` → `{ 1, HUELLA }`) before building the artifact.
+
+2. **Secrets in the artifact**: `secrets/trading.env` = `formatEnvFile({ WAITRON_TILL_TENANT_ID: F.tenantId, WAITRON_TILL_TILL_ID: F.tillId, WAITRON_TILL_NODE_ID: F.nodeId, WAITRON_TILL_SERIES_ID: F.seriesId, WAITRON_TILL_LOCATION_ID: F.locationId, DATABASE_URL: "postgres://app@localhost/waitron", WAITRON_MIGRATIONS_DATABASE_URL: "postgres://owner@localhost/waitron", WAITRON_ENV: "preproduction" })` and `secrets/secrets.env` = `"WAITRON_CREDENTIALS_KEY=deadbeef\n"`.
+
+3. **Two artifacts**: `artifactPath` (current schema) and `olderArtifactPath` — built from a SECOND baseline clone seeded the same way and then downgraded one core migration:
+
+```ts
+    await olderAdmin.execute(sql`alter table invoice_series drop column retired_at`);
+    await olderAdmin.execute(sql`delete from __drizzle_migrations_db where id = (select max(id) from __drizzle_migrations_db)`);
+```
+
+then `buildManifest` (its `core` version is one less — the gate admits an older schema) and dump/pack/encrypt exactly as the first.
+
+4. **Targets are FRESH databases**, not template clones: `makeFreshTarget()` runs `docker exec <id> psql <internal("postgres")> -v ON_ERROR_STOP=1 -c "create database <name>"` (`pg-restore.test.ts`'s step 4) with `name = \`restore_fiscal_${process.pid}_${n++}\``, records it, and returns `databaseUrl(adminUri, name)`; `afterAll` drops each with `drop database <name> with (force)` over the admin connection.
+
+5. `restoreDepsFor(targetUrl, dirs, artifact = artifactPath): Promise<RestoreDeps>` builds `{ artifact: await readFile(artifact), recoveryKey: RECOVERY_KEY, databaseUrl: targetUrl, ...dirs, stagingDir: join(dirs.stateDir, "restore-staging"), migrationsRoot, modules: ALL_MODULES, environment: "preproduction", runRestore: containerPgRestore(containerId!), log: noopLog }` — the real `applyMigrations` and the real `createPostgresDb`; `drive(...)` = `restoreFromArtifact(await restoreDepsFor(...))`.
 
 Tests:
 
@@ -1363,7 +1666,6 @@ Tests:
 
     const db = await createPostgresDb(target);
     try {
-      // SIF: old revoked, new live, number ≥ the clock floor.
       const sifs = await db.execute<{ numero_instalacion: number; revocado_en: string | null }>(sql`select numero_instalacion, revocado_en from registro_sif where node_id = ${F.nodeId}::uuid order by numero_instalacion`);
       expect(sifs.rows).toHaveLength(2);
       expect(sifs.rows[0]).toMatchObject({ numero_instalacion: 1 });
@@ -1371,10 +1673,8 @@ Tests:
       expect(sifs.rows[1]?.revocado_en).toBeNull();
       expect(sifs.rows[1]!.numero_instalacion).toBeGreaterThanOrEqual(installationFloor(new Date(Date.now() - 60_000)));
       const n = sifs.rows[1]!.numero_instalacion;
-      // Chain head reset, sequence kept.
       const head = await db.execute<{ ultima_huella: string | null; secuencia: number }>(sql`select ultima_huella, secuencia from cadenas where node_id = ${F.nodeId}::uuid`);
       expect(head.rows[0]).toEqual({ ultima_huella: null, secuencia: 1 });
-      // Series: FA and RE retired; FA-n / RE-n live at 1.
       const series = await db.execute<{ code: string; retired: boolean; next_number: number }>(sql`select code, retired_at is not null as retired, next_number from invoice_series where node_id = ${F.nodeId}::uuid order by code`);
       expect(series.rows).toEqual([
         { code: "FA", retired: true, next_number: 5 },
@@ -1382,12 +1682,11 @@ Tests:
         { code: "RE", retired: true, next_number: 1 },
         { code: `RE-${n}`, retired: false, next_number: 1 },
       ]);
-      // trading.env names the new standard series; everything else preserved.
       const env = parseEnvFile(await readFile(join(dirs.stateDir, "trading.env"), "utf8"));
       expect(env.WAITRON_TILL_SERIES_ID).toBe(await readStandardSeriesId(db, F.tenantId, F.nodeId));
       expect(env.WAITRON_TILL_NODE_ID).toBe(F.nodeId);
       expect(env.DATABASE_URL).toBe("postgres://app@localhost/waitron");
-      // The ledger row is present and IMMUTABLE (BR-3's receipt, kept).
+      expect(await readFile(join(dirs.stateDir, "secrets.env"), "utf8")).toBe("WAITRON_CREDENTIALS_KEY=deadbeef\n");
       const ledger = await db.execute<{ n: number }>(sql`select count(*)::int as n from registros_facturacion`);
       expect(ledger.rows[0]?.n).toBe(1);
       const blocked = await db.execute(sql`update registros_facturacion set huella = ${"E".repeat(64)}`).then(() => undefined).catch((e: unknown) => e as { code?: string; cause?: { code?: string } });
@@ -1395,7 +1694,6 @@ Tests:
       // Origin stamping: the hook's captured rows carry THIS node, not the all-zero origin.
       const captured = await db.execute<{ n: number }>(sql`select count(*)::int as n from sync_log where table_name in ('registro_sif', 'cadenas') and origin_id = ${F.nodeId}::uuid`);
       expect(captured.rows[0]!.n).toBeGreaterThanOrEqual(3); // revoke + insert + head reset
-      // Migrated to this binary's schema.
       expect(await schemaVersionsByModule(db, ALL_MODULES)).toEqual(Object.fromEntries(ALL_MODULES.map((m) => [m.name, expectedSchemaVersion(m.migrations, migrationsRoot)])));
     } finally {
       await db.close();
@@ -1403,11 +1701,31 @@ Tests:
     await expect(stat(join(dirs.stateDir, "restore-staging", "db.dump"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("an OLDER artifact (one core migration behind) is migrated before the hook runs — and is NOT without the migrate step", async () => {
+    if (containerId === undefined) return;
+    const target = await makeFreshTarget();
+    const dirs = await arrangeDirs();
+    await drive(target, dirs, olderArtifactPath);
+    const db = await createPostgresDb(target);
+    try {
+      expect(await schemaVersionsByModule(db, ALL_MODULES)).toEqual(Object.fromEntries(ALL_MODULES.map((m) => [m.name, expectedSchemaVersion(m.migrations, migrationsRoot)])));
+      const series = await db.execute<{ n: number }>(sql`select count(*)::int as n from invoice_series where retired_at is not null`);
+      expect(series.rows[0]?.n).toBe(2);
+    } finally {
+      await db.close();
+    }
+    // Control: with the migrate step stubbed out the hook reads a column the older dump lacks.
+    const control = await makeFreshTarget();
+    const controlDirs = await arrangeDirs();
+    await expect(restoreFromArtifact({ ...(await restoreDepsFor(control, controlDirs, olderArtifactPath)), migrate: async () => {} })).rejects.toThrow();
+    await expect(stat(join(controlDirs.stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("NEGATIVE CONTROL — skipSecrets:true (the rejoin shape) leaves SIF, series and stateDir untouched", async () => {
     if (containerId === undefined) return;
     const target = await makeFreshTarget();
     const dirs = await arrangeDirs();
-    await drive(target, dirs, { skipSecrets: true });
+    await restoreFromArtifact({ ...(await restoreDepsFor(target, dirs)), skipSecrets: true });
     const db = await createPostgresDb(target);
     try {
       const sifs = await db.execute<{ n: number }>(sql`select count(*)::int as n from registro_sif where revocado_en is null and numero_instalacion = 1`);
@@ -1420,33 +1738,35 @@ Tests:
     await expect(stat(join(dirs.stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("a throwing hook after the fiscal one rolls the SIF and series back and writes no identity", async () => {
+  it("a failure AFTER the fiscal hook minted and the series were retired rolls everything back and writes no identity", async () => {
     if (containerId === undefined) return;
+    // The real fiscal hook runs, then its outcome is replaced by a code the node already holds — the
+    // orchestrator's insert collides after the retire, and the whole transaction (SIF included) must roll back.
+    const sabotaged: WaitronModule[] = ALL_MODULES.map((m) =>
+      m.name === "fiscal"
+        ? { ...m, backup: { ...m.backup, restore: async (tx, node) => ({ ...(await FISCAL_RESTORE(tx, node)), series: [{ code: "FA", purpose: "standard" }] }) } }
+        : m,
+    );
     const target = await makeFreshTarget();
     const dirs = await arrangeDirs();
-    const boom = { name: "boom", version: "0.0.0", tier: "toggleable", migrations: { name: "boom", table: "__drizzle_migrations_boom", from: "../boom/drizzle" }, backup: { restore: async () => { throw new AppError("restore.unexpected_entry", { name: "boom" }); } } } as unknown as WaitronModule;
-    // `modules` feeds the gate and the migrate step too, so the fake module needs a migrations folder:
-    // point `from` at an EMPTY folder created under scratchRoot/migrations/boom with an empty journal —
-    // OR pass the fake only to the hook phase by wrapping: simplest is to keep `modules: ALL_MODULES`
-    // for gate+migrate and run `writeValidated` with `modules: [...ALL_MODULES, boom]` after a
-    // `validateArtifact` with `ALL_MODULES`. Do the latter.
-    const rd = restoreDepsFor(target, dirs);
+    const rd = await restoreDepsFor(target, dirs);
     const validated = await validateArtifact(rd);
-    await expect(writeValidated(validated, { ...rd, modules: [...ALL_MODULES, boom], migrate: async () => {} })).rejects.toMatchObject({ code: "restore.hook_failed", params: { module: "boom" } });
+    await expect(writeValidated(validated, { ...rd, modules: sabotaged })).rejects.toMatchObject({ code: "restore.hook_failed", params: { module: "fiscal", code: "series.code_collision" } });
     const db = await createPostgresDb(target);
     try {
       const sifs = await db.execute<{ n: number }>(sql`select count(*)::int as n from registro_sif`);
-      expect(sifs.rows[0]?.n).toBe(1); // the fiscal hook's new row rolled back
+      expect(sifs.rows[0]?.n).toBe(1); // the hook's new row rolled back
+      const counter = await db.execute<{ proximo_numero: number }>(sql`select proximo_numero from contadores_instalacion`);
+      expect(counter.rows[0]?.proximo_numero).toBe(2); // the floor rolled back with it
       const retired = await db.execute<{ n: number }>(sql`select count(*)::int as n from invoice_series where retired_at is not null`);
       expect(retired.rows[0]?.n).toBe(0);
     } finally {
       await db.close();
     }
     await expect(stat(join(dirs.stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(join(dirs.stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 ```
-
-(`restoreDepsFor` is the deps-building half of `drive`; `migrate: async () => {}` in the third test avoids `orderedMigrationSets` seeing the fake module — the real migrate ran in neither, so also assert nothing: this test is about the rollback.)
 
 - [ ] **Step 2: Run it**
 
@@ -1455,11 +1775,11 @@ Expected: PASS with the container reachable (a LOUD skip line otherwise — then
 
 - [ ] **Step 3: Verify and commit**
 
-Run: `pnpm format:check && pnpm --filter @waitron/server lint && pnpm --filter @waitron/server typecheck && pnpm test guarded-teardowns` (root: the suite's raw teardown must be guarded).
+Run: `pnpm format:check && pnpm --filter @waitron/server lint && pnpm --filter @waitron/server typecheck && pnpm exec vitest run guarded-teardowns module-seams`
 
 ```bash
 git add apps/server/src/restore-fiscal-e2e.rls.test.ts
-git commit -s -m "test(server): real-Postgres receipt for the fiscal restore hook — fresh SIF, retired series, origin-stamped, rollback, skipSecrets control"
+git commit -s -m "test(server): real-Postgres receipt for the fiscal restore hook — fresh SIF, retired series, origin-stamped, migrate-before-hook, rollback, skipSecrets control"
 ```
 
 ---
@@ -1467,17 +1787,17 @@ git commit -s -m "test(server): real-Postgres receipt for the fiscal restore hoo
 ### Task 7: Receipts, docs, and the whole-package runs
 
 **Files:**
-- Modify: `CLAUDE.md` (§5), `docs/backlog.md`, `docs/superpowers/plans/2026-08-30-onboarding-slice4b-iii-cold-restore-runbook.md`, `docs/superpowers/specs/2026-09-04-backup-restore-regime-design.md`, `docs/superpowers/specs/2026-09-05-membership-rejoin-r3-wipe-and-restore-design.md`, `docs/superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md` (status line), plus any code comment §11 lists that Tasks 1–6 did not already retire.
+- Modify: `CLAUDE.md` (§5), `docs/backlog.md`, `apps/till/README.md` (the operator's series query), `docs/superpowers/plans/2026-08-30-onboarding-slice4b-iii-cold-restore-runbook.md`, `docs/superpowers/specs/2026-09-04-backup-restore-regime-design.md`, `docs/superpowers/specs/2026-09-05-membership-rejoin-r3-wipe-and-restore-design.md`, `docs/superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md` (status line), plus any code comment §11 lists that Tasks 1–6 did not already retire.
 
 - [ ] **Step 1: The base-to-tip receipt sweep**
 
-Run `git diff origin/main..HEAD --stat` and then, for every claim §11 of the spec lists, `grep -rn` the phrase across the WHOLE tree (`packages/ apps/ scripts/ docs/ .github/ CLAUDE.md README.md`) — not only the files the branch touched:
+Run `git diff origin/main..HEAD --stat` and then, for every claim §11 of the spec lists, grep the WHOLE tree — phrases AND identifiers, and the operator instructions around them:
 
 ```bash
-grep -rn "no business touching the fiscal chain\|mints NO fresh chain\|no trade-readier\|EMPTY in v1\|restore-hook seat is empty\|body lands in BR-3/BR-4\|later slice's seat\|only the \`restoreSecrets\` write is elided\|unreachable today\|backstopped by AEAT error" packages apps scripts docs .github CLAUDE.md README.md | grep -v node_modules
+grep -rn "no business touching the fiscal chain\|mints NO fresh chain\|no trade-readier\|EMPTY in v1\|restore-hook seat is empty\|body lands in BR-3/BR-4\|later slice's seat\|only the \`restoreSecrets\` write is elided\|unreachable today\|backstopped by AEAT error\|invokeRestoreHooks\|RestoreHookContext\|purpose = 'standard'" packages apps scripts docs .github CLAUDE.md README.md | grep -v node_modules
 ```
 
-Fix each hit: code comments get the invariant (one line, no history); docs get a dated pointer (`> **2026-09-06 (SP-3d):** …`) — never a rewrite of a historical spec.
+Fix each hit: code comments get the invariant (one line, no history); docs get a dated pointer (`> **2026-09-06 (SP-3d):** …`) — never a rewrite of a historical spec. Known hits to fix: `apps/till/README.md` ~L39-45 — the operator's series query joins `invoice_series … and s.purpose = 'standard'`; add `and s.retired_at is null` (after a restore the old standard series is still there, retired) and a one-line note that a cold restore rewrites `trading.env` for you.
 
 - [ ] **Step 2: CLAUDE.md §5**
 
@@ -1494,7 +1814,7 @@ Change the "Re-registering a node starts a new chain" bullet to:
 
 - [ ] **Step 3: Backlog**
 
-In `docs/backlog.md`: mark SP-3d / BR-4 LANDED-pending (the row at ~L865 and the BR-4 bullet at ~L1464; the section header at ~L1414) as "**SP-3d — on branch, PR open, owner-gated (H2)**" with the PR number once known; replace the "Cold-restore follow-up (from 4b-iii)" note (~L1651) with a one-line "closed by SP-3d" pointer; in the promote-action slices (~L1748) change Slice 4's gate to "mechanism landed with SP-3d; remaining: the operator surface (§2 of the SP-3d spec: connection rebinding, advertised origin, an authenticated entry)"; under the SP-3c follow-ups add: "the provisioning seed opens `withTenant` without `{ nodeId }` (`packages/provisioning/src/venue-apply.ts`), so its captured fiscal rows carry the all-zero origin — same class as the SP-3d review's Major 1; fix with the first standby that adopts from a freshly provisioned primary". Record the yardstick data (fix rounds per task, false claims found at whole-branch review) in the SP-3d row when `/finish-branch` is done.
+In `docs/backlog.md`: mark SP-3d / BR-4 (the row at ~L865, the BR-4 bullet at ~L1464, the section header at ~L1414) as "**SP-3d — on branch, PR open, owner-gated (H2)**" with the PR number once known; replace the "Cold-restore follow-up (from 4b-iii)" note (~L1651) with a one-line "closed by SP-3d" pointer; in the promote-action slices (~L1748) change Slice 4's gate to "mechanism landed with SP-3d; remaining: the operator surface (§2 of the SP-3d spec: connection rebinding, advertised origin, an authenticated entry)"; under the SP-3c follow-ups add: "the provisioning seed opens `withTenant` without `{ nodeId }` (`packages/provisioning/src/venue-apply.ts`), so its captured fiscal rows carry the all-zero origin — same class as the SP-3d review's Major 1; fix with the first standby that adopts from a freshly provisioned primary". Record the yardstick data (fix rounds per task, false claims found at whole-branch review) in the SP-3d row when `/finish-branch` is done.
 
 - [ ] **Step 4: Spec status line**
 
@@ -1502,18 +1822,20 @@ In the SP-3d spec, change `**Status:** design.` to `**Status:** built on feat/mo
 
 - [ ] **Step 5: Whole-package and root runs**
 
+Sequentially, nothing else running (CLAUDE.md §2: never two browser gates, never a backgrounded workspace run):
+
 ```bash
 pnpm format:check
 pnpm lint
 pnpm typecheck
-pnpm test                                      # root project: every guard, unfiltered
+pnpm exec vitest run                                                       # the ROOT project: every guard, unfiltered
 TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/db test:coverage
 pnpm --filter @waitron/core test:coverage
 pnpm --filter @waitron/module test:coverage
 TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/fiscal-verifactu test:coverage
 pnpm --filter @waitron/composition test:coverage
-TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server test:coverage   # alone; nothing else running
-pnpm --filter @waitron/provisioning test:coverage                               # depends on db's schema change
+pnpm --filter @waitron/provisioning test:coverage
+TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server test:coverage   # alone
 ```
 
 Every run green at its package's bar. If `apps/server`'s run trips a known timing flake in `boot.test`/`mirror-e2e`, re-run that file once before investigating.
@@ -1522,15 +1844,15 @@ Every run green at its package's bar. If `apps/server`'s run trips a known timin
 
 ```bash
 git add -A
-git commit -s -m "docs: SP-3d receipts — CLAUDE.md §5 cold restore, backlog, runbook and spec pointers"
+git commit -s -m "docs: SP-3d receipts — CLAUDE.md §5 cold restore, till README series query, backlog, runbook and spec pointers"
 ```
 
 Then hand over to `/finish-branch` (simplify → the two reviewers → rebase → PR → CI). **Do not land**: this slice is owner-gated.
 
 ---
 
-## Self-review (done while writing)
+## Self-review (done while writing; revised after Astra's plan review 2026-09-06)
 
-- **Spec coverage:** §3.1 (no node-id change) — nothing to build, Task 5 keeps `trading.env`'s node id. §3.2/§7 — Tasks 1, 2, 4 (`standby.reserve`), 5. §3.3 — Task 5 gate + test, Task 6 control. §3.4 — Tasks 3, 4, 5. §3.5 — Task 4 (`installationFloor`, `raiseInstallationFloor`, the reuse experiment). §4 — Task 3. §5 — Task 5 (migrate, identity, transaction, origin `{ nodeId }`, secrets last), Task 6 (real migrate, origin count, rollback). §6 — Task 4 (bases, bound, live-row identity, no-live-SIF branch). §8 — Tasks 1, 2, 4, 5. §9 — Tasks 1, 2, 4, 5, 6; root guards in Tasks 4, 5, 7. §11 — Tasks 4, 5, 7. §2's CLI precondition line — Task 5.
-- **Placeholders:** the `provisioning.test.ts` addition in Task 4 names `<the retired code>` for the implementer to read off the sibling test — that is a read, not a TBD; everything else is literal.
-- **Type consistency:** `RestoreHook(tx, node)` in Tasks 3, 4, 5, 6; `RestoreOutcome.series` shape `{ code, purpose }` everywhere; `runRestoreHooks` returns `{ seriesId, reports }` (Task 5 body and tests); `openDb` returns `{ db, close }` in Task 5's seam and both tests; `insertNodeSeriesTx(tx, tenantId, nodeId, series)` in Tasks 1 and 5; `readStandardSeriesIdTx(tx, tenantId, nodeId)` in Tasks 1 and 5.
+- **Spec coverage:** §2 (CLI precondition line) — Task 5. §3.1 — Task 5 keeps the node id; Task 6 asserts it. §3.2/§7 — Tasks 1, 2, 4 (`standby.reserve` via `liveSeriesBases`), 5; the bundle round trip — Task 1. §3.3 — Task 5 gate + no-identity artifact test; Task 6 control. §3.4 (set-aside, identity last, both-branch series check) — Task 5. §3.5 — Task 4 (`installationFloor`, `raiseInstallationFloor`, the corrected reuse experiment). §4 — Task 3. §5 steps — Task 5 (set-aside, migrate, identity from the artifact, transaction with `{ nodeId }`, secrets last); Task 6 (real migrate, older-artifact receipt with its control, origin count, rollback after retire). §6 — Task 4 (bases, bound, live-row identity, no-live-SIF branch; the real append path before and after). §8 — Tasks 1, 2, 4, 5 (+ CLI formatting of `hook_failed`). §9 — Tasks 1, 2 (three deletion controls), 4 (PGlite + the real-PG leg), 5, 6; root guards in Tasks 3, 4, 5, 6, 7.
+- **Placeholders:** none — every test and every implementation step is literal.
+- **Type consistency:** `RestoreHook(tx, node)` in Tasks 3–6; `RestoreOutcome.series` shape `{ code, purpose }` everywhere; `runRestoreHooks` returns `{ seriesId: string, reports }` (Task 5 body and tests, both branches); `openDb` returns `{ db, close }` in the seam and both suites; `insertNodeSeriesTx(tx, tenantId, nodeId, series)` in Tasks 1 and 5; `readStandardSeriesIdTx(tx, tenantId, nodeId)` in Tasks 1 and 5; `liveSeriesBases(tx, { tenantId, nodeId })` in Task 4's hook and reserve; `deriveReservedSeriesCodes(bases, n)` unchanged in signature.
