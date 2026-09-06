@@ -52,8 +52,7 @@ const CLAIMED = {
  * OR non-terminal at any age, so a re-sweep chain older than the horizon stays claimable. The
  * below-horizon MISSING-day count would be an unbounded read, so it is aggregated in SQL instead.
  *
- * Carries an explicit `eq(tenantId)` predicate as defence in depth: under a superuser or BYPASSRLS
- * connection, where RLS does not apply, this is the only thing scoping the read to one tenant.
+ * The explicit tenant predicate scopes the read to the requested tenant.
  */
 export async function readSnapshot(
   tx: Transaction,

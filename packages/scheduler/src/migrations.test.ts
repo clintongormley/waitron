@@ -22,16 +22,6 @@ const suite = usePgliteDb({
 });
 
 describe("the scheduler migration set", () => {
-  it("creates scheduled_runs with row-level security forced", async () => {
-    const result = await suite.db.execute<{
-      relrowsecurity: boolean;
-      relforcerowsecurity: boolean;
-    }>(sql`
-      select relrowsecurity, relforcerowsecurity
-        from pg_class where relname = 'scheduled_runs'`);
-    expect(result.rows[0]).toEqual({ relrowsecurity: true, relforcerowsecurity: true });
-  });
-
   // `.rejects.toThrow(...)` does NOT work here: drizzle wraps the driver error in
   // `DrizzleQueryError`, whose OWN `.message` is `Failed query: <sql>\nparams: ...` — not the
   // real Postgres text. Verified live. `pgErrorCode`/`pgErrorMessage` unwrap `.cause` to reach the

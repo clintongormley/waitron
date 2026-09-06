@@ -20,6 +20,5 @@ CREATE TABLE "scheduled_runs" (
 	CONSTRAINT "scheduled_runs_attempts_ck" CHECK ("scheduled_runs"."attempts" >= 0)
 );
 --> statement-breakpoint
-ALTER TABLE "scheduled_runs" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "scheduled_runs" ADD CONSTRAINT "scheduled_runs_tenant_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "scheduled_runs_key" ON "scheduled_runs" USING btree ("tenant_id","duty","period_from","generation");

@@ -1,6 +1,6 @@
 {
-  "id": "b1152468-4d8d-4db1-a1fe-e50368f028e2",
-  "prevId": "294bb1fd-a0f5-4f5e-9ea4-7ee4f06d61c5",
+  "id": "5ff6bbb8-0044-4089-80dc-7f7dc0d186f6",
+  "prevId": "842ce443-770a-4cff-a6b8-43cfd900c0ed",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -175,7 +175,7 @@
           "value": "\"scheduled_runs\".\"attempts\" >= 0"
         }
       },
-      "isRLSEnabled": true
+      "isRLSEnabled": false
     }
   },
   "enums": {},

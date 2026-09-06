@@ -16,10 +16,6 @@ import { SCHEDULER_MIGRATIONS } from "../migrations.js";
  * explicit here; the now-removed per-file `startRealPostgres` ran the same pair. `store.concurrency.test.ts`
  * clones it with `useTemplateDb({ template: "core_scheduler" })`.
  *
- * No `roles`: the `scheduler_rls_probe` login this file created existed for one suite alone, and
- * that suite was retired with the RLS drop — its two isolation cases had no meaning under
- * one tenant per database, and its claim/run/complete round trip was `scheduled_runs: "SIU"` in
- * `packages/fiscal-verifactu/src/privileges.expected.ts` over behaviour `run.test.ts` already pins.
  * `store.concurrency.test.ts`, the one real-PG suite left, opens its racing backends with plain
  * `pg.connect()` (superuser connections to the clone) and needs no probe role.
  *

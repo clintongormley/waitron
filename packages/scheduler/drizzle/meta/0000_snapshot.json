@@ -1,5 +1,5 @@
 {
-  "id": "294bb1fd-a0f5-4f5e-9ea4-7ee4f06d61c5",
+  "id": "842ce443-770a-4cff-a6b8-43cfd900c0ed",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -175,7 +175,7 @@
           "value": "\"scheduled_runs\".\"attempts\" >= 0"
         }
       },
-      "isRLSEnabled": true
+      "isRLSEnabled": false
     }
   },
   "enums": {},

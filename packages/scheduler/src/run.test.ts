@@ -59,11 +59,7 @@ describe("runDue", () => {
     // Read the column directly: readSnapshot deliberately omits `summary`, since derivation never
     // needs it and a large one would be read on every tick for nothing.
     //
-    // Explicitly scoped to `tenantId`, unlike the brief's original text: `withTenant`'s own doc
-    // comment warns PGlite connects as superuser and bypasses RLS entirely, "which is precisely
-    // why the tests must not rely on it" — and this describe block's earlier tests already leave
-    // their own `duty = 'test.duty'` rows behind under other tenants in the same shared `suite.db`.
-    // Without this filter the query over-matches the moment it runs after any prior test.
+    // Filter by tenant because other cases leave their ledger rows in this shared fixture.
     const stored = await withTenant(suite.db, tenantId, (tx) =>
       tx.execute<{ summary: Record<string, unknown> }>(
         sql`select summary from scheduled_runs where duty = 'test.duty' and tenant_id = ${tenantId}`,
