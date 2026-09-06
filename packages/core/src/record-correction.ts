@@ -148,6 +148,7 @@ export async function recordCorrection(
       code: invoiceSeries.code,
       nodeId: invoiceSeries.nodeId,
       purpose: invoiceSeries.purpose,
+      retiredAt: invoiceSeries.retiredAt,
     })
     .from(invoiceSeries)
     .where(and(eq(invoiceSeries.id, input.seriesId), eq(invoiceSeries.tenantId, input.tenantId)));
@@ -170,6 +171,12 @@ export async function recordCorrection(
       seriesId: input.seriesId,
       expected: "rectificative",
       actual: series.purpose,
+    });
+  }
+  if (series.retiredAt !== null) {
+    throw new AppError("sale.series_retired", {
+      seriesId: input.seriesId,
+      retiredAt: series.retiredAt.toISOString(),
     });
   }
 

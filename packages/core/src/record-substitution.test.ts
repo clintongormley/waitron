@@ -334,6 +334,24 @@ describe("recordSubstitution — the series (node-ownership guards)", () => {
     const records = await backend.recordsFor(nodeId);
     expect(records.map((r) => r.kind)).toEqual(["sale"]); // only the ticket's alta, no F3
   });
+
+  it("rejects a RETIRED series: a restored box must never number from the series it was restored with", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId } = await sellTicket(backend);
+    const retiredAt = new Date("2026-09-06T10:00:00.000Z");
+    await suite.db.update(invoiceSeries).set({ retiredAt }).where(eq(invoiceSeries.id, seriesId));
+    try {
+      await expect(substitute(backend, [saleId])).rejects.toMatchObject({
+        code: "sale.series_retired",
+        params: { seriesId, retiredAt: retiredAt.toISOString() },
+      });
+    } finally {
+      await suite.db
+        .update(invoiceSeries)
+        .set({ retiredAt: null })
+        .where(eq(invoiceSeries.id, seriesId));
+    }
+  });
 });
 
 describe("recordSubstitution — the F3 sale", () => {
