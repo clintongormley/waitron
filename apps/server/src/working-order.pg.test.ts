@@ -1139,6 +1139,88 @@ describe("cross-till end-to-end", () => {
   });
 });
 
+// Two tenants in ONE database. Production holds one tenant per database, but tenant isolation is
+// enforced at the QUERY, never left to the deployment invariant (#255): `withTenant` stopped isolating
+// SELECTs when RLS was dropped, so a by-id read's own tenant predicate is its only scope, and the
+// harness + dev DBs really are multi-tenant. Venue-wide (§3.6) means every NODE of one tenant, never
+// across tenants — the six S3 read sites are uniformly `eq(tenantId, cfg.tenantId)`. Real Postgres
+// as `app_user` (rolsuper=f): on PGlite every connection is a superuser and the leak would pass silently.
+describe("cross-tenant isolation — a by-id read never reaches another tenant's order (#255, till-reroute §3.6)", () => {
+  it("getHeldOrder against a FOREIGN tenant's order id throws not_found — never the other tenant's basket", async () => {
+    const { cfg: tenantA } = await setupVenue();
+    const { cfg: tenantB, cafe: cafeB } = await setupVenue();
+    expect(tenantB.tenantId).not.toBe(tenantA.tenantId);
+
+    const bOrderId = randomUUID();
+    await parkOrder({ db: suite.admin }, tenantB, {
+      id: bOrderId,
+      lines: [{ productId: cafeB.id, quantity: "1" }],
+      label: "B private",
+    });
+
+    // As tenant A the foreign id is invisible, exactly as a non-existent id is.
+    await expect(getHeldOrder({ db: suite.admin }, tenantA, bOrderId)).rejects.toMatchObject({
+      code: "working_order.not_found",
+      params: { workingOrderId: bOrderId },
+    });
+
+    // B's order is untouched: still open, one line, still labelled — read back as B.
+    const stillOpen = await getHeldOrder({ db: suite.admin }, tenantB, bOrderId);
+    expect(stillOpen.label).toBe("B private");
+    expect(stillOpen.lines).toHaveLength(1);
+  });
+
+  it("abandonHeldOrder against a FOREIGN tenant's order id throws not_open — never abandons the other tenant's order", async () => {
+    const { cfg: tenantA } = await setupVenue();
+    const { cfg: tenantB, cafe: cafeB } = await setupVenue();
+
+    const bOrderId = randomUUID();
+    await parkOrder({ db: suite.admin }, tenantB, {
+      id: bOrderId,
+      lines: [{ productId: cafeB.id, quantity: "1" }],
+      label: "B private",
+    });
+
+    await expect(abandonHeldOrder({ db: suite.admin }, tenantA, bOrderId)).rejects.toMatchObject({
+      code: "working_order.not_open",
+      params: { workingOrderId: bOrderId },
+    });
+
+    // B's order stays OPEN — the abandon did not cross the tenant boundary.
+    expect((await getHeldOrder({ db: suite.admin }, tenantB, bOrderId)).id).toBe(bOrderId);
+  });
+
+  it("updateHeldOrder against a FOREIGN tenant's order id throws not_open — never a raw 23503, never mutates it", async () => {
+    const { cfg: tenantA, cafe: cafeA } = await setupVenue();
+    const { cfg: tenantB, cafe: cafeB } = await setupVenue();
+
+    const bOrderId = randomUUID();
+    await parkOrder({ db: suite.admin }, tenantB, {
+      id: bOrderId,
+      lines: [{ productId: cafeB.id, quantity: "1" }],
+      label: "B private",
+    });
+
+    // `cafeA` is tenant A's own product, so pricing succeeds under A and — before the fix — the lock
+    // finds B's row by id alone and the path runs on to the line insert, failing only at the composite
+    // FK (23503). After the fix the tenant predicate makes the lock miss, so it is a clean not_open.
+    await expect(
+      updateHeldOrder({ db: suite.admin }, tenantA, bOrderId, {
+        lines: [{ productId: cafeA.id, quantity: "2" }],
+      }),
+    ).rejects.toMatchObject({
+      code: "working_order.not_open",
+      params: { workingOrderId: bOrderId },
+    });
+
+    // B's basket is unchanged: one line, its original label — the aborted tx touched nothing.
+    const afterAttempt = await getHeldOrder({ db: suite.admin }, tenantB, bOrderId);
+    expect(afterAttempt.label).toBe("B private");
+    expect(afterAttempt.lines).toHaveLength(1);
+    expect(Number(afterAttempt.lines[0]!.quantity)).toBe(1);
+  });
+});
+
 // Placing (open → placed) opens the art. 29.2.j amendment log with its `order_placed` genesis and
 // freezes composition (for free — a placed order's lines are already frozen by require_open_parent);
 // cancelling a placed order (placed → abandoned) appends an `order_cancelled` amendment. Real Postgres

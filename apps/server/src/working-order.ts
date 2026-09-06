@@ -2536,6 +2536,8 @@ export async function listHeldOrders(
 /**
  * Read an open parked order anywhere in the venue (venue-wide, till-reroute §3.6 — not node-scoped).
  * Return product ids and quantities in line-number order so the till can rebuild and re-price the basket.
+ * Scoped to the tenant, not the id alone: `withTenant` no longer isolates SELECTs since RLS was dropped
+ * (#255), so the tenant predicate is this by-id read's own boundary — a foreign-tenant id reads as absent.
  */
 export async function getHeldOrder(
   deps: WorkingOrderDeps,
@@ -2552,7 +2554,13 @@ export async function getHeldOrder(
         label: workingOrders.label,
       })
       .from(workingOrders)
-      .where(and(eq(workingOrders.id, id), eq(workingOrders.status, "open")));
+      .where(
+        and(
+          eq(workingOrders.tenantId, cfg.tenantId),
+          eq(workingOrders.id, id),
+          eq(workingOrders.status, "open"),
+        ),
+      );
 
     if (order === undefined) {
       throw new AppError("working_order.not_found", { workingOrderId: id });
@@ -2603,12 +2611,14 @@ export async function updateHeldOrder(
       // Lock the order row for the life of the tx, then read its status off the locked copy. Absent or
       // not-open → `working_order.not_open`; the DB triggers (enforce_transition on the label update,
       // require_open_parent on the line delete/insert) are the backstop if this app check is ever wrong.
-      // The lock predicate is `id` alone (venue-wide, till-reroute §3.6 — any node's open tab is editable);
-      // `status` stays off the WHERE so a closed order is told from an absent one only inside the tx.
+      // Scoped to the tenant, then venue-wide within it (till-reroute §3.6 — any node's open tab is
+      // editable): the tenant predicate is this read's own boundary since RLS was dropped (#255), so a
+      // foreign-tenant id misses the lock and reads as absent rather than reaching the line insert (a
+      // raw 23503). `status` stays off the WHERE so a closed order is told from an absent one in the tx.
       const [order] = await tx
         .select({ status: workingOrders.status })
         .from(workingOrders)
-        .where(eq(workingOrders.id, id))
+        .where(and(eq(workingOrders.tenantId, cfg.tenantId), eq(workingOrders.id, id)))
         .for("update");
 
       if (order === undefined || order.status !== "open") {
@@ -2644,7 +2654,10 @@ export async function updateHeldOrder(
 
 /**
  * Abandon an open held order anywhere in the venue (venue-wide, till-reroute §3.6). The conditional
- * status update leaves settled_at null because abandonment does not settle an order.
+ * status update leaves settled_at null because abandonment does not settle an order. Scoped to the
+ * tenant, not the id alone: `withTenant` no longer isolates writes' row selection since RLS was dropped
+ * (#255), so the tenant predicate is this by-id abandon's own boundary — a foreign-tenant id matches
+ * nothing and reads as `working_order.not_open` rather than abandoning another tenant's order.
  */
 export async function abandonHeldOrder(
   deps: WorkingOrderDeps,
@@ -2660,7 +2673,13 @@ export async function abandonHeldOrder(
       const updated = await tx
         .update(workingOrders)
         .set({ status: "abandoned" })
-        .where(and(eq(workingOrders.id, id), eq(workingOrders.status, "open")))
+        .where(
+          and(
+            eq(workingOrders.tenantId, cfg.tenantId),
+            eq(workingOrders.id, id),
+            eq(workingOrders.status, "open"),
+          ),
+        )
         .returning({ id: workingOrders.id });
 
       if (updated.length === 0) {
