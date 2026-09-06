@@ -357,7 +357,7 @@ run_step "sign-off (DCO)" "git rebase --signoff <base>   (or: git commit -s --am
 # ONE classifier call answers both questions. stdout carries two lines and nothing else; the reason
 # goes to stderr, where it has already been printed by the time this reads the result.
 #
-#   scope=documentation   every changed path is prose
+#   scope=documentation   every changed path is inert: prose, or root config no code-gated job reads
 #   scope=global          run everything
 #   scope=packages        `packages=` names what to narrow to
 #

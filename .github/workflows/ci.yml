@@ -48,8 +48,9 @@ jobs:
   # Works out what the rest of the workflow needs to do. Everything below gates on its outputs.
   #
   # Two independent decisions, deliberately not merged into one (design §3.2):
-  #   `code`  — is there anything here that is not prose? If not, only `lint` runs, on pull requests
-  #             AND on main, so a documentation merge costs nothing in either place.
+  #   `code`  — does anything here reach a code-gated job? If not, only the `lint` job runs (eslint
+  #             AND format:check, both ungated), on pull requests AND on main, so an inert change —
+  #             prose, or root config no code-gated job reads — costs nothing in either place.
   #   `scope` — on a pull request, narrow the test shards to the packages that changed and the
   #             packages that depend on them. On main, run everything, because that unfiltered run
   #             is what verifies the narrowing was right.

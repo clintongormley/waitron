@@ -33,6 +33,15 @@ describe("isInertPath", () => {
     },
   );
 
+  // Root config no code-gated job reads. A push touching only these ran the whole workspace, locally
+  // and in CI, until 2026-09-06.
+  it.each([".codex/config.toml", ".vscode/settings.json", ".gitignore", ".editorconfig"])(
+    "treats the root config %s as inert",
+    (path) => {
+      expect(isInertPath(path)).toBe(true);
+    },
+  );
+
   // The case that rules out a `**/*.md` shortcut. packages/verifactu/schemas/README.md is a test
   // FIXTURE: schemas.test.ts:40-48 asserts each AEAT schema's SHA-256 appears in it, precisely to
   // catch someone editing a primary source to make a test pass. Classifying it as documentation
@@ -48,11 +57,21 @@ describe("isInertPath", () => {
     ".github/workflows/ci.yml",
     ".husky/pre-push",
     "pnpm-workspace.yaml",
+    "pnpm-lock.yaml",
     "eslint.config.js",
     ".prettierignore",
   ])("treats %s as code", (path) => {
     expect(isInertPath(path)).toBe(false);
   });
+
+  // The root-config rule is ROOT-ONLY: the same names inside a package are that package's files,
+  // and a package's `.gitignore` decides what its build and test runs can see.
+  it.each(["packages/db/.gitignore", "apps/till/.vscode/x.json"])(
+    "treats %s as code, because the root-config rule does not reach inside a package",
+    (path) => {
+      expect(isInertPath(path)).toBe(false);
+    },
+  );
 });
 
 describe("classify", () => {

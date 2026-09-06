@@ -202,6 +202,15 @@ smoke/assertion steps. Gated on `code`, since a Markdown edit cannot change an e
 
 ### 3.4 "Docs-only" is a path allowlist, never a file extension
 
+> **Dated pointer, 2026-09-06 — the inert set below has grown past docs-only.** `isInertPath`
+> (`scripts/changed-scope.mjs`) now also treats root-only editor/agent config that no `code`-gated
+> job reads as inert: the `.codex/` and `.vscode/` prefixes, and the root `.gitignore` and
+> `.editorconfig`. A push touching only those skips the expensive `code`-gated jobs too. `lint` and
+> `format:check` are ungated and still run on such a push (prettier honours `.editorconfig`, the root
+> `.gitignore` and `.vscode/*.json`; eslint lints a `.vscode/*.mjs`), so nothing formatting- or
+> lint-relevant escapes. The path-allowlist-not-extension principle below is unchanged. The receipt
+> is the commit that widened `INERT_ROOT_PREFIXES` / `INERT_ROOT_FILES` and its PR thread.
+
 **A change is docs-only when every changed path is under `docs/` or is a root-level `*.md`.**
 Anything under `packages/` or `apps/` is code, Markdown or not.
 
