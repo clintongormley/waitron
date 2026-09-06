@@ -131,7 +131,7 @@ Append to `describe("reserved-identity accessors", …)` in `packages/db/src/res
   });
 ```
 
-In `packages/provisioning/src/venue-adopt.test.ts`, extend the test "revives an ISO-string created_at (the JSON round-trip shape)…": after `rows.tills[0]!.createdAt = stamp;` add `rows.invoiceSeries[0]!.retiredAt = stamp;` (the first timestamp column on `invoice_series` — `reviveRow` is schema-driven, so this pins that it is covered), and replace the trailing "no-date-column rows (locations, invoice_series)" assertion block with:
+In `packages/provisioning/src/venue-adopt.test.ts`, extend the test "revives an ISO-string created_at (the JSON round-trip shape)…": after `rows.tills[0]!.createdAt = stamp;` add `rows.invoiceSeries[0]!.retiredAt = stamp;` (the first timestamp column on `invoice_series` — `reviveRow` is schema-driven, so this pins that it is covered), and make the adopt call go through a REAL serialization round trip — `adoptVenue(JSON.parse(JSON.stringify(rows)) as typeof rows, designated, { db: suite.db })` — so the wire shape is what `JSON.stringify` produces, not a hand-assigned string. Then replace the trailing "no-date-column rows (locations, invoice_series)" assertion block with:
 
 ```ts
     // `locations` has no date column — the pass-through path.
@@ -1026,15 +1026,26 @@ export async function restoreFiscal(
 export const FISCAL_RESTORE: RestoreHook = (tx, node) => restoreFiscal(tx, node, new Date());
 ```
 
-In `provisioning.ts`'s `standby.reserve`, replace the `primarySeries` select and the return with:
+In `provisioning.ts`, replace the whole body of `standby.reserve` so the bases are read (and the bound refused) BEFORE the counter is advanced — otherwise `series.code_too_long` would burn a number inside the transaction:
 
 ```ts
+    async reserve(tx, primary): Promise<StandbyReservation> {
+      const primarySif = await currentSif(tx, primary.tenantId, primary.nodeId);
       const bases = await liveSeriesBases(tx, primary);
-      const state: ReservedSifState = { nif: primarySif.nif, idSistemaInformatico: primarySif.idSistemaInformatico, numeroInstalacion };
+      const numeroInstalacion = await reserveInstallationNumber(tx, {
+        nif: primarySif.nif,
+        idSistemaInformatico: primarySif.idSistemaInformatico,
+      });
+      const state: ReservedSifState = {
+        nif: primarySif.nif,
+        idSistemaInformatico: primarySif.idSistemaInformatico,
+        numeroInstalacion,
+      };
       return { state, series: deriveReservedSeriesCodes(bases, numeroInstalacion) };
+    },
 ```
 
-(import `liveSeriesBases` from `./reserved-series.js`; drop the now-unused `invoiceSeries`/`eq` imports if nothing else in the file uses them).
+(import `liveSeriesBases` from `./reserved-series.js`; drop the now-unused `invoiceSeries` import — `eq` stays, `obligadoNif` uses it).
 
 `packages/fiscal-verifactu/src/index.ts`: add
 `export { FISCAL_RESTORE, installationFloor, raiseInstallationFloor, restoreFiscal } from "./restore.js";` and
@@ -1198,11 +1209,17 @@ describe("restore hooks (identity phase)", () => {
     expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV); // the artifact's, restored over the stale one
   });
 
-  it("a pre-existing identity is set aside BEFORE anything irreversible, so a failed hook leaves NO trading.env", async () => {
-    const existing = formatEnvFile({ WAITRON_TILL_TENANT_ID: "old", WAITRON_TILL_NODE_ID: "old", WAITRON_TILL_LOCATION_ID: "old", WAITRON_TILL_SERIES_ID: "old" });
+  it("a pre-existing VALID identity is set aside BEFORE pg_restore runs, so a failed hook leaves NO trading.env", async () => {
+    // The target already holds a bootable identity (the artifact's own shape, with a different node).
+    const existing = formatEnvFile({ ...parseEnvFile(TRADING_ENV), WAITRON_TILL_NODE_ID: "c0000000-0000-4000-8000-0000000000aa" });
     await writeFile(join(stateDir, "trading.env"), existing);
+    let goneWhenRestoreRan = false;
+    const runRestore: PgRestoreRunner = vi.fn(async () => {
+      goneWhenRestoreRan = await stat(join(stateDir, "trading.env")).then(() => false, () => true);
+    });
     const boom: RestoreHook = async () => { throw new AppError("restore.unexpected_entry", { name: "boom" }); };
-    await expect(restoreFromArtifact(deps({ modules: withHooks({ fiscal: boom }) }))).rejects.toMatchObject({ code: "restore.hook_failed", params: { module: "fiscal", code: "restore.unexpected_entry" } });
+    await expect(restoreFromArtifact(deps({ runRestore, modules: withHooks({ fiscal: boom }) }))).rejects.toMatchObject({ code: "restore.hook_failed", params: { module: "fiscal", code: "restore.unexpected_entry" } });
+    expect(goneWhenRestoreRan).toBe(true); // set aside before the first irreversible step
     await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
     expect(await readFile(join(stateDir, "trading.env.replaced"), "utf8")).toBe(existing);
   });
@@ -1243,6 +1260,22 @@ describe("restore hooks (identity phase)", () => {
     const written = parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8"));
     const [fb] = (await suite.db.execute<{ id: string }>(sql`select id from invoice_series where code = 'FB'`)).rows;
     expect(written.WAITRON_TILL_SERIES_ID).toBe(fb!.id);
+  });
+
+  it("no series returned and TWO live standard series in the restored db → refused (loud), no identity written", async () => {
+    await suite.db.execute(sql`insert into invoice_series (tenant_id, node_id, code) values (${T.tenantId}, ${T.nodeId}, 'FB')`);
+    await expect(restoreFromArtifact(deps({ modules: withHooks({}) }))).rejects.toThrow(/more than one standard series/);
+    await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("a failure AFTER the replacement series were inserted rolls the inserts and the retire back", async () => {
+    // Two standard replacements insert fine; the settling read then finds two live standard series
+    // and aborts — the inserts and the retire must both be gone.
+    const hook: RestoreHook = async () => ({ report: "ok", series: [{ code: "FA-9", purpose: "standard" }, { code: "FA-10", purpose: "standard" }] });
+    await expect(restoreFromArtifact(deps({ modules: withHooks({ fiscal: hook }) }))).rejects.toThrow(/more than one standard series/);
+    const rows = await suite.db.execute<{ code: string; retired: boolean }>(sql`select code, retired_at is not null as retired from invoice_series where node_id = ${T.nodeId} order by code`);
+    expect(rows.rows).toEqual([{ code: "FA", retired: false }]);
+    await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("a colliding replacement code fails AFTER the retire started and rolls everything back", async () => {
@@ -1570,7 +1603,7 @@ In `restore-command.ts`:
   );
 ```
 
-- In the `catch`, before the prefix check (`hasCode`, `isAppError` from `@waitron/shared`):
+- In the `catch`, inside the existing `if (err instanceof AppError)` guard and before the prefix check (import only `hasCode` from `@waitron/shared` — `isAppError` would be an unused import beside the `instanceof` guard, a typecheck error):
 
 ```ts
       if (hasCode(err, "restore.hook_failed")) {
@@ -1836,6 +1869,9 @@ TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/fiscal-verifactu test:c
 pnpm --filter @waitron/composition test:coverage
 pnpm --filter @waitron/provisioning test:coverage
 TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server test:coverage   # alone
+# Last, the WHOLE workspace (CLAUDE.md §2: a value more than one suite asserts changed — the
+# series schema — so every package runs), alone, at the sanctioned concurrency:
+TESTCONTAINERS_RYUK_DISABLED=true pnpm -r --workspace-concurrency=2 test:coverage
 ```
 
 Every run green at its package's bar. If `apps/server`'s run trips a known timing flake in `boot.test`/`mirror-e2e`, re-run that file once before investigating.
