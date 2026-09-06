@@ -58,8 +58,8 @@ export async function seedVenue(db: Database): Promise<SeededVenue> {
 
 /**
  * A SECOND node (with its own series) under an existing venue's tenant+location — for tests that need
- * two nodes in ONE tenant, which `seedVenue` (always a fresh tenant) cannot express. This is what
- * proves the `node_id` predicate, since RLS scopes by tenant only.
+ * two nodes in ONE tenant, which `seedVenue` (always a fresh tenant) cannot express. The shared
+ * tenant lets a test distinguish the explicit node predicate from the tenant predicate.
  */
 export async function seedNodeAndSeries(
   db: Database,
@@ -201,7 +201,7 @@ export async function seedVoid(
 
 /**
  * Seeds one received supplier invoice (factura recibida) and its per-rate VAT lines directly, as the
- * connection owner (superuser bypasses RLS — pure setup). Inserts the raw tables rather than going
+ * connection owner for fixture setup. Inserts the raw tables rather than going
  * through `@waitron/purchasing`, so `@waitron/reporting`'s tests take no dependency on that package
  * (it reads the tables directly, exactly as it reads `sales`). `supplierInvoiceNumber` must be unique
  * per (tenant, supplierTaxId).
@@ -266,8 +266,7 @@ export async function seedSubstitution(
  * `opts.ageMinutes` — the same `now() - N minutes` idiom `apps/server/src/working-order.test.ts`/
  * `tables.test.ts` use to control a band's age precisely. Split out from {@link seedFiredOrder} so a
  * test can add a SECOND line to one order (proving the worst-line reduction), which minting a whole
- * new order each time cannot express. Every insert runs as the connection owner (superuser bypasses
- * RLS) — pure setup, like every other fixture in this file.
+ * new order each time cannot express. Every insert runs as the connection owner for fixture setup.
  */
 export async function seedFiredLine(
   db: Database,
@@ -384,7 +383,7 @@ export async function seedFiredOrder(
   },
 ): Promise<{ orderId: string }> {
   // Always CREATE the order `open` and fire the line before applying a terminal status/collected_at:
-  // `working_order_lines_require_open_parent` (0004_working_orders.sql) rejects writing a line onto
+  // `working_order_lines_require_open_parent` rejects writing a line onto
   // a non-open parent, exactly as the real fire path would (a line is fired onto an open order, and
   // only THEN does it settle/place/abandon or get collected).
   const { orderId } = await seedOpenOrder(db, seed, opts.orderNumber);

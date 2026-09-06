@@ -12,12 +12,8 @@ import { invoiceSeries } from "./series.js";
 import { locations, tenants, tills } from "./tenants.js";
 
 /**
- * Task 1 is the DDL alone: this suite proves migration 0012 APPLIES and leaves
- * the schema in the shape the later tasks build on. It is deliberately a
- * shape/apply smoke test — every runtime behaviour of the new guards (coverage
- * on settlement, the post-settlement tender guard, sale_settlements
- * immutability, the tightened tender checks) is Task 2's behavioural matrix,
- * proved by deletion as design §7 requires.
+ * Checks settlement schema shape, coverage on settlement, the post-settlement tender guard,
+ * immutability and tender constraints. The behavioural matrix below pins each guard's refusal.
  */
 
 async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]> {
@@ -25,7 +21,7 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
   return Array.isArray(result) ? result : result.rows;
 }
 
-describeEachTarget("sale settlements — schema shape after 0012", (target) => {
+describeEachTarget("sale settlements — schema shape", (target) => {
   let db: Database;
 
   beforeEach(async () => {
@@ -98,15 +94,15 @@ describeEachTarget("sale settlements — schema shape after 0012", (target) => {
   });
 });
 
-// Behavioural guard matrix, proved by deletion (design §7). Receipt: 939e5fbe,
-// this file's pre-baseline matrix header and wrong-reason failure assertions.
+// Behavioural guard matrix, proved by deletion (design §7); see the matrix header this file
+// carried before the baseline squash in its git history.
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 
 let seriesA = "";
-// sales.node_id is NOT NULL since the node-id rekey (2026-08-03); recordSale writes this node.
+// sales.node_id is NOT NULL; recordSale writes this node.
 let nodeA = "";
 
 async function seed(db: Database): Promise<void> {
@@ -132,11 +128,8 @@ async function seed(db: Database): Promise<void> {
 }
 
 /**
- * Writes a sale + one line + the given tenders, returning its id. Since 0012
- * there is no coverage check at tender INSERT (both deferred constraint triggers
- * were dropped), so the tenders here need NOT sum to anything — which is exactly
- * what lets these tests stage a mis-summed sale and only discover it at the
- * sale_settlements INSERT, where the check now lives.
+ * Writes a sale, one line and the given tenders, returning its id. Coverage is checked on
+ * sale_settlements INSERT, so this fixture can stage a shortfall before declaring settlement.
  */
 async function recordSale(
   db: Database,

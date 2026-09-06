@@ -33,11 +33,10 @@ restore these mutation privileges, so provisioning must not issue it after the r
 
 The application role lacks UPDATE, DELETE and TRUNCATE privileges. The owner holds those
 privileges, so the triggers provide a separate refusal with SQLSTATE `WT001`.
-Truncation needs its own statement trigger because it does not fire row triggers. The measured
-control is an owner TRUNCATE with only the row trigger present: it succeeds and leaves zero rows;
-adding the statement trigger makes the same operation fail with `WT001`. Receipt: Task 4 fix report,
-real-PG truncate probe, and `immutability.test.ts`'s owner-TRUNCATE case. `ENABLE ALWAYS`
-also keeps these triggers active when a session uses replica mode.
+Truncation needs its own statement trigger because it does not fire row triggers. In the measured
+probe, owner TRUNCATE with only the row trigger succeeds and leaves zero rows; the statement
+trigger raises `WT001`. See `immutability.test.ts`'s owner-TRUNCATE case. `ENABLE ALWAYS` also keeps
+these triggers active when a session uses replica mode.
 
 Keep mutable delivery state in a separate table. Correcting a delivery attempt must not require
 editing the immutable fact it describes. Keep the application's connection separate from the

@@ -76,10 +76,8 @@ export interface MigratedPostgresOptions {
 /**
  * Starts a real PostgreSQL container on `POSTGRES_IMAGE`, adapted to `StartedContainer`.
  *
- * The one place any SHARED test helper here constructs a container: `./harness.ts` calls this for
- * its own dual-target suites rather than reaching for `PostgreSqlContainer` itself. The two have
- * different lifecycles — one container per suite with a fresh database per test, versus one
- * connect-migrate-stop — but only one way to start one.
+ * Shared-container startup and the one-off migrated helpers use this constructor. The dual-target
+ * harness clones the shared core template; it does not start a container per suite.
  *
  * `client.test.ts` and `migrate.test.ts` still construct their own directly. They are testing
  * `createPostgresDb` and `runMigrations` against a bare server, so routing them through a helper
@@ -134,11 +132,9 @@ export function databaseUrl(uri: string, database: string): string {
 /**
  * Runs `sets` in order over one throwaway connection, closing it whether or not a set throws.
  *
- * Ordering across packages is the runtime's responsibility and nothing enforces it, so callers pass
- * the order explicitly — core first, since it carries `tenants` and every other set has a foreign
- * key to it. Closing the connection either way is not decoration: the five copies this replaces
- * closed their migrator only on success, so a failing migration leaked a pool as well as a
- * container.
+ * Callers supply migration-set order explicitly; this helper applies it without sorting or
+ * validating dependencies. Closing the connection on failure prevents a migration error from
+ * leaking its pool.
  *
  * The close is best-effort only on the failure path — mirroring `startMigratedPostgres`'s stop: if
  * a set throws and `close()` then also rejects, the close failure must not replace the migration
@@ -163,12 +159,9 @@ export async function runMigrationSets(
 /**
  * Starts a PostgreSQL container, migrates it, and returns the connections a suite needs.
  *
- * Either returns a fully-migrated `RealPostgres` or throws having already stopped the container: a
- * caller's `pg = await startRealPostgres()` never observes a partially constructed value, so its
- * own `afterAll`'s `if (pg !== undefined)` guard cannot help here. Left unguarded, a throw from
- * `migrate` would leave the container running with nothing left to stop it — and with
- * `TESTCONTAINERS_RYUK_DISABLED=true` (mandatory for this repo's local runs) there is no reaper
- * backstop either.
+ * A migration failure attempts to stop the container before propagating the error. The caller
+ * has no handle to clean up until this function returns, and TESTCONTAINERS_RYUK_DISABLED=true
+ * disables automatic Ryuk cleanup.
  */
 export async function startMigratedPostgres(
   options: MigratedPostgresOptions,
@@ -178,8 +171,9 @@ export async function startMigratedPostgres(
   try {
     container = await start();
   } catch (cause) {
-    // Never degrade to a skip. A suite that disappears when Docker is absent reports green while
-    // asserting nothing, and PGlite's superuser bypasses FORCE ROW LEVEL SECURITY outright.
+    // Never replace the real-server checks with a skip: PGlite's default superuser connection
+    // bypasses privilege checks and serialises queries. Real PostgreSQL supplies restricted LOGIN
+    // connections and independent backends for the privilege and contention tests.
     throw new Error(options.dockerRequired, { cause });
   }
 

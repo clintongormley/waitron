@@ -41,7 +41,7 @@ export interface Target {
    * migrations against postgres itself — but the idempotency rule still holds
    * for whatever the globalSetup's template migrator runs.)
    *
-   * This is the ONLY way a test in this package should obtain a database.
+   * A suite using this dual-target harness obtains its database through this method.
    * There is deliberately no `target.db` property and no `target.db()`
    * accessor — a test that builds its own PGlite instance runs one target
    * while appearing to run both.
@@ -150,39 +150,26 @@ export interface TargetEnvironment {
 }
 
 /**
- * Which targets this run covers.
- *
- * Pure, and separate from describeEachTarget, precisely so the skip decision
- * is testable without controlling the machine's Docker daemon.
- *
- * A silent skip here is the most dangerous failure mode in the package. The
- * postgres target is the ONLY thing that can observe the two behaviours spec
- * §10 records PGlite being unable to reproduce — lock contention, where
- * `FOR UPDATE` parses and runs but never blocks on a single shared backend,
- * and RLS enforcement against a non-superuser role. If it disappears from the
- * run, the suite still reports green while the properties it exists to prove
- * are no longer being checked. That is worse than a red build: it is a green
- * build that means nothing, which is the exact shape of the seven vacuous
- * tests plan 1 shipped.
- *
- * So: loud on a developer machine, fatal in CI.
+ * Selects targets from the supplied environment, independently of the machine's Docker daemon.
+ * A skipped real-Postgres target leaves lock contention unchecked: PGlite serialises queries
+ * onto one backend. The required-Docker branch throws; the optional branch warns. Package-level
+ * global setup separately requires Docker before the test files run.
  */
 export function resolveTargets(env: TargetEnvironment): Target[] {
   if (env.dockerAvailable) return [pgliteTarget, postgresTarget()];
   if (env.requireDocker) {
     throw new Error(
-      "REQUIRE_DOCKER is set but Docker is not available. The real-Postgres target is the " +
-        "only one that can observe lock contention and non-superuser RLS; skipping it here " +
-        "would report a green run that proves neither.",
+      "REQUIRE_DOCKER is set but Docker is not available. The real-Postgres target is required " +
+        "for lock contention; skipping it would leave concurrency unchecked.",
     );
   }
   console.warn(
     "\n" +
       "!".repeat(78) +
       "\n! DOCKER NOT AVAILABLE — the real-Postgres target is SKIPPED.\n" +
-      "! Lock contention and non-superuser RLS are NOT covered by this run.\n" +
+      "! Lock contention is NOT covered by this run.\n" +
       "! PGlite serialises onto one backend, so FOR UPDATE never blocks there.\n" +
-      "! This run cannot be used as evidence for either property.\n" +
+      "! This run cannot be used as evidence for database concurrency.\n" +
       "!".repeat(78) +
       "\n",
   );
