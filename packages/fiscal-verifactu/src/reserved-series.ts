@@ -13,11 +13,9 @@ const MAX_INT_DIGITS = 10;
 export const MAX_BASE_CODE_LENGTH = NUM_SERIE_MAX - (1 + MAX_INT_DIGITS) - (1 + MAX_INT_DIGITS);
 
 /**
- * Derive DISJOINT invoice-series codes from base codes by suffixing each with an installation number,
- * preserving purpose. The installation number is unique and never reused per NIF, so the codes are
- * provably disjoint from every code the tenant's nodes use on the AEAT identity
- * (NIF, NumSerieFactura, Fecha). Used for a reserved standby (design 2026-09-03 §6 R2) and for a
- * restored primary's replacement series (design 2026-09-06 §6).
+ * Suffix each base with the installation number, preserving purpose. Given a fresh installation
+ * number, codes derived for different installations are disjoint. The write path's
+ * `series.code_collision` refusal is the backstop for collisions with other configured codes.
  */
 export function deriveReservedSeriesCodes(
   bases: readonly { code: string; purpose: string }[],
@@ -43,9 +41,9 @@ export function stripOwnSuffixes(code: string, registered: ReadonlySet<number>):
 }
 
 /**
- * A node's LIVE series as bases for derivation — retired series are history — ordered by code,
- * each stripped of the tenant's own suffixes. Refuses (`series.code_too_long`) a base that cannot
- * carry a suffix within the cap, before the caller mints anything.
+ * A node's live series, ordered by original code and stripped of the tenant's own suffixes:
+ * one base per (code, purpose) pair, preserving first-seen order. Retired series remain history.
+ * Throws `series.code_too_long` for a base that cannot carry a suffix within the cap.
  */
 export async function liveSeriesBases(
   tx: Transaction,
@@ -67,10 +65,15 @@ export async function liveSeriesBases(
     .from(registroSif)
     .where(eq(registroSif.tenantId, node.tenantId));
   const registered = new Set(numbers.map((r) => r.n));
-  const bases = live.map((s) => ({
-    code: stripOwnSuffixes(s.code, registered),
-    purpose: s.purpose,
-  }));
+  const seen = new Set<string>();
+  const bases = live
+    .map((s) => ({ code: stripOwnSuffixes(s.code, registered), purpose: s.purpose }))
+    .filter(({ code, purpose }) => {
+      const key = JSON.stringify([code, purpose]);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   for (const base of bases) {
     if (base.code.length > MAX_BASE_CODE_LENGTH) {
       throw new AppError("series.code_too_long", { code: base.code });

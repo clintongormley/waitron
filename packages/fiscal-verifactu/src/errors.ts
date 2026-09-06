@@ -46,11 +46,10 @@ import "@waitron/shared";
 declare module "@waitron/shared" {
   interface ErrorParams {
     /**
-     * A restore (or a standby reservation) cannot open a disjoint series for this base code:
-     * `NumSerieFactura` is capped at 60 characters (`packages/verifactu` validate) and the base plus
-     * one `-<installation number>` suffix plus `/<counter>` would not fit. A base over
-     * `MAX_BASE_CODE_LENGTH` is not a real code; refused BEFORE anything is minted. `series.*` names
-     * the concept (the `series.not_found` prefix), never the package. Never renamed once shipped.
+     * A restore or standby reservation rejects a base over `MAX_BASE_CODE_LENGTH`, leaving room
+     * within the 60-character `NumSerieFactura` cap for `-<installation number>/<counter>` with
+     * ten digits each. The restore hook throws inside its transaction; on rollback, nothing it
+     * wrote persists. `series.*` names the concept, never the package.
      */
     "series.code_too_long": { code: string };
 

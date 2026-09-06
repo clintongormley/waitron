@@ -9,11 +9,11 @@ import { contadoresInstalacion } from "./schema/sif.js";
 const FLOOR_EPOCH_MS = Date.UTC(2020, 0, 1);
 
 /**
- * The installation-number floor a restore raises the counter to: whole seconds since
- * 2020-01-01T00:00:00Z. The counter row is in the dump, so restoring an artifact older than a
- * previous restore's minting would otherwise re-mint that number; the wall clock is the one
- * monotonic state a sole box has that a restore does not roll back (spec §3.5). Fits `integer`
- * until 2088.
+ * Whole seconds since 2020-01-01T00:00:00Z, used to raise the restored counter's floor.
+ * A restore in the same second, or on a clock behind the prior restore, can compute the same floor
+ * (spec §3.5). `greatest` keeps a higher stored counter; `registro_sif_instalacion_uq` refuses reuse
+ * of an installation number still in the database. Neither protects history absent from an older
+ * dump when the clock has not advanced beyond it. Fits `integer` until 2088.
  */
 export function installationFloor(now: Date): number {
   return Math.floor((now.getTime() - FLOOR_EPOCH_MS) / 1000);
@@ -44,12 +44,11 @@ export async function raiseInstallationFloor(
 }
 
 /**
- * The fiscal module's restore hook body (spec §6). With a live SIF: read the node's live series bases
- * (refusing one that cannot carry a suffix, before anything is minted), raise the counter floor,
- * `registerSif` under the identity IN USE (the live row's NIF + software id — the counter is keyed by
- * that pair), and return the derived disjoint codes for the orchestrator to open. Without a live SIF
- * the node is not a filing node and the restore does not make it one: nothing minted, `series`
- * absent. Writes nothing to `invoice_series`.
+ * With a live SIF, read the node's live series bases, raise the counter floor, and call `registerSif`
+ * under the live row's NIF + software id: that pair identifies the counter. Return derived codes for
+ * the orchestrator to open. An overlong base throws inside the restore transaction; on rollback,
+ * nothing the hook wrote persists. Without a live SIF, mint nothing and omit `series`:
+ * the restore does not make the node a filing node. Writes nothing to `invoice_series`.
  */
 export async function restoreFiscal(
   tx: Transaction,

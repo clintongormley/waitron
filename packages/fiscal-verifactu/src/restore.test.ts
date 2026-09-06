@@ -145,6 +145,23 @@ describe("restoreFiscal", () => {
     expect(fresh.numeroInstalacion).toBeGreaterThan(later.numeroInstalacion);
   });
 
+  it("keeps an existing counter above the wall-clock floor when minting", async () => {
+    await seedLiveNode();
+    const nextNumber = FLOOR + 1;
+    await db.execute(sql`
+      update contadores_instalacion set proximo_numero = ${nextNumber}
+      where nif = ${SIF.nif} and id_sistema_informatico = ${SIF.idSistemaInformatico}
+    `);
+
+    await withTenant(db, TENANT_A.id, (tx) => restoreFiscal(tx, NODE, NOW));
+
+    const fresh = await withTenant(db, TENANT_A.id, (tx) =>
+      currentSif(tx, TENANT_A.id, TENANT_A.nodeId),
+    );
+    expect(fresh.numeroInstalacion).toBe(nextNumber);
+    expect(await counterOf()).toBe(nextNumber + 1);
+  });
+
   it("creates the counter row when the restored database has none (a promoted standby's backup)", async () => {
     await seedLiveNode();
     await db.execute(sql`delete from contadores_instalacion`);
@@ -184,7 +201,7 @@ describe("restoreFiscal", () => {
     ]);
   });
 
-  it("refuses a base code that cannot carry a suffix within the 60-character invoice-number cap, BEFORE minting", async () => {
+  it("refuses a base code that cannot carry a suffix within the 60-character invoice-number cap, rolling back the restore", async () => {
     await seedLiveNode();
     const long = "L".repeat(MAX_BASE_CODE_LENGTH + 1);
     await db.execute(sql`update invoice_series set code = ${long} where code = 'FA'`);
@@ -192,7 +209,7 @@ describe("restoreFiscal", () => {
       (e: unknown) => e,
     );
     expect(isAppError(err) && err.code).toBe("series.code_too_long");
-    // Nothing minted: the live SIF is the seeded one, the counter untouched.
+    // Only the seeded SIF remains after the transaction rolls back.
     const { rows } = await db.execute<{ n: number }>(
       sql`select count(*)::int as n from registro_sif`,
     );

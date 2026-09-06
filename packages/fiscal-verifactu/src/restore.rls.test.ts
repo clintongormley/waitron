@@ -9,9 +9,9 @@ import { currentSif, esPrimerRegistro } from "./registro-sif.js";
 import { installationFloor, restoreFiscal } from "./restore.js";
 import { altaFor, seedSale, seedTill } from "./testing/seed.js";
 
-// The PGlite suite proves the logic; this leg proves the same transaction on real PostgreSQL — the
-// `greatest(...)` upsert on the counter, the partial unique index on the live SIF row, and the
-// chain-head reset — as the superuser-class role the production restore runs as. No RLS claim.
+// On real PostgreSQL as the superuser-class admin, checks a fresh live SIF identity, an installation
+// number at least the clock floor, an empty chain head, the retained ledger count and derived series
+// codes. This does not test preserving a counter above the floor or non-superuser RLS enforcement.
 const suite = useTemplateDb({ template: "manifest" });
 const NOW = new Date("2026-09-06T10:00:00.000Z");
 
