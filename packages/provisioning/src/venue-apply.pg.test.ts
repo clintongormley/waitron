@@ -6,7 +6,7 @@ import { createPostgresDb, withTenant, type Database } from "@waitron/db";
 import { applyInstance, withDatabase } from "./instance-apply.js";
 import { planInstance } from "./instance-plan.js";
 import { readInstanceState } from "./instance-state.js";
-import { readTenantIdentities } from "./tenant-guard.js";
+import { readObligadoIdentities } from "./obligado-guard.js";
 import { applyVenue } from "./venue-apply.js";
 import { planVenue, type VenueRequest } from "./venue-plan.js";
 import { roleUrl, startBarePostgres, type RealPostgres } from "./testing/postgres.js";
@@ -160,13 +160,13 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
     ]);
   });
 
-  it("readTenantIdentities reads the real committed obligado — the venue guard's real read (§5)", async () => {
-    // The `venue` command refuses a SECOND, DIFFERENT obligado in one database (one tenant per
+  it("readObligadoIdentities reads the real committed obligado — the venue guard's real read (§5)", async () => {
+    // The `venue` command refuses a SECOND, DIFFERENT obligado in one database (one obligado per
     // database, the post-RLS isolation boundary) by reading the existing `(country, tax_id)` set with
     // this function before it applies; the refusal DECISION is proven in cli.test.ts with an injected
     // reader, exactly as the deployment-stamp refusal is. This is the real read, run against the real
     // database the end-to-end test above committed B12345678 into — proven by running, not reasoned.
-    const identities = await readTenantIdentities(owner);
+    const identities = await readObligadoIdentities(owner);
     expect(identities).toEqual([{ country: "ES", taxId: "B12345678" }]);
     // The predicate the guard applies: any identity but the one present is FOREIGN, the same one stays.
     expect(identities.some((t) => t.country !== "ES" || t.taxId !== "B99999999")).toBe(true);

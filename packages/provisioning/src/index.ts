@@ -21,6 +21,6 @@ export type { AdoptResult, AdoptVenueDeps, AdoptVenueRows, VenueRow } from "./ve
 export { FISCAL_TERRITORIES, resolveFiscalModules } from "./fiscal-modules.js";
 export type { FiscalModules } from "./fiscal-modules.js";
 export { obligadoTenantId } from "./tenant-id.js";
-export { assertNoForeignTenant, readTenantIdentities } from "./tenant-guard.js";
-export type { TenantIdentity } from "./tenant-guard.js";
+export { assertNoForeignObligado, readObligadoIdentities } from "./obligado-guard.js";
+export type { ObligadoIdentity } from "./obligado-guard.js";
 import "./errors.js";

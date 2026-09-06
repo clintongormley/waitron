@@ -64,11 +64,22 @@ the UI's `POST /setup-api/provision`) and the `venue` CLI (ops/dev) — and the 
 the CLI, so the UI gap stood. Both now read the existing `(country, tax_id)` set before applying and
 throw `provisioning.foreign_tenant` for any identity but the one already present (the same identity
 re-provisions, D8; an empty database is the first tenant), through ONE shared decision —
-`assertNoForeignTenant` (`packages/provisioning/src/tenant-guard.ts`). The guard lives at those two
+`assertNoForeignTenant` (`packages/provisioning/src/tenant-guard.ts`) — both renamed to obligado, and a
+third entry point (mirror adopt) added, by the 2026-09-06 correction below. The guard lives at those
 entry points, NOT in `applyVenue`: ~50 real-PG suites provision many distinct obligados through
 `applyVenue` into one shared container by design ("each test gets its own tenant so its state is
 order-independent"), and a guard inside `applyVenue` would break all of them while enforcing nothing
 production does not already route through the two entry points.
+
+**Correction (2026-09-06, adopt-guard fix wave).** The correction above found TWO tenant-creation
+paths; there is a THIRD — the mirror adopt orchestrator (`adoptFromPrimary`, `apps/server/src/adopt.ts`),
+which `adoptVenue` inserts a tenant through and which stood UNguarded (a foreign bundle adopted into
+an occupied instance database would have stood up a second obligado, worst of all on the box where
+hash-chained fiscal rows later flow in by sync). It now shares the same guard. The guard, its types
+and its error were also renamed off the infra word "tenant" onto the fiscal concept they enforce:
+`assertNoForeignObligado` / `readObligadoIdentities` / `ObligadoIdentity` in
+`packages/provisioning/src/obligado-guard.ts`, error `provisioning.foreign_obligado`. The `tenants`
+table, `withTenant` and `tenant_id` (legitimate multi-tenancy infra) keep their names.
 
 **Gone.** All 95 policies and 190 `ENABLE`/`FORCE` switches; `current_tenant_id()`; the
 `sync_log` / `sync_cursor` / `sync_peers` / `sync_config_conflicts` tables, `sync_capture()` and

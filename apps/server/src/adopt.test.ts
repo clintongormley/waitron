@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { afterEach, afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { loadKeyRing } from "@waitron/credentials";
 import {
   invoiceSeries,
@@ -16,9 +16,17 @@ import {
   withTenant,
   type Database,
 } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import {
+  cloneTemplate,
+  nextCloneName,
+  pickTemplate,
+  resolveSharedHandle,
+  useTemplateDb,
+} from "@waitron/db/testing/lifecycle.js";
+import { type RealPostgres } from "@waitron/db/testing/postgres.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { isEnabled, type ModuleConfig } from "@waitron/module";
+import { isAppError } from "@waitron/shared";
 import {
   applyVenue,
   planVenue,
@@ -47,13 +55,19 @@ const RING = loadKeyRing({
 // primary as the joining node's `contactUrl`, the address a rerouting till dials (till-reroute §3.3).
 const ADVERTISED_ORIGIN = "https://standby.deli.test";
 
-// The SOURCE database supplies the primary's real parent rows; the MIRROR database is a fresh,
-// never-stamped clone that adopt provisions. Two independent clones of the same template.
+// The SOURCE database supplies the primary's real parent rows; it is shared across the suite (a
+// fresh venue with its own NIF per test accumulates there harmlessly — nothing guards the source).
 const source = useTemplateDb({ template: "manifest" });
-const mirror = useTemplateDb({ template: "manifest" });
+
+// The MIRROR is cloned FRESH PER TEST, not shared: `adoptFromPrimary` now refuses a foreign obligado
+// (assertNoForeignObligado, one obligado per database, §5), and each test adopts a DIFFERENT obligado,
+// so a shared mirror would make the second adopt throw `provisioning.foreign_obligado`. A per-test
+// clone is exactly the production shape anyway — adopt runs against a fresh, never-stamped instance.
+let mirror: RealPostgres;
+let mirrorAdmin: Database; // owner connection to the fresh mirror clone
+let mirrorApp: Database; // app_login → app_user on the mirror: the boot-time token read path
 
 let sourceApp: Database; // app_login → app_user on the source: reads the venue's parent rows
-let mirrorApp: Database; // app_login → app_user on the mirror: the boot-time token read path
 
 let nifCounter = 0;
 function nextNif(): string {
@@ -62,9 +76,9 @@ function nextNif(): string {
 }
 
 // The dormant fiscal + membership identity the primary reserves for the standby (design §6 R2), the
-// `bundle.reservedIdentity` the primary mints in Task 4. The mirror DB is shared across this suite's
-// tests, so each reservation needs its OWN (nif, idSistemaInformatico, numeroInstalacion) — the global
-// `registro_sif_instalacion_uq` (never-reuse per NIF) 23505s a duplicate — and its own series codes.
+// `bundle.reservedIdentity` the primary mints in Task 4. Each reservation gets its OWN
+// (nif, idSistemaInformatico, numeroInstalacion) + series codes: the mirror is fresh per test, but the
+// SOURCE venue (built from `nextNif`) is shared, so distinct identities keep both sides collision-free.
 // The endorsement is stored VERBATIM on the standby's node row (jsonb); adopt performs no signature
 // check, so a representative shape suffices here (the real signing round-trip lives in mirror-bundle-*).
 let reservedCounter = 0;
@@ -165,12 +179,33 @@ async function buildBundleParts(): Promise<{ rows: AdoptVenueRows; designated: A
 
 beforeAll(async () => {
   sourceApp = await source.pg.connectAs("app_login", "app_pw");
-  mirrorApp = await mirror.pg.connectAs("app_login", "app_pw");
 }, 180_000);
 
 afterAll(async () => {
   if (sourceApp !== undefined) await sourceApp.close();
-  if (mirrorApp !== undefined) await mirrorApp.close();
+});
+
+// A fresh mirror clone per test (see the declarations above): clone from the shared container's
+// pre-migrated `manifest` template (~26ms), open the owner + app connections. The clone and both
+// connections are torn down in afterEach, each guard checked (a failed clone/connect must not throw
+// a second TypeError over the real error — `scripts/guarded-teardowns.test.ts`).
+beforeEach(async () => {
+  const handle = resolveSharedHandle(undefined);
+  mirror = await cloneTemplate(handle.uri, pickTemplate(handle, "manifest"), nextCloneName());
+  mirrorAdmin = await mirror.connect();
+  mirrorApp = await mirror.connectAs("app_login", "app_pw");
+});
+
+afterEach(async () => {
+  const app = mirrorApp;
+  const admin = mirrorAdmin;
+  const clone = mirror;
+  mirrorApp = undefined as unknown as Database;
+  mirrorAdmin = undefined as unknown as Database;
+  mirror = undefined as unknown as RealPostgres;
+  if (app !== undefined) await app.close();
+  if (admin !== undefined) await admin.close();
+  if (clone !== undefined) await clone.stop();
 });
 
 describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
@@ -199,7 +234,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
 
     const result = await adoptFromPrimary(
       {
-        ownerDb: mirror.admin,
+        ownerDb: mirrorAdmin,
         ring: RING,
         advertisedOrigin: ADVERTISED_ORIGIN,
         fetchBundle: async (primaryUrl, cred, standby) => {
@@ -216,6 +251,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
         databaseUrl: "postgres://app@mirror/db",
         migrationsDatabaseUrl: "postgres://owner@mirror/db",
         syncDatabaseUrl: "postgres://sync@mirror/db",
+        database: "mirror_db",
       },
       { primaryUrl: "https://primary.test/", credential },
     );
@@ -228,13 +264,13 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
     expect(capturedStandby!.contactUrl).toBe(ADVERTISED_ORIGIN);
 
     // Environment stamped to the primary's value, mode flipped to mirror.
-    expect(await readDeploymentEnvironment(mirror.admin)).toBe("preproduction");
-    expect(await readDeploymentMode(mirror.admin)).toBe("mirror");
+    expect(await readDeploymentEnvironment(mirrorAdmin)).toBe("preproduction");
+    expect(await readDeploymentMode(mirrorAdmin)).toBe("mirror");
 
     // Connection config persisted; the token sealed under the mirror's key and readable as app_user.
     // `origin_node_id` is the PRIMARY's node — the origin the mirror will pull, split from its own id
     // (membership promotion R3a).
-    const persistedConfig = (await readMirrorConfig(mirror.admin))!;
+    const persistedConfig = (await readMirrorConfig(mirrorAdmin))!;
     expect(persistedConfig.relayUrl).toBe(bundle.relayUrl);
     expect(persistedConfig.originNodeId).toBe(designated.nodeId);
     expect(await readMirrorToken(mirrorApp, RING, designated.tenantId)).toBe(bundle.syncToken);
@@ -264,7 +300,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
     expect(isEnabled(persistedModuleConfigs[0]!, ALL_MODULES[0]!.name)).toBe(true);
 
     // The parent rows landed on the mirror (adoptVenue ran).
-    const t = await mirror.admin.execute(
+    const t = await mirrorAdmin.execute(
       sql`select id from tenants where id = ${designated.tenantId}`,
     );
     expect(t.rows).toHaveLength(1);
@@ -307,7 +343,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
     let standby: { nodeId: string; publicKey: string; contactUrl: string } | undefined;
     await adoptFromPrimary(
       {
-        ownerDb: mirror.admin,
+        ownerDb: mirrorAdmin,
         ring: RING,
         advertisedOrigin: ADVERTISED_ORIGIN,
         fetchBundle: async (_url, _cred, s) => {
@@ -319,6 +355,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
         databaseUrl: "postgres://app@mirror/db",
         migrationsDatabaseUrl: "postgres://owner@mirror/db",
         syncDatabaseUrl: "postgres://sync@mirror/db",
+        database: "mirror_db",
       },
       {
         primaryUrl: "https://primary.test/",
@@ -364,7 +401,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
     let capturedStandby: { nodeId: string; publicKey: string; contactUrl: string } | undefined;
     await adoptFromPrimary(
       {
-        ownerDb: mirror.admin,
+        ownerDb: mirrorAdmin,
         ring: RING,
         advertisedOrigin: ADVERTISED_ORIGIN,
         fetchBundle: async (_url, _cred, standby) => {
@@ -376,6 +413,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
         databaseUrl: "postgres://app@mirror/db",
         migrationsDatabaseUrl: "postgres://owner@mirror/db",
         syncDatabaseUrl: "postgres://sync@mirror/db",
+        database: "mirror_db",
       },
       {
         primaryUrl: "https://primary.test/",
@@ -400,7 +438,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
     // Exactly ONE reserved (dormant) registro_sif for this tenant, keyed to the standby's OWN nodeId with
     // the primary-allocated number — NOT `designated.nodeId`, so the mirror still has no LIVE selling SIF
     // and forks no chain (CLAUDE.md §5). Scoped by tenant_id: the mirror DB is shared across this suite.
-    const reservedSif = await mirror.admin.execute<{ numero_instalacion: number; node_id: string }>(
+    const reservedSif = await mirrorAdmin.execute<{ numero_instalacion: number; node_id: string }>(
       sql`select numero_instalacion, node_id from registro_sif
           where revocado_en is null and tenant_id = ${designated.tenantId}`,
     );
@@ -437,7 +475,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
     let persisted: ModuleConfig | undefined;
     await adoptFromPrimary(
       {
-        ownerDb: mirror.admin,
+        ownerDb: mirrorAdmin,
         ring: RING,
         advertisedOrigin: ADVERTISED_ORIGIN,
         fetchBundle: async () => bundle,
@@ -448,6 +486,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
         databaseUrl: "postgres://app@mirror/db",
         migrationsDatabaseUrl: "postgres://owner@mirror/db",
         syncDatabaseUrl: "postgres://sync@mirror/db",
+        database: "mirror_db",
       },
       {
         primaryUrl: "https://primary.test/",
@@ -475,7 +514,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
     await expect(
       adoptFromPrimary(
         {
-          ownerDb: mirror.admin,
+          ownerDb: mirrorAdmin,
           ring: RING,
           advertisedOrigin: ADVERTISED_ORIGIN,
           fetchBundle: async () => bundle,
@@ -486,6 +525,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
           databaseUrl: "postgres://app@mirror/db",
           migrationsDatabaseUrl: "postgres://owner@mirror/db",
           syncDatabaseUrl: "postgres://sync@mirror/db",
+          database: "mirror_db",
         },
         {
           primaryUrl: "https://primary.test/",
@@ -497,13 +537,82 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
     // The up-front validation ran BEFORE any DB side effect, so `adoptVenue` never inserted this
     // bundle's (fresh) tenant — no half-adopted mirror for a set we reject (Copilot/review fail-fast
     // fix). Move the `parseModuleOverrides` call back to its old late position and this row appears.
-    const orphanTenant = await mirror.admin.execute(
+    const orphanTenant = await mirrorAdmin.execute(
       sql`select id from tenants where id = ${designated.tenantId}`,
     );
     expect(orphanTenant.rows).toHaveLength(0);
   });
-});
 
-afterEach(async () => {
-  await mirror.admin.execute(sql`update nodes set public_key = null`);
+  it("refuses adopt (fail-closed) when the mirror database already holds a DIFFERENT obligado (§5)", async () => {
+    // adoptFromPrimary shares the same `assertNoForeignObligado` guard as the provision paths (§5).
+    // Adopt obligado A, then a DIFFERENT obligado B into the SAME mirror: B is refused before any side
+    // effect. Deletion-proof: drop the guard in adopt.ts and B is ADOPTED (the same-environment re-stamp
+    // is idempotent, so nothing else stops it) — two obligados in one database, the leak §5 forbids.
+    const deps = (bundle: MirrorBundle, onPersistTrading?: () => void) => ({
+      ownerDb: mirrorAdmin,
+      ring: RING,
+      advertisedOrigin: ADVERTISED_ORIGIN,
+      fetchBundle: async () => bundle,
+      persistTrading: async () => onPersistTrading?.(),
+      persistModuleConfig: async () => {},
+      databaseUrl: "postgres://app@mirror/db",
+      migrationsDatabaseUrl: "postgres://owner@mirror/db",
+      syncDatabaseUrl: "postgres://sync@mirror/db",
+      database: "mirror_db",
+    });
+    const req = {
+      primaryUrl: "https://primary.test/",
+      credential: { personId: "99999999-9999-9999-9999-999999999999", password: "dashPass123" },
+    } as const;
+    const common = {
+      environment: "preproduction" as const,
+      boxHostname: "waitron.local",
+      boxCaPem: "x",
+      relayUrl: "https://relay.test/",
+      moduleOverrides: {},
+    };
+
+    // Obligado A adopted — the mirror now serves it.
+    const a = await buildBundleParts();
+    await adoptFromPrimary(
+      deps({
+        ...common,
+        rows: a.rows,
+        designated: a.designated,
+        syncToken: "peer-token-a",
+        reservedIdentity: nextReservedIdentity(),
+      }),
+      req,
+    );
+
+    // A DIFFERENT obligado B (fresh NIF) adopted into the same mirror — refused.
+    const b = await buildBundleParts();
+    let tradingPersistedForB = false;
+    const error = await adoptFromPrimary(
+      deps(
+        {
+          ...common,
+          rows: b.rows,
+          designated: b.designated,
+          syncToken: "peer-token-b",
+          reservedIdentity: nextReservedIdentity(),
+        },
+        () => {
+          tradingPersistedForB = true;
+        },
+      ),
+      req,
+    ).catch((e: unknown) => e);
+    expect(isAppError(error) && error.code).toBe("provisioning.foreign_obligado");
+    // Refused before any side effect: trading.env not written, B's tenant never inserted, A still alone.
+    expect(tradingPersistedForB).toBe(false);
+    const bRow = await mirrorAdmin.execute(
+      sql`select id from tenants where id = ${b.designated.tenantId}`,
+    );
+    expect(bRow.rows).toHaveLength(0);
+    const count = await mirrorAdmin.execute<{ n: number }>(
+      sql`select count(*)::int as n from tenants`,
+    );
+    expect(count.rows[0]!.n).toBe(1);
+  });
 });

@@ -23,7 +23,7 @@ import { sqlStateOf } from "./sql-state.js";
 import { formatStatus } from "./status-command.js";
 import { applyVenue } from "./venue-apply.js";
 import { describeVenueAction, planVenue, type VenueRequest } from "./venue-plan.js";
-import { assertNoForeignTenant, readTenantIdentities } from "./tenant-guard.js";
+import { assertNoForeignObligado, readObligadoIdentities } from "./obligado-guard.js";
 import "./errors.js";
 
 /**
@@ -58,10 +58,10 @@ export interface CliDeps {
   /** Reads a target database's deployment stamp. Injected so the "unstamped is refused" path is
    * reachable without a container; the real one (`@waitron/db`) needs the target connection. */
   readEnvironment: typeof readDeploymentEnvironment;
-  /** Reads the fiscal identity of every tenant already in the target database. Injected like
-   * `readEnvironment` so the foreign-tenant refusal is reachable without a container; the real one
-   * (`readTenantIdentities`, `./tenant-guard.js`) needs the target connection. */
-  readTenants: typeof readTenantIdentities;
+  /** Reads the fiscal identity of every obligado already in the target database. Injected like
+   * `readEnvironment` so the foreign-obligado refusal is reachable without a container; the real one
+   * (`readObligadoIdentities`, `./obligado-guard.js`) needs the target connection. */
+  readObligados: typeof readObligadoIdentities;
 }
 
 const ENVIRONMENTS: DeploymentEnvironment[] = ["production", "preproduction"];
@@ -484,17 +484,18 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
         throw new AppError("provisioning.database_unstamped", { database });
       }
 
-      // One tenant per database is the post-RLS isolation boundary (§5), enforced here and at the
-      // setup-api provision handler (`provisionVenue`) — the two production tenant-creation paths —
-      // through the shared `assertNoForeignTenant` guard: with row-level security gone, `withTenant`
-      // no longer filters by tenant, so a foreign `(country, tax_id)` in this database would expose
-      // one business's rows to the other. The SAME identity proceeds — `applyVenue`'s ON CONFLICT DO
-      // NOTHING reuses the obligado and adds a shop (D8) — and an empty database proceeds as the
-      // first tenant. The identity applied is the ensure-tenant action's, canonicalized by planVenue.
+      // One obligado per database is the post-RLS isolation boundary (§5), enforced here, at the
+      // setup-api provision handler (`provisionVenue`) and at the mirror adopt orchestrator
+      // (`adoptFromPrimary`) — every tenant-creation path — through the shared `assertNoForeignObligado`
+      // guard: with row-level security gone, `withTenant` no longer filters by tenant, so a foreign
+      // `(country, tax_id)` in this database would expose one business's rows to the other. The SAME
+      // identity proceeds — `applyVenue`'s ON CONFLICT DO NOTHING reuses the obligado and adds a shop
+      // (D8) — and an empty database proceeds as the first obligado. The identity applied is the
+      // ensure-tenant action's, canonicalized by planVenue.
       const ensure = actions.find((a) => a.kind === "ensure-tenant");
       if (ensure !== undefined && ensure.kind === "ensure-tenant") {
-        assertNoForeignTenant(
-          await deps.readTenants(target),
+        assertNoForeignObligado(
+          await deps.readObligados(target),
           { country: ensure.country, taxId: ensure.taxId },
           database,
         );
