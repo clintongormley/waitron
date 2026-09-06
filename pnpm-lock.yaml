@@ -792,6 +792,9 @@ importers:
       '@waitron/credentials':
         specifier: workspace:*
         version: link:../credentials
+      '@waitron/fiscal-none':
+        specifier: workspace:*
+        version: link:../fiscal-none
       '@waitron/fiscal-verifactu':
         specifier: workspace:*
         version: link:../fiscal-verifactu

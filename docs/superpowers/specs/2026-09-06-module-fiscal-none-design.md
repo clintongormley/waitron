@@ -361,6 +361,11 @@ interface FiscalContribution {
 Territory drops out of the condition: the territory already selected the module, so
 `verifactu.provisioningSecret.required(production) === true` subsumes the old `ES-common` half.
 
+**2026-09-07 (as built):** the seat gained a third member, `validate(raw): void`, beside `required`
+and `seal`. `validate` runs PRE-mint (before `provisionVenue` mints the unrepairable SIF/hash chain,
+CLAUDE.md §5) and refuses a malformed blob with nothing written; `seal` runs post-mint inside the
+tenant transaction and re-validates as defense-in-depth. See `packages/fiscal/src/contribution.ts`.
+
 ### 8.2 The wizard
 
 `setup-api.ts` resolves the fiscal contribution for the territory, then:

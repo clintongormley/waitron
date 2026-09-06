@@ -7,6 +7,7 @@ import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import { WORKFORCE_ES_MIGRATIONS } from "@waitron/workforce-es";
 import { FISCAL_MIGRATIONS } from "@waitron/fiscal-verifactu";
+import { FISCAL_NONE_MIGRATIONS } from "@waitron/fiscal-none";
 import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { SCHEDULER_MIGRATIONS } from "@waitron/scheduler";
 import { CREDENTIALS_MIGRATIONS } from "@waitron/credentials";
@@ -28,6 +29,7 @@ describe("the migration manifest", () => {
       workforce: WORKFORCE_MIGRATIONS.migrationsTable,
       "workforce-es": WORKFORCE_ES_MIGRATIONS.migrationsTable,
       "fiscal-verifactu": FISCAL_MIGRATIONS.migrationsTable,
+      "fiscal-none": FISCAL_NONE_MIGRATIONS.migrationsTable,
       payments: PAYMENTS_MIGRATIONS.migrationsTable,
       scheduler: SCHEDULER_MIGRATIONS.migrationsTable,
       credentials: CREDENTIALS_MIGRATIONS.migrationsTable,

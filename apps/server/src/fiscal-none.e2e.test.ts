@@ -75,7 +75,11 @@ let backend: FiscalBackend;
 beforeAll(() => {
   const gbConfig = venueModuleConfig(parseModuleConfig({}, ALL_MODULES), "GB-vat");
   gbModules = enabledModules(ALL_MODULES, gbConfig);
-  backend = fiscalSlot(gbModules, null).makeBackend();
+  backend = fiscalSlot(gbModules, null).makeBackend({
+    db: suite.admin,
+    clock: steadyClock,
+    environment: "preproduction",
+  });
 });
 
 interface GbVenue {
