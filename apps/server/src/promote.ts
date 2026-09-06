@@ -40,7 +40,7 @@ export interface PromoteDeps {
   /**
    * The app pool — the holder-refresh READ (`app_user` holds SELECT on `deployment`) and the identity
    * reads, all app-role: `readNodeIdentityKey` unseals the signing key under `withTenant` as `app_user`,
-   * which holds SELECT on `tenant_credentials` (0001_credentials_rls.sql) — the same role and path
+   * which holds SELECT on `tenant_credentials` (0001_credentials_baseline_sql.sql) — the same role and path
    * `readMirrorToken` uses at mirror boot; `readNodeMembership` reads the held org chart via `app_user`'s
    * SELECT on `node_membership` (0097).
    */

@@ -42,14 +42,15 @@ export interface Station {
 }
 
 /**
- * Assert `stationId` names a LIVE station of THIS venue — present, `active`, and in
- * `cfg.locationId`. NULL-or-false → `station.not_found`, folding "absent / another venue's" and
- * "deactivated" into the one code (errors.ts explains why the inactive case is not distinct). The
- * tenant-consistent `categories_station_fk`/`products_station_fk` (and the default's own scope)
- * enforce only same-TENANT existence — they can see neither `active` nor the location — so this
- * explicit read is what rejects a retired or cross-venue station the FK would accept. One round
- * trip via a scalar subquery, the shape tables.ts's `setTableStatus` uses; the database holds one
- * tenant, and the `location_id` predicate narrows it to this venue.
+ * The deployment holds one tenant per database. Assert `stationId` names a LIVE station of THIS
+ * venue — present, `active`, and in `cfg.locationId`. NULL-or-false → `station.not_found`,
+ * folding "absent / another venue's" and "deactivated" into the one code (errors.ts explains why
+ * the inactive case is not distinct). The tenant-consistent
+ * `categories_station_fk`/`products_station_fk` (and the default's own scope) enforce only
+ * same-TENANT existence — they can see neither `active` nor the location — so this explicit read
+ * is what rejects a retired or cross-venue station the FK would accept. One round trip via a
+ * scalar subquery, the shape tables.ts's `setTableStatus` uses; the `location_id` predicate
+ * narrows it to this venue.
  */
 export async function requireLiveStation(
   tx: Transaction,
@@ -124,9 +125,10 @@ export async function createStation(
 }
 
 /**
- * The venue's ACTIVE stations, by `display_order` then `name`. The database holds one tenant; the
- * location filter narrows to this till's venue — the same active-only, location-scoped shape
- * tables.ts's {@link listZones} uses (a deactivated station is not a routing/display target).
+ * The venue's ACTIVE stations, by `display_order` then `name`. The deployment holds one tenant
+ * per database. The location filter narrows to this till's venue — the same active-only,
+ * location-scoped shape tables.ts's {@link listZones} uses (a deactivated station is not a
+ * routing/display target).
  */
 export async function listStations(tx: Transaction, cfg: TillConfig): Promise<Station[]> {
   return tx
@@ -159,9 +161,9 @@ export async function listStations(tx: Transaction, cfg: TillConfig): Promise<St
  */
 export async function updateStation(
   tx: Transaction,
-  // Kept for a uniform `(tx, cfg, …)` verb surface; this by-id update assumes one tenant per
-  // database, so the config is unused here (the repo idiom for an interface-mandated unused param
-  // — see tables.ts's updateZone).
+  // The deployment holds one tenant per database. Kept for a uniform `(tx, cfg, …)` verb surface;
+  // this update filters by id, so the config is unused here (the repo idiom for an
+  // interface-mandated unused param — see tables.ts's updateZone).
   _cfg: TillConfig,
   id: string,
   patch: {
@@ -252,12 +254,12 @@ export async function setDefaultStation(
 }
 
 /**
- * Set (or clear, with `null`) a category's DEFAULT routing station (KDS-1 §2b) — the
- * category-level route a fired line falls to when its product names no override. A non-null
- * `stationId` must be a LIVE station of this venue ({@link requireLiveStation},
- * `station.not_found` otherwise); clearing (null) skips the check, the shape tables.ts's
- * `setTableStatus` uses for a null status. The UPDATE is by category id in a database holding one
- * tenant (categories have no location column): an absent `categoryId` matches no row and is a
+ * The deployment holds one tenant per database. Set (or clear, with `null`) a category's DEFAULT
+ * routing station (KDS-1 §2b) — the category-level route a fired line falls to when its product
+ * names no override. A non-null `stationId` must be a LIVE station of this venue ({@link
+ * requireLiveStation}, `station.not_found` otherwise); clearing (null) skips the check, the shape
+ * tables.ts's `setTableStatus` uses for a null status. The UPDATE is by category id in this
+ * database (categories have no location column): an absent `categoryId` matches no row and is a
  * no-op — the route layer (Task 7) resolves category ids against the catalogue surface, and KDS-1
  * mints no `category.not_found` (spec §6 enumerates only the three `station.*` codes +
  * `ticket.*`).
@@ -275,11 +277,12 @@ export async function setCategoryStation(
 }
 
 /**
- * Set (or clear, with `null`) a product's OVERRIDE routing station (KDS-1 §2b) — the per-product
- * route that wins over its category default. Same shape as {@link setCategoryStation}: a non-null
- * `stationId` must be a LIVE station of this venue (`station.not_found` otherwise), null clears
- * it, and the UPDATE is by product id in a database holding one tenant (an absent `productId` is
- * a no-op — the route layer resolves product ids, and KDS-1 mints no `product.not_found`).
+ * The deployment holds one tenant per database. Set (or clear, with `null`) a product's OVERRIDE
+ * routing station (KDS-1 §2b) — the per-product route that wins over its category default. Same
+ * shape as {@link setCategoryStation}: a non-null `stationId` must be a LIVE station of this
+ * venue (`station.not_found` otherwise), null clears it, and the UPDATE is by product id in this
+ * database (an absent `productId` is a no-op — the route layer resolves product ids, and KDS-1
+ * mints no `product.not_found`).
  */
 export async function setProductStation(
   tx: Transaction,
@@ -474,8 +477,9 @@ export async function createCourse(
 
 /**
  * The venue's ACTIVE courses, by `display_order` then `name` — the coursing SEQUENCE (spec §2a:
- * lowest display_order fires first). The database holds one tenant; the location filter narrows
- * to this till's venue — the same active-only, location-scoped shape {@link listStations} uses.
+ * lowest display_order fires first). The deployment holds one tenant per database. The location
+ * filter narrows to this till's venue — the same active-only, location-scoped shape {@link
+ * listStations} uses.
  */
 export async function listCourses(tx: Transaction, cfg: TillConfig): Promise<Course[]> {
   return tx
@@ -497,9 +501,9 @@ export async function listCourses(tx: Transaction, cfg: TillConfig): Promise<Cou
  */
 export async function updateCourse(
   tx: Transaction,
-  // Kept for a uniform `(tx, cfg, …)` verb surface; this by-id update assumes one tenant per
-  // database, so the config is unused here (the repo idiom for an interface-mandated unused param
-  // — see {@link updateStation}).
+  // The deployment holds one tenant per database. Kept for a uniform `(tx, cfg, …)` verb surface;
+  // this update filters by id, so the config is unused here (the repo idiom for an
+  // interface-mandated unused param — see {@link updateStation}).
   _cfg: TillConfig,
   id: string,
   patch: { name?: string; displayOrder?: number; active?: boolean },
@@ -548,12 +552,12 @@ export async function deactivateCourse(
 }
 
 /**
- * Set (or clear, with `null`) a product's DEFAULT kitchen course (KDS-2 §2b) — the per-product
- * course a line falls to at ring time when the line carries no override. Same shape as {@link
- * setProductStation}: a non-null `courseId` must be a LIVE course of this venue ({@link
- * requireLiveCourse}, `course.not_found` otherwise), null clears it, and the UPDATE is by product
- * id in a database holding one tenant (an absent `productId` is a no-op — the route layer
- * resolves product ids, and KDS-2 mints no `product.not_found`).
+ * The deployment holds one tenant per database. Set (or clear, with `null`) a product's DEFAULT
+ * kitchen course (KDS-2 §2b) — the per-product course a line falls to at ring time when the line
+ * carries no override. Same shape as {@link setProductStation}: a non-null `courseId` must be a
+ * LIVE course of this venue ({@link requireLiveCourse}, `course.not_found` otherwise), null
+ * clears it, and the UPDATE is by product id in this database (an absent `productId` is a no-op —
+ * the route layer resolves product ids, and KDS-2 mints no `product.not_found`).
  */
 export async function setProductCourse(
   tx: Transaction,

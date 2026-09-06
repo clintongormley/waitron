@@ -224,7 +224,7 @@ export interface StaffListEntry {
 }
 
 /**
- * Pre-login roster for the till lock screen. This read has no tenant predicate; the deployment
+ * Pre-login roster for the till lock screen. This read has no tenant predicate. The deployment
  * holds one tenant per database. Unlike the rest of this file it is NOT gated on `authorize` — it
  * runs before any session exists — and returns only `{ personId, displayName }` for `active`
  * persons. No PIN material, no role, no status: nothing that is unsafe to show before anyone has
@@ -245,7 +245,7 @@ export async function listActiveStaff(tx: Transaction): Promise<StaffListEntry[]
  * `listActiveStaff` returns. This is the roster a till surfaces when an operator must pick an
  * authorizing supervisor for a privileged action under a gated policy (the cash-drawer override —
  * cash-drawer-authorization §5): the eligible authorizers are exactly the active persons whose
- * role holds the action's permission. The active-person read has no tenant predicate; the
+ * role holds the action's permission. The active-person read has no tenant predicate. The
  * deployment holds one tenant per database.
  *
  * Like `listActiveStaff` it returns ONLY `{ personId, displayName }` — no PIN material, role or status: the

@@ -64,8 +64,8 @@ import {
 import type { Logger } from "./logger.js";
 
 /**
- * Everything `mountPrintApi` needs. `cfg` carries this venue's tenant + location — the scope
- * every `withTenant` below runs under (the database holds this server's one tenant) and the two
+ * The deployment holds one tenant per database. Everything `mountPrintApi` needs. `cfg` carries
+ * this venue's tenant + location — the scope every `withTenant` below runs under and the two
  * fields the `@waitron/printing` verbs stamp onto minted codes / created printers
  * (`PrintAgentConfig` / `PrintConfig`). No `nodeId`: `print_jobs` carries no sync-capture trigger
  * in this slice (§4, single-writer-per-row until replication lands), so there is no
@@ -338,8 +338,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   app.get("/management-api/print-agents", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // This read has no tenant filter and assumes one tenant per database. Newest enrolment
-      // first. The `token_hash` is NEVER selected — a secret never leaves the row.
+      // The deployment holds one tenant per database. This read has no tenant filter. Newest
+      // enrolment first. The `token_hash` is NEVER selected — a secret never leaves the row.
       const rows = await gated(sessionId, (tx) =>
         tx
           .select({

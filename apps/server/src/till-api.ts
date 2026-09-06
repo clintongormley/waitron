@@ -507,10 +507,11 @@ function mountCourseVerb(
  *     and `recordSale` are reached ONLY by `placeOrder`/`cancelPlacedOrder`/`collectOrder`).
  */
 export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
-  // Log in: verify the operator's PIN and set the httpOnly session cookie. The login runs as the
-  // app role under the till's tenant — `withTenant` + `asAppUser`, exactly as the sale path does
-  // — in this one-tenant database; a wrong PIN, unknown or suspended person surfaces as the
-  // identity credential codes `STATUS` maps to 401/403.
+  // The deployment holds one tenant per database. Log in: verify the operator's PIN and set the
+  // httpOnly session cookie. The login runs as the app role under the till's tenant —
+  // `withTenant` + `asAppUser`, exactly as the sale path does — in this database; a wrong PIN,
+  // unknown or suspended person surfaces as the identity credential codes `STATUS` maps to
+  // 401/403.
   app.post("/api/session", (c) =>
     run(c, log, async () => {
       const { personId, pin } = await c.req.json<{ personId: string; pin: string }>();
@@ -588,9 +589,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Pre-login roster for the lock screen. Deliberately UNAUTHENTICATED — it is what the operator
-  // picks their name from before any session exists — so it calls `listActiveStaff` under
-  // `withTenant` + `asAppUser` (the roster assumes one tenant per database) rather than
+  // The deployment holds one tenant per database. Pre-login roster for the lock screen.
+  // Deliberately UNAUTHENTICATED — it is what the operator picks their name from before any
+  // session exists — so it calls `listActiveStaff` under `withTenant` + `asAppUser` rather than
   // `requireSession`. `listActiveStaff` returns `{ personId, displayName }` only: no PIN
   // material, role or status, so there is nothing here a bystander at the counter must not see.
   app.get("/api/staff", (c) =>
@@ -628,12 +629,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // `node_membership` is a whole-DB singleton row with no `tenant_id`, so it has no place under
       // `withTenant`'s tenant scope. Read straight off `deps.db`, like every other read in this file.
       const held = await readNodeMembership(deps.db);
-      // ONE transaction reads the issuer identity and the authored receipt trim (`getReceipt`,
-      // its own `tenant_receipts` row — SP-B4), plus the resolved canvas below: all run inside
-      // the same `withTenant` + `asAppUser` block (the database holds one tenant), never a second
-      // connection. `getReceipt` does not authorize — this boot read is deliberately
-      // unauthenticated (the browser fetches it before login), and it carries no secrets, only
-      // the receipt trim + canvas, same as `venueName`/`orderFlow` already here.
+      // The deployment holds one tenant per database. ONE transaction reads the issuer identity
+      // and the authored receipt trim (`getReceipt`, its own `tenant_receipts` row — SP-B4), plus
+      // the resolved canvas below: all run inside the same `withTenant` + `asAppUser` block,
+      // never a second connection. `getReceipt` does not authorize — this boot read is
+      // deliberately unauthenticated (the browser fetches it before login), and it carries no
+      // secrets, only the receipt trim + canvas, same as `venueName`/`orderFlow` already here.
       const boot = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         const [row] = await tx
@@ -949,10 +950,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // The cross-till held list for this node: every OPEN working order any register on the node can
-  // retrieve. SESSION-GUARDED — the operator must be logged in to see parked orders.
-  // `listHeldOrders` is filtered by `deps.cfg.nodeId` in this one-tenant database; the browser
-  // names nothing.
+  // The deployment holds one tenant per database. The cross-till held list for this node: every
+  // OPEN working order any register on the node can retrieve. SESSION-GUARDED — the operator must
+  // be logged in to see parked orders. `listHeldOrders` is filtered by `deps.cfg.nodeId` in this
+  // database; the browser names nothing.
   //
   // LATENT MIRROR TRAP (whole-branch review, membership promotion R3a): this and every other till/KDS
   // read below that filters by `deps.cfg.nodeId` (`getHeldOrder`; `listStationQueue`/`listExpoQueue` in
@@ -1097,11 +1098,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // The venue's ACTIVE kitchen stations (KDS-1, design §3f), for the station-display picker.
-  // SESSION- GUARDED (kitchen staff log in with a PIN and pick a station, §0). `listStations` is
-  // location-scoped from `deps.cfg` in this one-tenant database, ordered by display order then
-  // name — the same LIST-ONLY, active-only shape `GET /api/zones` uses; station CRUD is the
-  // MANAGEMENT API's, so this surface throws no config code.
+  // The deployment holds one tenant per database. The venue's ACTIVE kitchen stations (KDS-1,
+  // design §3f), for the station-display picker. SESSION- GUARDED (kitchen staff log in with a
+  // PIN and pick a station, §0). `listStations` is location-scoped from `deps.cfg` in this
+  // database, ordered by display order then name — the same LIST-ONLY, active-only shape `GET
+  // /api/zones` uses; station CRUD is the MANAGEMENT API's, so this surface throws no config
+  // code.
   app.get("/api/stations", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1113,13 +1115,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // One station's kitchen queue (KDS-1, design §3c/§3f) — this node's ticket items AT `:id`,
-  // grouped by order, oldest first. SESSION-GUARDED. `listStationQueue` is filtered by
-  // `deps.cfg.nodeId` in this one-tenant database. The `:id` is `isUuid`-screened first: an
-  // unknown station id already yields an empty queue (it names no items), so a MALFORMED one —
-  // which likewise names no live station — is refused `station.not_found` (404) rather than
-  // reaching the `station_id` uuid column and raising `22P02` → an opaque 500, the SAME 404 the
-  // config surface gives an absent station.
+  // The deployment holds one tenant per database. One station's kitchen queue (KDS-1, design
+  // §3c/§3f) — this node's ticket items AT `:id`, grouped by order, oldest first.
+  // SESSION-GUARDED. `listStationQueue` is filtered by `deps.cfg.nodeId` in this database. The
+  // `:id` is `isUuid`-screened first: an unknown station id already yields an empty queue (it
+  // names no items), so a MALFORMED one — which likewise names no live station — is refused
+  // `station.not_found` (404) rather than reaching the `station_id` uuid column and raising
+  // `22P02` → an opaque 500, the SAME 404 the config surface gives an absent station.
   app.get("/api/stations/:id/queue", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1197,14 +1199,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // shape, session gate and id screens are `mountCourseVerb`'s.
   mountCourseVerb(app, deps, log, "fire", fireCourse);
 
-  // The expo (pass) queue (KDS-3 §3d) — this node's live orders, aggregated into courses ACROSS
-  // stations, for the expediter's display. SESSION-GUARDED (kitchen/pass staff log in with a PIN,
-  // §0). `listExpoQueue` is filtered by `deps.cfg.nodeId` in this one-tenant database — the SAME
-  // LIST-ONLY, session-gated shape the station queue (`GET /api/stations/:id/queue`) and the
-  // station list (`GET /api/stations`) use, minus a path param: the pass is the whole node's, so
-  // there is nothing to screen. Returns the `ExpoOrder[]` aggregation (orders oldest-first,
-  // courses by display_order, each item carrying its station name + fired/away roll-ups); the
-  // display re-reads it after each bump/dispatch. READ-ONLY, no fiscal touch.
+  // The deployment holds one tenant per database. The expo (pass) queue (KDS-3 §3d) — this node's
+  // live orders, aggregated into courses ACROSS stations, for the expediter's display.
+  // SESSION-GUARDED (kitchen/pass staff log in with a PIN, §0). `listExpoQueue` is filtered by
+  // `deps.cfg.nodeId` in this database — the SAME LIST-ONLY, session-gated shape the station
+  // queue (`GET /api/stations/:id/queue`) and the station list (`GET /api/stations`) use, minus a
+  // path param: the pass is the whole node's, so there is nothing to screen. Returns the
+  // `ExpoOrder[]` aggregation (orders oldest-first, courses by display_order, each item carrying
+  // its station name + fired/away roll-ups); the display re-reads it after each bump/dispatch.
+  // READ-ONLY, no fiscal touch.
   app.get("/api/expo/queue", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1298,15 +1301,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // The eligible authorizers for a gated privileged action — the active persons whose role holds
-  // `cash.drawer` (cash-drawer-authorization §5). SESSION-GUARDED, not permission-gated: ANY
-  // logged-in operator may call it (they are about to request a supervisor override and need the
-  // picker of who could authorize it), so `requireSession` runs FIRST and no `authorize` gate
-  // follows. Runs under `withTenant` + `asAppUser` (the roster assumes one tenant per database),
-  // returning the SAME no-secrets `{ personId, displayName }` shape as `GET /api/staff` — no PIN
-  // material, role or status: the till shows this picker BEFORE the supervisor has entered their
-  // credential. The client sends the chosen `{ personId, pin }` only on the authenticated `POST
-  // /api/drawer/open` override request.
+  // The deployment holds one tenant per database. The eligible authorizers for a gated privileged
+  // action — the active persons whose role holds `cash.drawer` (cash-drawer-authorization §5).
+  // SESSION-GUARDED, not permission-gated: ANY logged-in operator may call it (they are about to
+  // request a supervisor override and need the picker of who could authorize it), so
+  // `requireSession` runs FIRST and no `authorize` gate follows. Runs under `withTenant` +
+  // `asAppUser`, returning the SAME no-secrets `{ personId, displayName }` shape as `GET
+  // /api/staff` — no PIN material, role or status: the till shows this picker BEFORE the
+  // supervisor has entered their credential. The client sends the chosen `{ personId, pin }` only
+  // on the authenticated `POST /api/drawer/open` override request.
   app.get("/api/drawer/authorizers", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1524,11 +1527,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // The venue's ACTIVE service statuses (FP-1, TS-2), for the table-order screen's Estado picker.
-  // SESSION-GUARDED (operator PIN, NOT the manager-only `listStatuses`): `requireSession` runs
-  // FIRST, and `listServiceStatuses` assumes one tenant per database. LIST-ONLY, active-only (a
-  // deactivated status can't be applied); status CRUD is the management API's, so this surface
-  // throws no domain code.
+  // The deployment holds one tenant per database. The venue's ACTIVE service statuses (FP-1,
+  // TS-2), for the table-order screen's Estado picker. SESSION-GUARDED (operator PIN, NOT the
+  // manager-only `listStatuses`): `requireSession` runs FIRST, and `listServiceStatuses` reads
+  // without a tenant filter. LIST-ONLY, active-only (a deactivated status can't be applied);
+  // status CRUD is the management API's, so this surface throws no domain code.
   app.get("/api/statuses", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1885,11 +1888,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Relocate a tab to a free table (TS-3, design §3a). SESSION-GUARDED. The tab `:id` and the
-  // body `toTableId` are both isUuid-screened before any query — a malformed tab id →
-  // `tab.not_open` (409), a malformed target → `table.not_found` (404), never a 500. The verb
-  // runs on a fresh withTenant/asAppUser transaction (the verb assumes one tenant per database).
-  // Returns 200 empty.
+  // The deployment holds one tenant per database. Relocate a tab to a free table (TS-3, design
+  // §3a). SESSION-GUARDED. The tab `:id` and the body `toTableId` are both isUuid-screened before
+  // any query — a malformed tab id → `tab.not_open` (409), a malformed target → `table.not_found`
+  // (404), never a 500. The verb runs on a fresh withTenant/asAppUser transaction. Returns 200
+  // empty.
   app.post("/api/tabs/:id/move", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);

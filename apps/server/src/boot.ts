@@ -1190,15 +1190,16 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // work at boot; the agent guard and the `printer.manage` gate run per request.
     mountPrintApi(app, { db, cfg: { tenantId: till.tenantId, locationId: till.locationId } }, log);
   }
-  // The dashboard's management HTTP surface (manager login, staff/person management, passkey
-  // ceremonies) on the SAME app, the identical convention `mountWebhook` and `mountTillApi` above
-  // follow. It reuses the EXACT values `mountTillApi` receives so the two cannot drift: the same `db`,
-  // the same tenant (`till.tenantId`, this venue's one tenant) and the same `secureCookies` binding
-  // hoisted above (one value, read by both mounts — not a re-typed `config.tls !== undefined`). No
-  // fiscal backend, clock or card provider: the management routes read and write only the tenant's own
-  // identity records. `rpId`/`origin` are the passkey Relying Party config from `loadConfig` — a
-  // passkey is bound to its RP ID + origin, so these are config, never hardcoded (spec §4c). Routes
-  // only — no database work at boot.
+  // The deployment holds one tenant per database. The dashboard's management HTTP surface
+  // (manager login, staff/person management, passkey ceremonies) on the SAME app, the identical
+  // convention `mountWebhook` and `mountTillApi` above follow. It reuses the EXACT values
+  // `mountTillApi` receives so the two cannot drift: the same `db`, the same tenant
+  // (`till.tenantId`) and the same `secureCookies` binding hoisted above (one value, read by both
+  // mounts — not a re-typed `config.tls !== undefined`). No fiscal backend, clock or card
+  // provider: the management routes read and write only the tenant's own identity records.
+  // `rpId`/`origin` are the passkey Relying Party config from `loadConfig` — a passkey is bound
+  // to its RP ID + origin, so these are config, never hardcoded (spec §4c). Routes only — no
+  // database work at boot.
   mountManagementApi(
     app,
     {
@@ -1218,19 +1219,21 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     },
     log,
   );
-  // The dashboard's diagnostics surface (read the recent log tail, read + raise verbosity) on the SAME
-  // app, the identical convention. It reuses the EXACT `db` and tenant (`till.tenantId`, this venue's
-  // one tenant) `mountManagementApi` above receives, plus the `reader` over the rotating files and the
-  // in-memory `verbosity` controller the logger reads. All three routes are gated behind
-  // `diagnostics.view`. Routes only — no database work at boot; the gate runs per request.
+  // The deployment holds one tenant per database. The dashboard's diagnostics surface (read the
+  // recent log tail, read + raise verbosity) on the SAME app, the identical convention. It reuses
+  // the EXACT `db` and tenant (`till.tenantId`) `mountManagementApi` above receives, plus the
+  // `reader` over the rotating files and the in-memory `verbosity` controller the logger reads.
+  // All three routes are gated behind `diagnostics.view`. Routes only — no database work at boot;
+  // the gate runs per request.
   mountDiagnosticsApi(app, { db, cfg: { tenantId: till.tenantId }, reader, verbosity }, log);
-  // The dashboard's gated catalogue write group (catalogues/categories/products + image upload) on the
-  // SAME app, the identical convention. It reuses the EXACT `db` and tenant `mountManagementApi` above
-  // receives (`till.tenantId`, this venue's one tenant) so the two cannot drift, plus the store
-  // `mkdirSync` above ensured (`config.mediaDir`) and the shared `MAX_UPLOAD_BYTES` DoS ceiling — one
-  // value read by this mount and its route, not two literals. No fiscal backend, clock or card
-  // provider: these routes touch only the catalogue and the image store. Routes only — no database
-  // work at boot; the `person.manage` gate runs per request.
+  // The deployment holds one tenant per database. The dashboard's gated catalogue write group
+  // (catalogues/categories/products + image upload) on the SAME app, the identical convention. It
+  // reuses the EXACT `db` and tenant `mountManagementApi` above receives (`till.tenantId`) so the
+  // two cannot drift, plus the store `mkdirSync` above ensured (`config.mediaDir`) and the shared
+  // `MAX_UPLOAD_BYTES` DoS ceiling — one value read by this mount and its route, not two
+  // literals. No fiscal backend, clock or card provider: these routes touch only the catalogue
+  // and the image store. Routes only — no database work at boot; the `person.manage` gate runs
+  // per request.
   mountCatalogueApi(
     app,
     {
@@ -1241,38 +1244,43 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     },
     log,
   );
-  // The dashboard's gated purchase-invoice write group (facturas recibidas: header + VAT desglose) on
-  // the SAME app, the identical convention. Reuses the EXACT `db` and tenant `mountCatalogueApi` above
-  // receives (`till.tenantId`, this venue's one tenant) so the two cannot drift. No `nodeId` (the
-  // purchase tables carry no sync-capture trigger), no fiscal backend, clock, card provider or media
-  // store — these routes touch only the two purchase-invoice tables. Routes only — no database work at
-  // boot; the `purchase.manage` gate runs per request. This is the #91 fast-follow's capture surface,
-  // feeding the headless modelo 303 IVA-deducible reporting.
+  // The deployment holds one tenant per database. The dashboard's gated purchase-invoice write
+  // group (facturas recibidas: header + VAT desglose) on the SAME app, the identical convention.
+  // Reuses the EXACT `db` and tenant `mountCatalogueApi` above receives (`till.tenantId`) so the
+  // two cannot drift. No `nodeId` (the purchase tables carry no sync-capture trigger), no fiscal
+  // backend, clock, card provider or media store — these routes touch only the two
+  // purchase-invoice tables. Routes only — no database work at boot; the `purchase.manage` gate
+  // runs per request. This is the #91 fast-follow's capture surface, feeding the headless modelo
+  // 303 IVA-deducible reporting.
   mountPurchasingApi(app, { db, cfg: { tenantId: till.tenantId } }, log);
   // Mount booking routes with the venue configuration and shared authorization gate.
   mountBookingsApi(app, { db, cfg: till }, log);
-  // The dashboard's gated reporting surface on the SAME app, the identical convention. Reuses the EXACT
-  // `db` and tenant (`till.tenantId`, this venue's one tenant) `mountPurchasingApi` above receives so
-  // the two cannot drift. `nodeId` here is `dataNodeId` — the node whose DATA this server DISPLAYS, not
-  // its own identity: on a MIRROR that is the ORIGIN (the primary whose replicated sales it holds), so
-  // the per-till/fiscal reports (daily-close view, period, cash-up, VAT, overdue) resolve the venue's
-  // data rather than the mirror's empty own node (membership promotion R3a); on a primary it is the own
-  // id. The `/reports/overview` route ignores it entirely and aggregates the WHOLE venue (all nodes),
-  // and the modelo 303 export is likewise tenant-wide. No fiscal backend, card provider or media store —
-  // READ-ONLY routes over the filed commercial record + the venue's dining tables. Routes only — no
-  // database work at boot; the `report.export`/`report.view` gates run per request, SELECTs only.
+  // The deployment holds one tenant per database. The dashboard's gated reporting surface on the
+  // SAME app, the identical convention. Reuses the EXACT `db` and tenant (`till.tenantId`)
+  // `mountPurchasingApi` above receives so the two cannot drift. `nodeId` here is `dataNodeId` —
+  // the node whose DATA this server DISPLAYS, not its own identity: on a MIRROR that is the
+  // ORIGIN (the primary whose replicated sales it holds), so the per-till/fiscal reports
+  // (daily-close view, period, cash-up, VAT, overdue) resolve the venue's data rather than the
+  // mirror's empty own node (membership promotion R3a); on a primary it is the own id. The
+  // `/reports/overview` route ignores it entirely and aggregates the WHOLE venue (all nodes), and
+  // the modelo 303 export is likewise tenant-wide. No fiscal backend, card provider or media
+  // store — READ-ONLY routes over the filed commercial record + the venue's dining tables. Routes
+  // only — no database work at boot; the `report.export`/`report.view` gates run per request,
+  // SELECTs only.
   mountReportApi(app, { db, cfg: { tenantId: till.tenantId, nodeId: dataNodeId } }, log);
-  // The dashboard's gated recipe-authoring surface (ingredient CRUD + product-recipe get/set) on the
-  // SAME app, the identical convention. Reuses the EXACT `db`, tenant and `nodeId` `mountCatalogueApi`
-  // above receives (`till.tenantId`/`till.nodeId`, this venue's one tenant + this node) — a recipe write
-  // UPDATEs the sync-enrolled `products` table (via applyRecipeDerivation), so it threads `nodeId` for
-  // the same origin-attribution reason catalogue does. No fiscal backend, clock, card provider or media
-  // store. Routes only — no database work at boot; the `recipe.manage` gate runs per request.
+  // The deployment holds one tenant per database. The dashboard's gated recipe-authoring surface
+  // (ingredient CRUD + product-recipe get/set) on the SAME app, the identical convention. Reuses
+  // the EXACT `db`, tenant and `nodeId` `mountCatalogueApi` above receives
+  // (`till.tenantId`/`till.nodeId`) — a recipe write UPDATEs the sync-enrolled `products` table
+  // (via applyRecipeDerivation), so it threads `nodeId` for the same origin-attribution reason
+  // catalogue does. No fiscal backend, clock, card provider or media store. Routes only — no
+  // database work at boot; the `recipe.manage` gate runs per request.
   mountRecipeApi(app, { db, cfg: { tenantId: till.tenantId, nodeId: till.nodeId } }, log);
-  // The dashboard's gated shift-planning surface (roster authoring + publish) on the SAME app, the
-  // identical convention. Reuses the EXACT db + tenant (till.tenantId, this venue's one tenant); no
-  // fiscal backend, clock, card provider or media store — these routes touch only roster_versions /
-  // shifts / convenio_config / locations. Routes only; the schedule.manage gate runs per request.
+  // The deployment holds one tenant per database. The dashboard's gated shift-planning surface
+  // (roster authoring + publish) on the SAME app, the identical convention. Reuses the EXACT db +
+  // tenant (till.tenantId); no fiscal backend, clock, card provider or media store — these routes
+  // touch only roster_versions / shifts / convenio_config / locations. Routes only; the
+  // schedule.manage gate runs per request.
   mountWorkforceApi(app, { db, cfg: { tenantId: till.tenantId } }, log);
   // The STAFF-FACING half of the schedule surface on the SAME app — the till-session-gated request
   // routes (view my shifts/swaps/absences, request a swap or absence, accept a swap offered to me),
@@ -1597,9 +1605,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     log("info", "backup.disabled", {});
   }
 
-  // Read replication lag through the sync pool when sync is configured. Capture the
-  // pool in a const so its non-undefined type is preserved inside the reader closure.
-  // The database holds one tenant; app_user can read its sync log.
+  // Read replication lag through the sync pool when sync is configured. Capture the pool in a
+  // const so its non-undefined type is preserved inside the reader closure. The deployment holds
+  // one tenant per database. app_user can read its sync log.
   const lagPool = syncDb;
   // Hoisted to a plain `const` so TS keeps the `carrierNodeId !== undefined` narrowing inside the
   // `readDisposal` arrow below (a captured `const`, unlike a `let`, does not widen — same rule the

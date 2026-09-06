@@ -435,7 +435,7 @@ describe("applyInstance against a blank container", () => {
     // and cannot be — `MigrationSet` carries `name`, `table` and `from` (manifest.ts:9-14) and no
     // list of what each set creates, so there is nothing to derive `registros_facturacion` from.
     // This assertion is what keeps the hardcoded half honest: `registros_facturacion` is created by
-    // `packages/fiscal-verifactu/drizzle/0000_baseline.sql`, which is the `fiscal` set (now
+    // `packages/fiscal-verifactu/drizzle/0000_fiscal_baseline.sql`, which is the `fiscal` set (now
     // last, since SP-3a: fiscal's capture triggers will call sync's `sync_capture()` SPI, so the
     // `sync` set must migrate first). Append a further set to the manifest and this fails here,
     // loudly, instead of silently probing a table that belongs to a set which was never the one

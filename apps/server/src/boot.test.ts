@@ -631,10 +631,11 @@ describe("startServer, against a real container as the deployment role", () => {
       const body = (await response.json()) as { ok: boolean };
       expect(body.ok).toBe(true);
 
-      // The till API is mounted on the same app (`mountTillApi` in `boot.ts`). `GET /api/staff`
-      // is the unauthenticated roster route — it needs no session: in this one-tenant database
-      // (seeded minimally in `beforeAll`, with NO staff) it returns an empty array rather than
-      // 404, which is the proof the route exists. A 404 here would mean `mountTillApi` never ran.
+      // The deployment holds one tenant per database. The till API is mounted on the same app
+      // (`mountTillApi` in `boot.ts`). `GET /api/staff` is the unauthenticated roster route — it
+      // needs no session: in this database (seeded minimally in `beforeAll`, with NO staff) it
+      // returns an empty array rather than 404, which is the proof the route exists. A 404 here
+      // would mean `mountTillApi` never ran.
       const staff = await fetch(`http://127.0.0.1:${port}/api/staff`);
       expect(staff.status).toBe(200);
       // The request-id middleware is live and wraps every route mounted after it (registered on the
@@ -1664,9 +1665,9 @@ describe("startServer, against a real container as the deployment role", () => {
       WAITRON_SKIP_RETRY_MS: "100",
     });
     try {
-      // The trading surface is live: the unauthenticated roster route returns this till's (empty)
-      // staff list in this one-tenant database — 200 [], not 404 — exactly as the first test in
-      // this block asserts.
+      // The deployment holds one tenant per database. The trading surface is live: the
+      // unauthenticated roster route returns this till's (empty) staff list in this database —
+      // 200 [], not 404 — exactly as the first test in this block asserts.
       const staff = await fetch(`http://127.0.0.1:${port}/api/staff`);
       expect(staff.status).toBe(200);
       expect(await staff.json()).toEqual([]);
@@ -1720,9 +1721,9 @@ describe("startServer, against a real container as the deployment role", () => {
       expect((await fetch(`http://127.0.0.1:${port}/setup-api/ca.crt`)).status).toBe(404);
       expect((await fetch(`http://127.0.0.1:${port}/setup/trust`)).status).toBe(404);
 
-      // The trading surface is unchanged: the unauthenticated roster route answers this till's
-      // empty staff list in this one-tenant database (200 [], not 404), and /health still answers
-      // its JSON.
+      // The deployment holds one tenant per database. The trading surface is unchanged: the
+      // unauthenticated roster route answers this till's empty staff list in this database (200
+      // [], not 404), and /health still answers its JSON.
       const staff = await fetch(`http://127.0.0.1:${port}/api/staff`);
       expect(staff.status).toBe(200);
       expect(await staff.json()).toEqual([]);
@@ -2633,7 +2634,7 @@ describe("startServer, against a real container as the deployment role", () => {
   // would produce this exact same error and pass this exact same assertion. Under RUNTIME_ROLE it
   // cannot: a late or bypassed guard would surface a permission-denied failure instead, a distinct
   // and distinguishable error from `deployment.environment_mismatch`. RUNTIME_ROLE still reads the
-  // stamp `assertDeploymentMatches` needs to see: `0010_deployment_stamp.sql` grants `deployment`'s
+  // stamp `assertDeploymentMatches` needs to see: `0001_db_baseline_sql.sql` grants `deployment`'s
   // own `SELECT` to `app_user`, and `RUNTIME_ROLE` is an `app_user` member (this file's own
   // `beforeAll`).
   it("refuses to start, and runs no migration, against another environment's database", async () => {

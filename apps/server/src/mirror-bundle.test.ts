@@ -48,7 +48,7 @@ function nextNif(): string {
 
 let stateDir: string;
 let caPem: string;
-let appDb: Database; // app_login → app_user: reads the venue rows in this one-tenant database
+let appDb: Database; // The deployment holds one tenant per database. app_login → app_user: reads the venue rows in this database
 let retentionDb: Database; // sync_pruner → app_user: mints the peer token
 
 /** Provision a fresh venue (as the owner), stamp its database `preproduction`, and return the five

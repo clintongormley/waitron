@@ -40,7 +40,7 @@ import type { Logger } from "./logger.js";
 
 /**
  * Everything the dashboard's purchase-invoice routes need: `db` + this venue's own `cfg.tenantId`
- * are passed to every `withTenant` below. The database holds this server's one tenant. No
+ * are passed to every `withTenant` below. The deployment holds one tenant per database. No
  * `nodeId` (unlike `CatalogueApiDeps`): the purchase-invoice tables carry no sync-capture
  * trigger, so there is no `sync_log.origin_id` to attribute. No card provider, clock or media
  * store either — these routes touch only the two purchase-invoice tables via the headless
@@ -184,12 +184,12 @@ function screenLines(v: unknown): PurchaseInvoiceLineInput[] {
 }
 
 /**
- * Mounts the dashboard's gated purchase-invoice write group on an existing Hono app —
- * `mountCatalogueApi`'s sibling, attached to the SAME app (the `mountWebhook`/`mountTillApi`
- * convention). Every route wraps its handler in `run`, calls `requireManagementSession(c)` (→ 401
- * before any DB work) and then, inside `withTenant` + `asAppUser`, `authorizeManager(...)` (→
- * 403) before the headless `@waitron/purchasing` op, in the database holding this server's one
- * tenant. The `purchase.manage` gate runs on every route through one constant.
+ * The deployment holds one tenant per database. Mounts the dashboard's gated purchase-invoice
+ * write group on an existing Hono app — `mountCatalogueApi`'s sibling, attached to the SAME app
+ * (the `mountWebhook`/`mountTillApi` convention). Every route wraps its handler in `run`, calls
+ * `requireManagementSession(c)` (→ 401 before any DB work) and then, inside `withTenant` +
+ * `asAppUser`, `authorizeManager(...)` (→ 403) before the headless `@waitron/purchasing` op, in
+ * this database. The `purchase.manage` gate runs on every route through one constant.
  */
 export function mountPurchasingApi(app: Hono, deps: PurchasingApiDeps, log: Logger): void {
   // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries
@@ -227,8 +227,9 @@ export function mountPurchasingApi(app: Hono, deps: PurchasingApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PurchaseInvoiceId");
       const invoice = await gated(sessionId, (tx) => getPurchaseInvoice(tx, id));
-      // A well-formed id that names no visible row is a clean 404, not a 200 null body — the op
-      // returns null (the database holds one tenant), so this route makes it explicit.
+      // The deployment holds one tenant per database. A well-formed id that names no visible row
+      // is a clean 404, not a 200 null body — the op returns null, so this route makes it
+      // explicit.
       if (invoice === null) throw new AppError("purchase.not_found", { id });
       return c.json(invoice);
     }),

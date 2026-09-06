@@ -13,15 +13,21 @@ export default defineConfig({
     // testTimeout covers work inside an individual test.
     testTimeout: 30_000,
     hookTimeout: 180_000,
-    // The PGlite suites boot a WASM PostgreSQL and apply migrations in beforeAll, so hookTimeout
-    // covers that setup. The container boot/image pull runs in globalSetup, outside hookTimeout.
-    // testTimeout covers work inside an individual test.
+    // NO poolOptions: this package stays MULTI-FORK, deliberately. It is not held to `singleFork` for
+    // the @vitest/coverage-v8 branch-merge artifact (unlike scheduler/credentials/workforce-es):
+    // purchasing had no `poolOptions` before this branch, so it has been multi-fork on `main` all along
+    // and passes the unfiltered `main` merge's `pnpm -r` coverage that way — this batch changes where
+    // the DB comes from, not how coverage merges across forks, so it neither introduces nor worsens the
+    // artifact (an isolated `test:coverage` here proves nothing about the concurrent case, per
+    // CLAUDE.md §2; the pre-existing main history is the evidence). It needs no `maxForks` connection
+    // cap either: only ONE real-PG file runs here, opening a handful of `connectAs` backends, far under
+    // the shared cluster's ~100-connection budget.
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "json-summary"],
-      // The PGlite suites boot a WASM PostgreSQL and apply migrations in beforeAll, so
-      // hookTimeout covers that setup. The container boot/image pull runs in globalSetup, outside
-      // hookTimeout. testTimeout covers work inside an individual test.
+      // src/index.ts is a pure re-export barrel; src/testing/** and test/** hold the DB harness and
+      // fixtures. All are test infrastructure, not measured product code (the same exclusions
+      // packages/recipes records).
       exclude: [...coverageConfigDefaults.exclude, "src/index.ts", "src/testing/**", "test/**"],
       thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
     },

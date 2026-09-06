@@ -171,12 +171,12 @@ export type BoxStatusDeps = {
 };
 
 /**
- * Counts the append-only `sync_config_conflicts` ops rows (membership Slice 7): config-class
- * writes primary-wins overrode while a carrier drained a returned node's tail (spec §7).
- * `row_image` contains tenant business data. The sync baseline grants SELECT to `app_user`; `db`
- * is the sync pool (`lagPool`/`syncDb`). The table has no tenant_id and the database holds one
- * tenant, so the read is a bare `count(*)`. An index is deferred until a list/filter surface
- * needs one.
+ * The deployment holds one tenant per database. Counts the append-only `sync_config_conflicts`
+ * ops rows (membership Slice 7): config-class writes primary-wins overrode while a carrier
+ * drained a returned node's tail (spec §7). `row_image` contains tenant business data. The sync
+ * baseline grants SELECT to `app_user`; `db` is the sync pool (`lagPool`/`syncDb`). The table has
+ * no tenant_id, and the read is a bare `count(*)`. An index is deferred until a list/filter
+ * surface needs one.
  */
 export async function readConfigConflictCount(db: Database): Promise<{ count: number }> {
   const r = await db.execute<{ count: number }>(

@@ -9,7 +9,7 @@ import { readChainHeight } from "./chain-height.js";
 import { ALL_MODULES } from "./modules.js";
 
 // This suite retains the real-Postgres manifest fixture and reads cadenas as app_user. The cases
-// check the node-id lookup and absent-row fallback; the deployment holds one tenant per database.
+// check the node-id lookup and absent-row fallback. The deployment holds one tenant per database.
 // Target selection is deferred to Task 9 (§4).
 const LOCALE = "es-ES";
 

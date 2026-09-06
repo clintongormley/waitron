@@ -471,7 +471,7 @@ describe("sync origin attribution through the real API call sites (fix B)", () =
     // The recipe surface writes no enrolled table DIRECTLY (ingredients / recipe_lines carry no capture
     // trigger), but setProductRecipe → recomputeProductDerivations → applyRecipeDerivation +
     // applyDietDerivation UPDATE `products`, which IS enrolled (products_capture,
-    // sync/drizzle/0000_sync_outbox.sql:196). Guard-by-deletion: with the fix, recipe-api's `gated`
+    // sync/drizzle/0000_sync_baseline.sql:97). Guard-by-deletion: with the fix, recipe-api's `gated`
     // threads { nodeId: cfg.nodeId } into withTenant, so that UPDATE captures NODE_C. Drop the 4th arg
     // and app.node_id is unset → capture falls back to all-zero.
     const venue = await setupVenue();

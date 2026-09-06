@@ -17,7 +17,7 @@ import {
  */
 export const FISCAL_ENROLMENT: readonly EnrolledTable[] = [
   // The immutable ledger. INSERT-ONLY, grant-enforced: app_user holds only SELECT,INSERT
-  // (0001_registros_inmutables.sql), so ON CONFLICT (id) DO NOTHING issues no UPDATE — and a stray one
+  // (0001_fiscal_baseline_sql.sql), so ON CONFLICT (id) DO NOTHING issues no UPDATE — and a stray one
   // would be refused by the grant (42501) before the append-only BEFORE UPDATE OR DELETE trigger fires
   // (WT001 is the backstop for a privilege-bypassing superuser). Replicated verbatim — huella,
   // the four anterior_* pointers and entorno copy as opaque bytes; nothing recomputes a hash.
@@ -70,7 +70,7 @@ export const FISCAL_ENROLMENT: readonly EnrolledTable[] = [
     lane: "ordered",
   }),
   // The ack outbox — the ONE fiscal table that DELETES (a delivered ack in a terminal state is
-  // pruned), so it captures delete too. app_user holds DELETE (0008_acks_delete_grant.sql).
+  // pruned), so it captures delete too. app_user holds DELETE (0001_fiscal_baseline_sql.sql).
   enrol(acks, {
     mode: "watermark-upsert",
     conflictKey: ["registro_id"],

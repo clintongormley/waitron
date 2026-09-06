@@ -13,15 +13,22 @@ export default defineConfig({
     // testTimeout covers work inside an individual test.
     testTimeout: 30_000,
     hookTimeout: 60_000,
-    // The PGlite suites boot a WASM PostgreSQL and apply migrations in beforeAll, so hookTimeout
-    // covers that setup. The container boot/image pull runs in globalSetup, outside hookTimeout.
-    // testTimeout covers work inside an individual test.
+    // NO poolOptions: this package stays MULTI-FORK, deliberately. It is not held to `singleFork` for
+    // the @vitest/coverage-v8 branch-merge artifact (unlike scheduler/credentials/workforce-es): recipes
+    // had no `poolOptions` before this branch, so it has been multi-fork on `main` all along and passes
+    // the unfiltered `main` merge's `pnpm -r` coverage that way — this batch changes where the DB comes
+    // from, not how coverage merges across forks, so it neither introduces nor worsens the artifact (an
+    // isolated `test:coverage` here proves nothing about the concurrent case, per CLAUDE.md §2; the
+    // pre-existing main history is the evidence). It needs no `maxForks` connection cap either: only TWO
+    // real-PG files run here, each opening a handful of `connectAs` backends, so even fully
+    // parallel they hold far fewer than the shared cluster's ~100-connection budget.
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "json-summary"],
-      // The PGlite suites boot a WASM PostgreSQL and apply migrations in beforeAll, so
-      // hookTimeout covers that setup. The container boot/image pull runs in globalSetup, outside
-      // hookTimeout. testTimeout covers work inside an individual test.
+      // src/index.ts is a pure re-export barrel with no logic of its own; src/testing/** and test/**
+      // hold the DB harness/fixtures. All three are test infrastructure, not measured product code, so
+      // they are excluded from the coverage thresholds below (the same barrel exclusion
+      // packages/catalogue's own vitest.config.ts records).
       exclude: [...coverageConfigDefaults.exclude, "src/index.ts", "src/testing/**", "test/**"],
       thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
     },

@@ -57,13 +57,14 @@ function parseDbTarget(url: string): { host: string; port: string; database: str
  * `waitron-rejoin rejoin <artifact-path>` — WIPE this fenced, fully-drained ex-primary's local
  * database and RESTORE the carrier's baseline, so a returned node rejoins the cluster as a clean
  * secondary (spec §4). Assembles the real dependencies and hands them to `rejoinAsSecondary`
- * (`rejoin.ts`), which runs the ordered guard ladder (`not_fenced` → `no_carrier` → `not_drained`)
- * BEFORE anything irreversible, then closes our pre-wipe pools, wipes, and restores.
+ * (`rejoin.ts`), which runs the ordered guard ladder (`not_fenced` → `no_carrier` →
+ * `not_drained`) BEFORE anything irreversible, then closes our pre-wipe pools, wipes, and
+ * restores.
  *
  * Modelled on `restore-command.ts`: secrets and privileged connection strings come from the
- * environment, NEVER argv (they leak into `ps` otherwise), and each fails CLOSED on an empty value via
- * `isUnset` — "an empty connection string is a valid connection string" (CLAUDE.md §3), so a blank
- * value must refuse rather than silently resolve to localhost.
+ * environment, NEVER argv (they leak into `ps` otherwise), and each fails CLOSED on an empty
+ * value via `isUnset` — "an empty connection string is a valid connection string" (CLAUDE.md §3),
+ * so a blank value must refuse rather than silently resolve to localhost.
  *
  * Env contract:
  *  - `DATABASE_URL` — the app pool. Holds the ONE pre-wipe `node_membership` read, whose result keys
@@ -89,18 +90,19 @@ function parseDbTarget(url: string): { host: string; port: string; database: str
  * Seams (all defaulted to the real wiring, injected by tests so the flow is unit-tested without a
  * container): `connect` (`createPostgresDb`) opens the app/sync/maintenance pools, `validate`
  * (`validateArtifact`) runs the write-free decrypt/gate/guard pass BEFORE the wipe and `write`
- * (`writeValidated`) runs the destructive restore AFTER it — both over one shared `RestoreDeps` (one
- * decrypt of the same bytes), and `rejoin` (`rejoinAsSecondary`) is the orchestrator. `bin-rejoin.ts`
- * supplies `process.argv`/`process.env` and exits on the returned code.
+ * (`writeValidated`) runs the destructive restore AFTER it — both over one shared `RestoreDeps`
+ * (one decrypt of the same bytes), and `rejoin` (`rejoinAsSecondary`) is the orchestrator.
+ * `bin-rejoin.ts` supplies `process.argv`/`process.env` and exits on the returned code.
  *
- * Returns a process exit code: 0 on success, 1 on an expected disaster-recovery failure (a missing or
- * empty env var, an unprovisioned box, an unreadable artifact, an invalid `WAITRON_ENV`, a restore URL
- * with no db name, or ANY error out of the orchestrator — a `rejoin.*`/`restore.*`/`recovery.*`/
- * `backup.*` `AppError` reported by code, a decrypt-phase code collapsed to one non-oracle message, and
- * anything else reported generically), 2 on a usage error. The orchestrator's error is NEVER rethrown
- * and its `.message` is NEVER printed: `bin-rejoin.ts`'s `.then(process.exit)` has no `.catch`, so a
- * raw rejection here would dump a message that could carry the admin connection string straight to
- * stderr — the same second-layer defence `runRestore` documents.
+ * Returns a process exit code: 0 on success, 1 on an expected disaster-recovery failure (a
+ * missing or empty env var, an unprovisioned box, an unreadable artifact, an invalid
+ * `WAITRON_ENV`, a restore URL with no db name, or ANY error out of the orchestrator — a
+ * `rejoin.*`/`restore.*`/`recovery.*`/ `backup.*` `AppError` reported by code, a decrypt-phase
+ * code collapsed to one non-oracle message, and anything else reported generically), 2 on a usage
+ * error. The orchestrator's error is NEVER rethrown and its `.message` is NEVER printed:
+ * `bin-rejoin.ts`'s `.then(process.exit)` has no `.catch`, so a raw rejection here would dump a
+ * message that could carry the admin connection string straight to stderr — the same second-layer
+ * defence `runRestore` documents.
  */
 export async function runRejoin(deps: {
   argv: string[];

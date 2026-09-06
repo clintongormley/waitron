@@ -10,9 +10,10 @@ import { asAppUser, withTenant, type Database } from "@waitron/db";
 import { authenticateAgent } from "@waitron/printing";
 
 /**
- * Everything `requireAgent` needs: the app pool and this venue's one tenant, exactly the subset the
- * other gated surfaces take. No cookie/session config — a print agent authenticates with a BEARER
- * token (the sync-api machine-to-machine shape), never a browser cookie.
+ * The deployment holds one tenant per database. Everything `requireAgent` needs: the app pool and
+ * this venue's tenant, exactly the subset the other gated surfaces take. No cookie/session config
+ * — a print agent authenticates with a BEARER token (the sync-api machine-to-machine shape),
+ * never a browser cookie.
  */
 export interface PrintAgentSessionDeps {
   db: Database;

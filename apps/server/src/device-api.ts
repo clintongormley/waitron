@@ -396,8 +396,8 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   app.get("/management-api/devices", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // This read has no tenant filter and assumes one tenant per database. Newest enrolment
-      // first.
+      // The deployment holds one tenant per database. This read has no tenant filter. Newest
+      // enrolment first.
       const rows = await gated(sessionId, (tx) =>
         tx
           .select({
@@ -510,12 +510,12 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
               .from(devices)
               .where(eq(devices.active, true))
               .orderBy(desc(devices.enrolledAt));
-            // The option-sources for minting a new device (`POST /api/dev/devices`): the tenant's
-            // tills (no explicit tenant filter; one tenant per database), its kitchen stations,
-            // and its device profiles. (Since the Task 10 cutover a device binds its canvas +
-            // capabilities through a device profile, so the dev mint offers a PROFILE picker
-            // where it used to offer a canvas one — the exact analogue, `listDeviceProfiles` in
-            // the SAME transaction the canvas list used.)
+            // The deployment holds one tenant per database. The option-sources for minting a new
+            // device (`POST /api/dev/devices`): the tenant's tills (no explicit tenant filter),
+            // its kitchen stations, and its device profiles. (Since the Task 10 cutover a device
+            // binds its canvas + capabilities through a device profile, so the dev mint offers a
+            // PROFILE picker where it used to offer a canvas one — the exact analogue,
+            // `listDeviceProfiles` in the SAME transaction the canvas list used.)
             const tillRows = await tx
               .select({ id: tills.id, name: tills.name, locationId: tills.locationId })
               .from(tills);

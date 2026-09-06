@@ -19,11 +19,11 @@ type Env = Record<string, string | undefined>;
  * tenant, gated ONLY by physical shell access plus the box's `DATABASE_URL` — nothing at the
  * application layer.
  *
- * The ungated reset lives HERE, not in `@waitron/identity`, on purpose: exposing a reusable
- * ungated reset from the identity package would be a permission-bypass anyone could import. This
- * command writes `persons` directly (the same columns `setPassword`/`resetPin` set) under
- * `withTenant`, so the by-id write assumes one tenant per database — the reset bypasses the
- * application permission gate.
+ * The deployment holds one tenant per database. The ungated reset lives HERE, not in
+ * `@waitron/identity`, on purpose: exposing a reusable ungated reset from the identity package
+ * would be a permission-bypass anyone could import. This command writes `persons` directly (the
+ * same columns `setPassword`/`resetPin` set) under `withTenant`; the write is by id — the reset
+ * bypasses the application permission gate.
  *
  * Secrets come from the environment, NEVER argv — an argv element leaks into the process table
  * (`ps`), the same reason `waitron-recovery`/`register-till` read theirs from env. The new password
@@ -106,7 +106,8 @@ export async function runBreakGlassReset(deps: {
   const db = await deps.connect(databaseUrl);
   try {
     return await withTenant(db, tenantId, async (tx) => {
-      // The unfiltered tenant scope assumes one tenant per database: these are the box's admins.
+      // The deployment holds one tenant per database. The read is unfiltered: these are the box's
+      // admins.
       const admins = await tx
         .select({ id: persons.id })
         .from(persons)

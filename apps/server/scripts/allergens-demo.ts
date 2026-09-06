@@ -6,16 +6,20 @@
 // `CORE_MIGRATIONS` alone suffices: it creates the catalogue tables (0026) and the
 // `products.allergens` jsonb column (0031), which is everything read here.
 //
-// It: 1. boots an in-memory PGlite and applies `CORE_MIGRATIONS`; 2. seeds a tenant + location as
-// the PGlite superuser — `app_user` holds no INSERT on `tenants`, deliberately (a running POS
-// cannot create tenants); 3. as the application role, seeds ONE catalogue with four products
-// carrying VARIED allergen states, then assigns the catalogue to the location: - "Empanada de
-// trigo" → contains gluten (source: wheat) + eggs — a `contains` with a SOURCE - "Tarta de la
-// casa" → contains milk, MAY contain nuts — a `may_contain` - "Ensalada de la huerta"→ {} —
-// reviewed, no declarable allergens — the empty-but-reviewed case - "Sopa del día" → allergens
-// unset (null) — NOT yet reviewed → PENDING 4. reads the sellable products back with
-// `listAvailableProducts` (as the app role, exactly as the till does) and prints (a) an allergen
-// matrix (product × allergen) and (b) a single-product operator-lookup view.
+// It:
+// 1. boots an in-memory PGlite and applies `CORE_MIGRATIONS`;
+// 2. seeds a tenant + location as the PGlite superuser — `app_user` holds no INSERT on `tenants`,
+//    deliberately (a running POS cannot create tenants);
+// 3. as the application role, seeds ONE catalogue with four products carrying VARIED allergen
+//    states, then assigns the catalogue to the location:
+//    - "Empanada de trigo" → contains gluten (source: wheat) + eggs — a `contains` with a SOURCE
+//    - "Tarta de la casa" → contains milk, MAY contain nuts — a `may_contain`
+//    - "Ensalada de la huerta"→ {} — reviewed, no declarable allergens — the empty-but-reviewed
+//      case
+//    - "Sopa del día" → allergens unset (null) — NOT yet reviewed → PENDING
+// 4. reads the sellable products back with `listAvailableProducts` (as the app role, exactly as
+//    the till does) and prints (a) an allergen matrix (product × allergen) and (b) a
+//    single-product operator-lookup view.
 //
 // The load-bearing distinction (design D4): a reviewed product with no allergens ({}) is allergen-FREE,
 // while a product with `allergens = null` is PENDING — never yet reviewed, and must NEVER be shown as

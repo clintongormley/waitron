@@ -28,7 +28,7 @@ export type DeploymentEnvironment = "production" | "preproduction";
  * caller may still need.
  *
  * The return type is narrowed to `DeploymentEnvironment | null`, not a bare `string`, because
- * `0010_deployment_stamp.sql`'s `deployment_environment_ck` is the thing that makes this honest: no
+ * `0001_db_baseline_sql.sql`'s `deployment_environment_ck` is the thing that makes this honest: no
  * row can exist in this column outside `'production'`/`'preproduction'`, so a value read back here
  * is one of those two by construction, never a value merely assumed to be safe.
  */

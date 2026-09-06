@@ -10,12 +10,14 @@
 // published column plus its `manual_allergens`/`recipe_derivation` overlays, and (0038/0039) the
 // `ingredients` and `recipe_lines` tables read and written here.
 //
-// It: 1. boots an in-memory PGlite and applies `CORE_MIGRATIONS`; 2. seeds a tenant + location as
-// the PGlite superuser — `app_user` holds no INSERT on `tenants`, deliberately (a running POS
-// cannot create tenants); 3. as the application role (`withTenant` opens the transaction,
-// `asAppUser` selects the app role on PostgreSQL, exactly as the running POS does), walks the
-// six-step story below, reading the PUBLISHED `products.allergens` column back after each
-// mutation and asserting it matches.
+// It:
+// 1. boots an in-memory PGlite and applies `CORE_MIGRATIONS`;
+// 2. seeds a tenant + location as the PGlite superuser — `app_user` holds no INSERT on `tenants`,
+//    deliberately (a running POS cannot create tenants);
+// 3. as the application role (`withTenant` opens the transaction, `asAppUser` selects the app
+//    role on PostgreSQL, exactly as the running POS does), walks the six-step story below,
+//    reading the PUBLISHED `products.allergens` column back after each mutation and asserting it
+//    matches.
 //
 // The story (design D4 — floor ∪ manual, add-only, with PENDING contagion):
 //   3. setProductRecipe(bocadillo, [alioli, pan])            → {eggs, gluten}         (inherited floor)

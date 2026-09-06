@@ -225,7 +225,7 @@ describe("mountSyncApi peer auth + handshake", () => {
         { nodeId: NODE_A },
       );
       // A captured FAST-lane payments row (same origin NODE_A). app_user holds INSERT on payments
-      // (0001_payments_rls.sql:30) and the payments_capture AFTER-INSERT trigger writes it to sync_log
+      // (0001_payments_baseline_sql.sql:3) and the payments_capture AFTER-INSERT trigger writes it to sync_log
       // with origin_id = the app.node_id GUC withTenant set.
       await withTenant(
         app_,

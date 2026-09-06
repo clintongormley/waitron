@@ -309,9 +309,10 @@ export async function payWorkingOrder(
       async (tx) => {
         await asAppUser(tx);
 
-        // Step 1. Lock/resolve the order by its id in this one-tenant database. FOR UPDATE
-        // serialises a concurrent pay on a PARKED order; on a walk-up there is no row yet, so it
-        // locks nothing and the 23505 catch below is that shape's backstop.
+        // The deployment holds one tenant per database. Step
+        // 1. Lock/resolve the order by its id in this database. FOR UPDATE serialises a
+        //    concurrent pay on a PARKED order; on a walk-up there is no row yet, so it locks
+        //    nothing and the 23505 catch below is that shape's backstop.
         const [locked] = await tx
           .select({ status: workingOrders.status })
           .from(workingOrders)
@@ -1476,9 +1477,10 @@ export function toPayOutcome(
  * the ticket (filing/settling nothing). The `sales_working_order_id_key` and `sale_settlements` UNIQUE
  * constraints are the constraints underneath, but the lock means neither is ever reached concurrently.
  *
- * A non-`placed`, non-`settled` order (still `open`, already `abandoned`, or absent in this
- * one-tenant database) fails closed with `working_order.not_placed` — collect is a placed-order
- * operation. The tender guard mirrors `payWorkingOrder`'s: cash or manual card only.
+ * The deployment holds one tenant per database. A non-`placed`, non-`settled` order (still
+ * `open`, already `abandoned`, or absent in this database) fails closed with
+ * `working_order.not_placed` — collect is a placed-order operation. The tender guard mirrors
+ * `payWorkingOrder`'s: cash or manual card only.
  *
  * `req.lines` is IGNORED (a placed order files its frozen stored composition); it is on
  * `PayWorkingOrderRequest` only to share the shape. `operatorId` is the collecting operator.
@@ -1582,7 +1584,7 @@ export async function collectOrder(
           // fired to a station leaves that station's queue (`listStationQueue` excludes
           // `collected_at IS NOT NULL`) once collected. It is stamped in THIS same placed → settled
           // UPDATE — a later UPDATE on the settled row would be a settled → settled edit, which
-          // `working_orders_enforce_transition` rejects (0030_prepare_collect.sql). Same instant as
+          // `working_orders_enforce_transition` rejects (0001_db_baseline_sql.sql). Same instant as
           // `settled_at` (the collect's own clock reading). NON-FISCAL: the alta path never reads it,
           // and the H2 huella-identity test pins two records differing only in it hash identically.
           .set({

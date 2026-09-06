@@ -1300,10 +1300,10 @@ describe("C1 — the dining_tables FK-closure enrolment (the ordered-lane hard g
   it("replicates a settle's status clear: the working_orders→dining_tables cascade (0050) applies and echo-suppresses", async () => {
     // Models the REAL source→mirror flow for a tab settling on a laid-out floor. On the SOURCE a single
     // settle UPDATE of the working_order fires working_orders_clear_table_status
-    // (packages/db/drizzle/0050_clear_table_status_trigger.sql:48-52 — AFTER UPDATE, NOT gated on
+    // (packages/db/drizzle/0001_db_baseline_sql.sql:389-393 — AFTER UPDATE, NOT gated on
     // app.sync_apply), which cascades `UPDATE dining_tables SET status_id = NULL WHERE tab_id = NEW.id`
-    // (0050:40-43). Because working_orders_capture fires before working_orders_clear_table_status
-    // (alphabetical trigger order), the source captures BOTH — a working_orders UPDATE (status=settled)
+    // (0001_db_baseline_sql.sql:381-384). Because working_orders_capture fires before
+    // working_orders_clear_table_status (alphabetical trigger order), the source captures BOTH — a working_orders UPDATE (status=settled)
     // at the LOWER seq and the cascaded dining_tables UPDATE (status_id=NULL) at the higher. This asserts
     // a DR mirror converges on applying that batch.
     //

@@ -10,8 +10,8 @@ import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
  *
  * One template, because every real-PG suite here migrates exactly `CORE_MIGRATIONS` — the print
  * tables (`print_agents`, `print_agent_pairing_codes`, `printers`, `print_jobs`) ship in CORE's
- * `0062_printing.sql`/`0063_printing_rls.sql`, so there is no printing-specific migration set to
- * layer on top. Suites clone it with `useTemplateDb({ template: "core" })`.
+ * `0000_db_baseline.sql`/`0001_db_baseline_sql.sql`, so there is no printing-specific migration
+ * set to layer on top. Suites clone it with `useTemplateDb({ template: "core" })`.
  *
  * NO cluster `roles` are provided: the enrol/auth suites drive the real deployment role by switching
  * to it inside a superuser transaction (`withTenant` + `asAppUser`, i.e. `set local role app_user`),

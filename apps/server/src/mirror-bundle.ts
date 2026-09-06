@@ -2,10 +2,10 @@
 // reads a venue's parent rows + the box's connection details and mints ONE per-peer sync token,
 // returning a `MirrorBundle` the endpoint serves and the mirror consumes via `adoptVenue`.
 //
-// The database holds one tenant. The tenant row is selected by id; locations, nodes, tills and
-// invoice series are read without tenant predicates. `app_user` holds SELECT on these parent
-// tables in the core baseline. The token is minted in PLAINTEXT via `enrolPeer` and returned
-// ONCE; sealing is mirror-side (design §10), and the token is never logged.
+// The deployment holds one tenant per database. The tenant row is selected by id; locations,
+// nodes, tills and invoice series are read without tenant predicates. `app_user` holds SELECT on
+// these parent tables in the core baseline. The token is minted in PLAINTEXT via `enrolPeer` and
+// returned ONCE; sealing is mirror-side (design §10), and the token is never logged.
 import "./errors.js";
 import { readFile } from "node:fs/promises";
 import { eq } from "drizzle-orm";
@@ -115,7 +115,7 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
       // (`config.till`), and a provisioned till always has its tenant row (minted as its FK
       // parent at provision), so the by-id lookup always returns exactly one row.
       tenant: (await tx.select().from(tenants).where(eq(tenants.id, deps.designated.tenantId)))[0]!,
-      locations: await tx.select().from(locations), // These unfiltered reads assume one tenant per database.
+      locations: await tx.select().from(locations), // The deployment holds one tenant per database. These reads are unfiltered.
       nodes: await tx.select().from(nodes),
       tills: await tx.select().from(tills),
       invoiceSeries: await tx.select().from(invoiceSeries),

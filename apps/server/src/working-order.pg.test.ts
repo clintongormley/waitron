@@ -442,11 +442,11 @@ async function addTill(cfg: TillConfig, name: string): Promise<TillConfig> {
 }
 
 /**
- * A SECOND node under the SAME tenant + location — a `cfg` differing only in `node_id`. It never
- * sells here; it exists so `listHeldOrders` on it proves the `node_id = cfg.nodeId` filter within
- * the one-tenant database. Inserted as the owner under `withTenant`, the way `applyVenue`'s
- * create-node does; `filing_module`/`tax_module` are nullable and unused for a listing-only node,
- * so they are left out.
+ * The deployment holds one tenant per database. A SECOND node under the SAME tenant + location —
+ * a `cfg` differing only in `node_id`. It never sells here; it exists so `listHeldOrders` on it
+ * proves the `node_id = cfg.nodeId` filter within this database. Inserted as the owner under
+ * `withTenant`, the way `applyVenue`'s create-node does; `filing_module`/`tax_module` are
+ * nullable and unused for a listing-only node, so they are left out.
  */
 async function addNode(cfg: TillConfig, name: string): Promise<TillConfig> {
   const id = randomUUID();

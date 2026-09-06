@@ -5,7 +5,7 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { insertFiscalRegistro, seedFiscalParents } from "./testing/fiscal-fixtures.js";
 
 // Real Postgres, not PGlite: this suite proves the six fiscal sync_capture triggers (SP-3a,
-// packages/fiscal-verifactu/drizzle/0014_fiscal_sync_capture.sql) fire under the genuine
+// packages/fiscal-verifactu/drizzle/0001_fiscal_baseline_sql.sql) fire under the genuine
 // non-superuser deployment role — capturing byte-identically into sync_log, honouring the
 // app.sync_apply echo guard, and, the two fiscal-specific facts:
 //   (1) capture works on `registros_facturacion` DESPITE its `REVOKE ALL` — the writer holds

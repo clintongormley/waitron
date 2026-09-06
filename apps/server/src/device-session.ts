@@ -133,15 +133,15 @@ function toDeviceBinding(deviceId: string, row: Omit<DeviceBinding, "deviceId">)
  * stored hash — returns the SAME `null`, so `requireDevice`'s `device.unauthorized` confirms neither a
  * device's existence nor its revocation state to whoever asked (the fail-closed reasoning in `errors.ts`).
  *
- * The lookup runs as `app_user` inside `withTenant` and assumes one tenant per database; it
- * filters by id and active state only. The `active = true` filter makes revocation INSTANT: a
- * revoked row is simply not found, with no token lifetime to expire. `verifySecret` (scrypt,
- * `@waitron/identity`) is constant-time — the token is NEVER compared with `===`. On a successful
- * COOKIE read the sighting is recorded (`last_seen_at = now()`, gated to at most one write per
- * minute — see the UPDATE below) and the binding returned; nothing is logged, and the token never
- * leaves this function. That `last_seen_at` write happens ONLY on the cookie success path, so a
- * firewall probe on a non-device request is a pure read — and so is the devMode override branch
- * above, which resolves the binding by id and writes nothing.
+ * The deployment holds one tenant per database. The lookup runs as `app_user` inside
+ * `withTenant`; it filters by id and active state only. The `active = true` filter makes
+ * revocation INSTANT: a revoked row is simply not found, with no token lifetime to expire.
+ * `verifySecret` (scrypt, `@waitron/identity`) is constant-time — the token is NEVER compared
+ * with `===`. On a successful COOKIE read the sighting is recorded (`last_seen_at = now()`, gated
+ * to at most one write per minute — see the UPDATE below) and the binding returned; nothing is
+ * logged, and the token never leaves this function. That `last_seen_at` write happens ONLY on the
+ * cookie success path, so a firewall probe on a non-device request is a pure read — and so is the
+ * devMode override branch above, which resolves the binding by id and writes nothing.
  *
  * `deps.cfg` is typed to the ONE field this reads — `tenantId` — matching `requireSession`, so any route
  * group carrying only `{ tenantId }` can gate on it without contriving a full config.
@@ -272,22 +272,23 @@ export async function requireDevice(
  * {@link tryReadDevice} (the `app_user` role) and fails CLOSED. Both refusals are documented
  * SETUP preconditions (§16.5) — a sellable box MUST be an enrolled, till-bound device — analogous
  * to the boot-time `server.till_config_missing`, NOT a per-sale block (a mis-provisioned box is a
- * setup fault surfaced before the fiscal write, not the sale itself failing, CLAUDE.md §5): - No
- * `waitron_device` cookie (`tryReadDevice` → `null`) ⇒ `device.unauthorized` — the existing
- * device-auth code (an ordinary env-only till is no longer a sellable box on its own). - A device
- * with no till (`tillId === null`, e.g. a `kds_station`, which rings no sale) ⇒
- * `device.till_required` — the mint-time twin (Task 12) reused: a till-less device cannot ring a
- * sale.
+ * setup fault surfaced before the fiscal write, not the sale itself failing, CLAUDE.md §5):
+ * - No `waitron_device` cookie (`tryReadDevice` → `null`) ⇒ `device.unauthorized` — the existing
+ *   device-auth code (an ordinary env-only till is no longer a sellable box on its own).
+ * - A device with no till (`tillId === null`, e.g. a `kds_station`, which rings no sale) ⇒
+ *   `device.till_required` — the mint-time twin (Task 12) reused: a till-less device cannot ring
+ *   a sale.
  *
- * On success the row's `till_id` is branded `TillId` via the shared `tillId` guard (UUID-validated,
- * `packages/shared/src/ids.ts`), the SAME brand `loadTillConfig` applies to the env value it replaces
- * (`till-config.ts`).
+ * On success the row's `till_id` is branded `TillId` via the shared `tillId` guard
+ * (UUID-validated, `packages/shared/src/ids.ts`), the SAME brand `loadTillConfig` applies to the
+ * env value it replaces (`till-config.ts`).
  *
- * `device` is an OPTIONAL pre-resolved binding: a route that also runs a device/capability guard reads
- * the binding ONCE (`tryReadDevice`) and threads it to both, so scrypt + the `withTenant` read run once
- * per request instead of twice. Passing `null` means "resolved, no device" (fail-closed → `unauthorized`);
- * OMITTING it preserves the original behaviour — this reads the binding itself. Undefined (omitted), not
- * null, is the "read it yourself" signal, so the fail-closed null path is unchanged either way.
+ * `device` is an OPTIONAL pre-resolved binding: a route that also runs a device/capability guard
+ * reads the binding ONCE (`tryReadDevice`) and threads it to both, so scrypt + the `withTenant`
+ * read run once per request instead of twice. Passing `null` means "resolved, no device"
+ * (fail-closed → `unauthorized`); OMITTING it preserves the original behaviour — this reads the
+ * binding itself. Undefined (omitted), not null, is the "read it yourself" signal, so the
+ * fail-closed null path is unchanged either way.
  */
 export async function requireSaleTillId(
   deps: { db: Database; cfg: { tenantId: string }; devMode?: boolean },
@@ -331,38 +332,44 @@ export async function assertNotHandheld(
 }
 
 /**
- * The device-capability firewall (SP-A.2 §16 / design §5 layer 2) — the generalisation of
- * {@link assertNotHandheld} from a hardcoded KIND check to a DECLARED capability, resolved through the
- * device's PROFILE (device-profile design 2026-09-05 §5.3, Task 9). A route that requires
- * a server-enforced device capability (the INTEGRATED card reader ⇒ `integrated-card-payment`; opening
- * the cash drawer ⇒ `open-cash-drawer`) runs this right after its `requireSession` guard, on the SAME
- * request, so the fence holds even if the client were bypassed — the identical placement and reasoning
- * as `assertNotHandheld`, which it replaces on those two routes. It guards UNRECOVERABLE fiscal records
- * (CLAUDE.md §5), so it fails CLOSED: any device that cannot be shown to hold the capability is refused
- * with `device.forbidden_action` naming the attempted `action`.
+ * The device-capability firewall (SP-A.2 §16 / design §5 layer 2) — the generalisation of {@link
+ * assertNotHandheld} from a hardcoded KIND check to a DECLARED capability, resolved through the
+ * device's PROFILE (device-profile design 2026-09-05 §5.3, Task 9). A route that requires a
+ * server-enforced device capability (the INTEGRATED card reader ⇒ `integrated-card-payment`;
+ * opening the cash drawer ⇒ `open-cash-drawer`) runs this right after its `requireSession` guard,
+ * on the SAME request, so the fence holds even if the client were bypassed — the identical
+ * placement and reasoning as `assertNotHandheld`, which it replaces on those two routes. It
+ * guards UNRECOVERABLE fiscal records (CLAUDE.md §5), so it fails CLOSED: any device that cannot
+ * be shown to hold the capability is refused with `device.forbidden_action` naming the attempted
+ * `action`.
  *
- * The branches, in order: 1. No device cookie (`tryReadDevice` → `null`) — an ordinary
- * env-configured/legacy till, which authenticates by operator SESSION and carries no
- * `waitron_device`. It PASSES, exactly as `assertNotHandheld`'s absent-cookie branch does:
- * "nothing blocks a sale" on a cookie-less till. 2. A device with NO assigned device profile
- * (`deviceProfileId === null`) declares no capabilities at all — refused. (This is the path the
- * old handheld, which carries no profile, now falls down.) 3. Resolve the assigned DEVICE PROFILE
- * via `getDeviceProfile` under the SAME `withTenant` + `asAppUser` scope `tryReadDevice` uses,
- * and `getDeviceProfile` explicitly filters by tenant id. A bound-but-missing profile is
- * unreachable (the `(tenant_id, device_profile_id)` FK is RESTRICT — see `devices.ts`); treated
- * defensively as no-capability. 4. Whether the profile's declared `capabilities` include the
- * required flag decides pass vs refuse.
+ * The branches, in order:
+ * 1. No device cookie (`tryReadDevice` → `null`) — an ordinary env-configured/legacy till, which
+ *    authenticates by operator SESSION and carries no `waitron_device`. It PASSES, exactly as
+ *    `assertNotHandheld`'s absent-cookie branch does: "nothing blocks a sale" on a cookie-less
+ *    till.
+ * 2. A device with NO assigned device profile (`deviceProfileId === null`) declares no
+ *    capabilities at all — refused. (This is the path the old handheld, which carries no profile,
+ *    now falls down.)
+ * 3. Resolve the assigned DEVICE PROFILE via `getDeviceProfile` under the SAME `withTenant` +
+ *    `asAppUser` scope `tryReadDevice` uses, and `getDeviceProfile` explicitly filters by tenant
+ *    id. A bound-but-missing profile is unreachable (the `(tenant_id, device_profile_id)` FK is
+ *    RESTRICT — see `devices.ts`); treated defensively as no-capability.
+ * 4. Whether the profile's declared `capabilities` include the required flag decides pass vs
+ *    refuse.
  *
- * Capabilities relocated OFF the canvas onto the device profile (device-profile design 2026-09-05 §5.3,
- * Task 9): a canvas is the display, capabilities are facts about the box. A handheld carrying a
- * capability-less profile (or no profile at all) is therefore still refused pay + drawer — the
- * handheld-firewall behaviour is PRESERVED, now enforced by the profile's capability set.
+ * Capabilities relocated OFF the canvas onto the device profile (device-profile design 2026-09-05
+ * §5.3, Task 9): a canvas is the display, capabilities are facts about the box. A handheld
+ * carrying a capability-less profile (or no profile at all) is therefore still refused pay +
+ * drawer — the handheld-firewall behaviour is PRESERVED, now enforced by the profile's capability
+ * set.
  *
- * `device` is an OPTIONAL pre-resolved binding (see {@link requireSaleTillId}): `/api/pay` reads the
- * binding ONCE and threads it here and to `requireSaleTillId`, so the device read + scrypt run once per
- * request (the profile `getDeviceProfile` read below is a separate query and always runs). `null` means
- * "resolved, no device" (passes, branch 1); OMITTING it preserves the original behaviour — this reads
- * the binding itself, which is why the other capability call-site (`/api/drawer/open`) need not change.
+ * `device` is an OPTIONAL pre-resolved binding (see {@link requireSaleTillId}): `/api/pay` reads
+ * the binding ONCE and threads it here and to `requireSaleTillId`, so the device read + scrypt
+ * run once per request (the profile `getDeviceProfile` read below is a separate query and always
+ * runs). `null` means "resolved, no device" (passes, branch 1); OMITTING it preserves the
+ * original behaviour — this reads the binding itself, which is why the other capability call-site
+ * (`/api/drawer/open`) need not change.
  */
 export async function assertDeviceCapability(
   deps: { db: Database; cfg: { tenantId: string }; devMode?: boolean },

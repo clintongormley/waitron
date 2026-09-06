@@ -24,8 +24,8 @@ function uuidV5(name: string, namespace: string): string {
  * INVARIANT: any future PRODUCTION tenant-creation path MUST derive its id through this function,
  * never a random one. `applyVenue`'s re-run idempotency uses this derived id and
  * inserts the tenant with `ON CONFLICT DO NOTHING` (venue-apply.ts), and `locations.tenant_id`
- * FK-references `tenants.id` (packages/db/drizzle/0000_baseline.sql) — a second path that minted a RANDOM id for the same
- * (country, tax_id) would make the re-run's ON CONFLICT a no-op while the scope adopts the derived
+ * FK-references `tenants.id` (packages/db/drizzle/0000_db_baseline.sql) — a second path that minted a
+ * RANDOM id for the same (country, tax_id) would make the re-run's ON CONFLICT a no-op while the scope adopts the derived
  * id, so every location insert would fail the FK. `venue` is the only such path today; `seedTenant`
  * and the fixtures use `defaultRandom()` ids but are test-only.
  *

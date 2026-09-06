@@ -232,7 +232,7 @@ async function readEnvio(
 
 /** Deletes the fiscal sidecar rows a test seeded so the clone stays order-independent (CLAUDE.md §4):
  * `envios` (keyed by registro id) is what makes the tenant perpetually due; `incidents` (keyed by
- * tenant id — it carries no registro_id column, 0007_incidents.sql) is defensive against a failure
+ * tenant id — it carries no registro_id column, 0000_db_baseline.sql) is defensive against a failure
  * path that raises one, matching boot.test.ts's own drain-cleanup convention. */
 async function cleanupFiscalWork(seeded: {
   registroIds: string[];

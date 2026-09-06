@@ -209,7 +209,7 @@ describe("fiscal apply gate — verbatim replication of the immutable ledger", (
     // fails the moment its guard is absent. Two enforcement layers, both proven on the RESTORED/MIRRORED
     // table (measured 2026-09-05, receipts in the report):
     //   1. GRANT (the front-line protection): the apply role holds only SELECT,INSERT on
-    //      registros_facturacion (0001_registros_inmutables.sql), so a direct UPDATE or TRUNCATE is
+    //      registros_facturacion (0001_fiscal_baseline_sql.sql), so a direct UPDATE or TRUNCATE is
     //      refused at the privilege check — SQLSTATE 42501, BEFORE any trigger fires. This is what
     //      actually stops the apply worker tampering with the ledger.
     //   2. TRIGGER (the backstop): a privilege-bypassing SUPERUSER still trips the append-only trigger

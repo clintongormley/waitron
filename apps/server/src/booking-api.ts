@@ -162,12 +162,12 @@ function screenPatch(v: Record<string, unknown>): UpdateBookingPatch {
 }
 
 /**
- * Mounts the dashboard's gated booking write group on an existing Hono app —
- * `mountPurchasingApi`'s sibling, attached to the SAME app (the `mountWebhook`/`mountTillApi`
- * convention). Every route wraps its handler in `run`, calls `requireManagementSession(c)` (→ 401
- * before any DB work) and then, inside `withTenant` + `asAppUser`, `authorizeManager(...)` (→
- * 403) before the `./bookings.js` verb, in the database holding this server's one tenant. The
- * `booking.manage` gate runs on every route through one constant. No fiscal path is touched:
+ * The deployment holds one tenant per database. Mounts the dashboard's gated booking write group
+ * on an existing Hono app — `mountPurchasingApi`'s sibling, attached to the SAME app (the
+ * `mountWebhook`/`mountTillApi` convention). Every route wraps its handler in `run`, calls
+ * `requireManagementSession(c)` (→ 401 before any DB work) and then, inside `withTenant` +
+ * `asAppUser`, `authorizeManager(...)` (→ 403) before the `./bookings.js` verb, in this database.
+ * The `booking.manage` gate runs on every route through one constant. No fiscal path is touched:
  * `seatBooking` opens a pre-fiscal working order only.
  */
 export function mountBookingsApi(app: Hono, deps: BookingsApiDeps, log: Logger): void {

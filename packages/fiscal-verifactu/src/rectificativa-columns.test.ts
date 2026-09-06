@@ -191,7 +191,7 @@ describe("the new columns inherit the table's immutability", () => {
   class RollbackSignal extends Error {}
 
   it("refuses an UPDATE of tipo_rectificativa by the trigger backstop", async () => {
-    // Confirms the table-wide reject_mutation() trigger (0001_registros_inmutables.sql) covers the
+    // Confirms the table-wide reject_mutation() trigger (0001_fiscal_baseline_sql.sql) covers the
     // new column with NO new DDL. Revocation fires first for the app role, so — exactly as
     // inmutabilidad.test.ts does for `huella` — grant UPDATE inside a rolled-back transaction and
     // watch the SECOND layer (the trigger) catch it. WT001 is the trigger's SQLSTATE.

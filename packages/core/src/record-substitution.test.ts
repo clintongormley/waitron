@@ -35,11 +35,11 @@ let seriesId: SeriesId; // the ordinary (purpose='standard') series — the F3 r
 // requires `sale.void`, and only the void's authorization matters here, not the substitution's caller.
 let voidSessionId: string;
 
-// PGlite for everything in this file: the guards here are pure logic (an empty list, a duplicate id,
-// an unknown/voided/already-substituted ticket, a wrong-node series) that a superuser backend
-// exercises just as well as a non-superuser one. `sale.not_found` and `sale.series_not_found` are
-// asserted below for a genuinely ABSENT row, which is what those codes mean with one tenant per
-// database — the same shape record-correction.test.ts uses.
+// The deployment holds one tenant per database. PGlite for everything in this file: the guards
+// here are pure logic (an empty list, a duplicate id, an unknown/voided/already-substituted
+// ticket, a wrong-node series) that a superuser backend exercises just as well as a non-superuser
+// one. `sale.not_found` and `sale.series_not_found` are asserted below for a genuinely ABSENT
+// row, which is what those codes mean here — the same shape record-correction.test.ts uses.
 const suite = usePgliteDb({
   // IDENTITY_MIGRATIONS after CORE: recordVoid now calls `authorize`, which reads persons/sessions.
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
@@ -280,8 +280,6 @@ describe("recordSubstitution — error propagation", () => {
     const foreignTicket = await seedBareSale(suite.db, other);
 
     const error = await captureError(() =>
-      // Use the caller's transaction so the failed association insert rolls back with the
-      // substitution.
       withTenant(suite.db, tenantId, (tx) =>
         recordSubstitution(tx, backend, substitutionInput([foreignTicket])),
       ),

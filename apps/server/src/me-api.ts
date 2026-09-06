@@ -26,10 +26,11 @@ import {
 import type { Logger } from "./logger.js";
 
 /**
- * The deps the "me" API needs — the SAME minimal shape `mountScheduleApi` takes: no fiscal backend,
- * clock or card provider, because these routes touch only the identity session (`management_sessions`)
- * and the planning tables (`shifts`/`shift_swaps`/`absences`). `cfg.tenantId` is this venue's one tenant,
- * scoping every `withTenant` below.
+ * The deployment holds one tenant per database. The deps the "me" API needs — the SAME minimal
+ * shape `mountScheduleApi` takes: no fiscal backend, clock or card provider, because these routes
+ * touch only the identity session (`management_sessions`) and the planning tables
+ * (`shifts`/`shift_swaps`/`absences`). `cfg.tenantId` is this venue's tenant, scoping every
+ * `withTenant` below.
  */
 export interface MeApiDeps {
   db: Database;
@@ -122,13 +123,13 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     run(c, log, async () => c.json({ locales: SUPPORTED_LOCALES, venueDefault: deps.venueLocale })),
   );
 
-  // Whoami: who is signed into this browser, with what role and in which language.
-  // `requireManagementSession` screens the cookie's SHAPE (401 before any DB work), then
-  // `resolveManagementSession` re-reads the live session + the person's current role, status and
-  // `locale` in this one-tenant database (a suspended person 403s here). Role-blind: NO
-  // `authorizeManager`, so a staff session answers `{ role: "staff" }` rather than 403 — this is
-  // the endpoint the dashboard shell probes to decide whether to open the staff view or the
-  // manager screens. `locale` is the signed-in person's OWN UI-language preference
+  // The deployment holds one tenant per database. Whoami: who is signed into this browser, with
+  // what role and in which language. `requireManagementSession` screens the cookie's SHAPE (401
+  // before any DB work), then `resolveManagementSession` re-reads the live session + the person's
+  // current role, status and `locale` in this database (a suspended person 403s here).
+  // Role-blind: NO `authorizeManager`, so a staff session answers `{ role: "staff" }` rather than
+  // 403 — this is the endpoint the dashboard shell probes to decide whether to open the staff
+  // view or the manager screens. `locale` is the signed-in person's OWN UI-language preference
   // (`persons.locale`, null when unset); `venueLocale` is the geography-derived boot default
   // (`deps.venueLocale`) the dashboard falls back to when that preference is null — the same
   // value `GET /management-api/locales` echoes as `venueDefault`.

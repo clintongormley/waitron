@@ -140,7 +140,7 @@ describe("the destinatarios column inherits the table's immutability", () => {
   class RollbackSignal extends Error {}
 
   it("refuses an UPDATE of destinatarios by the trigger backstop", async () => {
-    // The table-wide reject_mutation() trigger (0001_registros_inmutables.sql) covers the new
+    // The table-wide reject_mutation() trigger (0001_fiscal_baseline_sql.sql) covers the new
     // column with NO new DDL. Revocation fires first for the app role, so — exactly as
     // rectificativa-columns.test.ts does — grant UPDATE inside a rolled-back transaction and watch
     // the SECOND layer (the trigger) catch it. WT001 is the trigger's SQLSTATE.

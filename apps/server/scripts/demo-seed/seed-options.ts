@@ -3,8 +3,9 @@
 // the steak — so the till shows a picker on those two products, the receipt/basket group their
 // modifier lines, and the dashboard's option-group manager has real content to show off.
 //
-// It runs inside the CALLER's transaction, under the app_user role the caller selected with
-// `withTenant`/`asAppUser` — the same posture `seedCatalogues` uses in this one-tenant database.
+// The deployment holds one tenant per database. `seedOptions` runs inside the CALLER's
+// transaction, under the app_user role the caller selected with `withTenant`/`asAppUser` — the same posture
+// `seedCatalogues` uses in this database.
 // `createOptionGroup`/`createOptionGroupItem`/`setProductOptionGroups` (`@waitron/catalogue`) are
 // plain catalogue operations, not session-gated the way `createPerson` (`@waitron/identity`) is,
 // so — like `seedCatalogues`'s `createProduct` — this calls them directly rather than

@@ -56,8 +56,8 @@ import type { Logger } from "./logger.js";
 
 /**
  * Everything the dashboard's catalogue-management routes need. Mirrors `ManagementApiDeps` — `db`
- * + this venue's own `cfg.tenantId` are passed to every `withTenant` below. The database holds
- * this server's one tenant. `mediaDir` is the absolute store `boot.ts` ensured exists;
+ * + this venue's own `cfg.tenantId` are passed to every `withTenant` below. The deployment holds
+ * one tenant per database. `mediaDir` is the absolute store `boot.ts` ensured exists;
  * `maxUploadBytes` is the DoS ceiling the upload route enforces (surfaced on `deps`, not a
  * constant, so a test can shrink it). No card provider, clock or secure-cookie flag: these routes
  * touch only the catalogue and the image store, and the session cookie is set by the
@@ -165,12 +165,13 @@ async function requireCatalogueIdBody(c: Context): Promise<string> {
 }
 
 /**
- * The trust-boundary check for an untrusted `catalogueId` a location-menu WRITE will reference:
- * refuse it as `catalogue.not_found` (404) unless it names a catalogue present in this one-tenant
- * database. Runs inside `gated`'s transaction; `catalogueExists` checks by id only. This is the
- * CLEAN-error front of a two-layer defense: both write targets carry a tenant-consistent
- * composite FK (`locations.catalogue_id` → 0078, `location_catalogues.catalogue_id` → 0074) that
- * 23503-rejects a cross-tenant id at the data layer anyway — see the route comment.
+ * The deployment holds one tenant per database. The trust-boundary check for an untrusted
+ * `catalogueId` a location-menu WRITE will reference: refuse it as `catalogue.not_found` (404)
+ * unless it names a catalogue present in this database. Runs inside `gated`'s transaction;
+ * `catalogueExists` checks by id only. This is the CLEAN-error front of a two-layer defense: both
+ * write targets carry a tenant-consistent composite FK (`locations.catalogue_id` → 0078,
+ * `location_catalogues.catalogue_id` → 0074) that 23503-rejects a cross-tenant id at the data
+ * layer anyway — see the route comment.
  */
 async function assertCatalogueVisible(tx: Transaction, catalogueId: string): Promise<void> {
   if (!(await catalogueExists(tx, catalogueId))) {
@@ -267,13 +268,13 @@ function parseOptionGroupIds(value: unknown): string[] | undefined {
 const UPLOAD_BODY_HEADROOM = 16 * 1024;
 
 /**
- * Mounts the dashboard's gated catalogue write group plus the image-upload route on an existing
- * Hono app — `mountManagementApi`'s sibling, attached to the SAME app (the
- * `mountWebhook`/`mountTillApi` convention). Every route wraps its handler in `run`, calls
- * `requireManagementSession(c)` (→ 401 before any DB work) and then, inside `withTenant` +
- * `asAppUser`, `authorizeManager(...)` (→ 403) before the headless `@waitron/catalogue` op, in
- * the database holding this server's one tenant. The `person.manage` gate runs on every route
- * through one constant.
+ * The deployment holds one tenant per database. Mounts the dashboard's gated catalogue write
+ * group plus the image-upload route on an existing Hono app — `mountManagementApi`'s sibling,
+ * attached to the SAME app (the `mountWebhook`/`mountTillApi` convention). Every route wraps its
+ * handler in `run`, calls `requireManagementSession(c)` (→ 401 before any DB work) and then,
+ * inside `withTenant` + `asAppUser`, `authorizeManager(...)` (→ 403) before the headless
+ * `@waitron/catalogue` op, in this database. The `person.manage` gate runs on every route through
+ * one constant.
  */
 export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger): void {
   // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries
@@ -320,21 +321,21 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  // ── Location menus
-  // ─────────────────────────────────────────────────────────────────────────────── The
-  // dashboard's location↔menu membership screen: which catalogues a location may SELL (its
+  // ── Location menus ───────────────────────────────────────────────────────────────────────────────
+  // The deployment holds one tenant per database.
+  // The dashboard's location↔menu membership screen: which catalogues a location may SELL (its
   // default `locations.catalogue_id` plus `location_catalogues` members). GET returns EVERY
   // tenant catalogue flagged sellable/isDefault so the screen can also offer the not-yet-sold
   // ones; POST/DELETE add and remove a member; PUT sets the default (keep-sellable — the old
   // default is demoted, never dropped). The two routes that WRITE a `catalogueId` reference (POST
   // add, PUT default) guard it with `catalogueExists` FIRST — an absent id is refused
-  // `catalogue.not_found` (404). The by-id lookup assumes one tenant per database. This is
-  // defense-in-depth, not the sole protection: BOTH write targets carry a tenant-consistent
-  // composite FK — `locations.catalogue_id` → catalogues(tenant_id,id) (0078),
-  // `location_catalogues` → (0074) — that 23503-rejects a foreign-tenant id at the DATA layer.
-  // The guard gives an absent id a clean error. A foreign row seeded into the same database
-  // passes that by-id lookup, but the composite FK still rejects the write with 23503. DELETE
-  // needs no guard: removing a non-member row is a no-op.
+  // `catalogue.not_found` (404). The lookup is by id. This is defense-in-depth, not the sole
+  // protection: BOTH write targets carry a tenant-consistent composite FK —
+  // `locations.catalogue_id` → catalogues(tenant_id,id) (0078), `location_catalogues` → (0074) —
+  // that 23503-rejects a foreign-tenant id at the DATA layer. The guard gives an absent id a
+  // clean error. A foreign row seeded into the same database passes that by-id lookup, but the
+  // composite FK still rejects the write with 23503. DELETE needs no guard: removing a non-member
+  // row is a no-op.
   app.get("/management-api/locations/:locationId/catalogues", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
