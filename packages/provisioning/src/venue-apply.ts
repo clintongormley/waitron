@@ -209,11 +209,14 @@ export async function applyVenue(
       }
     }
 
-    // Completeness guard for the one id no LATER action depends on: the ordering guards make
-    // locationId/nodeId non-empty whenever a dependent action runs, but nothing downstream reads
-    // tillId, so an OMITTED create-till slips through and would return a "complete" venue with an
-    // empty till id — a shop that cannot sell (recordSale needs a real till). Named here rather than
-    // left to fail confusingly later.
+    // Completeness guards for ids the ordering guards above cannot cover. Those guards only fire when
+    // a DEPENDENT action runs, so a plan that omits create-node (and therefore every seed and series
+    // that depends on it) reaches here with an empty nodeId, and a plan that omits create-till reaches
+    // here with an empty tillId — nothing downstream reads it at all. Either way the venue would be
+    // returned as "complete" with an empty id: a node that files nothing, or a shop that cannot sell
+    // (recordSale needs a real till). Named here rather than left to fail confusingly later. Plain
+    // Errors, NOT operator-facing AppError codes: a plan bug, not input.
+    if (nodeId === "") throw new Error("applyVenue: plan is missing create-node");
     if (tillId === "") throw new Error("applyVenue: plan is missing create-till");
     return { tenantId, locationId, tillId, nodeId, seriesIds, seeded };
   });

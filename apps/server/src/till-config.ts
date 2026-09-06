@@ -279,9 +279,11 @@ export async function readFilingModule(
       .where(eq(nodes.id, cfg.nodeId));
     /* v8 ignore start */
     if (row === undefined) {
-      // Structurally unreachable: the till is stamped with its own node, so the row always exists
-      // and RLS returns it. A till pointed at a nonexistent node is a misconfiguration that fails
-      // loudly at boot rather than selecting a fiscal backend against a guessed regime.
+      // Reachable only by operator misconfiguration: a till whose WAITRON_TILL_NODE_ID names a node
+      // that does not exist (or that RLS hides from its tenant). Provisioning stamps the till with
+      // its own node, so a correctly configured deployment never gets here; when it does, boot fails
+      // loudly rather than selecting a fiscal backend against a guessed regime. Excluded from
+      // coverage deliberately — no fixture should build that state.
       throw new Error(`readFilingModule: no node ${cfg.nodeId}`);
     }
     /* v8 ignore stop */

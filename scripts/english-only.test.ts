@@ -1,5 +1,5 @@
 /**
- * The English-only vocabulary guard's suite. It scans the twenty generic packages' `src/`, so it
+ * The English-only vocabulary guard's suite. It scans the generic packages' `src/`, so it
  * polices the tree rather than any one package, and lives in the repo-level Vitest project for that
  * reason — see the repo-root `vitest.config.ts` for what that project is and which two gates run it.
  *
@@ -72,7 +72,7 @@ const discovered = GENERIC_PACKAGES.flatMap((name) =>
 );
 
 describe("configuration", () => {
-  it("scopes itself to the twenty generic packages", () => {
+  it("scopes itself to the generic packages, in this order", () => {
     expect([...GENERIC_PACKAGES]).toEqual([
       "db",
       "core",
@@ -94,6 +94,7 @@ describe("configuration", () => {
       "printing",
       "diagnostics",
       "sync-enrolment",
+      "composition",
     ]);
   });
 

@@ -54,8 +54,10 @@ declare module "@waitron/shared" {
 
     /** `IdSistemaInformatico` is empty or longer than AEAT's two-character cap
      * (`packages/verifactu`'s `ID_SISTEMA_LENGTH`). Thrown by `assertUsableIdSistema`
-     * (./registro-sif.ts), which BOTH write primitives — `registerSif` and `writeReservedSif` —
-     * call before writing anything, so no caller can put an unusable id into `registro_sif`.
+     * (./registro-sif.ts), which both LOCAL write primitives — `registerSif` and `writeReservedSif`
+     * — call before writing anything, so no caller of either can put an unusable id into
+     * `registro_sif`. The sync apply lane writes the column too and reaches neither: it copies a
+     * value the primary already validated, verbatim (./enrolment.ts's watermark-upsert).
      *
      * `registro_sif.id_sistema_informatico` carries no CHECK and every registro copies the value,
      * so the bound is a code-side invariant rather than a column constraint.

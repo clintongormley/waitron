@@ -328,8 +328,8 @@ All three decisions are now taken.
    `till_id` holds is unchanged.
 
 **Track C — product / modules** (sequential; owns `packages/fiscal*`, the module framework packages,
-every NEW module package, `apps/dashboard` module screens, `apps/server/src/modules.ts`, and the
-control-plane docs):
+`packages/composition` (the `ALL_MODULES` list), every NEW module package, `apps/dashboard` module
+screens, `apps/server/src/modules.ts` (the maps derived from that list), and the control-plane docs):
 
 1. **Finish fiscal as a module:** SP-3b vocabulary (landed #240), SP-3c gated-provisioning seam (in PR,
    `feat/module-sp3c-gated-provisioning`), SP-3d backup/restore hook (= BR-4) — the queued slices under

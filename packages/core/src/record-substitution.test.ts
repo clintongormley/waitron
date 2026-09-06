@@ -354,6 +354,17 @@ describe("recordSubstitution — the F3 sale", () => {
     expect(row?.invoiceLocales).toEqual(["es-ES", "ca-ES"]);
   });
 
+  it("writes the backend's own id into sales.fiscal_backend", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: ticket } = await sellTicket(backend);
+
+    const { saleId: f3Id } = await substitute(backend, [ticket]);
+
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, f3Id));
+    expect(backend.id).toBe("fake");
+    expect(row?.fiscalBackend).toBe(backend.id);
+  });
+
   it("allocates the F3 number from the reused standard series", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: ticket } = await sellTicket(backend); // takes number 1 from the standard series

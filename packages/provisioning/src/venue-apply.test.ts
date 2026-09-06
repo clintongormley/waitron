@@ -302,6 +302,19 @@ describe("applyVenue", () => {
     );
   });
 
+  it("refuses a plan with no create-node — a venue that files nothing is not complete", async () => {
+    // create-node's own id is only checked by the actions that DEPEND on it (seed-module,
+    // create-series), so dropping all three together clears every ordering guard and used to return
+    // a "complete" VenueResult with `nodeId === ""`. The post-loop completeness guard names the
+    // missing step instead.
+    const withoutNode = planVenue(request("B48484848"), ALL_MODULES).filter(
+      (a) => a.kind !== "create-node" && a.kind !== "seed-module" && a.kind !== "create-series",
+    );
+    await expect(applyVenue(withoutNode, { db: suite.db, modules: ALL_MODULES })).rejects.toThrow(
+      "applyVenue: plan is missing create-node",
+    );
+  });
+
   it("never returns a phantom series id when ON CONFLICT drops a colliding series", async () => {
     // planVenue rejects equal codes, so this hand-builds the colliding plan directly to prove the
     // apply-side gate: two create-series sharing (tenant, node, code), the second dropped by
@@ -485,8 +498,10 @@ describe("applyVenue", () => {
     });
 
     it("runs the seed with the node it just created and reports its line", async () => {
+      // Its own obligado: the suite shares one database, and B44444444 belongs to the create-till
+      // completeness case above.
       const modules = [...ALL_MODULES, recorder];
-      const result = await applyVenue(planVenue(request("B44444444"), modules), {
+      const result = await applyVenue(planVenue(request("B47474747"), modules), {
         db: suite.db,
         modules,
       });

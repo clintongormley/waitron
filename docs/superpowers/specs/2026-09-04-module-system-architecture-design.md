@@ -130,6 +130,13 @@ descriptors** into an **open set of generic registries** — one per contributio
 - **theme, privileges and scheduled-job registries** the respective surfaces read;
 - and any registry kind added later (§3, "the contribution set is open").
 
+_(2026-09-06, SP-3c: the LIST itself moved out of `apps/server`. `ALL_MODULES` — the one place naming
+every module package — now lives in `packages/composition`, which both the server and the provisioning
+CLI read; `apps/server/src/modules.ts` keeps only the maps it derives from that list. `apps/server`
+remains outside the english-only guard's scan by the recorded decision in `english-only.ts`, and
+`packages/composition` is inside it (it is in `GENERIC_PACKAGES`). See
+[`2026-09-05-module-sp3c-gated-provisioning-design.md`](2026-09-05-module-sp3c-gated-provisioning-design.md).)_
+
 This DI seam is the whole point: swapping `fiscal-verifactu` for a different regime's package changes
 only which descriptor `apps/server` registers — nothing in `sync`, `layouts` or `migrations` moves. It
 is also why the english-only clash dissolves: the Spanish names live in the (exempt) fiscal module and
@@ -278,6 +285,8 @@ Each is its own spec → plan → build → PR.
 - **English-only guard preserved, not exempted-around.** The generic packages stay guarded; Spanish
   names live only in the exempt module + composition root (§4). No new whole-package exemption for a
   generic package — the exact thing the guard's own doc warns against.
+  _(2026-09-06, SP-3c: still true, and the composition LIST is now itself a guarded generic package —
+  `packages/composition` is in `GENERIC_PACKAGES`; see the §4 pointer above.)_
 - **Grants stay colocated with `CREATE TABLE`**, so a skipped/disabled module carries no orphaned grant
   loop (§1.3).
 

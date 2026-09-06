@@ -94,6 +94,9 @@ Every section of today's `SPANISH_WORDS` moves **verbatim** to exactly one home:
 - **`apps/server/src/modules.ts`** wires `vocabulary: FISCAL_VOCABULARY` on the `fiscal` descriptor and
   `vocabulary: WORKFORCE_ES_VOCABULARY` on `workforce-es` — the composition root injects, the package
   declares, exactly the `FISCAL_ENROLMENT` shape.
+  _(2026-09-06, SP-3c: that wiring moved with the list — the descriptors now live in
+  `packages/composition/src/modules.ts`. The seat and its shape are unchanged. See
+  [`2026-09-05-module-sp3c-gated-provisioning-design.md`](2026-09-05-module-sp3c-gated-provisioning-design.md).)_
 - Both packages are already outside the guard's scan (neither is in `GENERIC_PACKAGES`), so a file of
   Spanish words in each needs no exclusion.
 
@@ -198,6 +201,7 @@ runtime values only because the root project is not typechecked (CLAUDE.md §2).
   `mesa`, `linea`) stay true and are left alone.
 - **`packages/module/src/module.ts`** — the seat's doc comment carries §2's meaning; the type is
   unchanged. **`apps/server/src/modules.ts`**'s header names `vocabulary` among the populated seats.
+  _(2026-09-06, SP-3c: that header now lives in `packages/composition/src/modules.ts`.)_
 - **CLAUDE.md §3**, the "Spanish domain terms are deliberate" entry: a module declares its vocabulary
   on its descriptor's `vocabulary` seat; the guard's base list is generic POS Spanish only; the owner
   packages are derived from `migrations.from`; `packages/verifactu` is an unlisted library.

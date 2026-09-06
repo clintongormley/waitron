@@ -1,4 +1,4 @@
-// Side-effect only: registers this package's `sif.*` code on the shared `ErrorParams` registry by
+// Side-effect only: registers this package's `sif.*` codes on the shared `ErrorParams` registry by
 // declaration merging. See ./errors.ts for the code and the reasoning, and
 // ./errors.reachability.test.ts for the mechanical check that keeps errors.ts reachable from this
 // package's own public barrel (index.ts). Mirrors packages/db/src/allocate-number.ts's identical
@@ -15,11 +15,13 @@ import { contadoresInstalacion, registroSif } from "./schema/sif.js";
  * AEAT caps `IdSistemaInformatico` at two characters (`packages/verifactu`'s `ID_SISTEMA_LENGTH`).
  *
  * Exported because the rule is defined once for the whole package: `registro_sif` carries no CHECK
- * on the column, so every write path into it must apply this bound itself. Both write primitives do
- * — `registerSif` and `writeReservedSif` below each open with `assertUsableIdSistema` — so no caller
- * can put an unusable id into the column. `./provisioning.ts`'s `parseReservedState` applies the
- * same bound EARLIER on the wire path, reporting `sif.reservation_invalid` for a malformed bundle
- * before `writeReservedSif` is reached.
+ * on the column, so the bound is applied in code. Both LOCAL write primitives apply it —
+ * `registerSif` and `writeReservedSif` below each open with `assertUsableIdSistema` — so no caller
+ * of either can put an unusable id into the column. `./provisioning.ts`'s `parseReservedState`
+ * applies the same bound EARLIER on the wire path, reporting `sif.reservation_invalid` for a
+ * malformed bundle before `writeReservedSif` is reached. The sync APPLY lane is the one write into
+ * the column that reaches neither primitive: `registro_sif` is enrolled as a watermark-upsert
+ * (./enrolment.ts), so a replica copies the value the primary already validated, verbatim.
  */
 export const ID_SISTEMA_MAX_LENGTH = 2;
 

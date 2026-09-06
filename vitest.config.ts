@@ -5,12 +5,14 @@ import { defineConfig } from "vitest/config";
 //
 //   the two CLASSIFIERS (`scripts/changed-*.mjs`) that decide what CI and the pre-push hook run;
 //   the repo-wide GUARDS (`scripts/*.test.ts`), which read `packages/` and `apps/` whole —
-//   guarded-teardowns scans every `*.test.ts` under both, english-only scans the twenty generic
+//   guarded-teardowns scans every `*.test.ts` under both, english-only scans the generic
 //   packages' `src/`, errors-reachable walks each `packages/*` public barrel's import graph
 //   for an `errors.ts` that has gone unreachable, allergen-names-drift pins the 14 EU allergen
-//   display names equal across the till and dashboard i18n copies, and module-graph-honesty
+//   display names equal across the till and dashboard i18n copies, module-graph-honesty
 //   cross-checks every module descriptor's `requires` against the FK/trigger edges its
-//   `packages/*/drizzle` SQL creates against other modules' tables, and coverage-thresholds pins
+//   `packages/*/drizzle` SQL creates against other modules' tables, module-seams reads every
+//   non-test source file under `packages/provisioning/src` and `apps/server/src` for a `from
+//   "<regime package>"` prefix, and coverage-thresholds pins
 //   which package holds which coverage bar;
 //   `scripts/check-signoff.test.mjs`, which covers the sign-off predicate both gates share and
 //   runs licence.yml's `dco` step extracted from the workflow file.

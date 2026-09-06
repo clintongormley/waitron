@@ -242,7 +242,8 @@ async function main(): Promise<void> {
 
     // Stand up a real chained venue + registered SIF via the production provisioning path. Run as the
     // connection owner (this superuser owns the tables it just migrated) — applyVenue inserts the
-    // tenant and registers the SIF, neither of which the app role may do.
+    // core rows and runs every module's seed for the node (the fiscal seed registers the SIF), and
+    // the app role may do neither.
     const venue = await applyVenue(
       planVenue(
         {

@@ -16,8 +16,19 @@ import { FISCAL_TERRITORIES, resolveFiscalModules } from "../packages/provisioni
  * the REGIME, not "any module".
  *
  * Reads text, like `module-graph-honesty` — a `from "@waitron/…"` inside a comment counts; stated
- * rather than papered over. Only the DIRECT import is seen: a file reaching the regime through
- * another module of the app is not detected here.
+ * rather than papered over. The match is on the PREFIX `from "<pkg>` with no closing quote, so a
+ * subpath import (`from "@waitron/fiscal-verifactu/src/registro-sif.js"`) counts too; no regime
+ * package's name is a prefix of another's, so the prefix cannot cross-match. What is still NOT
+ * seen: a side-effect `import "<pkg>"` (no `from`), a dynamic `import("<pkg>")`, and any file
+ * reaching the regime indirectly through another module of the app.
+ *
+ * OUT OF SCOPE, by `sourceFiles`: `*.test.ts` and every `testing/` directory. The seam this guard
+ * protects is what the SHIPPED code depends on; a suite may name the regime to assert against it
+ * (`packages/provisioning/src/venue-apply.e2e.test.ts` does), and a `testing/` file is a fixture for
+ * such a suite, not composition. No `testing/` file imports a regime package today — the exclusion
+ * is the rule, not a carve-out for an existing violation. `apps/server/src/testing/
+ * fiscal-fixtures.ts` is the fixture nearest the line: it seeds `registros_facturacion` rows with
+ * raw SQL and imports no regime package at all.
  *
  * DEFERRED, allowlisted with the reason: the runtime fiscal pass still imports the Spanish regime
  * directly until the `fiscal-none` slice designs the runtime-duty seat (SP-3c spec §12). Shrink this
@@ -47,7 +58,7 @@ function sourceFiles(dir: string): string[] {
 
 function imports(file: string, packages: Iterable<string>): string[] {
   const text = readFileSync(file, "utf8");
-  return [...packages].filter((pkg) => text.includes(`from "${pkg}"`));
+  return [...packages].filter((pkg) => text.includes(`from "${pkg}`));
 }
 
 describe("packages/provisioning imports no regime package, and the composition list only from bin.ts", () => {
@@ -90,6 +101,17 @@ describe("the detector itself", () => {
     const dir = mkdtempSync(join(tmpdir(), "module-seams-"));
     const probe = join(dir, "probe.ts");
     writeFileSync(probe, 'import { x } from "@waitron/fiscal-verifactu";\n');
+    try {
+      expect(imports(probe, REGIME_PACKAGES)).toEqual(["@waitron/fiscal-verifactu"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("finds a DEEP regime import, which the exact-string form missed", () => {
+    const dir = mkdtempSync(join(tmpdir(), "module-seams-"));
+    const probe = join(dir, "probe.ts");
+    writeFileSync(probe, 'import { x } from "@waitron/fiscal-verifactu/src/registro-sif.js";\n');
     try {
       expect(imports(probe, REGIME_PACKAGES)).toEqual(["@waitron/fiscal-verifactu"]);
     } finally {

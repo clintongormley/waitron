@@ -329,6 +329,17 @@ describe("recordCorrection — the corrective sale", () => {
     expect(row?.invoiceLocales).toEqual(["es-ES", "ca-ES"]);
   });
 
+  it("writes the backend's own id into sales.fiscal_backend", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+
+    const { saleId: correctiveId } = await correct(backend, originalId);
+
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, correctiveId));
+    expect(backend.id).toBe("fake");
+    expect(row?.fiscalBackend).toBe(backend.id);
+  });
+
   it("allocates the corrective number from the rectificative series", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: originalId } = await sell(backend);

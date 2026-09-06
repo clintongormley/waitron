@@ -346,7 +346,11 @@ this package would quote a `CREATE ROLE … PASSWORD '<generated>'` statement ba
 
 Every other row is a structured code; that last one is a gap, recorded rather than dressed up.
 Reclassifying it into a `provisioning.*` code is a separate change, because a code is permanent once
-shipped.
+shipped. Nothing here is shipped yet, though — Waitron is not in production (CLAUDE.md §3, "no
+backwards-compatibility or data-migration code until Waitron is in production") — which is the
+carve-out under which SP-3c DELETED `provisioning.id_sistema_invalid` outright instead of
+deprecating it: the software-id bound moved into the fiscal module, where the same concept is now
+`sif.id_sistema_invalid`. The rule stands for the day a venue is live.
 
 **The gap is pre-existing and shared, not something making `migrate` unconditional created.**
 `src/instance-apply.ts` is byte-identical to its state on `main` — `git diff main...HEAD --

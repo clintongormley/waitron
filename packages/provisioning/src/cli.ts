@@ -317,8 +317,9 @@ async function status(argv: string[], deps: CliDeps): Promise<number> {
 }
 
 /**
- * Stands a venue up: a tenant, a location, a till, a node registered as a SIF, and its two invoice
- * series — the whole slice `planVenue`/`applyVenue` compose.
+ * Stands a venue up: a tenant, a location, a till, a node, its two invoice series, and every
+ * injected module's own seed for that node (the fiscal seed is what registers it as a SIF) — the
+ * whole slice `planVenue`/`applyVenue` compose.
  *
  * The ORDER mirrors `instance`: everything that can be resolved and validated WITHOUT a database is
  * done first — including the pure `planVenue`, which refuses an unimplemented territory, a bad

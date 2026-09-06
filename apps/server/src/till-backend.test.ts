@@ -49,6 +49,12 @@ describe("makeFiscalBackend", () => {
     expect(makeFiscalBackend(ALL_MODULES, null, STUB_DB, {}).id).toBe("verifactu");
   });
 
+  it("defaults the deployment environment to preproduction when WAITRON_ENV is unset", () => {
+    // The one default in config.ts whose mistake is irreversible — proven reachable here rather than
+    // asserted: an unset environment must not throw at construction, it must resolve the safe value.
+    expect(makeFiscalBackend(ALL_MODULES, null, STUB_DB, {}).id).toBe("verifactu");
+  });
+
   it("refuses when no enabled module fills the slot", () => {
     expect(() => makeFiscalBackend(NO_FISCAL, null, STUB_DB, {})).toThrow(
       expect.objectContaining({ code: "module.fiscal_slot_empty" }),

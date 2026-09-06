@@ -45,8 +45,10 @@ export function generateStandbyIdentity(): StandbyIdentity {
  * module validates its own state inside `establish` and throws there, which rolls this transaction back
  * — so a malformed reservation leaves no node row behind. Which modules establish is decided by THIS
  * node's enabled set (`args.modules`), never by the bundle's key set: state for a module disabled here
- * is ignored, and a module enabled here with no entry in the bundle is handed `undefined` and refuses
- * inside its own `establish`.
+ * is ignored, and a module enabled here whose state the bundle does not carry — no entry, or no
+ * `modules` key at all — is handed `undefined` and refuses inside its own `establish`. Hence the
+ * optional chain on `reserved.modules` and the `?? []` on `reserved.series`: a bundle missing either
+ * key must reach the module's refusal, not a `TypeError` from this carrier.
  */
 export async function establishReservedStandbyIdentity(
   deps: { ownerDb: Database; ring: KeyRing },
@@ -92,11 +94,11 @@ export async function establishReservedStandbyIdentity(
     };
     for (const m of args.modules) {
       if (m.provisioning?.standby === undefined) continue;
-      await m.provisioning.standby.establish(tx, standbyNode, args.reserved.modules[m.name]);
+      await m.provisioning.standby.establish(tx, standbyNode, args.reserved.modules?.[m.name]);
     }
     await insertReservedSeriesTx(
       tx,
-      args.reserved.series.map((s) => ({
+      (args.reserved.series ?? []).map((s) => ({
         tenantId: args.tenantId,
         nodeId: args.standby.nodeId,
         code: s.code,

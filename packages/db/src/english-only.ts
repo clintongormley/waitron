@@ -31,6 +31,7 @@ export const GENERIC_PACKAGES = [
   "printing",
   "diagnostics",
   "sync-enrolment",
+  "composition",
 ] as const;
 
 // -----------------------------------------------------------------------------------------------
@@ -58,7 +59,9 @@ export const GENERIC_PACKAGES = [
 // says would end up listing most of the assembled forbidden set, which asserts nothing.
 //
 // This is not a loophole for a NEW generic package to hide Spanish vocabulary behind: the guard
-// still applies to every package under `packages/`, `apps/server` still imports the generic layer
+// still scans every package in `GENERIC_PACKAGES` and reads every module's declared vocabulary
+// owner (a package in neither is out of scope by omission, not by exemption — see the list's own
+// doc comment), `apps/server` still imports the generic layer
 // through the same interfaces (`DrainDeps`, `PeriodDuty`) as everything else, and its own `src/`
 // mixes English identifiers with the Spanish ones its logs and comments cite deliberately — nothing
 // here weakens THAT boundary. Only the identifier-naming guard stops at the composition root's own

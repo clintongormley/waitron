@@ -6,7 +6,7 @@ import type { ProvisionedNode } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TENANT_A, seedTenants } from "../test/fixtures.js";
 import { FISCAL_PROVISIONING, WAITRON_ID_SISTEMA } from "./provisioning.js";
-import { currentSif } from "./registro-sif.js";
+import { ID_SISTEMA_MAX_LENGTH, currentSif } from "./registro-sif.js";
 
 let db: Awaited<ReturnType<typeof createPgliteDb>>;
 
@@ -31,6 +31,16 @@ beforeEach(async () => {
 
 afterEach(async () => {
   if (db !== undefined) await db.close();
+});
+
+describe("WAITRON_ID_SISTEMA", () => {
+  it("is a product code within the bound registerSif enforces", () => {
+    // The product constant the deleted provisioning-side case pinned. AEAT's `IDSistemaInformatico`
+    // is at most `ID_SISTEMA_MAX_LENGTH` characters, and the value is stamped into every SIF row a
+    // seed writes — an out-of-bound constant would be refused at provision, not at review.
+    expect(WAITRON_ID_SISTEMA.length).toBeGreaterThan(0);
+    expect(WAITRON_ID_SISTEMA.length).toBeLessThanOrEqual(ID_SISTEMA_MAX_LENGTH);
+  });
 });
 
 describe("FISCAL_PROVISIONING.seed", () => {

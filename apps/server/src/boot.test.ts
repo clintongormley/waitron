@@ -1024,6 +1024,40 @@ describe("startServer, against a real container as the deployment role", () => {
     }
   }, 60_000);
 
+  it("refuses a trading boot whose enabled set fills no fiscal slot (fiscal off) — module.fiscal_slot_empty", async () => {
+    // SP-3c: the till's fiscal backend comes from whichever ENABLED module fills the `fiscal` seat
+    // (boot.ts's `makeFiscalBackend(setsToMigrate, …)` → `fiscalSlot`). Disabling `fiscal` in
+    // modules.json leaves the enabled set with no contributor, and a trading boot must REFUSE rather
+    // than mount the till routes with no way to chain a sale (§5 — a sale needs its record).
+    // `fiscal` is `provision-only`, and nothing `requires` it, so the enabled set stays
+    // dependency-complete: the refusal that fires is the slot's, not SP-1c's.
+    //
+    // The shared suite DB (already migrated + seeded) is enough, exactly as the drift-log case above:
+    // the filtered migration is a no-op for the enabled sets and never drops fiscal's tables, so the
+    // boot gets as far as building the backend. `...KEY_ENV` keeps this in TRADING mode; setup mode
+    // never builds a backend at all.
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-fiscaloff-state-"));
+    try {
+      await writeFile(
+        join(stateDir, "modules.json"),
+        JSON.stringify({ modules: { fiscal: false } }),
+      );
+      await expect(
+        startServer({
+          ...KEY_ENV,
+          DATABASE_URL: databaseUrl,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_ENV: "preproduction",
+        }),
+      ).rejects.toMatchObject({ code: "module.fiscal_slot_empty" });
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("setup mode serves the built setup wizard at / end-to-end when WAITRON_SETUP_APP_DIR is configured", async () => {
     // The end-to-end proof that `config.setupAppDir` threads config → boot's SETUP branch → `mountSetup`
     // → `mountSpa`: a real `startServer` boot in setup mode (all five WAITRON_TILL_*_ID omitted) with

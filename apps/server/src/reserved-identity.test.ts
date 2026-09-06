@@ -9,6 +9,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { tenantId as brandTenantId, nodeId as brandNodeId } from "@waitron/shared";
 import type { LocationId, TenantId } from "@waitron/shared";
 import type { Endorsement } from "@waitron/membership";
+import type { ReservedIdentity } from "./mirror-bundle.js";
 import { ALL_MODULES } from "./modules.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 
@@ -157,6 +158,30 @@ describe("establishReservedStandbyIdentity", () => {
           taxModule: "iva",
           modules: ALL_MODULES,
           reserved: { modules: {}, series: [], endorsement: ENDORSEMENT },
+        },
+      ),
+    ).rejects.toMatchObject({ code: "sif.reservation_invalid" });
+    const node = await suite.db.execute(sql`select 1 from nodes where id = ${standby.nodeId}`);
+    expect(node.rows).toEqual([]); // the one transaction rolled back
+  });
+
+  it("refuses a bundle carrying no `modules` key at all, before writing the node", async () => {
+    // The other shape of the same wire defect: not an empty map but a bundle whose `modules` (and
+    // `series`) keys are absent entirely. The carrier must still reach the module's own refusal —
+    // an unguarded index would throw a bare TypeError here instead.
+    const standby = generateStandbyIdentity();
+    await expect(
+      establishReservedStandbyIdentity(
+        { ownerDb: suite.db, ring: RING },
+        {
+          tenantId,
+          locationId,
+          standby,
+          nodeName: "cloud",
+          filingModule: "verifactu",
+          taxModule: "iva",
+          modules: ALL_MODULES,
+          reserved: { endorsement: ENDORSEMENT } as unknown as ReservedIdentity,
         },
       ),
     ).rejects.toMatchObject({ code: "sif.reservation_invalid" });
