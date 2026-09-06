@@ -37,8 +37,8 @@ import { IDENTITY_MIGRATIONS } from "../migrations.js";
  * makes it acceptable is not an assumption that every machine has Docker, but that this package's
  * reason to be in the real-PG tier at all needs Docker regardless: `passkey.concurrency.test.ts`
  * needs two distinct backends whose row locks actually contend, which PGlite — serialising every
- * query onto one backend — cannot stage, and `staff.email.test.ts` needs a server that enforces the
- * functional partial unique index its `person.email_taken` path is built on. CLAUDE.md §4 documents
+ * query onto one backend — cannot stage. That is the whole of it; the other real-PG files here are
+ * candidates for the PGlite tier once the suites are re-tagged. CLAUDE.md §4 documents
  * that this repo's real-Postgres test tier needs a local Docker daemon (plus
  * `TESTCONTAINERS_RYUK_DISABLED`); `dockerRequired` turns the raw testcontainers daemon error into
  * that guidance when Docker is absent.
@@ -48,8 +48,7 @@ export default async function ({ provide }: GlobalSetupContext) {
     dockerRequired:
       "@waitron/identity's real-Postgres suites require a running Docker daemon. They cannot be " +
       "skipped: PGlite serialises every query onto one backend, so it cannot stage the two-backend " +
-      "row-lock race passkey.concurrency.test.ts exists to prove, and staff.email.test.ts needs a " +
-      "server that enforces the persons_tenant_email_uq functional partial index.",
+      "row-lock race passkey.concurrency.test.ts exists to prove.",
     templates: {
       core_identity: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS, IDENTITY_MIGRATIONS]),
     },

@@ -540,10 +540,11 @@ container by pointing the admin URL at a dead port.
 
 ## Testing
 
-`src/*.rls.test.ts` needs a real Postgres container: `instance` creates databases and roles and
-reads `pg_roles` attributes, none of which PGlite's bundled single-superuser server can reproduce.
-Everything else — the planner, the formatter, the whole CLI — is a pure function or an injected-IO
-call and needs nothing.
+Three suites need a real Postgres container — `src/instance-apply.pg.test.ts`,
+`src/instance-state.test.ts` and `src/venue-apply.pg.test.ts`: `instance` creates databases and
+roles and reads `pg_roles` attributes, none of which PGlite's bundled single-superuser server can
+reproduce. Everything else — the planner, the formatter, the whole CLI — is a pure function, an
+injected-IO call, or a PGlite suite.
 
 ```bash
 TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/provisioning test:coverage

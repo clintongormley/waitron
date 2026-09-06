@@ -6,15 +6,13 @@ import { describe, expect, it } from "vitest";
 import { createPerson, setEmail } from "./staff.js";
 import { openManagementSession, seedPerson } from "../test/fixtures.js";
 
-// Real Postgres, unlike the PGlite staff.test.ts. The `person.email_taken` path depends on the DB's
-// functional partial unique index (persons_tenant_email_uq) firing SQLSTATE 23505, which the
-// production translator (`isUniqueViolation`, a Drizzle-cause-chain walk) then maps to the domain
-// error. PGlite is a superuser that serialises every query and need not reproduce that constraint
-// faithfully, so the duplicate must be proven against a real server — the same reason
-// persons.email.test.ts uses a real backend. The connection here is the template's OWNER: the
-// unique INDEX fires for any role, so this drives
-// the gated createPerson/setEmail API exactly as the PGlite logic suite does, just on a backend that
-// enforces the index.
+// The `person.email_taken` path depends on the functional partial unique index
+// (persons_tenant_email_uq) firing SQLSTATE 23505, which the production translator
+// (`isUniqueViolation`, a Drizzle-cause-chain walk) then maps to the domain error. This runs on the
+// real-PG tier's template, over the template's OWNER connection, so no privilege or role is under
+// test — and PGlite 0.5.4 does enforce that index (measured), so this file is a candidate for the
+// PGlite tier once the suites are re-tagged. Until then it drives the gated createPerson/setEmail
+// API exactly as the PGlite logic suite does, one tier over.
 const suite = useTemplateDb({ template: "core_identity" });
 
 function run<T>(db: Database, tenantId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
