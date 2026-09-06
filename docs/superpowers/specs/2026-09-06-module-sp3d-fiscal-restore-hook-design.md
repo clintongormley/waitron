@@ -56,8 +56,8 @@ each guarantee; the receipts this retires.
 **Out of scope, named:** the rejoin path's semantics (it restores with `skipSecrets: true` and after
 this slice runs **no** hook, §3.3); a fresh **node** identity on restore (§3.1); the promote-action
 Slice 4 operator surface (an authenticated endpoint / runbook step around this CLI — this slice is
-the mechanism); rebinding the restored `trading.env`'s connection strings and advertised origin to
-the new hardware (§2); AEAT `consultar` month-end reconciliation of the lost tail
+the mechanism); rebinding the restored `trading.env`'s connection strings to the new hardware
+(§2; the advertised origin is process env, never in `trading.env` — corrected 2026-09-06, see §13); AEAT `consultar` month-end reconciliation of the lost tail
 (promotion-failover §5.2); resolving `config.till.seriesId` at **boot** (§12).
 
 ---
@@ -468,7 +468,8 @@ setup input and a type comment), so there is no hidden purpose-based consumer.
 
 - **`series.code_collision { code }`** — the derived code already exists for the node (live or
   retired). Requires a human-chosen code equal to `<base>-<seconds-since-2020>`; the restore is redone
-  a second later.
+  a second later. _2026-09-06 (whole-branch review): also raised by `insertNodeSeriesTx` when the
+  incoming batch names one code twice — a coded refusal before INSERT, never a raw 23505._
 
 `packages/fiscal-verifactu/src/errors.ts`:
 
@@ -659,8 +660,9 @@ unchanged).
   until the sequence passes the old cursor (promotion-failover §6.2 condition 1, in reverse). Not
   new to this slice — true of BR-3 today — and the answer is the runbook's: promote the survivor. A
   guard would need the survivor to be reachable to be asked; not built.
-- **Platform rebinding** (§2): connection strings and advertised origin in the restored
-  `trading.env` are the dead cluster's. Promote-Slice-4's operator surface.
+- **Platform rebinding** (§2): the connection strings in the restored `trading.env` are the dead
+  cluster's; the advertised origin is process env the CLI never writes (`WAITRON_ADVERTISED_ORIGIN`
+  is only read, `apps/server/src/config.ts`; corrected 2026-09-06). Promote-Slice-4's operator surface.
 - **The secrets-write window and `writeFileAtomic`'s missing fsync** (§5): both close by resolving
   the box's series at boot (§3.4) or by fsync in `fs-atomic.ts`. Named for Track A, not built here.
 - **The clock** (§3.5): a restore performed on a box whose clock is behind a previous restore's can
@@ -690,6 +692,8 @@ unchanged).
 ## 14. What this does not touch
 
 `computeHuella`; `registros_facturacion` and its triggers; the AEAT transport; the backup producer
-(manifest, archive, encryption, destinations); the compatibility gate and the traversal guard; the
-provisioning runners; `nodes`, `node_membership`, `mirror_config`; the till and dashboard sale paths
+(manifest, archive, encryption, destinations); the compatibility gate and the traversal guard
+(_2026-09-06: the per-entry guard is unchanged, but `validateArtifact` now normalises entry names and
+refuses two entries resolving to one destination — `restore.unsafe_entry_path` covers that class too_);
+the provisioning runners; `nodes`, `node_membership`, `mirror_config`; the till and dashboard sale paths
 beyond the one added guard.

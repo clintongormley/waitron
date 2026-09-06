@@ -74,6 +74,8 @@ export async function liveSeriesBases(
     let code = stripOwnSuffixes(series.code, registered);
     const key = JSON.stringify([code, series.purpose]);
     if (seen.has(key)) continue;
+    // The fallback is not re-checked against `claimed`: it is distinct because the query orders by
+    // code, so an unsuffixed base is claimed before any `<base>-<n>` variant reaches it.
     if (claimed.has(code)) code = series.code;
     if (code.length > MAX_BASE_CODE_LENGTH) {
       throw new AppError("series.code_too_long", { code });

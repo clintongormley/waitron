@@ -3,10 +3,11 @@
 > **2026-09-06 (SP-3d):** This is the historical manual procedure. For an encrypted `.backup.enc`
 > archive, use `waitron-restore restore <artifact-path>` into a fresh database before booting; it
 > restores the database and media, migrates, opens a fresh chain and disjoint series for a node that
-> was filing, and writes `trading.env` last. Do not run step 3 after the CLI. Set the replacement box's
-> connection strings after the restore and before boot: they come back from the artifact's
-> `trading.env`. Set `WAITRON_ADVERTISED_ORIGIN` in the replacement box's process environment;
-> the CLI never touches it. See the [SP-3d
+> was filing, and writes `trading.env` last. Do not run step 3 after the CLI. The restored
+> `trading.env` carries the DEAD box's connection strings: after the restore and before boot, edit
+> them for the replacement box (editing before the restore is lost — the CLI writes the artifact's
+> file back). `WAITRON_ADVERTISED_ORIGIN` is process environment, not a `trading.env` key: set it on
+> the replacement box yourself; the CLI never touches it. See the [SP-3d
 > design](../specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md) §2 and §5. The manual steps
 > below remain as history, not the current procedure.
 

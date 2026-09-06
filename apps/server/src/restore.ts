@@ -136,8 +136,10 @@ export async function validateArtifact(deps: RestoreDeps): Promise<ValidatedArti
   const plaintext = decryptArtifact(deps.artifact, deps.recoveryKey);
   const entries = unpackArchive(plaintext);
 
-  // First-wins classification preserves rejection precedence: missing manifest → missing dump →
-  // compatibility gate → unexpected entry → path guard → identity completeness.
+  // Rejection precedence is the statement order below: missing manifest → missing dump →
+  // compatibility gate → unexpected entry → path guard / duplicate destination → identity
+  // completeness. `??=` only fixes which entry a repeated name is classified as; a repeated
+  // destination is refused by the guard loop regardless.
   let manifestEntry: ArchiveEntry | undefined;
   let dumpEntry: ArchiveEntry | undefined;
   const mediaEntries: ArchiveEntry[] = [];
