@@ -135,7 +135,7 @@ interface Harness {
   readState: ReturnType<typeof vi.fn>;
   applyVenue: ReturnType<typeof vi.fn>;
   readEnvironment: ReturnType<typeof vi.fn>;
-  readTenants: ReturnType<typeof vi.fn>;
+  readObligados: ReturnType<typeof vi.fn>;
   connect: ReturnType<typeof vi.fn>;
   closes: () => number;
 }
@@ -150,7 +150,7 @@ function harness(
     readState?: () => Promise<InstanceState>;
     applyVenue?: CliDeps["applyVenue"];
     readEnvironment?: () => Promise<DeploymentEnvironment | null>;
-    readTenants?: () => Promise<{ country: string; taxId: string }[]>;
+    readObligados?: () => Promise<{ country: string; taxId: string }[]>;
   } = {},
 ): Harness {
   const lines: string[] = [];
@@ -173,7 +173,7 @@ function harness(
   );
   // Empty by default: a fresh, single-tenant database, so the foreign-tenant guard proceeds. Tests
   // exercising the refusal supply an existing identity.
-  const readTenants = vi.fn(options.readTenants ?? (async () => []));
+  const readObligados = vi.fn(options.readObligados ?? (async () => []));
 
   return {
     lines,
@@ -185,7 +185,7 @@ function harness(
     readState,
     applyVenue,
     readEnvironment,
-    readTenants,
+    readObligados,
     connect,
     deps: {
       io: {
@@ -209,7 +209,7 @@ function harness(
       applyVenue: applyVenue as unknown as CliDeps["applyVenue"],
       modules: MODULES,
       readEnvironment: readEnvironment as unknown as CliDeps["readEnvironment"],
-      readTenants: readTenants as unknown as CliDeps["readTenants"],
+      readObligados: readObligados as unknown as CliDeps["readObligados"],
     },
   };
 }
@@ -1237,23 +1237,25 @@ describe("runCli venue", () => {
   });
 
   it("refuses a SECOND, DIFFERENT fiscal identity in the same database, before applying (§5)", async () => {
-    // One tenant per database is the post-RLS isolation boundary: this branch dropped row-level
+    // One obligado per database is the post-RLS isolation boundary: this branch dropped row-level
     // security, so `withTenant` no longer filters by tenant and a second obligado would leak one
-    // business's rows to the other. `venue` is one of the two production tenant-creation paths (the
-    // setup-api `provisionVenue` is the other), and both call the shared `assertNoForeignTenant`:
-    // each reads the existing `(country, tax_id)` set and refuses any identity but the one present. Here
-    // the database already holds ES/B99999999 while the request is ES/B12345678 (VENUE_ARGS), so the
-    // apply is refused — never reached — leaving no second tenant.
+    // business's rows to the other. `venue` is one of the tenant-creation paths (the setup-api
+    // `provisionVenue` and the mirror `adoptFromPrimary` are the others), and each calls the shared
+    // `assertNoForeignObligado`: it reads the existing `(country, tax_id)` set and refuses any identity
+    // but the one present. Here the database already holds ES/B99999999 while the request is
+    // ES/B12345678 (VENUE_ARGS), so the apply is refused — never reached — leaving no second obligado.
     const h = harness({
       env: VENUE_ENV,
-      readTenants: async () => [{ country: "ES", taxId: "B99999999" }],
+      readObligados: async () => [{ country: "ES", taxId: "B99999999" }],
     });
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
     expect(code).toBe(1);
-    expect(h.lines.join("\n")).toContain('provisioning.foreign_tenant {"database":"waitron_demo"}');
+    expect(h.lines.join("\n")).toContain(
+      'provisioning.foreign_obligado {"database":"waitron_demo"}',
+    );
     // The identities were read — that is how the foreign obligado was learnt — and nothing was
     // applied: no second tenant can be written.
-    expect(h.readTenants).toHaveBeenCalledTimes(1);
+    expect(h.readObligados).toHaveBeenCalledTimes(1);
     expect(h.applyVenue).not.toHaveBeenCalled();
     expect(h.closes()).toBe(1);
   });
@@ -1264,11 +1266,11 @@ describe("runCli venue", () => {
     // `ON CONFLICT DO NOTHING` reuses the obligado and adds a shop.
     const h = harness({
       env: VENUE_ENV,
-      readTenants: async () => [{ country: "ES", taxId: "B12345678" }],
+      readObligados: async () => [{ country: "ES", taxId: "B12345678" }],
     });
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
     expect(code).toBe(0);
-    expect(h.readTenants).toHaveBeenCalledTimes(1);
+    expect(h.readObligados).toHaveBeenCalledTimes(1);
     expect(h.applyVenue).toHaveBeenCalledTimes(1);
   });
 

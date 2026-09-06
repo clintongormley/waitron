@@ -10,7 +10,7 @@ import { isAppError } from "@waitron/shared";
 import { formatAppError, runCli } from "./cli.js";
 import { applyInstance } from "./instance-apply.js";
 import { readInstanceState } from "./instance-state.js";
-import { readTenantIdentities } from "./tenant-guard.js";
+import { readObligadoIdentities } from "./obligado-guard.js";
 import { applyVenue } from "./venue-apply.js";
 
 /**
@@ -64,7 +64,7 @@ async function main(): Promise<number> {
       applyVenue,
       modules: ALL_MODULES,
       readEnvironment: readDeploymentEnvironment,
-      readTenants: readTenantIdentities,
+      readObligados: readObligadoIdentities,
     });
   } catch (error) {
     // `runCli` (cli.ts) resolves with a number for every EXPECTED failure — a bad database name, an

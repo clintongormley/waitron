@@ -180,7 +180,7 @@ describe("provisionVenue", () => {
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     ).catch((e: unknown) => e);
     expect(isAppError(error)).toBe(true);
-    expect(isAppError(error) && error.code).toBe("provisioning.foreign_tenant");
+    expect(isAppError(error) && error.code).toBe("provisioning.foreign_obligado");
 
     // Still exactly one tenant — and no second SIF/series/node/chain.
     const tenants = await db.execute<{ n: number }>(sql`select count(*)::int as n from tenants`);

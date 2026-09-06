@@ -270,6 +270,10 @@ function adoptDeps(overrides: Partial<AdoptDeps> = {}): AdoptDeps {
     // WAITRON_SYNC_DATABASE_URL so the reboot's `loadMirrorSyncConfig` reads it back and enters mirror
     // mode. The same role the reboot env below (`mirrorBootEnv`) uses.
     syncDatabaseUrl: roleUrl(mirror.pg.uri, "sync_applier", "ap"),
+    // Echoed by `provisioning.foreign_obligado` if a foreign bundle is adopted into an occupied
+    // mirror; this e2e adopts one venue into a fresh clone, so the guard passes and the name is only
+    // a label here.
+    database: "mirror",
     ...overrides,
   };
 }

@@ -1,5 +1,5 @@
 import { setDeploymentMode, stampDeployment, writeMirrorConfig, type Database } from "@waitron/db";
-import { adoptVenue } from "@waitron/provisioning";
+import { adoptVenue, assertNoForeignObligado, readObligadoIdentities } from "@waitron/provisioning";
 import type { KeyRing } from "@waitron/credentials";
 import { enabledModules, parseModuleOverrides, type ModuleConfig } from "@waitron/module";
 import { ALL_MODULES } from "./modules.js";
@@ -72,6 +72,11 @@ export interface AdoptDeps {
    * back to enter mirror mode. Guaranteed non-empty by the boot adopt closure's Ruling 1 guard, which
    * refuses an unset value at adopt time (`server.config_missing`) rather than persist nothing. */
   syncDatabaseUrl: string;
+  /** The NAME of the mirror's own database, echoed by `provisioning.foreign_obligado` when a bundle
+   * for a DIFFERENT obligado is adopted into a database that already holds one (operator-typed
+   * configuration, never a secret). Boot derives it from `config.migrationsDatabaseUrl`, the same
+   * `ownerDatabaseName` the provision path passes to `provisionVenue`. */
+  database: string;
 }
 
 /**
@@ -125,6 +130,18 @@ export async function adoptFromPrimary(
   // (CLAUDE.md §3). The validated config is persisted below (unconditionally, even {}), so the
   // mirror's set is explicitly the primary's and re-adopt is idempotent.
   const moduleConfig = parseModuleOverrides(bundle.moduleOverrides, ALL_MODULES);
+
+  // Refuse a FOREIGN obligado before any mutation, the third caller of the shared one-obligado guard
+  // (why it exists: `obligado-guard.ts`; the sibling callers: `provisionVenue`, the `venue` CLI). Runs
+  // after the up-front module validation so both fail-closed checks precede `stampDeployment`.
+  // `adoptVenue`'s `ON CONFLICT (id) DO NOTHING` makes re-inserting the SAME bundle's tenant row a
+  // no-op, but does NOT stop a DIFFERENT obligado landing beside an incumbent — that is this guard's
+  // job. The applied identity is the bundle tenant's `(country, tax_id)` as the primary stored it.
+  assertNoForeignObligado(
+    await readObligadoIdentities(deps.ownerDb),
+    { country: rows.tenant.country as string, taxId: rows.tenant.taxId as string },
+    deps.database,
+  );
 
   await stampDeployment(deps.ownerDb, bundle.environment);
   await adoptVenue(rows, designated, { db: deps.ownerDb });
