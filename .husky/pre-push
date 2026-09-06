@@ -509,8 +509,6 @@ fi
 # script exits 0 even with Docker absent or nothing to reap, and `|| true` guarantees it never blocks a push.
 node scripts/reap-testcontainers.mjs || true
 
-run_step "typecheck ($scope_label)" "pnpm$repro_filters typecheck" pnpm "$@" typecheck
-
 # Refuses a SCOPED run that would execute no test at all. pnpm reports both of its "nothing to do"
 # outcomes on stdout with exit 0 — measured on 2026-08-01, pnpm 9.15.0:
 #
@@ -539,8 +537,44 @@ fi
 # `-r` rather than the root `test:coverage` script: that script is `vitest run --coverage && pnpm
 # -r test:coverage`, and its first half is the step above. `-r` runs every SELECTED member and
 # never the workspace root — which is also why the root script cannot recurse into itself.
-run_step "tests with coverage ($scope_label)" "pnpm -r$repro_filters test:coverage" \
-  pnpm -r "$@" test:coverage
+# Typecheck and the coverage run are independent — tsc reads sources, vitest runs them — so they
+# run AT ONCE (owner decision 2026-09-06: the hook's serial steps were the wall clock, and the
+# machine has the headroom; CI shards the same way). The coverage run streams to the terminal as
+# before; the typecheck writes to its own log, printed only when it fails, so the two never
+# interleave. Both statuses are collected and both reported with run_step's Reproduce line; the
+# per-step and wall-clock seconds printed at the end are the receipt for the overlap.
+tc_log=$(mktemp "${TMPDIR:-/tmp}/waitron-pre-push-typecheck.XXXXXX")
+echo "pre-push: running typecheck ($scope_label) and tests with coverage ($scope_label) concurrently..."
+par_start=$(date +%s)
+( pnpm "$@" typecheck > "$tc_log" 2>&1; echo "$?" > "$tc_log.rc"; date +%s > "$tc_log.end" ) &
+tc_pid=$!
+cov_rc=0
+pnpm -r "$@" test:coverage || cov_rc=$?
+cov_end=$(date +%s)
+wait "$tc_pid"
+tc_rc=$(cat "$tc_log.rc" 2>/dev/null || echo 1)
+tc_end=$(cat "$tc_log.end" 2>/dev/null || date +%s)
+failed=0
+if [ "$tc_rc" -ne 0 ]; then
+  cat "$tc_log"
+  echo ""
+  echo "pre-push BLOCKED: 'typecheck ($scope_label)' failed."
+  echo "  Reproduce:      pnpm$repro_filters typecheck"
+  echo "  Skip this once: git push --no-verify"
+  echo ""
+  failed=1
+fi
+if [ "$cov_rc" -ne 0 ]; then
+  echo ""
+  echo "pre-push BLOCKED: 'tests with coverage ($scope_label)' failed."
+  echo "  Reproduce:      pnpm -r$repro_filters test:coverage"
+  echo "  Skip this once: git push --no-verify"
+  echo ""
+  failed=1
+fi
+rm -f "$tc_log" "$tc_log.rc" "$tc_log.end"
+echo "pre-push: typecheck $((tc_end - par_start))s, tests with coverage $((cov_end - par_start))s, concurrent wall $(( (tc_end > cov_end ? tc_end : cov_end) - par_start ))s"
+[ "$failed" -eq 0 ] || exit 1
 
 end_ts=$(date +%s)
 echo "pre-push: all checks passed in $((end_ts - start_ts))s ($scope_label)"
