@@ -870,8 +870,10 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
       keyless bundle, an "unreachable" that a misconfigured env reaches) plus the convention reviewer's
       "every write path" and "no caller can" absolutes — all fixed on the branch. Copilot: off.
   - **SP-3d — on branch, PR pending, owner-gated (H2).** Fiscal backup/restore contribution (= BR-4):
-    the module `backup.restore` hook opens a fresh chain and disjoint series, floors the installation
-    counter by the clock, and writes the restored identity after commit. Built on
+    for a node that was filing, the module `backup.restore` hook floors the installation counter by
+    the clock, mints a fresh chain and derives disjoint series codes. The restore orchestrator retires
+    the old series, opens the replacements and writes the restored identity after the transaction
+    commits. Built on
     `feat/module-sp3d-fiscal-restore-hook`; [design](superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md).
     **Yardstick pending `/finish-branch`:** record fix rounds per task and false claims found at
     whole-branch review, then add the PR number.
@@ -1459,7 +1461,8 @@ Design: [backup-restore-regime](superpowers/specs/2026-09-04-backup-restore-regi
     Deferred edges (note-only): a working-backup boot success-path integration test; scope the flat
     `resolvers` map by module when a 2nd `nonDbState` module lands; `packArchive` pack-time `entries.length`
     bound.
-- **BR-3 — the restore consumer — LANDED #232 (2026-09-05).** `decrypt` → `unpackArchive` → **compatibility
+- **BR-3 — the restore consumer — LANDED #232 (2026-09-05).** (Superseded; see the SP-3d note below.)
+  `decrypt` → `unpackArchive` → **compatibility
   gate** (env + module schema-version vs the restoring binary) → **entry-name path-traversal guard**
   (lexical + realpath, shared with `unpackBundleToDir`, all entries before any write) → `pg_restore`
   (`--no-owner`, password via `PGPASSWORD` env not argv) into a fresh DB → restore media/secrets → invoke
@@ -1482,8 +1485,9 @@ Design: [backup-restore-regime](superpowers/specs/2026-09-04-backup-restore-regi
   > identity replacement and hooks. `invokeRestoreHooks` has been replaced by `runRestoreHooks`; see
   > the [SP-3d design](superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md) §5.
 
-- **BR-4 = SP-3d — on branch, PR pending, owner-gated (H2).** The fiscal `backup.restore` hook
-  mints a fresh chain and disjoint series for cold restore. The mechanism is built on the branch;
+- **BR-4 = SP-3d — on branch, PR pending, owner-gated (H2).** For a node that was filing, the fiscal
+  `backup.restore` hook mints a fresh chain and derives disjoint series codes; the restore orchestrator
+  opens those series. The mechanism is built on the branch;
   promote-Slice-4 still needs its operator surface. See the module-system SP-3d row and
   [design](superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md).
 
