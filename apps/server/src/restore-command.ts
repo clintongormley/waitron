@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { AppError } from "@waitron/shared";
+import { AppError, hasCode } from "@waitron/shared";
 import { DEFAULT_MEDIA_ROOT, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT } from "./boot.js";
 import { deploymentEnvironment, resolveConfigDir, type DeploymentEnvironment } from "./config.js";
 import { isUnset } from "./env-value.js";
@@ -28,9 +28,9 @@ const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
 
 /**
  * `waitron-restore restore <artifact-path>` — decrypt and restore one BR-3 backup artifact
- * (`restoreFromArtifact`, `restore.ts`) onto a FRESH target database, then its media and state
- * secrets, then run every module's (empty, in v1) restore hook. Secrets come from the environment,
- * NEVER argv: the recovery key (`WAITRON_BACKUP_RECOVERY_KEY` — the SAME variable a backup was
+ * (`restoreFromArtifact`, `restore.ts`): validate → set aside any existing identity → db → media →
+ * migrate → hooks (one transaction) → secrets (identity last). The target database must be FRESH.
+ * Secrets come from the environment, NEVER argv: the recovery key (`WAITRON_BACKUP_RECOVERY_KEY` — the SAME variable a backup was
  * encrypted under, `backup-config.ts`) and the privileged admin connection to the restore target
  * (`WAITRON_RESTORE_DATABASE_URL`) both leak into the process table (`ps`) if passed as an argv
  * element, the same reason `waitron-recovery`/`waitron-break-glass` read theirs from env.
@@ -48,9 +48,8 @@ const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
  * overridden — no `resolve()` — mirroring `config.ts`'s own `loadConfig` exactly. `stagingDir` is
  * `<stateDir>/restore-staging`, the restore-side twin of `boot.ts`'s `<stateDir>/backup-staging`.
  * `modules` is always `ALL_MODULES`, never an enabled subset — matching how `boot.ts` wires the
- * backup sweep: the restore-hook seat is empty in v1 (`restore.ts`'s `invokeRestoreHooks`), so there
- * is nothing to narrow yet, and a future hook must run for a module this box does not currently trade
- * with just as readily as one it does.
+ * backup sweep: a restore hook must run for every module whose tables are in the backup, and the
+ * descriptor list is that set.
  *
  * Exported so the flow is unit-tested without a real `pg_restore`/Postgres connection: `deps.restore`
  * is the orchestrator seam (defaults to {@link restoreFromArtifact}), injected by tests as a fake that
@@ -152,12 +151,21 @@ export async function runRestore(deps: {
   };
 
   const restore = deps.restore ?? restoreFromArtifact;
+  deps.out(
+    "cold restore: use only when no peer (mirror or local secondary) survived — a survivor holds more history and is promoted, not overwritten (promotion runbook §5d)",
+  );
   try {
     await restore(restoreDeps);
   } catch (err) {
     if (err instanceof AppError) {
       if (DECRYPT_PHASE_CODES.has(err.code)) {
         deps.out("restore failed: wrong recovery key or corrupt artifact");
+        return 1;
+      }
+      if (hasCode(err, "restore.hook_failed")) {
+        deps.out(
+          `restore failed: restore.hook_failed (module ${err.params.module}: ${err.params.code})`,
+        );
         return 1;
       }
       if (
@@ -172,7 +180,7 @@ export async function runRestore(deps: {
     // NEVER propagates raw and NEVER echoes `err.message`/`String(err)`. A failed `pg_restore`
     // (bad perms, a non-fresh target, a full disk — all plausible real outcomes) rejects with an
     // error whose `.message` is built from its own argv by `promisify(execFile)`; `pg-restore.ts`
-    // now keeps the password out of that argv (the root fix), but this is the load-bearing SECOND
+    // now keeps the password out of that argv (the root fix), but this is the SECOND
     // layer — an unrelated bug anywhere else in `restoreFromArtifact`'s chain that throws a raw
     // driver/fs error carrying `databaseUrl` (or anything else sensitive) in its message must not
     // reach an operator's terminal either. Unlike `runRecoveryUnpack` (which rethrows anything

@@ -1711,5 +1711,22 @@ declare module "@waitron/shared" {
      * renamed once shipped.
      */
     "restore.unexpected_entry": { name: string };
+    /** The artifact's `secrets/trading.env` is absent or lacks one of the identity keys the restore
+     * hooks need (`WAITRON_TILL_TENANT_ID`/`NODE_ID`/`LOCATION_ID`/`SERIES_ID`; an empty value is
+     * missing). A backup of a box that never finished provisioning has no node to re-register.
+     * `missing` is the fixed key or file name. Never renamed once shipped. */
+    "restore.identity_incomplete": { missing: string };
+    /** The artifact's identity names a node the restored database does not hold: the identity must
+     * be one this backup knows. Both ids are uuids, not secrets. Never renamed once shipped. */
+    "restore.identity_unknown": { tenantId: string; nodeId: string };
+    /** More than one module's restore hook returned replacement series; only one may own the node's
+     * numbering. `modules` is the comma-joined list of their names. Never renamed once shipped. */
+    "restore.series_conflict": { modules: string };
+    /** A module's restore hook, or the series work its outcome led to, threw an `AppError`: `module`
+     * is the module's name (`core` when the node's own series contract failed with no module
+     * returning series) and `code` the inner code, so the CLI's `restore.*` reporting shows both
+     * without learning any module's namespaces. A non-`AppError` throw is not wrapped. Never renamed
+     * once shipped. */
+    "restore.hook_failed": { module: string; code: string };
   }
 }

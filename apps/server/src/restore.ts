@@ -1,8 +1,26 @@
-import { mkdir, realpath, rm } from "node:fs/promises";
+import { mkdir, realpath, rename, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { AppError } from "@waitron/shared";
-import { expectedSchemaVersion } from "@waitron/migrations";
-import type { WaitronModule } from "@waitron/module";
+import { and, eq } from "drizzle-orm";
+import {
+  AppError,
+  isAppError,
+  locationId as brandLocationId,
+  nodeId as brandNodeId,
+  tenantId as brandTenantId,
+} from "@waitron/shared";
+import {
+  createPostgresDb,
+  insertNodeSeriesTx,
+  nodes,
+  readStandardSeriesIdTx,
+  retireNodeSeriesTx,
+  withTenant,
+  type Database,
+} from "@waitron/db";
+import { applyMigrations, expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";
+import { orderedMigrationSets, type ProvisionedNode, type WaitronModule } from "@waitron/module";
+import { formatEnvFile, parseEnvFile } from "./env-file.js";
+import { isUnset } from "./env-value.js";
 import { type ArchiveEntry, unpackArchive } from "./backup-archive.js";
 import { decryptArtifact } from "./artifact-cipher.js";
 import type { BackupManifest } from "./backup-manifest.js";
@@ -23,6 +41,16 @@ const MANIFEST_NAME = "manifest.json";
 const DB_DUMP_NAME = "db.dump";
 const MEDIA_PREFIX = "media/";
 const SECRETS_PREFIX = "secrets/";
+const TRADING_ENV_ENTRY = `${SECRETS_PREFIX}trading.env`;
+const TRADING_ENV_FILE = "trading.env";
+/** Where a pre-existing identity is moved before the restore; boot reads only `trading.env`. */
+const REPLACED_SUFFIX = ".replaced";
+const IDENTITY_KEYS = [
+  "WAITRON_TILL_TENANT_ID",
+  "WAITRON_TILL_NODE_ID",
+  "WAITRON_TILL_LOCATION_ID",
+  "WAITRON_TILL_SERIES_ID",
+] as const;
 /** Media blobs are public content-addressed files (`GET /media/:filename`), not secrets — 0644, not
  * the 0600 the secret writers use. The staged dump IS sensitive (whole-DB plaintext), so it is 0600. */
 const MEDIA_FILE_MODE = 0o644;
@@ -53,28 +81,18 @@ export interface RestoreDeps {
   readonly modules: readonly WaitronModule[];
   readonly environment: DeploymentEnvironment;
   readonly runRestore?: PgRestoreRunner;
-  /**
-   * Skip restoring `secrets/*` into `stateDir`. Default `false` (the disaster-recovery CLI restores
-   * everything). R3 rejoin sets `true`: a returning node keeps its OWN identity (its identity keypair
-   * / box key in `stateDir`), so it restores the primary's DB and media but NOT the primary's secrets
-   * (spec §4.4). The whole up-front pass — decrypt, unpack, compatibility gate, traversal guard — still
-   * runs; only the `restoreSecrets` write is elided, keeping that gate+guard a single source of truth.
-   */
+  /** Opens the privileged connection the hook transaction runs on. Default `createPostgresDb`;
+   * tests hand in a PGlite. */
+  readonly openDb?: (url: string) => Promise<{ db: Database; close(): Promise<void> }>;
+  /** Migrates the restored database to this binary's schema before any hook runs. Default
+   * `applyMigrations`; tests stub it. */
+  readonly migrate?: typeof applyMigrations;
+  /** Skip restoring `secrets/*`, the set-aside of any existing identity, AND the restore hooks: a
+   * returning node keeps its OWN identity, and a hook exists only to make an ASSUMED identity
+   * trade-safe (spec §3.3). */
   readonly skipSecrets?: boolean;
   readonly log: Logger;
 }
-
-/** The context a module's `backup.restore` hook receives — the restore destinations it may need to
- * put its own non-DB state back. Declared here rather than in `@waitron/module` (whose `restore`
- * seat stays `unknown` until BR-4 gives it a body); v1 has no such hook, so this is exercised only by
- * a test's injected fake. Deliberately NO database/chain handle: BR-3 restores the ledger VERBATIM
- * and mints nothing (CLAUDE.md §5), and a restore hook has no business touching the fiscal chain. */
-export interface RestoreHookContext {
-  readonly mediaDir: string;
-  readonly stateDir: string;
-  readonly log: Logger;
-}
-type RestoreHook = (ctx: RestoreHookContext) => void | Promise<void>;
 
 /**
  * The classified, validated pieces of one backup artifact — the output of {@link validateArtifact}
@@ -195,12 +213,11 @@ export async function validateArtifact(deps: RestoreDeps): Promise<ValidatedArti
 }
 
 /**
- * The destructive write phase of a restore, driven by an already-{@link validateArtifact validated}
- * artifact: restore the database, then media, then secrets (SKIPPED when `skipSecrets` is set — R3
- * rejoin keeps its own identity) → invoke each enabled module's restore hook → clean staging. Assumes
- * the GATE and GUARD have already passed (its input is a `ValidatedArtifact`, which only
- * `validateArtifact` produces), so it re-runs neither — the security pass stays a single source of
- * truth. Restores the fiscal ledger VERBATIM: mints NO fresh chain and makes the box no trade-readier.
+ * After validation, set any existing identity aside → restore database and media → migrate → run
+ * module hooks and settle series in one transaction → write secrets. Once the old identity is set
+ * aside, a failure before the secrets write leaves no bootable identity. `skipSecrets` keeps the
+ * target's identity and skips hooks.
+ * The GATE and GUARD belong to `validateArtifact`; staging is cleaned even on failure.
  */
 export async function writeValidated(
   validated: ValidatedArtifact,
@@ -209,6 +226,7 @@ export async function writeValidated(
   const { log } = deps;
   const staged = join(deps.stagingDir, DB_DUMP_NAME);
   try {
+    if (!deps.skipSecrets) await setAsideExistingIdentity(deps.stateDir, log);
     await restoreDatabase({
       dumpBytes: validated.dumpEntry.bytes,
       stagingDir: deps.stagingDir,
@@ -217,37 +235,45 @@ export async function writeValidated(
       log,
     });
     await restoreMedia({ entries: validated.mediaEntries, mediaDir: deps.mediaDir, log });
-    if (!deps.skipSecrets) {
-      await restoreSecrets({ entries: validated.secretEntries, stateDir: deps.stateDir, log });
+    // The gate admits an OLDER schema; a hook written against today's must not run against
+    // yesterday's. Every module, as setup mode migrates — the CLI has no enabled-set config.
+    await (deps.migrate ?? applyMigrations)(
+      deps.databaseUrl,
+      migrationOptionsFor(orderedMigrationSets(deps.modules), deps.migrationsRoot),
+    );
+    log("info", "restore.migrated", {});
+    if (deps.skipSecrets) {
+      log("info", "restore.identity.kept", {});
+      return;
     }
-    await invokeRestoreHooks({
-      modules: deps.modules,
-      mediaDir: deps.mediaDir,
-      stateDir: deps.stateDir,
-      log,
-    });
+    const identity = readArtifactIdentity(validated.secretEntries);
+    const opened = await (deps.openDb ?? openPostgres)(deps.databaseUrl);
+    let seriesId: string;
+    try {
+      ({ seriesId } = await runRestoreHooks({
+        db: opened.db,
+        modules: deps.modules,
+        node: identity.node,
+        log,
+      }));
+    } finally {
+      await opened.close();
+    }
+    const entries =
+      seriesId === identity.seriesId
+        ? validated.secretEntries
+        : rewriteTradingEnv(validated.secretEntries, seriesId);
+    await restoreSecrets({ entries, stateDir: deps.stateDir, log });
   } finally {
-    // Staging holds the whole-DB plaintext dump — remove it whether or not pg_restore succeeded, so a
-    // failed restore leaves no plaintext ledger behind. `force` so cleanup is a no-op when a throw in
-    // the guard/gate meant it was never staged.
     await rm(staged, { force: true });
   }
 }
 
 /**
- * Restore one encrypted backup artifact onto a fresh box: the write-free {@link validateArtifact} pass
- * (decrypt → unpack → GATE → GUARD) then the destructive {@link writeValidated} phase (db → media →
- * secrets → hooks → staging cleanup). External behaviour is exactly the two composed — the gate/guard
- * still run before any write. R3 rejoin instead calls the two halves separately, validating BEFORE its
- * irreversible wipe and writing after, so this stays the single-shot path for the disaster-recovery
- * CLI.
- *
- * This restores the fiscal ledger VERBATIM. It mints NO fresh chain, no installation number, and
- * makes the box no trade-readier — the restore hooks are the only extension seat and none exists in
- * v1. Throws `restore.archive_incomplete` for a missing `manifest.json`/`db.dump`,
- * `restore.unexpected_entry` for a top-level entry it cannot route,
- * `restore.environment_mismatch`/`restore.schema_too_new` from the gate, or
- * `restore.unsafe_entry_path` from the guard.
+ * Validate an encrypted backup, then set aside any existing identity, restore, migrate, run the
+ * module hooks in one transaction and write the artifact's secrets last. After set-aside and before
+ * the secrets write, the box has no bootable identity. Rejoin calls the two halves separately around its
+ * database wipe and uses `skipSecrets` to keep its own identity without running restore hooks.
  */
 export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
   const validated = await validateArtifact(deps);
@@ -333,27 +359,147 @@ export async function restoreSecrets(args: {
 }
 
 /**
- * Invoke each enabled module's `backup.restore` hook, in list order, so a module can put its own
- * non-DB state back after the DB/media/secrets are restored. EMPTY in v1: no module declares a
- * `backup.restore` hook yet (the `@waitron/module` seat is still typed `unknown`), so the loop body
- * runs for none of `ALL_MODULES` today — the mechanism is here, the bodies land later. Exposed for
- * R3. It touches NO fiscal chain or SIF: BR-3 restores the ledger verbatim (CLAUDE.md §5).
+ * Move a pre-existing identity aside before anything irreversible: `<stateDir>/trading.env` →
+ * `trading.env.replaced` (boot reads only the former). With the artifact's identity written only
+ * after the hook transaction commits, a successful set-aside leaves NO bootable identity until the
+ * secrets write — neither the target's old one nor the artifact's. A missing file is the normal
+ * fresh-box case.
  */
-export async function invokeRestoreHooks(args: {
-  modules: readonly WaitronModule[];
-  mediaDir: string;
-  stateDir: string;
-  log: Logger;
-}): Promise<void> {
-  const ctx: RestoreHookContext = {
-    mediaDir: args.mediaDir,
-    stateDir: args.stateDir,
-    log: args.log,
-  };
-  for (const m of args.modules) {
-    const hook = m.backup?.restore;
-    if (typeof hook === "function") {
-      await (hook as RestoreHook)(ctx);
-    }
+export async function setAsideExistingIdentity(stateDir: string, log: Logger): Promise<void> {
+  const path = join(stateDir, TRADING_ENV_FILE);
+  try {
+    await rename(path, `${path}${REPLACED_SUFFIX}`);
+    log("info", "restore.identity.set_aside", {});
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
+}
+
+/**
+ * The identity the restored box will take, read from the ARTIFACT's `secrets/trading.env` — never the
+ * target box's file, which may hold a stale or foreign identity. Every key is required and non-empty
+ * (`isUnset`): a backup of a never-provisioned box has no node to re-register.
+ */
+export function readArtifactIdentity(secretEntries: readonly ArchiveEntry[]): {
+  node: ProvisionedNode;
+  seriesId: string;
+} {
+  const entry = secretEntries.find((e) => e.name === TRADING_ENV_ENTRY);
+  if (entry === undefined) {
+    throw new AppError("restore.identity_incomplete", { missing: TRADING_ENV_FILE });
+  }
+  const env = parseEnvFile(Buffer.from(entry.bytes).toString("utf8"));
+  for (const key of IDENTITY_KEYS) {
+    if (isUnset(env[key])) throw new AppError("restore.identity_incomplete", { missing: key });
+  }
+  return {
+    node: {
+      tenantId: brandTenantId(env.WAITRON_TILL_TENANT_ID!),
+      locationId: brandLocationId(env.WAITRON_TILL_LOCATION_ID!),
+      nodeId: brandNodeId(env.WAITRON_TILL_NODE_ID!),
+    },
+    seriesId: env.WAITRON_TILL_SERIES_ID!,
+  };
+}
+
+/** The secret entries with `trading.env`'s `WAITRON_TILL_SERIES_ID` replaced; every other key and the
+ * key order preserved (`parseEnvFile` skips comments and blank lines). */
+export function rewriteTradingEnv(
+  entries: readonly ArchiveEntry[],
+  seriesId: string,
+): ArchiveEntry[] {
+  return entries.map((e) =>
+    e.name === TRADING_ENV_ENTRY
+      ? {
+          name: e.name,
+          bytes: Buffer.from(
+            formatEnvFile({
+              ...parseEnvFile(Buffer.from(e.bytes).toString("utf8")),
+              WAITRON_TILL_SERIES_ID: seriesId,
+            }),
+          ),
+        }
+      : e,
+  );
+}
+
+function wrapHookError(module: string, err: unknown): unknown {
+  return isAppError(err) ? new AppError("restore.hook_failed", { module, code: err.code }) : err;
+}
+
+/**
+ * Run every module's `backup.restore` hook and settle the node's series, in ONE tenant transaction
+ * stamped with the node as sync origin (`registro_sif`/`cadenas` are enrolled on the ordered lane; a
+ * later standby pulls only rows whose origin is this node). Order: check the node exists → hooks in
+ * list order → at most one module may return `series` → if one did, retire the node's live series and
+ * open the returned ones → on EVERY path read the live standard series id — zero or two live standard
+ * series aborts the transaction, so a commit leaves exactly one live standard series. Returns that id
+ * (the env is pointed at it) and the hooks' reports.
+ */
+export async function runRestoreHooks(args: {
+  db: Database;
+  modules: readonly WaitronModule[];
+  node: ProvisionedNode;
+  log: Logger;
+}): Promise<{ seriesId: string; reports: readonly string[] }> {
+  const { node } = args;
+  return withTenant(
+    args.db,
+    node.tenantId,
+    async (tx) => {
+      const [known] = await tx
+        .select({ id: nodes.id })
+        .from(nodes)
+        .where(and(eq(nodes.tenantId, node.tenantId), eq(nodes.id, node.nodeId)))
+        .limit(1);
+      if (known === undefined) {
+        throw new AppError("restore.identity_unknown", {
+          tenantId: node.tenantId,
+          nodeId: node.nodeId,
+        });
+      }
+      const reports: string[] = [];
+      let replacement:
+        { module: string; series: readonly { code: string; purpose: string }[] } | undefined;
+      for (const m of args.modules) {
+        const hook = m.backup?.restore;
+        if (hook === undefined) continue;
+        let outcome;
+        try {
+          outcome = await hook(tx, node);
+        } catch (err) {
+          throw wrapHookError(m.name, err);
+        }
+        reports.push(`${m.name}: ${outcome.report}`);
+        args.log("info", "restore.hook.done", { module: m.name, report: outcome.report });
+        if (outcome.series !== undefined) {
+          if (replacement !== undefined) {
+            throw new AppError("restore.series_conflict", {
+              modules: `${replacement.module},${m.name}`,
+            });
+          }
+          replacement = { module: m.name, series: outcome.series };
+        }
+      }
+      // `core` owns `invoice_series`: a failure here with no module returning series is the node's own
+      // series contract failing, so that is the module named.
+      const owner = replacement?.module ?? "core";
+      try {
+        if (replacement !== undefined) {
+          await retireNodeSeriesTx(tx, node.tenantId, node.nodeId);
+          await insertNodeSeriesTx(tx, node.tenantId, node.nodeId, replacement.series);
+        }
+        const seriesId = await readStandardSeriesIdTx(tx, node.tenantId, node.nodeId);
+        return { seriesId, reports };
+      } catch (err) {
+        throw wrapHookError(owner, err);
+      }
+    },
+    { nodeId: node.nodeId },
+  );
+}
+
+async function openPostgres(url: string): Promise<{ db: Database; close(): Promise<void> }> {
+  const db = await createPostgresDb(url);
+  return { db, close: () => db.close() };
 }

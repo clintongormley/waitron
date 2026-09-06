@@ -83,8 +83,8 @@ function parseDbTarget(url: string): { host: string; port: string; database: str
  *  - `WAITRON_TILL_*_ID` — via `tryLoadTillConfig` → the node's `nodeId`/`tenantId`. Absent = an
  *    unprovisioned box, which `rejoin` is a misuse of, so it is refused.
  *  - `WAITRON_MEDIA_DIR`/`WAITRON_STATE_DIR`/`WAITRON_MIGRATIONS_DIR`/`WAITRON_ENV` — resolved exactly
- *    as `restore-command.ts` does (`restoreFromArtifact` runs with `skipSecrets: true`: R3 keeps this
- *    node's OWN identity secrets, restoring only the ledger + media).
+ *    as `restore-command.ts` does. Restore runs with `skipSecrets: true` (the returning node keeps
+ *    its own identity: no set-aside, no secrets write, no module restore hook).
  *
  * Seams (all defaulted to the real wiring, injected by tests so the flow is unit-tested without a
  * container): `connect` (`createPostgresDb`) opens the app/sync/maintenance pools, `validate`
