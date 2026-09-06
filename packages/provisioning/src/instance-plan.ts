@@ -30,7 +30,7 @@ export interface InstanceRequest {
 }
 
 /**
- * The two deployment logins and their required grants.
+ * The two deployment logins and the grants the plan emits.
  * The migrator needs CREATEROLE to create app_user on an empty cluster;
  * the app inherits app_user and receives no database or schema CREATE grant.
  */
@@ -47,7 +47,7 @@ export const REQUIREMENTS: Record<
     createRole: true,
     memberOf: ["app_user"],
     databaseCreate: true,
-    // Retain the migrator's direct, grantable schema CREATE privilege.
+    // Grant-option necessity is unmeasured; review separately before changing this grant.
     schemaCreate: { withGrantOption: true },
   },
   waitron_app: {

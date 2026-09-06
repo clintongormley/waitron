@@ -1573,10 +1573,9 @@ declare module "@waitron/shared" {
      * cannot be built. `missing` is the state-dir-relative path (e.g. `secrets.env`). A server
      * fault, not a client error: the box has lost part of its own unrecoverable state. */
     "recovery.state_incomplete": { missing: string };
-    /** The backup connection lacks schema access or SELECT on a user table or sequence,
-     * including the migration journals read by the manifest builder. Refused at boot so a
-     * recurring backup failure has one clear cause. Ownership or effective read grants suffice.
-     * The existing code is retained; no params. */
+    /** The boot probe found missing schema access or SELECT on a user table or sequence the
+     * dump needs, including migration journals. Ownership or effective read grants suffice.
+     * Refused at boot so a recurring backup failure has one clear cause. No params. */
     "backup.role_rls_fenced": Record<string, never>;
     /** A backup artifact's binary frame is malformed (bad magic, version, or truncated header)
      * before decryption is even attempted. `reason` is a short machine tag. */

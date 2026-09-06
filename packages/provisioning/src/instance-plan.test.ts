@@ -199,13 +199,17 @@ describe("planInstance's injected password()", () => {
   });
 });
 
-it("refuses a superuser and ignores unrelated role attributes", () => {
-  const ordinary = { ...HEALTHY, superuser: false, bypassRls: true };
-  const superuser = { ...HEALTHY, superuser: true, bypassRls: false };
-  expect(() => assertUsable("waitron_app", ordinary)).not.toThrow();
-  expect(() => assertUsable("waitron_app", superuser)).toThrow(/role_over_privileged/);
-});
-it("plans exactly two logins: the migrator and the app", () => {
-  expect(INSTANCE_ROLES).toEqual(["waitron_migrator", "waitron_app"]);
-  expect(REQUIREMENTS.waitron_app.memberOf).toEqual(["app_user"]);
+// Pin the deployment login set and distinguish ordinary app-role acceptance from superuser refusal.
+describe("deployment login contract", () => {
+  it("accepts an ordinary app role and refuses the same role with SUPERUSER", () => {
+    expect(() => assertUsable("waitron_app", HEALTHY)).not.toThrow();
+    expect(() => assertUsable("waitron_app", { ...HEALTHY, superuser: true })).toThrow(
+      /role_over_privileged/,
+    );
+  });
+
+  it("plans exactly two logins: the migrator and the app", () => {
+    expect(INSTANCE_ROLES).toEqual(["waitron_migrator", "waitron_app"]);
+    expect(REQUIREMENTS.waitron_app.memberOf).toEqual(["app_user"]);
+  });
 });

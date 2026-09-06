@@ -142,8 +142,8 @@ function prepareRow(table: Table, row: VenueRow): VenueRow {
  * installation number and chain — never from provisioning. `adoptVenue` inserts only the identity
  * scaffold those pulled rows need.
  *
- * The transaction uses designated.tenantId; the read-back checks that the designated
- * tenant, location, till, node and series exist.
+ * Inserts carry the bundle rows' explicit tenant ids; withTenant only supplies the transaction.
+ * The read-back checks that the designated tenant, location, till, node and series exist.
  */
 export async function adoptVenue(
   rows: AdoptVenueRows,
@@ -180,7 +180,7 @@ export async function adoptVenue(
         .onConflictDoNothing({ target: invoiceSeries.id });
     }
 
-    // Read each designated id back inside the tenant scope: a malformed bundle whose row arrays did
+    // Read each designated id back inside the same transaction: a malformed bundle whose row arrays did
     // not carry a row with a designated id would leave the mirror pointed at a till/series that does
     // not exist. Fail loudly (and roll the transaction back — never leave a half-provisioned mirror)
     // rather than let it surface confusingly at first sale.

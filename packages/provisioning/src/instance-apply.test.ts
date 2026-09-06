@@ -299,8 +299,8 @@ describe("applyInstance's post-apply grant verification", () => {
   });
 
   it("treats a bare C as missing when the plan asked for WITH GRANT OPTION", async () => {
-    // The plan promises WITH GRANT OPTION; a bare CREATE privilege does not
-    // satisfy that promise even when the grantee can use the schema itself.
+    // This tests ACL interpretation: C permits creating schema objects; C* also permits delegation.
+    // It does not establish that the migrator needs to delegate that privilege.
     await expect(
       applyInstance(SCHEMA_GRANT, cluster({ nspacl: ["waitron_migrator=C/pg_database_owner"] })),
     ).rejects.toMatchObject({ code: "provisioning.grant_ineffective" });

@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { sql } from "drizzle-orm";
+import { idempotentRoleStatement } from "@waitron/db/testing/shared-container.js";
 import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -16,7 +17,10 @@ const execFileAsync = promisify(execFile);
 
 beforeAll(async () => {
   appDb = await suite.pg.connectAs("app_login", "app_pw");
-  await suite.admin.execute(sql`create role backup_probe_reader login password 'reader'`);
+  // Roles are cluster-global, so fixture setup must tolerate a reused test container.
+  await suite.admin.execute(
+    sql.raw(idempotentRoleStatement({ name: "backup_probe_reader", password: "reader" })),
+  );
   await suite.admin.execute(
     sql`grant select on all tables in schema public to backup_probe_reader`,
   );
@@ -113,6 +117,8 @@ describe("assertBackupCanReadFiscal checks backup read privileges", () => {
       tag: "backup reader",
       unproven: "Non-superuser pg_dump is unproven.",
     });
+    // This suite establishes that an accepted ordinary login can actually dump the database.
+    // Skipping the dump would leave that privilege claim untested, so fail if it cannot run.
     expect(containerId).toBeDefined();
     const connection = `postgresql://backup_probe_reader:reader@localhost:5432${uri.pathname}`;
     const { stdout } = await execFileAsync(

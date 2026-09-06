@@ -68,18 +68,14 @@ Splitting them is what makes "the non-superuser deployment role" and "migrations
 `CREATE SCHEMA IF NOT EXISTS "public"` and `CREATE TABLE IF NOT EXISTS` per set — and Postgres checks
 the privilege for those statements **before** it evaluates whether the object already exists, so a
 role with only ordinary duty-level grants (`app_user` membership, nothing else) fails on the very
-first statement even though every migration is a no-op. Against an **empty** database, the
-migrations that create `app_user`, `sales_coverage_checker`, `envios_drainer`,
-`payments_webhook_resolver`, `credentials_enumerator` and `tenant_provisioner` need `CREATEROLE`,
-and four of those six also need a temporary ownership-transfer dance that a plain duty-level role
-cannot do at all. Neither case is satisfiable
-by the role spec §10 actually wants running the process day to day — hence the split.
+first statement even though every migration is a no-op. Against an **empty** database, the core baseline also creates
+`app_user NOLOGIN`, which needs `CREATEROLE`. Keep these schema-changing privileges on your
+migration connection and use `app_user` membership for the day-to-day pool.
 
 ### `DATABASE_URL` — the deployment role, always
 
-Whatever else is true, this role needs to be a member of `app_user` so the tenant-isolation row-level
-security policies apply to it (every table `apps/server` reads or writes carries `FORCE ROW LEVEL
-SECURITY`, and `app_user` is who the migrations grant table access to):
+Make this login a member of `app_user`, the NOLOGIN role that receives the migrations' table
+grants. The application login inherits those grants:
 
 ```sql
 create role waitron_app login password '<secret>' in role app_user;
@@ -110,7 +106,7 @@ create role waitron_migrator login password '<secret>' in role app_user;
 -- these statements is a no-op against a current database.
 grant create on database <dbname> to waitron_migrator;
 grant create on schema public to waitron_migrator;
--- SELECT on every table, not just the five journal tables by name: this role did not create them
+-- SELECT on every table includes the migration journals: this role did not create them
 -- (whoever originally bootstrapped the database did), so it does not own them and cannot read them
 -- back without an explicit grant — and reading them back is how Drizzle decides nothing new needs
 -- applying.
@@ -122,118 +118,61 @@ default); a migrations-only role that never runs a duty pass does not need it.
 
 ### `WAITRON_MIGRATIONS_DATABASE_URL` — against an empty database (first boot ever)
 
-**There is now a tool that does this for you: [`packages/provisioning`](../../packages/provisioning/README.md).**
-`waitron-provision instance` creates the database, creates `waitron_migrator`, `waitron_app` and
-`waitron_provisioner`, issues both grants below, applies every migration set and writes the
-deployment stamp — printing each new role's connection string once. It issues a **superset** of the
-recipe below, not the same set: it also makes `waitron_migrator` a member of `app_user`, which the
-empty-database recipe deliberately omits (see the note under the SQL — that membership is only
-needed when the same role is also `DATABASE_URL`), and it creates `waitron_app` and
-`waitron_provisioner`, which this recipe is not about at all.
-The SQL below stays as the documented manual fallback for the roles `instance` creates. Creating the
-business rows on top of them — a tenant, a location, a till, a node, its invoice series, and each
-enabled module's seed for that node (the fiscal seed registers it as a SIF) — is
-`waitron-provision venue` (see ["Provisioning a venue"](#provisioning-a-venue)
-below). That command replaced `apps/server/sql/bootstrap-tenant.sql`, which was **retired on
-2026-08-04** rather than kept as a fallback: it inserted `invoice_series.till_id` (dropped by
-migration `0018`, now `node_id NOT NULL`) so it could no longer run, and it created no node so it
-could not produce a sellable venue.
+Use [`waitron-provision instance`](../../packages/provisioning/README.md) to bootstrap the
+database. It creates the database, applies the full migration manifest as the admin, then creates
+exactly two logins: `waitron_migrator` and `waitron_app`. Both join `app_user`; only the migrator
+gets `CREATEROLE`, database CREATE and schema CREATE WITH GRANT OPTION. It writes the deployment
+stamp and prints each newly created login's connection string once. Keep those strings: a rerun
+preserves existing passwords and cannot print them again.
 
-This case is no longer exercised only by hand. `packages/provisioning/src/instance-apply.pg.test.ts`
-runs the whole sequence against a real `postgres:18-alpine` container **as a role holding exactly
-`login createdb createrole`** — asserted in that suite's own first test, which reads back
-`rolsuper = f` and `rolbypassrls = f` for `current_user` — and that role is what the migrations
-themselves are applied by, because the migrator's URL is composed from its connection string. The
-suite then asserts, against the database rather than against its own model: all five migration sets
-recorded, the three roles present with the right `rolcreaterole` and memberships,
-`has_database_privilege(... 'CREATE')` and `has_schema_privilege('public', 'CREATE')` true for
-`waitron_migrator`, `pg_namespace.nspacl` carrying `waitron_migrator=C*` (the `*` is the WITH GRANT
-OPTION below), and the stamp written. A second plan from the state the first produced carries no
-create and no stamp — it **does** carry `migrate`, which `instance` now emits on every run rather
-than only when a journal table is missing. This sentence said "no create and no migrate" until the
-gate was removed.
+The admin that ran `instance` owns the migrated objects. The generated migrator login's CREATE
+grants do not make it their owner or give it journal SELECT. Use the original owner connection for
+later schema changes. If you use the generated login only to check an already-current database,
+the SELECT grant in the preceding recipe supplies the journal reads; that recipe does not authorize
+future changes to existing tables.
 
-Two receipts sit behind that, and they are **not** the same one. What
-`packages/provisioning/src/instance-apply.pg.test.ts` pins is the PLAN: it asserts
-`toContainEqual({ kind: "migrate" })` on exactly that second plan, then applies it again — and the
-test body ends there, with no assertion after the `applyInstance` call. So that suite
-establishes only that the re-run **does not throw**; nothing in it observes what the migrator did.
-The "applied nothing new" half is pinned one package over, by
-`packages/migrations/src/apply.concurrency.test.ts:74-79`: it counts the rows in
-`__drizzle_migrations_db` (the `core` set's journal table, per `migrations.manifest.json`), runs a
-third `applyMigrations` over the same options, and asserts the count is unchanged. That covers one
-set rather than all five, and what it pins is what gets **recorded as applied** — the migrator still
-issues `CREATE SCHEMA IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS <journal>` and a journal read per
-set on every re-run — which is why `packages/provisioning/README.md`'s "Idempotency" paragraph calls
-a no-op re-run idempotent but **not privilege-free**, and sends the reader to its wall 4 for what
-that costs.
+`packages/provisioning/src/instance-apply.pg.test.ts` checks the bootstrap against a real Postgres
+container. Its first test reads `current_user = prov_admin` and `rolsuper = false`; setup creates
+that login with `CREATEDB` and `CREATEROLE`. The next test runs the full plan through that admin's
+connection string and checks the database exists, every listed manifest journal is present, the
+stamp is `preproduction`, and the role keys are exactly `waitron_app` and `waitron_migrator`.
+It checks CREATEROLE is true for the migrator and false for the app, and that the app's direct
+membership is exactly `["app_user"]`. It checks the migrator's effective database/schema CREATE
+and reads its schema ACL entry directly for `C*`, the grant-option marker.
 
-That last assertion reads `nspacl` **directly** rather than asking
-`has_schema_privilege(…, 'CREATE WITH GRANT OPTION')`, and the reason is the recursive closure, not
-the grant option: `has_*` answers for everything a role can reach, so a grant arriving through a
-group reads as satisfied when the direct grant the tool makes is absent — measured on
-`postgres:18-alpine`, `has_database_privilege('r_direct','acl_db2','CREATE')` was `t` while
-`aclexplode(datacl)` held zero entries naming `r_direct`. An earlier version of this sentence said
-no `has_*_privilege` function can see the grant option at all. That is false: they report it via the
-`'<PRIV> WITH GRANT OPTION'` spelling, `has_schema_privilege` returning `t` for a role holding the
-option and `f` for one holding a bare `C` on the same image.
+That test then checks a second plan has no role creation or stamp, still includes migration, and
+applies it without throwing. It does not count newly applied migrations. The separate
+`packages/migrations/src/apply.concurrency.test.ts` checks that a repeated migration leaves one
+journal's row count unchanged. Neither receipt means a rerun is privilege-free: Drizzle still
+issues its schema/table setup statements before reading each journal.
 
-Two things that suite does **not** cover, so do not read it as covering them: it applies the
-migrations over the connection that just created the database, so it says nothing about a
-**different** role taking over migrating later (see "Practical recommendation" below); and it
-proves the membership and grant SHAPE, not that `waitron_app` can run a duty pass. The
-`tenant_provisioner` bucket is removed by
-`docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md` §1.
+Read direct grants from the ACL, as the provisioning test does. Effective privilege checks also
+count inherited grants, so they cannot tell you whether the specific direct grant you issued took
+effect. The provisioning suite tests membership repair and delegated grants separately. Its
+bootstrap test checks the role/grant shape; the server's `boot.test.ts` exercises the running host.
 
-Why any of this needed proving: `packages/db`'s own `0001_tenancy_rls.sql` and its siblings are
-hand-written, custom migrations that create six NOLOGIN support roles — `app_user`,
-`sales_coverage_checker`, `tenant_provisioner`, `credentials_enumerator`, `envios_drainer`,
-`payments_webhook_resolver` — and hand a `SECURITY DEFINER` function's ownership to four of them;
-`app_user` and `tenant_provisioner` own no function. drizzle-kit generates no roles or ownership, so
-none of it is inferred. The recipe below was originally verified by hand against a real Postgres 18
-container and **re-verified on PostgreSQL 18.4 after `0011_provisioner_role.sql` was added**. Treat
-it as correct but re-check if a future migration changes the pattern:
+For a manual first boot, create a separate migration login and grant it CREATE on the target
+database and schema from the database owner:
 
 ```sql
 create role waitron_migrator login password '<secret>' createrole;
 grant create on database <dbname> to waitron_migrator;
--- WITH GRANT OPTION matters here and did not above: the empty-database migrations temporarily
--- re-grant CREATE ON SCHEMA public to each support role they create (so they can own a function),
--- then revoke it — a grant this role cannot itself pass on fails partway through that dance.
 grant create on schema public to waitron_migrator with grant option;
 ```
 
-`CREATEROLE` is what lets this role run `CREATE ROLE app_user NOLOGIN`, `CREATE ROLE
-sales_coverage_checker NOLOGIN NOSUPERUSER`, and the other four — and, because Postgres grants the
-creating role admin option on a role it just created, is also what lets the same role run each
-migration's `GRANT <support_role> TO CURRENT_USER WITH INHERIT FALSE` / `REVOKE … FROM CURRENT_USER`
-pair, and `0011_provisioner_role.sql`'s `GRANT app_user TO tenant_provisioner`, without any further
-grant. That last one is where "the same role keeps running every migration" stops being merely
-convenient: a role that did NOT create `app_user` holds no admin option on it and that GRANT fails
-with `permission denied to grant role "app_user"` — observed on 18.4 (see the note in
-`0011_provisioner_role.sql`, and the "Practical recommendation" below).
+The grant option matches the tool's current grant shape. No baseline currently re-grants schema
+CREATE; its necessity has not been established. It remains a candidate for removal after a
+separate privilege review. `CREATEROLE` permits creation of `app_user` on an empty cluster.
+After the migrations create `app_user`, create the application login with the membership shown
+above. Business rows are a separate step: `waitron-provision venue` creates the tenant, location,
+till, node, invoice series and composed module seeds. The retired `bootstrap-tenant.sql` script is
+not a fallback for that flow.
 
-**Practical recommendation:** if the same role keeps running every migration for the lifetime of the
-database — the common case, and the one that also answers the "new migration" gap noted above from
-the other direction — it owns every table and role it created on every boot, including the objects a
-FUTURE migration creates, so it never hits the missing-`INSERT`-on-the-journal or
-missing-ownership-to-`ALTER` problem either: it just needs the same `CREATEROLE` plus `CREATE`
-grants this section already lists, every time, not a widening set over the database's life. The
-`SELECT ON ALL TABLES` grant from the already-migrated recipe above is only needed when a DIFFERENT
-role (one that did not create the objects) takes over migrating later — and that handoff still only
-covers a no-op re-run, not a role change happening in the same boot that also ships new SQL.
-
-If your Postgres provider's bootstrap/admin user is already the database owner, that satisfies the
-SCHEMA-level half of the empty-database case (it owns `public` via `pg_database_owner`, so it can
-create anything there) but **not necessarily the `CREATEROLE` half** — database ownership does not
-imply it; `CREATEROLE` is a separate role attribute Postgres does not grant merely for owning a
-database. This is commonly true anyway for a managed provider's master/admin user (RDS, Cloud SQL,
-Supabase and similar typically grant their master user createrole-equivalent privileges as part of
-their own bootstrapping), but not guaranteed by "is the database owner" alone — a self-hosted
-"just made this role the owner" setup may need `alter role <owner> createrole;` added explicitly.
-Using that admin user for the very first boot only, then switching `WAITRON_MIGRATIONS_DATABASE_URL`
-to a narrower `waitron_migrator` role afterwards, is a reasonable way to avoid keeping `CREATEROLE`
-on a long-lived credential either way.
+**Keep the same owner for later migrations.** If the manual migration login creates the tables
+and journals, retaining that connection preserves the ownership needed to modify them. Switching
+to a different login requires a separate review of object ownership and grants; the
+already-migrated recipe only covers a rerun with no pending migration. Database ownership itself
+does not imply the `CREATEROLE` attribute, so check the actual login before the first migration.
 
 ### The deployment-environment check needs no grant beyond the above
 
@@ -275,7 +214,8 @@ against an unstamped database — it is refused with `provisioning.database_unst
 database per environment is a fiscal invariant and stamping is `instance`'s job. It connects to that
 target database as the **owner-admin** (the role that created the tables when it ran `instance`) over
 `WAITRON_ADMIN_DATABASE_URL`, the same admin connection string `instance` reads; there is no separate
-role and no grant to widen, because `applyVenue` inserts under RLS as the table owner.
+role and no grant to widen: `applyVenue` inserts as the table owner in one transaction, with
+explicit tenant ids.
 
 ```bash
 pnpm --filter @waitron/provisioning build   # once — produces dist/bin.js and copies the migrations

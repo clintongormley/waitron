@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { idempotentRoleStatement } from "@waitron/db/testing/shared-container.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { useRealPostgres, useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { roleUrl, startMigratedPostgres } from "@waitron/db/testing/postgres.js";
@@ -146,18 +147,16 @@ describe("buildDevEnv carries the resolved seed locale into the env contract", (
   );
 });
 
-// Real Postgres, not PGlite: dev-setup migrates + provisions as the container superuser and its
-// whole point is that the reused/fresh decision is right against a persisted database — PGlite's
-// per-connection superuser can't stand in for that. Requires TESTCONTAINERS_RYUK_DISABLED=true
-// locally (CLAUDE.md §4) or the container hooks hang to the 180s timeout.
+// Real Postgres exercises dev-setup's actual migration, provisioning and reuse connections.
+// The separate inspectVenues suite below checks SELECT privileges.
+// TESTCONTAINERS_RYUK_DISABLED=true is required locally (CLAUDE.md §4).
 describe("devSetup against real Postgres", () => {
   // A BARE container (no-op migrate): devSetup runs the migrations itself, exactly as a fresh dev DB.
   const suite = useRealPostgres({
     start: () =>
       startMigratedPostgres({
         dockerRequired:
-          "dev-setup provisions and reuses a venue against a real Postgres as the container " +
-          "superuser; PGlite's per-connection superuser cannot exercise the persisted decision.",
+          "dev-setup requires Postgres for its provisioning and venue-reuse integration test.",
         migrate: async () => {
           /* devSetup applies the full manifest itself — a bare container is the fresh-DB shape. */
         },
@@ -329,7 +328,10 @@ describe("inspectVenues reads existing venues with ordinary SELECT rights", () =
   });
 
   it("propagates permission denied instead of reporting an empty database", async () => {
-    await suite.admin.execute(sql`create role venue_inspection_denied login password 'denied'`);
+    // Roles are cluster-global, so fixture setup must tolerate a reused test container.
+    await suite.admin.execute(
+      sql.raw(idempotentRoleStatement({ name: "venue_inspection_denied", password: "denied" })),
+    );
     const uri = roleUrl(suite.pg.uri, "venue_inspection_denied", "denied");
     await expect(inspectVenues(uri, null)).rejects.toMatchObject({ code: "42501" });
   });

@@ -56,15 +56,11 @@ export type ManifestBuilder = (deps: {
 export interface BackupSweepDeps {
   /** Every destination this run fans the SAME encrypted artifact out to. */
   backends: StorageBackend[];
-  /** A PRIVILEGED pool (superuser/BYPASSRLS — the same role the dump uses) for {@link buildManifest}:
-   * `appliedSchemaVersion` reads each module's `__drizzle_migrations_*` journal, on which `app_user`
-   * holds NO SELECT, so the app pool would fail. NOT the app pool. Whether THIS role can read the
-   * journal is not separately probed — the receipt is `pg_dump` itself: it connects with the SAME
-   * connection string / role (a separate process, opening its own connection) and must read those
-   * same ordinary, RLS-free journal tables for a complete dump, so a role able to dump them holds
-   * SELECT on them; if it somehow did not, `buildManifest` throws and fails the tick visibly
-   * (`backup.failed`) BEFORE `pg_dump` ever runs (see the FAIL-FAST note on {@link runOnce}),
-   * rather than shipping a corrupt or incomplete archive. */
+  /** The pool accepted by the boot probe: effective schema access and SELECT on the user
+   * tables and sequences the dump needs, including every module's migration journal.
+   * pg_dump uses the same connection string in a separate process. The app pool lacks journal
+   * SELECT. If a journal read fails after boot, buildManifest fails the tick before pg_dump or archive
+   * delivery, so an incomplete manifest cannot be shipped as a successful backup. */
   db: Database;
   /** The running composition's modules — their `backup.nonDbState` refs drive the media/etc. capture
    * and their names + applied schema versions populate the manifest. */
@@ -76,7 +72,7 @@ export interface BackupSweepDeps {
   resolvers: Record<string, string>;
   /** State dir holding the RECOVERY_FILES secrets captured into `secrets/<path>` (state-secrets.ts). */
   stateDir: string;
-  /** The libpq connection string `pg_dump` dumps — the privileged backup role, not the app pool's. */
+  /** The libpq connection string pg_dump uses, with the same role and database as db. */
   databaseUrl: string;
   /** The operator-held passphrase the dump is encrypted under before it ever reaches a backend. */
   recoveryKey: string;

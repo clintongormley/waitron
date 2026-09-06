@@ -163,7 +163,14 @@ deliberately not made here. Until one exists, the rule is operational rather tha
 `instance` against a production database from the same build as the `apps/server` being deployed, or
 in a window where no till is selling.
 
-**Use a non-superuser admin.** `src/instance-apply.pg.test.ts` runs `applyInstance` against a
+**Use a non-superuser admin.** Managed Postgres makes this a practical requirement:
+[Neon](https://neon.com/docs/manage/roles),
+[Supabase](https://supabase.com/docs/guides/database/postgres/roles-superuser) and
+[RDS](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Appendix.PostgreSQL.CommonDBATasks.Roles.rds_superuser.html)
+withhold true superuser access from your connection. RDS explicitly documents `CREATEDB` and
+`CREATEROLE` on its admin login; check your provider's role attributes before provisioning.
+The local test measures the PostgreSQL privilege shape, not compatibility with each hosted service.
+`src/instance-apply.pg.test.ts` runs `applyInstance` against a
 blank PostgreSQL container as a login with `CREATEDB` and `CREATEROLE`. It checks `rolsuper = false`,
 applies the full manifest, creates the two logins, reads the database/schema ACLs and memberships
 back, and checks the deployment stamp. `src/venue-apply.pg.test.ts` then exercises the venue flow as
@@ -401,10 +408,10 @@ with two admins `adm_a` (which provisioned) and `adm_b` (which did not):
    sees is `unexpected failure (Error)` and exit 1, the last row of that table. Wall 3's own hard
    42501 lands in the same place, uncoded, for the same reason.
 
-Run `instance` as the admin that created the database. If you delegate an already-migrated
-database to another admin, that role needs to read the journals, administer `app_user` membership,
-and issue the database and schema grants. The role that owns those objects or holds their grant
-options can delegate those privileges:
+Run `instance` as the admin that created the database. For a different admin on an already-migrated
+database, the following four statements together were sufficient in `instance-apply.pg.test.ts`.
+The test applies them as the original owner to a login with `CREATEDB` and `CREATEROLE`, reads the
+ACLs and membership back, then successfully reapplies the plan:
 
 ```sql
 -- inside <db>:
@@ -414,8 +421,10 @@ grant create on database <db> to <new_admin> with grant option;
 grant create on schema public to <new_admin> with grant option;
 ```
 
-These grants do not transfer table ownership or authorize future migrations that alter existing
-tables. Use the original owner for that work. `instance-apply.pg.test.ts` exercises membership
+This experiment does not establish which statement fixes which failure, or that each statement is
+necessary: they were applied together, not removed one at a time. Do not read the list as a measured
+per-capability requirement. These grants do not transfer table ownership or authorize future
+migrations that alter existing tables. Use the original owner for that work. `instance-apply.pg.test.ts` exercises membership
 refusal, ineffective grants, and this delegation procedure with direct ACL read-back. The tool reads each
 grantor's ACL entry: a grantee can have several entries, and a privilege held through another role
 does not substitute for the direct grant the plan promised.

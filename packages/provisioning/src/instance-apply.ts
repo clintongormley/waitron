@@ -159,7 +159,8 @@ export async function applyInstance(
           break;
         }
         case "migrate":
-          // Migrate as the admin against the target database. On a first provision
+          // Migrate with the admin connection string so the generated migrator password is not
+          // used to open another connection. On a first provision
           // that admin just created the database and owns it; the deployment logins
           // are created only after the migrations create their app_user membership target.
           // Re-running against a database owned by another admin requires explicit grants.
