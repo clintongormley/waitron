@@ -155,8 +155,11 @@ Traps, each of which cost a round trip:
   backgrounded whole-workspace `pnpm -r test:coverage` — check what else is testing on the machine
   first. The receipt is two 65 GB RAM spikes and a force-quit on 2026-08-30, with several sessions
   testing at once; one session running its own package gates in parallel was never the problem
-  (owner decision 2026-09-06, retiring "one gate at a time"). A whole-workspace local run, if
-  genuinely needed, runs alone with `--workspace-concurrency=1`. Chromium cannot launch
+  (owner decision 2026-09-06, retiring "one gate at a time"). Concurrency is decided by measured
+  headroom, never by a count: before a heavy run check free memory (`memory_pressure | grep free`)
+  and the heaviest processes (`ps -axo rss,command | sort -nr | head`), then scale
+  `--workspace-concurrency` to what is free. Receipt: 77% of 64 GB free tonight with two review
+  sessions, four vitest workers and two Chromiums running. Chromium cannot launch
   inside Codex's macOS sandbox
   (`bootstrap_check_in org.chromium.Chromium.MachPortRendezvousServer: Permission denied (1100)`,
   measured 2026-09-06), so a run that reaches a browser package is driven from the host, never
