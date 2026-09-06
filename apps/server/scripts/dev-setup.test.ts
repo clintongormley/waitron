@@ -137,7 +137,7 @@ describe("buildDevEnv carries the resolved seed locale into the env contract", (
         ids,
         seedLocale,
       });
-      // The load-bearing mapping (dev-setup.ts): the bare content locale becomes the full-tag
+      // The mapping (dev-setup.ts): the bare content locale becomes the full-tag
       // WAITRON_TILL_LOCALE (a SUPPORTED_LOCALES code)…
       expect(env.WAITRON_TILL_LOCALE).toBe(expectedTillLocale);
       // …and survives the round-trip out to the written `.env` text and back.
@@ -191,7 +191,7 @@ describe("devSetup against real Postgres", () => {
   });
 
   async function tillsCount(): Promise<number> {
-    // As the container superuser (RLS bypassed) — a raw count of every till in the database.
+    // Count every till through the container owner connection.
     const { rows } = await suite.admin.execute<{ n: number }>(
       sql`select count(*)::int as n from tills`,
     );
@@ -258,7 +258,7 @@ describe("devSetup against real Postgres", () => {
     const second = await devSetup({ databaseUrl: suite.pg.uri, envPath, log: () => {} });
 
     expect(second.reused).toBe(true);
-    // The load-bearing fiscal assertion: no second till (no second SIF, no second chain).
+    // The fiscal assertion: no second till (no second SIF, no second chain).
     expect(await tillsCount()).toBe(1);
     // Same identity handed back, read from the untouched `.env`.
     expect(second.env.WAITRON_TILL_TENANT_ID).toBe(first.env.WAITRON_TILL_TENANT_ID);
@@ -303,34 +303,34 @@ describe("devSetup against real Postgres", () => {
     await expect(devSetup({ databaseUrl: suite.pg.uri, envPath, log: () => {} })).rejects.toThrow(
       /already holds a venue/i,
     );
-    // The load-bearing fiscal assertion: still exactly one till, no second chain.
+    // The fiscal assertion: still exactly one till, no second chain.
     expect(await tillsCount()).toBe(1);
   });
 });
 
-// The Copilot-flagged gap: `inspectVenues` decides "does this database hold a venue?" via
-// `exists(select 1 from tenants …)`, but `tenants` is FORCE ROW LEVEL SECURITY (packages/db/drizzle
-// 0001_tenancy_rls.sql), so on a non-superuser/non-BYPASSRLS connection with no tenant GUC set that
-// exists() silently reads false even when tenants exist — a false negative that would defeat the
-// refuse-to-clobber guard both dev-setup and dev-onboard rely on. Clones the shared apps/server
-// container's already-migrated `manifest` template (apps/server/src/testing/global-setup.ts) rather
-// than booting a fresh one, and authenticates as `app_login` — one of that file's cluster-wide roles,
-// `in role app_user`, which 0001_tenancy_rls.sql creates NOLOGIN and refuses to grant table access to
-// if it is ever SUPERUSER/BYPASSRLS, so `app_login` is guaranteed non-privileged by construction.
-describe("inspectVenues refuses to run on a non-privileged connection", () => {
+// Real Postgres enforces SELECT privileges; PGlite's superuser cannot test refusal.
+describe("inspectVenues reads existing venues with ordinary SELECT rights", () => {
   const suite = useTemplateDb({ template: "manifest" });
 
-  it("throws naming the privilege requirement rather than silently reporting no venue", async () => {
-    // Seed a tenant as the superuser admin connection FIRST: if the new privilege guard were absent
-    // (or broken) and the old exists()-only behaviour ran instead, it would silently return
-    // `{ hasExpected: false, hasAny: false }` here — the exact false negative this test exists to
-    // catch, not a throw. Asserting `rejects.toThrow` against a database that provably holds a tenant
-    // is what makes this a test of the guard rather than of an empty table.
-    await suite.admin.execute(
-      sql`insert into tenants (country, tax_id, legal_name) values ('ES', '00000000T', 'Privilege Guard SL')`,
-    );
+  it("finds the expected tenant and refuses to overlook a different existing tenant", async () => {
+    const tenantId = "11111111-2222-3333-4444-555555555555";
+    await suite.admin.execute(sql`
+      insert into tenants (id, country, tax_id, legal_name)
+      values (${tenantId}, 'ES', '00000000T', 'Inspection SL')`);
+    const readerUri = roleUrl(suite.pg.uri, "app_login", "app_pw");
+    await expect(inspectVenues(readerUri, tenantId)).resolves.toEqual({
+      hasExpected: true,
+      hasAny: true,
+    });
+    await expect(inspectVenues(readerUri, null)).resolves.toEqual({
+      hasExpected: false,
+      hasAny: true,
+    });
+  });
 
-    const nonPrivilegedUri = roleUrl(suite.pg.uri, "app_login", "app_pw");
-    await expect(inspectVenues(nonPrivilegedUri, null)).rejects.toThrow(/superuser or BYPASSRLS/i);
+  it("propagates permission denied instead of reporting an empty database", async () => {
+    await suite.admin.execute(sql`create role venue_inspection_denied login password 'denied'`);
+    const uri = roleUrl(suite.pg.uri, "venue_inspection_denied", "denied");
+    await expect(inspectVenues(uri, null)).rejects.toMatchObject({ code: "42501" });
   });
 });

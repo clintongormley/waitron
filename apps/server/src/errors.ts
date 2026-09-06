@@ -1573,12 +1573,10 @@ declare module "@waitron/shared" {
      * cannot be built. `missing` is the state-dir-relative path (e.g. `secrets.env`). A server
      * fault, not a client error: the box has lost part of its own unrecoverable state. */
     "recovery.state_incomplete": { missing: string };
-    /** The configured backup connection is neither superuser nor BYPASSRLS, so it cannot read the
-     * FORCE-RLS fiscal tables: under `pg_dump`'s default `row_security = off` the dump ERRORS loudly,
-     * and only WITH `--enable-row-security` (which our runner does not pass) would it instead silently
-     * emit a per-tenant-truncated (empty) dump. Refused at boot so a recurring per-run `pg_dump`
-     * failure surfaces as one clear boot-time cause and no silently-truncated fiscal backup can ship.
-     * No params. */
+    /** The backup connection lacks schema access or SELECT on a user table or sequence,
+     * including the migration journals read by the manifest builder. Refused at boot so a
+     * recurring backup failure has one clear cause. Ownership or effective read grants suffice.
+     * The existing code is retained; no params. */
     "backup.role_rls_fenced": Record<string, never>;
     /** A backup artifact's binary frame is malformed (bad magic, version, or truncated header)
      * before decryption is even attempted. `reason` is a short machine tag. */

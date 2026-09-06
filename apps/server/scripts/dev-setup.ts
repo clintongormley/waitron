@@ -225,7 +225,7 @@ export async function waitForPostgres(uri: string, log: (line: string) => void):
 
 /**
  * Read whether the database contains the expected tenant and whether any tenant
- * exists. The current connection check accepts superuser or BYPASSRLS roles.
+ * exists. The connection needs SELECT on tenants; the query enforces that privilege.
  * Only an absent tenants table means no venue; propagate other query failures so
  * a failed inspection cannot trigger provisioning over an existing venue.
  */
@@ -236,21 +236,6 @@ export async function inspectVenues(
   const client = new pg.Client({ connectionString: uri });
   try {
     await client.connect();
-
-    // Must run BEFORE the tenants query, and unconditionally: `pg_roles` is a system catalog, always
-    // present whether or not the manifest has migrated, so this check itself never hits 42P01 — an
-    // unmigrated database still fails closed here if the connection somehow lacked privilege, rather
-    // than falling through to the (in that case, coincidentally correct) undefined_table branch below.
-    const { rows: privilegeRows } = await client.query<{ privileged: boolean }>(
-      "select rolsuper or rolbypassrls as privileged from pg_roles where rolname = current_user",
-    );
-    if (privilegeRows[0]?.privileged !== true) {
-      throw new Error(
-        "dev-setup: inspectVenues requires a superuser or BYPASSRLS connection. " +
-          "`dev:onboard`/`dev:setup` are meant to run against the local dev container as its " +
-          "`postgres` superuser — check DATABASE_URL.",
-      );
-    }
 
     const { rows } = await client.query<{ has_expected: boolean; has_any: boolean }>(
       "select exists(select 1 from tenants where id = $1) as has_expected, exists(select 1 from tenants) as has_any",
