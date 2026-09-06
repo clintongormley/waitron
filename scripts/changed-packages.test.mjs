@@ -186,10 +186,10 @@ describe("scopeForPaths", () => {
     ).toMatchObject({ kind: "packages", packages: ["@waitron/db"] });
   });
 
-  // Root config no gate reads takes the documentation route rather than the global one. A push of
-  // `.codex/config.toml` alone belongs to no package, so it landed on `global` and ran the whole
-  // workspace.
-  it("does not let root config no gate reads widen the run", () => {
+  // Root config no code-gated job reads takes the documentation route rather than the global one. A
+  // push of `.codex/config.toml` alone belongs to no package, so it landed on `global` and ran the
+  // whole workspace.
+  it("does not let inert root config widen the run", () => {
     expect(scopeForPaths([".codex/config.toml"], workspace())).toMatchObject({
       kind: "documentation",
       packages: [],

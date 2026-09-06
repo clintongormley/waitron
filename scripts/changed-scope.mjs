@@ -16,15 +16,26 @@ import { readFileSync } from "node:fs";
 // exactly that edit skip exactly that test.
 
 /**
- * Root directories and root files that no gate reads: an editor's or another agent's own config,
- * which cannot reach a test, a build or a type-check.
+ * Root directories and root files that no `code`-gated job reads — the typecheck, test, build and
+ * mutation jobs the documentation route skips. An editor's or another agent's own config: changing
+ * one cannot change what any of those jobs produce.
  *
- * ROOT-ONLY, and the prefixes below carry that. The same names inside a package are that package's
- * files — a package's own `.gitignore` decides what its build and test runs can see.
+ * NOT "no gate at all", and CI's ungated `lint` job is why it does not need to be. `format:check`
+ * reads `.editorconfig`, the root `.gitignore` and `.vscode/*.json` (prettier honours all three), and
+ * `lint` reads a `.vscode/*.mjs` (eslint's base config lints every `.mjs`) — but CI runs both on
+ * EVERY push, ungated, so a formatting or lint regression in one of these is caught there regardless
+ * of this classification. Only the LOCAL pre-push fast-path skips lint, exactly as it already skips it
+ * for a `.ts` file under `docs/`; `.husky/pre-push` records that tradeoff and CI's ungated lint as its
+ * backstop.
  *
- * Root config a gate DOES read is deliberately absent and stays code: `.github/`, `.husky/`,
- * `scripts/`, the lockfile, the root manifests, `eslint.config.js`, `.prettierrc*`,
- * `tsconfig*.json` and `pnpm-workspace.yaml` can each affect any package or the lint/format gates.
+ * ROOT-ONLY, and the prefixes below carry that. The same names inside a package stay code — the
+ * conservative route, since the classifier cannot read a package's config to prove it inert. (tsc and
+ * vitest read the filesystem, not `.gitignore`, so a nested one never actually reaches a build or a
+ * test; classifying it code is insurance, not a claim that it could.)
+ *
+ * Root config a `code`-gated job reads is deliberately absent and stays code: `.github/`, `.husky/`,
+ * `scripts/`, the lockfile, the root manifests, `eslint.config.js`, `.prettierrc*`, `tsconfig*.json`
+ * and `pnpm-workspace.yaml` can each affect a package's typecheck or tests.
  */
 const INERT_ROOT_PREFIXES = [".codex/", ".vscode/"];
 const INERT_ROOT_FILES = [".gitignore", ".editorconfig"];
@@ -33,8 +44,8 @@ const INERT_ROOT_FILES = [".gitignore", ".editorconfig"];
  * True when a change to `path` cannot affect any test, build or type-check result.
  *
  * Inert means: anywhere under `docs/`, a Markdown file at the repository root, or the root config
- * above that no gate reads. Everything else — including Markdown inside a package, and those same
- * config names inside a package — is code.
+ * above that no `code`-gated job reads. Everything else — including Markdown inside a package, and
+ * those same config names inside a package — is code.
  */
 export function isInertPath(path) {
   if (path.startsWith("docs/")) return true;
@@ -49,9 +60,9 @@ export function isInertPath(path) {
  * Classifies a list of changed paths.
  *
  * `code: false` is what both gates call `documentation` — a name narrower than the set, which is
- * every inert path: prose AND the root config no gate reads. The name is the consumers' contract
- * (ci.yml gates on `code`, .husky/pre-push compares its scope to the literal `documentation`), so
- * it stays.
+ * every inert path: prose AND the root config no `code`-gated job reads. The name is the consumers'
+ * contract (ci.yml gates on `code`, .husky/pre-push compares its scope to the literal
+ * `documentation`), so it stays.
  *
  * Fails closed: an empty list means the diff could not be worked out (a force-push, a new branch,
  * an all-zero `github.event.before`), which is a reason to run everything rather than nothing.

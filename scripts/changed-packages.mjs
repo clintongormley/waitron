@@ -149,8 +149,8 @@ function owningPackage(path, packages) {
  * The whole verdict on a push's changed paths, from ONE call: `{ kind, packages, reason }`, where
  * `kind` is one of THREE outcomes and the hook does something different for each.
  *
- *   "documentation"  every changed path is inert — prose, or the root config no gate reads (see
- *                    `isInertPath`). format:check still reads it (`.prettierignore` excludes
+ *   "documentation"  every changed path is inert — prose, or the root config no `code`-gated job
+ *                    reads (see `isInertPath`). format:check still reads it (`.prettierignore` excludes
  *                    `docs/` but NOT a root-level `CLAUDE.md` or `README.md` — run here on
  *                    2026-08-01: `prettier --file-info docs/backlog.md` is `"ignored": true`,
  *                    `--file-info CLAUDE.md` is `"ignored": false, "inferredParser": "markdown"`,
@@ -212,8 +212,9 @@ export function scopeForPaths(changedPaths, loadPackages) {
   for (const path of codePaths) {
     const owner = owningPackage(path, packages);
     // `.github/`, `.husky/`, `scripts/`, `pnpm-workspace.yaml`, `tsconfig.base.json`, the root
-    // manifest and the lockfile all land here. Those can affect anything. Root config no gate
-    // reads does NOT reach here — `isInertPath` classifies it out of `codePaths` above.
+    // manifest and the lockfile all land here. Those can affect anything. Root config no
+    // `code`-gated job reads does NOT reach here — `isInertPath` classifies it out of `codePaths`
+    // above.
     if (owner === undefined) {
       return {
         kind: "global",

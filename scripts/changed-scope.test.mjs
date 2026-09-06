@@ -33,8 +33,8 @@ describe("isInertPath", () => {
     },
   );
 
-  // Root config no gate reads. A push touching only these ran the whole workspace, locally and in
-  // CI, until 2026-09-06.
+  // Root config no code-gated job reads. A push touching only these ran the whole workspace, locally
+  // and in CI, until 2026-09-06.
   it.each([".codex/config.toml", ".vscode/settings.json", ".gitignore", ".editorconfig"])(
     "treats the root config %s as inert",
     (path) => {

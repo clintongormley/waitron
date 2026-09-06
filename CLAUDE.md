@@ -108,12 +108,14 @@ Traps, each of which cost a round trip:
   `test-light-b` for everything else (bins in `scripts/changed-scope.mjs`). Vitest `--shard` splits
   by FILE COUNT, so shard imbalance is the real limit, and `N` must never exceed a package's test-file
   count.
-- **CI does not run every check on every push.** The `changes` job skips the expensive jobs when
-  every changed path is documentation or root config no gate reads (`.codex/`, `.vscode/`, the root
-  `.gitignore`, the root `.editorconfig`), and on a pull request narrows the shards and mutation jobs to
-  the changed packages and their dependents. A merge to `main` runs the unfiltered suite whenever
-  anything but documentation changed — that run verifies the narrowing. Read the `changes` job's
-  `code`, `scope` and `packages` outputs before treating a green PR as evidence about the workspace.
+- **CI does not run every check on every push.** The `changes` job skips the expensive `code`-gated
+  jobs when every changed path is inert — documentation, or root config no `code`-gated job reads
+  (`.codex/`, `.vscode/`, the root `.gitignore`, the root `.editorconfig`) — and on a pull request
+  narrows the shards and mutation jobs to the changed packages and their dependents. `lint` and
+  `format:check` are ungated and run on every push, so a lint or formatting regression in an inert
+  path is still caught. A merge to `main` runs the unfiltered suite whenever anything outside that
+  inert set changed — that run verifies the narrowing. Read the `changes` job's `code`, `scope` and
+  `packages` outputs before treating a green PR as evidence about the workspace.
   Design: `docs/superpowers/specs/2026-07-31-scoped-ci-design.md`.
 - **A cheap job can still be the critical path.** `mutation-verifactu` was ungated because a mutant
   is cheap; on run 30650089655 it was 3m26s of a 4m8s run. Sort a run's jobs by duration before
