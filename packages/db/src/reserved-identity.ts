@@ -93,6 +93,7 @@ export async function readStandardSeriesIdTx(
     .from(invoiceSeries)
     .where(
       and(
+        eq(invoiceSeries.tenantId, tenantId),
         eq(invoiceSeries.nodeId, nodeId),
         eq(invoiceSeries.purpose, "standard"),
         isNull(invoiceSeries.retiredAt),

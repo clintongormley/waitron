@@ -115,6 +115,7 @@ describe("adoptVenue", () => {
     // Bundle timestamps arrive as ISO strings. Drizzle's date-mode inserts need Dates, so
     // schema-driven revival covers created_at on tenants, nodes and tills, plus retired_at on
     // invoice_series. Locations has no date column and passes through unchanged.
+    // Deletion-proof: make `reviveRow` return its row unchanged and this throws `TypeError: value.toISOString is not a function`.
     const { rows, designated } = makeRows();
     const stamp = "2026-01-02T03:04:05.000Z";
     rows.tenant.createdAt = stamp;

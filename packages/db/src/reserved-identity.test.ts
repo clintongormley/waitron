@@ -11,6 +11,7 @@ import {
   readMembershipTrustSet,
   readNodeEndorsement,
   readStandardSeriesId,
+  readStandardSeriesIdTx,
   retireNodeSeriesTx,
   insertNodeSeriesTx,
   withTenant,
@@ -120,6 +121,24 @@ describe("reserved-identity accessors", () => {
     expect(row).toEqual({ code: "F-42", purpose: "standard" });
   });
 
+  it("readStandardSeriesIdTx refuses a node belonging to a different tenant argument", async () => {
+    // PGlite bypasses RLS, so the helper's own tenant predicate must reject this mismatched pair.
+    const node = await seedNode(suite.db, tenantId, locationId);
+    const otherTenant = await seedTenant(suite.db);
+    await withTenant(suite.db, tenantId, (tx) =>
+      insertReservedSeriesTx(tx, [{ tenantId, nodeId: node, code: "FA", purpose: "standard" }]),
+    );
+    await expect(
+      withTenant(suite.db, tenantId, (tx) => readStandardSeriesIdTx(tx, otherTenant, node)),
+    ).rejects.toMatchObject({
+      code: "series.no_standard_for_node",
+      params: { tenantId: otherTenant, nodeId: node },
+    });
+    await expect(
+      withTenant(suite.db, tenantId, (tx) => readStandardSeriesIdTx(tx, tenantId, node)),
+    ).resolves.toEqual(expect.any(String));
+  });
+
   it("readStandardSeriesId throws series.no_standard_for_node when the node has none", async () => {
     const bareNode = await seedNode(suite.db, tenantId, locationId);
     const err = await captureError(() => readStandardSeriesId(suite.db, tenantId, bareNode));
@@ -211,14 +230,16 @@ describe("reserved-identity accessors", () => {
       .from(invoiceSeries)
       .where(and(eq(invoiceSeries.nodeId, node), eq(invoiceSeries.code, "FA-7")));
     expect(fresh).toEqual({ nextNumber: 1, retiredAt: null });
-    // The retired `FA` still reserves its code — the natural key includes retired rows.
-    const err = await captureError(() =>
-      withTenant(suite.db, tenantId, (tx) =>
-        insertNodeSeriesTx(tx, tenantId, node, [{ code: "FA", purpose: "standard" }]),
-      ),
-    );
-    expect(isAppError(err) && err.code).toBe("series.code_collision");
-    expect(isAppError(err) && err.params).toEqual({ code: "FA" });
+    // Both the retired FA and the live FA-7 reserve their codes.
+    for (const code of ["FA", "FA-7"]) {
+      const err = await captureError(() =>
+        withTenant(suite.db, tenantId, (tx) =>
+          insertNodeSeriesTx(tx, tenantId, node, [{ code, purpose: "standard" }]),
+        ),
+      );
+      expect(isAppError(err) && err.code).toBe("series.code_collision");
+      expect(isAppError(err) && err.params).toEqual({ code });
+    }
     // An empty list is a no-op, not an INSERT with no rows.
     await withTenant(suite.db, tenantId, (tx) => insertNodeSeriesTx(tx, tenantId, node, []));
   });

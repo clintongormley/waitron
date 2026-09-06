@@ -75,6 +75,15 @@ describe("FISCAL_PROVISIONING.seed", () => {
 });
 
 describe("FISCAL_PROVISIONING.standby", () => {
+  beforeEach(async () => {
+    // The primary must hold a live SIF and its series before it can reserve for a standby.
+    await withTenant(db, TENANT_A.id, (tx) => seed.run(tx, NODE));
+    await db.execute(sql`
+      insert into invoice_series (tenant_id, node_id, code, purpose) values
+        (${TENANT_A.id}, ${TENANT_A.nodeId}, 'FA', 'standard'),
+        (${TENANT_A.id}, ${TENANT_A.nodeId}, 'RF', 'rectificative')`);
+  });
+
   it("reserve derives from the primary's LIVE series bases: a restored primary's `FA-<n>` gives the standby `FA-<m>`, not `FA-<n>-<m>`", async () => {
     await db.execute(sql`delete from invoice_series where node_id = ${TENANT_A.nodeId}`);
     const primarySif = await withTenant(db, TENANT_A.id, (tx) =>
@@ -98,15 +107,6 @@ describe("FISCAL_PROVISIONING.standby", () => {
       { code: `FA-${m}`, purpose: "standard" },
       { code: `RE-${m}`, purpose: "rectificative" },
     ]);
-  });
-
-  beforeEach(async () => {
-    // The primary must hold a live SIF and its series before it can reserve for a standby.
-    await withTenant(db, TENANT_A.id, (tx) => seed.run(tx, NODE));
-    await db.execute(sql`
-      insert into invoice_series (tenant_id, node_id, code, purpose) values
-        (${TENANT_A.id}, ${TENANT_A.nodeId}, 'FA', 'standard'),
-        (${TENANT_A.id}, ${TENANT_A.nodeId}, 'RF', 'rectificative')`);
   });
 
   it("reserves a fresh number and derives disjoint series codes from the primary's", async () => {

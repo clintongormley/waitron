@@ -100,7 +100,7 @@ function containerPgRestore(containerId: string): PgRestoreRunner {
   return async ({ databaseUrl: url, inFile, signal }) => {
     const dbn = new URL(url).pathname.replace(/^\//, "");
     const internal = internalUrl(url, dbn);
-    const inContainer = `/tmp/waitron-rejoin-e2e-${process.pid}-${(n += 1)}.dump`;
+    const inContainer = `/tmp/waitron-restore-fiscal-e2e-${process.pid}-${(n += 1)}.dump`;
     await execFileAsync("docker", ["cp", inFile, `${containerId}:${inContainer}`]);
     try {
       await execFileAsync(
@@ -129,10 +129,10 @@ let olderArtifactPath: string;
 let baselinePg: RealPostgres | undefined;
 let olderBaselinePg: RealPostgres | undefined;
 const targets: string[] = [];
-let n = 0;
+let targetCounter = 0;
 
 async function makeFreshTarget(): Promise<string> {
-  const name = `restore_fiscal_${process.pid}_${n++}`;
+  const name = `restore_fiscal_${process.pid}_${targetCounter++}`;
   // PostgreSQL utility statements cannot bind identifiers.
   if (!/^restore_fiscal_[0-9]+_[0-9]+$/.test(name)) throw new Error("Invalid target name");
   await execFileAsync("docker", [

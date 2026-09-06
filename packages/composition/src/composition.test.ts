@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  FISCAL_RESTORE,
   FISCAL_PROVISIONING,
+  FISCAL_RESTORE,
   FISCAL_SLOT,
   FISCAL_VOCABULARY,
 } from "@waitron/fiscal-verifactu";
