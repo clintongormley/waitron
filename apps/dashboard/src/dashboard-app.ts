@@ -1,8 +1,9 @@
+import { dashboardPath } from "./navigation.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";
 import { keyed } from "lit/directives/keyed.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, UrlStateController } from "@waitron/ui";
 import { resolveActiveLocale } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
@@ -43,14 +44,9 @@ import type { DashboardApi, PersonRole } from "./api/client.js";
  * author the roster, work the approvals queues, review planned vs actual worked time, record received
  * purchase invoices, author ingredients and product recipes, manage enrolled devices, manage printing
  * (agents + printers + status), see today's business overview, or review sales & takings over a date
- * range. Exactly one shows at a time. `overview`, `sales`, `staff`, `catalogue`, `location-menus`,
- * `receipt`, `statuses`, `floor`, `bookings`, `kitchen`, `roster`, `approvals`,
- * `planned-actual`, `purchases`, `recipe`, `devices`, `printers` and `canvas-editor` are the eighteen
- * non-gated MANAGER faces the nav switches between (a manager/admin session also sees the gated
- * `diagnostics`, for nineteen in all) — `overview` is also
- * the post-login/post-probe LANDING for every non-staff role (Task 9); `my-schedule` is the sole face
- * of a `staff`-role session and carries no nav. All logged-in faces share the same chrome (logout, plus
- * the nav for a non-staff session).
+ * range. Exactly one permitted destination shows at a time. Non-staff sessions restore a permitted
+ * path or fall back to overview; staff sessions show only my-schedule. Logged-in faces share logout
+ * and language controls, with navigation available to non-staff sessions.
  */
 type Screen =
   | "login"
@@ -145,67 +141,13 @@ const NAV_GROUPS: NavGroup[] = [
 ];
 
 /**
- * The management dashboard's ROOT element — the shell that turns the screens into a working app.
+ * Owns session discovery, permitted URL navigation and language preferences.
+ * The login screen stays visible until getMe confirms a session. Staff have only their own
+ * schedule; other roles can restore a destination from their visible sidebar entries.
  *
- * It owns one thing the whole flow shares: the injected {@link DashboardApi}. It runs a screen
- * machine (`login` | `my-schedule` | `overview` | `sales` | `staff` | `catalogue` | `location-menus` |
- * `receipt` | `statuses` | `floor` | `kitchen` | `roster` | `approvals` | `planned-actual` |
- * `purchases` | `recipe` | `devices` | `printers`) and does the event wiring the screens deliberately
- * do not:
- *
- *  - boot → a SESSION PROBE ({@link DashboardApp.#probeSession}) calls `api.getMe()` (WHOAMI); a
- *    success means a live management session, so it applies the resolved role — a `staff` person
- *    lands on the self-service `my-schedule` screen, a manager/supervisor/admin on the business
- *    `overview` screen (registered Task 9 — the "today at a glance" home) — while ANY rejection (the
- *    common `management_session.required`/401, or a stray/network error) means no usable session, so
- *    it opens on `login`. The probe is fully wrapped
- *    — an unhandled rejection here would be the exact `apps/till` `#boot` defect (`docs/backlog.md`),
- *    so this shell mirrors the login/staff screens' own `try/catch`ed loaders instead;
- *  - `logged-in` (from the login screen, on a successful `api.login`) → re-probe `getMe()` to learn
- *    the freshly-authenticated person's role, then land on `my-schedule` or `overview` the same way;
- *  - the NAV (the shell's own control, shown only for a NON-staff logged-in session) switches between
- *    the eighteen non-gated manager faces `overview`, `sales`, `staff`, `catalogue`, `location-menus`,
- *    `receipt`, `statuses`, `floor`, `bookings`, `kitchen`, `roster`, `approvals`,
- *    `planned-actual`, `purchases`, `recipe`, `devices`, `printers` and `canvas-editor` (plus the gated
- *    `diagnostics`) — a plain local state change, no
- *    server call. A `staff` session has no
- *    nav (the self-service view is its only face);
- *  - `logout` (the shell's own control, logged-in only) → end the server session, back to `login`.
- *
- * The default screen is `login`: before the probe resolves the shell shows the sign-in screen, and
- * only a successful probe switches it to a logged-in face — so a not-logged-in cold load never
- * flashes a screen it is not entitled to.
- *
- * HEADING OUTLINE. Each screen owns its OWN top heading — `dashboard-my-schedule-screen` renders the
- * sole `<h1>Mi horario</h1>`, `dashboard-overview-screen` the sole `<h1>Hoy de un vistazo</h1>`,
- * `dashboard-sales-screen` the sole `<h1>Ventas y recaudación</h1>`, `dashboard-staff-screen` the sole
- * `<h1>Usuarios</h1>`, `dashboard-catalogue-screen` the sole `<h1>Carta</h1>`,
- * `dashboard-location-menus-screen` the sole `<h1>Menús por local</h1>`,
- * `dashboard-receipt-screen` the sole
- * `<h1>Recibo</h1>`, `dashboard-service-status-screen` the sole `<h1>Estados de servicio</h1>`,
- * `dashboard-floor-screen` the sole `<h1>Sala</h1>`, `dashboard-kitchen-screen` the sole
- * `<h1>Cocina</h1>`, `dashboard-roster-screen` the sole `<h1>Turnos</h1>`,
- * `dashboard-approvals-screen` the sole `<h1>Aprobaciones</h1>`, `dashboard-planned-actual-screen`
- * the sole `<h1>Previsto vs real</h1>`, `dashboard-purchases-screen` the sole `<h1>Compras</h1>`,
- * `dashboard-recipe-screen` the sole `<h1>Recetas</h1>`, `dashboard-devices-screen` the sole
- * `<h1>Dispositivos</h1>`, `dashboard-printers-screen` the sole `<h1>Impresoras</h1>`, and
- * `dashboard-login-screen`
- * none — so the shell adds no competing `<h1>`: its logged-in chrome is a two-column layout — a
- * sidebar `<nav>` (whose group labels are `<h2 class="nav-group">`, never `<h1>`) beside a `<header
- * class="topbar">` carrying the language chooser + logout button — keeping exactly one `<h1>` in the
- * DOM at a time.
- *
- * DISCONNECT SAFETY (per-user-language-preference). `setLocale` mutates module-global locale, so it is
- * the one effect that can outlive the element. It runs on FOUR post-await paths, and each carries
- * `if (!this.isConnected) return` before the switch so a teardown during the await skips it —
- * {@link DashboardApp.#seedLocale} (the boot venue-default seed), {@link DashboardApp.#applyMe} (invoked
- * as `#applyMe(await getMe())`, so the probe's round trip is the await), {@link DashboardApp.#onLogout}
- * (the venue-default revert, after the logout round trip) and {@link DashboardApp.#onLocaleSelected}'s
- * PERSIST path (the preference write has already landed and the next login re-applies it, so only the
- * pointless local repaint is skipped). The TRANSIENT (`screen === "login"`) branch of
- * `#onLocaleSelected` runs its `setLocale` SYNCHRONOUSLY before any await, so it needs no guard. Each
- * guarded site is pinned by a deletion-proven disconnect test. Every OTHER state write here is
- * reactive-only and needs no guard — Lit never paints a detached element.
+ * A locale change recreates the screen subtree so translated text updates. Disconnect guards
+ * prevent late responses from changing browser history or the shared locale after teardown.
+ * Each screen owns its heading; the shell supplies navigation, logout and the language chooser.
  */
 @customElement("dashboard-app")
 export class DashboardApp extends LitElement {
@@ -252,7 +194,7 @@ export class DashboardApp extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      /* The main column: top bar (chooser + logout) over the scrolling screen body. */
+      /* The main column: top bar (logout) over the scrolling screen body. */
       .main {
         flex: 1 1 auto;
         min-width: 0;
@@ -290,6 +232,9 @@ export class DashboardApp extends LitElement {
 
       .body {
         padding: var(--wt-space-4);
+        padding-bottom: calc(
+          var(--wt-tap-min) + 2 * var(--wt-space-3) + env(safe-area-inset-bottom)
+        );
       }
 
       /* Narrow screens (a phone or a split view): the sidebar becomes an off-canvas DRAWER. It leaves
@@ -455,18 +400,8 @@ export class DashboardApp extends LitElement {
     }
   }
 
-  /** Land a resolved whoami on the right face: a `staff` person on the self-service `my-schedule`
-   * screen, every other role (supervisor/manager/admin) on the business `overview` screen — the
-   * post-login landing since Task 9 (previously the manager `staff` screen; `staff` is still one nav
-   * click away). Records the id + role the shell and screen both read. The ONE place the role→screen
-   * branch lives, shared by the boot probe and the post-login re-probe.
-   *
-   * Per-user-language-preference: also apply the signed-in person's UI language —
-   * `resolveActiveLocale(me.locale, me.venueLocale)`, their supported stored choice else the venue
-   * default — and remember the venue default for later. `#applyMe` is invoked as `#applyMe(await
-   * getMe())`, so the module-global `setLocale` runs POST-AWAIT: a teardown during the probe must not
-   * repaint a live sibling's locale (the DISCONNECT SAFETY note). The reactive state writes above the
-   * guard are harmless on a detached element (Lit never paints one), so only `setLocale` is guarded. */
+  /** Restore a permitted URL destination after authentication and apply the person's language.
+   * The disconnect guard protects both browser history and the shared locale from a late response. */
   #applyMe(me: {
     personId: string;
     role: PersonRole;
@@ -475,9 +410,10 @@ export class DashboardApp extends LitElement {
   }): void {
     this.myPersonId = me.personId;
     this.sessionRole = me.role;
-    this.screen = me.role === "staff" ? "my-schedule" : "overview";
+    this.screen = this.#permittedScreen(this.#url.read("dashboard"));
     this.#venueLocale = me.venueLocale;
     if (!this.isConnected) return;
+    this.#writeScreenUrl(this.screen, true);
     setLocale(resolveActiveLocale(me.locale, me.venueLocale));
   }
 
@@ -505,6 +441,11 @@ export class DashboardApp extends LitElement {
       // A failed logout must still drop to login; the reason it failed is not actionable here.
     }
     this.screen = "login";
+    this.sessionRole = undefined;
+    this.#url.write(
+      { dashboard: null, canvas: null, "canvas-tab": null, "floor-view": null, "floor-zone": null },
+      true,
+    );
     // Revert the UI to the venue default (per-user-language-preference): the previous operator's chosen
     // language must not linger into the login screen the next person meets — their own login re-applies
     // their stored preference. Guard the post-await module-global `setLocale` (the DISCONNECT SAFETY
@@ -609,9 +550,6 @@ export class DashboardApp extends LitElement {
                   >`
                 : nothing
             }
-            <dashboard-language-chooser
-              .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
-            ></dashboard-language-chooser>
             <wt-button variant="secondary" data-test="logout" @click=${() => void this.#onLogout()}
               >${t("action.logout")}</wt-button
             >
@@ -619,6 +557,9 @@ export class DashboardApp extends LitElement {
           <!-- keyed on the active locale: a switch changes the key, so Lit discards and rebuilds the
                screen subtree, repainting every child in the new language (screens hold no controller). -->
           <div class="body">${keyed(currentLocale(), this.#renderScreen())}</div>
+          <dashboard-language-chooser
+            .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
+          ></dashboard-language-chooser>
         </div>
       </div>
     `;
@@ -629,9 +570,38 @@ export class DashboardApp extends LitElement {
    * flip is inert (the drawer is never shown there). Keeps the `screen` set the nav has always done. */
   #selectScreen(screen: Screen): void {
     diag.record("info", "nav", { screen });
-    this.screen = screen;
+    this.screen = this.#permittedScreen(screen);
+    this.#writeScreenUrl(this.screen);
     this.drawerOpen = false;
   }
+
+  /** A URL selects a destination only within the authenticated person's visible navigation. */
+  #permittedScreen(requested: string | null): Screen {
+    if (this.sessionRole === "staff") return "my-schedule";
+    const item = NAV_GROUPS.flatMap((group) => group.items).find(
+      (entry) => entry.screen === requested,
+    );
+    if (
+      item &&
+      (!item.requiresManager || this.sessionRole === "manager" || this.sessionRole === "admin")
+    )
+      return item.screen;
+    return "overview";
+  }
+
+  readonly #url = new UrlStateController(this, () => this.#onHistory(), dashboardPath);
+
+  #writeScreenUrl(screen: Screen, replace = false): void {
+    this.#url.write({ dashboard: screen }, replace);
+  }
+
+  readonly #onHistory = (): void => {
+    if (this.screen === "login" || this.sessionRole === undefined) return;
+    this.screen = this.#permittedScreen(this.#url.read("dashboard"));
+    this.#writeScreenUrl(this.screen, true);
+    this.drawerOpen = false;
+    diag.record("info", "nav", { screen: this.screen });
+  };
 
   /** Escape closes the open drawer (Task 12) — completing keyboard operability: open via the hamburger,
    * close via Escape, the scrim, or selecting a nav item. Bound on the `.layout` wrapper, which contains

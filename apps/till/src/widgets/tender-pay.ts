@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles } from "@waitron/ui";
 import { type Decimal, compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
 import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
@@ -660,6 +660,7 @@ export class TillTenderPay extends LitElement {
           this.tipsEnabled
             ? html`
                 <wt-input
+                  @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(".pay-card"))}
                   class="tip-input"
                   type="number"
                   .value=${this.tipEntry}
@@ -729,6 +730,7 @@ export class TillTenderPay extends LitElement {
   #renderHolding() {
     return html`
       <wt-input
+        @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(".park"))}
         class="label-input"
         .value=${this.labelEntry}
         .label=${t("held.label_prompt")}
@@ -757,6 +759,7 @@ export class TillTenderPay extends LitElement {
         </div>
       </div>
       <wt-input
+        @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(".confirm"))}
         class="ref-input"
         .value=${this.refEntry}
         .label=${t("tender.card_ref")}

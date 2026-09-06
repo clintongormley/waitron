@@ -1,6 +1,6 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -212,6 +212,7 @@ export class IngredientForm extends LitElement {
   override render() {
     return html`
       <wt-dialog
+        @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]"))}
         heading=${this.ingredient ? t("ingredient.edit") : t("ingredient.new")}
         .open=${this.open}
         @wt-close=${() => this.#onClose()}

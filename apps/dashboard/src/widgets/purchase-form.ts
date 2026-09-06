@@ -1,6 +1,6 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -349,6 +349,7 @@ export class PurchaseForm extends LitElement {
   override render() {
     return html`
       <wt-dialog
+        @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]"))}
         heading=${this.invoice ? t("purchase.edit") : t("purchase.new")}
         .open=${this.open}
         @wt-close=${() => this.#onClose()}

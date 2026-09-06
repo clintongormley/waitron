@@ -16,7 +16,7 @@ import "../widgets/diet-filter.js";
 // The allergen screen the "Allergens" header button reveals (menu & allergens) — a full-body view, not
 // a card, so it is registered here and toggled in `render`, replacing the grid body when open.
 import "./till-allergen-screen.js";
-// The post-login language chooser in the header (per-user-language-preference). It only EMITS a
+// The post-login language chooser (per-user-language-preference). It only EMITS a
 // composed `locale-selected`; `till-app` persists the pick and switches the locale.
 import "../widgets/language-chooser.js";
 import type {
@@ -103,7 +103,7 @@ export class TillCounterScreen extends LitElement {
     `,
   ];
 
-  /** The HTTP face of the till, threaded from the app. The header's language chooser reads it
+  /** The HTTP face of the till, threaded from the app. The language chooser reads it
    * (`getLocales`) to offer the venue's languages; the app owns persisting a pick. */
   @property({ attribute: false }) api!: TillApi;
   /** The shared working order every widget reads and mutates. Set before the element connects. */
@@ -157,14 +157,8 @@ export class TillCounterScreen extends LitElement {
   /** Whether the allergen lookup screen is showing in place of the sale body (menu & allergens). The
    * "Allergens" header button opens it; the screen's own Close (`close-allergens`) returns to the sale. */
   @state() private showAllergens = false;
-  /**
-   * The active menu DIET filter (dietary-classification, Task 7), or `null` for none — a view-only lens
-   * that narrows the grid to vegan / vegetarian / no-meat / no-fish via {@link filterProductsByDiet}.
-   * Owned locally (unlike {@link selectedMenuId}, which the app owns): the diet lens touches ONLY which
-   * tiles are visible, never the basket, so it need not survive a screen switch. The diet-filter widget's
-   * `diet-filter-selected` toggles it.
-   */
-  @state() private selectedDiet: DietPredicate | null = null;
+  /** The session's dietary selection; null shows every dish in the selected menu. */
+  @property({ attribute: false }) selectedDiet: DietPredicate | null = null;
   /**
    * A sale is in flight (the app is awaiting `recordSale`). Threaded straight through to the pay
    * widget, which disables its Pay/Confirm affordances while set — the visible half of the app's
@@ -297,6 +291,7 @@ export class TillCounterScreen extends LitElement {
         .tab=${this.counterTab}
         .store=${this.store}
         .products=${this.#gridProducts()}
+        .selectedDiet=${this.selectedDiet}
         .heldOrders=${this.heldOrders}
         .stationQueue=${this.stationQueue}
         .defaultStationId=${this.defaultStationId}

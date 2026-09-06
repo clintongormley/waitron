@@ -1,6 +1,7 @@
+import { dashboardPath } from "../navigation.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles, selectStyles, UrlStateController } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
@@ -269,6 +270,46 @@ export class CanvasEditorScreen extends LitElement {
   /** True while a `#save` write is in flight, so Guardar disables itself and no second write races. */
   @state() private saving = false;
 
+  #editorRequest = 0;
+  #savedTabKeys = new Set<string>();
+  readonly #url = new UrlStateController(
+    this,
+    () => {
+      ++this.#editorRequest;
+      const id = this.#url.read("canvas");
+      if (id === null) {
+        if (this.mode === "editor") this.#cancelEditor(true);
+      } else if (id === this.editingId && this.draft !== null) {
+        this.#selectTab(this.#requestedTabIndex(this.draft), true);
+      } else {
+        void this.#openEditor(id, true);
+      }
+    },
+    dashboardPath,
+  );
+
+  #requestedTabIndex(draft: CanvasDef): number {
+    const requested = this.#url.read("canvas-tab");
+    return Math.max(
+      0,
+      draft.tabs.findIndex((tab) => tab.key === requested),
+    );
+  }
+
+  #writeEditorUrl(replace = false): void {
+    if (this.editingId === null) return;
+    const tabKey = this.draft?.tabs[this.activeTabIndex]?.key;
+    if (tabKey === undefined || !this.#savedTabKeys.has(tabKey)) return;
+    this.#url.write(
+      {
+        dashboard: "canvas-editor",
+        canvas: this.editingId,
+        "canvas-tab": tabKey,
+      },
+      replace,
+    );
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
@@ -344,9 +385,11 @@ export class CanvasEditorScreen extends LitElement {
    * Nothing is written to the server here — that happens on Guardar (`#save`). `structuredClone` gives
    * the editor a private copy it can mutate without touching the shared `DEFAULT_CANVASES` template. */
   #confirmCreate(): void {
+    ++this.#editorRequest;
     this.draft = structuredClone(DEFAULT_CANVASES[this.createFormFactor]);
     this.draftName = this.createName;
     this.editingId = null;
+    this.#savedTabKeys.clear();
     this.activeTabIndex = 0;
     this.selection = null;
     this.createOpen = false;
@@ -362,22 +405,29 @@ export class CanvasEditorScreen extends LitElement {
    * definition the defensive parse rejects — sets the banner and stays in LIST mode rather than
    * entering a broken editor (and never becomes an unhandled rejection; the caller `void`-invokes it).
    * Guardar (`#save`) writes the draft back. */
-  async #openEditor(id: string): Promise<void> {
+  async #openEditor(id: string, fromHistory = false): Promise<void> {
+    const request = ++this.#editorRequest;
     this.errorKey = null;
     try {
       const canvas = await this.api.getCanvas(id);
+      if (!this.isConnected || request !== this.#editorRequest) return;
       const parsed = this.#parseDefinition(canvas.definition);
       if (parsed === null) {
+        if (fromHistory) this.#cancelEditor(true);
         this.errorKey = "canvas.invalid";
         return;
       }
+      this.#savedTabKeys = new Set(parsed.tabs.map((tab) => tab.key));
       this.draft = structuredClone(parsed);
       this.draftName = canvas.name;
       this.editingId = id;
-      this.activeTabIndex = 0;
+      this.activeTabIndex = fromHistory ? this.#requestedTabIndex(parsed) : 0;
       this.selection = null;
       this.mode = "editor";
+      this.#writeEditorUrl(fromHistory);
     } catch (error) {
+      if (!this.isConnected || request !== this.#editorRequest) return;
+      if (fromHistory) this.#cancelEditor(true);
       this.errorKey = codeOf(error);
     }
   }
@@ -398,9 +448,10 @@ export class CanvasEditorScreen extends LitElement {
     this.#updateDraft({ ...draft, tabs });
   }
 
-  #selectTab(index: number): void {
+  #selectTab(index: number, fromHistory = false): void {
     this.activeTabIndex = index;
     this.selection = null;
+    this.#writeEditorUrl(fromHistory);
   }
 
   /** Append a fresh, empty tab and make it active. Its column count comes from the form factor's
@@ -417,8 +468,7 @@ export class CanvasEditorScreen extends LitElement {
     };
     const nextIndex = draft.tabs.length;
     this.#updateDraft({ ...draft, tabs: [...draft.tabs, tab] });
-    this.activeTabIndex = nextIndex;
-    this.selection = null;
+    this.#selectTab(nextIndex);
   }
 
   /** Append a card of `type` to the active tab at its default spans (colSpan capped to the tab's
@@ -554,7 +604,9 @@ export class CanvasEditorScreen extends LitElement {
   }
 
   /** Discard the draft and return to the list, clearing the error banner too. */
-  #cancelEditor(): void {
+  #cancelEditor(fromHistory = false): void {
+    ++this.#editorRequest;
+    this.#url.write({ canvas: null, "canvas-tab": null }, fromHistory);
     this.mode = "list";
     this.draft = null;
     this.draftName = "";
@@ -652,8 +704,7 @@ export class CanvasEditorScreen extends LitElement {
     const index = this.activeTabIndex;
     const tabs = draft.tabs.filter((_, i) => i !== index);
     this.#updateDraft({ ...draft, tabs });
-    this.activeTabIndex = Math.min(index, tabs.length - 1);
-    this.selection = null;
+    this.#selectTab(Math.min(index, tabs.length - 1), true);
   }
 
   // ── Property panel: canvas settings ──────────────────────────────────────────────────────────────
@@ -680,6 +731,8 @@ export class CanvasEditorScreen extends LitElement {
    * itself while the write is in flight.
    */
   async #save(): Promise<void> {
+    if (this.saving) return;
+    const request = this.#editorRequest;
     const draft = this.draft;
     if (draft === null) return;
     const name = this.draftName.trim();
@@ -697,12 +750,23 @@ export class CanvasEditorScreen extends LitElement {
     try {
       await this.#mutate(async () => {
         if (id !== null) await this.api.updateCanvas(id, name, draft);
-        else await this.api.createCanvas(name, draft);
-        this.mode = "list";
-        this.draft = null;
-        this.draftName = "";
-        this.editingId = null;
-        this.selection = null;
+        else {
+          const created = await this.api.createCanvas(name, draft);
+          if (request === this.#editorRequest) {
+            this.#savedTabKeys = new Set(draft.tabs.map((tab) => tab.key));
+            this.editingId = created.id;
+            this.#writeEditorUrl(true);
+          }
+        }
+        if (request === this.#editorRequest)
+          this.#savedTabKeys = new Set(draft.tabs.map((tab) => tab.key));
+        // A finished write belongs to the draft submitted, not a destination opened during the request.
+        if (
+          request === this.#editorRequest &&
+          this.draft === draft &&
+          this.draftName.trim() === name
+        )
+          this.#cancelEditor();
       });
     } finally {
       this.saving = false;
@@ -828,6 +892,7 @@ export class CanvasEditorScreen extends LitElement {
       @wt-close=${() => (this.createOpen = false)}
     >
       <wt-input
+        @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-create]"))}
         class="field"
         data-test="create-name"
         label=${t("canvas_editor.create_name_label")}
@@ -857,6 +922,7 @@ export class CanvasEditorScreen extends LitElement {
       @wt-close=${() => (this.duplicateTarget = null)}
     >
       <wt-input
+        @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-duplicate]"))}
         class="field"
         data-test="duplicate-name"
         label=${t("canvas_editor.duplicate_name_label")}
@@ -976,6 +1042,7 @@ export class CanvasEditorScreen extends LitElement {
     return html`${fields.map((field) =>
       field === "columns"
         ? html`<wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
             class="field"
             type="number"
             data-test="config-columns"
@@ -1019,6 +1086,7 @@ export class CanvasEditorScreen extends LitElement {
     return html`<div class="panel" data-test="card-panel">
       <h2 class="panel-title">${t(`canvas_editor.card.${card.type}` as StringKey)}</h2>
       <wt-input
+        @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
         class="field"
         type="number"
         data-test="card-colspan"
@@ -1027,6 +1095,7 @@ export class CanvasEditorScreen extends LitElement {
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onColSpan(e)}
       ></wt-input>
       <wt-input
+        @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
         class="field"
         type="number"
         data-test="card-rowspan"
@@ -1076,6 +1145,7 @@ export class CanvasEditorScreen extends LitElement {
     return html`<div class="panel" data-test="tab-settings-panel">
       <h2 class="panel-title">${t("canvas_editor.tab_settings")}</h2>
       <wt-input
+        @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
         class="field"
         data-test="tab-title"
         label=${t("canvas_editor.tab_title")}
@@ -1083,6 +1153,7 @@ export class CanvasEditorScreen extends LitElement {
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onTabTitle(e)}
       ></wt-input>
       <wt-input
+        @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
         class="field"
         type="number"
         data-test="tab-columns"
@@ -1110,6 +1181,7 @@ export class CanvasEditorScreen extends LitElement {
     return html`<div class="panel" data-test="canvas-settings-panel">
       <h2 class="panel-title">${t("canvas_editor.canvas_settings")}</h2>
       <wt-input
+        @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
         class="field"
         data-test="canvas-name"
         label=${t("canvas_editor.name")}

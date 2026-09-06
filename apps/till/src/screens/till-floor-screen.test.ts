@@ -97,7 +97,11 @@ function captureOpenTable(el: TillFloorScreen): { detail?: unknown } {
   return seen;
 }
 
-afterEach(cleanupWidgets);
+const originalUrl = location.href;
+afterEach(() => {
+  cleanupWidgets();
+  history.replaceState(null, "", originalUrl);
+});
 
 describe("till-floor-screen", () => {
   it("registers as a custom element", () => {
@@ -791,5 +795,29 @@ describe("till-floor-screen — FP-2 map/list toggle, tray, Editar plano", () =>
     );
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(refreshed).toBe(true);
+  });
+});
+
+describe("floor zone URL navigation", () => {
+  it("restores the zone after refresh and records a new zone selection", async () => {
+    const url = new URL(location.href);
+    url.pathname = "/tabs/floor/zone/z2";
+    history.replaceState(null, "", url);
+    const { el } = await mount({
+      zones: [zone(), zone({ id: "z2", name: "Terrace" })],
+      tables: [table(), table({ id: "t2", zoneId: "z2" })],
+    });
+    expect(el.shadowRoot!.querySelector('[data-table="t2"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-table="t1"]')).toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-zone="z1"]')!.click();
+    await el.updateComplete;
+    expect(location.pathname).toBe("/tabs/floor/zone/z1");
+    const back = new Promise<void>((resolve) =>
+      window.addEventListener("popstate", () => resolve(), { once: true }),
+    );
+    history.back();
+    await back;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('[data-table="t2"]')).not.toBeNull();
   });
 });

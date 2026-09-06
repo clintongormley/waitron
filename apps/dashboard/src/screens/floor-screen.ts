@@ -1,3 +1,4 @@
+import { dashboardPath } from "../navigation.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 // `baseStyles` also loads the `@waitron/ui` barrel, which self-registers `<wt-floor-canvas>` and
@@ -5,7 +6,9 @@ import { customElement, property, state } from "lit/decorators.js";
 // `clampPermille` size the tap-to-place default slot; the type-only imports carry the canvas's
 // copy / table / placement-event shapes.
 import {
+  submitOnEnter,
   baseStyles,
+  UrlStateController,
   buildZoneTabs,
   defaultTraySlot,
   floorTrayStyles,
@@ -160,6 +163,7 @@ export class FloorScreen extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
 
   // The configured zones + tables as editable rows, loaded on connect and re-synced after every mutation.
+  @state() private submitting = false;
   @state() private zones: EditableZone[] = [];
   @state() private tables: EditableTable[] = [];
   // The new-zone / new-table forms' single fields.
@@ -172,6 +176,26 @@ export class FloorScreen extends LitElement {
   // Within Plano, which zone sub-tab is active: a zone id, `null` for the "Sin zona" tab, or `undefined`
   // before a pick (→ the first tab). Kept distinct from a zone id so the default tracks the tab order.
   @state() private activeZone: string | null | undefined = undefined;
+
+  readonly #url = new UrlStateController(
+    this,
+    () => {
+      this.activeTab = this.#url.read("floor-view") === "plano" ? "plano" : "config";
+      const zone = this.#url.read("floor-zone");
+      this.activeZone = zone === null ? undefined : zone === "" ? null : zone;
+    },
+    dashboardPath,
+  );
+
+  #selectView(view: "config" | "plano"): void {
+    this.activeTab = view;
+    this.#url.write({ dashboard: "floor", "floor-view": view });
+  }
+
+  #selectZone(zone: string | null): void {
+    this.activeZone = zone;
+    this.#url.write({ dashboard: "floor", "floor-zone": zone ?? "" });
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -240,15 +264,19 @@ export class FloorScreen extends LitElement {
    * left to the server default (a manager reorders afterwards). A rejection becomes the `errorKey`
    * banner; never an unhandled rejection (called via `void`). */
   async #createZone(): Promise<void> {
+    if (this.submitting) return;
     this.errorKey = null;
     const name = this.newZone.trim();
     if (name === "") return;
+    this.submitting = true;
     try {
       await this.api.createZone({ name });
       this.newZone = "";
       await this.#load();
     } catch (error) {
       this.errorKey = codeOf(error);
+    } finally {
+      this.submitting = false;
     }
   }
 
@@ -262,14 +290,18 @@ export class FloorScreen extends LitElement {
    * state at click time (not a captured render closure), so an edit made immediately before the click is
    * what persists. A vanished row is a no-op. A rejection becomes the `errorKey` banner. */
   async #saveZone(id: string): Promise<void> {
+    if (this.submitting) return;
     this.errorKey = null;
     const row = this.zones.find((z) => z.id === id);
     if (row === undefined) return;
+    this.submitting = true;
     try {
       await this.api.updateZone(row.id, { name: row.name, displayOrder: row.displayOrder });
       await this.#load();
     } catch (error) {
       this.errorKey = codeOf(error);
+    } finally {
+      this.submitting = false;
     }
   }
 
@@ -296,15 +328,19 @@ export class FloorScreen extends LitElement {
   /** Create a table from the new-table form, then reload. A blank label is a no-op. Zone + capacity are
    * assigned per-row afterwards (the new-table form authors just the label, like the new-zone form). */
   async #createTable(): Promise<void> {
+    if (this.submitting) return;
     this.errorKey = null;
     const label = this.newTable.trim();
     if (label === "") return;
+    this.submitting = true;
     try {
       await this.api.createTable({ label });
       this.newTable = "";
       await this.#load();
     } catch (error) {
       this.errorKey = codeOf(error);
+    } finally {
+      this.submitting = false;
     }
   }
 
@@ -316,16 +352,20 @@ export class FloorScreen extends LitElement {
    * omitted from the patch (the route leaves the column untouched), so a table left without a seat count
    * sends only its label. The zone is NOT sent here — it is assigned live by the row's <select>. */
   async #saveTable(id: string): Promise<void> {
+    if (this.submitting) return;
     this.errorKey = null;
     const row = this.tables.find((tbl) => tbl.id === id);
     if (row === undefined) return;
     const patch: { label: string; capacity?: number } = { label: row.label };
     if (row.capacity !== null) patch.capacity = row.capacity;
+    this.submitting = true;
     try {
       await this.api.updateTable(row.id, patch);
       await this.#load();
     } catch (error) {
       this.errorKey = codeOf(error);
+    } finally {
+      this.submitting = false;
     }
   }
 
@@ -368,6 +408,7 @@ export class FloorScreen extends LitElement {
       <wt-card>
         <div class="row">
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="zone-save-${z.id}"]`))}
             label=${t("floor.zone_name")}
             data-test="zone-name-${z.id}"
             .value=${z.name}
@@ -377,6 +418,7 @@ export class FloorScreen extends LitElement {
             }}
           ></wt-input>
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="zone-save-${z.id}"]`))}
             type="number"
             label=${t("floor.zone_order")}
             data-test="zone-order-${z.id}"
@@ -390,6 +432,7 @@ export class FloorScreen extends LitElement {
             variant="primary"
             size="sm"
             data-test="zone-save-${z.id}"
+            ?disabled=${this.submitting}
             @click=${() => void this.#saveZone(z.id)}
             >${t("action.save")}</wt-button
           >
@@ -411,6 +454,7 @@ export class FloorScreen extends LitElement {
       <wt-card>
         <div class="row">
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="table-save-${tbl.id}"]`))}
             label=${t("floor.table_label")}
             data-test="table-label-${tbl.id}"
             .value=${tbl.label}
@@ -420,6 +464,7 @@ export class FloorScreen extends LitElement {
             }}
           ></wt-input>
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="table-save-${tbl.id}"]`))}
             type="number"
             label=${t("floor.table_capacity")}
             data-test="table-capacity-${tbl.id}"
@@ -458,6 +503,7 @@ export class FloorScreen extends LitElement {
             variant="primary"
             size="sm"
             data-test="table-save-${tbl.id}"
+            ?disabled=${this.submitting}
             @click=${() => void this.#saveTable(tbl.id)}
             >${t("action.save")}</wt-button
           >
@@ -570,7 +616,7 @@ export class FloorScreen extends LitElement {
       class="tab"
       data-tab=${key}
       variant=${this.activeTab === key ? "primary" : "secondary"}
-      @click=${() => (this.activeTab = key)}
+      @click=${() => this.#selectView(key)}
       >${label}</wt-button
     >`;
   }
@@ -583,7 +629,7 @@ export class FloorScreen extends LitElement {
       class="zone-tab"
       data-zone=${tab.key ?? "none"}
       variant=${tab.key === activeKey ? "primary" : "secondary"}
-      @click=${() => (this.activeZone = tab.key)}
+      @click=${() => this.#selectZone(tab.key)}
       >${tab.name}</wt-button
     >`;
   }
@@ -617,12 +663,17 @@ export class FloorScreen extends LitElement {
           }
           <div class="new">
             <wt-input
+              @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-add-zone]"))}
               label=${t("floor.new_zone")}
               data-new-zone
               .value=${this.newZone}
               @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onNewZone(e)}
             ></wt-input>
-            <wt-button variant="primary" data-add-zone @click=${() => void this.#createZone()}
+            <wt-button
+              variant="primary"
+              data-add-zone
+              ?disabled=${this.submitting}
+              @click=${() => void this.#createZone()}
               >${t("floor.add_zone")}</wt-button
             >
           </div>
@@ -639,12 +690,17 @@ export class FloorScreen extends LitElement {
           }
           <div class="new">
             <wt-input
+              @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-add-table]"))}
               label=${t("floor.table_label")}
               data-new-table
               .value=${this.newTable}
               @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onNewTable(e)}
             ></wt-input>
-            <wt-button variant="primary" data-add-table @click=${() => void this.#createTable()}
+            <wt-button
+              variant="primary"
+              data-add-table
+              ?disabled=${this.submitting}
+              @click=${() => void this.#createTable()}
               >${t("floor.add_table")}</wt-button
             >
           </div>

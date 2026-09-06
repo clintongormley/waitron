@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { createRef, ref } from "lit/directives/ref.js";
 import type { PropertyValues } from "lit";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -264,6 +264,7 @@ export class PersonEdit extends LitElement {
 
                 <div class="action">
                   <wt-input
+                    @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save-pin]"))}
                     class="field grow"
                     data-test="edit-pin"
                     label=${t("person.pin")}
@@ -283,6 +284,7 @@ export class PersonEdit extends LitElement {
                      email and the password, grouped together. -->
                 <div class="action">
                   <wt-input
+                    @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save-email]"))}
                     class="field grow"
                     data-test="edit-email"
                     type="email"
@@ -301,6 +303,7 @@ export class PersonEdit extends LitElement {
 
                 <div class="action">
                   <wt-input
+                    @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save-password]"))}
                     class="field grow"
                     data-test="edit-password"
                     label=${t("person.password")}

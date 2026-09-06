@@ -80,6 +80,33 @@ correction that needs a **new table** is parked until the FORCE RLS removal + mi
 As the owner finds issues they land here as a checklist per area, then become fixes. Keep each item
 one line; the fix's detail belongs in its PR/commit, not here.
 
+### General UI corrections — 2026-09-06
+
+Owner scope: **all UI**. Finish-branch review is in progress on `ui/till-login`. Earlier browser,
+server and built-app reload results are dated in the plan; the final workspace gate is pending. Plan: [UI navigation and controls](superpowers/plans/2026-09-06-ui-navigation-and-controls.md).
+
+- Keep the selected navigation tab in the URL so Back, Forward and refresh restore it. Includes
+  dashboard sections, till canvas tabs, Schedule, Kitchen/station selection, Pass, Allergens, floor
+  views/zones and saved canvas editor tabs.
+  A requested destination still needs the current session's permissions and device canvas.
+  Paths use `/manage/<section>` and `/tabs/<key>`, with nested selections as path segments.
+- Keep unsaved canvas tabs out of URL writes, including when you reselect them. Embedded station
+  pickers keep their selection local; an enrolled kitchen display keeps its bound station.
+- Keep history for meaningful navigation. Payment and modifier steps do not add entries; menu choice
+  stays in browser session storage as the last menu viewed across new and parked orders. Every new
+  login resets it to the default, including the PIN login required after refresh.
+- Remember vegan, vegetarian, no-meat and no-fish filters throughout the login, shared by counter and
+  table ordering. New and parked orders retain the selection; a new login clears it. Filter changes
+  add no browser history entries and leave the basket intact.
+- Enter submits an ordinary form through its existing action and validation. Multiline fields,
+  selectors, file pickers and focused keypad buttons keep their normal keyboard behavior.
+- Show **English** or **Español** immediately, including before the language menu is opened.
+- Keep the language chooser at the bottom right, including PIN entry, pairing and kitchen displays.
+  Its menu opens upwards. Kitchen displays change language locally because no staff member is signed in.
+
+The setup wizard receives the form behavior. It has no translated UI or language chooser, and wizard
+steps are not tabs; this change does not persist setup credentials or unfinished form contents.
+
 ### 2 — Till login & shift start
 
 Candidates from the first look (awaiting owner confirmation — not yet fixes):
@@ -92,8 +119,8 @@ Candidates from the first look (awaiting owner confirmation — not yet fixes):
 - [ ] The admin user shows as **"Administradora"** (Spanish) among otherwise English staff names with
       an `en-GB` locale — likely a seed-data naming choice; confirm whether the admin should have a
       real person name.
-- [ ] `en-GB` locale toggle is a small button bottom-left — confirm it belongs on the login screen and
-      whether it should read as a language name ("English") rather than a locale code.
+- [x] Language label and placement decided 2026-09-06: **English**, bottom right throughout the UI.
+      Implementation is covered by the general corrections above.
 
 ### 3 — Counter / walk-up sales
 
@@ -105,10 +132,11 @@ Much more polished than the login screen (proper top bar, product grid, basket c
 - [ ] **"Pay" vs "Card" as two big buttons** — relationship is unclear (is Pay = cash, Card = card?);
       the tender each triggers should read plainly.
 - [ ] **Top bar mixes navigation, actions and identity** — Allergens / Floor / Kitchen / Pass / My
-      schedule / Marta Ruiz / en-GB / Log out sit in one undifferentiated row; consider grouping
+      schedule / Marta Ruiz / Log out sit in one undifferentiated row; consider grouping
       (navigate vs act vs who-am-I).
 - [ ] **Per-kg deli items** (e.g. White tuna belly €54.00/kg) — confirm the add-to-basket weight-entry
       flow is intuitive when tapped (not yet exercised).
 - [ ] **Menu tab labels** — "Casa Delgado" (the venue name?) vs "Menú del Día"; confirm the à-la-carte
       tab should carry the venue name.
-- [ ] `en-GB` toggle repeats on this screen too — same language-name question as the login.
+- [x] The counter uses the same language-name and bottom-right placement decision as login.
+      Implementation is covered by the general corrections above.

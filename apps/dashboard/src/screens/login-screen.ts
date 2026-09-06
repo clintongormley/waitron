@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { startAuthentication } from "@simplewebauthn/browser";
 import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/browser";
-import { baseStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
@@ -40,6 +40,7 @@ export class LoginScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  @state() private busy = false;
   @state() private email = "";
   @state() private password = "";
   @state() private totp = "";
@@ -71,6 +72,8 @@ export class LoginScreen extends LitElement {
   }
 
   async #submit(): Promise<void> {
+    if (this.busy) return;
+    this.busy = true;
     this.errorKey = null;
     try {
       const out = await this.api.login({
@@ -83,6 +86,8 @@ export class LoginScreen extends LitElement {
       );
     } catch (error) {
       this.errorKey = codeOf(error);
+    } finally {
+      this.busy = false;
     }
   }
 
@@ -109,6 +114,8 @@ export class LoginScreen extends LitElement {
    * uncaught rejection would strand the operator with no feedback.
    */
   async #passkeyLogin(): Promise<void> {
+    if (this.busy) return;
+    this.busy = true;
     this.errorKey = null;
     try {
       const { challengeHandle, options } = await this.api.passkeyAuthOptions();
@@ -121,15 +128,15 @@ export class LoginScreen extends LitElement {
       );
     } catch (error) {
       this.errorKey = codeOf(error, "passkey.verification_failed");
+    } finally {
+      this.busy = false;
     }
   }
 
   override render() {
     return html`
-      <dashboard-language-chooser
-        .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
-      ></dashboard-language-chooser>
       <wt-input
+        @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]"))}
         class="field"
         label=${t("login.email")}
         type="email"
@@ -137,6 +144,7 @@ export class LoginScreen extends LitElement {
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onEmailChange(e)}
       ></wt-input>
       <wt-input
+        @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]"))}
         class="field"
         label=${t("login.password")}
         type="password"
@@ -144,21 +152,30 @@ export class LoginScreen extends LitElement {
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPasswordChange(e)}
       ></wt-input>
       <wt-input
+        @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]"))}
         class="field"
         label=${t("login.totp")}
         .value=${this.totp}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onTotpChange(e)}
       ></wt-input>
-      <wt-button variant="primary" data-test="submit" @click=${() => void this.#submit()}
+      <wt-button
+        variant="primary"
+        data-test="submit"
+        ?disabled=${this.busy}
+        @click=${() => void this.#submit()}
         >${t("action.login")}</wt-button
       >
       <wt-button
         variant="secondary"
         data-test="passkey-login"
+        ?disabled=${this.busy}
         @click=${() => void this.#passkeyLogin()}
         >${t("login.with_passkey")}</wt-button
       >
       ${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
+      <dashboard-language-chooser
+        .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
+      ></dashboard-language-chooser>
     `;
   }
 }

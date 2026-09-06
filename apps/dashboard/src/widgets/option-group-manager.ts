@@ -1,6 +1,6 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -154,6 +154,7 @@ export class OptionGroupManager extends LitElement {
 
   /** Every option group (active AND inactive), from `DashboardApi.listOptionGroups`. Screen-owned and
    * refreshed after each mutation; defaults empty so the widget renders safely before the screen loads. */
+  @property({ type: Boolean }) itemBusy = false;
   @property({ attribute: false }) groups: OptionGroup[] = [];
 
   /** The EXPANDED group's items only (active AND inactive), from `listOptionGroupItems`. Screen-owned. */
@@ -295,7 +296,7 @@ export class OptionGroupManager extends LitElement {
    * draft — the screen owns success via a prop reload. */
   #createItem(event: Event): void {
     event.stopPropagation();
-    if (this.expandedGroupId === null) return; // the create-item form only renders when one is open
+    if (this.itemBusy || this.expandedGroupId === null) return; // the create-item form only renders when one is open
     this.dispatchEvent(
       new CustomEvent("create-option-group-item", {
         detail: {
@@ -504,6 +505,7 @@ export class OptionGroupManager extends LitElement {
           ${this.locales.map(
             (locale) => html`
               <wt-input
+                @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=create-item]"))}
                 data-test=${`item-name-${locale}`}
                 label=${`${t("option_group.name")} (${locale})`}
                 .value=${this.newItemName[locale] ?? ""}
@@ -513,6 +515,7 @@ export class OptionGroupManager extends LitElement {
             `,
           )}
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=create-item]"))}
             class="field"
             data-test="item-new-price"
             label=${t("option_group.price_delta")}
@@ -534,6 +537,7 @@ export class OptionGroupManager extends LitElement {
             </select>
           </label>
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=create-item]"))}
             class="field"
             type="number"
             data-test="item-new-maxqty"
@@ -543,6 +547,7 @@ export class OptionGroupManager extends LitElement {
               this.#applyInteger(e, (n) => (this.newItemMaxQuantity = n))}
           ></wt-input>
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=create-item]"))}
             class="field"
             type="number"
             data-test="item-new-sort"
@@ -561,6 +566,7 @@ export class OptionGroupManager extends LitElement {
           <wt-button
             variant="secondary"
             data-test="create-item"
+            ?disabled=${this.itemBusy}
             @click=${(e: Event) => this.#createItem(e)}
           >
             ${t("action.create")}
@@ -645,6 +651,7 @@ export class OptionGroupManager extends LitElement {
         ${this.locales.map(
           (locale) => html`
             <wt-input
+              @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=create-group]"))}
               data-test=${`group-name-${locale}`}
               label=${`${t("option_group.name")} (${locale})`}
               .value=${this.newGroupName[locale] ?? ""}
@@ -654,6 +661,7 @@ export class OptionGroupManager extends LitElement {
           `,
         )}
         <wt-input
+          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=create-group]"))}
           class="field"
           type="number"
           data-test="group-new-min"
@@ -663,6 +671,7 @@ export class OptionGroupManager extends LitElement {
             this.#applyInteger(e, (n) => (this.newGroupMinSelect = n))}
         ></wt-input>
         <wt-input
+          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=create-group]"))}
           class="field"
           type="number"
           data-test="group-new-max"
@@ -686,6 +695,7 @@ export class OptionGroupManager extends LitElement {
             this.#applyBoolean(e, (checked) => (this.newGroupActive = checked))}
         ></wt-switch>
         <wt-input
+          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=create-group]"))}
           class="field"
           type="number"
           data-test="group-new-sort"

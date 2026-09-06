@@ -1,3 +1,4 @@
+import { userEvent } from "@vitest/browser/context";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -16,7 +17,11 @@ import { FloorScreen } from "./floor-screen.js";
  * `service-status-screen.test.ts`.
  */
 
-afterEach(cleanupWidgets);
+const originalUrl = location.href;
+afterEach(() => {
+  cleanupWidgets();
+  history.replaceState(null, "", originalUrl);
+});
 
 const ZONES: FloorZone[] = [{ id: "z1", name: "Comedor", displayOrder: 0, active: true }];
 
@@ -656,3 +661,96 @@ describe("floor-screen — Plano editor (FP-2)", () => {
     expect(q(el, "[data-tray-table]")).toBeNull(); // no tray
   });
 });
+
+describe("floor URL tabs", () => {
+  it("restores the plan and zone, records clicks, and follows history", async () => {
+    const url = new URL(location.href);
+    url.pathname = "/manage/floor/view/plano/zone/z2";
+    history.replaceState(null, "", url);
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", {
+      api: stubApi({}, TWO_ZONES),
+    });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector('[data-tab="plano"]')!.getAttribute("variant")).toBe(
+      "primary",
+    );
+    expect(el.shadowRoot!.querySelector('[data-zone="z2"]')!.getAttribute("variant")).toBe(
+      "primary",
+    );
+    el.shadowRoot!.querySelector<HTMLElement>('[data-tab="config"]')!.click();
+    await el.updateComplete;
+    expect(location.pathname).toBe("/manage/floor/view/config/zone/z2");
+    const back = new Promise<void>((resolve) =>
+      window.addEventListener("popstate", () => resolve(), { once: true }),
+    );
+    history.back();
+    await back;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('[data-zone="z2"]')!.getAttribute("variant")).toBe(
+      "primary",
+    );
+  });
+});
+
+it.each([
+  {
+    method: "createZone",
+    field: "[data-new-zone]",
+    button: "[data-add-zone]",
+    result: { id: "z9" },
+  },
+  {
+    method: "updateZone",
+    field: "[data-test=zone-name-z1]",
+    button: "[data-test=zone-save-z1]",
+    result: null,
+  },
+  {
+    method: "createTable",
+    field: "[data-new-table]",
+    button: "[data-add-table]",
+    result: { id: "t9" },
+  },
+  {
+    method: "updateTable",
+    field: "[data-test=table-label-t1]",
+    button: "[data-test=table-save-t1]",
+    result: null,
+  },
+])(
+  "Enter guards pending $method and allows retry after rejection",
+  async ({ method, field, button, result }) => {
+    let reject!: (reason: unknown) => void;
+    const pending = new Promise((_, fail) => {
+      reject = fail;
+    });
+    const request = vi.fn().mockReturnValueOnce(pending).mockResolvedValue(result);
+    const api = stubApi({ [method]: request });
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+
+    const control = el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(field)!;
+    await control.updateComplete;
+    const input = control.shadowRoot!.querySelector("input")!;
+    input.value = "Updated";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    input.focus();
+    await userEvent.keyboard("{Enter}");
+    await userEvent.keyboard("{Enter}");
+    el.shadowRoot!.querySelector<HTMLElement>(button)!.click();
+    expect(request).toHaveBeenCalledTimes(1);
+    expect((el.shadowRoot!.querySelector(button) as import("@waitron/ui").WtButton).disabled).toBe(
+      true,
+    );
+    reject({ code: "management.request_invalid" });
+    await flush(el);
+    input.focus();
+    await userEvent.keyboard("{Enter}");
+    await flush(el);
+    expect(request).toHaveBeenCalledTimes(2);
+    expect((el.shadowRoot!.querySelector(button) as import("@waitron/ui").WtButton).disabled).toBe(
+      false,
+    );
+  },
+);

@@ -1,6 +1,6 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles } from "@waitron/ui";
 import { selectStyles } from "../select-styles.js";
 import { clearDevDeviceId, setDevDeviceId } from "../api/dev-device.js";
 import type { DevDeviceList, DevMintRequest, TillApi } from "../api/client.js";
@@ -275,6 +275,7 @@ export class TillDevChooser extends LitElement {
           </select>
         </div>
         <wt-input
+          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-mint-submit]"))}
           data-mint-label
           .label=${"Label"}
           .value=${this.label}

@@ -1,6 +1,7 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { UrlStateController, submitOnEnter, baseStyles } from "@waitron/ui";
+import { tillPath } from "../navigation.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 // Side-effect import: registers <till-station-queue>, the shared queue renderer this screen wraps with a
@@ -173,8 +174,7 @@ export class TillStationScreen extends LitElement {
 
   /** The venue's active stations (fetched once on connect). Operator path only. */
   @state() private stations: Station[] = [];
-  /** The station whose queue is showing — the default station on load, or whichever tab was tapped
-   * (operator path); in device mode, the ONE station enrolment bound this display to. */
+  /** The requested or default operator station; device mode uses only its enrolled station. */
   @state() private activeStationId?: string;
   /** The active station's queue, grouped by order (reloaded after every advance). */
   @state() private groups: StationQueueGroup[] = [];
@@ -207,6 +207,39 @@ export class TillStationScreen extends LitElement {
    * reactive: it gates a fetch, never the render. */
   #initialConsumed = false;
 
+  #queueRequest = 0;
+  // Preserve the requested ID until the station list can validate it.
+  #stationsLoaded = false;
+  readonly #url = new UrlStateController(
+    this,
+    () => {
+      if (this.#stationsLoaded && this.#ownsStationPath()) void this.#restoreStation();
+    },
+    tillPath,
+  );
+
+  #ownsStationPath(): boolean {
+    return (
+      this.isConnected &&
+      !this.embedded &&
+      !this.deviceMode &&
+      this.#url.read("till-view") === "station"
+    );
+  }
+
+  async #restoreStation(): Promise<void> {
+    const requested = this.#ownsStationPath() ? this.#url.read("till-station") : null;
+    const active =
+      this.stations.find((station) => station.id === requested) ??
+      this.stations.find((station) => station.isDefault) ??
+      this.stations[0];
+    if (active === undefined) {
+      if (this.#ownsStationPath()) this.#url.write({ "till-station": null }, true);
+      return;
+    }
+    await this.#selectStation(active.id, true);
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
     if (this.deviceMode) {
@@ -216,23 +249,17 @@ export class TillStationScreen extends LitElement {
     }
   }
 
-  /**
-   * Fetch the station list once on connect, adopt the DEFAULT station (or the first, if none is flagged)
-   * as active, and load its queue. A rejection leaves the screen empty rather than escaping as an
-   * unhandled promise; state written after a mid-fetch disconnect is harmless — Lit does not paint a
-   * detached element — so no `isConnected` guard is needed (the sibling screens' reasoning).
-   */
+  /** Fetch the operator's stations, then validate the latest requested station before loading its queue. */
   async #load(): Promise<void> {
     try {
       this.stations = await this.api.listStations();
+      this.#stationsLoaded = true;
     } catch {
       this.stations = [];
       return;
     }
-    const active = this.stations.find((s) => s.isDefault) ?? this.stations[0];
-    if (active === undefined) return;
-    this.activeStationId = active.id;
-    await this.#reload();
+    if (!this.isConnected) return;
+    await this.#restoreStation();
   }
 
   /**
@@ -265,9 +292,8 @@ export class TillStationScreen extends LitElement {
     }
   }
 
-  /** (Re)load the ACTIVE station's queue. A failed read leaves the last-known queue in place (degrade
-   * gracefully — the kitchen display touches no fiscal path); no `isConnected` guard (state-only). In
-   * device mode it re-reads through the DEVICE probe (`getDeviceStation`) instead of the session route. */
+  /** Reload the active queue, ignoring operator responses superseded by a later request. A failed
+   * read retains the current queue. Device mode reads through its bound-station probe. */
   async #reload(): Promise<void> {
     if (this.deviceMode) {
       try {
@@ -280,16 +306,21 @@ export class TillStationScreen extends LitElement {
       return;
     }
     if (this.activeStationId === undefined) return;
+    const request = ++this.#queueRequest;
     try {
-      this.groups = await this.api.getStationQueue(this.activeStationId);
+      const groups = await this.api.getStationQueue(this.activeStationId);
+      if (this.isConnected && request === this.#queueRequest) this.groups = groups;
     } catch {
       // Non-fatal — leave the last-known queue; the next reload reconciles.
     }
   }
 
   /** Switch to another station's queue (a picker tap). */
-  async #selectStation(id: string): Promise<void> {
+  async #selectStation(id: string, replace = false): Promise<void> {
+    if (this.deviceMode) return;
+    if (this.activeStationId !== id) this.groups = [];
     this.activeStationId = id;
+    if (this.#ownsStationPath()) this.#url.write({ "till-station": id }, replace);
     await this.#reload();
   }
 
@@ -565,6 +596,7 @@ export class TillStationScreen extends LitElement {
             : nothing
         }
         <wt-input
+          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-enrol-submit]"))}
           class="enrol-code"
           data-enrol-code
           .label=${t("device.enrol_code")}

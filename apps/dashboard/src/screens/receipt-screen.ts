@@ -1,6 +1,6 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
@@ -85,6 +85,7 @@ export class ReceiptScreen extends LitElement {
   // The two authored trim strings, loaded from the receipt config on connect and composed back on
   // Guardar. Held as plain strings (never `undefined`) so the fields bind cleanly; a blank one is
   // dropped from the composed config so its key is absent, not `""`.
+  @state() private submitting = false;
   @state() private headerSubtitle = "";
   @state() private footerMessage = "";
   @state() private errorKey: string | null = null;
@@ -132,16 +133,20 @@ export class ReceiptScreen extends LitElement {
    * `void`).
    */
   async #save(): Promise<void> {
+    if (this.submitting) return;
     this.errorKey = null;
     const config: ReceiptConfig = {};
     const header = this.headerSubtitle.trim();
     const footer = this.footerMessage.trim();
     if (header !== "") config.headerSubtitle = header;
     if (footer !== "") config.footerMessage = footer;
+    this.submitting = true;
     try {
       await this.api.putReceipt(config);
     } catch (error) {
       this.errorKey = codeOf(error);
+    } finally {
+      this.submitting = false;
     }
   }
 
@@ -150,6 +155,7 @@ export class ReceiptScreen extends LitElement {
       <h1 class="title">${t("receipt.title")}</h1>
       <div class="fields">
         <wt-input
+          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
           label=${t("receipt.header_subtitle")}
           data-test="header-subtitle"
           .value=${this.headerSubtitle}
@@ -167,7 +173,11 @@ export class ReceiptScreen extends LitElement {
       </div>
 
       <div class="save">
-        <wt-button variant="primary" data-test="save" @click=${() => void this.#save()}
+        <wt-button
+          variant="primary"
+          data-test="save"
+          ?disabled=${this.submitting}
+          @click=${() => void this.#save()}
           >${t("action.save")}</wt-button
         >
       </div>

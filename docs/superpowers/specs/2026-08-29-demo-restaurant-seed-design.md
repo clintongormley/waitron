@@ -250,3 +250,7 @@ snapshotted, and the fiscal write path is byte-unchanged.
 - `mediaDir` default-resolution parity with `boot.ts` from the standalone `tsx` seed process.
 - The per-dish SVG→PNG rasterisation step (tool + committed output) and tile count.
 - Confirming `record-one-sale.ts`'s exact `VerifactuBackend` construction + clock stub to copy.
+
+
+> **2026-09-06 update:** The menu preference now persists in browser session storage through new
+> and parked orders. Every login resets it to the default, including the PIN login after refresh. See [UI navigation and controls](../plans/2026-09-06-ui-navigation-and-controls.md).

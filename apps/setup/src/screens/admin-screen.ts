@@ -1,6 +1,6 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -125,6 +125,7 @@ export class SetupAdminScreen extends LitElement {
   /** Renders one credential field as a `wt-input`, bound to `this.values[key]` and its `invalid` state. */
   #field(label: string, key: AdminField, type = "text"): TemplateResult {
     return html`<wt-input
+      @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=next]"))}
       class="field"
       label=${label}
       data-test=${key}

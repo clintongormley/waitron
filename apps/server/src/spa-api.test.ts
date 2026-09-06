@@ -103,7 +103,7 @@ describe("mountSpa", () => {
     expect(await res.text()).toBe("blob");
   });
 
-  it("404s an unknown path rather than returning index.html (no client routing)", async () => {
+  it("404s an unknown path when navigation is not configured", async () => {
     const res = await mount("").request("/does/not/exist");
     expect(res.status).toBe(404);
   });

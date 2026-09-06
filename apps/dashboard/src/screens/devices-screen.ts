@@ -1,7 +1,7 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { createRef, ref } from "lit/directives/ref.js";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
@@ -166,6 +166,7 @@ export class DevicesScreen extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
 
   // The enrolled devices, loaded on connect and re-synced after every mutation (server order kept).
+  @state() private submitting = false;
   @state() private devices: DeviceRow[] = [];
   // The venue's ACTIVE kitchen stations — both the generate-code picker's options and the source that
   // resolves a device row's stationId to a display name.
@@ -361,6 +362,7 @@ export class DevicesScreen extends LitElement {
    * state (never re-fetched) and the label resets; on rejection the `errorKey` banner shows and the form
    * is left intact for a retry. */
   async #generate(): Promise<void> {
+    if (this.submitting) return;
     this.errorKey = null;
     const label = this.label.trim();
     if (label === "") return;
@@ -397,6 +399,7 @@ export class DevicesScreen extends LitElement {
         input.cardReaderId = this.cardReaderId.trim();
       }
     }
+    this.submitting = true;
     try {
       const { code } = await this.api.createDeviceCode(input);
       this.generatedCode = code;
@@ -405,6 +408,8 @@ export class DevicesScreen extends LitElement {
       await this.#reloadDevices();
     } catch (error) {
       this.errorKey = codeOf(error);
+    } finally {
+      this.submitting = false;
     }
   }
 
@@ -527,6 +532,7 @@ export class DevicesScreen extends LitElement {
       ${
         this.cardProvider === "stripe_terminal"
           ? html`<wt-input
+              @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=generate]"))}
               label=${t("devices.card_reader")}
               data-test="card-reader-id"
               .value=${this.cardReaderId}
@@ -696,12 +702,17 @@ export class DevicesScreen extends LitElement {
           </label>
           ${this.kind === "till" ? this.#renderTillHardware() : nothing}
           <wt-input
+            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=generate]"))}
             label=${t("devices.label")}
             data-test="code-label"
             .value=${this.label}
             @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onLabelChange(e)}
           ></wt-input>
-          <wt-button variant="primary" data-test="generate" @click=${() => void this.#generate()}
+          <wt-button
+            variant="primary"
+            data-test="generate"
+            ?disabled=${this.submitting}
+            @click=${() => void this.#generate()}
             >${t("devices.generate")}</wt-button
           >
         </div>

@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { selectStyles } from "../select-styles.js";
@@ -467,6 +467,7 @@ export class TillScheduleScreen extends LitElement {
           </select>
         </div>
         <wt-input
+          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(".abs-submit"))}
           class="abs-from"
           type="date"
           .label=${t("schedule.absence_from")}
@@ -477,6 +478,7 @@ export class TillScheduleScreen extends LitElement {
           }}
         ></wt-input>
         <wt-input
+          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(".abs-submit"))}
           class="abs-to"
           type="date"
           .label=${t("schedule.absence_to")}
@@ -487,6 +489,7 @@ export class TillScheduleScreen extends LitElement {
           }}
         ></wt-input>
         <wt-input
+          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(".abs-submit"))}
           class="abs-note"
           .label=${t("schedule.absence_note")}
           .value=${this.absNote}

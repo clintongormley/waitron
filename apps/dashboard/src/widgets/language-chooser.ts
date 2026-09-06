@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
+import { SUPPORTED_LOCALES } from "@waitron/shared";
 import { currentLocale } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 
@@ -16,14 +17,13 @@ interface Locale {
  * bubbling `locale-selected` carrying only the chosen `code`.
  *
  * It is PRESENTATIONAL and lazy: it holds no store, calls no write API, and — crucially — invokes
- * NEITHER `setLocale` NOR the preference-write endpoint. The parent (a later task) owns what a pick
+ * NEITHER `setLocale` NOR the preference-write endpoint. The parent owns what a pick
  * means, turning the event into a `setLocale` + a preference write. The list is fetched through the
  * injected `loadLocales` (the app adapts `DashboardApi.getLocales`), and ONCE: the first open caches
  * it, so re-opening never re-fetches. It reads {@link currentLocale} to mark the active option and
  * carries a {@link LocaleChangeController} so the trigger label follows a live switch made elsewhere.
  *
- * Until the list is fetched the trigger falls back to the raw active code (labels are unknown before
- * the first open); once loaded it reads the active locale's own-language label.
+ * The bundled language registry supplies the initial label; fetched labels take precedence.
  *
  * Accessibility: the trigger (a `wt-button`) carries `aria-haspopup="menu"` + `aria-expanded`; the
  * options are NATIVE `<button role="menuitemradio">` elements — the real focusable nodes — as DIRECT
@@ -39,13 +39,18 @@ export class LanguageChooser extends LitElement {
     css`
       :host {
         display: inline-block;
-        position: relative;
+        position: fixed;
+        right: max(var(--wt-space-3), env(safe-area-inset-right));
+        bottom: max(var(--wt-space-3), env(safe-area-inset-bottom));
+        z-index: 10;
       }
 
       .menu {
         position: absolute;
         z-index: 1;
-        margin-top: var(--wt-space-1);
+        bottom: calc(100% + var(--wt-space-1));
+        right: 0;
+        max-width: calc(100vw - 2 * var(--wt-space-3));
         padding: var(--wt-space-1);
         display: flex;
         flex-direction: column;
@@ -126,9 +131,13 @@ export class LanguageChooser extends LitElement {
     );
   }
 
-  /** The display label for `code`, or the bare code when the list is not yet fetched / lacks it. */
+  /** Fetched labels override the bundled names; unknown codes remain identifiable. */
   #label(code: string): string {
-    return this.locales?.find((l) => l.code === code)?.label ?? code;
+    return (
+      this.locales?.find((l) => l.code === code)?.label ??
+      SUPPORTED_LOCALES.find((l) => l.code === code)?.label ??
+      code
+    );
   }
 
   override render() {

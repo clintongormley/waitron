@@ -173,3 +173,12 @@ describe("till-tab-shell", () => {
     expect(el.shadowRoot!.querySelector("header")).not.toBeNull();
   });
 });
+
+it("keeps the language chooser available on a kitchen display without operator chrome", async () => {
+  const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
+    kiosk: true,
+    loadLocales: async () => [{ code: "en-GB", label: "English" }],
+  });
+  expect(el.shadowRoot!.querySelector("header")).toBeNull();
+  expect(el.shadowRoot!.querySelector("till-language-chooser")).not.toBeNull();
+});

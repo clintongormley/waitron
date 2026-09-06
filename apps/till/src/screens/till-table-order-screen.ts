@@ -388,14 +388,8 @@ export class TillTableOrderScreen extends LitElement {
   /** Whether the pull-out tab drawer is open (its handle toggles it). */
   @state() private drawerOpen = false;
 
-  /**
-   * The active menu DIET filter (dietary-classification, Task 7), or `null` for none — a view-only lens
-   * that narrows the round grid to vegan / vegetarian / no-meat / no-fish via {@link filterProductsByDiet}.
-   * Owned locally (like {@link drawerOpen}, unlike the app-owned {@link selectedMenuId}): the diet lens
-   * touches ONLY which tiles are visible, never the tab or the round. The diet-filter widget's
-   * `diet-filter-selected` toggles it.
-   */
-  @state() private selectedDiet: DietPredicate | null = null;
+  /** The session's dietary selection; null shows every dish in the selected menu. */
+  @property({ attribute: false }) selectedDiet: DietPredicate | null = null;
 
   /** The FIRED-and-STARTED line the operator is about to CANCEL (coursing corrections C5), captured when
    * they tap its Cancel action so the consequence-naming confirm can name the dish; `null` when no confirm

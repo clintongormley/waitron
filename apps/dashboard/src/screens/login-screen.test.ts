@@ -1,3 +1,4 @@
+import { userEvent } from "@vitest/browser/context";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { startAuthentication } from "@simplewebauthn/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -187,4 +188,38 @@ describe("login-screen", () => {
       "passkey.verification_failed",
     );
   });
+});
+
+it("Enter submits current shadow input values once while login is pending", async () => {
+  let resolve!: (value: { personId: string }) => void;
+  const login = vi.fn(
+    () =>
+      new Promise<{ personId: string }>((done) => {
+        resolve = done;
+      }),
+  );
+  const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+    api: stubApi({ login }),
+  });
+  const inputs = [...el.shadowRoot!.querySelectorAll("wt-input")];
+  for (const [i, value] of ["owner@example.com", "secret", "123456"].entries()) {
+    await inputs[i].updateComplete;
+    const input = inputs[i].shadowRoot!.querySelector("input")!;
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  }
+  await el.updateComplete;
+  const input = inputs[1].shadowRoot!.querySelector("input")!;
+  input.focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  input.focus();
+  await userEvent.keyboard("{Enter}");
+  expect(login).toHaveBeenCalledExactlyOnceWith({
+    email: "owner@example.com",
+    password: "secret",
+    totp: "123456",
+  });
+  resolve({ personId: "p1" });
+  await flush(el);
 });

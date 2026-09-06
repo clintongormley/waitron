@@ -1,5 +1,6 @@
+import { userEvent } from "@vitest/browser/context";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { t } from "../i18n/t.js";
+import { t, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillDeviceEnrolScreen, type DeviceEnrolKind } from "./till-device-enrol-screen.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -194,4 +195,57 @@ describe.each(kinds)("till-device-enrol-screen (kind=$kind)", ({ kind, title, hi
     await el.updateComplete;
     expect(button.disabled).toBe(false);
   });
+});
+
+it("Enter pairs with the current shadow input code and ignores pending repeats", async () => {
+  let resolve!: (value: unknown) => void;
+  const enrolDevice = vi.fn(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  const { el } = await mountWidget<TillDeviceEnrolScreen>("till-device-enrol-screen", {
+    api: stubApi({ enrolDevice }),
+  });
+  const field = el.shadowRoot!.querySelector("wt-input")!;
+  await field.updateComplete;
+  const input = field.shadowRoot!.querySelector("input")!;
+  input.focus();
+  await userEvent.keyboard("{Enter}");
+  expect(enrolDevice).not.toHaveBeenCalled();
+  input.value = "PAIR1234";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  input.focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  input.focus();
+  await userEvent.keyboard("{Enter}");
+  expect(enrolDevice).toHaveBeenCalledExactlyOnceWith("PAIR1234");
+  resolve({ deviceId: "d1", kind: "till", stationId: null, label: "Caja 1" });
+  await flush(el);
+});
+
+it("offers the language chooser before pairing", async () => {
+  const { el } = await mountWidget<TillDeviceEnrolScreen>("till-device-enrol-screen", {
+    api: stubApi(),
+  });
+  expect(el.shadowRoot!.querySelector("till-language-chooser")).not.toBeNull();
+});
+
+it("repaints pairing instructions when the language changes without losing the code", async () => {
+  setLocale("es-ES");
+  const { el } = await mountWidget<TillDeviceEnrolScreen>("till-device-enrol-screen", {
+    api: stubApi(),
+  });
+  const field = el.shadowRoot!.querySelector<HTMLElement & { value: string }>("[data-code]")!;
+  field.value = "DEMO";
+  field.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "DEMO" }, bubbles: true }));
+  await el.updateComplete;
+  const before = el.shadowRoot!.querySelector("h1")!.textContent;
+  setLocale("en-GB");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("h1")!.textContent).not.toBe(before);
+  expect(field.value).toBe("DEMO");
 });

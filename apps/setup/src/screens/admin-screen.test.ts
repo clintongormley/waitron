@@ -1,3 +1,4 @@
+import { userEvent } from "@vitest/browser/context";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./admin-screen.js";
@@ -188,4 +189,44 @@ describe("setup-admin-screen", () => {
     await el.updateComplete;
     expect(val()).toBe("edited");
   });
+});
+
+it("Enter advances the admin step using current shadow input values", async () => {
+  const { el, host } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
+  const events = collect(host);
+  for (const [field, value] of Object.entries({
+    displayName: "Alba",
+    email: "alba@example.com",
+    password: "secret",
+    pin: "1234",
+  })) {
+    const control = el.shadowRoot!.querySelector(
+      `wt-input[data-test=${field}]`,
+    )! as import("@waitron/ui").WtInput;
+    await control.updateComplete;
+    const input = control.shadowRoot!.querySelector("input")!;
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  }
+  await el.updateComplete;
+  q(el, "[data-test=pin]")!.shadowRoot!.querySelector<HTMLInputElement>("input")!.focus();
+  await userEvent.keyboard("{Enter}");
+  expect(events).toEqual([
+    {
+      kind: "patch",
+      detail: {
+        patch: {
+          venue: {
+            admin: {
+              displayName: "Alba",
+              email: "alba@example.com",
+              password: "secret",
+              pin: "1234",
+            },
+          },
+        },
+      },
+    },
+    { kind: "goto", detail: { screen: "venue" } },
+  ]);
 });

@@ -1,3 +1,4 @@
+import { userEvent } from "@vitest/browser/context";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -364,4 +365,36 @@ describe("ingredient-form", () => {
     await el.updateComplete;
     expect(fired).toBe(false);
   });
+});
+
+it("Enter saves an edit with the current name and respects busy", async () => {
+  const ingredient: Ingredient = {
+    id: "i1",
+    name: "Salt",
+    active: true,
+    allergens: null,
+    dietaryOrigin: null,
+  };
+  const { el } = await mountWidget<IngredientForm>(
+    "dashboard-ingredient-form",
+    baseProps({ ingredient }),
+  );
+  const updates: unknown[] = [];
+  el.addEventListener("update-ingredient", (e) => updates.push((e as CustomEvent).detail));
+  const field = el.shadowRoot!.querySelector("wt-input")!;
+  await field.updateComplete;
+  const input = field.shadowRoot!.querySelector("input")!;
+  input.value = "Sea salt";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  input.focus();
+  await userEvent.keyboard("{Enter}");
+  expect(updates).toEqual([
+    { id: "i1", patch: { name: "Sea salt", active: true, allergens: null, dietaryOrigin: null } },
+  ]);
+  el.busy = true;
+  await el.updateComplete;
+  input.focus();
+  await userEvent.keyboard("{Enter}");
+  expect(updates).toHaveLength(1);
 });

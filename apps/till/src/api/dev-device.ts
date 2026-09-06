@@ -3,7 +3,7 @@
  * so one browser can run several devices in separate tabs) and rides every request as the
  * `x-waitron-dev-device` header, which the server honours ONLY in devMode. Inert wherever the key is
  * unset; every storage access is guarded so a private window / blocked storage degrades to "no
- * override" rather than throwing. This is the FIRST sessionStorage use in the app.
+ * override" rather than throwing.
  */
 export const DEV_DEVICE_STORAGE_KEY = "waitron.devDeviceId";
 export const DEV_DEVICE_HEADER = "x-waitron-dev-device";

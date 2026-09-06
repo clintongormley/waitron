@@ -1913,11 +1913,15 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // (`server.config_invalid`, naming the env var), §8's "everything escapes" — so by here each
   // configured dir is known to hold its `index.html`, never a catch-all that 404s every page load.
   if (config.dashboardAppDir !== undefined) {
-    mountSpa(app, { root: config.dashboardAppDir, basePath: "/manage" }, log);
+    mountSpa(
+      app,
+      { root: config.dashboardAppDir, basePath: "/manage", navigationPath: "/manage" },
+      log,
+    );
   }
   if (config.tillAppDir !== undefined) {
     // `""` = the origin-root catch-all: MUST be the last GET mounted (see the block comment above).
-    mountSpa(app, { root: config.tillAppDir, basePath: "" }, log);
+    mountSpa(app, { root: config.tillAppDir, basePath: "", navigationPath: "/tabs" }, log);
   }
 
   // Bind the HTTP listener and wire the listen-failure handler — the serve step shared by both boot

@@ -76,6 +76,13 @@ wide margin.
 
 ## 2. The gate
 
+**Before a PR, run tests appropriate to the change and its affected consumers, not the full
+workspace suite by default** (owner decision 2026-09-06). Use focused regressions during development
+and affected-package coverage where needed. The normal scoped pre-push hook remains required;
+do not duplicate its checks solely because a PR is being opened.
+
+The whole-workspace command below is a reference, not a mandatory pre-PR step:
+
 ```bash
 pnpm lint && pnpm typecheck && pnpm format:check && pnpm test
 ```
@@ -302,6 +309,10 @@ unfiltered `main` run, not a wrong hook.
   there: the root project does not typecheck (§2), and a module tested only from there must be in the
   root `coverage.include` and excluded from its package's.
 - **Prove a guard by deletion**, and confirm a negative control fails for the reason you think.
+- **Dispatch events when testing a `composedPath()` guard.** An undispatched `KeyboardEvent` has an
+  empty path, so a missing-action test can pass at the input-type guard without reaching the branch it
+  claims to check. Exercise the event from the real input and prove the target guard by deletion.
+  Receipt: `packages/ui/src/submit-on-enter.test.ts` (UI keyboard review, 2026-09-06).
 - **Vitest's default coverage excludes swallow every dot-prefixed path** (`**/[.]**`), and
   `include`/`exclude` replace rather than merge. The root config's first version measured
   `All files | 0 | 0 | 0 | 0`, wrote `"Unknown"` percentages and **exited 0** with the thresholds
@@ -406,9 +417,9 @@ slices against the previous five PRs on fix rounds before land, false claims fou
 review, and Codex tasks that needed a Claude fix round. The seat-by-seat probe that informed this is
 `docs/superpowers/specs/2026-09-05-model-seats-experiment.md`.
 
-**Before a PR**, run the §2 gate yourself rather than relying on the hook, then `/finish-branch`.
-Both the hook and CI narrow to changed packages; the unfiltered `main` merge is the only run that
-covers the rest.
+**Before a PR**, run the appropriate tests described in §2, then `/finish-branch`; do not run the
+full workspace suite as a routine pre-PR gate. Both the hook and PR CI narrow to changed packages
+and their dependents; the unfiltered `main` CI run covers the rest.
 
 **Docs:**
 

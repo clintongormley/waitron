@@ -1,6 +1,6 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
@@ -286,6 +286,7 @@ export class DeviceProfilesScreen extends LitElement {
    * write is in flight.
    */
   async #save(): Promise<void> {
+    if (this.saving) return;
     const name = this.draftName.trim();
     if (name === "") {
       this.errorKey = "device_profiles.err_no_name";
@@ -439,6 +440,7 @@ export class DeviceProfilesScreen extends LitElement {
       <div class="editor" data-test="editor-form" data-editing-id=${this.editingId ?? nothing}>
         <h1 class="title">${t("device_profiles.title")}</h1>
         <wt-input
+          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]"))}
           class="field"
           data-test="profile-name"
           label=${t("device_profiles.name")}

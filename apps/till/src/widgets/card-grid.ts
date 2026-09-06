@@ -1,3 +1,4 @@
+import type { DietPredicate } from "../menu-filter.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 // Side-effect imports: registering each widget element so the switch below can render its tag. This
@@ -120,6 +121,7 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) menus: TillMenu[] = [];
   /** The menu (catalogue) the table-order round grid currently shows, threaded straight through. */
   @property() selectedMenuId = "";
+  @property({ attribute: false }) selectedDiet: DietPredicate | null = null;
   /** The table service statuses the table-order Estado picker offers, threaded straight through. */
   @property({ attribute: false }) statuses: TableServiceStatus[] = [];
   /** The venue's active kitchen courses, threaded to the embedded table-order screen's course picker. */
@@ -275,6 +277,7 @@ export class TillCardGrid extends LitElement {
           .products=${this.products}
           .menus=${this.menus}
           .selectedMenuId=${this.selectedMenuId}
+          .selectedDiet=${this.selectedDiet}
           .statuses=${this.statuses}
           .courses=${this.courses}
           .fireControl=${this.fireControl}
