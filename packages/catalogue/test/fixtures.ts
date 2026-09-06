@@ -1,5 +1,6 @@
-import { afterEach, beforeEach } from "vitest";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations } from "@waitron/db";
+import { beforeEach } from "vitest";
+import { CORE_MIGRATIONS } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { sql } from "drizzle-orm";
 import {
   locationId as brandLocationId,
@@ -80,22 +81,22 @@ export async function seedCatalogueFixture(
   };
 }
 
-/** Each case gets its own database so unfiltered catalogue reads see only that case's fixture. */
+/** Share the migrated database; clear authoring rows before each fixture is seeded. */
 export function useCatalogueDb(): { readonly db: Database } {
-  let db: Database | undefined;
+  const fx = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
   beforeEach(async () => {
-    db = await createPgliteDb();
-    await runMigrations(db, CORE_MIGRATIONS);
+    // DELETE avoids TRUNCATE CASCADE following catalogue references into locations and immutable
+    // sales tables. These tests write mutable authoring rows; venue identity rows can stay.
+    await fx.db.transaction(async (tx) => {
+      await tx.execute(sql`delete from product_option_groups`);
+      await tx.execute(sql`delete from option_group_items`);
+      await tx.execute(sql`delete from option_groups`);
+      await tx.execute(sql`delete from products`);
+      await tx.execute(sql`delete from categories`);
+      await tx.execute(sql`delete from location_catalogues`);
+      await tx.execute(sql`update locations set catalogue_id = null`);
+      await tx.execute(sql`delete from catalogues`);
+    });
   });
-  afterEach(async () => {
-    const started = db;
-    db = undefined;
-    if (started !== undefined) await started.close();
-  });
-  return {
-    get db() {
-      if (db === undefined) throw new Error("catalogue database is not started");
-      return db;
-    },
-  };
+  return fx;
 }

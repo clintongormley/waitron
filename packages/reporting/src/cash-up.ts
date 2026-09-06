@@ -15,8 +15,8 @@ import type {
  * over one business day, anchored on settlement. Reads `tenders` joined to `sales` (for node scoping
  * and till_id); groups by (till, method). `cashTakings` per till is Σ cash-method amount (design §5).
  * The node predicate is applied via `nodeScopeClause` only when a node is fixed (a venue-wide overview
- * omits it, relying on RLS + the tenant predicate). Post-settlement refunds are out of scope (tenders
- * are always positive). Belt-and-suspenders tenant/node predicates over RLS.
+ * omits it, relying on the tenant predicate). Post-settlement refunds are out of scope (tenders
+ * are always positive). Explicit predicates scope the tenant and optional node.
  */
 export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Promise<CashUp> {
   const { rows } = await tx.execute<{

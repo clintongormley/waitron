@@ -8,8 +8,8 @@ import type { CloseCounts, DailyCloseInput } from "./types.js";
  * omitted — over one business day. `sales` and `corrections` are issued-in-day (excluding voided;
  * `sales` also excludes F3-canje substitutes — same exclusions as the VAT half). `voids` counts void
  * EVENTS whose voided_at falls in the day, for this node's sales. The node predicate is applied via
- * `nodeScopeClause` only when a node is fixed (a venue-wide overview omits it). Belt-and-suspenders
- * tenant/node predicates over RLS.
+ * `nodeScopeClause` only when a node is fixed (a venue-wide overview omits it). Explicit predicates
+ * scope the tenant and optional node.
  */
 export async function computeCloseCounts(
   tx: Transaction,

@@ -1,5 +1,6 @@
-import { afterEach, beforeEach } from "vitest";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations } from "@waitron/db";
+import { beforeEach } from "vitest";
+import { CORE_MIGRATIONS } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { sql } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -41,22 +42,11 @@ export async function seedProduct(db: Database, tenantId: TenantId): Promise<str
   });
 }
 
-/** Each case gets its own database so unfiltered ingredient reads see only that case's fixture. */
+/** Share the migrated database; each ingredient case starts with empty ingredient tables. */
 export function useIngredientDb(): { readonly db: Database } {
-  let db: Database | undefined;
+  const fx = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
   beforeEach(async () => {
-    db = await createPgliteDb();
-    await runMigrations(db, CORE_MIGRATIONS);
+    await fx.db.execute(sql`truncate recipe_lines, ingredients`);
   });
-  afterEach(async () => {
-    const started = db;
-    db = undefined;
-    if (started !== undefined) await started.close();
-  });
-  return {
-    get db() {
-      if (db === undefined) throw new Error("ingredient database is not started");
-      return db;
-    },
-  };
+  return fx;
 }

@@ -6,7 +6,7 @@ BEGIN
     SELECT 1 FROM pg_roles WHERE rolname = 'app_user' AND (rolsuper OR rolbypassrls)
   ) THEN
     RAISE EXCEPTION
-      'app_user already exists with SUPERUSER or BYPASSRLS — refusing to grant it table access, since that would silently defeat every row-level security policy in this migration';
+      'app_user already exists with SUPERUSER or BYPASSRLS — refusing to grant it table access, the application role must lack elevated attributes, and SUPERUSER would bypass the table privilege revocations below';
   END IF;
 END
 $$;

@@ -21,7 +21,7 @@ export interface ReservedNodeInput {
 /**
  * Insert the standby's OWN dormant node row (design §6 R2): its distinct nodeId, its public key, and
  * the primary's endorsement of that key, all in one INSERT so public_key and endorsement land together.
- * Owner-role: `nodes` grants app_user SELECT only (`0017_nodes_rls.sql`), so these writes need the
+ * Owner-role: `nodes` grants app_user SELECT only (`drizzle/0001_db_baseline_sql.sql`), so these writes need the
  * owner (adopt already runs on ownerDb). Caller supplies a `withTenant` tx so this commits with the
  * reserved SIF + sealed key in one transaction (CLAUDE.md §3 — a write-path helper takes a `tx`).
  */

@@ -15,10 +15,8 @@ import { startSharedContainer } from "./shared-container.js";
  * suite migrates exactly it (`describeEachTarget`'s `migrated()` and each `useRealPostgres` `migrate`
  * both run `[CORE_MIGRATIONS]`).
  *
- * No cluster `roles` are declared. The three provisioner LOGIN roles that lived here existed for the
- * `tenant_provisioner` and `nodes.public_key` suites, both retired with the RLS suites; a suite that
- * needs a non-superuser LOGIN again declares it in `roles` here (never per-file — a per-file
- * `create role` collides on the second file against a shared cluster).
+ * No additional cluster roles are declared. Any suite that needs a LOGIN role declares it here,
+ * because per-file CREATE ROLE can collide across databases sharing the same cluster.
  *
  * A globalSetup's return value is its globalTeardown, so returning `teardown` stops the container
  * once the run finishes.

@@ -19,9 +19,9 @@ import type { DailyCloseInput, PeriodVatInput, VatSummary } from "./types.js";
  * from `sales.vat_breakdown` — the exact cuota AEAT received, whichever method (direct or difference)
  * filed it — by unnesting the jsonb array and summing base and tax per rate. Corrections (negative
  * breakdowns) net in for free; voided sales and F3-canje substitutes are excluded. The explicit
- * tenant predicate is belt-and-suspenders over RLS (mirrors listOutstandingSales); the node predicate
+ * tenant predicate scopes the tenant (mirrors listOutstandingSales); the node predicate
  * is applied only when `scope.nodeId` is given (a tenant-wide aggregate — e.g. modelo 303 — omits it,
- * relying on RLS + the tenant predicate). Callers differ only in their issuance-date `dateFilter` and
+ * relying on the tenant predicate). Callers differ only in their issuance-date `dateFilter` and
  * whether a node is fixed.
  *
  * Exported for `vat-return.ts`'s modelo 303 aggregate to reuse; package-internal, deliberately NOT in

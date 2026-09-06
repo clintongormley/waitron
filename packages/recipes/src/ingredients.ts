@@ -11,7 +11,8 @@ import {
 import { INGREDIENT_COLUMNS } from "./columns.js";
 import { productsUsingIngredient, recomputeProductDerivations } from "./recipes.js";
 
-/** Ingredient writes share the caller's transaction. Deactivation preserves recipe references. */
+/** Ingredient writes share the caller's transaction. Deactivation preserves recipe references.
+ * All SQL is built with Drizzle query builders — no string concatenation. */
 
 export interface Ingredient {
   id: string;

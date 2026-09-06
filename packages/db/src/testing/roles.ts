@@ -4,9 +4,7 @@ import type { Transaction } from "../client.js";
 /**
  * Switches the current transaction to the non-owner application role.
  *
- * Every RLS assertion in this repository goes through here. PGlite runs as
- * superuser and superusers bypass RLS unconditionally — with ENABLE and with
- * FORCE alike — so a test that reads without this call is measuring nothing.
+ * Queries then run with app_user's grants instead of the connection owner's privileges.
  *
  * `set local` rather than `set`: the role reverts at transaction end, so a
  * pooled connection is never handed back wearing the wrong role.

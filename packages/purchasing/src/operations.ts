@@ -16,7 +16,11 @@ import type {
   UpdatePurchaseInvoiceInput,
 } from "./types.js";
 
-/** Received supplier invoices and VAT lines share the caller's transaction. */
+/**
+ * Received supplier invoices (facturas recibidas) and VAT lines share the caller's transaction.
+ * This is the mutable commercial/accounting lane: no huella, chain or allocated invoice number.
+ * All SQL is built with Drizzle query builders — no string concatenation.
+ */
 
 const ZERO = decimal("0.00");
 const HUNDRED = decimal("100.00");
@@ -239,7 +243,7 @@ export async function getPurchaseInvoice(
 }
 
 /**
- * Every visible invoice (header + lines), optionally narrowed to a half-open `received_on` window —
+ * Every invoice (header + lines), optionally narrowed to a half-open `received_on` window —
  * the deduction-period bound. Two queries regardless of count (headers, then all their lines grouped
  * in JS), not a per-invoice fan-out.
  */

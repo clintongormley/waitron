@@ -40,19 +40,15 @@ export interface RealPostgres {
    * processes for `FOR UPDATE` to have anything to block against, and a pool sized below the
    * caller count would silently reduce the concurrency under test.
    * `packages/fiscal-verifactu/src/chain.concurrency.test.ts`'s first test — "runs its writers on
-   * distinct backend processes" — is the load-bearing check that this promise holds downstream.
+   * distinct backend processes" — is the check that this promise holds downstream.
    *
-   * A second, independent reason an RLS suite cares about this: it typically seeds rows through
-   * `connect()`, as the superuser, and probes through `connectAs()`, under `SET app.tenant_id`. A
-   * shared backend between the two would let that session GUC leak into the seeding connection and
-   * make the RLS assertion pass for the wrong reason — quietly proving nothing. A fresh `Database`
-   * per call keeps the two on separate backend processes, so that leak cannot happen.
+   * Separate pools also keep session settings on an application connection from leaking into
+   * an owner's fixture connection.
    */
   connect(): Promise<Database>;
   /**
    * A fresh Database authenticated as `role`, which the caller must already have created. The
-   * container's default user is a superuser and bypasses RLS, so `connect()` cannot exercise a
-   * policy.
+   * container's default user is a superuser, so use connectAs when testing restricted privileges.
    */
   connectAs(role: string, password: string): Promise<Database>;
   stop(): Promise<void>;
@@ -66,16 +62,9 @@ export interface MigratedPostgresOptions {
    * several cite the file that documents the reason; a default would produce a generic message at
    * exactly the moment someone needs the specific one.
    *
-   * This is a harder line than `./harness.ts`'s own `resolveTargets` takes for `@waitron/db`'s OWN
-   * dual-target suites — those warn and continue on PGlite alone (fatal only under
-   * `REQUIRE_DOCKER=1`), because most of them still prove something real on PGlite. The six
-   * package wrappers that call this do not: each exists specifically to observe lock contention or
-   * non-superuser RLS, which PGlite's superuser-only bundled server cannot reproduce at all, so
-   * none has a soft mode to fall back to — and each says so in its own words.
-   *
-   * `postgres.test.ts`'s own real-container block is the one caller that IS gated, on
-   * `describe.runIf(dockerAvailable())`: it tests this helper rather than using it to test
-   * something else, so it has nothing to prove when Docker is absent and nothing to warn about.
+   * A caller that needs real PostgreSQL for concurrency or deployment-role behaviour supplies
+   * its reason here. The real-container block in `postgres.test.ts` gates on `dockerAvailable()`;
+   * the package global setup can still require Docker before that block runs.
    */
   dockerRequired: string;
   /** Applies every migration set this suite needs, core first. */

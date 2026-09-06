@@ -22,7 +22,7 @@ import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
  *
  * One template, because the suites that used to clone it migrated exactly one set — CORE.
  * `@waitron/recipes` owns no migrations of its own: the `ingredients`/`recipe_lines` tables and their
- * grant lines live in `CORE_MIGRATIONS` (`0039_recipes_rls.sql`), so `CORE_MIGRATIONS` is the whole
+ * grant lines live in `CORE_MIGRATIONS` (`0001_db_baseline_sql.sql`), so `CORE_MIGRATIONS` is the whole
  * set and no cross-package ordering has to be stated. `core` is the established key for a CORE-only
  * template — packages/db, apps/server and reporting all name theirs `core`.
  *

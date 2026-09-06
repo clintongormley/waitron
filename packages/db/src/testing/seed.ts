@@ -24,8 +24,7 @@ export function freshNif(): string {
   return `${String(40_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/** Seeds one tenant and returns its id. Run as the connection owner (superuser) — RLS is bypassed,
- * so this is pure setup. */
+/** Seeds one tenant and returns its id. Run as the connection owner; app_user has no INSERT grant. */
 export async function seedTenant(db: Database): Promise<TenantId> {
   const result = await db.execute<{ id: string }>(sql`
     insert into tenants (country, tax_id, legal_name) values ('ES', ${freshNif()}, 'Test SL') returning id`);
@@ -33,7 +32,7 @@ export async function seedTenant(db: Database): Promise<TenantId> {
 }
 
 /** Seeds one node for `tenant` at `location` and returns its id. Run as the connection owner
- * (superuser) — RLS is bypassed, so this is pure setup, exactly like {@link seedTenant}. The name
+ * for fixture setup, exactly like {@link seedTenant}. The name
  * is a fixed fixture value, mirroring seedTenant's hardcoded legal_name: callers that care about a
  * node's name insert it themselves. */
 export async function seedNode(
@@ -48,7 +47,7 @@ export async function seedNode(
 }
 
 /** Seeds one kitchen station for `tenantId`/`locationId` and returns its id. Run as the connection owner
- * (superuser) — RLS is bypassed, so this is pure setup, exactly like {@link seedTenant}/{@link seedNode}.
+ * for fixture setup, exactly like {@link seedTenant}/{@link seedNode}.
  * Defaults to the DEFAULT station named 'Cocina' — the fixture shape the till suites need so a fire's
  * default-station fallback ({@link fireLines}) resolves; callers wanting a non-default or differently
  * named station override `isDefault`/`name`. */

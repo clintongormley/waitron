@@ -291,7 +291,12 @@ export async function listCatalogues(tx: Transaction): Promise<Catalogue[]> {
   return tx.select(CATALOGUE_COLUMNS).from(catalogues).orderBy(catalogues.createdAt, catalogues.id);
 }
 
-/** Tests whether the catalogue id exists before a route attempts to assign it. */
+/**
+ * Check an untrusted catalogue id before a location-menu write, so an absent catalogue produces
+ * `catalogue.not_found` (404) instead of an opaque FK failure (23503). Composite FKs on
+ * `locations.catalogue_id` and `location_catalogues.catalogue_id` remain the data-layer backstop
+ * for missing or tenant-inconsistent references; this read checks existence only.
+ */
 export async function catalogueExists(tx: Transaction, catalogueId: string): Promise<boolean> {
   const [row] = await tx
     .select({ id: catalogues.id })
@@ -1238,6 +1243,12 @@ export async function updateOptionGroupItem(
   await tx.update(optionGroupItems).set(write).where(eq(optionGroupItems.id, itemId));
 }
 
+/**
+ * Fully replace the product's option groups with `groupIds`. Delete the existing attachments,
+ * then insert each id with `sort` equal to its list index; an empty list detaches everything.
+ * The caller's transaction keeps replacement atomic, and composite FKs reject tenant-inconsistent
+ * product or group references.
+ */
 export async function setProductOptionGroups(
   tx: Transaction,
   tenantId: TenantId,

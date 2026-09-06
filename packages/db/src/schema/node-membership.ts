@@ -4,9 +4,8 @@ import type { SignedMembershipDocument } from "@waitron/membership";
 
 /**
  * The venue's current membership document (membership & rejoin wire-protocol, design §3). A whole-
- * database operational singleton — NO tenant_id, NO RLS — like `deployment`/`mirror_config`/
- * `sync_cursor`, so it is out of the fiscal `inmutabilidad` FORCE-RLS scan by construction (that scan
- * keys on the tenant_id column, which this table does not have).
+ * database operational singleton without tenant_id, like `deployment`, `mirror_config` and
+ * `sync_cursor`.
  *
  * The signed document is stored as ONE unit (the `document` jsonb column holds the whole
  * `SignedMembershipDocument`), never a per-row synced table — a row-image would not carry a

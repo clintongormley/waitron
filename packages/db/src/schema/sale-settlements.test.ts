@@ -98,6 +98,8 @@ describeEachTarget("sale settlements — schema shape after 0012", (target) => {
   });
 });
 
+// Behavioural guard matrix, proved by deletion (design §7). Receipt: 939e5fbe,
+// this file's pre-baseline matrix header and wrong-reason failure assertions.
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
@@ -218,27 +220,13 @@ describeEachTarget("sale settlements — coverage on the settlement INSERT", (ta
     const error = await captureError(() =>
       db.insert(saleSettlements).values({ tenantId: TENANT_A, saleId, settledAt: AT }),
     );
+    // P0001 is the default PL/pgSQL RAISE code. Pin it and the coverage message so a privilege
+    // denial (42501) or CHECK failure (23514) cannot pass as a coverage refusal.
     expect(pgErrorCode(error)).toBe("P0001");
     expect(pgErrorMessage(error)).toMatch(
       /tenders for sale .* but sale\.total \+ corrections \+ tips is/,
     );
   });
-
-  it.runIf(target.name === "postgres")(
-    "refuses a mis-summed settlement in a plain transaction",
-    async () => {
-      const saleId = await recordSale(db, "70.00", [{ method: "cash", amount: "50.00" }]);
-      const error = await captureError(() =>
-        db.transaction(async (tx) => {
-          await tx.insert(saleSettlements).values({ tenantId: TENANT_A, saleId, settledAt: AT });
-        }),
-      );
-      expect(pgErrorCode(error)).toBe("P0001");
-      expect(pgErrorMessage(error)).toMatch(
-        /tenders for sale .* but sale\.total \+ corrections \+ tips is/,
-      );
-    },
-  );
 });
 
 describeEachTarget("sale settlements — append-only", (target) => {

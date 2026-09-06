@@ -22,7 +22,7 @@ import { PRIVILEGES } from "./privileges.expected.js";
  * boot a WASM cluster and re-apply every migration set.
  *
  * `has_table_privilege` answers TABLE-level privilege only, so the matrix does not pin column
- * grants; the second describe below guards the one column-level fact that needs it.
+ * grants; the second describe below guards the column-level facts that need it.
  * `scripts/schema-equivalence.sh` diffs the dumped ACLs, column grants included, but that is a
  * one-shot proof of the squash rather than a standing guard.
  */
@@ -53,7 +53,7 @@ describe("app_user's table privileges are exactly the captured matrix", () => {
   });
 });
 
-describe("column-level grants app_user must not hold", () => {
+describe("app_user's column-level grants", () => {
   it("holds SELECT and NOT UPDATE on nodes.public_key", async () => {
     // The membership trust anchor: boot reads the key on the app pool, and it is stamped owner-role
     // at provision only. The table matrix above cannot express this — `nodes` reads `S` there
@@ -70,5 +70,17 @@ describe("column-level grants app_user must not hold", () => {
         has_column_privilege('app_user', 'nodes', 'public_key', 'SELECT') as sel,
         has_column_privilege('app_user', 'nodes', 'public_key', 'UPDATE') as upd`);
     expect(rows[0]).toEqual({ sel: true, upd: false });
+  });
+  it.each([
+    { table: "invoice_series", columns: ["next_number"] },
+    { table: "incidents", columns: ["acknowledged_at", "acknowledged_by"] },
+  ])("holds UPDATE on $table's permitted columns and no others", async ({ table, columns }) => {
+    const { rows } = await suite.admin.execute<{ column: string; upd: boolean }>(sql`
+      select a.attname as column,
+        has_column_privilege('app_user', a.attrelid, a.attnum, 'UPDATE') as upd
+      from pg_attribute a
+      where a.attrelid = ${table}::regclass and a.attnum > 0 and not a.attisdropped
+      order by a.attname`);
+    expect(rows.filter((row) => row.upd).map((row) => row.column)).toEqual(columns);
   });
 });

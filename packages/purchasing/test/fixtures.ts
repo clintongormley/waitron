@@ -1,23 +1,14 @@
-import { afterEach, beforeEach } from "vitest";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations } from "@waitron/db";
+import { beforeEach } from "vitest";
+import { sql } from "drizzle-orm";
+import { CORE_MIGRATIONS } from "@waitron/db";
 import type { Database } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 
-/** Each case gets its own database so unfiltered purchase-invoice reads see only that case's fixture. */
+/** Share the migrated database; each case starts with empty invoice tables. */
 export function usePurchasingDb(): { readonly db: Database } {
-  let db: Database | undefined;
+  const fx = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
   beforeEach(async () => {
-    db = await createPgliteDb();
-    await runMigrations(db, CORE_MIGRATIONS);
+    await fx.db.execute(sql`truncate purchase_invoice_vat, purchase_invoices`);
   });
-  afterEach(async () => {
-    const started = db;
-    db = undefined;
-    if (started !== undefined) await started.close();
-  });
-  return {
-    get db() {
-      if (db === undefined) throw new Error("purchase-invoice database is not started");
-      return db;
-    },
-  };
+  return fx;
 }

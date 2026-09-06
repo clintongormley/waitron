@@ -41,7 +41,7 @@ function record(businessDay: string, cashCounts: CashCountInput[]): Promise<Dail
   });
 }
 
-// Verify under the real app role + tenant GUC — the shape a caller (Task 5's demo) uses, which also
+// Verify under the app role with an explicit tenant id — the shape a caller (Task 5's demo) uses, which also
 // proves app_user's SELECT grant is enough to re-walk the chain.
 function verify() {
   return withTenant(suite.db, venue.tenantId, async (tx) => {
@@ -59,7 +59,7 @@ const SNAPSHOT = JSON.stringify({
   cashReconciliation: { byTill: [], nodeVariance: "0.00" },
 });
 
-/** Raw superuser INSERT of one close row, bypassing RLS (PGlite is superuser). INSERT is not what
+/** Owner INSERT of one close row. INSERT is not what
  * the append-only trigger guards, so no bypass is needed; this is how a break is staged without
  * mutating a committed row. */
 function craftClose(opts: {

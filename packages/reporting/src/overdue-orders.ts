@@ -34,7 +34,7 @@ import type { OverdueOrder, OverdueOrdersInput } from "./types.js";
  * order-specific links, so tenant scoping alone is exact here — never two tables satisfy the OR for
  * the SAME order under the one-tab-per-table / one-delivery-target invariants those columns carry.
  *
- * `tenantId`/`nodeId` are both explicit WHERE predicates — belt-and-suspenders over RLS, the
+ * `tenantId`/`nodeId` are both explicit WHERE predicates, the
  * convention every reporting/report-api read follows (`report-api.ts`'s `countOpenTables`,
  * `computeTopSellers`'s tenant predicate). Runs on the CALLER's transaction under its tenant/app_user
  * scope.

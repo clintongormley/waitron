@@ -13,7 +13,14 @@ import {
 import { INGREDIENT_COLUMNS } from "./columns.js";
 import type { Ingredient } from "./ingredients.js";
 
-/** Recipe changes and their derived allergen and diet values share the caller's transaction. */
+/**
+ * Recipe changes and their derived allergen and diet values share the caller's transaction.
+ * All SQL is built with Drizzle query builders — no string concatenation.
+ *
+ * `Ingredient` is an `import type`, erased at runtime: ingredients imports this module's
+ * propagation helpers, so a value import back would create a cycle. Shared column selections
+ * live in the leaf `columns.ts`, which imports neither operation module.
+ */
 
 /** The ingredients that make up a product (ordered by created_at then id — a stable order, not
  * the order the ids were passed to setProductRecipe: setProductRecipe inserts every line in one

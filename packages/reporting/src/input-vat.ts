@@ -30,8 +30,8 @@ const KIND_ORDER: Record<PurchaseVatKind, number> = { ordinary: 0, capital: 1 };
  * deductible_proportion/100)` — rounded PER invoice line, then summed, never re-rounded on the monthly
  * base. That is the same "sum the filed per-invoice cuotas, never `round(Σ base × rate)`" exactness
  * rule the output side follows (#76/#66); with the default proportion 100 it collapses to `Σ` of the
- * filed cuotas verbatim. The explicit `p.tenant_id` predicate is belt-and-suspenders over RLS
- * (mirrors `aggregateVatByRate`); across nodes, RLS + that predicate are the only scoping.
+ * filed cuotas verbatim. The explicit `p.tenant_id` predicate scopes the query to the requested
+ * tenant across all its nodes (mirrors `aggregateVatByRate`).
  *
  * The result carries every (rate, kind) line UNFILTERED — the casilla 28/29 (corrientes) vs 30/31
  * (bienes de inversión) split is applied DOWNSTREAM in `mapModelo303`, which sums `deductible.byRate`

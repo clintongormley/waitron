@@ -47,7 +47,7 @@ import { AppError } from "@waitron/shared";
 import type { AvailableProduct } from "./operations.js";
 import { seedCatalogueFixture, seedVenue, useCatalogueDb } from "../test/fixtures.js";
 
-// Query behaviour runs on PGlite; each case owns its fixture database.
+// Query behaviour runs on PGlite; each case starts with empty authoring tables.
 const fx = useCatalogueDb();
 
 describe("catalogue operations", () => {

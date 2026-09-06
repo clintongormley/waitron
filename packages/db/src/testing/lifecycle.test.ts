@@ -81,11 +81,7 @@ describe("usePgliteDb assigns its handle before setup can throw", () => {
   });
 });
 
-/**
- * `useRealPostgres` itself needs a container, so its happy path is exercised by the RLS suites that
- * use it rather than here. Its one branching decision is extracted so both arms are provable without
- * Docker — a container is a heavy price for asserting a string.
- */
+// Role-statement generation is pure: both membership shapes can be checked without a container.
 describe("probeRoleStatement", () => {
   it("grants membership when inRole is given", () => {
     expect(probeRoleStatement({ name: "probe", password: "pw", inRole: "app_user" })).toBe(

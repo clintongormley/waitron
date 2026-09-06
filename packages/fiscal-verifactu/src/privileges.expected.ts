@@ -11,7 +11,7 @@
  * grant such as `GRANT UPDATE ("next_number") ON invoice_series` (packages/db 0003) does NOT show a
  * `U` here, so this matrix does not pin column grants. `scripts/schema-equivalence.sh` diffs the
  * dumped ACLs and does cover them, but it is a one-shot proof of the squash rather than a standing
- * guard; the suite beside this file carries the one column-level fact that needs one.
+ * guard; the suite beside this file carries the column-level facts that need one.
  *
  * The capture returned 82 rows (`__drizzle_migrations_*` excluded by the query): every migration in
  * `packages/migrations/migrations.manifest.json` order, applied from a worktree at that base commit
