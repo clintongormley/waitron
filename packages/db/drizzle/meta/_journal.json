@@ -5,22 +5,15 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1788685651652,
+      "when": 1788709333661,
       "tag": "0000_db_baseline",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1788685652198,
+      "when": 1788709345224,
       "tag": "0001_db_baseline_sql",
-      "breakpoints": true
-    },
-    {
-      "idx": 111,
-      "version": "7",
-      "when": 1788687984021,
-      "tag": "0111_series_retired_at",
       "breakpoints": true
     }
   ]

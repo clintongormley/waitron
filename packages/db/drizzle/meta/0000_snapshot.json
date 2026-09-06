@@ -1,5 +1,5 @@
 {
-  "id": "9c67d2b2-37a8-441e-9589-3a6dd9b0033d",
+  "id": "b22b21ff-118b-4b94-ba61-92f30bbed43b",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -522,6 +522,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": 1
+        },
+        "retired_at": {
+          "name": "retired_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {

@@ -80,6 +80,7 @@ CREATE TABLE "invoice_series" (
 	"code" text NOT NULL,
 	"purpose" text DEFAULT 'standard' NOT NULL,
 	"next_number" integer DEFAULT 1 NOT NULL,
+	"retired_at" timestamp with time zone,
 	CONSTRAINT "invoice_series_node_code_key" UNIQUE("tenant_id","node_id","code"),
 	CONSTRAINT "invoice_series_tenant_id_key" UNIQUE("tenant_id","id"),
 	CONSTRAINT "invoice_series_purpose_ck" CHECK ("invoice_series"."purpose" in ('standard', 'rectificative')),
