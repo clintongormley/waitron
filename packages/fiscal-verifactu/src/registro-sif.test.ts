@@ -304,10 +304,8 @@ describe("the database, not the application, is what forbids a duplicate", () =>
     expect(pgErrorCode(error)).toBe("23505");
   });
 
-  it("rejects a duplicate raised by a different tenant it cannot even see", async () => {
-    // Unique constraints are NOT RLS-filtered. A second obligado sharing a NIF still collides,
-    // which is the behaviour that makes never-reuse true across the whole installation rather
-    // than within one tenant's visible slice.
+  it("rejects a duplicate installation identity raised by a different tenant", async () => {
+    // The unique installation identity includes the NIF, independently of the tenant id.
     const reg = await withTenant(db, TENANT_A.id, (tx) =>
       registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId }),
     );

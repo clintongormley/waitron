@@ -21,11 +21,7 @@ const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
 let till: SeededTill;
 
-// No withTenant/asAppUser here, unlike registro-sif.test.ts: this suite is about appendToChain's
-// OWN logic (ordering, error shape, the row lock's ability to serialise), never about RLS or role
-// privilege, and PGlite's default connection is a superuser that bypasses RLS unconditionally
-// regardless (see test/fixtures.ts's identical observation) — wrapping every call in withTenant
-// here would add a set_config round trip that asserts nothing this suite is about.
+// PGlite exercises append ordering and error handling; concurrency lives in the real-PG suite.
 beforeEach(async () => {
   till = await seedTill(pg.db);
 });

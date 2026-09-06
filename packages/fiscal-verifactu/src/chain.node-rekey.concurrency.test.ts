@@ -21,14 +21,9 @@ import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/writ
 const WRITERS = 20;
 
 /**
- * The node-id rekey's container-prototype gate (design §9). Every property below is re-proven on the
- * NODE key — the chain, series, SIF and concurrency backstop all moved from `till_id` to `node_id`
- * (#33: the SIF is the node). Real PostgreSQL via Testcontainers, deliberately never a PGlite
- * fallback: PGlite serialises every query onto one backend, so a concurrency suite there is a false
- * pass, and PGlite is superuser, so it cannot show the non-superuser app role under RLS (CLAUDE.md
- * §4). Docker-absence THROWS rather than skipping when Docker is unavailable — now at the package
- * globalSetup (`src/testing/global-setup.ts`'s `dockerRequired`), which precedes every worker — so a
- * vanished suite fails loudly instead of reporting a green that proves nothing.
+ * Exercise node-keyed chain and series allocation using independent PostgreSQL connections.
+ * PGlite serialises queries onto one backend and cannot exercise contention.
+ * The shared global setup requires Docker before any worker starts.
  */
 const suite = useTemplateDb({ template: "manifest" });
 
@@ -42,20 +37,8 @@ beforeEach(async () => {
 });
 
 describe("appendToChain under real contention, keyed by node", () => {
-  // Property 1 (design §9.1): the concurrency backstop under (tenant, node, secuencia). One node
-  // serving sales; WRITERS concurrent appends on distinct backend connections; all commit, the
-  // sequence is 1..WRITERS with no gap, and each record chains onto its predecessor's huella.
-  //
-  // What GUARANTEES the no-gaps property here is the per-node `cadenas` FOR UPDATE head lock
-  // (chain.ts's lockChainHead): the writers serialise on that row, each computing head.secuencia+1
-  // only after the previous one commits. MEASURED, not reasoned: dropping
-  // registros_tenant_node_secuencia_uq and re-running this exact test leaves it PASSING (observed
-  // 2026-08-03) — so the unique index is NOT what makes this test green. The index is the
-  // defense-in-depth BACKSTOP against a writer that reaches an occupied (tenant, node, secuencia) by
-  // any path that bypasses or races the lock; that is proven directly, and deterministically, by a
-  // duplicate-position insert being rejected with 23505 while the same insert succeeds once the index
-  // is dropped (task-4-report §2's delete-the-index receipt). This mirrors chain.concurrency.test.ts,
-  // which likewise attributes the property to the lock and makes no deletion claim about the index.
+  // The per-node chain-head lock serialises writers before each reads the next position.
+  // The unique index rejects duplicate positions; this case checks concurrent allocation.
   it("assigns 20 concurrent appends distinct positions with no gaps, each chained to its predecessor", async () => {
     const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
     try {
@@ -245,7 +228,7 @@ describe("the series↔node guard (record-sale)", () => {
   });
 });
 
-describe("RLS under the non-superuser app role", () => {
+describe("node references and app-role appends", () => {
   // Property 5 (design §9.3): the app role can append node-keyed rows under withTenant; the composite
   // (tenant_id, node_id) FK on `sales` blocks a cross-tenant node reference.
   it("lets the app role append under its own tenant context", async () => {

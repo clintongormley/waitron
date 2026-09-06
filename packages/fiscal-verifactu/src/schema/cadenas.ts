@@ -50,4 +50,4 @@ export const cadenas = pgTable(
     check("cadenas_puntero_ck", sql`(${t.ultimoRegistroId} is null) = (${t.ultimaHuella} is null)`),
   ],
   /* v8 ignore stop */
-).enableRLS();
+);

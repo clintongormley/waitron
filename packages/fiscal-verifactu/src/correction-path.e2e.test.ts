@@ -14,21 +14,9 @@ import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixt
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 
 /**
- * The end-to-end counterpart to `./write-path.e2e.test.ts`/`./void-path.e2e.test.ts`, for
- * `VerifactuBackend.recordCorrection` — the R5 rectificativa write path.
- *
- * **Real Postgres, not PGlite** (unlike those two, which use `usePgliteDb`): this slice's brief
- * calls for it, and the concurrency suite at the foot genuinely requires it — PGlite serialises
- * every query onto one backend, so a contention test on it is a false pass (CLAUDE.md §4). The
- * correctness suite runs the write path as the non-superuser deployment role (`withTenant` +
- * `asAppUser`, exactly `write-path.e2e.test.ts`'s shape) so RLS is genuinely enforced during the
- * append rather than bypassed by a superuser session.
- *
- * What this proves that the PGlite `backend.test.ts` refusals cannot: a rectificativa registro is a
- * real alta at the next chain position, its stored huella recomputes from its own columns
- * (including the negative `ImporteTotal`/`CuotaTotal` it hashes), its `FacturasRectificadas` carries
- * the ORIGINAL registro's exact stored identity, and it advances the same chain the original sits
- * on with its own `pendiente` sidecar — none of which a refusal-only test exercises.
+ * Record an R5 correction as app_user on real PostgreSQL, including concurrent writers.
+ * Check its chain position, recomputed hash, original invoice identity and pending sidecar.
+ * PGlite serialises queries onto one backend and cannot exercise the lock contention here.
  */
 // A clone of the shared container's `manifest` template (the full migration manifest).
 const suite = useTemplateDb({ template: "manifest" });
@@ -114,8 +102,7 @@ async function recordOriginal(): Promise<string> {
   return originalId;
 }
 
-/** Inserts one corrective `sales` row (negative total + `corrects_sale_id`, allowed by migration
- * 0013's relaxed check) as the RLS-bypassing admin, returning its generated id. */
+/** Insert a corrective sale as the fixture owner and return its id. */
 async function seedCorrectiveRow(
   invoiceNumber: number,
   correctsSaleId: string,

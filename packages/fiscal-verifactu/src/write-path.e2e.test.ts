@@ -472,33 +472,10 @@ describe("line note/doneness are not part of the huella", () => {
 });
 
 describe("till_id is inert to the huella and the chain (SP-A.2 §16.4(b))", () => {
-  // The H2 fiscal receipt for the SP-A.2 device-unification cutover, proven at the REAL
-  // `recordSale` -> `computeHuella` write path (the counterpart to the structural + AEAT-vector proof
-  // in `packages/verifactu/src/huella.test.ts`, "till_id is not part of the huella"). The cutover moved
-  // a sale's `till_id` from an env value to the authenticated device's assigned `tills` row
-  // (`requireSaleTillId`, apps/server); a handheld's `till_id` legitimately changes as a result (spec
-  // §16.4). This block proves that change is inert to the fiscal chain: two FIRST-OF-CHAIN sales that
-  // are byte-for-byte identical EXCEPT for their `till_id` produce the SAME `huella`, the SAME empty
-  // `anterior_huella`, the SAME `secuencia`, the SAME `entorno` and the SAME `node_id` — only the
-  // `sales`/`registros_facturacion` `till_id` snapshot differs. The §5 invariant "never put our own
-  // metadata into a hash", applied to `till_id`.
-  //
-  // Failing case (§16.4): if `till_id` fed the huella, or if it keyed the chain/series instead of
-  // `node_id`, the two records would differ beyond `till_id` — the byte-identity assertion would fail.
-  //
-  // PGlite, deliberately (CLAUDE.md §4): this proves a determinism property of `recordSale`/
-  // `computeHuella` — same inputs bar `till_id` give the same hash and chain position — for which
-  // RLS, the deployment role's privileges and concurrency are all irrelevant. The REAL-Postgres arm of
-  // the receipt (the device-resolution + mutation-control + `node_id`-untouched proofs, which DO run
-  // the app role under RLS through the actual sale route) lives in
-  // `apps/server/src/sale-till-source.receipt.test.ts`.
-  //
-  // Byte-identical huellas need the same NumSerieFactura against the same empty chain, so — exactly as
-  // the `parent_line_id` / note-doneness blocks above — each sale is recorded, its record read back
-  // INSIDE its transaction, and the transaction then ROLLED BACK, reverting `invoice_series.next_number`
-  // and the `cadenas` head so the next call re-allocates the identical `A/1` against the same still-empty
-  // chain. The two tills X and Y share ONE location, so even the (non-hashed) `DescripcionOperacion`
-  // read from the till's location is identical between the runs — the only difference is the `till_id`.
+  // Changing only till_id must preserve the hash and chain position. Roll back each sale
+  // so the next sale uses the same invoice number and empty chain. Both tills share a location.
+  // PGlite checks determinism here; apps/server/src/sale-till-source.receipt.test.ts
+  // exercises device resolution and the sale route as the application role on PostgreSQL.
   const ROLLBACK = new Error("rollback: record captured");
 
   // A `type` alias, not an `interface`: `tx.execute<T>` constrains `T extends Record<string, unknown>`,

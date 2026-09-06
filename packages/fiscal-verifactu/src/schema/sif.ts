@@ -43,10 +43,7 @@ export const registroSif = pgTable(
   // own closing bracket outside the range left it separately reported as uncovered.
   /* v8 ignore start */
   (t) => [
-    // `NºInstalación` "no puede repetirse nunca". This index — not the allocator, not a code
-    // review, not a spreadsheet — is what makes that true. Note it enforces across tenants even
-    // under FORCE ROW LEVEL SECURITY: unique constraints are not RLS-filtered, so a conflicting
-    // row you cannot SELECT still raises 23505.
+    // Installation identity is unique by NIF, system id and installation number.
     uniqueIndex("registro_sif_instalacion_uq").on(
       t.nif,
       t.idSistemaInformatico,
@@ -59,21 +56,11 @@ export const registroSif = pgTable(
     check("registro_sif_numero_ck", sql`${t.numeroInstalacion} > 0`),
   ],
   /* v8 ignore stop */
-).enableRLS();
+);
 
 /**
- * The upstream allocator's counter, one row per (NIF, IdSIF).
- *
- * Rejected alternative: `coalesce(max(numero_instalacion), 0) + 1` over `registro_sif`. That
- * derives never-reuse from never-deleting, which makes a routine housekeeping DELETE a compliance
- * breach with no error message — a wiped-and-re-registered till would silently be handed a number
- * a previous installation had already used, and AEAT would see two SIFs with one identity. A
- * counter row is independent of the retention of anything.
- *
- * Deliberately carries NO `tenant_id` and NO RLS. It is keyed by NIF, which IS the obligado
- * tributario for this purpose, and a single writer cannot guarantee uniqueness over rows a policy
- * hides from it: an RLS predicate here would silently let two tenants sharing a NIF allocate the
- * same number.
+ * One allocation counter per (NIF, IdSIF), independent of retained registro_sif rows.
+ * Keeping the counter separate prevents allocation from restarting when identities are removed.
  */
 export const contadoresInstalacion = pgTable(
   "contadores_instalacion",

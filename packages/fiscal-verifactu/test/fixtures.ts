@@ -57,21 +57,9 @@ export const TENANT_B = {
 };
 
 /**
- * Seeds exactly the core-package rows `registros_facturacion` needs a foreign key onto (a
- * tenant, a location, a till, an invoice series, one sale) plus this package's own `registro_sif`
- * row — everything `insertRegistro` in `inmutabilidad.test.ts` references.
- *
- * Runs as plain, unscoped statements rather than inside `withTenant`. PGlite's default connection
- * is a SUPERUSER (the same fact `inmutabilidad.test.ts`'s own first test pins down), and a
- * superuser bypasses row-level security unconditionally — WITH ENABLE and WITH FORCE alike — so
- * no `app.tenant_id` needs to be set for these inserts to satisfy each table's tenant-isolation
- * `WITH CHECK`. Were this fixture ever pointed at a real, non-superuser owner connection, every
- * insert below would need to run inside `withTenant(db, TENANT_A.id, ...)` first.
- *
- * The seeded sale has `total = 0.00` and gets NO tender or `sale_settlements` row. Migration 0012
- * dropped `tip_amount`/`amount_charged` from `sales` and retired the old commit-time
- * `sales_assert_tenders_cover` trigger, so a bare, unsettled sale is a legitimate steady state
- * (design §3) and nothing checks coverage against it.
+ * Seed the foreign-key parents needed by insertRegistro: tenant, location, till, node,
+ * invoice series, sale and SIF identity. Use the fixture owner's table privileges.
+ * The zero-total sale remains unsettled; settlement coverage is checked on settlement.
  */
 export async function seedTenantTillSif(db: Database): Promise<void> {
   await db.execute(sql`

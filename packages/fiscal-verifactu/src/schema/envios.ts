@@ -75,4 +75,4 @@ export const envios = pgTable(
     ),
   ],
   /* v8 ignore stop */
-).enableRLS();
+);

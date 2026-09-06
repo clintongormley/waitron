@@ -16,31 +16,8 @@ import { nodes, sales, tenants, tills } from "@waitron/db";
 import { registroSif } from "./sif.js";
 
 /**
- * The immutable registro de facturación. Real columns, not an opaque payload, because this is
- * the table the module queries: the outbox drains by `(tenant_id, estado, proximo_intento_en)`,
- * reconciliation filters by período de imputación, and art. 7.i verification walks predecessors
- * by identity. A jsonb blob would make every one of those a full scan plus a deserialise.
- *
- * Two columns are jsonb, and the rule that puts them there is narrow: a value earns its own
- * column when something queries, joins or constrains it.
- *
- * `jsonb`, not `text`, is safe for both because NEITHER is part of the huella input:
- * `buildCadenaAlta`/`buildCadenaAnulacion` (`packages/verifactu/src/huella.ts`) hash exactly 8
- * and 5 named fields respectively, and `Desglose`/`SistemaInformatico` are not among them. jsonb's
- * key-reordering-on-storage is therefore harmless here — these values are only ever
- * re-serialised into XML, never digested. (A field that WERE part of the huella input would need
- * `text`, for the same byte-identity reason `cuota_total`/`importe_total` below are `text` —
- * jsonb must never be used for anything this package hashes.)
- *
- * - `desglose` is a repeating group of 1–12 entries containing an xsd:choice. In columns that
- *   means a child table — and a child table of an immutable parent needs its own revocation, its
- *   own pair of triggers and its own RLS policy, all to serve a query nobody makes. It is never
- *   filtered on.
- * - `sistema_informatico` is a nine-field snapshot. The identity-bearing parts of it —
- *   `numero_instalacion` and `id_sistema_informatico` — are already real, unique-constrained
- *   columns on `registro_sif`. This is a frozen copy of a row that also exists relationally, and
- *   splitting it into nine columns invites exactly the backfill that would silently diverge from
- *   what was actually sent to AEAT.
+ * Immutable fiscal records keep query keys in columns and structured, non-hashed payloads in jsonb.
+ * Huella inputs retain their original text representation; JSON key ordering must not affect a hash.
  */
 export const registrosFacturacion = pgTable(
   "registros_facturacion",
@@ -197,26 +174,14 @@ export const registrosFacturacion = pgTable(
       "registros_tipo_rectificativa_ck",
       sql`${t.tipoRectificativa} is null or ${t.tipoRectificativa} in ('S', 'I')`,
     ),
-    // Defense-in-depth for AEAT rule 1115 (given §5 unrepairability): a tipo_rectificativa may only
-    // sit on a rectificativa TipoFactura (R1–R5). The full rule-1114 direction (an R-type REQUIRES
-    // a tipo_rectificativa) stays at the app layer (validate.ts), because tipo_factura is nullable
-    // (anulación) and that cross-field NULL logic is awkward and duplicative here.
-    //
-    // The `tipo_factura is not null` arm is load-bearing, not redundant (Copilot): tipo_factura is
-    // NULL on an anulación, and `NULL ~ '^R[1-5]$'` evaluates to NULL, which a CHECK treats as
-    // PASSING — so without the explicit not-null a tipo_rectificativa on a NULL-tipo_factura row
-    // would slip past this backstop. Regression-pinned in rectificativa-columns.test.ts.
+    // A rectification type requires an R1–R5 invoice type. Explicit NOT NULL rejects
+    // anulación rows: SQL CHECK accepts NULL results as well as true.
     check(
       "registros_tipo_factura_rectificativa_ck",
       sql`${t.tipoRectificativa} is null or (${t.tipoFactura} is not null and ${t.tipoFactura} ~ '^R[1-5]$')`,
     ),
-    // Defense-in-depth for the F3 canje (given §5 unrepairability), mirroring
-    // registros_tipo_factura_rectificativa_ck above: a FacturasSustituidas block may only sit on an
-    // F3 full invoice. The `tipo_factura is not null` arm is load-bearing, not redundant (the same
-    // three-valued-logic hole Copilot found on #46): tipo_factura is NULL on an anulación, and
-    // `NULL = 'F3'` evaluates to NULL, which a CHECK treats as PASSING — so without the explicit
-    // not-null a facturas_sustituidas on a NULL-tipo_factura row would slip past this backstop.
-    // Regression-pinned in canje-columns.test.ts.
+    // A substitution block requires F3. Explicit NOT NULL rejects anulación rows
+    // because SQL CHECK accepts NULL results as well as true.
     check(
       "registros_facturas_sustituidas_f3_ck",
       sql`${t.facturasSustituidas} is null or (${t.tipoFactura} is not null and ${t.tipoFactura} = 'F3')`,
@@ -236,4 +201,4 @@ export const registrosFacturacion = pgTable(
     ),
   ],
   /* v8 ignore stop */
-).enableRLS();
+);

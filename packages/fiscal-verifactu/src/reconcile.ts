@@ -286,14 +286,8 @@ export async function reconcile(
   return result;
 }
 
-/**
- * Our `envios` rows for the period, joined to their registro. Period = expedition MONTH: our
- * records carry no `FechaOperacion`, so operation month is always expedition month (spec §1), and
- * `fecha_expedicion_factura` (a `date`) is the column to filter on — `to_char` compares the stored
- * year/month against the requested `Ejercicio`/`Periodo` directly. Scoped to the tenant (and run
- * under `withTenant`, so the RLS tenant-isolation policy matches these rows under a non-superuser
- * deployment role — the same scoping `pendingCount` relies on).
- */
+/** Our envios for the requested tenant and expedition month, joined to their registros.
+ * Records carry no FechaOperacion, so the period filter uses fecha_expedicion_factura. */
 async function rowsForPeriod(
   tx: Transaction,
   tenantId: string,
@@ -306,10 +300,7 @@ async function rowsForPeriod(
       r.id_emisor_factura, r.nombre_razon_emisor, r.num_serie_factura,
       to_char(r.fecha_expedicion_factura, 'DD-MM-YYYY') as fecha_expedicion_factura
     from envios e
-    -- r.tenant_id = e.tenant_id keeps the join tenant-consistent by construction: an envios row's
-    -- tenant_id always equals its registro's (both stamped from the same sale at insert), so this is
-    -- redundant under that invariant and under RLS, but hardens the join against a cross-tenant match
-    -- in any superuser/RLS-bypass context (the same defense-in-depth pendingCount adds explicitly).
+    -- Match both ids so the joined registro belongs to the selected tenant.
     join registros_facturacion r on r.id = e.registro_id and r.tenant_id = e.tenant_id
     where e.tenant_id = ${tenantId}
       and to_char(r.fecha_expedicion_factura, 'YYYY') = ${period.year}

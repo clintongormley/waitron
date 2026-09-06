@@ -1,9 +1,90 @@
 {
-  "id": "57c2401d-8eab-4cef-bc19-dacfb0072b1f",
-  "prevId": "9231a727-26bd-41c4-bf7e-22090d4241e2",
+  "id": "bb0c5cd4-20c5-4ceb-b382-85a26c9af99c",
+  "prevId": "52b5a824-9108-40b5-a14b-753c499ef4c5",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
+    "public.acks": {
+      "name": "acks",
+      "schema": "",
+      "columns": {
+        "registro_id": {
+          "name": "registro_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "submitted_at": {
+          "name": "submitted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "csv": {
+          "name": "csv",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "delivered_at": {
+          "name": "delivered_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "acks_registro_id_registros_facturacion_id_fk": {
+          "name": "acks_registro_id_registros_facturacion_id_fk",
+          "tableFrom": "acks",
+          "columnsFrom": [
+            "registro_id"
+          ],
+          "tableTo": "registros_facturacion",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "acks_tenant_id_tenants_id_fk": {
+          "name": "acks_tenant_id_tenants_id_fk",
+          "tableFrom": "acks",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "tableTo": "tenants",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "acks_state_ck": {
+          "name": "acks_state_ck",
+          "value": "\"acks\".\"state\" in ('accepted', 'accepted_with_errors', 'rejected', 'halted')"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.cadenas": {
       "name": "cadenas",
       "schema": "",
@@ -14,8 +95,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "till_id": {
-          "name": "till_id",
+        "node_id": {
+          "name": "node_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -62,13 +143,13 @@
           "onUpdate": "no action",
           "onDelete": "no action"
         },
-        "cadenas_till_id_tills_id_fk": {
-          "name": "cadenas_till_id_tills_id_fk",
+        "cadenas_node_id_nodes_id_fk": {
+          "name": "cadenas_node_id_nodes_id_fk",
           "tableFrom": "cadenas",
           "columnsFrom": [
-            "till_id"
+            "node_id"
           ],
-          "tableTo": "tills",
+          "tableTo": "nodes",
           "columnsTo": [
             "id"
           ],
@@ -90,11 +171,11 @@
         }
       },
       "compositePrimaryKeys": {
-        "cadenas_tenant_id_till_id_pk": {
-          "name": "cadenas_tenant_id_till_id_pk",
+        "cadenas_tenant_id_node_id_pk": {
+          "name": "cadenas_tenant_id_node_id_pk",
           "columns": [
             "tenant_id",
-            "till_id"
+            "node_id"
           ]
         }
       },
@@ -106,7 +187,7 @@
           "value": "(\"cadenas\".\"ultimo_registro_id\" is null) = (\"cadenas\".\"ultima_huella\" is null)"
         }
       },
-      "isRLSEnabled": true
+      "isRLSEnabled": false
     },
     "public.contadores_instalacion": {
       "name": "contadores_instalacion",
@@ -143,6 +224,51 @@
           ]
         }
       },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.envio_flujo": {
+      "name": "envio_flujo",
+      "schema": "",
+      "columns": {
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "proximo_envio_en": {
+          "name": "proximo_envio_en",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tiempo_espera_seg": {
+          "name": "tiempo_espera_seg",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "envio_flujo_tenant_id_tenants_id_fk": {
+          "name": "envio_flujo_tenant_id_tenants_id_fk",
+          "tableFrom": "envio_flujo",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "tableTo": "tenants",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
@@ -221,6 +347,12 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "reconciled_resubmit_at": {
+          "name": "reconciled_resubmit_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -289,7 +421,7 @@
           "value": "\"envios\".\"estado\" in ('pendiente', 'enviando', 'aceptado', 'aceptado_con_errores', 'rechazado', 'detenido')"
         }
       },
-      "isRLSEnabled": true
+      "isRLSEnabled": false
     },
     "public.registro_sif": {
       "name": "registro_sif",
@@ -308,8 +440,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "till_id": {
-          "name": "till_id",
+        "node_id": {
+          "name": "node_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -384,7 +516,7 @@
               "nulls": "last"
             },
             {
-              "expression": "till_id",
+              "expression": "node_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -411,13 +543,13 @@
           "onUpdate": "no action",
           "onDelete": "no action"
         },
-        "registro_sif_till_id_tills_id_fk": {
-          "name": "registro_sif_till_id_tills_id_fk",
+        "registro_sif_node_id_nodes_id_fk": {
+          "name": "registro_sif_node_id_nodes_id_fk",
           "tableFrom": "registro_sif",
           "columnsFrom": [
-            "till_id"
+            "node_id"
           ],
-          "tableTo": "tills",
+          "tableTo": "nodes",
           "columnsTo": [
             "id"
           ],
@@ -434,7 +566,7 @@
           "value": "\"registro_sif\".\"numero_instalacion\" > 0"
         }
       },
-      "isRLSEnabled": true
+      "isRLSEnabled": false
     },
     "public.registros_facturacion": {
       "name": "registros_facturacion",
@@ -455,6 +587,12 @@
         },
         "till_id": {
           "name": "till_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "node_id": {
+          "name": "node_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -510,6 +648,36 @@
         "tipo_factura": {
           "name": "tipo_factura",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tipo_rectificativa": {
+          "name": "tipo_rectificativa",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "facturas_rectificadas": {
+          "name": "facturas_rectificadas",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "facturas_sustituidas": {
+          "name": "facturas_sustituidas",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "importe_rectificacion": {
+          "name": "importe_rectificacion",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "destinatarios": {
+          "name": "destinatarios",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -597,6 +765,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "entorno": {
+          "name": "entorno",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "creado_en": {
           "name": "creado_en",
           "type": "timestamp with time zone",
@@ -606,8 +780,8 @@
         }
       },
       "indexes": {
-        "registros_tenant_till_secuencia_uq": {
-          "name": "registros_tenant_till_secuencia_uq",
+        "registros_tenant_node_secuencia_uq": {
+          "name": "registros_tenant_node_secuencia_uq",
           "columns": [
             {
               "expression": "tenant_id",
@@ -616,7 +790,7 @@
               "nulls": "last"
             },
             {
-              "expression": "till_id",
+              "expression": "node_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -693,8 +867,8 @@
           "method": "btree",
           "concurrently": false
         },
-        "registros_till_secuencia_idx": {
-          "name": "registros_till_secuencia_idx",
+        "registros_node_secuencia_idx": {
+          "name": "registros_node_secuencia_idx",
           "columns": [
             {
               "expression": "tenant_id",
@@ -703,7 +877,7 @@
               "nulls": "last"
             },
             {
-              "expression": "till_id",
+              "expression": "node_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -742,6 +916,19 @@
             "till_id"
           ],
           "tableTo": "tills",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "registros_facturacion_node_id_nodes_id_fk": {
+          "name": "registros_facturacion_node_id_nodes_id_fk",
+          "tableFrom": "registros_facturacion",
+          "columnsFrom": [
+            "node_id"
+          ],
+          "tableTo": "nodes",
           "columnsTo": [
             "id"
           ],
@@ -795,12 +982,28 @@
           "name": "registros_secuencia_ck",
           "value": "\"registros_facturacion\".\"secuencia\" > 0"
         },
+        "registros_entorno_ck": {
+          "name": "registros_entorno_ck",
+          "value": "\"registros_facturacion\".\"entorno\" is null or \"registros_facturacion\".\"entorno\" in ('production', 'preproduction')"
+        },
+        "registros_tipo_rectificativa_ck": {
+          "name": "registros_tipo_rectificativa_ck",
+          "value": "\"registros_facturacion\".\"tipo_rectificativa\" is null or \"registros_facturacion\".\"tipo_rectificativa\" in ('S', 'I')"
+        },
+        "registros_tipo_factura_rectificativa_ck": {
+          "name": "registros_tipo_factura_rectificativa_ck",
+          "value": "\"registros_facturacion\".\"tipo_rectificativa\" is null or (\"registros_facturacion\".\"tipo_factura\" is not null and \"registros_facturacion\".\"tipo_factura\" ~ '^R[1-5]$')"
+        },
+        "registros_facturas_sustituidas_f3_ck": {
+          "name": "registros_facturas_sustituidas_f3_ck",
+          "value": "\"registros_facturacion\".\"facturas_sustituidas\" is null or (\"registros_facturacion\".\"tipo_factura\" is not null and \"registros_facturacion\".\"tipo_factura\" = 'F3')"
+        },
         "registros_encadenamiento_ck": {
           "name": "registros_encadenamiento_ck",
           "value": "(\"registros_facturacion\".\"primer_registro\"\n             and \"registros_facturacion\".\"anterior_id_emisor_factura\" is null\n             and \"registros_facturacion\".\"anterior_num_serie_factura\" is null\n             and \"registros_facturacion\".\"anterior_fecha_expedicion_factura\" is null\n             and \"registros_facturacion\".\"anterior_huella\" is null)\n           or (not \"registros_facturacion\".\"primer_registro\"\n             and \"registros_facturacion\".\"anterior_id_emisor_factura\" is not null\n             and \"registros_facturacion\".\"anterior_num_serie_factura\" is not null\n             and \"registros_facturacion\".\"anterior_fecha_expedicion_factura\" is not null\n             and \"registros_facturacion\".\"anterior_huella\" is not null)"
         }
       },
-      "isRLSEnabled": true
+      "isRLSEnabled": false
     }
   },
   "enums": {},

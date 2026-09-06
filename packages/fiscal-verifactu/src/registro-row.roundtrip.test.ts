@@ -8,12 +8,7 @@ import { registrosFacturacion } from "./schema/registros.js";
 import { fromRegistroRow, toRegistroRow, type RegistroRow } from "./registro-row.js";
 import { seedSale, seedTill, TEST_NIF, TEST_SISTEMA, type SeededTill } from "./testing/seed.js";
 
-// PGlite, deliberately (CLAUDE.md §4): every case here only builds a record, flattens it through
-// `toRegistroRow`, inserts it, reads it back with `select *` and rehydrates via `fromRegistroRow` —
-// pure flatten/rehydrate and XML assembly. It exercises no RLS, no deployment role and no
-// concurrency (each case is its own single insert under a fresh tenant), so real Postgres would buy
-// nothing here and PGlite is the lighter target. The columns' immutability/REVOKE backstop and the
-// deployment-role/RLS behaviour are Slice 1's real-PG suites, not this file's.
+// PGlite exercises record flattening, storage, rehydration and XML assembly without concurrency.
 const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
 let till: SeededTill;

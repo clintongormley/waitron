@@ -5,106 +5,15 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1784595396184,
-      "tag": "0000_esquema_fiscal",
+      "when": 1788698745016,
+      "tag": "0000_fiscal_baseline",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1784595396644,
-      "tag": "0001_registros_inmutables",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1784668573495,
-      "tag": "0002_envio_flujo",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1784668578259,
-      "tag": "0003_envio_flujo_rls",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1784721668333,
-      "tag": "0004_envios_drainer_seam",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1784735530000,
-      "tag": "0005_acks",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1784735544628,
-      "tag": "0006_acks_rls",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1784748448344,
-      "tag": "0007_jittery_tinkerer",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1784750693354,
-      "tag": "0008_acks_delete_grant",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "7",
-      "when": 1785333402567,
-      "tag": "0009_registro_entorno",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "7",
-      "when": 1785672143363,
-      "tag": "0010_registro_rectificativa",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "7",
-      "when": 1785693439057,
-      "tag": "0011_registro_canje",
-      "breakpoints": true
-    },
-    {
-      "idx": 12,
-      "version": "7",
-      "when": 1785748206213,
-      "tag": "0012_add_node_id",
-      "breakpoints": true
-    },
-    {
-      "idx": 13,
-      "version": "7",
-      "when": 1785751797491,
-      "tag": "0013_rekey_chain_to_node",
-      "breakpoints": true
-    },
-    {
-      "idx": 14,
-      "version": "7",
-      "when": 1788601567078,
-      "tag": "0014_fiscal_sync_capture",
+      "when": 1788698745498,
+      "tag": "0001_fiscal_baseline_sql",
       "breakpoints": true
     }
   ]

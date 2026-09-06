@@ -148,33 +148,10 @@ export interface DrainDeps {
 type DueRow = RegistroRow & { intentos: number };
 
 /**
- * Enumerate tenants with due work. Runs on the system connection (not inside `withTenant`) because
- * it must see EVERY tenant's due rows to decide which ones to drain, not just one already-scoped
- * tenant's — a deliberately cross-tenant read of a table (`envios`) under FORCE ROW LEVEL SECURITY.
- *
- * That crossing goes through `envios_tenants_with_work` (fiscal migration 0004), a SECURITY DEFINER
- * function OWNED by the dedicated NOLOGIN `envios_drainer` role, which alone carries a permissive
- * `USING (true)` SELECT policy on `envios`. Inside the function `current_user` is `envios_drainer`,
- * so its `SELECT DISTINCT tenant_id` sees rows through that role-scoped policy — ORed with
- * `envios_tenant_isolation` — regardless of `app.tenant_id`. Without it, the old raw
- * `select distinct tenant_id from envios` returned ZERO rows under the non-superuser `app_user`
- * deployment role (`current_tenant_id()` is NULL with no GUC set, so the tenant-isolation policy
- * fails closed), and the whole drainer was a silent no-op in production (spec §7.1/§11). PGlite's
- * superuser connection would have bypassed RLS and hidden that, which is exactly why the seam is
- * proven under the real `app_user` role on real Postgres (`drain.concurrency.test.ts`), never on
- * PGlite. The function returns ONLY the tenant-id list — no wider `envios` column leaks to
- * `app_user` — and app_user holds EXECUTE on it and nothing else new.
- *
- * The predicate the function runs is kept in lockstep with the two conditions below; see 0004's own
- * comment on the `interval '300000 milliseconds'` ↔ `RECUPERACION_ENVIANDO_MS` (5 * 60_000 ms)
- * coupling. It also matches a tenant whose ONLY due work is a stale `enviando` row (past
- * `RECUPERACION_ENVIANDO_MS`) with NO `pendiente` row alongside it. This is not optional: a tenant
- * with a lone stuck `enviando` row has zero `pendiente` rows by definition, so a `pendiente`-only
- * predicate would never select it, `drainTenant` would never run for it, and `recoverStaleClaims` —
- * which only runs INSIDE `drainTenant`, per tenant — would never get the chance to recover it.
- * Confirmed live while implementing Task 8: without this OR clause, the "recovers a stale enviando
- * row" unit test's tenant is silently skipped by the top-level sweep and the row is left `enviando`
- * forever, incidencia never raised.
+ * Enumerate due work before opening each tenant's drain transaction, using the caller's grants.
+ * Include lone stale claims so drainTenant can recover them even without a pending row.
+ * The SQL interval in envios_tenants_with_work matches RECUPERACION_ENVIANDO_MS;
+ * migrations.test.ts checks both sides of that threshold.
  */
 async function tenantsWithWork(db: Database, now: Date): Promise<TenantId[]> {
   const rows = await db.execute<{ tenant_id: string }>(sql`

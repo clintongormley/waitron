@@ -43,11 +43,7 @@ interface RegistroFields {
   importeRectificacion?: unknown;
 }
 
-/**
- * Inserts one alta registro carrying the rectificativa columns. Runs on the given executor —
- * `pg.db` (superuser, RLS bypassed) for the CHECK/jsonb tests, or an app-role transaction for the
- * trigger test. Negative totals throughout, as a rectificativa carries.
- */
+/** Insert a rectificativa alta using the owner for CHECK/jsonb cases or app_user for triggers. */
 async function insertRegistro(
   exec: { execute: (q: ReturnType<typeof sql>) => Promise<unknown> },
   fields: RegistroFields = {},
@@ -114,8 +110,7 @@ describe("registros_tipo_rectificativa_ck — the value domain", () => {
 
 describe("registros_tipo_factura_rectificativa_ck — rule 1115 at the DB", () => {
   it("rejects a tipo_rectificativa sitting on a non-rectificativa tipo_factura", async () => {
-    // Defense-in-depth (§2.2): a tipo_rectificativa may only appear on an R1–R5 invoice. An 'I'
-    // on an F2 is the shape this check forbids.
+    // tipo_rectificativa may appear only on an R1–R5 invoice.
     const error = await captureError(() =>
       insertRegistro(pg.db, { tipoFactura: "F2", tipoRectificativa: "I" }),
     );

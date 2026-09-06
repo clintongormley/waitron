@@ -7,13 +7,8 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
 
 /**
- * The `destinatarios` column on `registros_facturacion` (migration 0011) and the defense-in-depth
- * CHECK that a `facturas_sustituidas` block may only sit on an F3.
- * docs/superpowers/plans/2026-08-02-f3-canje.md §2.2.
- *
- * PGlite (via usePgliteDb), matching this package's `rectificativa-columns.test.ts`: these are
- * jsonb round-trip, CHECK and trigger-backstop assertions, none of which needs the non-superuser
- * deployment role or lock contention that would require real Postgres (CLAUDE.md §4).
+ * Check canje jsonb round-trips and the constraint limiting facturas_sustituidas to F3.
+ * PGlite exercises these checks and rejection triggers without concurrent writers.
  */
 const pg = usePgliteDb({
   migrations: TEST_MIGRATIONS,
@@ -48,11 +43,7 @@ const A_FACTURA_SUSTITUIDA = {
   ],
 };
 
-/**
- * Inserts one alta registro carrying the canje columns. Runs on the given executor — `pg.db`
- * (superuser, RLS bypassed) for the CHECK/jsonb tests, or an app-role transaction for the trigger
- * test. Positive totals throughout, as an F3 carries. `tipoFactura` defaults to 'F3'.
- */
+/** Insert a canje alta using the owner for CHECK/jsonb cases or app_user for triggers. */
 async function insertRegistro(
   exec: { execute: (q: ReturnType<typeof sql>) => Promise<unknown> },
   fields: RegistroFields = {},
@@ -115,9 +106,7 @@ describe("registros_facturas_sustituidas_f3_ck — a substitution block only on 
   });
 
   it("rejects a facturas_sustituidas sitting on a non-F3 tipo_factura", async () => {
-    // Defense-in-depth (§2.2): FacturasSustituidas is the F3 canje block; it must never sit on an
-    // F2 (or an R-type). PROVEN BY DELETION (manual, recorded in this task's report): with
-    // registros_facturas_sustituidas_f3_ck removed from migration 0011, this exact insert succeeds.
+    // An F2 or R-type invoice cannot carry the F3 substitution block.
     const error = await captureError(() =>
       insertRegistro(pg.db, { tipoFactura: "F2", facturasSustituidas: A_FACTURA_SUSTITUIDA }),
     );
