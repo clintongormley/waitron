@@ -114,13 +114,15 @@ describe("provisionVenue", () => {
     expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 2, nodes: 1, registros: 0 });
   });
 
-  it("refuses venue provisioning when a provision-only module is disabled — before minting anything", async () => {
-    // The SP-1b fiscal gate (spec §4): disabling the `fiscal-verifactu` (provision-only) module must REFUSE
-    // provisioning outright — never mint an unrecoverable SIF/hash chain for a module that is off
-    // (CLAUDE.md §5). The guard is step 0, before planVenue/stampDeployment/applyVenue, so nothing is
-    // validated, stamped or minted. Proven by an `ownerDb` Proxy that THROWS on ANY property access:
-    // if the guard short-circuits first, the DB is never touched, so a `module.provision_only_disabled`
-    // throw (rather than "ownerDb must not be touched") is the proof.
+  it("refuses venue provisioning when the fiscal slot is emptied — before minting anything", async () => {
+    // Disabling the only fiscal-slot member (`fiscal-verifactu`) empties the slot, so provisioning
+    // must REFUSE outright — never mint an unrecoverable SIF/hash chain with no regime to file it
+    // (CLAUDE.md §5). fiscal-verifactu carries a `fiscal` seat, so the provision-only gate no longer
+    // flags it (that set is governed by the slot's exactly-one rule); the slot check is what refuses,
+    // as step 0b, before planVenue/stampDeployment/applyVenue — nothing is validated, stamped or
+    // minted. Proven by an `ownerDb` Proxy that THROWS on ANY property access: a
+    // `module.fiscal_slot_empty` throw (rather than "ownerDb must not be touched") is the proof the
+    // slot check short-circuits before the DB is ever reached.
     const moduleConfig = parseModuleConfig({ modules: { "fiscal-verifactu": false } }, ALL_MODULES);
     const ownerDb = new Proxy(
       {},
@@ -135,7 +137,7 @@ describe("provisionVenue", () => {
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     ).catch((e: unknown) => e);
     expect(isAppError(err)).toBe(true);
-    expect(isAppError(err) && err.code).toBe("module.provision_only_disabled");
+    expect(isAppError(err) && err.code).toBe("module.fiscal_slot_empty");
   });
 
   it("refuses a second provision of the same NIF and mints no second SIF/chain (the fiscal footgun)", async () => {

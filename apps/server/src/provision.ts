@@ -10,7 +10,12 @@ import {
   type VenueResult,
 } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
-import { disabledProvisionOnly, enabledModules, type ModuleConfig } from "@waitron/module";
+import {
+  disabledProvisionOnly,
+  enabledModules,
+  fiscalSlot,
+  type ModuleConfig,
+} from "@waitron/module";
 import { ALL_MODULES } from "./modules.js";
 import "./errors.js";
 
@@ -41,6 +46,10 @@ export interface ProvisionDeps {
  * provision. This is the UI production tenant-creation path (`POST /setup-api/provision`); the `venue`
  * CLI and the mirror `adoptFromPrimary` are the others, and all share `assertNoForeignTenant`
  * (one tenant per database, §5).
+ * The module-set validation is two-part (both before any DB write, since `applyVenue` mints an
+ * unrecoverable SIF/hash chain, §5): a `provision-only` module that is NOT a fiscal-slot member must
+ * not be disabled (`module.provision_only_disabled`), and the fiscal slot must resolve to exactly one
+ * enabled module (`module.fiscal_slot_empty` / `module.fiscal_slot_ambiguous`).
  * Callers must serialize provisioning: the existence checks and applyVenue use separate transactions.
  * The setup route supplies a process-local latch; these checks reject sequential retries.
  * applyVenue commits the tenant, venue rows and enabled module seeds together. The caller
@@ -50,10 +59,10 @@ export async function provisionVenue(
   deps: ProvisionDeps,
   req: ProvisionRequest,
 ): Promise<VenueResult> {
-  // 0. Provision-only gate. A `provision-only` module (fiscal today) that modules.json disables must
-  // never be seeded — the fiscal seed mints an unrecoverable chain (CLAUDE.md §5). The gate REFUSES
-  // rather than minting a venue without that module: a venue with no fiscal identity needs a fiscal
-  // module that seeds none, not a missing one. Generic: it names no module, it iterates the tier.
+  // 0. Provision-only gate. A `provision-only` module that modules.json disables and that is NOT a
+  // fiscal-slot member must never be seeded — it mints unrecoverable state at provision (CLAUDE.md
+  // §5). Fiscal-slot members are excluded here and governed by the slot check (0b): once the slot has
+  // two members a deployment always disables one. Generic: it names no module, it iterates the tier.
   const blocked = disabledProvisionOnly(ALL_MODULES, deps.moduleConfig);
   if (blocked.length > 0) {
     throw new AppError("module.provision_only_disabled", { module: blocked[0]! });
@@ -62,6 +71,12 @@ export async function provisionVenue(
   // because the plan and the apply are built from the SAME list, none can be named that the runner
   // does not hold.
   const modules = enabledModules(ALL_MODULES, deps.moduleConfig);
+
+  // 0b. Fiscal-slot resolution. The provision-only gate above no longer covers a fiscal-slot member
+  // (those are governed here), so refuse before any DB write unless exactly one enabled module fills
+  // the slot: `module.fiscal_slot_empty` (none) or `module.fiscal_slot_ambiguous` (two). `null` is
+  // stamped because no node is minted yet — this is provision, not an adoption of an existing chain.
+  fiscalSlot(modules, null);
 
   // 1. Pure validation — throws before touching the database.
   const plan = planVenue(req.venue, modules);

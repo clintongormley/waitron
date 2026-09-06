@@ -93,15 +93,23 @@ export function serializeModuleConfig(config: ModuleConfig): Record<string, bool
 }
 
 /**
- * The `provision-only` modules that are disabled. Generic — it names no module, it iterates the
- * `tier`, so this stays free of the token "fiscal". The composition root refuses venue provisioning
- * when this is non-empty (spec §4): a provision-only module mints unrecoverable state at provision.
+ * The `provision-only` modules that are disabled AND are not fiscal-slot members. Generic — it names
+ * no module, it iterates the `tier`, so this stays free of the token "fiscal". The composition root
+ * refuses venue provisioning when this is non-empty (spec §4): a provision-only module mints
+ * unrecoverable state at provision.
+ *
+ * A disabled provision-only module that DOES carry a `fiscal` contribution is deliberately excluded:
+ * fiscal-slot members are governed by the slot's exactly-one rule (`fiscalSlot`), not this gate.
+ * Once the slot has two members a deployment always disables one, so flagging it here would refuse
+ * every provision — the slot check is what enforces "exactly one enabled" for that set.
  */
 export function disabledProvisionOnly(
   modules: readonly WaitronModule[],
   config: ModuleConfig,
 ): string[] {
   return modules
-    .filter((m) => m.tier === "provision-only" && !isEnabled(config, m.name))
+    .filter(
+      (m) => m.tier === "provision-only" && m.fiscal === undefined && !isEnabled(config, m.name),
+    )
     .map((m) => m.name);
 }

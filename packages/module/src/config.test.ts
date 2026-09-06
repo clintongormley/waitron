@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { FiscalBackend, FiscalContribution } from "@waitron/fiscal";
 import { isAppError } from "@waitron/shared";
 import {
   disabledProvisionOnly,
@@ -10,12 +11,26 @@ import {
 } from "./index.js";
 import type { WaitronModule } from "./module.js";
 
-const mod = (name: string, tier: WaitronModule["tier"]): WaitronModule => ({
+const mod = (
+  name: string,
+  tier: WaitronModule["tier"],
+  seats: Partial<Pick<WaitronModule, "fiscal">> = {},
+): WaitronModule => ({
   name,
   version: "0.0.0",
   tier,
   migrations: { name, table: `__drizzle_migrations_${name}`, from: `../${name}/drizzle` },
+  ...seats,
 });
+
+/** A minimal fiscal-slot contribution — enough for `disabledProvisionOnly` to see `fiscal` is set.
+ * The gate reads only whether the seat is present; the backend/drain seats are never invoked here. */
+const contribution = (id: string): FiscalContribution => ({
+  id,
+  makeBackend: () => ({ id }) as unknown as FiscalBackend,
+  drain: () => Promise.reject(new Error("config tests never run the drain seat")),
+});
+
 const MODULES = [
   mod("core", "mandatory"),
   mod("fiscal", "provision-only"),
@@ -154,5 +169,26 @@ describe("enabledModules / disabledProvisionOnly", () => {
     expect(
       disabledProvisionOnly(MODULES, parseModuleConfig({ modules: { payments: false } }, MODULES)),
     ).toEqual([]);
+  });
+
+  // Two fiscal-slot members (both provision-only, each carrying a `fiscal` seat) plus a provision-only
+  // module with NO fiscal seat — the shape the fiscal-none module introduces.
+  const SLOT_MODULES = [
+    mod("core", "mandatory"),
+    mod("fiscal-verifactu", "provision-only", { fiscal: contribution("verifactu") }),
+    mod("fiscal-none", "provision-only", { fiscal: contribution("none") }),
+    mod("legacy-provision", "provision-only"),
+  ];
+
+  it("a disabled fiscal-slot member is NOT flagged by disabledProvisionOnly (the slot handles it)", () => {
+    // Disabling one of two fiscal-slot members is the NORMAL configuration once the slot has two
+    // members: the slot's exactly-one rule (`fiscalSlot`) governs it, not this gate.
+    const config = parseModuleOverrides({ "fiscal-none": false }, SLOT_MODULES);
+    expect(disabledProvisionOnly(SLOT_MODULES, config)).toEqual([]);
+  });
+
+  it("a disabled NON-slot provision-only module (no fiscal seat) is still flagged", () => {
+    const config = parseModuleOverrides({ "legacy-provision": false }, SLOT_MODULES);
+    expect(disabledProvisionOnly(SLOT_MODULES, config)).toEqual(["legacy-provision"]);
   });
 });
