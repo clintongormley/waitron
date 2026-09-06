@@ -34,6 +34,33 @@ async function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 class RollbackSignal extends Error {}
 
 describe("time_entries is immutable, as the app role", () => {
+  it("permits INSERT", async () => {
+    // The successful insert checks GENERATED ALWAYS AS IDENTITY ingest_seq without a separate
+    // sequence grant for the INSERT-only app role. A table privilege matrix cannot check that.
+    // It also controls the rejection cases: this role can insert a valid row.
+    await expect(asApp((tx) => insertTimeEntry(tx, ctx))).resolves.toBeUndefined();
+  });
+
+  it("rejects UPDATE with insufficient_privilege", async () => {
+    const error = await captureError(() =>
+      asApp(async (tx) => {
+        await insertTimeEntry(tx, ctx);
+        await tx.execute(sql`update time_entries set event_offset_minutes = 0`);
+      }),
+    );
+    expect(pgErrorCode(error)).toBe("42501");
+  });
+
+  it("rejects DELETE with insufficient_privilege", async () => {
+    const error = await captureError(() =>
+      asApp(async (tx) => {
+        await insertTimeEntry(tx, ctx);
+        await tx.execute(sql`delete from time_entries`);
+      }),
+    );
+    expect(pgErrorCode(error)).toBe("42501");
+  });
+
   it("is actually running as the non-owner application role", async () => {
     // Without this the whole file is theatre. pg_roles, not pg_user: app_user is created NOLOGIN, so
     // a pg_user lookup returns zero rows and reads back NULL, passing a truthiness check for the

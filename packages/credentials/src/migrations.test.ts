@@ -98,6 +98,23 @@ describe("the credentials migration set", () => {
 
 /** The enumeration function pins its search path; functional cases are in credentials.test.ts. */
 describe("credential_tenants enumeration seam", () => {
+  it("names EXECUTE to app_user only — PUBLIC's default grant was revoked", async () => {
+    // Check the app role grant and the absence of PUBLIC's default EXECUTE grant independently.
+    // aclexplode grantee 0 denotes PUBLIC.
+    const [exec] = (
+      await suite.db.execute<{ app_user_exec: boolean; public_exec: boolean }>(sql`
+        select
+          has_function_privilege('app_user', 'credential_tenants(text)', 'EXECUTE') as app_user_exec,
+          exists (
+            select 1 from pg_proc p, aclexplode(p.proacl) acl
+            where p.proname = 'credential_tenants'
+              and acl.grantee = 0 and acl.privilege_type = 'EXECUTE'
+          ) as public_exec
+      `)
+    ).rows;
+    expect(exec).toEqual({ app_user_exec: true, public_exec: false });
+  });
+
   it("pins search_path to pg_catalog, public", async () => {
     const result = await suite.db.execute<{ proconfig: string[] | null }>(sql`
       select proconfig from pg_proc where proname = 'credential_tenants'

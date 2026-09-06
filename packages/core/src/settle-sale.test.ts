@@ -170,6 +170,21 @@ describe("settleSale — the happy path", () => {
 });
 
 describe("settleSale — guards", () => {
+  it("throws sale.not_found for a cross-tenant sale", async () => {
+    // The sale exists, but the explicit sales.tenantId predicate excludes it from this lookup.
+    const other = await seedTenant(postgres.admin);
+    const foreignSaleId = await seedSale(postgres.admin, other, { total: "65.00" });
+    const seed = await seedTenant(postgres.admin);
+
+    await expect(
+      settle(postgres.admin, seed.tenantId, {
+        tenantId: seed.tenantId,
+        saleId: foreignSaleId,
+        tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
+      }),
+    ).rejects.toMatchObject({ code: "sale.not_found", params: { saleId: foreignSaleId } });
+  });
+
   it("throws sale.tender_unsettled for a null settledAt", async () => {
     const seed = await seedTenant(postgres.admin);
     const saleId = await seedSale(postgres.admin, seed, { total: "65.00" });

@@ -28,9 +28,8 @@ export function freshNif(): string {
 }
 
 /** Seeds tenant → location → till → node → open working_order and returns their ids. The `node`
- * is what the fiscal chain/series/SIF identity is keyed on since the node-id rekey (#33); it is
- * created at the same (tenant, location) as the till. Run as the connection owner (superuser) —
- * RLS is bypassed, so this is pure setup. */
+ * is what the fiscal chain/series/SIF identity is keyed on; it is
+ * created at the same (tenant, location) as the till. Uses the fixture connection directly. */
 export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise<Seeded> {
   const t = await db.execute<{ id: string }>(sql`
     insert into tenants (country, tax_id, legal_name) values ('ES', ${nif}, 'Test SL') returning id`);
@@ -67,8 +66,8 @@ export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise
  * only) sale, so `invoice_number = 1` never collides with `sales_series_invoice_number_key`. The
  * sale and its covering tender are wrapped in one `db.transaction` for atomic setup — not for the
  * composite FK (which a committed `sales` row satisfies across separate transactions too), but so a
- * partial failure can never leave a sale without its covering tender. Run as the connection owner
- * (superuser), like `seedWorkingOrder` — RLS is bypassed, so this is pure setup.
+ * partial failure can never leave a sale without its covering tender. Uses the fixture connection
+ * directly, like `seedWorkingOrder`.
  */
 export async function seedSale(db: Database, seeded: Seeded): Promise<string> {
   const series = await db.execute<{ id: string }>(sql`
@@ -105,8 +104,7 @@ export async function seedSale(db: Database, seeded: Seeded): Promise<string> {
  * `fake_node_registrations` row is visible to the later, separate `recordSale` transaction — the
  * node's `NodeId` is branded at the call site because `registerNode` requires the branded type.
  *
- * Run as the connection owner (superuser), like `seedWorkingOrder`/`seedSale` — RLS is bypassed,
- * so this is pure setup.
+ * Uses the fixture connection directly, like `seedWorkingOrder`/`seedSale`.
  */
 export async function seedForSale(
   db: Database,
@@ -124,8 +122,7 @@ export async function seedForSale(
   return { ...seeded, seriesId };
 }
 
-/** Seeds one `payment_policy` row for the tenant. Run as the connection owner (superuser), like
- * `seedWorkingOrder`/`seedSale` — RLS is bypassed, so this is pure setup. */
+/** Seeds one `payment_policy` row for the tenant through the fixture connection. */
 export async function seedPaymentPolicy(
   db: Database,
   tenantId: string,

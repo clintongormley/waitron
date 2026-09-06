@@ -4,14 +4,12 @@ import type { Database, Transaction } from "@waitron/db";
 /**
  * Seed helpers for the workforce-es suites. `seedLocation`, `seedPerson` and `seedEmployment` are
  * RE-EXPORTED from `@waitron/workforce`'s own fixtures — the identical inserts, kept in one place so
- * the -es copies cannot drift from the canonical ones. (They had: this dedup's -es `seedEmployment`
- * had silently lost the `returning id` the canonical one carries.) `@waitron/workforce` has no
- * `exports` map, so the deep `test/` path resolves — exactly as `packages/payments-stripe`'s RLS
+ * the -es copies cannot drift from the canonical ones. `@waitron/workforce` has no
+ * `exports` map, so the deep `test/` path resolves — exactly as `packages/payments-stripe`'s
  * suites import `@waitron/payments/test/seed.js`. `seedConvenioConfig` stays local: it is
  * workforce-es-specific (there is no `convenio_config` table in the generic package).
  *
- * The canonical helpers run as the connection OWNER (superuser) so RLS is bypassed — pure setup,
- * exactly as `@waitron/db`'s own `seedTenant` documents. Spanish is permitted in this exempt package,
+ * The canonical helpers use the fixture connection directly. Spanish is permitted in this exempt package,
  * but fixture strings stay English (the data is regime-neutral; only the legal rendering is Spanish).
  */
 export { seedEmployment, seedLocation, seedPerson } from "@waitron/workforce/test/fixtures.js";

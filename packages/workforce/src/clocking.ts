@@ -504,7 +504,7 @@ export class WorkforceBackend {
    * working-time record.
    *
    * `SELECT … FOR NO KEY UPDATE` on the actual person row, NOT `pg_advisory_xact_lock`: it is
-   * collision-free (no key hashing), self-documenting, and  the app role holds UPDATE
+   * collision-free (no key hashing). The app role holds UPDATE
    * on `persons` (@waitron/identity's drizzle/0001_identity_baseline_sql.sql; `persons: "SIU"` in
    * packages/fiscal-verifactu's privileges.expected.ts pins that grant), which is the
    * privilege the `FOR …` row-lock clauses require, so it is permitted for the non-superuser

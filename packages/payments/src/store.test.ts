@@ -840,6 +840,16 @@ async function setOrderStatus(
 }
 
 describe("listReconcilable", () => {
+  it("scopes to the given tenant by an explicit predicate", async () => {
+    // The explicit tenant predicate excludes the other tenant's payment from reconciliation.
+    const a = await seedTenant();
+    const b = await seedTenant();
+    await capture(a, "tenant-a-pay");
+    await capture(b, "tenant-b-pay");
+    const rows = await pg.db.transaction((tx) => listReconcilable(tx, a.tenantId, "fake", PERIOD));
+    expect(rows.map((r) => r.paymentRef)).toEqual(["tenant-a-pay"]);
+  });
+
   it("returns captured rows settled inside the period, joined to their working order", async () => {
     const seeded = await seedTenant();
     await capture(seeded, "in-period");
@@ -1000,6 +1010,17 @@ describe("listReconcilable", () => {
 });
 
 describe("existingReferences", () => {
+  it("excludes another tenant's reference by an explicit predicate", async () => {
+    // The tenant predicate prevents another tenant's reference from suppressing a missingLocal finding.
+    const a = await seedTenant();
+    const b = await seedTenant();
+    await seedReference(b, "b-init", "ext-b");
+    const found = await pg.db.transaction((tx) =>
+      existingReferences(tx, a.tenantId, "fake", ["ext-b"]),
+    );
+    expect(found).toEqual(new Set());
+  });
+
   /** Inserts an `initiated` row so its `externalRef` becomes visible to `existingReferences` —
    * mirrors the fixture the old `anyPaymentWithReference` tests used: state and settlement time are
    * irrelevant to the check (it is unbounded by both), only `provider` + `externalRef` are. */
@@ -1125,6 +1146,15 @@ async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
 }
 
 describe("tillsForWorkingOrders", () => {
+  it("excludes another tenant's working order by an explicit predicate", async () => {
+    const a = await seedTenant();
+    const b = await seedTenant();
+    const tills = await pg.db.transaction((tx) =>
+      tillsForWorkingOrders(tx, a.tenantId, [b.workingOrderId]),
+    );
+    expect(tills).toEqual(new Map());
+  });
+
   it("resolves several working orders across two tills in one pass, skipping one that does not exist", async () => {
     const seeded = await seedTenant();
     const second = await seedSecondTill(seeded);

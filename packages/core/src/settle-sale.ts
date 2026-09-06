@@ -20,11 +20,9 @@ export interface SettleSaleInput {
  * touches no chain, takes no chain-head lock, and submits nothing (design §4).
  */
 export async function settleSale(tx: Transaction, input: SettleSaleInput): Promise<void> {
-  // The sale's fiscal total, and every rectificativa correcting it netted in a correlated scalar
-  // subquery (design §2) — the same correlated corrections-sum subquery approach listOutstandingSales
-  // uses for its correctionTotal, and, since both files carry explicit belt-and-suspenders tenant
-  // predicates, its inner subquery now carries the same explicit `c.tenant_id` this one does.
-  // Both the outer sale lookup and the corrective sum filter by tenant.
+  // Net the sale's fiscal total with every correction in a correlated scalar subquery,
+  // as listOutstandingSales does for correctionTotal. The outer lookup and corrective sum
+  // each filter by tenant.
   // `${sales}.id` (not `${sales.id}`) so the column renders table-qualified — inside a select-list
   // sql template Drizzle emits a bare `"id"`, which the subquery's own `sales c` would capture.
   const [sale] = await tx

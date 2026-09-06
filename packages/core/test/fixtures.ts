@@ -28,12 +28,8 @@ function freshNif(): string {
 }
 
 /**
- * Seeds tenant -> location -> till -> node -> invoice series for `record-sale.test.ts`. Runs as
- * plain, unscoped statements rather than inside `withTenant`
- * — PGlite's default connection is a superuser and bypasses row-level security unconditionally,
- * so no `app.tenant_id` needs to be set for these inserts to satisfy each table's
- * tenant-isolation `WITH CHECK` — the identical convention
- * `packages/fiscal-verifactu/test/fixtures.ts`'s `seedTenantTillSif` already uses.
+ * Seeds tenant -> location -> till -> node -> invoice series for `record-sale.test.ts`
+ * directly through the fixture connection.
  *
  * The invoice series is keyed to the NODE, not the till (node-id rekey, 2026-08-03: the SIF is the
  * node, #33). Each call also mints its own node, so `overrides.tenantId`, when supplied, adds a
@@ -94,9 +90,8 @@ export async function seedTenant(
  * Adds a second series to an EXISTING node whose `purpose` is `rectificative`, returning its id
  * (node-id rekey, 2026-08-03: a series is owned by a node, #33). `recordCorrection` requires such a
  * series (a correction must draw its number from a corrective series, never an ordinary one — RD
- * 1619/2012 art. 6.1.a); `recordSale` requires the opposite. Runs as a plain, unscoped statement
- * exactly like `seedTenant` above — the seeding connection is a superuser and bypasses row-level
- * security, so no `app.tenant_id` need be set for the tenant-isolation `WITH CHECK` to pass.
+ * 1619/2012 art. 6.1.a); `recordSale` requires the opposite. Uses the fixture connection directly,
+ * like `seedTenant`.
  */
 export async function seedRectificativeSeries(
   db: Database,
@@ -113,8 +108,8 @@ export async function seedRectificativeSeries(
 }
 
 /**
- * Inserts one `sales` row directly, as the seeding (superuser) connection — the same
- * RLS-bypassing path `seedTenant` uses. For tests that need an ORIGINAL sale to correct without
+ * Inserts one `sales` row directly through the fixture connection.
+ * For tests that need an ORIGINAL sale to correct without
  * routing it through `recordSale` (so it has NO backend fiscal record, or so a cross-tenant
  * original can be planted under another tenant). Written on the current schema: `total` is the
  * only money column. `correctsSaleId` defaults to NULL for an ordinary original; pass it to seed a
