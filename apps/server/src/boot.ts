@@ -51,6 +51,8 @@ import { createLogger, type Logger } from "./logger.js";
 import { createRotatingFileSink, createLogReader, tee } from "./log-file.js";
 import { createVerbosityController } from "./verbosity.js";
 import { requestIdMiddleware } from "./request-id.js";
+import { createOriginAllowlist } from "./allowed-origins.js";
+import { corsForVenue } from "./cors.js";
 import { mountDiagnosticsApi } from "./diagnostics-api.js";
 import {
   createHealthState,
@@ -1057,6 +1059,21 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // Trading-only — a setup box serves no media.
   mkdirSync(config.mediaDir, { recursive: true });
 
+  // CORS for the venue's own origins on `/api/*` (till-reroute §3.4), registered before the API mounts
+  // so it wraps them and after `requestIdMiddleware` so the request id is stamped first. Trading-only:
+  // the allow-list reads the held membership document off `db`, which a setup box has not provisioned.
+  const allowOrigin = createOriginAllowlist({
+    advertisedOrigin: config.advertisedOrigin,
+    readMembership: () => readNodeMembership(db),
+    devMode: config.devMode,
+    now: () => Date.now(),
+  });
+  app.use("/api/*", corsForVenue(allowOrigin));
+  // The media surface is served at `/media/*` (media-api.ts), OUTSIDE `/api/*`, but §3.4 lists it
+  // among the CORS surfaces: a rerouted till fetches menu photos cross-origin. Same `allowOrigin`
+  // instance — one allow-list, not a second read path.
+  app.use("/media/*", corsForVenue(allowOrigin));
+
   // One Hono app: `/health` plus the Mode 3 inbound webhook, which "attaches to this app rather than
   // creating a second one" (health.ts's own note). `makeStripe` is `defaultMakeStripe`, the same SDK
   // factory `stripeAccountResolver` uses above — the webhook selects each request's signing secret
@@ -1190,7 +1207,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // (the routes touch none of the fiscal ids on it). `secureCookies` is the SAME hoisted binding, so the
     // enrolment cookie is `Secure` iff TLS is configured. Routes only — no database work at boot; the
     // device guard and the `device.manage` gate run per request.
-    mountDeviceApi(app, { db, cfg: till, secureCookies, devMode: config.devMode }, log);
+    mountDeviceApi(
+      app,
+      { db, cfg: till, secureCookies, devMode: config.devMode, tenantDomain: config.tenantDomain },
+      log,
+    );
     // The printing subsystem's HTTP surface on the SAME app, the identical three-group convention: the
     // UNAUTHENTICATED agent enrol (`POST /print-api/agent/enrol`, redeem a pairing code for a Bearer
     // token), the `requireAgent`-gated agent group (claim this agent's queued jobs, report each result —

@@ -70,6 +70,13 @@ export interface DeviceApiDeps {
    * (`config.devMode`) in Task 6.
    */
   devMode?: boolean;
+  /**
+   * The venue's registrable domain (till-reroute §3.5; see ServerConfig.tenantDomain for the
+   * invariant) — passed straight to `setDeviceCookie`/`clearDeviceCookie`, which resolve the effective
+   * `Domain` per request from it and the host. OPTIONAL: absent OR a host outside it → host-only, the
+   * loopback-dev default. Boot wires `config.tenantDomain`.
+   */
+  tenantDomain?: string;
 }
 
 /**
@@ -212,7 +219,12 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // in the body. The other three fields the verb returns — `kind`, `stationId`, `label` — are
       // non-secret (the manager who minted the code chose them) and the T6 enrol-confirmation view wants
       // them inline (spec §3b: the response is `{ deviceId, kind, stationId, label }`).
-      setDeviceCookie(c, `${enrolled.deviceId}.${enrolled.token}`, deps.secureCookies);
+      setDeviceCookie(
+        c,
+        `${enrolled.deviceId}.${enrolled.token}`,
+        deps.secureCookies,
+        deps.tenantDomain,
+      );
       return c.json(
         {
           deviceId: enrolled.deviceId,
@@ -597,7 +609,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     // untouched (still active) — only the browser's copy of the cookie is cleared.
     app.post("/api/device/reset", (c) =>
       run(c, log, async () => {
-        clearDeviceCookie(c);
+        clearDeviceCookie(c, deps.tenantDomain);
         return c.body(null, 204);
       }),
     );

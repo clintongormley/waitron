@@ -24,6 +24,7 @@ import {
   assertDeviceCapability,
   assertNotHandheld,
   clearDeviceCookie,
+  cookieDomainFor,
   readDeviceCookie,
   requireDevice,
   setDeviceCookie,
@@ -361,6 +362,38 @@ describe("device cookie helpers", () => {
     expect(cookie).not.toMatch(/Secure/i);
   });
 
+  // The optional `tenantDomain` (till-reroute §3.5): the helper resolves the effective `Domain` from
+  // it and the request host via `cookieDomainFor`, so a host UNDER the tenant domain carries
+  // `Domain=<it>` (see ServerConfig.tenantDomain) and a host outside it stays host-only (no `Domain`).
+  it("setDeviceCookie writes Domain only when the host is under the tenant domain", async () => {
+    const app = new Hono();
+    app.get("/set", (c) => {
+      setDeviceCookie(c, COOKIE_VALUE, true, "deli.waitron.app");
+      return c.body(null, 204);
+    });
+    const scoped =
+      (await app.request("/set", { headers: { host: "box.deli.waitron.app" } })).headers.get(
+        "set-cookie",
+      ) ?? "";
+    expect(scoped).toMatch(/Domain=deli\.waitron\.app/i);
+    const hostOnly =
+      (await app.request("/set", { headers: { host: "waitron.local" } })).headers.get(
+        "set-cookie",
+      ) ?? "";
+    expect(hostOnly).not.toMatch(/Domain=/i);
+    // No tenantDomain at all ⇒ host-only regardless of the host.
+    const app2 = new Hono();
+    app2.get("/set", (c) => {
+      setDeviceCookie(c, COOKIE_VALUE, true);
+      return c.body(null, 204);
+    });
+    const none =
+      (await app2.request("/set", { headers: { host: "box.deli.waitron.app" } })).headers.get(
+        "set-cookie",
+      ) ?? "";
+    expect(none).not.toMatch(/Domain=/i);
+  });
+
   it("clearDeviceCookie expires the cookie (Max-Age=0, matching Path)", async () => {
     const app = new Hono();
     app.get("/clear", (c) => {
@@ -372,6 +405,40 @@ describe("device cookie helpers", () => {
     expect(cookie).toContain(`${DEVICE_COOKIE}=`);
     expect(cookie).toMatch(/Max-Age=0/i);
     expect(cookie).toMatch(/Path=\//i);
+  });
+
+  // The clearing Set-Cookie must carry the SAME `Domain` the set one did — resolved from the same
+  // `tenantDomain` + host inputs (§3.5) — or the browser keeps the domain-scoped cookie alongside the
+  // host-only expiry (the `Path` reasoning, applied to `Domain`).
+  it("clearDeviceCookie writes Domain only when the host is under the tenant domain", async () => {
+    const app = new Hono();
+    app.get("/clear", (c) => {
+      clearDeviceCookie(c, "deli.waitron.app");
+      return c.body(null, 204);
+    });
+    const scoped = await app.request("/clear", { headers: { host: "box.deli.waitron.app" } });
+    const scopedCookie = scoped.headers.get("set-cookie") ?? "";
+    expect(scopedCookie).toMatch(/Domain=deli\.waitron\.app/i);
+    expect(scopedCookie).toMatch(/Max-Age=0/i);
+    const hostOnly = await app.request("/clear", { headers: { host: "waitron.local" } });
+    expect(hostOnly.headers.get("set-cookie") ?? "").not.toMatch(/Domain=/i);
+  });
+
+  describe("cookieDomainFor", () => {
+    it("scopes to the tenant domain for a host under it (port stripped, case-insensitive)", () => {
+      expect(cookieDomainFor("box.deli.waitron.app", "deli.waitron.app")).toBe("deli.waitron.app");
+      expect(cookieDomainFor("Box.Deli.Waitron.App:8443", "deli.waitron.app")).toBe(
+        "deli.waitron.app",
+      );
+      expect(cookieDomainFor("deli.waitron.app", "deli.waitron.app")).toBe("deli.waitron.app");
+    });
+    it("stays host-only for waitron.local, loopback, a look-alike, or no tenant domain", () => {
+      expect(cookieDomainFor("waitron.local", "deli.waitron.app")).toBeUndefined();
+      expect(cookieDomainFor("localhost:8080", "deli.waitron.app")).toBeUndefined();
+      expect(cookieDomainFor("notdeli.waitron.app", "deli.waitron.app")).toBeUndefined();
+      expect(cookieDomainFor("box.deli.waitron.app", undefined)).toBeUndefined();
+      expect(cookieDomainFor(undefined, "deli.waitron.app")).toBeUndefined();
+    });
   });
 
   it("readDeviceCookie returns the value when present and null when absent", async () => {

@@ -2318,6 +2318,21 @@ describe("startServer, against a real container as the deployment role", () => {
         `http://127.0.0.1:${port}/media/${encodeURIComponent("../../etc/passwd")}`,
       );
       expect(escape.status).toBe(404);
+
+      // §3.4 CORS covers the media surface too, even though it sits outside `/api/*`: a cross-origin
+      // fetch from the venue's own advertised origin gets the Allow-Origin echo, a stranger gets none.
+      // `config.advertisedOrigin` falls back to `WAITRON_MANAGEMENT_ORIGIN` here (KEY_ENV), so that is
+      // the venue's own origin for this boot.
+      const own = "https://dashboard.example.com";
+      const corsSelf = await fetch(`http://127.0.0.1:${port}/media/${imageName}`, {
+        headers: { origin: own },
+      });
+      expect(corsSelf.status).toBe(200);
+      expect(corsSelf.headers.get("access-control-allow-origin")).toBe(own);
+      const corsStranger = await fetch(`http://127.0.0.1:${port}/media/${imageName}`, {
+        headers: { origin: "https://evil.example" },
+      });
+      expect(corsStranger.headers.get("access-control-allow-origin")).toBeNull();
     } finally {
       await server.close();
     }

@@ -110,6 +110,9 @@ describe("loadConfig", () => {
       // No WAITRON_ADVERTISED_ORIGIN set, so the origin tills route on is the origin this box already
       // serves the dashboard from.
       advertisedOrigin: "http://localhost:5191",
+      // No WAITRON_TENANT_DOMAIN set, so the device cookie stays host-only (no `Domain` attribute).
+      // Present-but-undefined, asserted explicitly the same way settlementLagMs above is.
+      tenantDomain: undefined,
       // No WAITRON_TILL_APP_DIR / WAITRON_DASHBOARD_APP_DIR / WAITRON_SETUP_APP_DIR set, so the box
       // serves none of the SPAs — dev uses the Vite dev servers. Present-but-undefined, asserted
       // explicitly the same way settlementLagMs above is, so this case pins that an unset app dir
@@ -370,6 +373,49 @@ describe("loadConfig", () => {
       STATE_ROOT,
     );
     expect(config.advertisedOrigin).toBe("https://box.deli.waitron.app");
+  });
+
+  // WAITRON_TENANT_DOMAIN scopes the device cookie's `Domain` (§3.5; see ServerConfig.tenantDomain).
+  // Unset OR empty → undefined (host-only cookies, loopback dev); a set value is lower-cased for the
+  // case-insensitive host comparison `cookieDomainFor` makes.
+  it("reads WAITRON_TENANT_DOMAIN into config.tenantDomain (lower-cased), else undefined", () => {
+    expect(loadConfig(MIN_ENV, ROOT, MEDIA_ROOT, STATE_ROOT).tenantDomain).toBeUndefined();
+    expect(
+      loadConfig(
+        { ...MIN_ENV, WAITRON_TENANT_DOMAIN: "Deli.Waitron.App" },
+        ROOT,
+        MEDIA_ROOT,
+        STATE_ROOT,
+      ).tenantDomain,
+    ).toBe("deli.waitron.app");
+    // Empty string is unset (config.ts's own `isUnset`): `WAITRON_TENANT_DOMAIN=` is host-only, never
+    // a blank `Domain` on the Set-Cookie (CLAUDE.md §3).
+    expect(
+      loadConfig({ ...MIN_ENV, WAITRON_TENANT_DOMAIN: "" }, ROOT, MEDIA_ROOT, STATE_ROOT)
+        .tenantDomain,
+    ).toBeUndefined();
+  });
+
+  // A cookie `Domain` attribute is a bare registrable domain — no scheme, no port, no path, no
+  // whitespace. A value carrying `/`, `:` or whitespace is a URL, a host:port, or a typo, refused
+  // loudly at boot rather than reaching a Set-Cookie `Domain` malformed. Reuses the shipped
+  // `server.config_invalid` code (never renamed), with a `not_a_domain` reason.
+  it.each([
+    "https://deli.waitron.app",
+    "deli.waitron.app:8443",
+    "deli.waitron.app/till",
+    "deli waitron app",
+  ])("refuses WAITRON_TENANT_DOMAIN=%s, which is not a bare domain", async (bad) => {
+    const error = await captureError(() =>
+      Promise.resolve(
+        loadConfig({ ...MIN_ENV, WAITRON_TENANT_DOMAIN: bad }, ROOT, MEDIA_ROOT, STATE_ROOT),
+      ),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_TENANT_DOMAIN",
+      reason: "not_a_domain",
+    });
   });
 
   // A `contactUrl` a till concatenates paths onto, and a CORS allow-list entry compared against a

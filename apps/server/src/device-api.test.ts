@@ -20,7 +20,7 @@ const noopLog: Logger = () => {};
 // `devMode` is OPTIONAL so the omitted-flag case (production shape) is exercised too: the reset route
 // is DEV-ONLY, mounted only under `devMode === true` and 404 otherwise — the same fail-closed shape the
 // `GET`/`POST /api/dev/devices` tests prove in `device-api.pg.test.ts`.
-function mountApp(devMode?: boolean): Hono {
+function mountApp(devMode?: boolean, tenantDomain?: string): Hono {
   const app = new Hono();
   mountDeviceApi(
     app,
@@ -29,6 +29,7 @@ function mountApp(devMode?: boolean): Hono {
       cfg: undefined as unknown as TillConfig,
       secureCookies: false,
       devMode,
+      tenantDomain,
     },
     noopLog,
   );
@@ -58,5 +59,25 @@ describe("mountDeviceApi — reset (dev-only)", () => {
   it("POST /api/device/reset is absent (404) when devMode is omitted — fail-closed production shape", async () => {
     const res = await mountApp().request("/api/device/reset", { method: "POST" });
     expect(res.status).toBe(404);
+  });
+
+  // The clearing Set-Cookie is scoped to the tenant `Domain` when the request host is under it
+  // (till-reroute §3.5), so it expires the domain-scoped credential the enrol route set — not just a
+  // host-only copy. A host outside the tenant domain (dev loopback, `waitron.local`) stays host-only.
+  it("POST /api/device/reset scopes the clearing Domain to the tenant host, host-only otherwise", async () => {
+    const app = mountApp(true, "deli.waitron.app");
+    const scoped = await app.request("/api/device/reset", {
+      method: "POST",
+      headers: { host: "box.deli.waitron.app" },
+    });
+    expect(scoped.status).toBe(204);
+    expect(scoped.headers.get("set-cookie") ?? "").toMatch(/Domain=deli\.waitron\.app/i);
+
+    const hostOnly = await app.request("/api/device/reset", {
+      method: "POST",
+      headers: { host: "waitron.local" },
+    });
+    expect(hostOnly.status).toBe(204);
+    expect(hostOnly.headers.get("set-cookie") ?? "").not.toMatch(/Domain=/i);
   });
 });
