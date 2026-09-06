@@ -409,7 +409,7 @@ editor + rendering) is the sole remaining sub-project of this track.**
   `device.binding_invalid`), management API for profiles + tenant theme, server-side capability enforcement
   (`assertDeviceCapability` for pay/drawer; `assertNotHandheld` kept for place/reprint/collect/cancel),
   theme storage, dashboard Add-device UI, `apps/till` till-enrol screen, `dev:setup` mints a till code
-  (2026-09-06: the mint is gone — in `WAITRON_ENV=dev` the fixed code `DEMO` enrols the counter till,
+  (#246, 2026-09-06: the mint is gone — in `WAITRON_ENV=dev` the fixed code `DEMO` enrols the counter till,
   `apps/server/src/dev-pairing.ts`).
   The fiscal cutover — a sale's `till_id` now resolves from the authenticated device — passed its §7/§16.4
   container+mutation receipt (`till_id` inert to the huella; `nodeId`/series stay on the node; only
@@ -582,7 +582,7 @@ editor + rendering) is the sole remaining sub-project of this track.**
       payload returns `capabilities` as a sibling of `canvas`). CRUD `/management-api/device-profiles`
       routes + a dashboard device-profile editor screen + the devices screen assigning a profile;
       enrolment/reassign thread `device_profile_id`; `dev:setup` seeds a default "Counter" profile and
-      stamps it on the till pairing code (2026-09-06: provisioning seeds the starter set and the fixed
+      stamps it on the till pairing code (#246, 2026-09-06: provisioning seeds the starter set and the fixed
       dev code `DEMO` binds the till one at enrol, `apps/server/src/dev-pairing.ts`). Spec
       [device-profile-design](superpowers/specs/2026-09-05-device-profile-design.md). **Still
       per-device (NOT relocated):** till / station / hardware. **Still deferred:** area / order-routing /
