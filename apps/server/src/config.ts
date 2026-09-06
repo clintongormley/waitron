@@ -323,9 +323,8 @@ export interface SyncTransportConfig {
    * default 60000 (spec §3.2). Always present (defaulted), unlike retentionDatabaseUrl below, because
    * the sweep needs a cadence whenever it does run. */
   retentionTickMs: number;
-  /** OPTIONAL: the connection string for a `sync_retention` LOGIN member — the dedicated whole-log,
-   * cross-tenant role runRetentionSweep prunes `sync_log` and reports per-subscriber lag as
-   * (packages/sync/drizzle/0001_sync_retention.sql; NOT app_user/sync_tailer, which cannot DELETE it).
+  /** OPTIONAL: the connection string for an app_user LOGIN member. runRetentionSweep uses its
+   * sync_log and sync_cursor grants to prune and report per-subscriber lag.
    * Present ONLY when WAITRON_SYNC_RETENTION_DATABASE_URL is set; ABSENT (not present-but-undefined)
    * leaves the scheduled sweep OFF — sync still runs, the log just grows unpruned, which boot makes
    * loud via `sync.retention_unconfigured` (spec §3.2/§8: opt-in here, documented-required in prod). */
@@ -342,18 +341,12 @@ export interface SyncTransportConfig {
 }
 
 /**
- * Sync is enabled iff `WAITRON_SYNC_PEERS` is set (a non-empty JSON array of `{ nodeId, url, token }`).
- * Then the sync database URL (a LOGIN role that is a member of `app_user` AND `sync_tailer` — the
- * app-role pool cannot read `sync_log`) is required, and a blank URL or peer field fails closed (the
- * empty-value trap, CLAUDE.md §3): a blank secret must never mean "no auth". There is no shared
- * inbound node token any more: the SOURCE authenticates each peer against the `sync_peers` registry
- * (`sync-api.ts`, per-peer identity), so no shared inbound token is read here. The SUBSCRIBER
- * side is unchanged — each `WAITRON_SYNC_PEERS[].token` is the Bearer a node presents when it pulls
- * (`syncPullOnce`), now one a `waitron-sync-peer enrol` minted on the source it dials. The sync NODE
- * ID is `config.till.nodeId`, deliberately NOT a second `WAITRON_SYNC_NODE_ID` variable — two
- * variables that must agree is the drift the one-source-of-truth rule forbids (design deviation,
- * flagged to the owner). Absent peers → `undefined` → no sync is mounted, so a host that sets no sync
- * env (every existing boot) is unaffected.
+ * Sync is enabled iff `WAITRON_SYNC_PEERS` is a non-empty JSON array of `{ nodeId, url, token }`.
+ * It requires a sync connection whose LOGIN role inherits app_user. Blank URLs and peer fields
+ * fail closed: a blank secret must never mean no authentication. The source authenticates each
+ * peer against `sync_peers`; each subscriber presents its peer-specific Bearer token when pulling.
+ * The sync node ID is `config.till.nodeId`, so there is only one configured node identity.
+ * Absent peers disable sync.
  */
 export function loadSyncConfig(env: Env): SyncTransportConfig | undefined {
   const rawPeers = env.WAITRON_SYNC_PEERS;
@@ -396,7 +389,7 @@ export function loadSyncConfig(env: Env): SyncTransportConfig | undefined {
       "WAITRON_SYNC_RETENTION_TICK_MS",
       DEFAULT_SYNC_RETENTION_TICK_MS,
     ),
-    // The retention role is opt-in: an unset OR empty URL omits the field entirely (sweep off,
+    // The retention connection is opt-in: an unset OR empty URL omits the field entirely (sweep off,
     // boot warns loud) rather than a present-but-undefined key or a broken empty connection string
     // — "an empty connection string is a valid connection string" (CLAUDE.md §3), so it must never
     // reach `createPostgresDb` as `""`.
@@ -500,17 +493,11 @@ export function loadTunnelConfig(env: Env): TunnelConfig | undefined {
 }
 
 /**
- * The mirror's LOCAL pull config — the sync pool role + fast-lane tick. A mirror's CONNECTION to its
- * primary (relay URL, box CA + hostname, per-peer token) no longer lives in env: C2b (spec §7) moved
- * it to the DATABASE (`mirror_config`, written owner-role at adopt) and the vault
- * (`sync.mirror_token`, sealed under the mirror's own box key), both read at mirror boot — this is the
- * split C2a's env `loadMirrorConfig` + the mirror use of `WAITRON_SYNC_PEERS` anticipated. What stays
- * in env is the mirror's OWN `sync_applier` pool (a `sync_tailer` + `app_user` member — `app_user` is
- * never widened to reach `sync_cursor`, apply.ts / CLAUDE.md §3) from `WAITRON_SYNC_DATABASE_URL`, and
- * the fast-lane tick. Everything peer-shaped is built at boot from the DB config, so `peers` is
- * deliberately empty here (boot's mirror path never reads it). Unlike `loadSyncConfig`, this never
- * returns `undefined`: a mirror MUST pull, so an absent `WAITRON_SYNC_DATABASE_URL` is a loud
- * `server.config_missing` (fail-closed), not sync-off.
+ * The mirror's local pull config uses its `sync_applier` LOGIN (an app_user member) from
+ * `WAITRON_SYNC_DATABASE_URL` and the fast-lane tick. Boot builds its peer from `mirror_config`
+ * (written by the owner at adopt) and the vault's `sync.mirror_token`, sealed under the mirror's
+ * box key. `peers` is therefore empty here and boot's mirror path does not read it.
+ * A mirror must pull: an absent or empty database URL throws `server.config_missing`.
  */
 export function loadMirrorSyncConfig(env: Env): SyncTransportConfig {
   return {

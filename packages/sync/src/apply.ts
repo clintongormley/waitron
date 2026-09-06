@@ -1,15 +1,5 @@
-// The commercial-lane apply loop: it takes a peer's captured sync_log rows and writes each one into
-// the local mirror as the ordinary, non-superuser app role under `withTenant`, idempotently and in
-// `seq` order. This is the application-level apply the FORCE-RLS + non-BYPASSRLS model forces
-// (native logical apply is categorically refused — 2026-08-02-replication-force-rls-prototype-findings.md),
-// productionised from the container gates (2026-08-06-sync-container-gates-findings.md GATES 2/3/4/8).
-//
-// The apply worker connects as a LOGIN role that is a member of BOTH `app_user` (INSERT/UPDATE/DELETE
-// on the enrolled tables) AND `sync_tailer` (SELECT/INSERT/UPDATE on `sync_cursor`). That membership
-// is the sanctioned path — `app_user` is NEVER widened to reach `sync_cursor` (spec §7; CLAUDE.md §3
-// "never widen a grant"). Because the role is non-superuser and non-BYPASSRLS, the FORCE-RLS
-// `WITH CHECK` on every enrolled table genuinely fences each write to its own tenant.
-
+// Applies a peer's captured rows to the local mirror in seq order, idempotently. The worker uses
+// app_user for enrolled-table writes and cursor updates; withTenant supplies each write transaction.
 import { sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { pgErrorCode, readDeploymentEnvironment, withTenant, type Database } from "@waitron/db";
@@ -49,7 +39,7 @@ export interface ApplyBatchOptions {
   /** The environment the source peer advertised. Refused if it differs from the local stamp. */
   sourceEnvironment: string;
   /** Which replication lane this batch belongs to — selects the `(subscriber, origin, lane)` cursor
-   * rows read, skipped against, and advanced. Optional, defaulting to `"ordered"` (the 0002 column
+   * rows read, skipped against, and advanced. Optional, defaulting to `"ordered"` (the baseline column
    * default and the wire's ordered-clamp), so an ordered-lane caller need not name it. */
   lane?: SyncLane;
   /** The assembled module enrolment set, injected by the composition root (spec §2e): every enrolled
@@ -148,20 +138,10 @@ interface OriginProgress {
  * source-transaction atomicity buys nothing here (spec §1 defers the fast lane and its atomic
  * groups). The mirror is a failover target that is eventually consistent, not read live mid-sync.
  *
- * **Known constraint for the transport/redelivery slice (not yet built), flagged by the 2026-08-11
- * finish-branch review.** Per-row commit + the cursor held below a gap means a batch that throws a
- * NON-`23503` error mid-way leaves the rows it already committed above the (un-advanced) cursor. When
- * the transport layer later redelivers the below-cursor range at least once, those committed rows are
- * re-applied — and an insert-only re-apply is a clean `ON CONFLICT DO NOTHING` no-op ONLY if no
- * BEFORE trigger rejects it first. Several enrolled tables carry business-rule BEFORE triggers that
- * fire on the apply path and are NOT gated on `app.sync_apply` (`tenders_reject_post_settlement`
- * 0012_sale_settlement.sql:150, `working_orders_enforce_transition` 0004_working_orders.sql:96,
- * `working_order_lines_require_open_parent` 0004:122), so re-applying e.g. a `tenders` row after its
- * `sale_settlements` row has committed raises `WT002` and can wedge the stream. This slice ships only
- * `applyBatch` (a single batch, no redelivery), so it cannot occur here — but the transport slice MUST
- * resolve it: gate those business triggers on `app.sync_apply IS DISTINCT FROM 'on'` so the mirror
- * applies a source's already-validated write verbatim (spec §3.3) rather than re-validating it, or
- * make redelivery finer-grained than the whole below-cursor range.
+ * Per-row commits can leave applied rows above an unadvanced cursor when a later row throws.
+ * Redelivery can therefore repeat already-committed writes. The tenders, working-order transition
+ * and open-parent business triggers skip app.sync_apply writes so they do not reject a replay before
+ * its idempotency check; redelivery.gate.test.ts exercises these cases through app_user.
  */
 export async function applyBatch(
   subscriberDb: Database,
@@ -201,7 +181,7 @@ export async function applyBatch(
 
   // 3. The per-(subscriber, origin) cursor for THIS lane, read once. A row whose seq <= its origin's
   //    cursor was applied by a prior batch of the same lane — the Group-C monotonicity skip. The lane
-  //    defaults to "ordered" (the 0002 column default and the wire's ordered-clamp), so an ordered
+  //    defaults to "ordered" (the baseline column default and the wire's ordered-clamp), so an ordered
   //    caller need not name it; a fast pull passes lane:"fast" and reads/skips/advances the fast
   //    cursor rows only, disjoint from the ordered lane's (spec §4e).
   const lane: SyncLane = opts.lane ?? "ordered";
@@ -370,9 +350,8 @@ function dispatchFor(enrolments: readonly EnrolledTable[]): ReadonlyMap<string, 
 
 /**
  * Applies one row, returning the affected-row count, or the sentinel `"deferred"` when the write
- * raised `23503 foreign_key_violation` (the only error parked; anything else — a cross-tenant
- * `WITH CHECK` 42501, a check violation — propagates, since it is not an ordering problem a later
- * seq can fix). A row naming a table the injected enrolment set does not carry has no apply statement,
+ * raised `23503 foreign_key_violation`. Other errors, including permission and check violations,
+ * propagate because retrying after a later row does not resolve them. A row naming a table the injected enrolment set does not carry has no apply statement,
  * so that is a hard `sync.table_not_enrolled` rather than a silent skip.
  */
 async function tryApplyRow(
@@ -415,7 +394,7 @@ async function tryApplyRow(
 }
 
 /**
- * Runs the row's apply (or delete) statement inside a tenant-scoped, echo-guarded transaction and
+ * Runs the row's apply (or delete) statement inside an echo-guarded transaction and
  * returns how many rows it changed. The insert/update statement is the precomputed `applyParts`; a
  * delete builds its cheap statement per row (only Group C deletes, no column derivation). The shared
  * `Database.execute` result type exposes `.rows` but NOT pg's `.rowCount` (packages/db/src/client.ts,
@@ -440,8 +419,7 @@ async function applyOneRow(db: Database, row: SyncLogRow, dispatch: Dispatch): P
 
 /**
  * Reads this subscriber's per-origin cursors FOR ONE LANE into a map (missing origins default to 0
- * below). The `and lane = ${lane}` filter is load-bearing (Task 1 Minor review): with the 0002 lane
- * split each `(subscriber, origin)` has up to two cursor rows, and reading both would collapse them
+ * below). Each `(subscriber, origin)` can carry a cursor per lane; reading both would collapse them
  * to whichever sorts last into the `origin_id`-keyed map — a fast advance would then drag the ordered
  * lane's seq (or vice-versa), the silent data loss spec §4e exists to prevent. `lane` binds as a
  * param (never string-concatenated, CLAUDE.md §3).
@@ -465,8 +443,7 @@ async function readCursors(
 /**
  * Upserts this subscriber's cursor for one origin to `seq`. The `WHERE excluded.last_applied_seq >
  * sync_cursor.last_applied_seq` guard makes the write monotonic even against a concurrent advance —
- * a cursor never moves backward. Written by the `sync_tailer` grants the apply role holds through
- * membership (spec §7), never a widened `app_user`.
+ * a cursor never moves backward. The apply connection inherits app_user's cursor grants.
  */
 async function advanceCursor(
   db: Database,
@@ -476,7 +453,7 @@ async function advanceCursor(
   seq: bigint,
 ): Promise<void> {
   await db.execute(
-    // The ON CONFLICT arbiter is the 0002 PK (subscriber_id, origin_id, lane); the INSERT now carries
+    // The ON CONFLICT arbiter is the primary key (subscriber_id, origin_id, lane); the INSERT now carries
     // the REAL lane, so a fast-lane advance writes lane='fast' (its own cursor row) rather than the
     // 'ordered' default, and the conflict resolves on that lane's row only (spec §4e). `lane` binds as
     // a param (never string-concatenated, CLAUDE.md §3).
@@ -494,9 +471,8 @@ async function advanceCursor(
  * review. Raw-SQL, matching {@link advanceCursor}: every value binds as a parameter, so the CLAUDE.md
  * §3 escaping question does not arise. `rowImage` is the source's verbatim `row_image::text`, bound as
  * `$1::jsonb` exactly as {@link applyOneRow} does (never JSON.parse'd — a numeric's scale is preserved).
- * The table carries no RLS and no tenant_id, so no `withTenant` is needed; the rejected row's tenant
- * lives inside the jsonb image. NEVER log or throw the row bytes — they are another tenant's business
- * data (errors.ts's "NO PARAM CARRIES ROW CONTENT" rule); they exist only inside this one jsonb column.
+ * The rejected row's tenant lives inside the jsonb image. NEVER log or throw the row bytes: they
+ * carry business data (errors.ts's "NO PARAM CARRIES ROW CONTENT" rule); they exist only inside this one jsonb column.
  */
 async function recordConfigConflict(db: Database, row: SyncLogRow, lane: SyncLane): Promise<void> {
   await db.execute(

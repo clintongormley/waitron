@@ -1,23 +1,14 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { recordSubscriberCursor } from "./cursor-report.js";
 import { evictSubscriber, lagFor, pruneSyncLog, runRetentionSweep } from "./retention.js";
 import type { SyncLane } from "@waitron/sync-enrolment";
 
-// Real Postgres, not PGlite: the prune MUST run as a genuine non-superuser member of sync_retention
-// so that FORCE ROW LEVEL SECURITY is actually in force and the per-role permissive policy is what
-// lets it delete cross-tenant. A superuser prune bypasses RLS entirely and would be a false pass —
-// it could not tell a working permissive policy from a missing one (CLAUDE.md §4). The whole
-// migration manifest runs (including `sync`, now 0000 + 0001), so the container carries sync_log +
-// sync_cursor + the sync_retention role and its policy.
-// The sync_pruner (a sync_retention member — the role the prune/lag run as, so FORCE RLS genuinely
-// applies and the sync_log_retention permissive policy is exercised) and tailer_login (a sync_tailer
-// member, used only to prove the retention policy did NOT leak into sync_tailer) roles are now
-// created once in src/testing/global-setup.ts — a shared cluster is one cluster, so a per-file
-// `create role` would collide on the second suite. Neither is widened by hand (CLAUDE.md §3).
+// PostgreSQL exercises pruning, lag and eviction through non-superuser app_user members.
+// PGlite's superuser sessions cannot check the caller's grants. The shared template supplies the
+// outbox and cursors; global setup creates sync_pruner and tailer_login once per cluster.
 const postgres = useTemplateDb({ template: "manifest" });
 
 // One producing origin (gate 7 is single-origin), and two subscribers matching the findings doc.
@@ -36,7 +27,7 @@ async function resetOutbox(): Promise<void> {
  * sequence's state in the shared container. Alternating tenants is deliberate: a per-tenant prune
  * would pass on a single-tenant fixture and prove nothing, so the low seqs a correct prune deletes
  * must span BOTH tenants (CLAUDE.md §1 — a measurement where both answers look alike measures
- * nothing). Inserted as the superuser admin (RLS bypassed; pure setup).
+ * nothing). Inserted as the superuser admin (fixture setup).
  *
  * `tableFor` picks the seeded row's table_name per seq (default: always 'products', unchanged for
  * every single-lane caller); the two-lane retention tests (spec §4e) pass a selector alternating a
@@ -67,7 +58,7 @@ const twoLaneTableFor = (seq: number): string => (seq % 2 === 1 ? "payments" : "
 
 /** Upserts one subscriber's cursor for ORIGIN on the given lane as the superuser admin. `lane`
  * defaults to 'ordered' so every existing single-lane call is unchanged; the two-lane retention
- * tests pass 'fast'/'ordered' explicitly. The ON CONFLICT arbiter is the 0002 PK
+ * tests pass 'fast'/'ordered' explicitly. The ON CONFLICT arbiter is the primary key
  * (subscriber_id, origin_id, lane). */
 async function setCursor(
   subscriberId: string,
@@ -83,7 +74,7 @@ async function setCursor(
   );
 }
 
-/** Remaining sync_log seqs, ascending (admin read-back, RLS-bypassed). */
+/** Remaining sync_log seqs, ascending (admin read-back). */
 async function remainingSeqs(): Promise<number[]> {
   // Cast to int[] (seqs are 1..10 here): node-postgres parses an int4[] to numbers, but a bigint[]
   // comes back as an array of strings, which would not deep-equal a numeric literal array.
@@ -102,7 +93,7 @@ async function tenantRows(tenantId: string): Promise<number> {
 }
 
 describe("bounded sync_log retention under a down subscriber (gate 7)", () => {
-  it("0002 repivoted sync_cursor's primary key to (subscriber_id, origin_id, lane)", async () => {
+  it("sync_cursor's primary key is (subscriber_id, origin_id, lane)", async () => {
     // The lane split needs TWO cursor rows per (subscriber, origin), so the PK must include lane. Read
     // the live PK columns in index order; the fast and ordered lanes are then distinct rows, not a
     // second write clobbering the first on the old 2-col key.
@@ -114,14 +105,7 @@ describe("bounded sync_log retention under a down subscriber (gate 7)", () => {
     expect(pk.rows[0]!.cols).toEqual(["subscriber_id", "origin_id", "lane"]);
   });
 
-  it("0003 granted DELETE on sync_cursor to sync_retention", async () => {
-    const r = await postgres.admin.execute<{ has: boolean }>(
-      sql`select has_table_privilege('sync_retention', 'sync_cursor', 'DELETE') as has`,
-    );
-    expect(r.rows[0]!.has).toBe(true);
-  });
-
-  it("0004 created the sync_log_origin_seq_idx index on sync_log (origin_id, seq)", async () => {
+  it("sync_log_origin_seq_idx indexes sync_log (origin_id, seq)", async () => {
     // Read the index's key columns back from the catalog IN KEY ORDER — a DDL tag is not proof the
     // index landed with the right columns (CLAUDE.md §3), same read-back the PK check above does.
     // WHY the index exists: runRetentionSweep prunes every tick with a per-origin range DELETE
@@ -176,14 +160,14 @@ describe("bounded sync_log retention under a down subscriber (gate 7)", () => {
       expect(cloud).toMatchObject({ originId: ORIGIN, lag: 6n, alive: false });
       expect(peer).toMatchObject({ originId: ORIGIN, lag: 0n, alive: true });
 
-      // --- The correct prune, run as the non-superuser sync_retention member. ---
+      // --- The correct prune, run as the non-superuser app_user member. ---
       const aBefore = await tenantRows(a);
       const bBefore = await tenantRows(b);
       const first = await pruneSyncLog(pruner);
       expect(first).toEqual({ pruned: 4, highWater: 4n });
       expect(await remainingSeqs()).toEqual([5, 6, 7, 8, 9, 10]); // 1..4 gone, 5..10 held for `cloud`
 
-      // Cross-tenant proof: the prune (as sync_retention) deleted rows of BOTH tenants, not just one.
+      // Cross-tenant proof: the prune (as app_user) deleted rows of BOTH tenants, not just one.
       expect(await tenantRows(a)).toBeLessThan(aBefore); // tenant a lost rows (seq 1, 3)
       expect(await tenantRows(b)).toBeLessThan(bBefore); // tenant b lost rows (seq 2, 4)
 
@@ -215,83 +199,11 @@ describe("bounded sync_log retention under a down subscriber (gate 7)", () => {
       await pruner.close();
     }
   });
-
-  it("the sync_log_retention policy is load-bearing: removing it blocks the cross-tenant prune", async () => {
-    // Prove-a-guard-by-deletion (CLAUDE.md §1/§3 "a GRANT PostgreSQL accepted is not one that did
-    // anything"): with the permissive policy DROPPED, the non-superuser sync_pruner sees only
-    // sync_log_tenant_isolation, and with no app.tenant_id current_tenant_id() is NULL, so the DELETE
-    // matches ZERO rows — the prune is genuinely powerless without the policy. Restored, it deletes
-    // all four cross-tenant rows. This is the difference that proves the policy, not its mere presence.
-    await resetOutbox();
-    const a = await seedTenant(postgres.admin);
-    const b = await seedTenant(postgres.admin);
-    await seedLog(4, a, b);
-    await setCursor("peerB", 4, true); // a correct prune would delete all four (seq <= 4)
-
-    const pruner = await postgres.pg.connectAs("sync_pruner", "pp");
-    try {
-      await postgres.admin.execute(sql.raw(`drop policy sync_log_retention on sync_log`));
-      try {
-        // Blocked: the cursor min is 4 (so the prune proceeds past the no-subscribers short-circuit),
-        // but RLS filters every row out of the DELETE, so it removes nothing.
-        const blocked = await pruneSyncLog(pruner);
-        expect(blocked.pruned).toBe(0);
-        expect(await remainingSeqs()).toEqual([1, 2, 3, 4]); // nothing deleted — policy was load-bearing
-      } finally {
-        // Restore for the other tests (one shared database); then confirm it now works.
-        await postgres.admin.execute(
-          sql.raw(
-            `create policy sync_log_retention on sync_log
-               for all to sync_retention using (true) with check (true)`,
-          ),
-        );
-      }
-
-      const restored = await pruneSyncLog(pruner);
-      expect(restored).toEqual({ pruned: 4, highWater: 4n }); // policy back → cross-tenant delete works
-      expect(await remainingSeqs()).toEqual([]);
-    } finally {
-      await pruner.close();
-    }
-  });
-
-  it("did not leak into sync_tailer: a tailer member under withTenant still sees only its own tenant", async () => {
-    // The new policy is TO sync_retention only. A sync_tailer member is not a member of
-    // sync_retention, so the retention policy must NOT apply to it — sync_tailer stays fenced to its
-    // own tenant by sync_log_tenant_isolation, exactly as capture.gate.test.ts sub-test 4 requires.
-    // Failing case: the retention policy leaks (e.g. it were TO PUBLIC), and the tailer sees both
-    // tenants' rows. Control (both directions): under A only A is visible; under B only B.
-    await resetOutbox();
-    const a = await seedTenant(postgres.admin);
-    const b = await seedTenant(postgres.admin);
-    await postgres.admin.execute(
-      sql`insert into sync_log (origin_id, table_name, op, tenant_id, row_image) values
-            (${ORIGIN}::uuid, 'products', 'insert', ${a}::uuid, '{}'::jsonb),
-            (${ORIGIN}::uuid, 'products', 'insert', ${b}::uuid, '{}'::jsonb)`,
-    );
-
-    const tailer = await postgres.pg.connectAs("tailer_login", "tp");
-    try {
-      const visible = async (tenant: string): Promise<{ av: string; bv: string }> => {
-        const r = await withTenant(tailer, tenant, (tx) =>
-          tx.execute<{ av: string; bv: string }>(sql`
-            select count(*) filter (where tenant_id = ${a}::uuid)::text as av,
-                   count(*) filter (where tenant_id = ${b}::uuid)::text as bv
-            from sync_log`),
-        );
-        return r.rows[0]!;
-      };
-      expect(await visible(a)).toEqual({ av: "1", bv: "0" }); // under A: only A
-      expect(await visible(b)).toEqual({ av: "0", bv: "1" }); // under B: only B (the retention policy did not leak)
-    } finally {
-      await tailer.close();
-    }
-  });
 });
 
 describe("fast and ordered lanes track independent cursors; retention waits for the slower lane (spec §4e)", () => {
   it("holds sync_log at the min across BOTH lane cursors, and advancing the ahead lane alone does not move the boundary", async () => {
-    // Two cursor rows per (subscriber, origin) after 0002. pruneSyncLog groups by origin_id and takes
+    // Two cursor rows per (subscriber, origin), one per lane. pruneSyncLog groups by origin_id and takes
     // min(last_applied_seq) across BOTH lane rows, so the log is held at the SLOWER lane — a fast-lane
     // row below the fast cursor but above the ordered cursor is HELD, the deliberate over-retention of
     // spec §4e. Prove-by-deletion of the "min across BOTH lanes" boundary (CLAUDE.md §1): advancing ONLY
@@ -393,49 +305,6 @@ describe("recordSubscriberCursor gives the source cross-node visibility (spec §
   });
 });
 
-describe("lagFor as sync_tailer needs a tenant context — the box-status durability guard", () => {
-  it("a bare sync_tailer reads lag 0 (RLS hides sync_log); the same member under withTenant reads the real lag", async () => {
-    // This is the committed guard for GET /api/box/status's `replication` summary (onboarding slice
-    // 4a, boot.ts wiring). box-status hands the reader the sync pool, which connects as a `sync_tailer`
-    // member. `sync_tailer`'s SELECT on `sync_log` is fenced by the per-tenant `sync_log_tenant_isolation`
-    // policy (no TO clause → applies under FORCE RLS to this login too), so with NO `app.tenant_id` set
-    // `current_tenant_id()` is NULL and a bare `lagFor(syncDb)` sees ZERO `sync_log` rows — reporting
-    // every subscriber at lag 0, a SILENT FALSE-HEALTHY. That reading is fiscally dangerous: an operator
-    // who trusts a lag-0 box during a promotion (promotion/failover spec §5.1's durability surface)
-    // discards fiscal records the peer never actually replicated — an unrecoverable loss. The box wires
-    // `lagFor` INSIDE `withTenant(till.tenantId)` precisely to avoid this; this test fails if anyone
-    // collapses that back to a bare `lagFor`.
-    //
-    // Prove-by-deletion (CLAUDE.md §1): the "deletion" is the tenant context. Removed → lag 0 (the bug);
-    // present → the real lag 7. The two answers VISIBLY differ (0 vs 7), so the measurement separates the
-    // hypotheses (a §1 control in the other direction).
-    await resetOutbox();
-    const tenant = await seedTenant(postgres.admin);
-    // One tenant only (pass it as both a and b to seedLog, so every seq 1..10 carries `tenant`), so the
-    // single-venue box's own tenant context reveals the WHOLE log — matching the appliance shape.
-    await seedLog(10, tenant, tenant);
-    await setCursor("box_sub", 3, true); // applied 3 of 10 → true lag 7
-
-    const tailer = await postgres.pg.connectAs("tailer_login", "tp");
-    try {
-      // --- Bare sync_tailer, NO tenant context: RLS hides sync_log → coalesce(NULL, 3) − 3 = 0. ---
-      const bare = await lagFor(tailer);
-      const bareSub = bare.find((l) => l.subscriberId === "box_sub")!;
-      expect(bareSub).toMatchObject({ originId: ORIGIN, lag: 0n }); // the false-healthy reading
-
-      // --- Same member UNDER withTenant: sees the tenant's log (max seq 10) → 10 − 3 = 7. NO asAppUser
-      //     (that SET ROLE app_user would drop the sync_tailer SELECT); withTenant only sets the GUC. ---
-      const scoped = await withTenant(tailer, tenant, (tx) => lagFor(tx));
-      const scopedSub = scoped.find((l) => l.subscriberId === "box_sub")!;
-      expect(scopedSub).toMatchObject({ originId: ORIGIN, lag: 7n }); // the real lag the box must report
-
-      expect(bareSub.lag).not.toBe(scopedSub.lag); // the two directions disagree — the context is load-bearing
-    } finally {
-      await tailer.close();
-    }
-  });
-});
-
 describe("evictSubscriber releases a dead subscriber's cursor (spec §3.3/§3.4)", () => {
   it("evictSubscriber releases a dead subscriber's cursor so retention advances past it", async () => {
     await resetOutbox();
@@ -451,26 +320,6 @@ describe("evictSubscriber releases a dead subscriber's cursor (spec §3.3/§3.4)
       expect(evicted).toEqual({ deleted: 1 });
       expect(await pruneSyncLog(pruner)).toEqual({ pruned: 6, highWater: 10n }); // advances past dead `cloud`
       expect(await remainingSeqs()).toEqual([]);
-    } finally {
-      await pruner.close();
-    }
-  });
-
-  it("the DELETE grant is load-bearing: without it evictSubscriber cannot release the cursor", async () => {
-    await resetOutbox();
-    const a = await seedTenant(postgres.admin);
-    const b = await seedTenant(postgres.admin);
-    await seedLog(2, a, b);
-    await setCursor("cloud", 0, false);
-    const pruner = await postgres.pg.connectAs("sync_pruner", "pp");
-    try {
-      await postgres.admin.execute(sql.raw(`revoke delete on sync_cursor from sync_retention`));
-      try {
-        await expect(evictSubscriber(pruner, "cloud")).rejects.toThrow(); // 42501 permission denied
-      } finally {
-        await postgres.admin.execute(sql.raw(`grant delete on sync_cursor to sync_retention`));
-      }
-      expect(await evictSubscriber(pruner, "cloud")).toEqual({ deleted: 1 }); // restored → works
     } finally {
       await pruner.close();
     }

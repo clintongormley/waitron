@@ -22,10 +22,9 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
  * The cluster roles are created ONCE here, idempotently, in place of the per-file `probeRole` /
  * `setup` role creation the converted suites used — a shared container is one cluster, so a role
  * created per file would collide on the second file (the plan's "role collisions are the crux").
- * `rls_probe` serves both `till-api` and `till-sale-integrated` (they shared the name). `sync_applier`
- * needs membership in BOTH `app_user` and `sync_tailer`, expressed as an `inRole` array. `sync_tailer`
- * itself is created by the sync migration inside the `manifest` template, and roles run after the
- * templates migrate, so it is present when `sync_reader`/`sync_applier` are created.
+ * `rls_probe` serves both till-api and till-sale-integrated. The sync LOGIN fixtures inherit
+ * app_user for capture, read, apply, cursors and pruning. Roles run after the templates migrate,
+ * so app_user exists before the LOGIN fixtures receive their membership.
  *
  * A globalSetup's return value is its globalTeardown, so returning `teardown` stops the container
  * once the run finishes.
@@ -57,16 +56,11 @@ export default async function ({ provide }: GlobalSetupContext) {
       { name: "server_webhook_probe", password: "probe", inRole: "app_user" },
       { name: "server_boot_probe", password: "probe", inRole: "app_user" },
       { name: "server_boot_runtime_probe", password: "probe", inRole: "app_user" },
-      // The sync suites' roles. `app_login` writes through `app_user`; `sync_reader` reads through
-      // `sync_tailer`; `sync_applier` writes as `app_user` AND reads as `sync_tailer`, so it carries
-      // both memberships via the inRole array.
+      // Sync fixtures inherit app_user for the outbox and enrolled-table operations.
       { name: "app_login", password: "app_pw", inRole: "app_user" },
-      { name: "sync_reader", password: "rp", inRole: "sync_tailer" },
-      { name: "sync_applier", password: "ap", inRole: ["app_user", "sync_tailer"] },
-      // `sync_pruner` is a `sync_retention` member — the operator/CLI role that holds
-      // SELECT/INSERT/UPDATE on sync_peers (0005_sync_peers.sql). mirror-bundle.test.ts enrols the
-      // mirror peer through it (enrolPeer inserts a sync_peers row), matching packages/sync's own harness.
-      { name: "sync_pruner", password: "pp", inRole: "sync_retention" },
+      { name: "sync_reader", password: "rp", inRole: "app_user" },
+      { name: "sync_applier", password: "ap", inRole: "app_user" },
+      { name: "sync_pruner", password: "pp", inRole: "app_user" },
     ],
   });
   provide("sharedPg", handle);

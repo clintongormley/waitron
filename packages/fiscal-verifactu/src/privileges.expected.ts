@@ -1,21 +1,13 @@
 /**
- * What `app_user` may do on every table, captured from the schema BEFORE the RLS drop
- * (2026-09-05 base 7873b7ce) with `has_table_privilege`. Letters: S=SELECT I=INSERT U=UPDATE
- * D=DELETE T=TRUNCATE. This is the receipt that dropping row-level security and the helper roles
- * changed nothing about the app role's reach (spec §1): the suite beside it reads the live catalog
- * and expects exactly this. A deliberate grant change edits this file in the same commit, with the
- * reason in the message — the four `sync_*` rows are the ones already scheduled to go, with the
- * outbox tables themselves (spec §1, "Gone").
+ * app_user's table privileges. Letters: S=SELECT I=INSERT U=UPDATE D=DELETE T=TRUNCATE.
+ * The matrix preserves the original grants except for the four sync tables, whose reader and
+ * retention grants fold into app_user while the outbox remains. The design is
+ * docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md §1;
+ * this file's history records the original catalog capture and deliberate grant changes.
  *
- * Scope is TABLE-level privilege only, which is what `has_table_privilege` answers: a column-level
- * grant such as `GRANT UPDATE ("next_number") ON invoice_series` (packages/db 0003) does NOT show a
- * `U` here, so this matrix does not pin column grants. `scripts/schema-equivalence.sh` diffs the
- * dumped ACLs and does cover them, but it is a one-shot proof of the squash rather than a standing
- * guard; the suite beside this file carries the column-level facts that need one.
- *
- * The capture returned 82 rows (`__drizzle_migrations_*` excluded by the query): every migration in
- * `packages/migrations/migrations.manifest.json` order, applied from a worktree at that base commit
- * to a postgres:18-alpine container as a non-superuser owner.
+ * has_table_privilege measures table grants only: UPDATE(next_number) on invoice_series does not
+ * produce a U here. The suite beside this file guards the column privileges that need a standing
+ * check; scripts/schema-equivalence.sh also compares column ACLs during the squash proof.
  */
 export const PRIVILEGES: Record<string, string> = {
   absences: "SIUD",
@@ -81,10 +73,10 @@ export const PRIVILEGES: Record<string, string> = {
   shift_templates: "SIUD",
   shifts: "SIUD",
   station_printers: "SID",
-  sync_config_conflicts: "I",
-  sync_cursor: "",
-  sync_log: "I",
-  sync_peers: "",
+  sync_config_conflicts: "SI",
+  sync_cursor: "SIUD",
+  sync_log: "SID",
+  sync_peers: "SIU",
   table_service_statuses: "SIU",
   tenant_credentials: "SIUD",
   tenant_receipts: "SIU",

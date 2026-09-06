@@ -15,7 +15,7 @@ export interface ProbeRole {
   name: string;
   password: string;
   /**
-   * One membership, or several. `["app_user", "sync_tailer"]` emits `in role app_user, sync_tailer`
+   * One membership, or several. `["app_user", "pg_monitor"]` emits `in role app_user, pg_monitor`
    * — valid PostgreSQL, and how a role that must belong to more than one group is expressed without
    * an out-of-band grant.
    */

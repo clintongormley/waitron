@@ -1,34 +1,18 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import {
-  captureError,
-  pgErrorCode,
-  withTenant,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { withTenant, type Database, type Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 
-// Real Postgres, not PGlite: this suite proves sync_log's FORCE ROW LEVEL SECURITY, the app role's
-// INSERT-only grant, the sync_tailer read path and echo suppression under a genuine non-superuser
-// role — PGlite connects as a superuser and bypasses all of it, so it is a false pass here
-// (CLAUDE.md §4). The whole migration manifest runs (now including `sync` last), so the container
-// carries sync_log + sync_capture + the 22 capture triggers over the enrolled tables
-// (17 commercial+dining + 2 identity-config + 3 kitchen KDS).
-// The deployment role app_login — a non-superuser, non-BYPASSRLS LOGIN member of app_user, so FORCE
-// RLS actually applies to it — is now created once in src/testing/global-setup.ts and shared across
-// the gate suites: a shared cluster is one cluster, so a per-file `create role` would collide on the
-// second suite. The suite reaches it below with `postgres.pg.connectAs("app_login", "app_pw")`, and
-// reads back per-tenant as `tailer_login` (a sync_tailer member, likewise created once in
-// global-setup and shared with retention.gate).
+// PostgreSQL exercises capture and echo suppression through a non-superuser app_user member.
+// PGlite's superuser sessions would bypass the caller's grants. The shared template includes every
+// enrolled table and capture trigger; global setup creates the LOGIN fixtures once per cluster.
 const postgres = useTemplateDb({ template: "manifest" });
 
 // A producing node's id — capture writes it into sync_log.origin_id from the app.node_id GUC.
 const NODE_A = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
-const ZERO = "00000000-0000-0000-0000-000000000000";
 
-/** Mirrors withTenant, but also sets app.node_id so the capture trigger records the origin. */
+/** Sets app.node_id in the write transaction so capture records the producing origin. */
 async function withTenantNode<T>(
   db: Database,
   tenantId: string,
@@ -51,7 +35,7 @@ interface Base {
 
 /**
  * Seeds one tenant plus the FK parents an enrolled commercial row needs — location, till,
- * catalogue — as the superuser admin (RLS bypassed; this is setup, not the thing under test). It
+ * catalogue — as the superuser admin (fixture setup). It
  * deliberately does NOT seed a product: the capture tests that need one insert it themselves (as
  * the app role, so its own INSERT is captured) or add it inline (as admin, when it is only an FK
  * parent). English fixture values throughout — packages/sync/src is inside the english-only guard.
@@ -265,77 +249,6 @@ describe("the generic capture trigger over the commercial lane", () => {
     expect(remaining.rows[0]!.n).toBe("0");
   });
 
-  it("fences sync_log: FORCE RLS is on, the app role cannot read or mutate it, sync_tailer reads only its own tenant", async () => {
-    const a = await seedTenant(postgres.admin);
-    const b = await seedTenant(postgres.admin);
-    // Two rows, one per tenant, inserted directly as the superuser (RLS bypassed for setup). Both
-    // present so "invisible" below cannot be the trivial "nothing was there" answer (CLAUDE.md §1).
-    await postgres.admin.execute(
-      sql`insert into sync_log (origin_id, table_name, op, tenant_id, row_image) values
-            (${ZERO}, 'products', 'insert', ${a}, '{"marker":"a"}'::jsonb),
-            (${ZERO}, 'products', 'insert', ${b}, '{"marker":"b"}'::jsonb)`,
-    );
-
-    // The FORCE-RLS catalog check. This is the real guard for sync_log's FORCE: the fiscal
-    // inmutabilidad suite (CLAUDE.md §3) scans a database that only carries core+identity+fiscal
-    // and CANNOT run this migration (its triggers need the payments tables), so it never sees
-    // sync_log — the check has to live here. FORCE without ENABLE is silently inert, so both flags
-    // are asserted (mirroring inmutabilidad.test.ts's teeth check).
-    const flags = await postgres.admin.execute<{
-      relrowsecurity: boolean;
-      relforcerowsecurity: boolean;
-    }>(sql`select relrowsecurity, relforcerowsecurity from pg_class where relname = 'sync_log'`);
-    expect(flags.rows[0]).toMatchObject({ relrowsecurity: true, relforcerowsecurity: true });
-
-    // The app role holds INSERT only (REVOKE ALL then GRANT INSERT). Failing case for each: a
-    // SELECT/UPDATE/DELETE that succeeds (or returns rows) would mean the grant leaked read/write
-    // access. app_user has none, so each is refused 42501 at the privilege layer.
-    const app = await postgres.pg.connectAs("app_login", "app_pw");
-    try {
-      expect(
-        pgErrorCode(await captureError(() => app.execute(sql`select seq from sync_log`))),
-      ).toBe("42501");
-      expect(
-        pgErrorCode(
-          await captureError(() => app.execute(sql`update sync_log set row_image = row_image`)),
-        ),
-      ).toBe("42501");
-      expect(
-        pgErrorCode(
-          await captureError(() => app.execute(sql`delete from sync_log where seq = -1`)),
-        ),
-      ).toBe("42501");
-    } finally {
-      await app.close();
-    }
-
-    // The dedicated reader: `tailer_login`, a LOGIN member of sync_tailer created once in
-    // src/testing/global-setup.ts (shared with retention.gate — a shared cluster is one cluster, so a
-    // per-file create would collide, and a per-file drop/recreate would churn a role retention.gate
-    // also uses). Under tenant A it sees the tenant-A row and NOT the tenant-B row; under tenant B the
-    // reverse (the control) — the FORCE-RLS policy holding under a genuine RLS-subject role.
-    const tailer = await postgres.pg.connectAs("tailer_login", "tp");
-    try {
-      const underA = await withTenant(tailer, a, (tx) =>
-        tx.execute<{ av: string; bv: string }>(sql`
-          select count(*) filter (where tenant_id = ${a})::text as av,
-                 count(*) filter (where tenant_id = ${b})::text as bv
-          from sync_log`),
-      );
-      expect(underA.rows[0]).toMatchObject({ av: "1", bv: "0" }); // A visible, B hidden
-
-      const underB = await withTenant(tailer, b, (tx) =>
-        tx.execute<{ av: string; bv: string }>(sql`
-          select count(*) filter (where tenant_id = ${a})::text as av,
-                 count(*) filter (where tenant_id = ${b})::text as bv
-          from sync_log`),
-      );
-      expect(underB.rows[0]).toMatchObject({ av: "0", bv: "1" }); // control: B visible, A hidden
-    } finally {
-      await tailer.close();
-    }
-  });
-
   it("the C1 table-service triggers capture an app-role insert (dining_tables/floor_zones/table_service_statuses)", async () => {
     const base = await seedBase(postgres.admin);
     const app = await postgres.pg.connectAs("app_login", "app_pw");
@@ -387,7 +300,7 @@ describe("the generic capture trigger over the commercial lane", () => {
   it("the three C1 capture triggers fire on {INSERT, UPDATE} and NOT DELETE (spec §6)", async () => {
     // Spec §6 promises "the new triggers are asserted present with the right op set". These tables
     // deactivate via `active`, never hard-delete (the app-role grant is SELECT/INSERT/UPDATE with no
-    // DELETE — 0044/0048/0052), so 0006 declares them AFTER INSERT OR UPDATE: a DELETE must never be
+    // DELETE), so their capture triggers fire AFTER INSERT OR UPDATE: a DELETE must never be
     // captured. information_schema.triggers carries ONE row per (trigger, event_manipulation), so a
     // trigger firing on INSERT OR UPDATE shows exactly {INSERT, UPDATE} — the presence of a DELETE row
     // would mean a delete is captured. Read as the superuser admin (it sees every trigger).
@@ -415,14 +328,13 @@ describe("the generic capture trigger over the commercial lane", () => {
   });
 
   it("the kitchen KDS triggers capture an app-role insert (kitchen_stations/kitchen_courses/ticket_items)", async () => {
-    // Failing case: the 0008 enrolment migration is absent, so no capture trigger attaches to the three
+    // Failing case: no capture trigger attaches to the three
     // kitchen tables and an app-role insert lands NO sync_log row — a routed-menu mirror would never see
     // its stations/courses/tickets. Control in the other direction: each insert produces exactly one
     // op='insert' sync_log row carrying the app.node_id origin, in seq order.
     const base = await seedBase(postgres.admin);
-    // ticket_items FK parents seeded as admin (they are only reference rows for the item under test): a
-    // node (ticket_items.node_id, 0055_kds1_stations_tickets_rls.sql:57), a product, a working_order and
-    // its line (ticket_items.working_order_line_id CASCADE FK, 0055_kds1_stations_tickets_rls.sql:64).
+    // Seed the ticket item’s FK parents as admin: a node, product, working order and line.
+    // Deleting the line cascades to its ticket items.
     const node = await postgres.admin.execute<{ id: string }>(
       sql`insert into nodes (tenant_id, location_id, name)
           values (${base.tenantId}, ${base.locationId}, 'Node') returning id`,
@@ -499,10 +411,9 @@ describe("the generic capture trigger over the commercial lane", () => {
   });
 
   it("the three kitchen KDS capture triggers fire on {INSERT, UPDATE} and NOT DELETE (spec §6)", async () => {
-    // Spec §3: none of the three holds a DELETE grant (SELECT/INSERT/UPDATE only —
-    // 0055_kds1_stations_tickets_rls.sql:20,37, 0058_kds2_courses_fire_rls.sql:24); stations/courses
-    // deactivate via `active`, ticket_items is removed only by the line-FK CASCADE (never a captured
-    // delete). So 0008 declares them AFTER INSERT OR UPDATE and a DELETE must never be captured.
+    // The app role has SELECT/INSERT/UPDATE on these tables. Stations/courses deactivate via
+    // `active`; deleting a line cascades to its ticket items. Their capture triggers fire
+    // AFTER INSERT OR UPDATE, so those cascaded deletes must not be captured.
     // information_schema.triggers carries one row per (trigger, event_manipulation), so a captured
     // DELETE would surface as a third event row. Read as the superuser admin (it sees every trigger).
     const triggers: [table: string, trigger: string][] = [

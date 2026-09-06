@@ -4,19 +4,15 @@ import { withTenant, type Database, type Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 
-// Real Postgres, not PGlite: this suite proves the identity CONFIG capture triggers under a genuine
-// non-superuser app role, with FORCE RLS active on persons/webauthn_credentials. PGlite connects as a
-// superuser and bypasses RLS, so it is a false pass here (CLAUDE.md §4). The whole migration manifest
-// runs (with `sync` last), so the container carries the 0007 identity capture triggers over the
-// already-created identity tables. The deployment role app_login — a non-superuser, non-BYPASSRLS
-// LOGIN member of app_user — is created once in src/testing/global-setup.ts and shared across the gate
-// suites; the suite reaches it below with `postgres.pg.connectAs("app_login", "app_pw")`.
+// PostgreSQL exercises identity capture through a non-superuser app_user member; PGlite's
+// superuser sessions cannot check the caller's grants. The shared template includes identity tables
+// and their capture triggers. Global setup creates app_login once per cluster.
 const postgres = useTemplateDb({ template: "manifest" });
 
 // A producing node's id — capture writes it into sync_log.origin_id from the app.node_id GUC.
 const NODE_A = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
-/** Mirrors withTenant, but also sets app.node_id so the capture trigger records the origin. */
+/** Sets app.node_id in the write transaction so capture records the producing origin. */
 async function withTenantNode<T>(
   db: Database,
   tenantId: string,
@@ -31,7 +27,7 @@ async function withTenantNode<T>(
 }
 
 /**
- * Seeds one tenant plus a location, till and person, as the superuser admin (RLS bypassed; this is
+ * Seeds one tenant plus a location, till and person, as the superuser admin (fixture
  * setup, not the thing under test). English fixture values throughout — packages/sync/src is inside
  * the english-only guard.
  */

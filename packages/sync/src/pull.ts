@@ -4,8 +4,7 @@
 // apply, and the cursor advance. runSyncPull is the background loop boot.ts starts: for each peer,
 // pull until a batch makes no progress, then sleep; on a transport/HTTP error a peer backs off with
 // bounded exponential backoff, and sync.stream_stalled is logged when its backoff saturates (design
-// §4a/§6). sync_cursor is whole-DB operational state (no tenant_id, no RLS — 0000_sync_outbox.sql:96),
-// so the cursor read runs directly on the pool, never under withTenant.
+// §4a/§6). sync_cursor is database-wide operational state; app_user reads it directly on the pool.
 import { sql } from "drizzle-orm";
 import { type Database } from "@waitron/db";
 import { applyBatch, type ApplyBatchResult } from "./apply.js";
@@ -27,7 +26,7 @@ export interface PullPeer {
 }
 
 export interface SyncPullDeps {
-  /** A LOGIN pool that is a member of both sync_tailer (cursor) and app_user (apply). */
+  /** A LOGIN pool inheriting app_user for cursor access and apply. */
   localDb: Database;
   /** This node's id — the `subscriber_id` half of the cursor key (config.till.nodeId). */
   subscriberId: string;
@@ -42,7 +41,7 @@ export interface SyncPullDeps {
   batchLimit: number;
   /** Which replication lane this worker drives — 'fast' (payments/payment_refunds) or 'ordered'.
    * Threaded into the `?lane=` request, the `(subscriber, origin, lane)` cursor read/advance, and the
-   * applyBatch opts. Optional, defaulting to 'ordered' (the wire + 0002 default), so an ordered worker
+   * applyBatch opts. Optional, defaulting to 'ordered' (the wire and baseline default), so an ordered worker
    * need not name it; boot passes both lanes explicitly (spec §4d). */
   lane?: SyncLane;
   /** The assembled module enrolment set, injected by boot (SP-2a inversion): passed straight into the
@@ -98,7 +97,7 @@ async function readCursor(
   originId: string,
   lane: SyncLane,
 ): Promise<bigint> {
-  // `and lane = ${lane}` is load-bearing: with the 0002 lane column the PK is
+  // The lane filter selects this worker's cursor: the primary key is
   // (subscriber_id, origin_id, lane), so a (subscriber, origin) pair can hold TWO cursor rows. Without
   // the lane filter this would read an arbitrary one of them, so `advanced` (this pull moved MY lane's
   // cursor) would be computed against the wrong lane's seq — breaking the drain/backoff guard (spec §4e).

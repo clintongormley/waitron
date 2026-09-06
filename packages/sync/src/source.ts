@@ -1,8 +1,6 @@
-// The sync_tailer source read for the commercial-lane transport. Runs under the deli tenant context
-// (withTenant), so the sync_log_tenant_isolation RLS policy (0000_sync_outbox.sql:48) fences it to
-// this tenant's rows even as sync_tailer. Selects row_image::text — Postgres's canonical jsonb TEXT —
-// so node-postgres returns a STRING and JS never parses the row's numerics (design §4b). seq is read
-// as text and returned as bigint (a JS number would lose precision past 2^53).
+// Reads the database's captured outbox through app_user. Selects row_image::text so node-postgres
+// returns a string and JavaScript never parses the row's numerics. seq is returned as bigint;
+// converting it to a JavaScript number would lose precision past 2^53.
 import { sql } from "drizzle-orm";
 import { type Database, type Transaction } from "@waitron/db";
 import type { SyncLogRow } from "./apply.js";
@@ -24,9 +22,7 @@ export interface ReadSyncLogArgs {
   tables?: string[];
 }
 
-// Runs under the deli tenant context, so it is always handed the `withTenant` transaction (a
-// Transaction), never a raw pool — but a `Database` pool also satisfies the `.execute` it needs, so
-// both are accepted. (The design sketch said `Database`; the call sites all pass a tx.)
+// Accepts either a transaction or a pool; both expose the execute method this read uses.
 export async function readSyncLogSince(
   sourceDb: Database | Transaction,
   args: ReadSyncLogArgs,

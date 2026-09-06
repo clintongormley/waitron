@@ -4,16 +4,10 @@ import { withTenant, type Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 
-// Real Postgres, not PGlite: capture runs under FORCE ROW LEVEL SECURITY as the non-superuser app
-// role, which PGlite (superuser) bypasses — a false pass here (CLAUDE.md §4). Unlike capture.gate,
-// which drives capture through a LOCAL withTenantNode copy of the helper, this suite drives it
-// through the PRODUCTION `withTenant` from @waitron/db, so it is the test that proves Task 5's
-// wiring — that the real helper's optional node id reaches `app.node_id` and lands in
-// `sync_log.origin_id`.
-// The deployment role app_login — a non-superuser, non-BYPASSRLS LOGIN member of app_user, so FORCE
-// RLS applies to it — is now created once in src/testing/global-setup.ts and shared across the gate
-// suites: a shared cluster is one cluster, so a per-file `create role` would collide on the second.
-// Reached below with `postgres.pg.connectAs("app_login", "app_pw")`.
+// PostgreSQL exercises capture through a non-superuser app_user member. This suite uses the
+// production withTenant helper, so it checks that its optional node id reaches app.node_id and
+// sync_log.origin_id. Global setup creates app_login once per cluster; PGlite's superuser sessions
+// cannot exercise the same caller grants.
 const postgres = useTemplateDb({ template: "manifest" });
 
 // A producing node's id, and the all-zero uuid capture defaults origin to when app.node_id is unset.

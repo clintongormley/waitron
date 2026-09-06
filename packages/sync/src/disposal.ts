@@ -3,9 +3,8 @@
 // serving-primary): its own latest seq per lane versus the carrier's reported sync_cursor for that
 // lane. A non-empty tail on ANY lane means "not safely disposable". `seq` is a single global identity,
 // but each lane's cursor advances only over its own tables (tablesForLane), so "drained" is answered
-// per lane and ANDed. Runs the way the box-status lag reader does: a sync_tailer member INSIDE
-// withTenant(tenantId), so the sync_log_tenant_isolation RLS policy scopes the own-origin max to this
-// venue; sync_cursor carries no RLS. Reads only (no write), so it composes with the fenced read-only
+// per lane and ANDed. app_user reads the database's own-origin log and carrier cursors.
+// Reads only (no write), so it composes with the fenced read-only
 // posture. Values bind as parameters (CLAUDE.md §3); `in ${tables}` is drizzle's array-expansion shape
 // (source.ts), never `= any(...)`.
 import { sql } from "drizzle-orm";

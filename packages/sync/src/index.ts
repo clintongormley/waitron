@@ -36,8 +36,8 @@ export { applyStatementFor, deleteStatementFor } from "./apply-sql.js";
 export { applyBatch } from "./apply.js";
 export type { ApplyBatchOptions, ApplyBatchResult, SyncLogRow } from "./apply.js";
 
-// The sync_tailer source read — select a peer's captured sync_log rows past a cursor, row_image as
-// raw jsonb text, under the deli tenant context (docs/superpowers/plans/2026-08-15-sync-transport-slice1.md Task 5).
+// The app_user source read — select a peer's captured sync_log rows past a cursor, row_image as
+// raw jsonb text (docs/superpowers/plans/2026-08-15-sync-transport-slice1.md Task 5).
 export { readSyncLogSince } from "./source.js";
 export type { ReadSyncLogArgs } from "./source.js";
 
