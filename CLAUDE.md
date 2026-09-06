@@ -388,8 +388,8 @@ _Reference_.
 - **Do not merge a PR automatically — wait for the user's approval.** Invoking `/land-branch` is that
   approval; nothing else is.
 - **Merging requires resolved conversations** (`mergeStateStatus: BLOCKED` with green checks). Copilot
-  is switched off here (2026-09-06): the second model on the diff is Astra in `/finish-branch`'s
-  run-it seat, before the PR exists, so its findings are triaged with the others and leave no
+  is switched off here (2026-09-06): the second model on the diff is Codex (Sol) in
+  `/finish-branch`'s run-it seat, before the PR exists, so its findings are triaged with the others and leave no
   thread. Copilot's lesson stands — its one reliable class was the sibling-file convention the branch
   missed — so the convention reviewer's brief asks for siblings. A thread that does appear is resolved
   via the GraphQL `resolveReviewThread` mutation with the id passed as a variable. Verify CI runs belong to the current head SHA
