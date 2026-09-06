@@ -151,9 +151,11 @@ The four shared Claude/Codex skill wrappers and the profile machinery were remov
 runs simplify's lenses and both reviewers as one parallel wave with a scoped re-read after the apply
 pass, the driver restarts from the SDD ledger instead of compacting, and "one browser-mode gate at
 a time" was retired (CLAUDE.md §2). The simplify-through-Codex item is closed by the separation.
-Rule text: `~/.claude/CLAUDE.md`, CLAUDE.md §6. **LANDED #251 (2026-09-06).** Left behind, in flight:
-#252 (`fix/inert-root-config` — root config no code-gated job reads is inert, not a global run;
-finish-branch done, CI green, ready to land) and `fix/root-scope-parallel-hook` stacked on it
+Rule text: `~/.claude/CLAUDE.md`, CLAUDE.md §6. **LANDED #251 and #252 (2026-09-06).** #252 (`fix/inert-root-config`): root config no
+code-gated job reads (`.codex/`, `.vscode/`, root `.gitignore`, `.editorconfig`) is inert, not a
+global run; its Codex seat falsified three of the change's own claims ("no gate reads" — Prettier
+reads two of them; the nested-`.gitignore` rationale; a twin in ci.yml), all fixed before land.
+Left in flight: `fix/root-scope-parallel-hook`, stacked on #252
 (`scripts/`, `.husky/`, `.github/` become ROOT scope — root project only, never the whole workspace —
 and the hook runs typecheck, coverage and the root suite concurrently, measured; implementer running
 at land time). The seat-speed trial (bounded run-it brief, medium effort, rebase before the review
