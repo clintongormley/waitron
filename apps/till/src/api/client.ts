@@ -1406,7 +1406,8 @@ export class TillApi {
   /**
    * Enrol this browser as a trusted device by redeeming a pairing code (device-identity-1 §5a/§3b) →
    * `POST /api/device/enrol` with `{ code }`. UNAUTHENTICATED (no prior session), the till's `POST
-   * /api/session` counterpart: the server redeems the single-use code, mints the device token, and
+   * /api/session` counterpart: the server redeems the single-use code (or, in dev mode only, the fixed
+   * reusable dev code — `dev-pairing.ts`), mints the device token, and
    * returns it ONLY in the httpOnly device cookie (never the body) — so this resolves the four
    * NON-SECRET {@link DeviceEnrolment} fields the enrol view confirms. The `code` is sent VERBATIM: the
    * server normalises it, the client does not. A random/consumed code rejects

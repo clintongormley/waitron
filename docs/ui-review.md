@@ -8,8 +8,8 @@ corrects what is wrong or unintuitive, and the fixes land. This file records whe
 walkthrough survives a context clear.
 
 **Run path:** `pnpm dev:setup && pnpm dev` — till <http://localhost:5190>, dashboard
-<http://localhost:5191>, setup <http://localhost:5192>. Till PIN **5555**; dashboard
-**owner@demo.waitron.local / dashPass123**.
+<http://localhost:5191>, setup <http://localhost:5192>. Enrol the till once per browser with pairing
+code **DEMO** (dev only). Till PIN **5555**; dashboard **owner@demo.waitron.local / dashPass123**.
 
 **Running the stack from a worktree (cost a round trip on 2026-09-05).** The dev Postgres is ONE
 container for every checkout (`docker-compose.yml`, port 5432), and `apps/server/.env` is a
@@ -21,7 +21,7 @@ otherwise start a second `db` on the same port with its own empty volume (the st
 `waitron-feat-onboarding-slice1b-setup-mode-boot_waitron-dev-db` volume is what that leaves behind).
 The server migrates the shared DB forward at boot, so switching worktrees is fine; a venue seeded
 before the code's seed data (e.g. before device profiles) makes `dev:setup` refuse — `pnpm dev:reset`
-(throwaway preproduction data) re-provisions, writes a new `.env` and prints a new pairing code, and
+(throwaway preproduction data) re-provisions, writes a new `.env` and prints the fixed dev pairing code `DEMO`, and
 that `.env` must then be copied to every other checkout. `/health` reports `ok:false` on the dev venue
 because the fiscal drain has no AEAT credentials; the till and API serve normally regardless.
 

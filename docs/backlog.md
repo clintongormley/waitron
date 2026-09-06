@@ -117,7 +117,8 @@ de-risking the most-reused / most-uncertain foundations first.
 
 **Run path (local; no hardware, cloud, or AEAT cert):** `pnpm dev:setup && pnpm dev` → till
 <http://localhost:5190>, dashboard <http://localhost:5191>, setup <http://localhost:5192>, server
-:8080. Till PIN **5555**; dashboard **owner@demo.waitron.local / dashPass123**. `dev:setup` seeds a
+:8080. Enrol the till once per browser with pairing code **DEMO** (dev only). Till PIN **5555**;
+dashboard **owner@demo.waitron.local / dashPass123**. `dev:setup` seeds a
 believable demo restaurant: two menus (~44 products with per-dish images), a floor plan (3 zones / ~16
 tables), staff on PIN 5555, and ~28 days of back-dated preproduction sales — English by default,
 Spanish via `WAITRON_SEED_LOCALE=es-ES`. ~25 fleshed-out screens on one enforced design system.
@@ -407,7 +408,9 @@ editor + rendering) is the sole remaining sub-project of this track.**
   bindings, enrolment extension (carries profile/`till_id`/hardware; `device.till_required`/
   `device.binding_invalid`), management API for profiles + tenant theme, server-side capability enforcement
   (`assertDeviceCapability` for pay/drawer; `assertNotHandheld` kept for place/reprint/collect/cancel),
-  theme storage, dashboard Add-device UI, `apps/till` till-enrol screen, `dev:setup` mints a till code.
+  theme storage, dashboard Add-device UI, `apps/till` till-enrol screen, `dev:setup` mints a till code
+  (2026-09-06: the mint is gone — in `WAITRON_ENV=dev` the fixed code `DEMO` enrols the counter till,
+  `apps/server/src/dev-pairing.ts`).
   The fiscal cutover — a sale's `till_id` now resolves from the authenticated device — passed its §7/§16.4
   container+mutation receipt (`till_id` inert to the huella; `nodeId`/series stay on the node; only
   `sales.till_id` moved). SP-A.1 deferrals (a)-(d) all folded in.
@@ -579,7 +582,8 @@ editor + rendering) is the sole remaining sub-project of this track.**
       payload returns `capabilities` as a sibling of `canvas`). CRUD `/management-api/device-profiles`
       routes + a dashboard device-profile editor screen + the devices screen assigning a profile;
       enrolment/reassign thread `device_profile_id`; `dev:setup` seeds a default "Counter" profile and
-      stamps it on the till pairing code. Spec
+      stamps it on the till pairing code (2026-09-06: provisioning seeds the starter set and the fixed
+      dev code `DEMO` binds the till one at enrol, `apps/server/src/dev-pairing.ts`). Spec
       [device-profile-design](superpowers/specs/2026-09-05-device-profile-design.md). **Still
       per-device (NOT relocated):** till / station / hardware. **Still deferred:** area / order-routing /
       printer-target aggregation. **Deferred follow-ons this slice leaves open** — the follow-on batch

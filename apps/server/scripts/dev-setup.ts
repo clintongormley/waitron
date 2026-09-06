@@ -28,27 +28,12 @@ import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import pg from "pg";
-import {
-  asAppUser,
-  createPostgresDb,
-  withTenant,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { createPostgresDb, type Database } from "@waitron/db";
 import { hashPassword, hashPin } from "@waitron/identity";
-import { DEFAULT_DEVICE_PROFILES, defaultProfileName, listDeviceProfiles } from "@waitron/layouts";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../src/modules.js";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-  tenantId as brandTenantId,
-  tillId as brandTillId,
-} from "@waitron/shared";
-import { generatePairingCode } from "../src/device.js";
-import type { TillConfig } from "../src/till-config.js";
+import { DEV_PAIRING_CODE } from "../src/dev-pairing.js";
 import { parseEnvFile } from "../src/env-file.js";
 import { seedDemoRestaurant } from "./demo-seed/seed.js";
 import { DEMO_ADMIN_EMAIL, DEMO_DASHBOARD_PASSWORD } from "./demo-seed/staff.js";
@@ -441,92 +426,6 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
   return { reused: false, env };
 }
 
-/** The name of the till device profile `applyVenue` seeds for the counter till, resolved to the seeded
- * venue's locale (design §10; task-3 follow-on b). `dev:setup` provisions via `applyVenue`, which seeds
- * the whole starter set (Counter/Kitchen/Handheld) from `DEFAULT_DEVICE_PROFILES`, so this is just the
- * `till` entry's locale-resolved name — English "Counter" for the demo default (en-GB), "Mostrador" for
- * an es-ES seed. */
-export function tillDeviceProfileName(locale: string): string {
-  const till = DEFAULT_DEVICE_PROFILES.find((profile) => profile.formFactor === "till")!;
-  return defaultProfileName(till, locale);
-}
-
-/**
- * Find the tenant's till device profile and return its id — the profile `applyVenue` seeded at
- * provisioning (task-3 follow-on b: every new tenant gets the Counter/Kitchen/Handheld starter set), so
- * the minted `till` pairing code can carry it and the enrolled counter till resolves its canvas +
- * capabilities through it (design §5.3/§10). Without a bound profile an enrolled device gets
- * `capabilities: []` and the /api/pay + /api/drawer firewall refuses pay/drawer while the render axis
- * hides the capability cards — so the dev till would be unable to sell.
- *
- * Since `dev:setup` provisions through `applyVenue`, the profile already exists on both the fresh and
- * the reuse path; this LOCATES it (by its locale-resolved name) rather than creating it — the seeding
- * moved into provisioning. A missing profile is a provisioning regression, so it throws loudly rather
- * than mint a code with no profile. Runs on the caller's already-tenant-scoped app-role tx.
- */
-async function findTillDeviceProfile(
-  tx: Transaction,
-  tenantId: string,
-  locale: string,
-): Promise<string> {
-  const name = tillDeviceProfileName(locale);
-  const profile = (await listDeviceProfiles(tx, tenantId)).find((p) => p.name === name);
-  if (profile === undefined) {
-    throw new Error(
-      `dev-setup: provisioned tenant is missing the seeded "${name}" till device profile — applyVenue should have seeded it`,
-    );
-  }
-  return profile.id;
-}
-
-/**
- * Mint a single-use `till`-kind pairing code bound to the provisioned till (SP-A.2 device unification),
- * so the dev can enrol the counter till against the server (its sale routes now require a
- * `waitron_device` cookie carrying the till's id — Task 15a). The code is minted on EVERY `dev:setup`
- * run, fresh venue OR idempotent reuse: a code is single-use and expires in 15 minutes, so a stale
- * unredeemed one simply lapses — always handing the dev a fresh valid code is the point.
- *
- * The minted code carries the tenant's till device profile — the "Counter" (or its locale name) entry
- * `applyVenue` seeded at provisioning (task-3 follow-on b), LOCATED here via `findTillDeviceProfile` —
- * so the enrolled counter till resolves its canvas + capabilities through it and stays sale-capable. The
- * device-profile cutover (Task 10) made the profile the SOLE canvas/capability binding, so a code with
- * no profile would enrol a till the firewall refuses pay/drawer on (design §10).
- *
- * Runs as `app_user` inside a `withTenant` tx, exactly as the device-api enrol-code route does — the
- * running POS mints codes, not the provisioning owner. `generatePairingCode`'s per-kind gate requires a
- * `till` (a sale-capable kind) to carry a non-null `till_id` (else `device.till_required`), so the
- * provisioned till's id is passed; the enrolled device then rings against that real register. The
- * `TillConfig` is assembled from the written `.env` — `generatePairingCode` reads only `tenantId` +
- * `locationId` off it for a `till` mint (no station lookup), but the whole shape is branded for type
- * safety. Returns the plaintext code ONCE for the CLI to print (never stored in plaintext).
- */
-export async function mintTillPairingCode(db: Database, env: DevEnv): Promise<{ code: string }> {
-  const cfg: TillConfig = {
-    tenantId: brandTenantId(env.WAITRON_TILL_TENANT_ID),
-    tillId: brandTillId(env.WAITRON_TILL_TILL_ID),
-    nodeId: brandNodeId(env.WAITRON_TILL_NODE_ID),
-    seriesId: brandSeriesId(env.WAITRON_TILL_SERIES_ID),
-    locationId: brandLocationId(env.WAITRON_TILL_LOCATION_ID),
-    locale: env.WAITRON_TILL_LOCALE,
-    invoiceLocales: [env.WAITRON_TILL_LOCALE],
-    // Display-side only; a pairing-code mint reads neither. Fixed to the demo's cash-only defaults.
-    cardProvider: "none",
-    tipsEnabled: false,
-    orderFlow: "prepay",
-  };
-  return withTenant(db, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
-    const deviceProfileId = await findTillDeviceProfile(tx, cfg.tenantId, cfg.locale);
-    return generatePairingCode(tx, cfg, {
-      kind: "till",
-      stationId: null,
-      label: "Caja 1",
-      tillId: cfg.tillId,
-      deviceProfileId,
-    });
-  });
-}
-
 /** The CLI entrypoint: resolve `apps/server/.env`, run `devSetup`, print a human summary. */
 async function main(): Promise<void> {
   const envPath = fileURLToPath(new URL("../.env", import.meta.url));
@@ -540,17 +439,6 @@ async function main(): Promise<void> {
     envPath,
     log: (line) => void console.log(line),
   });
-
-  // Mint a fresh `till` pairing code on EVERY run (fresh venue OR reuse) so the dev can enrol the
-  // counter till, whose sale routes now require a device cookie (SP-A.2 Task 15a). Its own connection —
-  // `devSetup` has already closed the one it provisioned with — closed in the `finally`.
-  const db = await createPostgresDb(result.env.DATABASE_URL);
-  let pairing: { code: string };
-  try {
-    pairing = await mintTillPairingCode(db, result.env);
-  } finally {
-    await db.close();
-  }
 
   console.log("");
   console.log(
@@ -575,8 +463,8 @@ async function main(): Promise<void> {
   console.log(`  dashboard login (owner):       ${DEMO_ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
   console.log(`  locale:                        ${result.env.WAITRON_TILL_LOCALE}`);
   console.log("");
-  console.log(`  Enrol the till at http://localhost:5190 with pairing code: ${pairing.code}`);
-  console.log("  (single-use, expires in 15 minutes — re-run `pnpm dev:setup` for a fresh one)");
+  console.log(`  Enrol the till at http://localhost:5190 with pairing code: ${DEV_PAIRING_CODE}`);
+  console.log("  (fixed in dev mode, reusable by every fresh browser)");
   const salesDays = resolveSalesDays();
   if (!result.reused) {
     console.log(

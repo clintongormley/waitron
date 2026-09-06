@@ -1157,6 +1157,15 @@ declare module "@waitron/shared" {
       field: "tillId" | "receiptPrinterId" | "deviceProfileId";
     };
     /**
+     * The fixed dev pairing code (`dev-pairing.ts`, devMode only) found none of the seeded starter
+     * `till` device profiles in the tenant, so it refused to enrol — a till without a profile carries no
+     * capabilities and the pay/drawer firewall would refuse it. A provisioning regression, not a request
+     * fault: mapped to HTTP 500 by `device-api.ts`'s local STATUS map. NO params: the names it looked
+     * for are our own constants (`DEFAULT_DEVICE_PROFILES`). `device.*` names the DOMAIN CONCEPT
+     * (device pairing), never the throwing package. Never renamed once shipped.
+     */
+    "device.profile_missing": Record<string, never>;
+    /**
      * A self-signed server certificate was asked for with no hostname to put on the leaf — the
      * `hostnames` list was empty. The box mints its own CA + server cert on first boot to serve
      * setup-mode HTTPS (onboarding slice 2a), and a leaf with no `dNSName` SAN authenticates no

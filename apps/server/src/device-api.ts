@@ -23,6 +23,7 @@ import { readJsonBody } from "./read-json-body.js";
 import { requireManagementSession } from "./management-session.js";
 import { clearDeviceCookie, requireDevice, setDeviceCookie } from "./device-session.js";
 import { bindingFkField, enrolDevice, generatePairingCode, kindRequiresStation } from "./device.js";
+import { enrolDevTill, isDevPairingCode } from "./dev-pairing.js";
 import { listStations } from "./kitchen.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import {
@@ -61,7 +62,9 @@ export interface DeviceApiDeps {
   /**
    * When `true`, mounts the SP-C dev-only per-tab device switcher routes (`GET /api/dev/devices`, and
    * Task 5's `POST /api/dev/devices`); outside dev they DO NOT EXIST (404) — the same fail-closed shape
-   * as the `DEV_DEVICE_HEADER` override. OPTIONAL so every existing `DeviceApiDeps`/`mountDeviceApi`
+   * as the `DEV_DEVICE_HEADER` override. It ALSO makes the always-mounted `POST /api/device/enrol`
+   * accept the fixed dev pairing code (`dev-pairing.ts`) — a behaviour switch on a production route,
+   * not a mount gate; outside dev that code is just an invalid one. OPTIONAL so every existing `DeviceApiDeps`/`mountDeviceApi`
    * construction (boot, tests) compiles unchanged: undefined means the dev group is not mounted, so the
    * default is production, and the routes gate on `deps.devMode === true`. Boot wires the real value
    * (`config.devMode`) in Task 6.
@@ -119,6 +122,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // reads as a malformed request rather than a lookup miss.
   "device.till_required": 400,
   "device.binding_invalid": 400,
+  // The fixed dev code found no seeded till profile (dev-pairing.ts) — a provisioning fault, not a
+  // request one, so the one 500 this map names deliberately.
+  "device.profile_missing": 500,
   "device.not_found": 404,
   "station.not_found": 404,
   "management_session.required": 401,
@@ -154,6 +160,8 @@ const run = createErrorBoundary(STATUS, "device.failed");
  *     (403) before the op runs, in exactly one place.
  *  4. DEV-ONLY routes, mounted only under `devMode` (404 otherwise): the `?dev` switcher's device list
  *     and mint-and-adopt (`GET`/`POST /api/dev/devices`) and the cookie reset (`POST /api/device/reset`).
+ *     Under `devMode` the enrol route of group 1 additionally accepts the fixed dev pairing code, minting
+ *     and redeeming a till code in one tx (`enrolDevTill`, dev-pairing.ts).
  */
 export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): void {
   // The GLOBAL, in-memory, per-process redemption rate-limiter for the enrol route (spec §8). Built ONCE
@@ -192,9 +200,12 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // run first).
       const body = await readJsonBody<{ code?: unknown }>(c);
       const code = requireString(body.code, "code");
+      // In devMode ONLY, the fixed dev code enrols this browser as the counter till (dev-pairing.ts).
+      // Outside devMode the word is hashed like any other and misses — `device.pairing_invalid`.
+      const devTill = deps.devMode === true && isDevPairingCode(code);
       const enrolled = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
-        return enrolDevice(tx, deps.cfg, { code });
+        return devTill ? enrolDevTill(tx, deps.cfg) : enrolDevice(tx, deps.cfg, { code });
       });
       // The cookie is `${deviceId}.${token}` — a selector plus the scrypt-checked validator. The token
       // is the ONLY secret and leaves the process ONLY here, in the Set-Cookie header; it is NEVER echoed
