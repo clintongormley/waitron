@@ -38,7 +38,7 @@ import "@waitron/shared";
  *
  * - `role_over_privileged`, `role_unusable`, `role_creation_failed`, `membership_grant_failed`,
  *   `grant_ineffective`: none is a general fact about a role or about a grant. Each is a refusal or
- *   a failure OF THIS ACTIVITY — "a role this tool would adopt carries BYPASSRLS", "a grant this
+ *   a failure OF THIS ACTIVITY — "a role this tool would adopt carries SUPERUSER", "a grant this
  *   run issued did not take". A `role.*` or `grant.*` code should be true of any role or grant
  *   anywhere, and none of these is.
  * - `state_unreadable` is the one worth arguing, because its own text opens with "reading what a
@@ -131,7 +131,7 @@ declare module "@waitron/shared" {
      * `roleUri(uri, "waitron_app", "pw", "waitron_prod")` both threw `TypeError: Invalid URL`. On
      * the `instance` path that throw landed in `reportRoles`, i.e. AFTER `create database`,
      * `migrate` and `stamp` had run, and reached the operator as `unexpected failure (TypeError)`
-     * (`bin.ts`'s catch-all) with three generated passwords lost.
+     * (`bin.ts`'s catch-all) with the generated passwords lost.
      *
      * Supporting the non-URL forms properly was the alternative and was rejected: re-pointing a
      * libpq keyword/value string at a different database, user and password means parsing and
@@ -181,6 +181,23 @@ declare module "@waitron/shared" {
      * statement back in its message, and this file's header forbids a param that could carry one.
      * `database` is operator-typed configuration and never a secret. */
     "provisioning.venue_conflict": { database: string };
+    /** A SECOND, DIFFERENT fiscal obligado was asked to stand up in a database that already holds
+     * one. Refused: one tenant per database is the post-RLS isolation boundary. This branch dropped
+     * row-level security on the premise that each database carries a single tenant, so `withTenant`
+     * no longer filters rows by tenant (`packages/db/src/tenancy.ts`); a second `(country, tax_id)`
+     * in the same database would therefore expose one business's rows to the other — a cross-tenant
+     * leak a hash-chained fiscal record (§5) cannot take back. The invariant is enforced at BOTH
+     * production tenant-creation entry points — the setup-api provision handler (`provisionVenue`,
+     * `apps/server/src/provision.ts`) and the `venue` CLI (`packages/provisioning/src/cli.ts`) —
+     * through the shared `assertNoForeignTenant` guard (`packages/provisioning/src/tenant-guard.ts`):
+     * each reads the existing `(country, tax_id)` set before applying and refuses any identity but the
+     * one already present. The SAME identity re-provisions (spec D8 second shop); an empty database
+     * proceeds as the first tenant. This is NOT `venue_conflict` (a concurrent unique-key race on ONE
+     * identity); it is a refusal of a FOREIGN identity.
+     *
+     * `database` only, and never the driver's own error: the same discipline `venue_conflict` keeps
+     * — `database` is operator-typed configuration and never a secret. */
+    "provisioning.foreign_tenant": { database: string };
     /** `adoptVenue` finished its inserts but one of the five DESIGNATED ids the mirror bundle names
      * for `trading.env` is not present among the rows it inserted — a malformed or incomplete bundle
      * (spec §5). `adoptVenue` inserts the primary's tenant/location/node/till/series rows VERBATIM
@@ -253,10 +270,9 @@ declare module "@waitron/shared" {
     "provisioning.territory_country_mismatch": { country: string; fiscalTerritory: string };
     /** The CSPRNG returned the wrong number of bytes. `byteLength` is a size, never material. */
     "provisioning.key_generation_failed": { byteLength: number };
-    /** A role this tool would use already exists carrying SUPERUSER or BYPASSRLS. Refused rather
-     * than adopted: every grant `instance` is about to make sits behind an RLS policy that such a
-     * role ignores outright — the same refusal `0001_tenancy_rls.sql` makes for `app_user`. */
-    "provisioning.role_over_privileged": { role: string; superuser: boolean; bypassRls: boolean };
+    /** A role this tool would use already exists carrying SUPERUSER. Refused rather
+     * than adopted: a superuser can disable the append-only triggers. */
+    "provisioning.role_over_privileged": { role: string; superuser: boolean };
     /** A role exists but cannot log in, or lacks an attribute it needs. Refused rather than
      * altered: this tool did not create it, does not know its password, and `ALTER ROLE` on
      * something an operator made by hand is not its call. */
@@ -324,7 +340,7 @@ declare module "@waitron/shared" {
      * `provisioning.role_creation_failed` above, minus the password: this statement embeds no
      * secret, and the catch exists because the driver's raw error otherwise escaped `applyInstance`
      * unformatted on a path a real operator reaches (an admin holding CREATEROLE but no ADMIN
-     * OPTION on `app_user` — 42501, proven in `instance-apply.rls.test.ts`). */
+     * OPTION on `app_user` — 42501, proven in `instance-apply.pg.test.ts`). */
     "provisioning.membership_grant_failed": {
       role: string;
       memberOf: string;

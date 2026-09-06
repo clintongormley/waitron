@@ -3,18 +3,19 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 export default defineConfig({
   test: {
     globals: true,
-    // globalSetup boots ONE shared Postgres container and migrates the `core_credentials` template the
-    // real-PG (RLS) suite clones (~26ms) instead of that file booting and migrating its own (~1.5s).
-    // See src/testing/global-setup.ts. Because it precedes every worker, a Docker-absent run now fails
-    // the whole package (that file's header explains the broadening).
+    // globalSetup boots ONE shared Postgres container and migrates the `core_credentials`
+    // template the real-PG suite clones (~26ms) instead of that file booting and migrating its
+    // own (~1.5s). See src/testing/global-setup.ts. Because it precedes every worker, a
+    // Docker-absent run now fails the whole package (that file's header explains the broadening).
     globalSetup: ["./src/testing/global-setup.ts"],
-    // The PGlite suites (store.test.ts, rotate.test.ts, cli.test.ts, migrations.test.ts) boot PGlite (a
-    // WASM PostgreSQL) and apply two migration sets, longer than Vitest's 5s default on a cold CI
-    // runner; the real-PG (RLS) suite now clones the shared container's migrated `core_credentials`
-    // template (globalSetup, above). Each per-suite cost is paid in a beforeAll — the PGlite WASM boot,
-    // or the real-PG ~26ms clone — so hookTimeout stays generous for the PGlite boot; the ~26ms clone
-    // is a harmless ceiling under it. The container boot / image pull is NOT in a beforeAll: it moved
-    // to globalSetup, which vitest does NOT bound by hookTimeout.
+    // The PGlite suites (store.test.ts, rotate.test.ts, cli.test.ts, migrations.test.ts) boot
+    // PGlite (a WASM PostgreSQL) and apply two migration sets, longer than Vitest's 5s default on
+    // a cold CI runner; the real-PG suite now clones the shared container's migrated
+    // `core_credentials` template (globalSetup, above). Each per-suite cost is paid in a
+    // beforeAll — the PGlite WASM boot, or the real-PG ~26ms clone — so hookTimeout stays
+    // generous for the PGlite boot; the ~26ms clone is a harmless ceiling under it. The container
+    // boot / image pull is NOT in a beforeAll: it moved to globalSetup, which vitest does NOT
+    // bound by hookTimeout.
     testTimeout: 120_000,
     hookTimeout: 180_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],

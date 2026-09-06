@@ -1,35 +1,33 @@
 import { sql } from "drizzle-orm";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
-import { describeEachTarget } from "../testing/harness.js";
-import { catalogues } from "./catalogue.js";
+import { usePgliteDb } from "../testing/lifecycle.js";
+import { CORE_MIGRATIONS } from "../migrations.js";
+import { catalogues, optionGroups } from "./catalogue.js";
 import { tenants } from "./tenants.js";
+
+const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+
+// Each case gets empty mutable fixture tables while sharing the migrated database.
+afterEach(async () => {
+  await suite.db.execute(sql`delete from option_group_items`);
+  await suite.db.execute(sql`delete from option_groups`);
+  await suite.db.execute(sql`delete from products`);
+  await suite.db.execute(sql`delete from catalogues`);
+  await suite.db.execute(sql`delete from tenants`);
+});
 
 async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]> {
   const result = (await db.execute(query)) as unknown as { rows: T[] } | T[];
   return Array.isArray(result) ? result : result.rows;
 }
 
-describeEachTarget("catalogue — menu, taxonomy and priced items", (target) => {
+describe("catalogue — menu, taxonomy and priced items", () => {
   let db: Database;
 
   beforeEach(async () => {
-    db = await target.create();
-  });
-
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
-  });
-
-  it("forces RLS on the three catalogue tables", async () => {
-    const out = await rows<{ relname: string; relforcerowsecurity: boolean }>(
-      db,
-      sql`select relname, relforcerowsecurity from pg_class
-          where relname in ('catalogues','categories','products') order by relname`,
-    );
-    expect(out.map((r) => r.relname)).toEqual(["catalogues", "categories", "products"]);
-    expect(out.every((r) => r.relforcerowsecurity)).toBe(true);
+    db = suite.db;
   });
 
   it("rejects a bad pricing_unit and a bad vat_class, each on its own CHECK", async () => {
@@ -113,11 +111,51 @@ describeEachTarget("catalogue — menu, taxonomy and priced items", (target) => 
     ]);
   });
 
+  it("defaults option_group_items.max_quantity to 1 when the insert omits it", async () => {
+    // The AUTHORED per-option cap. Raw SQL that lists no max_quantity column, so a missing column
+    // fails on `column "max_quantity" ... does not exist` — the real cause — rather than on a
+    // drizzle-schema mismatch.
+    const [tenant] = await db
+      .insert(tenants)
+      .values({ country: "ES", taxId: "B00000001", legalName: "Fixture Tenant QTY" })
+      .returning({ id: tenants.id });
+    const [group] = await db
+      .insert(optionGroups)
+      .values({ tenantId: tenant.id, name: { en: "Extras" } })
+      .returning({ id: optionGroups.id });
+    const [row] = await rows<{ max_quantity: number }>(
+      db,
+      sql`insert into option_group_items (tenant_id, group_id, name, price_delta)
+          values (${tenant.id}, ${group.id}, '{"en":"Cheese"}'::jsonb, '0.50')
+          returning max_quantity`,
+    );
+    expect(row?.max_quantity).toBe(1);
+  });
+
+  it("rejects an option_group_items insert of max_quantity = 0 with the check constraint", async () => {
+    // The real SQLSTATE and constraint name live on the driver error's `.cause`, not on
+    // DrizzleQueryError's own `Failed query: <sql>` message — so read them with pgErrorCode/
+    // pgErrorMessage rather than matching the wrapper text (which would pass on any thrown error).
+    const [tenant] = await db
+      .insert(tenants)
+      .values({ country: "ES", taxId: "B00000002", legalName: "Fixture Tenant QTY2" })
+      .returning({ id: tenants.id });
+    const [group] = await db
+      .insert(optionGroups)
+      .values({ tenantId: tenant.id, name: { en: "Extras" } })
+      .returning({ id: optionGroups.id });
+    const error = await captureError(() =>
+      db.execute(sql`insert into option_group_items (tenant_id, group_id, name, price_delta, max_quantity)
+        values (${tenant.id}, ${group.id}, '{"en":"Bacon"}'::jsonb, '1.00', 0)`),
+    );
+    expect(pgErrorCode(error)).toBe("23514"); // check_violation
+    expect(pgErrorMessage(error)).toMatch(/option_group_items_qty_ck/);
+  });
+
   it("products carries a nullable image text column", async () => {
     // The image column is a path REFERENCE (a content-addressed filename), never bytes — nullable
     // because a product legitimately has no photo (distinct from allergens' null, which is a
-    // load-bearing PENDING state; image null just means "no picture"). The write/read RLS receipt
-    // that the existing grant + policy cover it lives in catalogue.rls.test.ts.
+    // PENDING state that the code reads; image null just means "no picture").
     const [col] = await rows<{ data_type: string; is_nullable: string }>(
       db,
       sql`select data_type, is_nullable from information_schema.columns

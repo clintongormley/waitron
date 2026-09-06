@@ -251,9 +251,7 @@ export async function registerSif(
     })
     .returning({ id: registroSif.id, registradoEn: registroSif.registradoEn });
 
-  // Always exactly one row: this INSERT carries no WHERE clause and RLS's WITH CHECK, not its
-  // USING clause, governs an insert — a mismatched app.tenant_id fails the check with an error,
-  // it does not silently insert zero rows the way a filtered UPDATE/SELECT would.
+  // INSERT VALUES returns one row on success; a failed constraint raises an error.
   /* v8 ignore start */
   if (inserted === undefined) {
     throw new Error("registro_sif: insert returned no row");

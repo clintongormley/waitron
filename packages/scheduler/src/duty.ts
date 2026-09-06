@@ -37,13 +37,13 @@ export interface DutyOutcome {
  * not to have the same answer:
  *
  *   - **`drain` cannot use this ledger at all.** It takes NO tenant and enumerates its own across
- *     `envios_tenants_with_work`, while every row here is `tenant_id NOT NULL` under RLS; it
+ *     `envios_tenants_with_work`, while every row here is `tenant_id NOT NULL`; it
  *     already owns durable schedule state (`envio_flujo.proximo_envio_en`, `envios.
  *     proximo_intento_en`); and `parked` is terminal, so three throws would silently end a LEGAL
  *     hourly retry. What it needs is a caller, which the `apps/*` host is anyway.
  *   - **`forward` is deferred, not ruled out.** None of the above applies to it: it is a
  *     per-tenant object, it owns no durable cadence (just an in-process constant in the adapter),
- *     and its failure is not legally load-bearing. It is waiting on a consumer for the `nextDueAt`
+ *     and its failure is not legally required. It is waiting on a consumer for the `nextDueAt`
  *     it already returns — i.e. on the host — not on a reason.
  *
  * See `2026-07-25-recurring-work-scheduler-design.md` §3's amendment.

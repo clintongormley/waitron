@@ -29,12 +29,12 @@ import { tunnelHttpClient } from "./tunnel-http.js";
 //        ▼  127.0.0.1:<httpsPort>
 //   the box's own HTTPS sync-api (node:https + a box.test self-signed cert), mounted on real Postgres
 //
-// Two REAL manifest-migrated databases in the shared container (`source` = the box, `mirror` = the
-// cloud), each a `useTemplateDb` clone, are the minimum that proves a genuine cross-DB apply as the
-// non-superuser sync roles under FORCE RLS (PGlite would be a false pass, CLAUDE.md §4). What makes
-// THIS test more than `sync-e2e.rls.test.ts` is that the HTTP seam is not a Hono `app.request` — it is
-// a real TLS connection over a real relay, so the byte-blindness of the relay is observable. See the
-// task-8 brief and design §5.
+// Two REAL manifest-migrated databases in the shared container (`source` = the box, `mirror` =
+// the cloud), each a `useTemplateDb` clone, are the minimum that proves a genuine cross-DB apply
+// as the non-superuser sync roles using app_user grants (PGlite would be a false pass, CLAUDE.md
+// §4). What makes THIS test more than `sync-e2e.test.ts` is that the HTTP seam is not a Hono
+// `app.request` — it is a real TLS connection over a real relay, so the byte-blindness of the
+// relay is observable. See the task-8 brief and design §5.
 const syncLog: Logger = () => {};
 
 // Sync node ids (origin marker + cursor keys) — distinct from the FK-parent `nodes` row below.
@@ -116,8 +116,8 @@ beforeAll(async () => {
   await seedParents(mirrorAdmin); // the SAME parents on the mirror so the applied sales' FKs resolve
   await stampEnv(mirrorAdmin, "production"); // a mirror must be environment-stamped before it applies
   mirrorApplier = await mirror.pg.connectAs("sync_applier", "ap");
-  // The source serve pool matches production (boot.ts:1053): a sync_tailer + app_user member, since
-  // /hello now also reads node_membership (app_user's SELECT); sync_reader alone would 500 there.
+  // The source serve pool matches production (boot.ts:1053): a app_user member, since /hello now
+  // also reads node_membership (app_user's SELECT); sync_reader alone would 500 there.
   sourceReader = await source.pg.connectAs("sync_applier", "ap");
   sourceWriter = await source.pg.connectAs("app_login", "app_pw");
   // Mint the mirror's Bearer token on the SOURCE (enrolPeer runs as the superuser admin — setup

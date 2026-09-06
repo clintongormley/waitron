@@ -44,11 +44,6 @@ export const deviceKind = pgEnum("device_kind", ["kds_station", "handheld", "til
  * `kitchen_stations` table, so its FK cannot be a one-arg `.references()`), exactly as
  * `ticket_items.station_id` is. NULLABLE so a future non-station kind carries no station; MATCH
  * SIMPLE (the FK default) skips the check on a NULL station_id.
- *
- * `.enableRLS()` emits only ENABLE ROW LEVEL SECURITY. The FORCE ROW LEVEL SECURITY, the
- * `devices_tenant_isolation` policy and the grant are hand-written in the paired --custom migration,
- * exactly as 0055 does for `kitchen_stations`. The `inmutabilidad` guard in packages/fiscal-verifactu
- * scans every tenant_id-bearing table for both RLS flags, so a missing FORCE here fails that suite.
  */
 export const devices = pgTable(
   "devices",
@@ -117,7 +112,7 @@ export const devices = pgTable(
     // (tenant_id, device_id) FK would use, the same role kitchen_stations_tenant_id_key plays.
     unique("devices_tenant_id_key").on(t.tenantId, t.id),
   ],
-).enableRLS();
+);
 
 /**
  * A short-lived, single-use PAIRING CODE (device-identity-1, §2b). An admin mints one bound to a
@@ -134,10 +129,6 @@ export const devices = pgTable(
  * the redeeming device selects on (it sends only the code, no selector, so a per-row scrypt salt
  * cannot be used for lookup). The `(tenant_id, code_sha256)` index is that redemption path.
  * `station_id` is a BARE uuid whose composite FK is hand-written like `devices.station_id`.
- *
- * `.enableRLS()` emits only ENABLE; FORCE + the `device_pairing_codes_tenant_isolation` policy + the
- * grant are hand-written in the --custom migration (inmutabilidad requires FORCE on every
- * tenant_id-bearing table).
  */
 export const devicePairingCodes = pgTable(
   "device_pairing_codes",
@@ -193,4 +184,4 @@ export const devicePairingCodes = pgTable(
     // minting a consumable duplicate. tenant_id leads the key, so uniqueness is per-tenant.
     uniqueIndex("device_pairing_codes_lookup_idx").on(t.tenantId, t.codeSha256),
   ],
-).enableRLS();
+);

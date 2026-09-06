@@ -48,9 +48,10 @@ export async function dumpAtomic(
 // unit-tested via an injected inner, so only the pg_dump spawn itself is uncovered.
 /* v8 ignore start */
 const pgDumpShellOut: PgDumpRunner = async ({ databaseUrl, outFile, signal }) => {
-  // `--format=custom` so `pg_restore` can read it; the libpq connstring is the final positional arg.
-  // Deliberately NO `--enable-row-security`: the default `row_security=off` dumps every row, which is
-  // what a full backup needs (the privileged backup role, not the app pool's least-privileged one).
+  // `--format=custom` so `pg_restore` can read it; the libpq connstring is the final positional
+  // arg. Dump the whole database. The boot probe checks read access to the dump sources and
+  // migration journals; an ordinary reader with those effective grants can supply this
+  // connection.
   //
   // The connstring (with password) is passed as an argv, visible via `ps`/`/proc` for the dump's
   // lifetime. This is standard `pg_dump` usage, accepted on a single-operator appliance box where the

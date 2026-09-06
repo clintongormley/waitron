@@ -1,62 +1,27 @@
 import { sql } from "drizzle-orm";
 import type { Database, Transaction } from "./client.js";
 
-/**
- * Runs `fn` inside a transaction scoped to one tenant.
- *
- * The tenant id is bound as a PARAMETER, via set_config. The obvious
- * alternative does not exist:
- *
- *     SET LOCAL app.tenant_id = $1     -- syntax error
- *
- * SET is a utility statement, and Postgres only substitutes parameters into
- * optimisable statements (SELECT/INSERT/UPDATE/DELETE/VALUES). Preparing that
- * statement fails with `syntax error at or near "set"` — verified. The naive
- * repair is to interpolate the id into the string, which is an injection
- * vector in the one place in the system that must not have one, since it is
- * the value every tenancy decision is made from. set_config() is an ordinary
- * function call inside a SELECT, so it parameterises like anything else.
- *
- * The `true` third argument means "local to this transaction". Combined with
- * the transaction wrapper it is also what makes pooling safe: node-postgres
- * pins one client for the whole transaction() callback, so the GUC cannot leak
- * to another tenant's request, and it is discarded at commit.
- *
- * In the standalone deployment this collapses to a no-op in effect. The same
- * migrations run and the same policy is evaluated, but there is exactly one
- * tenant, so the predicate never excludes a row — and PGlite connects as
- * superuser, which bypasses RLS entirely. That is acceptable only because
- * standalone is single-tenant (spec §3), and it is precisely why the tests
- * must not rely on it. Rejected alternative: branching on a deployment mode
- * inside this function, which would mean the standalone path runs a code path
- * the cloud tests never exercise.
- *
- * `opts.nodeId` (optional, additive) threads the PRODUCING node's id into
- * `app.node_id`, using the identical set_config parameter binding as the tenant
- * id above — never string-interpolated. When supplied, a locally-originated
- * write to an enrolled table records this node in `sync_log.origin_id` (the
- * `sync_capture()` trigger reads `app.node_id`; unset defaults to the all-zero
- * uuid — packages/sync). Omitting it is byte-behaviourally identical to the
- * former three-argument signature: no `app.node_id` is set and capture falls
- * back to the all-zero origin. Proven both directions on real Postgres — a
- * node-aware write stamps `origin_id` with the id, a plain write leaves the
- * all-zero default (packages/sync/src/origin.gate.test.ts); the GUC is set,
- * left unset on the plain form, and transaction-local (tenancy.test.ts,
- * "app.node_id origin context"). Typed `string` so a branded `NodeId`
- * (@waitron/shared, a string subtype) passes without importing the brand.
- */
+/** The producing node is recorded by the sync capture triggers. */
 export interface TenantTxOptions {
   nodeId?: string;
 }
 
+/**
+ * Runs the caller's work in one transaction. One tenant per database is the isolation boundary
+ * (row-level security is gone), so the tenant needs no per-transaction binding: `tenantId` sets no
+ * GUC and is not read here. It is retained deliberately as a stable, explicit write-path parameter —
+ * the call surface every write path already threads. The optional `nodeId` sets the
+ * transaction-local `app.node_id` the sync capture triggers read, bound through set_config because
+ * SET utility statements do not accept bound parameters.
+ */
 export async function withTenant<T>(
   db: Database,
   tenantId: string,
   fn: (tx: Transaction) => Promise<T>,
   opts?: TenantTxOptions,
 ): Promise<T> {
+  void tenantId;
   return db.transaction(async (tx) => {
-    await tx.execute(sql`select set_config('app.tenant_id', ${tenantId}, true)`);
     if (opts?.nodeId !== undefined) {
       await tx.execute(sql`select set_config('app.node_id', ${opts.nodeId}, true)`);
     }

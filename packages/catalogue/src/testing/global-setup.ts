@@ -9,51 +9,44 @@ import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
  * a container per file. See the plan at
  * `docs/superpowers/plans/2026-08-19-shared-test-container.md`.
  *
- * One template, because the one real-PG suite here migrates exactly one set — CORE.
- * `@waitron/catalogue` owns no migrations of its own: the `catalogues`/`categories`/`products` tables
- * and their FORCE-RLS/grant lines live in `CORE_MIGRATIONS` (0026/0027), so `CORE_MIGRATIONS` is the
- * whole set and no cross-package ordering has to be stated; the now-removed per-file `startRealPostgres`
- * ran that same single set. `core` is the established key for a CORE-only template — packages/db,
- * apps/server and reporting all name theirs `core`. The one suite clones it with
- * `useTemplateDb({ template: "core" })`.
+ * **NOTHING IN THIS PACKAGE CURRENTLY CLONES IT.** The one suite that ever did was retired with the
+ * RLS drop: its isolation cases had no meaning under one tenant per database, and its grant cases
+ * are `catalogues`/`products: "SIU"` in the privilege matrix
+ * (`packages/fiscal-verifactu/src/privileges.expected.ts`). The wiring is left standing — and this
+ * package therefore still requires Docker — because whether @waitron/catalogue keeps a real-Postgres
+ * tier at all is the per-suite target review's call
+ * (docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md §4, "PGlite
+ * where RLS was the only reason"), not this one's. Deleting this file, its
+ * `vitest.config.ts` reference and `test:coverage`'s Docker dependency is a one-commit change
+ * whenever that is decided.
  *
- * ONE role, `rls_probe`, created ONCE here idempotently in place of the per-file `probeRole` that
- * `operations.rls.test.ts` passed to `useRealPostgres`. That suite connects AS it (`pg.connectAs`);
- * being non-superuser is what makes FORCE ROW LEVEL SECURITY apply to it, which is the whole point of
- * the suite. Roles are CLUSTER-global — a shared container is one cluster, and every suite clones its
- * own DATABASE from the template but shares that cluster's roles. It inherits `app_user`'s grants via
- * `inRole`; `app_user` exists by the time it runs because CORE's `0001_tenancy_rls.sql` creates it and
- * `startSharedContainer` runs `roles` AFTER the templates migrate.
+ * One template, because the suite that used to clone it migrated exactly one set — CORE.
+ * `@waitron/catalogue` owns no migrations of its own: the `catalogues`/`categories`/`products` tables
+ * and their grant lines live in `CORE_MIGRATIONS` (0026/0027), so `CORE_MIGRATIONS` is the whole set
+ * and no cross-package ordering has to be stated. `core` is the established key for a CORE-only
+ * template — packages/db, apps/server and reporting all name theirs `core`.
+ *
+ * No `roles`: the `rls_probe` login this file created existed for that one suite alone.
  *
  * A globalSetup's return value is its globalTeardown, so returning `teardown` stops the container
  * once the run finishes.
  *
  * Because globalSetup runs before every worker, a Docker-absent run dies HERE, taking the WHOLE
- * @waitron/catalogue suite (its PGlite-only and hermetic files included) with it, not only the real-PG
- * suite — a real broadening of what needs Docker, the same one db and apps/server accepted. What makes
- * it acceptable is not an assumption that every machine has Docker, but that this package's reason to
- * be in the real-PG tier at all needs Docker regardless: `operations.rls.test.ts` needs a non-superuser
- * role, which PGlite cannot provide (its every connection is a superuser and bypasses FORCE ROW LEVEL
- * SECURITY, the very tenant-isolation policies and SELECT/INSERT/UPDATE (no DELETE) grants it verifies).
- * CLAUDE.md §4 documents that this repo's real-Postgres test tier needs a local Docker daemon (plus
- * `TESTCONTAINERS_RYUK_DISABLED`); `dockerRequired` turns the raw testcontainers daemon error into that
- * guidance when Docker is absent.
+ * @waitron/catalogue suite (its PGlite-only and hermetic files included) with it. CLAUDE.md §4
+ * documents that this repo's real-Postgres test tier needs a local Docker daemon (plus
+ * `TESTCONTAINERS_RYUK_DISABLED`); `dockerRequired` turns the raw testcontainers daemon error into
+ * that guidance when Docker is absent.
  */
 export default async function ({ provide }: GlobalSetupContext) {
   const { handle, teardown } = await startSharedContainer({
     dockerRequired:
-      "@waitron/catalogue's real-Postgres suite requires a running Docker daemon. It cannot be " +
-      "skipped: PGlite's superuser bypasses row-level security, so it cannot exercise the " +
-      "tenant-isolation policies and the SELECT/INSERT/UPDATE (no DELETE) grants this suite exists " +
-      "to verify (see operations.rls.test.ts).",
+      "@waitron/catalogue's vitest globalSetup still boots a shared PostgreSQL container, so a " +
+      "running Docker daemon is required even though no suite here clones it any more. See this " +
+      "file's header: removing the tier is the per-suite target review's call — see " +
+      "docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md §4.",
     templates: {
       core: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS]),
     },
-    roles: [
-      // A non-superuser LOGIN role inheriting app_user's grants — being non-superuser is what makes
-      // FORCE ROW LEVEL SECURITY apply to it, which is the whole point of operations.rls.test.ts.
-      { name: "rls_probe", password: "probe", inRole: "app_user" },
-    ],
   });
   provide("sharedPg", handle);
   return teardown;

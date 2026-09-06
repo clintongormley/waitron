@@ -1,3 +1,6 @@
+import { beforeEach } from "vitest";
+import { CORE_MIGRATIONS } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { sql } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -11,11 +14,7 @@ export interface SeededVenue {
   locationId: string;
 }
 
-// Mirrors packages/catalogue/test/fixtures.ts's seedVenue: tenant + node come off @waitron/db's own
-// seeders (they own the NIF counter and the tenants/nodes inserts), this file adds the location db
-// has no seeder for. Run as the connection owner (superuser) — RLS is bypassed, so this is pure
-// setup. The recipe ingredient tests only read `tenantId`; `locationId` is kept for the product
-// seed and for recipe-composition tests in a later slice.
+// Seed tenant, location and node as the connection owner.
 export async function seedVenue(db: Database): Promise<SeededVenue> {
   const tenantId = await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
@@ -30,8 +29,8 @@ export async function seedVenue(db: Database): Promise<SeededVenue> {
 export async function seedProduct(db: Database, tenantId: TenantId): Promise<string> {
   return withTenant(db, tenantId, async (tx: Transaction) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, { name: "Deli" });
-    const p = await createProduct(tx, {
+    const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+    const p = await createProduct(tx, tenantId, {
       catalogueId: cat.id,
       categoryId: null,
       descriptions: { en: "bocadillo" },
@@ -41,4 +40,13 @@ export async function seedProduct(db: Database, tenantId: TenantId): Promise<str
     });
     return p.id;
   });
+}
+
+/** Share the migrated database; each ingredient case starts with empty ingredient tables. */
+export function useIngredientDb(): { readonly db: Database } {
+  const fx = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+  beforeEach(async () => {
+    await fx.db.execute(sql`truncate recipe_lines, ingredients`);
+  });
+  return fx;
 }

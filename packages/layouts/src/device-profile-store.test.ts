@@ -3,7 +3,7 @@ import { isAppError } from "@waitron/shared";
 import { translateWriteError } from "./device-profile-store.js";
 
 // The device-profile write/delete error translations, proven end to end against the real DB in
-// device-profile-store.rls.test.ts (real Postgres). Here we pin the translator's branches directly with
+// device-profile-store.pg.test.ts. Here we pin the translator's branches directly with
 // crafted errors — no DB — so every branch (incl. the two re-throw paths and BOTH referencing
 // constraints) is covered deterministically. `translateWriteError` is exported from
 // device-profile-store.ts for exactly this, not from the package barrel. Mirrors canvas-store.test.ts.

@@ -1,3 +1,4 @@
+// Real PostgreSQL: exercises onboarding through a PostgreSQL URL that opens its own connections.
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
@@ -44,17 +45,15 @@ describe("renderSetupEnvFile", () => {
   });
 });
 
-// Real Postgres, not PGlite: dev-onboard migrates and then decides venue-less vs venue-bearing
-// against a PERSISTED database — PGlite's per-connection superuser can't stand in for that. Requires
-// TESTCONTAINERS_RYUK_DISABLED=true locally (CLAUDE.md §4) or the container hooks hang to the timeout.
+// Real Postgres exercises dev-onboard's actual migration and inspection connections.
+// TESTCONTAINERS_RYUK_DISABLED=true is required locally (CLAUDE.md §4).
 describe("devOnboard against real Postgres", () => {
   // A BARE container (no-op migrate): devOnboard runs the migrations itself, exactly as a fresh dev DB.
   const suite = useRealPostgres({
     start: () =>
       startMigratedPostgres({
         dockerRequired:
-          "dev-onboard migrates a real Postgres and asserts the venue-less/venue-bearing decision " +
-          "against a persisted database; PGlite's per-connection superuser cannot exercise it.",
+          "dev-onboard requires Postgres for its migration and venue-inspection integration test.",
         migrate: async () => {
           /* devOnboard applies the full manifest itself — a bare container is the fresh-DB shape. */
         },
@@ -78,7 +77,7 @@ describe("devOnboard against real Postgres", () => {
   });
 
   async function tenantsCount(): Promise<number> {
-    // As the container superuser (RLS bypassed) — a raw count of every tenant, the exact fact
+    // Count every tenant through the container owner connection, the exact fact
     // inspectVenues keys the refuse decision on.
     const { rows } = await suite.admin.execute<{ n: number }>(
       sql`select count(*)::int as n from tenants`,
@@ -122,7 +121,7 @@ describe("devOnboard against real Postgres", () => {
   });
 
   it("refuses to touch a database that already holds a venue", async () => {
-    // Insert a bare tenant as the container superuser (RLS bypassed) — the exact condition
+    // Insert a bare tenant through the container owner connection, the exact condition
     // inspectVenues keys on (`exists(select 1 from tenants)`). A provisioned database is a TRADING
     // target, never a setup one, so dev-onboard must REFUSE rather than migrate/overwrite: turning a
     // box that holds a fiscal chain into a setup box is precisely what CLAUDE.md §5 forbids. Runs

@@ -1,3 +1,4 @@
+// Real PostgreSQL: exercises migrations through the node-postgres driver.
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

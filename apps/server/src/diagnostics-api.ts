@@ -52,12 +52,12 @@ const MAX_LIMIT = 1000;
 const DEFAULT_LIMIT = 200;
 
 /**
- * Mounts the dashboard's diagnostics routes on an existing Hono app: read the recent log tail, read the
- * current verbosity, and raise verbosity for a bounded window. All three are gated behind
- * `diagnostics.view` — `requireManagementSession` first (401 before any DB work), then
- * `authorizeManager` under `withTenant` + `asAppUser` so RLS scopes the gate to this dashboard's own
- * tenant, mirroring `mountManagementApi`'s layout-`GET` shape. Each handler is wrapped in the shared
- * `run` boundary so the whole surface maps errors identically.
+ * Mounts the dashboard's diagnostics routes on an existing Hono app: read the recent log tail,
+ * read the current verbosity, and raise verbosity for a bounded window. All three are gated
+ * behind `diagnostics.view` — `requireManagementSession` first (401 before any DB work), then
+ * `authorizeManager` under `withTenant` + `asAppUser` in the database holding this dashboard's
+ * tenant, mirroring `mountManagementApi`'s layout-`GET` shape. Each handler is wrapped in the
+ * shared `run` boundary so the whole surface maps errors identically.
  */
 export function mountDiagnosticsApi(app: Hono, deps: DiagnosticsApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "diagnostics.failed");

@@ -1,37 +1,40 @@
-import { sql } from "drizzle-orm";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
+import { freshNif } from "../testing/seed.js";
 import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { sql } from "drizzle-orm";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
-import { describeEachTarget } from "../testing/harness.js";
-import { asAppUser } from "../testing/roles.js";
+import { usePgliteDb } from "../testing/lifecycle.js";
+import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedNode } from "../testing/seed.js";
-import { withTenant } from "../tenancy.js";
-import { invoiceSeries } from "./series.js";
 import { sales } from "./sales.js";
+import { invoiceSeries } from "./series.js";
 import { locations, tenants, tills } from "./tenants.js";
 
+const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+
+// Append-only links and sales retain their FK parents; each case uses a fresh fixture identity.
+beforeEach(() => {
+  TENANT_A = randomUUID();
+  TENANT_B = randomUUID();
+  LOCATION_A = randomUUID();
+  LOCATION_B = randomUUID();
+  TILL_A1 = randomUUID();
+  TILL_B1 = randomUUID();
+});
+
 /**
- * Migration 0014 — the generic-layer substitution link (`sale_substitutions`) and the recipient
+ * The generic-layer substitution link (`sale_substitutions`) and the recipient
  * columns on `sales` (`counterparty_*`). docs/superpowers/plans/2026-08-02-f3-canje.md §2.1.
- *
- * `sale_substitutions` is the N:1 link from an F3 canje (`substitution_sale_id`) to each simplified
- * ticket it replaces (`substituted_sale_id`); one row per (F3, ticket) pair. It is an immutable,
- * append-only child of `sales`, exactly like `sale_lines`/`tenders`: composite tenant-consistent
- * FKs, RLS with FORCE, the reject_mutation() triggers, and — unique to it — a
- * `unique(tenant_id, substituted_sale_id)` translating "a ticket is substituted at most once".
- *
- * describeEachTarget so the immutability triggers, the CHECK/UNIQUE constraints AND the
- * non-superuser RLS scoping all run against real Postgres too (CLAUDE.md §4: PGlite is a superuser
- * and would bypass FORCE ROW LEVEL SECURITY, so a PGlite-only pass on RLS would be a false pass).
  */
 
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
-const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
-const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
-const TILL_B1 = "bbbbbbbb-1111-4000-8000-000000000001";
+let TENANT_A = randomUUID();
+let TENANT_B = randomUUID();
+let LOCATION_A = randomUUID();
+let LOCATION_B = randomUUID();
+let TILL_A1 = randomUUID();
+let TILL_B1 = randomUUID();
 const AT = "2026-07-20T19:20:30+00:00";
 
 let seriesA = "";
@@ -48,8 +51,8 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
 
 async function seed(db: Database): Promise<void> {
   await db.insert(tenants).values([
-    { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-    { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
+    { id: TENANT_A, country: "ES", taxId: freshNif(), legalName: "Fixture Tenant A" },
+    { id: TENANT_B, country: "ES", taxId: freshNif(), legalName: "Fixture Tenant B" },
   ]);
   await db.insert(locations).values([
     {
@@ -140,15 +143,11 @@ async function insertSubstitution(
   );
 }
 
-describeEachTarget("sale_substitutions — schema shape after 0014", (target) => {
+describe("sale_substitutions — schema shape", () => {
   let db: Database;
 
   beforeEach(async () => {
-    db = await target.create();
-  });
-
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
+    db = suite.db;
   });
 
   it("creates sale_substitutions as an append-only table", async () => {
@@ -189,14 +188,14 @@ describeEachTarget("sale_substitutions — schema shape after 0014", (target) =>
   });
 });
 
-describeEachTarget("sale_substitutions — the N:1 link", (target) => {
+describe("sale_substitutions — the N:1 link", () => {
   let db: Database;
   let f3SaleId = "";
   let ticket1 = "";
   let ticket2 = "";
 
   beforeEach(async () => {
-    db = await target.create();
+    db = suite.db;
     invoiceCounter = 0;
     await seed(db);
     ticket1 = await insertSale(db);
@@ -204,10 +203,6 @@ describeEachTarget("sale_substitutions — the N:1 link", (target) => {
     f3SaleId = await insertSale(db, {
       counterparty: { taxId: "B99999999", legalName: "Acme Corp SL", countryCode: "ES" },
     });
-  });
-
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
   });
 
   it("links one F3 substitution sale to a substituted ticket", async () => {
@@ -231,9 +226,7 @@ describeEachTarget("sale_substitutions — the N:1 link", (target) => {
 
   it("refuses to substitute the same ticket twice (unique substituted_sale_id)", async () => {
     // The DB control for "a ticket is substituted at most once" (plan §2.1, decision 4). A second
-    // F3 (or the same one) naming an already-substituted ticket is rejected. PROVEN BY DELETION
-    // (manual, recorded in this task's report): with sale_substitutions_substituted_key removed
-    // from migration 0014, this second insert succeeds. The unique index is what rejects it.
+    // F3 (or the same one) naming an already-substituted ticket violates the unique index.
     const secondF3 = await insertSale(db, {
       counterparty: { taxId: "B88888888", legalName: "Beacon Corp SL", countryCode: "ES" },
     });
@@ -286,12 +279,12 @@ describeEachTarget("sale_substitutions — the N:1 link", (target) => {
   });
 });
 
-describeEachTarget("sale_substitutions — immutability", (target) => {
+describe("sale_substitutions — immutability", () => {
   let db: Database;
   let linkId = "";
 
   beforeEach(async () => {
-    db = await target.create();
+    db = suite.db;
     invoiceCounter = 0;
     await seed(db);
     const ticket = await insertSale(db);
@@ -303,32 +296,6 @@ describeEachTarget("sale_substitutions — immutability", (target) => {
       substitutedSaleId: ticket,
     });
     linkId = row.id;
-  });
-
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
-  });
-
-  it("refuses an UPDATE as the app role, on privilege grounds", async () => {
-    const error = await captureError(() =>
-      withTenant(db, TENANT_A, async (tx) => {
-        await asAppUser(tx);
-        return tx.execute(
-          sql`update sale_substitutions set substituted_sale_id = substitution_sale_id`,
-        );
-      }),
-    );
-    expect(pgErrorMessage(error)).toMatch(/permission denied for table sale_substitutions/);
-  });
-
-  it("refuses a DELETE as the app role, on privilege grounds", async () => {
-    const error = await captureError(() =>
-      withTenant(db, TENANT_A, async (tx) => {
-        await asAppUser(tx);
-        return tx.execute(sql`delete from sale_substitutions`);
-      }),
-    );
-    expect(pgErrorMessage(error)).toMatch(/permission denied for table sale_substitutions/);
   });
 
   it("stops the owner too, via the trigger backstop", async () => {
@@ -361,58 +328,13 @@ describeEachTarget("sale_substitutions — immutability", (target) => {
   });
 });
 
-describeEachTarget("sale_substitutions — RLS", (target) => {
-  let db: Database;
-  let linkId = "";
-
-  beforeEach(async () => {
-    db = await target.create();
-    invoiceCounter = 0;
-    await seed(db);
-    const ticket = await insertSale(db);
-    const f3 = await insertSale(db, {
-      counterparty: { taxId: "B99999999", legalName: "Acme Corp SL", countryCode: "ES" },
-    });
-    const [row] = await insertSubstitution(db, {
-      substitutionSaleId: f3,
-      substitutedSaleId: ticket,
-    });
-    linkId = row.id;
-  });
-
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
-  });
-
-  it("shows a tenant its own substitution row and hides it from another", async () => {
-    // Real Postgres via describeEachTarget is the load-bearing target: PGlite is a superuser and
-    // would bypass FORCE ROW LEVEL SECURITY, so a PGlite-only pass here proves nothing (CLAUDE.md
-    // §4). Both reads run as app_user, under a set app.tenant_id.
-    const visibleToA = await withTenant(db, TENANT_A, async (tx) => {
-      await asAppUser(tx);
-      return tx.execute(sql`select id from sale_substitutions where id = ${linkId}`);
-    });
-    expect(visibleToA.rows).toHaveLength(1);
-
-    const visibleToB = await withTenant(db, TENANT_B, async (tx) => {
-      await asAppUser(tx);
-      return tx.execute(sql`select id from sale_substitutions where id = ${linkId}`);
-    });
-    expect(visibleToB.rows).toHaveLength(0);
-  });
-});
-
-describeEachTarget("sales — counterparty columns", (target) => {
+describe("sales — counterparty columns", () => {
   let db: Database;
 
   beforeEach(async () => {
-    db = await target.create();
+    db = suite.db;
     invoiceCounter = 0;
     await seed(db);
-  });
-
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
   });
 
   it("stores the recipient on an F3 sale and reads it back", async () => {

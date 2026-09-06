@@ -101,7 +101,7 @@ describe.runIf(dockerAvailable())("startSharedContainer against a real container
   beforeAll(async () => {
     // Two templates that BOTH run CORE, in one cluster: the second's `CREATE ROLE app_user` would
     // fail with "role already exists" if CORE were not idempotent (it guards on pg_roles — see
-    // drizzle/0001_tenancy_rls.sql). That this resolves at all is the proof it is idempotent.
+    // drizzle/0001_db_baseline_sql.sql). That this resolves at all is the proof it is idempotent.
     ({ handle, teardown } = await startSharedContainer({
       templates: {
         core: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS]),

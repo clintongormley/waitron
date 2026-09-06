@@ -27,14 +27,6 @@ import { locations, tenants } from "./tenants.js";
  * migration (the `kitchen_courses_tenant_id_key` UNIQUE below is that FK's target). No default-course
  * concept and no partial unique — unlike `kitchen_stations`, which needs exactly-one-default; a null
  * course simply fires earliest (spec §2b).
- *
- * Deactivate, never hard-delete (`active`): a `ticket_items.course_id` snapshot may reference a row,
- * so the config CRUD flips `active = false` rather than DELETE — and `app_user` holds no DELETE here
- * (the custom migration grants only SELECT/INSERT/UPDATE). `.enableRLS()` emits only ENABLE ROW LEVEL
- * SECURITY; the FORCE ROW LEVEL SECURITY, the `kitchen_courses_tenant_isolation` policy and the grant
- * are hand-written in the paired --custom migration, exactly as 0055 does for `kitchen_stations` and
- * 0052 for `floor_zones`. The `inmutabilidad` guard in packages/fiscal-verifactu scans every
- * tenant_id-bearing table for both RLS flags, so a missing FORCE here fails that suite.
  */
 export const kitchenCourses = pgTable(
   "kitchen_courses",
@@ -66,12 +58,10 @@ export const kitchenCourses = pgTable(
     unique("kitchen_courses_tenant_id_key").on(t.tenantId, t.id),
     // No two courses share a name within a venue.
     unique("kitchen_courses_name_key").on(t.tenantId, t.locationId, t.name),
-    // Tenant-consistent composite FK to the owning location: a course cannot point at a location of
-    // another tenant, independently of whether RLS is in force on this connection.
     foreignKey({
       columns: [t.tenantId, t.locationId],
       foreignColumns: [locations.tenantId, locations.id],
       name: "kitchen_courses_location_fk",
     }),
   ],
-).enableRLS();
+);

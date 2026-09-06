@@ -1,1 +1,0 @@
-CREATE INDEX "recipe_lines_ingredient_id_idx" ON "recipe_lines" USING btree ("ingredient_id");

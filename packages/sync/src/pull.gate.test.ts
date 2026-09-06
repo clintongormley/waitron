@@ -8,15 +8,9 @@ import { encodeBatch } from "./wire.js";
 import { syncPullOnce, type HttpClient } from "./pull.js";
 import type { SyncLogRow } from "./apply.js";
 
-// Real Postgres, not PGlite: syncPullOnce drives applyBatch under the non-superuser sync_applier role
-// (app_user + sync_tailer member) so FORCE RLS genuinely applies — PGlite (superuser) bypasses it, a
-// false pass (CLAUDE.md §4). The http seam is faked: this suite proves the client wiring (cursor read
-// → fetch → apply → cursor advance → idempotent redelivery), not the socket (that is Task 10's e2e).
-// The apply worker's role sync_applier — a LOGIN member of BOTH app_user (write the enrolled tables)
-// and sync_tailer (read sync_cursor) — is now created once in src/testing/global-setup.ts with both
-// memberships in its inRole array, shared across the gate suites: a shared cluster is one cluster, so
-// a per-file `create role` would collide on the second. Reached below with `connectAs("sync_applier",
-// "ap")`.
+// PostgreSQL exercises syncPullOnce through a non-superuser app_user member. PGlite's superuser
+// sessions cannot check the caller's grants. The HTTP seam is faked: this checks cursor read, fetch,
+// apply, cursor advance and idempotent redelivery. Global setup creates sync_applier once per cluster.
 const postgres = useTemplateDb({ template: "manifest" });
 
 const uuid = (): string => randomUUID();

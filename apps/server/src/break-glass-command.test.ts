@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { type Database, withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, verifyPassword } from "@waitron/identity";
@@ -7,10 +7,7 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import { runBreakGlassReset } from "./break-glass-command.js";
 import { ALL_MODULES } from "./modules.js";
 
-// Real Postgres, not PGlite: the reset writes `persons` under FORCE ROW LEVEL SECURITY as the
-// non-owner app role, and `withTenant` scoping that write is exactly what PGlite's superuser
-// connection cannot exercise (CLAUDE.md §4). The box's DATABASE_URL is the app_login/app_user
-// connection, so the test's `connect` returns an `app_login` pool — the same shape as production.
+// Exercise the reset through an app_login connection inheriting app_user on PostgreSQL.
 const LOCALE = "es-ES";
 const OLD_PASSWORD = "dashPass123"; // ≥ MIN_PASSWORD_LENGTH; the seeded admin's original password.
 const NEW_PASSWORD = "brandNewSecret"; // what break-glass sets.
@@ -81,7 +78,7 @@ async function readSoleAdminId(tenantId: string): Promise<string> {
   return withAppUserDb((db) =>
     withTenant(db, tenantId, async (tx) => {
       const rows = await tx.execute<{ id: string }>(
-        sql`select id from persons where role = 'admin'`,
+        sql`select id from persons where tenant_id = ${tenantId} and role = 'admin'`,
       );
       return rows.rows[0]!.id;
     }),
@@ -132,7 +129,7 @@ function baseEnv(tenantId: string, password: string | null = NEW_PASSWORD) {
   };
 }
 
-describe("runBreakGlassReset (real postgres, app role under FORCE RLS)", () => {
+describe("runBreakGlassReset (real postgres, app role)", () => {
   it("resets the admin's password: the new one verifies, the old one fails (login restored)", async () => {
     const { tenantId, adminId } = await setupTenant();
 
@@ -236,7 +233,7 @@ describe("runBreakGlassReset (real postgres, app role under FORCE RLS)", () => {
   });
 
   it("no admin for the tenant → returns 1, message names it", async () => {
-    // A tenant id with no venue: RLS scopes the select to it, and it has no persons.
+    // A tenant id with no provisioned venue.
     const emptyTenant = "22222222-2222-4222-8222-222222222222";
     const { code, out } = await run(baseEnv(emptyTenant));
     expect(code).toBe(1);
@@ -250,7 +247,7 @@ describe("runBreakGlassReset (real postgres, app role under FORCE RLS)", () => {
       withTenant(db, tenantId, async (tx) => {
         const rows = await tx.execute<{ id: string }>(sql`
           insert into persons (tenant_id, display_name, pin_hash, password_hash, role)
-          values (current_tenant_id(), 'Second Admin', ${hashPin("1234")}, ${hashPassword(OLD_PASSWORD)}, 'admin')
+          values (${tenantId}, 'Second Admin', ${hashPin("1234")}, ${hashPassword(OLD_PASSWORD)}, 'admin')
           returning id`);
         return rows.rows[0]!.id;
       }),
@@ -314,4 +311,10 @@ describe("runBreakGlassReset (real postgres, app role under FORCE RLS)", () => {
     const after = await readPerson(tenantId, adminId);
     expect(after!.passwordHash).toBe(before!.passwordHash);
   });
+});
+
+afterEach(async () => {
+  await suite.admin.execute(sql`delete from management_sessions`);
+  await suite.admin.execute(sql`delete from sessions`);
+  await suite.admin.execute(sql`delete from persons`);
 });

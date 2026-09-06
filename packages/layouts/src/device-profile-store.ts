@@ -15,13 +15,12 @@ import { validateCapabilities } from "./device-profile.js";
 /**
  * The list/get/create/update/delete service over `device_profiles` (design 2026-09-05 §5.1). MANY rows
  * per tenant, keyed by `id`, names unique per tenant. The twin of `canvas-store.ts`, sharing its
- * shape exactly — read that file's header for the (tx, …)-is-caller-scoped / no-GUC-set convention.
+ * shape exactly — read that file's header for the (tx, …)-is-caller-scoped convention.
  *
- * Every function takes a `(tx, …)` the CALLER has already scoped — the management routes open it with
- * `withTenant(deps.db, tenantId, …)` + `asAppUser(tx)`, so the app role's tenant-isolation policy
- * supplies `current_tenant_id()` and no function here sets a GUC. Proven under that exact shape in
- * `device-profile-store.rls.test.ts` (real Postgres — RLS as the app role is a false pass on PGlite,
- * CLAUDE.md §4).
+ * Every function takes the caller's transaction, opened with
+ * `withTenant(deps.db, tenantId, …)` + `asAppUser(tx)`. Exercised in
+ * `device-profile-store.pg.test.ts` (real Postgres, as a non-superuser `app_user` member — PGlite
+ * holds every grant, CLAUDE.md §4).
  *
  * The writers run, in order: (1) `authorizeManager(..., "till.configure")` — the write gate, before
  * any DB write, proven by-deletion in the suite; (2) `validateCapabilities` — fail-closed on an
@@ -120,7 +119,7 @@ export function translateWriteError(err: unknown): never {
   throw err;
 }
 
-/** All of the current tenant's device profiles, ordered by name. RLS scopes the read to the tenant. */
+/** All of the current tenant's device profiles, ordered by name. The tenant predicate scopes the read. */
 export async function listDeviceProfiles(
   tx: Transaction,
   tenantId: string,
@@ -182,7 +181,7 @@ export async function createDeviceProfile(
 
 /**
  * Replace a profile's name, canvas reference and capabilities in place, returning the stored row.
- * Manager/admin only (`till.configure`). An absent id (or another tenant's row, RLS-hidden) throws
+ * Manager/admin only (`till.configure`). An absent id (or another tenant's row, excluded by the tenant predicate) throws
  * `device_profile.not_found` — the by-id config-CRUD idiom `updateCanvas` uses, read back via
  * `.returning({ id })` so a PUT that matched zero rows is a 404, never a masked "saved" 204. A name
  * collision throws `device_profile.name_taken`, a bad canvas reference `device_profile.invalid`
@@ -228,7 +227,7 @@ export async function updateDeviceProfile(
 
 /**
  * Delete a device profile. Manager/admin only (`till.configure`). An absent id (or another tenant's
- * row, RLS-hidden) throws `device_profile.not_found`, read back via `.returning({ id })` — the same
+ * row, excluded by the tenant predicate) throws `device_profile.not_found`, read back via `.returning({ id })` — the same
  * by-id config-CRUD idiom `deleteCanvas` uses, so a DELETE that matched zero rows is a 404 rather than
  * a silent success. A device (or a pending pairing code) still referencing the profile (Task 5's
  * composite FKs, ON DELETE RESTRICT) trips a 23001 restrict_violation, which `translateWriteError`

@@ -62,21 +62,8 @@ export function validateAeatCert(cert: {
 }
 
 /**
- * Seal a LIVE ES-common venue's AEAT certificate into the `fiscal.aeat` vault purpose for `tenantId`.
- *
- * The cert's SHAPE is validated HERE, before the write, via `validateAeatCert` — the SAME check the
- * provision endpoint runs upfront (`setup-api.ts`'s `parseCert`), so a malformed `certKind`,
- * `pfxBase64` or `passphrase` is rejected with `setup.request_invalid` (naming the offending field,
- * never its value). Running it again here is deliberate DEFENSE-IN-DEPTH: on the endpoint path the
- * cert has already passed `validateAeatCert`, but a direct caller that skipped it must still not seal
- * a blob `putCredential`'s own `validatePayload` would wave through — `validatePayload` accepts any
- * non-empty `certKind` (a `"bogus"` value only fails far downstream when the drain picks a SOAP host)
- * and any non-empty `pfxBase64` (a non-base64 blob only fails at decode time). These belong to the
- * setup request's shape, so they surface a setup-request code, not a vault-internal one.
- *
- * The seal runs under `withTenant`: `tenant_credentials` is FORCE-RLS, so `putCredential` must
- * execute with `app.tenant_id` set (the row's WITH CHECK is `tenant_id = current_tenant_id()`), and
- * the tenant must already exist (the seal runs AFTER `applyVenue` mints it — the FK is `restrict`).
+ * Validate the AEAT certificate before sealing it into the fiscal.aeat vault purpose.
+ * The tenant must already exist for the credential foreign key.
  */
 export async function sealAeatCredential(
   db: Database,

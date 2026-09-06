@@ -9,9 +9,9 @@ import {
 } from "@waitron/db";
 import { createDeploymentHolders, refreshDeploymentHolders } from "./deployment-holders.js";
 
-// PGlite is sufficient here (CLAUDE.md §4): the refresh READS deployment (app_user holds SELECT — no
-// role/RLS behaviour under test), and there is no concurrency. The owner-vs-app WRITE distinction is
-// exercised by the real-PG booted e2e (Task 4), where it actually matters.
+// PGlite is sufficient here (CLAUDE.md §4): the refresh READS deployment (app_user holds SELECT —
+// no role behaviour under test), and there is no concurrency. The owner-vs-app WRITE distinction
+// is exercised by the real-PG booted e2e (Task 4), where it actually matters.
 describe("refreshDeploymentHolders", () => {
   it("re-reads both axes from the database into the holder", async () => {
     const db = await createPgliteDb();

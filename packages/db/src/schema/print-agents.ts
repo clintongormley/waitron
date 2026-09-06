@@ -19,11 +19,6 @@ import { locations, tenants } from "./tenants.js";
  * a `print_jobs` history and `printers` bindings reference an agent — so `app_user` holds
  * SELECT/INSERT/UPDATE and no DELETE, exactly the `devices` shape, granted in the paired --custom
  * migration. `enrolled_at` is the creation stamp (there is no separate `created_at`, matching §2a).
- *
- * `.enableRLS()` emits only ENABLE ROW LEVEL SECURITY. The FORCE ROW LEVEL SECURITY, the
- * `print_agents_tenant_isolation` policy and the grant are hand-written in the paired --custom
- * migration, exactly as 0061 does for `devices`. The `inmutabilidad` guard in packages/fiscal-verifactu
- * scans every tenant_id-bearing table for both RLS flags, so a missing FORCE here fails that suite.
  */
 export const printAgents = pgTable(
   "print_agents",
@@ -58,7 +53,7 @@ export const printAgents = pgTable(
     // (tenant_id, agent_id) FK points at (printers.ts), the same role devices_tenant_id_key plays.
     unique("print_agents_tenant_id_key").on(t.tenantId, t.id),
   ],
-).enableRLS();
+);
 
 /**
  * A short-lived, single-use PAIRING CODE for print-agent enrolment (§2a). An admin mints one (the
@@ -76,10 +71,6 @@ export const printAgents = pgTable(
  * used for lookup). The `(tenant_id, code_sha256)` UNIQUE index is that redemption path — UNIQUE, not
  * plain, for the same single-use reason `device_pairing_codes_lookup_idx` gives. `label` is the name
  * to stamp on the enrolled agent.
- *
- * `.enableRLS()` emits only ENABLE; FORCE + the `print_agent_pairing_codes_tenant_isolation` policy +
- * the grant are hand-written in the --custom migration (inmutabilidad requires FORCE on every
- * tenant_id-bearing table).
  */
 export const printAgentPairingCodes = pgTable(
   "print_agent_pairing_codes",
@@ -120,4 +111,4 @@ export const printAgentPairingCodes = pgTable(
     // practice — no retry path hangs off it. tenant_id leads the key, so uniqueness is per-tenant.
     uniqueIndex("print_agent_pairing_codes_lookup_idx").on(t.tenantId, t.codeSha256),
   ],
-).enableRLS();
+);

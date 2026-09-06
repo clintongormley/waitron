@@ -9,11 +9,10 @@ import { validateThemeOverride } from "./theme.js";
  * The get/put service over `tenant_themes` (design §4/§9, SP-A.2 §16.3). ONE row per tenant, keyed on
  * `tenant_id`, which doubles as the `ON CONFLICT` target — the `putReceipt` shape.
  *
- * Every function takes a `(tx, …)` the CALLER has already scoped — the management routes open it with
- * `withTenant(deps.db, tenantId, …)` + `asAppUser(tx)`, so the app role's tenant-isolation policy
- * supplies `current_tenant_id()` and no function here sets a GUC. Proven under that exact shape in
- * `theme-store.rls.test.ts` (real Postgres — RLS as the app role is a false pass on PGlite,
- * CLAUDE.md §4).
+ * Every function takes the caller's transaction, opened with
+ * `withTenant(deps.db, tenantId, …)` + `asAppUser(tx)`. Exercised in
+ * `theme-store.test.ts` (real Postgres, as a non-superuser `app_user` member — PGlite holds every
+ * grant, CLAUDE.md §4).
  *
  * `putTenantTheme` runs, in order: (1) `authorizeManager(..., "till.configure")` — the write gate,
  * before any DB write, proven by-deletion in the suite; (2) `validateThemeOverride` — fail-closed on

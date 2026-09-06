@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import { captureError, pgErrorCode, CORE_ENROLMENT } from "@waitron/db";
+import { captureError, CORE_ENROLMENT } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_ENROLMENT } from "@waitron/identity";
@@ -87,18 +87,10 @@ const NON_CORE_ENROLMENT: readonly EnrolledTable[] = [
 // loop's dispatch WeakMap (keyed on the array reference) builds its map a single time across this suite.
 const ENROLMENT: readonly EnrolledTable[] = [...CORE_ENROLMENT, ...NON_CORE_ENROLMENT];
 
-// Real Postgres, not PGlite: this suite proves the apply loop under a genuine non-superuser,
-// non-BYPASSRLS role, so FORCE ROW LEVEL SECURITY's WITH CHECK actually fences each write to its
-// own tenant — PGlite connects as a superuser and bypasses all of it, a false pass (CLAUDE.md §4).
-// The whole migration manifest runs (including `sync` last), so the container carries sync_log +
-// sync_cursor + sync_capture + the 22 capture triggers over the enrolled tables
-// (17 commercial+dining + 2 identity-config + 3 kitchen KDS).
-// The apply worker's role sync_applier — a LOGIN member of BOTH app_user (INSERT/UPDATE/DELETE on the
-// enrolled tables) AND sync_tailer (SELECT/INSERT/UPDATE on sync_cursor), the sanctioned path that
-// never widens app_user to reach sync_cursor (spec §7; CLAUDE.md §3), non-superuser so FORCE RLS
-// genuinely applies — is now created once in src/testing/global-setup.ts with both memberships in its
-// inRole array, shared across the gate suites: a shared cluster is one cluster, so a per-file `create
-// role` would collide on the second. Reached below with `connectAs("sync_applier", "ap")`.
+// PostgreSQL exercises apply through a non-superuser app_user member, including enrolled-table
+// writes, capture suppression and cursor updates. PGlite's superuser sessions cannot check the
+// caller's grants. The shared template includes every enrolled table and capture trigger, and
+// global setup creates sync_applier once per cluster.
 const postgres = useTemplateDb({ template: "manifest" });
 
 const uuid = (): string => randomUUID();
@@ -121,7 +113,7 @@ interface Base {
 }
 
 /** Seeds a tenant plus the reference parents an enrolled commercial row references — location, till,
- * node, catalogue — as the superuser admin (RLS bypassed; pure setup). English fixture values
+ * node, catalogue — as the superuser admin (fixture setup). English fixture values
  * throughout: packages/sync/src is inside the english-only guard (CLAUDE.md §3). */
 async function seedBase(): Promise<Base> {
   const admin = postgres.admin;
@@ -412,7 +404,7 @@ function ticketItemImage(b: Base, over: Image = {}): Image {
   };
 }
 
-// Admin (RLS-bypassing) read-backs of the mirror's actual stored state.
+// Admin read-backs of the mirror's actual stored state.
 async function scalar(query: ReturnType<typeof sql>): Promise<string | null> {
   const r = await postgres.admin.execute<{ v: string | null }>(query);
   return r.rows[0]?.v ?? null;
@@ -433,7 +425,7 @@ const woStatus = (id: string) =>
   scalar(sql`select status as v from working_orders where id = ${id}`);
 
 /** Reads one lane's cursor for (subscriber, origin), or 0n when absent — the admin read-back. With
- * the 0002 lane split each (subscriber, origin) has up to two cursor rows, so a lane must be named. */
+ * separate lanes each (subscriber, origin) can have two cursor rows, so a lane must be named. */
 async function laneCursor(subscriberId: string, originId: string, lane: string): Promise<bigint> {
   const r = await postgres.admin.execute<{ seq: string | null }>(
     sql`select last_applied_seq::text as seq from sync_cursor
@@ -865,11 +857,10 @@ describe("the commercial-lane apply loop", () => {
     }
   });
 
-  it("applies verbatim under the app role and the FORCE-RLS WITH CHECK rejects a cross-tenant row", async () => {
+  it("applies verbatim numeric and jsonb values under app_user", async () => {
     await setEnv("production");
     const mirror = await seedBase(); // tenant B — the applying scope
     const seriesId = await seedSeries(mirror);
-    const other = await seedBase(); // tenant A — the WRONG scope
     const originId = uuid();
     const subscriberId = uuid();
     const applier = await postgres.pg.connectAs("sync_applier", "ap");
@@ -902,31 +893,6 @@ describe("the commercial-lane apply loop", () => {
       }>(sql`select total::text as total, vat_breakdown as vat from sales where id = ${saleId}`);
       expect(rb.rows[0]!.total).toBe("123.45"); // numeric round-trips to the exact string
       expect(rb.rows[0]!.vat).toEqual([{ rate: "21.00", base: "102.02", tax: "21.43" }]); // jsonb exact
-
-      // Cross-tenant: rowImage.tenant_id is B (all its FKs valid), but the SyncLogRow.tenantId is A,
-      // so apply opens withTenant(A). current_tenant_id() = A, jsonb_populate_record makes tenant_id
-      // = B, and the FORCE-RLS WITH CHECK (tenant_id = current_tenant_id()) rejects it with 42501.
-      // The image is otherwise FK-valid, so 42501 is the ONLY reason it fails (not a 23503), and
-      // applyBatch does not defer a 42501 — it propagates. Nothing lands.
-      const crossImg = saleImage(mirror, seriesId, 2);
-      const err = await captureError(() =>
-        applyBatch(
-          applier,
-          [
-            {
-              seq: 1n,
-              originId: uuid(),
-              table: "sales",
-              op: "insert",
-              tenantId: other.tenantId,
-              rowImage: wire(crossImg),
-            },
-          ],
-          { subscriberId: uuid(), ...PROD },
-        ),
-      );
-      expect(pgErrorCode(err)).toBe("42501");
-      expect(await saleCount(crossImg.id as string)).toBe("0");
     } finally {
       await applier.close();
     }
@@ -1331,13 +1297,13 @@ describe("C1 — the dining_tables FK-closure enrolment (the ordered-lane hard g
     }
   });
 
-  it("replicates a settle's status clear: the working_orders→dining_tables cascade (0050) applies and echo-suppresses", async () => {
+  it("replicates a settle's status clear: the working_orders→dining_tables cascade applies and echo-suppresses", async () => {
     // Models the REAL source→mirror flow for a tab settling on a laid-out floor. On the SOURCE a single
     // settle UPDATE of the working_order fires working_orders_clear_table_status
-    // (packages/db/drizzle/0050_clear_table_status_trigger.sql:48-52 — AFTER UPDATE, NOT gated on
+    // (packages/db/drizzle/0001_db_baseline_sql.sql:389-393 — AFTER UPDATE, NOT gated on
     // app.sync_apply), which cascades `UPDATE dining_tables SET status_id = NULL WHERE tab_id = NEW.id`
-    // (0050:40-43). Because working_orders_capture fires before working_orders_clear_table_status
-    // (alphabetical trigger order), the source captures BOTH — a working_orders UPDATE (status=settled)
+    // (0001_db_baseline_sql.sql:381-384). Because working_orders_capture fires before
+    // working_orders_clear_table_status (alphabetical trigger order), the source captures BOTH — a working_orders UPDATE (status=settled)
     // at the LOWER seq and the cascaded dining_tables UPDATE (status_id=NULL) at the higher. This asserts
     // a DR mirror converges on applying that batch.
     //
@@ -1587,12 +1553,12 @@ describe("kitchen-sync enrolment (the ordered-lane gate)", () => {
   });
 });
 
-describe("apply lands identity config under FORCE RLS (spec §3/§4)", () => {
+describe("apply lands identity config as app_user (spec §3/§4)", () => {
   it("applies a persons row as app_user, seq-cursor idempotent", async () => {
     await setEnv("preproduction");
     const tenantId = await seedTenant(postgres.admin);
     // Mint the exact row_image the capture trigger would write, then remove the row so apply re-creates
-    // it — proving the app-role apply writes into a FORCE-RLS table (native logical apply cannot).
+    // it, checking that app-role apply restores the captured image.
     const seeded = await postgres.admin.execute<{ id: string; img: string }>(sql`
       with ins as (
         insert into persons (tenant_id, display_name, pin_hash, role)
@@ -1626,7 +1592,7 @@ describe("apply lands identity config under FORCE RLS (spec §3/§4)", () => {
       const landed = await scalar(
         sql`select count(*)::text as v from persons where id = ${personId} and tenant_id = ${tenantId}`,
       );
-      expect(landed).toBe("1"); // the app role wrote into the FORCE-RLS table
+      expect(landed).toBe("1"); // the app role restored the captured person
 
       // Re-deliver the SAME seq: skipped by the cursor (null-watermark idempotency rests on the seq
       // cursor, NOT ON CONFLICT — an unconditional upsert would otherwise re-run). applied = 0.
@@ -1688,46 +1654,6 @@ describe("apply lands identity config under FORCE RLS (spec §3/§4)", () => {
         sql`select count(*)::text as v from webauthn_credentials where id = ${credId}`,
       );
       expect(remaining).toBe("0");
-    } finally {
-      await applier.close();
-    }
-  });
-
-  it("refuses a persons row_image whose tenant_id differs from the batch tenant (WITH CHECK fence)", async () => {
-    // The FORCE-RLS WITH CHECK holds under the app role (CLAUDE.md §4): a row claiming tenant B applied
-    // under tenant A is a 42501, which propagates (not a 23503 defer) — it never lands. Mirrors
-    // apply.gate.test.ts's existing cross-tenant fence test.
-    await setEnv("preproduction");
-    const a = await seedTenant(postgres.admin);
-    const b = await seedTenant(postgres.admin);
-    const seeded = await postgres.admin.execute<{ id: string; img: string }>(sql`
-      with ins as (
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${b}, 'Mallory', 'hash', 'staff') returning *
-      ) select id::text as id, to_jsonb(ins.*)::text as img from ins`);
-    await postgres.admin.execute(sql`delete from persons where id = ${seeded.rows[0]!.id}`);
-    // Claim it belongs to tenant A (the batch tenant) though the image carries tenant B.
-    const row: SyncLogRow = {
-      seq: 1n,
-      originId: uuid(),
-      table: "persons",
-      op: "insert",
-      tenantId: a,
-      rowImage: seeded.rows[0]!.img,
-    };
-    const applier = await postgres.pg.connectAs("sync_applier", "ap");
-    try {
-      const err = await captureError(() =>
-        applyBatch(applier, [row], {
-          subscriberId: uuid(),
-          localEnvironment: "preproduction",
-          sourceEnvironment: "preproduction",
-          enrolments: ENROLMENT,
-          subscriberModuleVersions: {},
-          moduleByTable: new Map<string, string>(),
-        }),
-      );
-      expect(pgErrorCode(err)).toBe("42501");
     } finally {
       await applier.close();
     }

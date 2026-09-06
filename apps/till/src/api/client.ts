@@ -1331,11 +1331,12 @@ export class TillApi {
   }
 
   /**
-   * Place a working order (7c, design §3) → `POST /api/working-orders/:id/place`. `open → placed`:
-   * freezes the order's composition and opens its amendment log; for Mode I also files a deferred
-   * (unpaid) chained invoice and returns its number, issue time, total, QR and VAT breakdown. A
-   * non-open id (already placed/settled/abandoned, or absent/foreign — RLS hides it) rejects with
-   * `{ code: "working_order.not_open" }`.
+   * The deployment holds one tenant per database. Place a working order (7c, design §3) → `POST
+   * /api/working-orders/:id/place`. `open → placed`: freezes the order's composition and opens
+   * its amendment log; for Mode I also files a deferred (unpaid) chained invoice and returns its
+   * number, issue time, total, QR and VAT breakdown. A non-open id (already
+   * placed/settled/abandoned, or absent from this database) rejects with `{ code:
+   * "working_order.not_open" }`.
    */
   placeOrder(id: string): Promise<PlaceOrderResult> {
     return this.#request<PlaceOrderResult>(`/api/working-orders/${id}/place`, "POST");

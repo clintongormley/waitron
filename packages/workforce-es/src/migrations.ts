@@ -10,8 +10,7 @@ import { fileURLToPath } from "node:url";
  * isolated from the workforce and fiscal sequences: journals never collide, so the lanes run in
  * parallel with no shared bookkeeping. Registered in packages/migrations/migrations.manifest.json
  * AFTER `workforce`, BEFORE `fiscal` — `convenio_config` FKs only core `tenants`/`locations`, so it
- * needs no ordering after `workforce`'s own tables, and keeping `credentials` last preserves the
- * provisioning RLS test's `last.name === "credentials"` assertion.
+ * needs no ordering after `workforce`'s own tables.
  */
 export const WORKFORCE_ES_MIGRATIONS = {
   migrationsFolder: fileURLToPath(new URL("../drizzle", import.meta.url)),

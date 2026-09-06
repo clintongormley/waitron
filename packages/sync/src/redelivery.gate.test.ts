@@ -6,15 +6,9 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { applyBatch } from "./apply.js";
 
-// Real Postgres, not PGlite: the redelivery guard proof needs the apply loop under a genuine
-// non-superuser, non-BYPASSRLS role (FORCE RLS actually fences it) and the real business BEFORE
-// triggers that migration 0037 gates — PGlite bypasses all of it, a false pass (CLAUDE.md §4). The
-// whole manifest runs (0037 included, `sync` last), so the container carries the gated triggers.
-// The apply worker's role sync_applier — a LOGIN member of BOTH app_user AND sync_tailer, the
-// sanctioned path (spec §7; CLAUDE.md §3, never widen app_user to reach sync_cursor) — is now created
-// once in src/testing/global-setup.ts with both memberships in its inRole array, shared across the
-// gate suites: a shared cluster is one cluster, so a per-file `create role` would collide on the
-// second. Reached below with `connectAs("sync_applier", "ap")`.
+// PostgreSQL exercises redelivery through a non-superuser app_user member and the real business
+// BEFORE triggers gated on app.sync_apply. PGlite's superuser sessions cannot check the caller's
+// grants. The shared template includes these triggers; global setup creates sync_applier once.
 const postgres = useTemplateDb({ template: "manifest" });
 
 const uuid = (): string => randomUUID();
@@ -36,7 +30,7 @@ interface Base {
 }
 
 /** Seeds a tenant plus the reference parents an enrolled commercial row references — location, till,
- * node, catalogue — as the superuser admin (RLS bypassed; pure setup). English fixtures throughout:
+ * node, catalogue — as the superuser admin (fixture setup). English fixtures throughout:
  * packages/sync/src is inside the english-only guard (CLAUDE.md §3). */
 async function seedBase(): Promise<Base> {
   const admin = postgres.admin;
@@ -153,7 +147,7 @@ describe("redelivery does not wedge the stream: business BEFORE-triggers are gat
     try {
       const sale = saleImage(b, seriesId, 1, { total: "10.00" });
       const saleId = sale.id as string;
-      // tenders columns (0005_sales.sql:47-55 + 0012:9 tip_amount): id, tenant_id, sale_id, method
+      // tenders columns: id, tenant_id, sale_id, method
       // (tender_method enum — 'cash' is valid), amount, settled_at (NOT NULL, no default), tip_amount.
       const tender = {
         id: uuid(),

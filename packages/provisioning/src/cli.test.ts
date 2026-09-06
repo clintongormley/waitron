@@ -98,7 +98,6 @@ function facts(overrides: Partial<RoleFacts> = {}): RoleFacts {
     canLogin: true,
     createRole: false,
     superuser: false,
-    bypassRls: false,
     memberOf: ["app_user"],
     ...overrides,
   };
@@ -119,7 +118,6 @@ const PROVISIONED = stateOf({
   roles: {
     waitron_migrator: facts({ createRole: true }),
     waitron_app: facts(),
-    waitron_provisioner: facts({ memberOf: ["app_user", "tenant_provisioner"] }),
   },
   inside: { migratedSets: manifestSets().map((set) => set.name), stamp: "preproduction" },
 });
@@ -137,6 +135,7 @@ interface Harness {
   readState: ReturnType<typeof vi.fn>;
   applyVenue: ReturnType<typeof vi.fn>;
   readEnvironment: ReturnType<typeof vi.fn>;
+  readTenants: ReturnType<typeof vi.fn>;
   connect: ReturnType<typeof vi.fn>;
   closes: () => number;
 }
@@ -151,6 +150,7 @@ function harness(
     readState?: () => Promise<InstanceState>;
     applyVenue?: CliDeps["applyVenue"];
     readEnvironment?: () => Promise<DeploymentEnvironment | null>;
+    readTenants?: () => Promise<{ country: string; taxId: string }[]>;
   } = {},
 ): Harness {
   const lines: string[] = [];
@@ -171,6 +171,9 @@ function harness(
   const readEnvironment = vi.fn(
     options.readEnvironment ?? (async () => "preproduction" as DeploymentEnvironment),
   );
+  // Empty by default: a fresh, single-tenant database, so the foreign-tenant guard proceeds. Tests
+  // exercising the refusal supply an existing identity.
+  const readTenants = vi.fn(options.readTenants ?? (async () => []));
 
   return {
     lines,
@@ -182,6 +185,7 @@ function harness(
     readState,
     applyVenue,
     readEnvironment,
+    readTenants,
     connect,
     deps: {
       io: {
@@ -205,6 +209,7 @@ function harness(
       applyVenue: applyVenue as unknown as CliDeps["applyVenue"],
       modules: MODULES,
       readEnvironment: readEnvironment as unknown as CliDeps["readEnvironment"],
+      readTenants: readTenants as unknown as CliDeps["readTenants"],
     },
   };
 }
@@ -494,7 +499,7 @@ describe("runCli instance", () => {
 
     const transcript = h.lines.join("\n");
     const uris = printedUris(h.lines);
-    expect(uris).toHaveLength(3);
+    expect(uris).toHaveLength(2);
     for (const uri of uris) {
       const password = new URL(uri).password;
       expect(password).not.toBe("");
@@ -512,7 +517,7 @@ describe("runCli instance", () => {
     ).toBe(0);
     expect(h.apply).toHaveBeenCalledTimes(1);
     // The acknowledgement of the printed connection strings is NOT the plan confirmation, and
-    // --yes does not skip it: three passwords are about to be wiped off the screen.
+    // --yes does not skip it: two passwords are about to be wiped off the screen.
     expect(h.asked.join(" ")).not.toMatch(/apply/i);
   });
 
@@ -535,7 +540,6 @@ describe("runCli instance", () => {
     expect(uris.map((uri) => new URL(uri).username).sort()).toEqual([
       "waitron_app",
       "waitron_migrator",
-      "waitron_provisioner",
     ]);
     // The target database, not the admin's own: a connection string that pointed at `postgres`
     // would be one the host cannot boot on.
@@ -546,7 +550,7 @@ describe("runCli instance", () => {
 
   it("waits for the operator before clearing the connection strings away", async () => {
     // The mutant this rules out is real, not hypothetical: the first draft of `reportRoles` ended
-    // with `void deps.io.prompt(...).then(() => clearScreen())`, which wipes three unrecoverable
+    // with `void deps.io.prompt(...).then(() => clearScreen())`, which wipes two unrecoverable
     // passwords off the screen before the operator has copied them. A test that only checked
     // "clearScreen was called once" passes against that draft — the marker order is identical,
     // because both are pushed before any await boundary. Holding the answer open is what
@@ -602,7 +606,6 @@ describe("runCli instance", () => {
     expect(printedUris(h.lines)).toEqual([]);
     expect(printed).toMatch(/waitron_migrator.*already exist/i);
     expect(printed).toMatch(/waitron_app.*already exist/i);
-    expect(printed).toMatch(/waitron_provisioner.*already exist/i);
     // Nothing secret was printed, so there is nothing to wipe — and wiping would take the plan
     // summary with it for no reason.
     expect(h.cleared()).toBe(0);
@@ -639,7 +642,7 @@ describe("runCli instance", () => {
   });
 
   it("does not warn about connection strings when the run will print some", async () => {
-    // The negative control: on a first provision all three roles are created, so the warning would
+    // The negative control: on a first provision both roles are created, so the warning would
     // be false. Without this, a version that printed it unconditionally passes the test above.
     const h = harness({ answers: ["n"], env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
     await runCli(["instance", "--database", DATABASE, "--environment", "preproduction"], h.deps);
@@ -654,7 +657,7 @@ describe("runCli instance", () => {
       databaseExists: true,
       roles: {
         ...PROVISIONED.roles,
-        waitron_provisioner: facts({ memberOf: ["app_user"] }),
+        waitron_app: facts({ memberOf: [] }),
       },
       inside: PROVISIONED.inside,
     });
@@ -664,7 +667,7 @@ describe("runCli instance", () => {
       env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
     });
     await runCli(["instance", "--database", DATABASE, "--environment", "preproduction"], h.deps);
-    expect(h.lines.join("\n")).toContain("grant tenant_provisioner to waitron_provisioner");
+    expect(h.lines.join("\n")).toContain("grant app_user to waitron_app");
   });
 
   it("opens a connection to the target database only when it already exists", async () => {
@@ -744,23 +747,20 @@ describe("runCli instance", () => {
     // NAMED, not described. `created` is in scope at the point this is printed and holds exactly
     // the roles this run minted, so telling the operator to run `status` and work out which
     // `waitron_*` roles to drop asked them to re-derive something already on hand — and to do it
-    // under the one condition where the tool has just failed. BLANK is the fixture, so all three
+    // under the one condition where the tool has just failed. BLANK is the fixture, so both
     // were created.
     expect(printed).toContain("DROP ROLE waitron_migrator");
     expect(printed).toContain("DROP ROLE waitron_app");
-    expect(printed).toContain("DROP ROLE waitron_provisioner");
     expect(printedUris(h.lines)).toEqual([]);
   });
 
   it("names only the roles THIS run created, not every role the deployment has", async () => {
-    // The drifted fixture creates one role and leaves two alone. Naming all three would send the
-    // operator to drop two roles whose passwords this tool never generated and whose owners are
-    // still using them — strictly worse than the vague advice this replaced.
+    // The drifted fixture creates one role and leaves the other alone. Naming both would send the
+    // operator to drop a role whose password this tool never generated and whose owner still uses it.
     const drifted = stateOf({
       databaseExists: true,
       roles: {
         waitron_migrator: facts({ createRole: true }),
-        waitron_app: facts(),
       },
       inside: PROVISIONED.inside,
     });
@@ -780,9 +780,8 @@ describe("runCli instance", () => {
     ).toBe(1);
 
     const printed = h.lines.join("\n");
-    expect(printed).toContain("DROP ROLE waitron_provisioner");
     expect(printed).not.toContain("DROP ROLE waitron_migrator");
-    expect(printed).not.toContain("DROP ROLE waitron_app");
+    expect(printed).toContain("DROP ROLE waitron_app");
   });
 
   it("hands the apply an openTarget pointing at the target database, not the admin's own", async () => {
@@ -1069,8 +1068,7 @@ describe("runCli venue", () => {
     expect(h.askedSecretly).toEqual([]);
 
     // `withVenueState` re-points the admin URI at the target database and hands THAT connection to
-    // the apply — not the admin's own database, where every insert would land under the wrong RLS
-    // scope, and not a second dial of it.
+    // the apply. Every insert must reach that database through the same connection.
     expect(h.connect).toHaveBeenCalledTimes(1);
     expect(h.connect).toHaveBeenCalledWith(
       "postgres://admin:adminsecret@db.example:5432/waitron_demo",
@@ -1236,6 +1234,42 @@ describe("runCli venue", () => {
     expect(h.readEnvironment).toHaveBeenCalledTimes(1);
     expect(h.applyVenue).not.toHaveBeenCalled();
     expect(h.closes()).toBe(1);
+  });
+
+  it("refuses a SECOND, DIFFERENT fiscal identity in the same database, before applying (§5)", async () => {
+    // One tenant per database is the post-RLS isolation boundary: this branch dropped row-level
+    // security, so `withTenant` no longer filters by tenant and a second obligado would leak one
+    // business's rows to the other. `venue` is one of the two production tenant-creation paths (the
+    // setup-api `provisionVenue` is the other), and both call the shared `assertNoForeignTenant`:
+    // each reads the existing `(country, tax_id)` set and refuses any identity but the one present. Here
+    // the database already holds ES/B99999999 while the request is ES/B12345678 (VENUE_ARGS), so the
+    // apply is refused — never reached — leaving no second tenant.
+    const h = harness({
+      env: VENUE_ENV,
+      readTenants: async () => [{ country: "ES", taxId: "B99999999" }],
+    });
+    const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
+    expect(code).toBe(1);
+    expect(h.lines.join("\n")).toContain('provisioning.foreign_tenant {"database":"waitron_demo"}');
+    // The identities were read — that is how the foreign obligado was learnt — and nothing was
+    // applied: no second tenant can be written.
+    expect(h.readTenants).toHaveBeenCalledTimes(1);
+    expect(h.applyVenue).not.toHaveBeenCalled();
+    expect(h.closes()).toBe(1);
+  });
+
+  it("re-provisions when the SAME fiscal identity is already present (D8 second shop)", async () => {
+    // The guard refuses only a FOREIGN identity, never an idempotent re-run: a database already
+    // holding ES/B12345678 (the VENUE_ARGS identity) proceeds to apply, where `applyVenue`'s
+    // `ON CONFLICT DO NOTHING` reuses the obligado and adds a shop.
+    const h = harness({
+      env: VENUE_ENV,
+      readTenants: async () => [{ country: "ES", taxId: "B12345678" }],
+    });
+    const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
+    expect(code).toBe(0);
+    expect(h.readTenants).toHaveBeenCalledTimes(1);
+    expect(h.applyVenue).toHaveBeenCalledTimes(1);
   });
 
   it("refuses a country that is not two ASCII letters, before connecting", async () => {

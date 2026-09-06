@@ -3,13 +3,10 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 export default defineConfig({
   test: {
     globals: true,
-    // globalSetup boots ONE shared Postgres container and migrates the `manifest` template every
-    // real-PG suite clones (~26ms) instead of each file booting and migrating its own (~1.5s). See
-    // src/testing/global-setup.ts. Because it precedes every worker, a Docker-absent run now fails
-    // the whole package — the PGlite-only inmutabilidad.test.ts included (that file's header explains
-    // the broadening).
+    // Shared globalSetup requires Docker for the real-Postgres privilege and concurrency suites.
+    // It runs before every worker, so Docker absence also fails PGlite-only test selections.
     globalSetup: ["./src/testing/global-setup.ts"],
-    // PGlite boots a WASM PostgreSQL and then applies two migration sets, and the concurrency / RLS /
+    // PGlite boots a WASM PostgreSQL and then applies the whole manifest, and the concurrency /
     // e2e suites clone the shared container's migrated template (globalSetup, above). Each per-suite
     // cost is paid in a beforeAll — the PGlite WASM boot + migrations, or the real-PG ~26ms clone —
     // so hookTimeout stays generous for the PGlite boot. The container boot/pull is NOT in a
@@ -33,7 +30,7 @@ export default defineConfig({
     // retention); a conservative worst case at maxForks: 4 — two ~30 heavy files plus a couple of
     // lighter ones — lands around 70-80, under the EFFECTIVE budget of ~97 (the stock 100 minus
     // superuser_reserved_connections=3), so 4 needs no `max_connections` bump to the shared
-    // `startPostgresContainer`. That margin is thinner than packages/db's, so the load-bearing proof is
+    // `startPostgresContainer`. That margin is thinner than packages/db's, so the verification is
     // deliberately EMPIRICAL, not this arithmetic and not an isolated local pass: the full suite passes
     // green under maxForks: 4, and the unfiltered `main` run is where a real exhaustion ("too many
     // clients already") would surface. 4 also matches CI's ubuntu-latest runner vCPU count (this

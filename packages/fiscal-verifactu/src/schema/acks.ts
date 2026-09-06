@@ -30,4 +30,4 @@ export const acks = pgTable(
       sql`${t.state} in ('accepted', 'accepted_with_errors', 'rejected', 'halted')`,
     ),
   ],
-).enableRLS();
+);

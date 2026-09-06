@@ -6,7 +6,7 @@ import { persons } from "./persons.js";
  * A shift login: a person active at a physical till. Keyed to the TILL (the station where a cashier
  * stands and where cash-up is grouped), not the node (the SIF machine, one per venue, shared across
  * tills). MUTABLE: `ended_at` is stamped on logout, so app_user holds SELECT, INSERT, UPDATE (no
- * DELETE), tenant-isolation RLS only (no immutability triggers) — see drizzle/0003_sessions_rls.sql.
+ * DELETE), with no immutability triggers.
  */
 export const sessions = pgTable(
   "sessions",
@@ -28,8 +28,9 @@ export const sessions = pgTable(
       foreignColumns: [tenants.id],
       name: "sessions_tenant_fk",
     }).onDelete("restrict"),
-    // Plain single-column FK to persons.id, the same shape sales.till_id uses for tills: RLS gives
-    // the tenant-consistency, and persons carries no (tenant_id, id) composite unique to target.
+    // Plain single-column FK to persons.id; persons carries no (tenant_id, id) composite unique.
+    // This checks person existence only: nothing here enforces tenant consistency for person_id.
+    // The deployment holds one tenant per database.
     foreignKey({
       columns: [t.personId],
       foreignColumns: [persons.id],
@@ -47,4 +48,4 @@ export const sessions = pgTable(
     // applied at query time.
     index("sessions_open_idx").on(t.tenantId, t.tillId),
   ],
-).enableRLS();
+);

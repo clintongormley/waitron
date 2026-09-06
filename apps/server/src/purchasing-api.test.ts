@@ -14,9 +14,9 @@ import "./errors.js";
 // id/date screens, the permission-gate wiring and the STATUS map — end to end in-process, the same way
 // `catalogue-api.test.ts` proves the catalogue routes. The purchase-invoice tables live in
 // CORE_MIGRATIONS and the management session/persons in IDENTITY_MIGRATIONS, and every DB touch runs
-// `withTenant` + `asAppUser` exactly as production does. The *differential* RLS isolation proof and the
-// gate-by-DELETION proof are the real-Postgres suite (`purchasing-api.rls.test.ts`), which PGlite
-// cannot show because it connects as a superuser that bypasses FORCE RLS (CLAUDE.md §4).
+// `withTenant` + `asAppUser` exactly as production does. The gate-by-DELETION proof, run as the
+// non-superuser app role, is the real-Postgres suite (`purchasing-api.pg.test.ts`); PGlite connects as
+// a superuser holding every grant (CLAUDE.md §4).
 const noopLog: Logger = () => {};
 
 let tenantId: string;
@@ -36,10 +36,10 @@ const suite = usePgliteDb({
       await asAppUser(tx);
       const mgr = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
-        values (current_tenant_id(), 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+        values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
       const stf = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
-        values (current_tenant_id(), 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+        values (${tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
       const managerSession = await startManagementSession(tx, {
         tenantId,
         personId: mgr.rows[0]!.id,

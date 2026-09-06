@@ -30,8 +30,9 @@ import "./errors.js";
 
 // PGlite, not real Postgres: these routes are wiring — session guard + isUuid screen + STATUS mapping
 // over the commercial table/tab verbs, which are LOGIC (no privilege or concurrency behaviour to
-// prove here). The table/tab verbs' own real-PG proofs (RLS, the FOR UPDATE tab lock, the composite
-// FKs) live in their packages' `*.rls.test.ts`; they are not re-proven at the HTTP layer. The schema
+// prove here). The table/tab verbs' own real-PG proofs (the FOR UPDATE tab lock, the composite FKs)
+// live in `tabs.pg.test.ts`, `move-merge.pg.test.ts` and packages/db's schema suites; they are not
+// re-proven at the HTTP layer. The schema
 // is CORE_MIGRATIONS (dining_tables + tab_id/delivery_table_id land in 0043/0044/0046) +
 // IDENTITY_MIGRATIONS (the sessions/persons the login path needs).
 let cfg: TillConfig;
@@ -57,8 +58,8 @@ const suite = usePgliteDb({
     const loc = await db.execute<{ id: string }>(sql`
       insert into locations (tenant_id, name, invoice_locales, operation_description)
       values (${tenantId}, 'Counter', array['es-ES'], 'Retail') returning id`);
-    // KDS-1: a default kitchen station so addTabRound's fire (→ fireLines) has a fallback. Seeded as
-    // the PGlite superuser here, as the surrounding venue rows are (RLS bypassed in setup).
+    // KDS-1: a default kitchen station so addTabRound's fire (→ fireLines) has a fallback. Seeded
+    // as the PGlite superuser here, as the surrounding venue rows are.
     await seedKitchenStation(db, { tenantId, locationId: brandLocationId(loc.rows[0]!.id) });
     const till = await db.execute<{ id: string }>(sql`
       insert into tills (tenant_id, location_id, name)
@@ -77,9 +78,9 @@ const suite = usePgliteDb({
     // the active/assignment filters are real, not bypassed by a superuser insert.
     const product = await withTenant(db, tenantId, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, { name: "Carta" });
-      const bebidas = await createCategory(tx, { name: "Bebidas" });
-      const p = await createProduct(tx, {
+      const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
+      const bebidas = await createCategory(tx, tenantId, { name: "Bebidas" });
+      const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
         descriptions: { es: "Agua mineral" },

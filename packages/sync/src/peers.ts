@@ -1,6 +1,6 @@
 // The per-peer subscriber-identity core for the sync source (spec §6). Reuses the identity scrypt
 // (hashSecret/verifySecret) and the ${id}.${secret} bearer shape print-agents use — no crypto is
-// written here. Runs directly on the pool: sync_peers has no RLS, so no withTenant, like
+// written here. Reads and writes sync_peers through app_user directly on the pool, like
 // recordSubscriberCursor (cursor-report.ts). Every auth failure folds into one sync.node_unauthorized
 // (oracle-free — the response confirms neither a peer's existence nor its revocation state).
 import "./errors.js";
@@ -71,12 +71,12 @@ export async function authenticatePeer(
   if (!verifySecret(secret, row.token_hash)) throw new AppError("sync.node_unauthorized", {});
 
   // Gated sighting write — auth runs on EVERY pull/report tick (the hot path; the fast lane polls
-  // ~1/s), so the second round-trip is SKIPPED entirely, not just no-op'd server-side, unless a minute
-  // has passed since the last sighting. Reading `sighting_due` above moves the gate to JS, turning
-  // ~one UPDATE per request into ~one per peer per minute. Only last_seen_at is written — the one
-  // column the auth-path role (sync_tailer) holds UPDATE on. `and active = true` re-checks revocation:
-  // if the peer is revoked in the window between the SELECT and this UPDATE, the sighting is skipped
-  // rather than stamping a "last seen" onto a now-revoked row (harmless, but keeps the semantics crisp).
+  // ~1/s), so the second round-trip is SKIPPED entirely, not just no-op'd server-side, unless a
+  // minute has passed since the last sighting. Reading `sighting_due` above moves the gate to JS,
+  // turning ~one UPDATE per request into ~one per peer per minute. Only last_seen_at is written.
+  // `and active = true` re-checks revocation: if the peer is revoked in the window between the
+  // SELECT and this UPDATE, the sighting is skipped rather than stamping a "last seen" onto a
+  // now-revoked row (harmless, but keeps the semantics crisp).
   if (row.sighting_due) {
     await db.execute(
       sql`update sync_peers set last_seen_at = now() where id = ${peerId}::uuid and active = true`,

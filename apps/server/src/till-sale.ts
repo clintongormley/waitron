@@ -309,9 +309,10 @@ export async function payWorkingOrder(
       async (tx) => {
         await asAppUser(tx);
 
-        // Step 1. Lock/resolve the order by its (RLS-tenant-scoped) id. FOR UPDATE serialises a
-        // concurrent pay on a PARKED order; on a walk-up there is no row yet, so it locks nothing and
-        // the 23505 catch below is that shape's backstop.
+        // The deployment holds one tenant per database. Step
+        // 1. Lock/resolve the order by its id in this database. FOR UPDATE serialises a
+        //    concurrent pay on a PARKED order; on a walk-up there is no row yet, so it locks
+        //    nothing and the 23505 catch below is that shape's backstop.
         const [locked] = await tx
           .select({ status: workingOrders.status })
           .from(workingOrders)
@@ -500,13 +501,13 @@ async function readSettledTicket(
  * rather than adding a sale-id reader. Reads the ALREADY-FILED record back and re-enqueues PAPER only —
  * it FILES NOTHING (the fiscal record/huella/invoice number are untouched, §4) and never opens the drawer.
  *
- * An id that names no filed sale (an unknown, still-`open`, or foreign — RLS-hidden — order) is a 200
- * NO-OP: there is nothing to reprint, mirroring the kitchen-reprint route (`reprintOrderTickets`) and
- * guarding `readSettledTicket`'s "settled order has no sale" throw, which is corruption-only for its
- * pay/collect callers (they hold a `for update` lock on a settled order) but reachable here from an
- * arbitrary `:id`. A settled sale on a till with no active printer is likewise a no-op
- * (`enqueueReceiptReprint` resolves no printer → enqueues nothing). Opens its OWN `withTenant`/`asAppUser`
- * transaction (the sibling verbs' shape).
+ * An id that names no filed sale (an unknown or still-`open` order) is a 200 NO-OP: there is
+ * nothing to reprint, mirroring the kitchen-reprint route (`reprintOrderTickets`) and guarding
+ * `readSettledTicket`'s "settled order has no sale" throw, which is corruption-only for its
+ * pay/collect callers (they hold a `for update` lock on a settled order) but reachable here from
+ * an arbitrary `:id`. A settled sale on a till with no active printer is likewise a no-op
+ * (`enqueueReceiptReprint` resolves no printer → enqueues nothing). Opens its OWN
+ * `withTenant`/`asAppUser` transaction (the sibling verbs' shape).
  */
 export async function reprintSale(
   deps: { db: Database; backend: FiscalBackend },
@@ -923,7 +924,7 @@ export async function payWorkingOrderIntegrated(
  * lock) is what hits the unique key. So, unlike `payWorkingOrder` (whose lock+file share one
  * transaction) this needs no internal re-lock of its own, but the 23505 path is real and reachable
  * rather than dead code: it is exercised end to end by "two concurrent pays for one parked order file
- * ONE sale; the loser replays (one sale/settlement)" (`apps/server/src/till-sale-integrated.rls.test.ts`),
+ * ONE sale; the loser replays (one sale/settlement)" (`apps/server/src/till-sale-integrated.pg.test.ts`),
  * which drives two real, concurrently-racing app-role connections and asserts `registroCount === 1`.
  * `readSettledTicket`
  * defaults `change` to "0.00": a replay hands back nothing (the winner settled the drawer at its sale).
@@ -1476,9 +1477,10 @@ export function toPayOutcome(
  * the ticket (filing/settling nothing). The `sales_working_order_id_key` and `sale_settlements` UNIQUE
  * constraints are the constraints underneath, but the lock means neither is ever reached concurrently.
  *
- * A non-`placed`, non-`settled` order (still `open`, already `abandoned`, or absent / another tenant's,
- * RLS-hidden) fails closed with `working_order.not_placed` — collect is a placed-order operation. The
- * tender guard mirrors `payWorkingOrder`'s: cash or manual card only.
+ * The deployment holds one tenant per database. A non-`placed`, non-`settled` order (still
+ * `open`, already `abandoned`, or absent in this database) fails closed with
+ * `working_order.not_placed` — collect is a placed-order operation. The tender guard mirrors
+ * `payWorkingOrder`'s: cash or manual card only.
  *
  * `req.lines` is IGNORED (a placed order files its frozen stored composition); it is on
  * `PayWorkingOrderRequest` only to share the shape. `operatorId` is the collecting operator.
@@ -1510,7 +1512,7 @@ export async function collectOrder(
       }
 
       // Only a placed order may be collected — an `open` (never placed), `abandoned`, absent or
-      // RLS-hidden order fails closed. `not_placed` (not `not_open`): collect is the placed→settled
+      // absent order fails closed. `not_placed` (not `not_open`): collect is the placed→settled
       // operation, and calling it on an open order is a state error about placing, not opening.
       if (locked === undefined || locked.status !== "placed") {
         throw new AppError("working_order.not_placed", { workingOrderId: req.id });
@@ -1582,7 +1584,7 @@ export async function collectOrder(
           // fired to a station leaves that station's queue (`listStationQueue` excludes
           // `collected_at IS NOT NULL`) once collected. It is stamped in THIS same placed → settled
           // UPDATE — a later UPDATE on the settled row would be a settled → settled edit, which
-          // `working_orders_enforce_transition` rejects (0030_prepare_collect.sql). Same instant as
+          // `working_orders_enforce_transition` rejects (0001_db_baseline_sql.sql). Same instant as
           // `settled_at` (the collect's own clock reading). NON-FISCAL: the alta path never reads it,
           // and the H2 huella-identity test pins two records differing only in it hash identically.
           .set({

@@ -5,9 +5,8 @@ import { persons } from "./persons.js";
 /**
  * A browser "management session": a person signed into the management dashboard from a browser,
  * distinct from a till's PIN shift-login (`sessions`), which is keyed to a physical till. MUTABLE:
- * `last_seen_at` is refreshed on activity and `ended_at` is stamped on sign-out, so app_user will
- * hold SELECT, INSERT, UPDATE (no DELETE) — the FORCE-RLS policy and grants land in the next
- * migration (Task 6), the way sessions splits its table (0002) from its RLS (0003).
+ * `last_seen_at` is refreshed on activity and `ended_at` is stamped on sign-out, so app_user
+ * holds SELECT, INSERT, UPDATE (no DELETE).
  */
 export const managementSessions = pgTable(
   "management_sessions",
@@ -47,4 +46,4 @@ export const managementSessions = pgTable(
     // round-trips it and db:generate stays a no-op.
     index("management_sessions_open_idx").on(t.tenantId, t.personId),
   ],
-).enableRLS();
+);

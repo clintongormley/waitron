@@ -1,14 +1,9 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { clearProvisionFixture } from "./testing/clear-provision-fixture.js";
+import { afterEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { readDeploymentEnvironment, stampDeployment, type Database } from "@waitron/db";
-import {
-  cloneTemplate,
-  nextCloneName,
-  pickTemplate,
-  resolveSharedHandle,
-} from "@waitron/db/testing/lifecycle.js";
-import type { RealPostgres } from "@waitron/db/testing/postgres.js";
-import type { SharedContainerHandle } from "@waitron/db/testing/shared-container.js";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashPassword, hashPin } from "@waitron/identity";
 import type { VenueRequest } from "@waitron/provisioning";
 import { isAppError } from "@waitron/shared";
@@ -19,13 +14,8 @@ import { ALL_MODULES } from "./modules.js";
 /** All modules enabled (an absent/empty modules.json) — the default the happy-path deps pass. */
 const ALL_ENABLED = parseModuleConfig({}, ALL_MODULES);
 
-// Real Postgres, not PGlite: provisionVenue stamps `deployment` and runs `applyVenue` under RLS as
-// the OWNER connection, which PGlite (every connection a superuser) cannot faithfully represent
-// (CLAUDE.md §4). The shared-container clone's default connection is the container superuser, which
-// OWNS the manifest tables and so is exactly the owner connection `applyVenue` documents it needs.
-
-// Each provisioned venue needs its own NIF (`tenants_country_tax_id_key` is unique); a fresh clone
-// per test still draws from one generator, the same nextNif shape `till-sale.test.ts` uses.
+// Each provisioned venue needs its own NIF (`tenants_country_tax_id_key` is unique); the shared database
+// draws from one generator, the same nextNif shape `till-sale.test.ts` uses.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -85,36 +75,12 @@ async function fiscalCounts(db: Database): Promise<FiscalCounts> {
   };
 }
 
-let handle: SharedContainerHandle;
-beforeAll(() => {
-  handle = resolveSharedHandle(undefined);
-});
+const suite = usePgliteDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
-// A FRESH manifest clone per test. provisionVenue stamps the `deployment` singleton, which is
-// GLOBAL to a database — a shared clone would let one test's stamp fix every other test's
-// environment (and make the stamp-mismatch scenario unreachable). A clone per test keeps the three
-// scenarios independent (CLAUDE.md §4: order-independent) at ~26ms each.
-let pg: RealPostgres | undefined;
-let db: Database | undefined;
+afterEach(() => clearProvisionFixture(suite.db));
 
-beforeEach(async () => {
-  pg = await cloneTemplate(handle.uri, pickTemplate(handle, "manifest"), nextCloneName());
-  db = await pg.connect();
-});
-
-afterEach(async () => {
-  const connection = db;
-  const started = pg;
-  db = undefined;
-  pg = undefined;
-  if (connection !== undefined) await connection.close();
-  if (started !== undefined) await started.stop();
-});
-
-/** The clone's owner connection, or a throw if read before `beforeEach` ran. */
 function ownerDb(): Database {
-  if (db === undefined) throw new Error("provision.test: clone not started");
-  return db;
+  return suite.db;
 }
 
 describe("provisionVenue", () => {
@@ -123,7 +89,7 @@ describe("provisionVenue", () => {
     expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 0, nodes: 0, registros: 0 });
 
     const result = await provisionVenue(
-      { ownerDb: db, moduleConfig: ALL_ENABLED },
+      { ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" },
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     );
 
@@ -165,7 +131,7 @@ describe("provisionVenue", () => {
       },
     ) as never;
     const err = await provisionVenue(
-      { ownerDb, moduleConfig },
+      { ownerDb, moduleConfig, database: "waitron" },
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     ).catch((e: unknown) => e);
     expect(isAppError(err)).toBe(true);
@@ -176,18 +142,49 @@ describe("provisionVenue", () => {
     const db = ownerDb();
     const request = { environment: "preproduction" as const, venue: venueRequest(nextNif()) };
 
-    await provisionVenue({ ownerDb: db, moduleConfig: ALL_ENABLED }, request);
+    await provisionVenue({ ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" }, request);
     const afterFirst = await fiscalCounts(db);
     expect(afterFirst).toEqual({ sif: 1, series: 2, nodes: 1, registros: 0 });
 
     // A second provision with the SAME NIF is refused BEFORE any fiscal write.
-    const error = await provisionVenue({ ownerDb: db, moduleConfig: ALL_ENABLED }, request).catch(
-      (e: unknown) => e,
-    );
+    const error = await provisionVenue(
+      { ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" },
+      request,
+    ).catch((e: unknown) => e);
     expect(isAppError(error)).toBe(true);
     expect(isAppError(error) && error.code).toBe("setup.already_provisioned");
 
     // No second SIF, series or node — the guard prevented a duplicate hash chain.
+    expect(await fiscalCounts(db)).toEqual(afterFirst);
+  });
+
+  it("refuses a FOREIGN obligado in an occupied database and mints no second tenant (§5)", async () => {
+    // The production gap: `POST /setup-api/provision` reaches this function, and one tenant per
+    // database is the post-RLS isolation boundary — with row-level security gone a second
+    // `(country, tax_id)` would expose one business's rows to the other (§5). A DIFFERENT obligado in
+    // an occupied database is refused BEFORE stamping or applyVenue, exactly as the `venue` CLI does.
+    const db = ownerDb();
+    await provisionVenue(
+      { ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" },
+      { environment: "preproduction", venue: venueRequest(nextNif()) },
+    );
+    const afterFirst = await fiscalCounts(db);
+    const firstTenants = await db.execute<{ n: number }>(
+      sql`select count(*)::int as n from tenants`,
+    );
+    expect(firstTenants.rows[0]!.n).toBe(1);
+
+    // A DIFFERENT business (a fresh NIF) against the SAME database is refused as a foreign tenant.
+    const error = await provisionVenue(
+      { ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" },
+      { environment: "preproduction", venue: venueRequest(nextNif()) },
+    ).catch((e: unknown) => e);
+    expect(isAppError(error)).toBe(true);
+    expect(isAppError(error) && error.code).toBe("provisioning.foreign_tenant");
+
+    // Still exactly one tenant — and no second SIF/series/node/chain.
+    const tenants = await db.execute<{ n: number }>(sql`select count(*)::int as n from tenants`);
+    expect(tenants.rows[0]!.n).toBe(1);
     expect(await fiscalCounts(db)).toEqual(afterFirst);
   });
 
@@ -214,7 +211,7 @@ describe("provisionVenue", () => {
 
     // First: provision in the CANONICAL casing.
     await provisionVenue(
-      { ownerDb: db, moduleConfig: ALL_ENABLED },
+      { ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" },
       { environment: env, venue: venueRequest(nif) },
     );
     const afterFirst = await fiscalCounts(db);
@@ -223,7 +220,7 @@ describe("provisionVenue", () => {
     // Second: re-provision the SAME business in a NON-canonical casing (lowercase country + NIF).
     const nonCanonical = { ...venueRequest(nif), country: "es", taxId: nif.toLowerCase() };
     const error = await provisionVenue(
-      { ownerDb: db, moduleConfig: ALL_ENABLED },
+      { ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" },
       { environment: env, venue: nonCanonical },
     ).catch((e: unknown) => e);
     expect(isAppError(error)).toBe(true);
@@ -243,7 +240,7 @@ describe("provisionVenue", () => {
 
     // ... so provisioning it for preproduction is refused at the stamp step, before any venue mint.
     const error = await provisionVenue(
-      { ownerDb: db, moduleConfig: ALL_ENABLED },
+      { ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" },
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     ).catch((e: unknown) => e);
     expect(isAppError(error)).toBe(true);

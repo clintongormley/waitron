@@ -22,10 +22,10 @@ import "./errors.js";
 // id screens, the agent Bearer guard, the claim/report logic, the management-gate wiring and the STATUS
 // map — end to end in-process, the same way `purchasing-api.test.ts` proves the purchase routes. The
 // agent-scope filters (cross-agent claim → empty, cross-agent report → no-op) and the revocation filter
-// (`active = true`) are QUERY predicates, so PGlite shows them faithfully. The three properties PGlite
-// CANNOT show — RLS isolation as the non-owner app role, the gate proven by DELETION under FORCE RLS,
-// and the claim's `for update … skip locked` under true concurrency — live in `print-api.rls.test.ts`
-// against real Postgres (CLAUDE.md §4). Each `it` seeds its own tenant, so its reads are its alone and
+// (`active = true`) are QUERY predicates, so PGlite shows them faithfully. The two properties PGlite
+// CANNOT show — the routes running as the non-owner app role with only its grants (the gate proven by
+// DELETION there) and the claim's `for update … skip locked` under true concurrency — live in
+// `print-api.pg.test.ts` against real Postgres (CLAUDE.md §4). Each `it` seeds its own tenant, so its reads are its alone and
 // order-independent across the shared PGlite.
 const noopLog: Logger = () => {};
 
@@ -47,10 +47,10 @@ const suite = usePgliteDb({
       await asAppUser(tx);
       const mgr = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
-        values (current_tenant_id(), 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+        values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
       const stf = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
-        values (current_tenant_id(), 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+        values (${tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
       const managerSession = await startManagementSession(tx, {
         tenantId,
         personId: mgr.rows[0]!.id,

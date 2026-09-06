@@ -14,7 +14,7 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
-    /** No purchase invoice with this id is visible in the current tenant. `id` is the id looked up. */
+    /** No purchase invoice with this id exists. `id` is the id looked up. */
     "purchase.not_found": { id: string };
     /** The `(tenant, supplier_tax_id, supplier_invoice_number)` unique index rejected a second entry
      * of the same supplier invoice (the libro-registro no-duplicate rule). */

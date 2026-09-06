@@ -11,25 +11,19 @@ import type { NodeId, TenantId, TillId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { provisionNode } from "./provision-till.js";
 
-// PGlite, not `startRealPostgres` — deliberately, and against the grain of this package's other
-// database suites. That harness's own refusal message says a container is required because "PGlite
-// runs every connection as a superuser, so it cannot show whether this host works as the
-// non-superuser deployment role"; nothing here ever leaves the superuser connection, so the
-// justification does not apply. The fiscal seed one layer down — the caller of `registerSif` — is
-// covered exactly this way (`packages/fiscal-verifactu/src/provisioning.test.ts`), as are this
-// directory's `stripe-account.test.ts` and `aeat-transport.test.ts`. `vitest.config.ts` pins
-// `singleFork`, so a container here would be pure additive wall-clock on every run.
+// PGlite exercises the explicit node-ownership comparison. Both PGlite and a superuser PostgreSQL
+// connection can expose a missing tenant predicate; withTenant adds no filtering. The fiscal seed
+// one layer down uses the same target in packages/fiscal-verifactu/src/provisioning.test.ts, as
+// do stripe-account.test.ts and aeat-transport.test.ts. No role or concurrency behaviour is under
+// test here, so a container adds
 //
-// What PGlite does NOT buy: it is not a stronger harness for the ownership guard. Both it and a
-// superuser container kill a mutant that drops the guard, because neither applies RLS. Only a
-// container connected as the non-superuser deployment role would let `eq(nodes.tenantId, …)` be
-// deleted unnoticed — RLS would hide the foreign node anyway — and no harness here does that.
+// no needed coverage (§4).
 
 // Well-formed but absent — the shape a mistyped argument actually takes, since a malformed one
 // never survives `tenantId()`'s brand.
 const ABSENT = "00000000-0000-0000-0000-000000000000";
 
-// The full manifest, not just [core, fiscal]: fiscal's SP-3a capture migration (0014) needs sync's
+// The full manifest, not just [core, fiscal]: fiscal's SP-3a capture migration needs sync's
 // `sync_capture()`, so the whole manifest is applied (sync before fiscal) — the production order.
 const suite = usePgliteDb({
   migrations: migrationOptionsFor(manifestSets(), null),

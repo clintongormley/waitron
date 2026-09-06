@@ -29,8 +29,8 @@ import {
 import "./errors.js";
 
 // PGlite, not real Postgres: these verbs are plain CRUD + a conditional-UPDATE state machine over one
-// table — no privilege, RLS-as-app_user or concurrency behaviour that needs a genuine non-superuser
-// backend (that is proven against real Postgres in the *.rls.test.ts). Every read/write still runs
+// table — no privilege or concurrency behaviour that needs a genuine non-superuser backend (the CAS
+// race is proven against real Postgres in `bookings-cas.test.ts`, the routes in `booking-api.test.ts`). Every read/write still runs
 // through `withTenant` + `asAppUser`, so the tenant scope and the `party_size > 0` CHECK are exercised
 // exactly as production does, not bypassed. `TESTCONTAINERS_RYUK_DISABLED` is irrelevant here — no
 // container is started.
@@ -70,9 +70,10 @@ async function makeTable(cfg: BookingConfig, active = true): Promise<string> {
 }
 
 /**
- * Insert an ACTIVE dining table in a SECOND location of the SAME tenant, and return its id. RLS scopes
- * only by tenant, so this cross-LOCATION table is visible to the app role — the exact shape the
- * location-scope guard must refuse (a booking in location A must not be assigned a table in location B).
+ * The deployment holds one tenant per database. Insert an ACTIVE dining table in a SECOND
+ * location of the SAME tenant, and return its id. This cross-LOCATION table exists in the same
+ * database — the exact shape the location-scope guard must refuse (a booking in location A must
+ * not be assigned a table in location B).
  */
 async function makeTableInOtherLocation(cfg: BookingConfig): Promise<string> {
   const loc = await db.execute<{ id: string }>(sql`

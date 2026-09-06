@@ -5,71 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1786492800000,
-      "tag": "0000_sync_outbox",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1786492800001,
-      "tag": "0001_sync_retention",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1786492800002,
-      "tag": "0002_sync_cursor_lane",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1786492800003,
-      "tag": "0003_sync_cursor_evict",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1786492800004,
-      "tag": "0004_sync_log_origin_seq_idx",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1786492800005,
-      "tag": "0005_sync_peers",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1786492800006,
-      "tag": "0006_enrol_table_service",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1786492800007,
-      "tag": "0007_sync_identity_capture",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1786492800008,
-      "tag": "0008_enrol_kitchen",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "7",
-      "when": 1786492800009,
-      "tag": "0009_sync_config_conflicts",
+      "when": 1788000000000,
+      "tag": "0000_sync_baseline",
       "breakpoints": true
     }
   ]

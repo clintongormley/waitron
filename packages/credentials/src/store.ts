@@ -23,9 +23,8 @@ export interface CredentialMeta {
 }
 
 /**
- * Reads and decrypts one credential. Runs inside `withTenant`, so RLS has already scoped the row;
- * `tenantId` is passed anyway because it is an AAD input, and because every other store function in
- * this repo names its tenant explicitly.
+ * Reads and decrypts one credential, matching its tenant id and purpose. The tenant id is also
+ * authenticated as AAD, so moving ciphertext to another tenant makes decryption fail.
  */
 export async function getCredential(
   tx: Transaction,
@@ -175,8 +174,7 @@ export async function deleteCredential(tx: Transaction, ref: CredentialRef): Pro
   return removed.length > 0;
 }
 
-/** Metadata for every row VISIBLE to this transaction — so inside `withTenant` it is one tenant's,
- * and the CLI's cross-tenant listing goes through `credentialTenants` instead. */
+/** Metadata for every credential in this database. The deployment holds one tenant per database. */
 export async function listCredentials(tx: Transaction): Promise<CredentialMeta[]> {
   const rows = await tx
     .select({
@@ -190,11 +188,8 @@ export async function listCredentials(tx: Transaction): Promise<CredentialMeta[]
 }
 
 /**
- * Which tenants hold a credential for `purpose`. Runs on the SYSTEM connection, NOT inside
- * `withTenant`: it must see every tenant's rows to answer at all, which is a deliberately
- * cross-tenant read of a FORCE-RLS table. That crossing goes through `credential_tenants`
- * (migration 0002), a SECURITY DEFINER function owned by the NOLOGIN `credentials_enumerator` role,
- * which alone carries a permissive USING (true) SELECT policy. The function returns ONLY tenant ids.
+ * Which tenants hold a credential for `purpose`. Calls `credential_tenants` on the supplied
+ * database handle, using the caller's privileges. The function returns only tenant ids.
  *
  * This is what gives the host its tenant list, and it has a property worth naming: a tenant with no
  * credential for a purpose is not enumerated for it, so the vault IS the enrolment list for that
@@ -227,27 +222,13 @@ export interface RotationResult {
  * no-op rather than a pointless re-encryption of everything.
  *
  * `tryGetCredential` and `putCredential` share one `withTenant` transaction per row, so the read
- * and the re-write are evaluated under one tenant GUC. It does NOT make the pair atomic against a
+ * and the re-write share one transaction. It does NOT make the pair atomic against a
  * concurrent `set`: under READ COMMITTED the SELECT takes no row lock, so a `set` committing
  * between the two is overwritten by this rotation's stale value whether the gap spans one
  * transaction or two. Preventing that would need `SELECT ... FOR UPDATE` inside this transaction,
  * or REPEATABLE READ plus a retry loop — deliberately absent, because `rotate` is a
  * maintenance-window operation and "rotation without downtime" is out of scope (design spec §8).
  * No test pins this, and none can without a second connection.
- *
- * **Needs a connection that is not a SUPERUSER or `BYPASSRLS` role to report truthful counts.**
- * Every read here goes through `withTenant`, which relies on RLS to scope it — FORCE ROW LEVEL
- * SECURITY binds even the table's own owner (drizzle/0001_credentials_rls.sql's `FORCE ROW LEVEL
- * SECURITY`, same as `packages/fiscal-verifactu`'s `envios_tenant_isolation`), so a plain,
- * non-superuser owner connection reports truthfully. Only a superuser or a `BYPASSRLS` role
- * actually bypasses the policy — if the connection handed to this function is one of those,
- * `listCredentials(tx)` inside `withTenant(db, tenantId, ...)` returns the WHOLE table on every
- * call regardless of which tenant is being visited, so every tenant's pass re-reads every OTHER
- * tenant's rows too — inflating `rotated`/`alreadyCurrent` by roughly the tenant count and doing
- * O(tenants² × purposes) redundant work. No corruption results (re-sealing the same row more than
- * once under the current key is idempotent), but the operator's only success signal — this
- * function's own return value — is wrong. Connect as `app_user` (or a role that inherits it and
- * carries neither SUPERUSER nor BYPASSRLS), not a superuser or BYPASSRLS role.
  */
 /* Coupled to the `PURPOSES` field registry, which is worth knowing before editing either.
  *
@@ -284,14 +265,8 @@ export async function rotateCredentials(db: Database, ring: KeyRing): Promise<Ro
       const purpose = row.purpose;
       await withTenant(db, tenantId, async (tx) => {
         const value = await tryGetCredential(tx, ring, { tenantId, purpose });
-        // `value === null` here means the row `listCredentials` just saw a moment ago is gone. In
-        // production that needs a genuinely concurrent `delete` racing this exact window — a
-        // host-level concurrency scenario this package's own "real database, never mocked" test
-        // convention cannot construct deterministically (see this function's own doc comment).
-        // rotate.test.ts's "does not count a row that vanished" test reaches this SAME branch by a
-        // different, fully deterministic route instead (PGlite's superuser RLS bypass surfacing a
-        // foreign tenant's row). `rotated` is NOT incremented on this path — nothing was actually
-        // re-sealed — which is what keeps this a genuine silent no-op rather than a phantom success.
+        // A row may disappear after listing. Count only credentials actually re-sealed;
+        // an absent tenant-purpose lookup leaves the count unchanged.
         if (value === null) return;
         await putCredential(tx, ring, { tenantId, purpose, value });
         result.rotated += 1;

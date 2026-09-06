@@ -94,4 +94,4 @@ export const scheduledRuns = pgTable(
     check("scheduled_runs_generation_ck", sql`${t.generation} >= 0`),
     check("scheduled_runs_attempts_ck", sql`${t.attempts} >= 0`),
   ],
-).enableRLS();
+);

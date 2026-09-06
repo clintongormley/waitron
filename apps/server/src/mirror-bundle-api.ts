@@ -39,17 +39,18 @@ import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
 
 /**
- * Everything the mirror-bundle route needs. `appDb` authenticates + authorizes (as `app_user` under
- * `withTenant` + `asAppUser`, the dashboard-login shape) AND reads the venue rows inside
- * `assembleMirrorBundle`; `retentionDb` is the `sync_retention` connection the retention sweep already
- * opens (`enrolPeer` mints the token as that role — CLAUDE.md §3, never a broader connection).
- * `designated` are the five ids the primary till was provisioned with (`config.till.*`) — its `tenantId`
- * scopes the auth transaction. `stateDir` locates the box CA; `boxHostname` is the box's TLS SAN.
- * `relayUrl` is the primary's own relay coordinates (`loadTunnelConfig`), `undefined` when no tunnel is
- * configured — the endpoint then refuses `mirror.no_relay` rather than minting an undial-able bundle.
- * `ring` is the box vault key used to unseal the primary's identity key — `assembleMirrorBundle`
- * endorses the standby's key with it (design §6 R2), and this route signs the membership document it
- * appends the standby to with it (till-reroute §3.3).
+ * Everything the mirror-bundle route needs. `appDb` authenticates + authorizes (as `app_user`
+ * under `withTenant` + `asAppUser`, the dashboard-login shape) AND reads the venue rows inside
+ * `assembleMirrorBundle`; `retentionDb` is the retention connection (an `app_user` member) the
+ * retention sweep already opens (`enrolPeer` mints the token as that role — CLAUDE.md §3, never a
+ * broader connection). `designated` are the five ids the primary till was provisioned with
+ * (`config.till.*`) — its `tenantId` scopes the auth transaction. `stateDir` locates the box CA;
+ * `boxHostname` is the box's TLS SAN. `relayUrl` is the primary's own relay coordinates
+ * (`loadTunnelConfig`), `undefined` when no tunnel is configured — the endpoint then refuses
+ * `mirror.no_relay` rather than minting an undial-able bundle. `ring` is the box vault key used
+ * to unseal the primary's identity key — `assembleMirrorBundle` endorses the standby's key with
+ * it (design §6 R2), and this route signs the membership document it appends the standby to with
+ * it (till-reroute §3.3).
  */
 export interface MirrorBundleApiDeps {
   appDb: Database;
@@ -154,14 +155,15 @@ export function mountMirrorBundleApi(
       const standby = { nodeId: body.standbyNodeId, publicKey: body.standbyPublicKey };
       const standbyContactUrl = body.standbyContactUrl;
 
-      // Authenticate + authorize: `loginManagerById` mints a session (password + TOTP when enrolled),
-      // `authorizeManager` checks the admin-only `mirror.create`. Runs as `app_user` under the
-      // designated tenant, so RLS scopes the person + session reads to this venue. This flow
-      // authenticates by PERSON ID, not email, because it is a server-to-server flow carrying an id the
-      // operator typed — not the email dashboard-login form. The primary's admin MAY now carry an email
-      // (onboarding via the setup UI sets one; the bare `venue` CLI seeds it emailless, since email is
-      // OPTIONAL in provisioning — `packages/provisioning/src/venue-apply.ts`), but this path never uses
-      // it: `loginManagerById` is the id sibling that shares all the same credential checks
+      // Authenticate + authorize: `loginManagerById` mints a session (password + TOTP when
+      // enrolled), `authorizeManager` checks the admin-only `mirror.create`. Runs as `app_user`
+      // under the designated tenant, in the database holding this venue's tenant. This flow
+      // authenticates by PERSON ID, not email, because it is a server-to-server flow carrying an
+      // id the operator typed — not the email dashboard-login form. The primary's admin MAY now
+      // carry an email (onboarding via the setup UI sets one; the bare `venue` CLI seeds it
+      // emailless, since email is OPTIONAL in provisioning —
+      // `packages/provisioning/src/venue-apply.ts`), but this path never uses it:
+      // `loginManagerById` is the id sibling that shares all the same credential checks
       // (`packages/identity/src/manager-login.ts`) and resolves the admin by id regardless.
       await withTenant(deps.appDb, deps.designated.tenantId, async (tx) => {
         await asAppUser(tx);

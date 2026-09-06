@@ -221,9 +221,11 @@ function membershipDoc(nodes: readonly MembershipNode[]): SignedMembershipDocume
   };
 }
 
-/** Mint a fresh management session for the seeded manager and return the cookie pair the box-status
- * route reads (`requireManagementSession` → the session id). Seeded owner-side (RLS bypassed) so no
- * HTTP login POST is needed — the fenced node's read-only gate would 403 that POST. */
+/**
+ * Mint a fresh management session for the seeded manager and return the cookie pair the
+ * box-status route reads (`requireManagementSession` → the session id). Seeded owner-side so no
+ * HTTP login POST is needed — the fenced node's read-only gate would 403 that POST.
+ */
 async function managerCookie(): Promise<string> {
   const res = await suite.admin.execute<{ id: string }>(sql`
     insert into management_sessions (tenant_id, person_id)
@@ -246,7 +248,7 @@ beforeAll(async () => {
 
   await seedTillIdentity(suite.admin);
   // Stamp production (matching WAITRON_ENV so the boot guard passes); singleton_role keeps its column
-  // default 'primary' (migration 0071) — so this clone is a PRIMARY, the state a returned ex-primary is
+  // default 'primary' (the baseline) — so this clone is a PRIMARY, the state a returned ex-primary is
   // in before its held fence is reconciled.
   await stampDeployment(suite.admin, "production");
 
@@ -459,9 +461,10 @@ describe("boot fence drain (real Postgres): a fenced node serves its own-origin 
     ).token;
     const carrierAuth = { Authorization: `Bearer ${carrierToken}` };
 
-    // 3. Seed an own-origin sync_log row on the ordered lane (table `catalogues`) as the superuser (RLS
-    //    bypassed). `seq` is GENERATED ALWAYS AS IDENTITY and monotonic, so this row is the origin's
-    //    high-water on that lane regardless of any rows a prior case left — a deterministic ownTailSeq.
+    // 3. Seed an own-origin sync_log row on the ordered lane (table `catalogues`) as the
+    // superuser. `seq` is GENERATED ALWAYS AS IDENTITY and monotonic, so this row is the origin's
+    // high-water on that lane regardless of any rows a prior case left — a deterministic
+    // ownTailSeq.
     const logRes = await suite.admin.execute<{ seq: string }>(sql`
       insert into sync_log (origin_id, table_name, op, tenant_id, row_image)
       values (${TILL_ENV.WAITRON_TILL_NODE_ID}::uuid, 'catalogues', 'insert',

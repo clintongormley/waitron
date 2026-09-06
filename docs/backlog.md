@@ -62,12 +62,14 @@ below). Two structures are known to be out of date and must not be built on:
 1. **FORCE RLS + the multi-role set + the unsquashed migrations** (Track A item 3). Every new table
    written before it lands gets policies, grants and an `*.rls.test.ts` that are deleted weeks
    later, and migration numbers collide on every rebase (#165). **Rule: no new table anywhere —
-   core or module — until Track A item 3 lands.** UI corrections are polish and need none; anything
+   core or module — until step 1 of Track A item 3 lands — LANDED #<step-1 PR>; from here a new
+   table needs CLAUDE.md §3's classification line.** UI corrections are polish and need none; anything
    that does is parked behind A3. Track A therefore goes first and fast: coverage split (an
    afternoon) → prototype (a day) → A3 starts immediately; it is the long pole for everyone.
    **2026-09-05:** the split LANDED (#239), the prototype has reported (item 2), item 4's spec is
    approved, and item 3's spec — one chain that also deletes the outbox (owner: "all at once") — is
-   drafted and awaits owner review. Step 1 of that chain is what lifts the no-new-table rule.
+   drafted; its step 1 LANDED (#<step-1 PR>), lifting the no-new-table rule, and steps 2–5 await
+   owner review.
 2. **The module framework's UI seats** (cards, permissions, i18n arriving with a module) are
    unproven until Track C's `fiscal-none` + bookings-as-a-module land. New product domains wait for
    them and land as modules; polishing existing screens does not.
@@ -232,8 +234,8 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    `time_entries.ingest_seq` does not replicate; one superuser provisioning step for the `REPLICATION`
    role. **Cross-track (Track C):** module SP-2b's schema-version gate (LANDED #230) rests on
    "deliberate rejection of native logical replication"; item 4's spec retires it (its §5).
-3. **Drop FORCE RLS + the multi-role set, squash the migrations, delete the outbox — SPEC DRAFTED
-   2026-09-05, awaiting owner review:**
+3. **Drop FORCE RLS + the multi-role set, squash the migrations, delete the outbox — STEP 1
+   LANDED #<step-1 PR> (2026-09-06); steps 2–5 pending owner review:**
    [drop-rls-squash-and-outbox-deletion-design](superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md).
    Owner decisions: all at once (item 4's swap slices are steps 2–5 of this chain, since nothing is
    deployed); ONE owner signature, on step 4 (where fiscal rows first flow natively and `ENABLE
@@ -245,8 +247,20 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    guards + two-node fixture; (3) provisioning of publications/subscriptions + the WireGuard key;
    (4) promotion/return on `pg_replication_slots` + the outbox deleted [owner]; (5) status, alarms,
    the standby-first migration check, the link on the box image (with Track B item 2). The
-   working-time chain's per-node rekey sits between 2 and 4. Measured for the brief: 212 real-PG
-   test files today (not 190). The original brief, kept for the receipts it names:
+   working-time chain's per-node rekey sits between 2 and 4.
+
+   **Step 1 LANDED (#<step-1 PR>).** Per-module baselines, FORCE RLS and the seven helper roles gone,
+   the `*.rls.test.ts` suites replaced by per-module grant suites and `privileges.test.ts`, and
+   CLAUDE.md §2–§4 rewritten. Proof: old migrations vs new baselines, `pg_dump --schema-only`,
+   normalised diff EMPTY. Measurements: real-PG test files 212 → 159; full-suite wall clock
+   352 s → 319 s. Post-squash follow-ups: (0) `adoptVenue` (the mirror/replication path, `venue-adopt.ts`) inserts a tenant but is NOT behind the one-tenant `assertNoForeignTenant` guard the two creation paths now share (finish-branch run-it review) — decide whether mirror-adopt into an occupied DB should refuse a foreign obligado; (1) `sales_assert_tenders_cover`'s "even though
+   the definer sees every row" clause (core baseline) is now false — kept byte-verbatim so the
+   equivalence proof stays EMPTY; thin it on the first change to that function; (2) `sync_peers`
+   carries a redundant `UPDATE (last_seen_at)` column grant beside its table-level `UPDATE` — drop at
+   the next sync grant change; (3) `scripts/schema-equivalence-fold.test.py` is a manual command run
+   by no gate.
+
+   The original brief, kept for the receipts it names:
    (one PR chain; the largest change on
    this list; gated on item 2 only because the answer changes what the sync layer must be). Keep
    `tenant_id` columns + composite FKs, the owner-vs-`app_user` split (the append-only guarantee rests
@@ -808,7 +822,7 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
     [sp-3a](superpowers/specs/2026-09-05-module-sp3a-fiscal-record-lane-design.md); plan:
     [sp-3a plan](superpowers/plans/2026-09-05-module-sp3a-fiscal-record-lane.md).
     - *Deferred (surfaced by the whole-branch review, NOT done — do-anytime):* (a) the ~300-line two-clone
-      apply-harness duplication across the four `apps/server/src/fiscal-*.rls.test.ts` suites → extract a
+      apply-harness duplication across the four `apps/server/src/fiscal-*.test.ts` suites → extract a
       shared `useFiscalMirrorPair()` helper (kept per-suite for now to avoid a vacuous-pass risk in the
       fiscal gates); (b) generalise the graph-honesty SPI detector from the `sync_capture`-specific match to
       **all** trigger `EXECUTE FUNCTION` cross-module edges — would also catch the currently-undetected
@@ -817,7 +831,7 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
     - *Flake stabilised, not just re-run (owner directive):* the CI `test-server` shard's documented
       `boot.test.ts` 503-not-200 flake (a wall-clock `/health` readiness race) was root-caused and fixed
       with condition-based-waiting (`fetchHealthOk` poll-until-200); ci.yml now uploads shard blobs on
-      failure so a future flake names its exact test. Sibling `mirror-e2e.rls.test.ts:~381` remains a
+      failure so a future flake names its exact test. Sibling `mirror-e2e.test.ts:~381` remains a
       candidate if it recurs. See memory `test-server-e2e-timing-flakes`.
 
     - ***FIX the `test-server (1)` mirror/promotion CI timing flake (owner directive 2026-09-06 — flaky

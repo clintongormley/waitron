@@ -1,3 +1,4 @@
+import { tenantId as brandTenantId } from "@waitron/shared";
 // Side-effect only: loads this host's errors.ts augmentation for the code this file THROWS directly,
 // `management.request_invalid` (declared in `./errors.js`), under the "every file that throws one of
 // these imports ./errors.js" convention. `shared.invalid_id` is declared in `@waitron/shared` and
@@ -54,19 +55,20 @@ import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
 
 /**
- * Everything the dashboard's catalogue-management routes need. Mirrors `ManagementApiDeps` — `db` +
- * this venue's own `cfg.tenantId` scope every `withTenant` below, so RLS confines each read/write to
- * this server's one tenant. `mediaDir` is the absolute store `boot.ts` ensured exists; `maxUploadBytes`
- * is the DoS ceiling the upload route enforces (surfaced on `deps`, not a constant, so a test can
- * shrink it). No card provider, clock or secure-cookie flag: these routes touch only the catalogue and
- * the image store, and the session cookie is set by the management-login routes, never here.
+ * Everything the dashboard's catalogue-management routes need. Mirrors `ManagementApiDeps` — `db`
+ * + this venue's own `cfg.tenantId` are passed to every `withTenant` below. The deployment holds
+ * one tenant per database. `mediaDir` is the absolute store `boot.ts` ensured exists;
+ * `maxUploadBytes` is the DoS ceiling the upload route enforces (surfaced on `deps`, not a
+ * constant, so a test can shrink it). No card provider, clock or secure-cookie flag: these routes
+ * touch only the catalogue and the image store, and the session cookie is set by the
+ * management-login routes, never here.
  */
 export interface CatalogueApiDeps {
   db: Database;
   /** `nodeId` is this node's origin id, threaded into every catalogue write's `withTenant` so the
    * enrolled `catalogues`/`categories`/`products` INSERT/UPDATE the capture trigger records carries a
    * real `sync_log.origin_id` rather than the all-zero sentinel (design §4d(B); sync origin
-   * attribution — proven end-to-end by `sync-origin.rls.test.ts`). */
+   * attribution — proven end-to-end by `sync-origin.test.ts`). */
   cfg: { tenantId: string; nodeId: string };
   mediaDir: string;
   maxUploadBytes: number;
@@ -134,11 +136,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 const run = createErrorBoundary(STATUS, "catalogue.failed");
 
 /**
- * Screen a `/…/:id` path param as a UUID before it reaches a `uuid` column, returning it. A malformed
- * id passed straight into a query would `22P02` → an opaque 500; refusing it here as `shared.invalid_id`
- * (the branded-id constructors' own code — `packages/shared/src/ids.ts`) turns that 500 into a clean
- * 400. Shape only: a well-formed id that names no row (or another tenant's row RLS hides) passes this
- * and is handled by the op it reaches. `value` is the caller-supplied uuid-shaped string, safe to echo.
+ * Screen a `/…/:id` path param as a UUID before it reaches a `uuid` column, returning it. A
+ * malformed id passed straight into a query would `22P02` → an opaque 500; refusing it here as
+ * `shared.invalid_id` (the branded-id constructors' own code — `packages/shared/src/ids.ts`)
+ * turns that 500 into a clean 400. Shape only: a well-formed id that names no row passes this and
+ * is handled by the op it reaches. `value` is the caller-supplied uuid-shaped string, safe to
+ * echo.
  */
 function requireUuidParam(id: string, kind: string): string {
   if (!isUuid(id)) throw new AppError("shared.invalid_id", { kind, value: id });
@@ -162,12 +165,13 @@ async function requireCatalogueIdBody(c: Context): Promise<string> {
 }
 
 /**
- * The trust-boundary check for an untrusted `catalogueId` a location-menu WRITE will reference: refuse
- * it as `catalogue.not_found` (404) unless it names a catalogue VISIBLE to the current tenant. Runs
- * inside `gated`'s tenant-scoped tx, so `catalogueExists`'s read is RLS-filtered and another tenant's
- * id reads as absent. This is the CLEAN-error front of a two-layer defense: both write targets carry a
- * tenant-consistent composite FK (`locations.catalogue_id` → 0078, `location_catalogues.catalogue_id`
- * → 0074) that 23503-rejects a cross-tenant id at the data layer anyway — see the route comment.
+ * The deployment holds one tenant per database. The trust-boundary check for an untrusted
+ * `catalogueId` a location-menu WRITE will reference: refuse it as `catalogue.not_found` (404)
+ * unless it names a catalogue present in this database. Runs inside `gated`'s transaction;
+ * `catalogueExists` checks by id only. This is the CLEAN-error front of a two-layer defense: both
+ * write targets carry a tenant-consistent composite FK (`locations.catalogue_id` → 0078,
+ * `location_catalogues.catalogue_id` → 0074) that 23503-rejects a cross-tenant id at the data
+ * layer anyway — see the route comment.
  */
 async function assertCatalogueVisible(tx: Transaction, catalogueId: string): Promise<void> {
   if (!(await catalogueExists(tx, catalogueId))) {
@@ -264,14 +268,19 @@ function parseOptionGroupIds(value: unknown): string[] | undefined {
 const UPLOAD_BODY_HEADROOM = 16 * 1024;
 
 /**
- * Mounts the dashboard's gated catalogue write group plus the image-upload route on an existing Hono
- * app — `mountManagementApi`'s sibling, attached to the SAME app (the `mountWebhook`/`mountTillApi`
- * convention). Every route wraps its handler in `run`, calls `requireManagementSession(c)` (→ 401
- * before any DB work) and then, inside `withTenant` + `asAppUser`, `authorizeManager(...)` (→ 403)
- * before the headless `@waitron/catalogue` op, so RLS scopes each read/write to this server's one
- * tenant and the `person.manage` gate runs on every route through one constant.
+ * The deployment holds one tenant per database. Mounts the dashboard's gated catalogue write
+ * group plus the image-upload route on an existing Hono app — `mountManagementApi`'s sibling,
+ * attached to the SAME app (the `mountWebhook`/`mountTillApi` convention). Every route wraps its
+ * handler in `run`, calls `requireManagementSession(c)` (→ 401 before any DB work) and then,
+ * inside `withTenant` + `asAppUser`, `authorizeManager(...)` (→ 403) before the headless
+ * `@waitron/catalogue` op, in this database. The `person.manage` gate runs on every route through
+ * one constant.
  */
 export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger): void {
+  // Brand the tenant id ONCE per mount rather than per write route — a stable value for the life
+  // of the mount (cfg.tenantId is fixed), the low-risk form of the dedup (deps keeps cfg: { tenantId:
+  // string }, the sibling convention).
+  const tenantId = brandTenantId(deps.cfg.tenantId);
   // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries
   // CATALOGUE_WRITE_PERMISSION, then run `fn`. Every route funnels its DB work through here so the gate
   // is applied identically and in exactly one place — the design §3 seam.
@@ -309,24 +318,26 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         throw new AppError("management.request_invalid", { field: "name" });
       }
       const { name } = body;
-      const created = await gated(sessionId, (tx) => createCatalogue(tx, { name }));
+      const created = await gated(sessionId, (tx) => createCatalogue(tx, tenantId, { name }));
       return c.json(created, 201);
     }),
   );
 
   // ── Location menus ───────────────────────────────────────────────────────────────────────────────
-  // The dashboard's location↔menu membership screen: which catalogues a location may SELL (its default
-  // `locations.catalogue_id` plus `location_catalogues` members). GET returns EVERY tenant catalogue
-  // flagged sellable/isDefault so the screen can also offer the not-yet-sold ones; POST/DELETE add and
-  // remove a member; PUT sets the default (keep-sellable — the old default is demoted, never dropped).
-  // The two routes that WRITE a `catalogueId` reference (POST add, PUT default) guard it with
-  // `catalogueExists` FIRST — an absent or cross-tenant id is refused `catalogue.not_found` (404).
-  // This is defense-in-depth, not the sole protection: BOTH write targets carry a tenant-consistent
-  // composite FK — `locations.catalogue_id` → catalogues(tenant_id,id) (0078), `location_catalogues`
-  // → (0074) — that 23503-rejects a cross-tenant id at the DATA layer independently of RLS. The guard's
-  // job is the CLEAN, uniform error: without it both routes still refuse a cross-tenant id, but via the
-  // FK's opaque 500 (proven cross-tenant in catalogue-api.rls.test.ts: guard deleted → the PUT returns
-  // 500, the default is never set). DELETE needs no guard: removing a non-member row is a no-op.
+  // The deployment holds one tenant per database.
+  // The dashboard's location↔menu membership screen: which catalogues a location may SELL (its
+  // default `locations.catalogue_id` plus `location_catalogues` members). GET returns EVERY
+  // tenant catalogue flagged sellable/isDefault so the screen can also offer the not-yet-sold
+  // ones; POST/DELETE add and remove a member; PUT sets the default (keep-sellable — the old
+  // default is demoted, never dropped). The two routes that WRITE a `catalogueId` reference (POST
+  // add, PUT default) guard it with `catalogueExists` FIRST — an absent id is refused
+  // `catalogue.not_found` (404). The lookup is by id. This is defense-in-depth, not the sole
+  // protection: BOTH write targets carry a tenant-consistent composite FK —
+  // `locations.catalogue_id` → catalogues(tenant_id,id), `location_catalogues.catalogue_id` → catalogues(tenant_id,id) —
+  // that 23503-rejects a foreign-tenant id at the DATA layer. The guard gives an absent id a
+  // clean error. A foreign row seeded into the same database passes that by-id lookup, but the
+  // composite FK still rejects the write with 23503. DELETE needs no guard: removing a non-member
+  // row is a no-op.
   app.get("/management-api/locations/:locationId/catalogues", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -343,7 +354,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const catalogueId = await requireCatalogueIdBody(c);
       await gated(sessionId, async (tx) => {
         await assertCatalogueVisible(tx, catalogueId);
-        await addCatalogueToLocation(tx, locationId, catalogueId);
+        await addCatalogueToLocation(tx, tenantId, locationId, catalogueId);
       });
       return c.body(null, 204);
     }),
@@ -366,7 +377,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const catalogueId = await requireCatalogueIdBody(c);
       await gated(sessionId, async (tx) => {
         await assertCatalogueVisible(tx, catalogueId);
-        await setLocationDefaultCatalogue(tx, locationId, catalogueId);
+        await setLocationDefaultCatalogue(tx, tenantId, locationId, catalogueId);
       });
       return c.body(null, 204);
     }),
@@ -389,7 +400,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         throw new AppError("management.request_invalid", { field: "name" });
       }
       const { name } = body;
-      const created = await gated(sessionId, (tx) => createCategory(tx, { name }));
+      const created = await gated(sessionId, (tx) => createCategory(tx, tenantId, { name }));
       return c.json(created, 201);
     }),
   );
@@ -474,9 +485,9 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         ...(body.active === undefined ? {} : { active: body.active }),
       };
       const created = await gated(sessionId, async (tx) => {
-        const product = await createProduct(tx, input);
+        const product = await createProduct(tx, tenantId, input);
         if (optionGroupIds !== undefined) {
-          await setProductOptionGroups(tx, product.id, optionGroupIds);
+          await setProductOptionGroups(tx, tenantId, product.id, optionGroupIds);
         }
         return product;
       });
@@ -566,7 +577,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       await gated(sessionId, async (tx) => {
         await updateProduct(tx, productId, patch);
         if (optionGroupIds !== undefined) {
-          await setProductOptionGroups(tx, productId, optionGroupIds);
+          await setProductOptionGroups(tx, tenantId, productId, optionGroupIds);
         }
       });
       return c.body(null, 204);
@@ -631,7 +642,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         ...(sort === undefined ? {} : { sort }),
         ...(body.active === undefined ? {} : { active: body.active }),
       };
-      const created = await gated(sessionId, (tx) => createOptionGroup(tx, input));
+      const created = await gated(sessionId, (tx) => createOptionGroup(tx, tenantId, input));
       return c.json(created, 201);
     }),
   );
@@ -748,7 +759,9 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       // The group :id is screened for SHAPE only; a well-formed-but-missing/foreign group makes the
       // tenant-consistent (tenant_id, group_id) FK raise 23503 → the opaque 500 the STATUS map documents
       // for a foreign id, the same posture the product routes take on a foreign catalogueId.
-      const created = await gated(sessionId, (tx) => createOptionGroupItem(tx, groupId, input));
+      const created = await gated(sessionId, (tx) =>
+        createOptionGroupItem(tx, tenantId, groupId, input),
+      );
       return c.json(created, 201);
     }),
   );

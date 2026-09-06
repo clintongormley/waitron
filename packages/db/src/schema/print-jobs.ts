@@ -36,13 +36,6 @@ const bytea = customType<{ data: Buffer; driverData: Buffer }>({
  * inspects them — it only moves bytes. `printer_id` is a BARE uuid whose tenant-consistent
  * (tenant_id, printer_id) → printers (tenant_id, id) composite FK is hand-written in the paired
  * --custom migration (a bare column carries no FK), exactly as `devices.station_id`.
- *
- * Built SINGLE-WRITER-PER-ROW (memory: replication is shared infra; §4): the enqueuer owns creation,
- * the pulling path owns the `printing`→`done`/`failed` transition. Single-node venues work today; full
- * multi-node routing lands when app-level replication does. `app_user` holds SELECT/INSERT/UPDATE and
- * no DELETE (a job is a durable record). `.enableRLS()` emits only ENABLE; FORCE + the
- * `print_jobs_tenant_isolation` policy + the grant are hand-written in the --custom migration
- * (inmutabilidad requires FORCE on every tenant_id-bearing table).
  */
 export const printJobs = pgTable(
   "print_jobs",
@@ -82,9 +75,5 @@ export const printJobs = pgTable(
     // Set when the job reaches `done`. NULL while queued/printing/failed.
     deliveredAt: timestamp("delivered_at", { withTimezone: true, mode: "string" }),
   },
-  (t) => [
-    // The agent's pull scan: the queued jobs for the agent's printers, keyed (tenant_id, printer_id,
-    // status). tenant_id leads, matching the RLS predicate's leading column.
-    index("print_jobs_pull_idx").on(t.tenantId, t.printerId, t.status),
-  ],
-).enableRLS();
+  (t) => [index("print_jobs_pull_idx").on(t.tenantId, t.printerId, t.status)],
+);

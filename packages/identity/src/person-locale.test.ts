@@ -9,9 +9,8 @@ import { setPersonLocale } from "./staff.js";
 import { codeOf, seedPerson } from "../test/fixtures.js";
 
 // PGlite, not real Postgres: setPersonLocale is LOGIC — the supported-locale assertion, then the
-// UPDATE. Nothing here depends on the privilege set or on RLS enforcement (a PGlite connection is
-// superuser, so RLS is a false pass, CLAUDE.md §4); that the app role can write and read `locale`
-// under FORCE RLS is proven in persons-locale.rls.test.ts and is not re-proven here.
+// UPDATE. Nothing here depends on the privilege set (a PGlite connection is superuser holding every
+// grant, so a grant assertion would be a false pass, CLAUDE.md §4).
 let tenantId: string;
 
 const suite = usePgliteDb({
@@ -25,7 +24,7 @@ function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTenant(suite.db, tenantId, fn);
 }
 
-// Read `locale` back as the superuser owner (RLS bypassed on PGlite). A validation that rejects
+// Read `locale` back as the superuser owner. A validation that rejects
 // BEFORE its UPDATE leaves the column untouched.
 async function localeOf(id: string): Promise<string | null> {
   const rows = await suite.db.execute<{ locale: string | null }>(

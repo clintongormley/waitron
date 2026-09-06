@@ -1,3 +1,4 @@
+import { tenantId as brandTenantId } from "@waitron/shared";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -15,10 +16,10 @@ import "./errors.js";
 // boundary, the body + id screens and the `recipe.manage` gate wiring — end to end in-process, the
 // same way `catalogue-api.test.ts` proves the catalogue routes. The ingredients/recipe_lines tables
 // live in CORE_MIGRATIONS and the management session/persons in IDENTITY_MIGRATIONS, and every DB
-// touch runs `withTenant` + `asAppUser` exactly as production does. The differential RLS isolation
-// proof and the gate-by-DELETION proof (removing `authorizeManager` turns the staff refusal
-// green→red) are the NEXT task's real-Postgres suite (`recipe-api.rls.test.ts`), which PGlite cannot
-// show because it connects as a superuser (CLAUDE.md §4).
+// touch runs `withTenant` + `asAppUser` exactly as production does. The gate-by-DELETION proof
+// (removing `authorizeManager` turns the staff refusal green→red), run as the non-superuser app role,
+// is the real-Postgres suite (`recipe-api.pg.test.ts`); PGlite connects as a superuser holding every
+// grant (CLAUDE.md §4).
 const noopLog: Logger = () => {};
 
 // This node's origin id — threaded into every recipe write's withTenant (a recipe write UPDATEs the
@@ -44,10 +45,10 @@ const suite = usePgliteDb({
       await asAppUser(tx);
       const mgr = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
-        values (current_tenant_id(), 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+        values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
       const stf = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
-        values (current_tenant_id(), 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+        values (${tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
       const managerSession = await startManagementSession(tx, {
         tenantId,
         personId: mgr.rows[0]!.id,
@@ -56,8 +57,10 @@ const suite = usePgliteDb({
         tenantId,
         personId: stf.rows[0]!.id,
       });
-      const catalogue = await createCatalogue(tx, { name: "Recipe catalogue" });
-      const product = await createProduct(tx, {
+      const catalogue = await createCatalogue(tx, brandTenantId(tenantId), {
+        name: "Recipe catalogue",
+      });
+      const product = await createProduct(tx, brandTenantId(tenantId), {
         catalogueId: catalogue.id,
         categoryId: null,
         descriptions: { es: "Tostada" },

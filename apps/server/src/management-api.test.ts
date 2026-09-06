@@ -1,3 +1,4 @@
+// Real PostgreSQL exercises management reads and writes after SET ROLE app_user.
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -20,11 +21,7 @@ import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { mountManagementApi } from "./management-api.js";
 
-// Real Postgres, not PGlite: these routes wrap the floor-zone + table config CRUD, and each route both
-// AUTHORIZES (`authorizeManager` reads persons + management_sessions under the app role's RLS) and
-// writes `floor_zones` / `dining_tables` under FORCE ROW LEVEL SECURITY — both false passes on PGlite's
-// superuser connection (CLAUDE.md §4). The same real-Postgres justification as `management-api.status.test.ts`,
-// whose harness (`applyVenue`/`planVenue` + password `login`) this file reuses.
+// Exercise floor-zone and table configuration with manager authorization on PostgreSQL.
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
 // Dashboard sign-in resolves the person by EMAIL (not a client-supplied id), so each seeded person
@@ -53,14 +50,7 @@ function unique(base: string): string {
   return `${base}-${randomUUID().slice(0, 8)}`;
 }
 
-/**
- * Stand up a fresh provisioned venue (as the owner), then seed — as the app role under the tenant, so
- * RLS is exercised — a MANAGER (role `manager`, which holds `till.configure`) and a STAFF person (role
- * `staff`, which holds nothing), each WITH a dashboard password so both can log in. Provisioning creates
- * only the ADMIN, so these two are seeded directly; `pin_hash` is NOT NULL, so a value is supplied even
- * though they log in by password. Returns the whole `VenueResult` so `mountApp` can thread the venue's
- * location into the zone/table config routes.
- */
+/** Provision a venue as owner and seed the people and sessions this route fixture needs. */
 async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; staffId: string }> {
   const venue = await applyVenue(
     planVenue(
@@ -99,11 +89,11 @@ async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; s
     await asAppUser(tx);
     const manager = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
+      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
       returning id`);
     const staff = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
+      values (${venue.tenantId}, 'The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
       returning id`);
     return { managerId: manager.rows[0]!.id, staffId: staff.rows[0]!.id };
   });
@@ -112,7 +102,7 @@ async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; s
 
 /** Build the venue's `TillConfig` from an `applyVenue` result — the tenant + location the zone/table
  *  config verbs scope to (the other fiscal ids are inert on the config surface). Mirrors the same
- *  helper in `move-merge.rls.test.ts`; `boot.ts` threads the real `till` config here in production. */
+ *  helper in `move-merge.pg.test.ts`; `boot.ts` threads the real `till` config here in production. */
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
     tenantId: brandTenantId(venue.tenantId),
@@ -836,7 +826,7 @@ describe("/management-api/tables", () => {
 // wrappers over Task 2's `setTablePlacement` / `clearPlacement`. Same gate + `run` mapping as the FP-1
 // zone/table routes above (`requireManagementSession` 401 first, then `withVenueAuth`'s
 // `authorizeManager(till.configure)` 403). These placement tests read the row back with a DIRECT
-// `dining_tables` read (`readPlacement`) — a tight row-level receipt for exactly the four columns the
+// `dining_tables` read (`readPlacement`) — a tight row receipt for exactly the four columns the
 // PUT/DELETE write. The management `GET /tables` surface (`listTables`) DOES now project those columns
 // (Task 7b), verified end-to-end by the "GET projects a placed table's placement columns" case in the
 // `/management-api/tables` describe above; the direct read here keeps this describe focused on the verb.
@@ -853,7 +843,7 @@ function place(zoneId: string): {
   return { zoneId, posX: 500, posY: 250, shape: "square", rotation: 0 };
 }
 
-/** Read a table's four placement columns as the app role under the venue's tenant (RLS-scoped). */
+/** Read a table's four placement columns as the app role under the venue's tenant. */
 async function readPlacement(tableId: string): Promise<{
   posX: number | null;
   posY: number | null;
@@ -1080,9 +1070,7 @@ describe("/management-api/tables/:id/placement", () => {
   });
 });
 
-// KDS-1 kitchen-station + routing config (design §3a/§3f), mirroring the FP-1 zone routes above: real
-// Postgres because each route AUTHORIZES (`authorizeManager` under RLS) and writes `kitchen_stations` /
-// `categories.station_id` / `products.station_id` / `locations.bump_mode` under FORCE ROW LEVEL SECURITY.
+// Exercise kitchen-station routing configuration and manager authorization on PostgreSQL.
 describe("/management-api/stations (KDS-1 config)", () => {
   /** Create a station as the manager and return its id. */
   async function createStation(
@@ -1376,9 +1364,13 @@ describe("/management-api/stations (KDS-1 config)", () => {
     // Seed a real category + product to route, on the app role under this venue's tenant.
     const { categoryId, productId } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
       await asAppUser(tx);
-      const catalogue = await createCatalogue(tx, { name: unique("Carta") });
-      const category = await createCategory(tx, { name: unique("Cat") });
-      const product = await createProduct(tx, {
+      const catalogue = await createCatalogue(tx, brandTenantId(venue.tenantId), {
+        name: unique("Carta"),
+      });
+      const category = await createCategory(tx, brandTenantId(venue.tenantId), {
+        name: unique("Cat"),
+      });
+      const product = await createProduct(tx, brandTenantId(venue.tenantId), {
         catalogueId: catalogue.id,
         categoryId: category.id,
         descriptions: { [LOCALE]: unique("Prod") },
@@ -1638,9 +1630,13 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     // Seed a real product to route, on the app role under this venue's tenant.
     const { productId } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
       await asAppUser(tx);
-      const catalogue = await createCatalogue(tx, { name: unique("Carta") });
-      const category = await createCategory(tx, { name: unique("Cat") });
-      const product = await createProduct(tx, {
+      const catalogue = await createCatalogue(tx, brandTenantId(venue.tenantId), {
+        name: unique("Carta"),
+      });
+      const category = await createCategory(tx, brandTenantId(venue.tenantId), {
+        name: unique("Cat"),
+      });
+      const product = await createProduct(tx, brandTenantId(venue.tenantId), {
         catalogueId: catalogue.id,
         categoryId: category.id,
         descriptions: { [LOCALE]: unique("Prod") },

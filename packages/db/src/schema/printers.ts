@@ -31,12 +31,6 @@ export const printTicketScope = pgEnum("print_ticket_scope", ["station", "order"
  * (tenant_id, id) composite FK is hand-written in the --custom migration (a bare column carries no
  * FK), exactly as `devices.station_id` does. NULLABLE — a `cloud_poll` printer has no agent (it
  * self-polls); MATCH SIMPLE skips the FK check on a NULL agent_id.
- *
- * A printer is deactivated via `active = false`, never deleted (a `print_jobs` history references it),
- * so `app_user` holds SELECT/INSERT/UPDATE and no DELETE — the `devices` shape, granted in the
- * --custom migration. `.enableRLS()` emits only ENABLE; FORCE + the `printers_tenant_isolation`
- * policy + the grant are hand-written there (inmutabilidad requires FORCE on every tenant_id-bearing
- * table).
  */
 export const printers = pgTable(
   "printers",
@@ -79,4 +73,4 @@ export const printers = pgTable(
     // (tenant_id, printer_id) FK points at (print-jobs.ts), the same role devices_tenant_id_key plays.
     unique("printers_tenant_id_key").on(t.tenantId, t.id),
   ],
-).enableRLS();
+);

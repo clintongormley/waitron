@@ -40,8 +40,7 @@ export interface AdoptResult {
 
 export interface AdoptVenueDeps {
   /** The OWNER connection to the mirror's database — the admin that ran `instance` and so owns the
-   * tables, mirroring `applyVenue`'s `db`. In-test this is a PGlite superuser; the non-superuser
-   * owner path under FORCE RLS is proven by a later real-Postgres e2e. */
+   * tables, mirroring applyVenue's db. All inserts and the designated-id read share one transaction. */
   db: Database;
 }
 
@@ -143,10 +142,8 @@ function prepareRow(table: Table, row: VenueRow): VenueRow {
  * installation number and chain — never from provisioning. `adoptVenue` inserts only the identity
  * scaffold those pulled rows need.
  *
- * The tenant scope is adopted from `designated.tenantId`, so every WITH CHECK
- * (`tenant_id = current_tenant_id()`) is satisfied by the rows this run inserts, and the designated-id
- * read-back below runs under that same scope — required so the check passes under FORCE RLS as the
- * owner (the later e2e's role), where a scopeless SELECT would see nothing.
+ * Inserts carry the bundle rows' explicit tenant ids; withTenant only supplies the transaction.
+ * The read-back checks that the designated tenant, location, till, node and series exist.
  */
 export async function adoptVenue(
   rows: AdoptVenueRows,
@@ -183,7 +180,7 @@ export async function adoptVenue(
         .onConflictDoNothing({ target: invoiceSeries.id });
     }
 
-    // Read each designated id back inside the tenant scope: a malformed bundle whose row arrays did
+    // Read each designated id back inside the same transaction: a malformed bundle whose row arrays did
     // not carry a row with a designated id would leave the mirror pointed at a till/series that does
     // not exist. Fail loudly (and roll the transaction back — never leave a half-provisioned mirror)
     // rather than let it surface confusingly at first sale.

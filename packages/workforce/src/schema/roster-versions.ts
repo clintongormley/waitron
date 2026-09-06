@@ -39,7 +39,7 @@ export const rosterVersionStatus = pgEnum("roster_version_status", [
  * A published (or draft) snapshot of a location's schedule for a date period — PLANNING data, NOT the
  * legal record. Unlike `time_entries` (the immutable registro de jornada), a roster version is
  * ordinary mutable data: the app role holds SELECT, INSERT, UPDATE and DELETE
- * (drizzle/0006_scheduling_rls.sql) — a draft is edited or discarded, a published version can be
+ * (drizzle/0001_workforce_baseline_sql.sql) — a draft is edited or discarded, a published version can be
  * re-stamped or removed. No append-only trigger and no hash chain: no Spanish statute requires a
  * *schedule* to be tamper-evident — that obligation (art. 34.9) is on the record of hours WORKED,
  * which `time_entries` satisfies alone (design 2026-07-22 §2.1 / plan
@@ -103,7 +103,7 @@ export const rosterVersions = pgTable(
     // concurrent first-publish of two DIFFERENT drafts has no row to lock, so THIS index is what
     // guarantees the second cannot also leave a published row — it raises 23505, which publishRoster
     // translates to roster.period_already_published. Like registro_sif_activo_uq (fiscal-verifactu),
-    // it binds across the whole table even under FORCE RLS: unique indexes are not RLS-filtered, and
+    // it binds across the whole table, and
     // tenant_id is the leading column so it never collides across tenants.
     uniqueIndex("roster_versions_published_period_uq")
       .on(t.tenantId, t.locationId, t.periodStart, t.periodEnd)
@@ -119,4 +119,4 @@ export const rosterVersions = pgTable(
       sql`(${t.status} = 'draft') = (${t.publishedAt} is null)`,
     ),
   ],
-).enableRLS();
+);

@@ -109,7 +109,7 @@ describe("print-on-fire concurrency — FOR SHARE on the mapping read", () => {
       tenantId,
       async (tx) => {
         await asAppUser(tx);
-        const cat = await createCatalogue(tx, { name: "Carta" });
+        const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
         await assignCatalogueToLocation(tx, locationId, cat.id);
         const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
         const { id: printerId } = await createPrinter(tx, printCfg(cfg), {
@@ -118,7 +118,7 @@ describe("print-on-fire concurrency — FOR SHARE on the mapping read", () => {
           pollId: `poll-${randomUUID()}`,
         });
         await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId });
-        const { id: product } = await createProduct(tx, {
+        const { id: product } = await createProduct(tx, tenantId, {
           catalogueId: cat.id,
           categoryId: null,
           descriptions: { [LOCALE]: "Chuleton" },

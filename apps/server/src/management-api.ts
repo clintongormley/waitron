@@ -114,7 +114,7 @@ export interface ManagementApiDeps {
    * node's origin id, threaded into every identity-config write's `withTenant` so that the `sync_log`
    * row the capture trigger records for each enrolled `persons`/`webauthn_credentials` INSERT/UPDATE
    * carries a real `origin_id` rather than the all-zero sentinel (design §4d(B); sync origin
-   * attribution — proven end-to-end by `sync-origin.rls.test.ts`). */
+   * attribution — proven end-to-end by `sync-origin.test.ts`). */
   cfg: { tenantId: string; nodeId: string };
   /**
    * The venue's own config — the tenant + LOCATION the floor-zone and table config routes (FP-1) scope
@@ -298,17 +298,17 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 const run = createErrorBoundary(STATUS, "management.failed");
 
 /**
- * Screen a `/management-api/staff/:id` path param as a UUID before it reaches a query, returning it. A
- * malformed id passed straight into a `uuid` column would `22P02` → an opaque 500; refusing it here as
- * `person.not_found` (a caller-supplied uuid, safe to echo) turns that 500 into a clean 404. This
- * screens SHAPE only — it does NOT check existence: a WELL-FORMED id that names no row (a person that
- * does not exist, or another tenant's row RLS hides) passes this guard, reaches the identity
- * `UPDATE persons … WHERE id = <id>` (which matches zero rows and throws nothing — the staff mutations
- * carry no `.returning()`/row-count check), and the route answers 204, the same silent no-op an
- * out-of-range PATCH `status` gets. This is where the guard DIVERGES from till-api.ts's `requireUuidId`:
- * that file's routes then look the row up and throw on absence; the identity staff mutations do not.
- * The three gated `/staff/:id/…` routes (patch, reset-pin, set-password) pass `c.req.param("id")` (a
- * `string` in their route-typed context) and share this one guard.
+ * Screen a `/management-api/staff/:id` path param as a UUID before it reaches a query, returning
+ * it. A malformed id passed straight into a `uuid` column would `22P02` → an opaque 500; refusing
+ * it here as `person.not_found` (a caller-supplied uuid, safe to echo) turns that 500 into a
+ * clean 404. This screens SHAPE only — it does NOT check existence: a WELL-FORMED id that names
+ * no row (a person that does not exist, ) passes this guard, reaches the identity `UPDATE persons
+ * … WHERE id = <id>` (which matches zero rows and throws nothing — the staff mutations carry no
+ * `.returning()`/row-count check), and the route answers 204, the same silent no-op an
+ * out-of-range PATCH `status` gets. This is where the guard DIVERGES from till-api.ts's
+ * `requireUuidId`: that file's routes then look the row up and throw on absence; the identity
+ * staff mutations do not. The three gated `/staff/:id/…` routes (patch, reset-pin, set-password)
+ * pass `c.req.param("id")` (a `string` in their route-typed context) and share this one guard.
  */
 function requirePersonId(id: string): string {
   if (!isUuid(id)) throw new AppError("person.not_found", { personId: id });
@@ -524,24 +524,25 @@ async function parsePasskeyVerifyBody(
 }
 
 /**
- * Mounts the dashboard's management-session routes on an existing Hono app: the staff roster (read
- * post-login by `my-schedule-screen.ts`), login and logout. Task 4 adds the gated staff CRUD routes
- * to THIS same function, each
- * handler wrapped in `run` (above) so the whole surface maps errors identically. Mirrors
- * `mountTillApi`'s shape — `withTenant(deps.db, deps.cfg.tenantId, …)` + `asAppUser(tx)` on every DB
- * touch, so RLS scopes each read/write to this dashboard's own tenant.
+ * Mounts the dashboard's management-session routes on an existing Hono app: the staff roster
+ * (read post-login by `my-schedule-screen.ts`), login and logout. Task 4 adds the gated staff
+ * CRUD routes to THIS same function, each handler wrapped in `run` (above) so the whole surface
+ * maps errors identically. Mirrors `mountTillApi`'s shape — `withTenant(deps.db,
+ * deps.cfg.tenantId, …)` + `asAppUser(tx)` on every DB touch, in the database holding this
+ * dashboard's tenant.
  */
 export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logger): void {
-  // Roster of active persons. Deliberately UNAUTHENTICATED — it exposes no secret, so it calls
-  // `listActiveStaff` under `withTenant` + `asAppUser` (RLS scopes it to this dashboard's tenant)
-  // rather than `requireManagementSession`. One dashboard screen fetches it via `api.getStaffRoster()`
-  // at HEAD: `my-schedule-screen.ts`'s staff self-service view (the colleague picker + name
-  // resolution). The login screen no longer uses it — spec §4.4's email-login migration landed, so
-  // `login-screen.ts`'s `#submit` now POSTs `{ email }` (`loginManager` resolves the person by email),
-  // not the old `{ personId }` roster picker. So the route stays for `my-schedule-screen.ts`. (The till
-  // has its OWN active-staff route, `GET /api/staff` in till-api.ts — not this one.) `listActiveStaff`
-  // returns `{ personId, displayName }` only: no password material, role or status, so there is nothing
-  // here a bystander must not see.
+  // The deployment holds one tenant per database. Roster of active persons. Deliberately
+  // UNAUTHENTICATED — it exposes no secret, so it calls `listActiveStaff` under `withTenant` +
+  // `asAppUser` rather than `requireManagementSession`. One dashboard screen fetches it via
+  // `api.getStaffRoster()` at HEAD: `my-schedule-screen.ts`'s staff self-service view (the
+  // colleague picker + name resolution). The login screen no longer uses it — spec §4.4's
+  // email-login migration landed, so `login-screen.ts`'s `#submit` now POSTs `{ email }`
+  // (`loginManager` resolves the person by email), not the old `{ personId }` roster picker. So
+  // the route stays for `my-schedule-screen.ts`. (The till has its OWN active-staff route, `GET
+  // /api/staff` in till-api.ts — not this one.) `listActiveStaff` returns `{ personId,
+  // displayName }` only: no password material, role or status, so there is nothing here a
+  // bystander must not see.
   app.get("/management-api/staff-roster", (c) =>
     run(c, log, async () => {
       const roster = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
@@ -552,31 +553,33 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Login: EMAIL + password (+ TOTP iff the person is enrolled) → management-session cookie. Runs as
-  // the app role under the dashboard's tenant (`withTenant` + `asAppUser`), so RLS scopes the person
-  // lookup. `loginManager` resolves the person by EMAIL (not a client-supplied id) and hardens against
-  // enumeration: an unknown email and a wrong password BOTH surface as `password.invalid` (401), so the
-  // response never reveals which addresses have accounts; a suspended person surfaces as
-  // `person.suspended` (403), a missing/wrong TOTP as `totp.invalid` (401) — the identity credential
-  // codes `STATUS` maps. The body is read via `readJsonBody`
-  // (`read-json-body.ts`), which coerces an empty/malformed/`null` body to `{}` so it never reaches
-  // `run` as an opaque 500 — see its doc for the two degenerate-body cases it handles. This is the
-  // representative site the other body-parsing routes point at: a degenerate body falls through to the
-  // screen as the route's OWN 4xx. (A JSON primitive/array body needs no coercion — a field access on
-  // it is `undefined`, not a throw.) The body is then screened: a missing/empty `email` (not a string,
-  // or a string that trims to empty), a non-string `password`, or a `totp` present but not a string, is
-  // refused as `password.invalid` — the SAME code a wrong password or unknown email gets, so nothing in
-  // the response tells an unauthenticated caller which field failed. Email FORMAT is validated at
-  // WRITE-time (`createPerson`/`setEmail`'s `screenEmail`), NOT here: login screens only that a
-  // non-empty string was supplied and leaves a well-formed-but-unknown address to `loginManager`, which
-  // answers `password.invalid` uniformly. (Screening `totp` does NOT avert a 500: `verifyTotp`
-  // fails closed — probed against otplib@13.4.1, `verifyTotp` returns `false` for a non-string `totp`
-  // (number/null/undefined/object/boolean/non-six-digit string all tested): v13's `verifySync` throws
-  // on such input and `verifyTotp`'s catch swallows the throw, so the wrapper never surfaces it — a
-  // non-string `totp` reaching `loginManager` yields `totp.invalid` when the person is enrolled and is
-  // ignored when they are not, never a throw. It is screened for response uniformity and to keep the
-  // runtime value matching its declared `string` type; see this task's fix report for the correction to
-  // the review's "totp → 500" claim.)
+  // The deployment holds one tenant per database. Login: EMAIL + password (+ TOTP iff the person
+  // is enrolled) → management-session cookie. Runs as the app role under the dashboard's tenant
+  // (`withTenant` + `asAppUser`), in this database. `loginManager` resolves the person by EMAIL
+  // (not a client-supplied id) and hardens against enumeration: an unknown email and a wrong
+  // password BOTH surface as `password.invalid` (401), so the response never reveals which
+  // addresses have accounts; a suspended person surfaces as `person.suspended` (403), a
+  // missing/wrong TOTP as `totp.invalid` (401) — the identity credential codes `STATUS` maps. The
+  // body is read via `readJsonBody` (`read-json-body.ts`), which coerces an
+  // empty/malformed/`null` body to `{}` so it never reaches `run` as an opaque 500 — see its doc
+  // for the two degenerate-body cases it handles. This is the representative site the other
+  // body-parsing routes point at: a degenerate body falls through to the screen as the route's
+  // OWN 4xx. (A JSON primitive/array body needs no coercion — a field access on it is
+  // `undefined`, not a throw.) The body is then screened: a missing/empty `email` (not a string,
+  // or a string that trims to empty), a non-string `password`, or a `totp` present but not a
+  // string, is refused as `password.invalid` — the SAME code a wrong password or unknown email
+  // gets, so nothing in the response tells an unauthenticated caller which field failed. Email
+  // FORMAT is validated at WRITE-time (`createPerson`/`setEmail`'s `screenEmail`), NOT here:
+  // login screens only that a non-empty string was supplied and leaves a well-formed-but-unknown
+  // address to `loginManager`, which answers `password.invalid` uniformly. (Screening `totp` does
+  // NOT avert a 500: `verifyTotp` fails closed — probed against otplib@13.4.1, `verifyTotp`
+  // returns `false` for a non-string `totp` (number/null/undefined/object/boolean/non-six-digit
+  // string all tested): v13's `verifySync` throws on such input and `verifyTotp`'s catch swallows
+  // the throw, so the wrapper never surfaces it — a non-string `totp` reaching `loginManager`
+  // yields `totp.invalid` when the person is enrolled and is ignored when they are not, never a
+  // throw. It is screened for response uniformity and to keep the runtime value matching its
+  // declared `string` type; see this task's fix report for the correction to the review's "totp →
+  // 500" claim.)
   app.post("/management-api/session", (c) =>
     run(c, log, async () => {
       const body = await readJsonBody<{ email?: string; password?: string; totp?: string }>(c);
@@ -626,10 +629,11 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // List every person of the tenant (roles, status, credential BOOLEANS — never secrets). Gated:
-  // `requireManagementSession` refuses an unauthenticated request with 401 before any DB work, then
-  // `listPersons`'s own `authorizeManager` enforces `person.manage` under RLS. The admin-roster
-  // counterpart of the unauthenticated `staff-roster` above.
+  // The deployment holds one tenant per database. List every person of the tenant (roles, status,
+  // credential BOOLEANS — never secrets). Gated: `requireManagementSession` refuses an
+  // unauthenticated request with 401 before any DB work, then `listPersons`'s own
+  // `authorizeManager` enforces `person.manage`. The admin-roster counterpart of the
+  // unauthenticated `staff-roster` above.
   app.get("/management-api/staff", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -823,20 +827,21 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // ── Receipt configuration (Task 7; receipt rehomed in SP-B4) ──────────────────────────────────
-  // The dashboard's receipt-trim editor surface. Both routes are gated (`requireManagementSession`
-  // first, 401 before any DB work) and every DB touch runs under `withTenant` + `asAppUser`, so RLS
-  // scopes both the authorize gate and the store rows to this dashboard's own tenant. The receipt
-  // routes read/write the tenant's own `tenant_receipts` row (SP-B4 — the trim moved out of the old
-  // widget-layout model, now removed). The PUT delegates the authorize + validate + upsert to
-  // `@waitron/layouts`'s `putReceipt`; the GET calls `getReceipt`, which does NOT authorize (it is
-  // shared with the unauthenticated till boot read), so it carries its own explicit gate.
+  // The deployment holds one tenant per database. The dashboard's receipt-trim editor
+  // surface. Both routes are gated (`requireManagementSession` first, 401 before any DB work) and
+  // every DB touch runs under `withTenant` + `asAppUser`, in this database; the receipt store
+  // explicitly keys rows by tenant id. The receipt routes read/write the tenant's own
+  // `tenant_receipts` row (SP-B4 — the trim moved out of the old widget-layout model, now
+  // removed). The PUT delegates the authorize + validate + upsert to `@waitron/layouts`'s
+  // `putReceipt`; the GET calls `getReceipt`, which does NOT authorize (it is shared with the
+  // unauthenticated till boot read), so it carries its own explicit gate.
 
   // Read the tenant's authored receipt trim, or the built-in default (`getReceipt` returns
   // DEFAULT_RECEIPT `{}` on absence — SP-B4, from its own `tenant_receipts` row). Gated on
   // `till.configure` via the explicit `authorizeManager`, NOT merely on holding a session —
   // `getReceipt` itself does NOT authorize (it is shared with the
   // unauthenticated till boot read), so this route carries its own gate. Proven by deletion in
-  // `management-api.rls.test.ts`: dropping this `authorizeManager` call flips the staff-role case from
+  // `management-api.pg.test.ts`: dropping this `authorizeManager` call flips the staff-role case from
   // 403 to 200.
   app.get("/management-api/receipt", (c) =>
     run(c, log, async () => {
@@ -883,15 +888,17 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // ── Canvases + tenant theme (Task 11) ──────────────────────────────────────────────────────
-  // The dashboard's reusable-canvas CRUD and the tenant's base theme (design §4/§9, SP-A.2
-  // §16.3). All routes are gated (`requireManagementSession` first, 401 before any DB work) and every
-  // DB touch runs `withTenant` + `asAppUser`, so RLS scopes the canvas/theme rows and the authorize
-  // gate to this dashboard's own tenant. The READS (`GET /canvases`, `/canvases/:id`, `/theme`) carry
-  // their own explicit `authorizeManager(..., "till.configure")` — `listCanvases`/`getCanvas`/
-  // `getTenantTheme` do NOT self-authorize (mirroring `GET /management-api/receipt`) — while the WRITES
-  // delegate the gate to the store fns (`createCanvas`/`updateCanvas`/`deleteCanvas`/`putTenantTheme`,
-  // proven by-deletion in the store rls suites). A malformed body field is refused as
-  // `management.request_invalid` naming the FIELD before the store call, the receipt/theme shape.
+  // The deployment holds one tenant per database. The dashboard's reusable-canvas CRUD
+  // and the tenant's base theme (design §4/§9, SP-A.2 §16.3). All routes are gated
+  // (`requireManagementSession` first, 401 before any DB work) and every DB touch runs
+  // `withTenant` + `asAppUser`, in this database; the canvas/theme stores explicitly filter or
+  // key rows by tenant id. The READS (`GET /canvases`, `/canvases/:id`, `/theme`) carry their own
+  // explicit `authorizeManager(..., "till.configure")` — `listCanvases`/`getCanvas`/
+  // `getTenantTheme` do NOT self-authorize (mirroring `GET /management-api/receipt`) — while the
+  // WRITES delegate the gate to the store fns
+  // (`createCanvas`/`updateCanvas`/`deleteCanvas`/`putTenantTheme`, covered by the store suites).
+  // A malformed body field is refused as `management.request_invalid` naming the FIELD before the
+  // store call, the receipt/theme shape.
 
   // The tenant's canvases, for the editor list. Gated on `till.configure` via the explicit
   // `authorizeManager` (the read fns do not gate). Returns `{ canvases: [{id,name,definition}] }`.
@@ -1060,18 +1067,19 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // ── Device profiles (Task 4) ───────────────────────────────────────────────────────────────────
-  // The dashboard's reusable device-profile CRUD (design 2026-09-05 §5.1) — a named capability set +
-  // optional default canvas that a device (a later task's reassign route) points at. Mirrors the
-  // canvas block: all routes are gated (`requireManagementSession` first, 401 before any DB work) and
-  // every DB touch runs `withTenant` + `asAppUser`, so RLS scopes the `device_profiles` rows and the
-  // authorize gate to this dashboard's own tenant. The READS (`GET /device-profiles`,
-  // `/device-profiles/:id`) carry their own explicit `authorizeManager(..., "till.configure")` —
-  // `listDeviceProfiles`/`getDeviceProfile` do NOT self-authorize (the canvas-read shape) — while the
-  // WRITES delegate the gate to the store fns (`createDeviceProfile`/`updateDeviceProfile`/
-  // `deleteDeviceProfile`, proven by-deletion in the store rls suite). A malformed body field is
-  // refused as `management.request_invalid` naming the FIELD before the store call; the store then maps
-  // an unknown capability / bad canvas reference to `device_profile.invalid` (400), a duplicate name to
-  // `device_profile.name_taken` (409), and an absent id to `device_profile.not_found` (404).
+  // The deployment holds one tenant per database. The dashboard's reusable
+  // device-profile CRUD (design 2026-09-05 §5.1) — a named capability set + optional default
+  // canvas that a device (a later task's reassign route) points at. Mirrors the canvas block: all
+  // routes are gated (`requireManagementSession` first, 401 before any DB work) and every DB
+  // touch runs `withTenant` + `asAppUser`, in this database; the device-profile store explicitly
+  // filters rows by tenant id. The READS (`GET /device-profiles`, `/device-profiles/:id`) carry
+  // their own explicit `authorizeManager(..., "till.configure")` —
+  // `listDeviceProfiles`/`getDeviceProfile` do NOT self-authorize (the canvas-read shape) — while
+  // the WRITES delegate the gate to the store fns (`createDeviceProfile`/`updateDeviceProfile`/
+  // `deleteDeviceProfile`, covered by the store suite). A malformed body field is refused as
+  // `management.request_invalid` naming the FIELD before the store call; the store then maps an
+  // unknown capability / bad canvas reference to `device_profile.invalid` (400), a duplicate name
+  // to `device_profile.name_taken` (409), and an absent id to `device_profile.not_found` (404).
 
   // The tenant's device profiles, for the editor list. Gated on `till.configure` via the explicit
   // `authorizeManager` (the read fn does not gate). Returns `{ deviceProfiles: [{id,name,canvasId,capabilities}] }`.
@@ -1223,9 +1231,10 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // ── Service-status configuration (TS-2) ──────────────────────────────────────────────────────────
-  // The dashboard's service-status editor surface (design §3a), mirroring the layout/receipt routes
-  // above. All four are gated (`requireManagementSession` first, 401 before any DB work); each verb's
-  // own `authorizeManager(..., "till.configure")` enforces the write gate under RLS.
+  // The deployment holds one tenant per database. The dashboard's service-status
+  // editor surface (design §3a), mirroring the layout/receipt routes above. All four are gated
+  // (`requireManagementSession` first, 401 before any DB work); each verb's own
+  // `authorizeManager(..., "till.configure")` enforces the write gate in this database.
 
   // Create a status. Body { label, color, displayOrder? }; a bad shape → management.request_invalid
   // naming the FIELD; a duplicate label → status.label_taken (409); a bad color → request_invalid.

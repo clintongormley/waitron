@@ -32,9 +32,8 @@ import {
 
 // PGlite, not real Postgres: the staff-admin API is LOGIC gated on authorizeManager() — the
 // person.manage check, the PIN-length assertion, and the role/status writes. Nothing here depends on
-// the privilege set or on RLS enforcement (a PGlite connection is superuser, so RLS is a false pass,
-// CLAUDE.md §4); tenant-isolation of persons is proven as the app role in persons.rls.test.ts and is
-// not re-proven.
+// the privilege set (a PGlite connection is superuser holding every grant, so a grant assertion
+// would be a false pass, CLAUDE.md §4).
 let tenantId: string;
 
 const suite = usePgliteDb({
@@ -53,8 +52,7 @@ async function personCount(): Promise<number> {
   return rows.rows[0]!.n;
 }
 
-// The mutable columns the staff-admin API writes, read as the superuser owner (RLS bypassed on
-// PGlite). A gate that rejects BEFORE its write leaves every one of these unchanged.
+// The mutable columns the staff-admin API writes, read as the superuser owner. A gate that rejects BEFORE its write leaves every one of these unchanged.
 async function personRow(
   id: string,
 ): Promise<{ role: string; status: string; pin_hash: string; password_hash: string | null }> {
@@ -67,7 +65,7 @@ async function personRow(
   return rows.rows[0]!;
 }
 
-// The stored login email, read as the superuser owner (RLS bypassed on PGlite).
+// The stored login email, read as the superuser owner.
 async function emailOf(id: string): Promise<string | null> {
   const rows = await suite.db.execute<{ email: string | null }>(
     sql`select email from persons where id = ${id}`,
@@ -555,9 +553,9 @@ describe("listActiveStaff", () => {
 
     const staff = await run((tx) => listActiveStaff(tx));
 
-    // This file shares one PGlite db + tenant across every describe block, and on PGlite the
-    // connection is superuser so RLS is bypassed (file header; CLAUDE.md §4) — the roster therefore
-    // also carries persons the other suites seeded. Restrict to the cohort THIS test created, the way
+    // This file shares one PGlite db + tenant across every describe block, and `listActiveStaff`
+    // reads every active person in the tenant — the roster therefore also carries persons the other
+    // describes seeded. Restrict to the cohort THIS test created, the way
     // the sibling suites read specific rows by id, so the assertion is order-independent.
     const mine = new Set([zoe.id, ana.id, gone.id]);
     const cohort = staff.filter((s) => mine.has(s.personId));

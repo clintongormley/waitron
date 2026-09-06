@@ -24,7 +24,7 @@ export type ShiftSwapStatus = (typeof shiftSwapStatus.enumValues)[number];
  * A request to swap shifts between two people — person A (the requester) offers their `from_shift` to
  * person B (`to_person`), optionally taking B's `to_shift` in return. PLANNING data, ordinary mutable
  * rows: the app role holds SELECT, INSERT, UPDATE and DELETE
- * (drizzle/0008_scheduling_planning_rls.sql), no append-only trigger and no chain (design 2026-07-22
+ * (drizzle/0001_workforce_baseline_sql.sql), no append-only trigger and no chain (design 2026-07-22
  * §2.1 / plan §2.1).
  *
  * `from_shift_id` cascades on delete — a swap is meaningless once the offered shift is gone, so
@@ -95,4 +95,4 @@ export const shiftSwaps = pgTable(
     index("shift_swaps_tenant_id_idx").on(t.tenantId),
     index("shift_swaps_tenant_from_shift_idx").on(t.tenantId, t.fromShiftId),
   ],
-).enableRLS();
+);

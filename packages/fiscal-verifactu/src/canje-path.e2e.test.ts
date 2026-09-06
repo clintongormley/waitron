@@ -10,22 +10,9 @@ import { seedSale, seedTill, TEST_NIF, TEST_SISTEMA, type SeededTill } from "./t
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 
 /**
- * The end-to-end proof that an F3 canje's recipient and substitution blocks survive the EXACT path
- * the drainer submits by. `drain.ts`'s `toEnvioRegistro` (:722-729) rebuilds a record from its
- * stored columns via `fromRegistroRow` and hands it to `serializeEnvio` (the same serialiser the
- * real client submits with, client.ts:50). If `destinatarios` did not round-trip through the
- * registro row, the F3 AEAT receives would be stripped of its mandatory recipient and rejected —
- * the same failure mode #46 fixed for the R5's `TipoRectificativa` (plan §2.3). This proves both
- * `<sf:Destinatarios>` and `<sf:FacturasSustituidas>` reach the wire from a stored row.
- *
- * **Real Postgres, not PGlite** (the sibling `registro-row.roundtrip.test.ts` uses PGlite for the
- * pure flatten/rehydrate): the F3 registro is stored under the NON-superuser deployment role
- * (`withTenant` + `asAppUser`, exactly `correction-path.e2e.test.ts`'s shape), so RLS is genuinely
- * enforced during the append and the recipient/substitution jsonb round-trips through the real
- * engine the production drainer serialises from — neither of which PGlite (every connection a
- * superuser, RLS bypassed) can show. `recordSubstitution` (the backend writer that will assemble
- * this record from a sale) is Slice 3, not built here; this slice isolates the storage round-trip
- * and drain serialisation by building the F3 record directly via `buildAltaRecord` → `toRegistroRow`.
+ * Store an F3 record as app_user on PostgreSQL and serialize its stored columns through
+ * the drainer path. Both Destinatarios and FacturasSustituidas must reach the wire.
+ * The fixture builds the record directly to isolate storage and serialization.
  */
 // A clone of the shared container's `manifest` template (the full migration manifest).
 const suite = useTemplateDb({ template: "manifest" });
@@ -77,9 +64,7 @@ function f3CanjeRecord(): RegistroAlta {
   });
 }
 
-/** Flattens `record` through `toRegistroRow` and inserts it under a fresh sale on the shared till,
- * AS THE DEPLOYMENT ROLE (`asAppUser` under the till's tenant), so RLS is enforced during the
- * append. Returns the sale id the registro is keyed on. */
+/** Insert the flattened record under a fresh sale as app_user and return the sale id. */
 async function storeF3AsAppUser(record: RegistroAlta): Promise<string> {
   const saleId = await seedSale(suite.admin, till, 1);
   const row = toRegistroRow(record, {
@@ -114,9 +99,7 @@ async function rawRegistro(saleId: string): Promise<RegistroRow> {
 
 describe("the F3 canje drain path against real Postgres", () => {
   it("stores an F3 registro carrying the recipient and substituted tickets under the deployment role", async () => {
-    // The registro exists and its jsonb blocks survived the RLS-enforced insert on the real engine —
-    // the storage half of the round-trip, before serialisation. `registros_facturas_sustituidas_f3_ck`
-    // (migration 0011) also passed, since an F3 is the one tipo_factura that may carry the block.
+    // Check the stored recipient and substitution blocks before serialization.
     const saleId = await storeF3AsAppUser(f3CanjeRecord());
 
     const [row] = await suite.admin

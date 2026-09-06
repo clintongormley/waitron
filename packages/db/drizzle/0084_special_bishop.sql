@@ -1,2 +1,0 @@
-ALTER TABLE "option_group_items" ADD COLUMN "max_quantity" integer DEFAULT 1 NOT NULL;--> statement-breakpoint
-ALTER TABLE "option_group_items" ADD CONSTRAINT "option_group_items_qty_ck" CHECK ("option_group_items"."max_quantity" >= 1);

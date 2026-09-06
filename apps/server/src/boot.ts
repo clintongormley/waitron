@@ -446,7 +446,7 @@ function makeStartedServer(
  * deployment role, and asserting `onPass`'s effect on `/health`, the `minTickMs`/`maxTickMs`
  * mapping (via the logged `loop.sleeping` line, since a duty-neutral pass alone cannot distinguish a
  * swapped mapping from a correct one), both sides of the `settlementLagMs` conditional spread, and
- * `close()`'s own sequencing including its idempotency guard. `pass.rls.test.ts` does NOT import
+ * `close()`'s own sequencing including its idempotency guard. `pass.pg.test.ts` does NOT import
  * this file — it builds its own, separate composition of the same pieces to prove the composed pass
  * runs as the non-superuser role; that predates `boot.test.ts` and remains evidence for the same
  * SHAPE of wiring, not a substitute for testing this function directly. The manual end-to-end boot
@@ -713,6 +713,18 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         const persistTrading = async (cfg: TradingConfig): Promise<void> => {
           await writeTradingEnv(config.stateDir, cfg);
         };
+        // The NAME of the database `ownerDb` writes — echoed by `provisioning.foreign_tenant` if a
+        // fresh venue is pointed at a database already holding a different obligado. Parsed from the
+        // owner URL, but never the URL itself (it can carry a password, and that code param is
+        // operator-typed configuration, never a secret): an unparseable string (a bare Unix-socket
+        // path throws in `new URL` — cli.ts's socket note) falls back to a neutral label.
+        let ownerDatabaseName = "the target database";
+        try {
+          const parsed = new URL(config.migrationsDatabaseUrl).pathname.replace(/^\//, "");
+          if (parsed !== "") ownerDatabaseName = parsed;
+        } catch {
+          // Keep the neutral label — a malformed/socket URL must not leak into the error param.
+        }
         // The setup surface, now with the slice-2b provisioning deps bound. `provision`/`sealAeat`
         // capture `ownerDb` + `ring`; `persistTrading` writes `<stateDir>/trading.env`; `requestRestart`
         // SIGTERMs this process so the supervisor restarts it into trading mode (`bin.ts`'s latch does
@@ -726,7 +738,8 @@ export async function startServer(env: Record<string, string | undefined>): Prom
           app,
           {
             environment: config.environment,
-            provision: (req) => provisionVenue({ ownerDb, moduleConfig }, req),
+            provision: (req) =>
+              provisionVenue({ ownerDb, moduleConfig, database: ownerDatabaseName }, req),
             adopt: (req) => {
               // Ruling 1 (fail loud at adopt, not at reboot): an adopted mirror MUST end up with
               // WAITRON_SYNC_DATABASE_URL in `trading.env`, because the next (mirror) boot's
@@ -949,15 +962,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     await db.close();
     throw error;
   }
-  // On a mirror, front the whole user-facing surface with the read-only gate (non-GET → node.read_only
-  // 403) and the ambient viewer session (so the existing management-session gates pass with no login).
-  // Registered BEFORE the mounts below so Hono wraps them; `/health` (registered before this branch) is
-  // deliberately not wrapped — it is a GET and must answer in every mode. A primary installs neither.
-  // BOTH middlewares read `holders.mode.current` per request, so promotion is a genuine flag-flip: when the
-  // holder flips to 'primary', the gate opens writes AND the ambient viewer stops (real auth applies) —
-  // there is no window where writes are open while an admin is still auto-logged-in. `ensureMirrorViewer`
-  // runs on this app-role `db` (RLS as app_user); guarded so its throw closes the pool rather than leaking
-  // it, matching the loadKeyRing / mirror-config db-cleanup discipline in this branch.
+  // On mirrors, apply the read-only gate and establish the ambient viewer session.
   if (fencedOrMirror) {
     app.use(
       "*",
@@ -966,18 +971,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // fence only by the wipe-and-restore of a later round, which is a fresh boot anyway.
       readOnlyGate(
         () => holders.mode.current === "mirror" || fenced,
-        // Let exactly two write surfaces through the fence, each named as ONE route (never a prefix), so
-        // a future mutating route added nearby is NOT auto-exempted — it hits the fence and fails loud
-        // (403), the safe default.
-        //   1. POST /sync-api/cursor — the carrier's cursor report, the disposal guard's only input (it
-        //      writes `sync_cursor`: no tenant_id, no RLS). The GET source routes (`/sync-api/hello`,
-        //      `/sync-api/log`) need no exemption — they pass as SAFE_METHODS. A mirror mounts no
-        //      /sync-api, so this clause is a no-op there.
-        //   2. POST /api/box/retire — a FENCED node's self-eviction (retire/evict R3), gated on `fenced`
-        //      so a MIRROR does not expose it. Like the cursor report it writes only whole-DB
-        //      `node_membership` (no tenant_id, no RLS — a self-eviction membership edit), never a client
-        //      tenant/fiscal write, so it is a write a read-only fenced node legitimately serves. This is
-        //      the ONE `/api/box/*` write let through; the rest stay behind the fence.
+        // Cursor and retirement writes use their own authentication gates.
         (c) =>
           (c.req.method === "POST" && c.req.path === "/sync-api/cursor") ||
           (fenced && c.req.method === "POST" && c.req.path === "/api/box/retire"),
@@ -1209,15 +1203,16 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // work at boot; the agent guard and the `printer.manage` gate run per request.
     mountPrintApi(app, { db, cfg: { tenantId: till.tenantId, locationId: till.locationId } }, log);
   }
-  // The dashboard's management HTTP surface (manager login, staff/person management, passkey
-  // ceremonies) on the SAME app, the identical convention `mountWebhook` and `mountTillApi` above
-  // follow. It reuses the EXACT values `mountTillApi` receives so the two cannot drift: the same `db`,
-  // the same tenant (`till.tenantId`, this venue's one tenant) and the same `secureCookies` binding
-  // hoisted above (one value, read by both mounts — not a re-typed `config.tls !== undefined`). No
-  // fiscal backend, clock or card provider: the management routes read and write only the tenant's own
-  // identity records. `rpId`/`origin` are the passkey Relying Party config from `loadConfig` — a
-  // passkey is bound to its RP ID + origin, so these are config, never hardcoded (spec §4c). Routes
-  // only — no database work at boot.
+  // The deployment holds one tenant per database. The dashboard's management HTTP surface
+  // (manager login, staff/person management, passkey ceremonies) on the SAME app, the identical
+  // convention `mountWebhook` and `mountTillApi` above follow. It reuses the EXACT values
+  // `mountTillApi` receives so the two cannot drift: the same `db`, the same tenant
+  // (`till.tenantId`) and the same `secureCookies` binding hoisted above (one value, read by both
+  // mounts — not a re-typed `config.tls !== undefined`). No fiscal backend, clock or card
+  // provider: the management routes read and write only the tenant's own identity records.
+  // `rpId`/`origin` are the passkey Relying Party config from `loadConfig` — a passkey is bound
+  // to its RP ID + origin, so these are config, never hardcoded (spec §4c). Routes only — no
+  // database work at boot.
   mountManagementApi(
     app,
     {
@@ -1237,19 +1232,21 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     },
     log,
   );
-  // The dashboard's diagnostics surface (read the recent log tail, read + raise verbosity) on the SAME
-  // app, the identical convention. It reuses the EXACT `db` and tenant (`till.tenantId`, this venue's
-  // one tenant) `mountManagementApi` above receives, plus the `reader` over the rotating files and the
-  // in-memory `verbosity` controller the logger reads. All three routes are gated behind
-  // `diagnostics.view`. Routes only — no database work at boot; the gate runs per request.
+  // The deployment holds one tenant per database. The dashboard's diagnostics surface (read the
+  // recent log tail, read + raise verbosity) on the SAME app, the identical convention. It reuses
+  // the EXACT `db` and tenant (`till.tenantId`) `mountManagementApi` above receives, plus the
+  // `reader` over the rotating files and the in-memory `verbosity` controller the logger reads.
+  // All three routes are gated behind `diagnostics.view`. Routes only — no database work at boot;
+  // the gate runs per request.
   mountDiagnosticsApi(app, { db, cfg: { tenantId: till.tenantId }, reader, verbosity }, log);
-  // The dashboard's gated catalogue write group (catalogues/categories/products + image upload) on the
-  // SAME app, the identical convention. It reuses the EXACT `db` and tenant `mountManagementApi` above
-  // receives (`till.tenantId`, this venue's one tenant) so the two cannot drift, plus the store
-  // `mkdirSync` above ensured (`config.mediaDir`) and the shared `MAX_UPLOAD_BYTES` DoS ceiling — one
-  // value read by this mount and its route, not two literals. No fiscal backend, clock or card
-  // provider: these routes touch only the catalogue and the image store. Routes only — no database
-  // work at boot; the `person.manage` gate runs per request.
+  // The deployment holds one tenant per database. The dashboard's gated catalogue write group
+  // (catalogues/categories/products + image upload) on the SAME app, the identical convention. It
+  // reuses the EXACT `db` and tenant `mountManagementApi` above receives (`till.tenantId`) so the
+  // two cannot drift, plus the store `mkdirSync` above ensured (`config.mediaDir`) and the shared
+  // `MAX_UPLOAD_BYTES` DoS ceiling — one value read by this mount and its route, not two
+  // literals. No fiscal backend, clock or card provider: these routes touch only the catalogue
+  // and the image store. Routes only — no database work at boot; the `person.manage` gate runs
+  // per request.
   mountCatalogueApi(
     app,
     {
@@ -1260,44 +1257,43 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     },
     log,
   );
-  // The dashboard's gated purchase-invoice write group (facturas recibidas: header + VAT desglose) on
-  // the SAME app, the identical convention. Reuses the EXACT `db` and tenant `mountCatalogueApi` above
-  // receives (`till.tenantId`, this venue's one tenant) so the two cannot drift. No `nodeId` (the
-  // purchase tables carry no sync-capture trigger), no fiscal backend, clock, card provider or media
-  // store — these routes touch only the two purchase-invoice tables. Routes only — no database work at
-  // boot; the `purchase.manage` gate runs per request. This is the #91 fast-follow's capture surface,
-  // feeding the headless modelo 303 IVA-deducible reporting.
+  // The deployment holds one tenant per database. The dashboard's gated purchase-invoice write
+  // group (facturas recibidas: header + VAT desglose) on the SAME app, the identical convention.
+  // Reuses the EXACT `db` and tenant `mountCatalogueApi` above receives (`till.tenantId`) so the
+  // two cannot drift. No `nodeId` (the purchase tables carry no sync-capture trigger), no fiscal
+  // backend, clock, card provider or media store — these routes touch only the two
+  // purchase-invoice tables. Routes only — no database work at boot; the `purchase.manage` gate
+  // runs per request. This is the #91 fast-follow's capture surface, feeding the headless modelo
+  // 303 IVA-deducible reporting.
   mountPurchasingApi(app, { db, cfg: { tenantId: till.tenantId } }, log);
-  // The dashboard's gated staff-reservation write group (create/list-by-day/edit + the seat + lifecycle
-  // moves) on the SAME app, the identical convention. Unlike the siblings it receives the FULL `till`
-  // config, not just `{ tenantId }`: `seatBooking` opens a real TS-1 tab whose order-number allocation
-  // reads `till.tillId`/`till.nodeId`, and create/list read `till.locationId` (the day-list scope RLS
-  // cannot supply). Reuses the EXACT `db` + this venue's `till` the trading surface holds so scope
-  // cannot drift. Routes only — no database work at boot; the `booking.manage` gate runs per request,
-  // and no fiscal path is touched (a seat writes a pre-fiscal working order only).
+  // Mount booking routes with the venue configuration and shared authorization gate.
   mountBookingsApi(app, { db, cfg: till }, log);
-  // The dashboard's gated reporting surface on the SAME app, the identical convention. Reuses the EXACT
-  // `db` and tenant (`till.tenantId`, this venue's one tenant) `mountPurchasingApi` above receives so
-  // the two cannot drift. `nodeId` here is `dataNodeId` — the node whose DATA this server DISPLAYS, not
-  // its own identity: on a MIRROR that is the ORIGIN (the primary whose replicated sales it holds), so
-  // the per-till/fiscal reports (daily-close view, period, cash-up, VAT, overdue) resolve the venue's
-  // data rather than the mirror's empty own node (membership promotion R3a); on a primary it is the own
-  // id. The `/reports/overview` route ignores it entirely and aggregates the WHOLE venue (all nodes),
-  // and the modelo 303 export is likewise tenant-wide. No fiscal backend, card provider or media store —
-  // READ-ONLY routes over the filed commercial record + the venue's dining tables. Routes only — no
-  // database work at boot; the `report.export`/`report.view` gates run per request, SELECTs only.
+  // The deployment holds one tenant per database. The dashboard's gated reporting surface on the
+  // SAME app, the identical convention. Reuses the EXACT `db` and tenant (`till.tenantId`)
+  // `mountPurchasingApi` above receives so the two cannot drift. `nodeId` here is `dataNodeId` —
+  // the node whose DATA this server DISPLAYS, not its own identity: on a MIRROR that is the
+  // ORIGIN (the primary whose replicated sales it holds), so the per-till/fiscal reports
+  // (daily-close view, period, cash-up, VAT, overdue) resolve the venue's data rather than the
+  // mirror's empty own node (membership promotion R3a); on a primary it is the own id. The
+  // `/reports/overview` route ignores it entirely and aggregates the WHOLE venue (all nodes), and
+  // the modelo 303 export is likewise tenant-wide. No fiscal backend, card provider or media
+  // store — READ-ONLY routes over the filed commercial record + the venue's dining tables. Routes
+  // only — no database work at boot; the `report.export`/`report.view` gates run per request,
+  // SELECTs only.
   mountReportApi(app, { db, cfg: { tenantId: till.tenantId, nodeId: dataNodeId } }, log);
-  // The dashboard's gated recipe-authoring surface (ingredient CRUD + product-recipe get/set) on the
-  // SAME app, the identical convention. Reuses the EXACT `db`, tenant and `nodeId` `mountCatalogueApi`
-  // above receives (`till.tenantId`/`till.nodeId`, this venue's one tenant + this node) — a recipe write
-  // UPDATEs the sync-enrolled `products` table (via applyRecipeDerivation), so it threads `nodeId` for
-  // the same origin-attribution reason catalogue does. No fiscal backend, clock, card provider or media
-  // store. Routes only — no database work at boot; the `recipe.manage` gate runs per request.
+  // The deployment holds one tenant per database. The dashboard's gated recipe-authoring surface
+  // (ingredient CRUD + product-recipe get/set) on the SAME app, the identical convention. Reuses
+  // the EXACT `db`, tenant and `nodeId` `mountCatalogueApi` above receives
+  // (`till.tenantId`/`till.nodeId`) — a recipe write UPDATEs the sync-enrolled `products` table
+  // (via applyRecipeDerivation), so it threads `nodeId` for the same origin-attribution reason
+  // catalogue does. No fiscal backend, clock, card provider or media store. Routes only — no
+  // database work at boot; the `recipe.manage` gate runs per request.
   mountRecipeApi(app, { db, cfg: { tenantId: till.tenantId, nodeId: till.nodeId } }, log);
-  // The dashboard's gated shift-planning surface (roster authoring + publish) on the SAME app, the
-  // identical convention. Reuses the EXACT db + tenant (till.tenantId, this venue's one tenant); no
-  // fiscal backend, clock, card provider or media store — these routes touch only roster_versions /
-  // shifts / convenio_config / locations. Routes only; the schedule.manage gate runs per request.
+  // The deployment holds one tenant per database. The dashboard's gated shift-planning surface
+  // (roster authoring + publish) on the SAME app, the identical convention. Reuses the EXACT db +
+  // tenant (till.tenantId); no fiscal backend, clock, card provider or media store — these routes
+  // touch only roster_versions / shifts / convenio_config / locations. Routes only; the
+  // schedule.manage gate runs per request.
   mountWorkforceApi(app, { db, cfg: { tenantId: till.tenantId } }, log);
   // The STAFF-FACING half of the schedule surface on the SAME app — the till-session-gated request
   // routes (view my shifts/swaps/absences, request a swap or absence, accept a swap offered to me),
@@ -1326,16 +1322,16 @@ export async function startServer(env: Record<string, string | undefined>): Prom
 
   // The active-active sync transport. A PRIMARY enables it iff WAITRON_SYNC_PEERS is set
   // (`loadSyncConfig` → undefined otherwise). A MIRROR always pulls (`loadMirrorSyncConfig` never
-  // returns undefined — an absent WAITRON_SYNC_DATABASE_URL is a loud server.config_missing), and its
-  // pull PEER (the relay + the per-peer token) comes from the DATABASE + the vault below, NOT from env
-  // (C2b, spec §7) — so a mirror needs no WAITRON_SYNC_PEERS. Either way the block opens its OWN pool
-  // (a sync_tailer + app_user member — the app pool cannot read sync_log), the primary mounts the
+  // returns undefined — an absent WAITRON_SYNC_DATABASE_URL is a loud server.config_missing), and
+  // its pull PEER (the relay + the per-peer token) comes from the DATABASE + the vault below, NOT
+  // from env (C2b, spec §7) — so a mirror needs no WAITRON_SYNC_PEERS. Either way the block opens
+  // its OWN pool (an app_user member with SELECT on sync_log), the primary mounts the
   // peer-authenticated source group on the SAME app (each caller's Bearer token resolves to its
   // enrolled sync_peers identity), and both start the background pull worker. The sync NODE ID is
-  // till.nodeId (one source of truth; no second WAITRON_SYNC_NODE_ID), and minTickMs/maxTickMs double
-  // as the worker's idle interval and backoff ceiling. A primary that sets no sync env leaves
-  // syncConfig undefined, so every existing boot is unchanged (boot.test.ts sets none). Torn down in
-  // close() below.
+  // till.nodeId (one source of truth; no second WAITRON_SYNC_NODE_ID), and minTickMs/maxTickMs
+  // double as the worker's idle interval and backoff ceiling. A primary that sets no sync env
+  // leaves syncConfig undefined, so every existing boot is unchanged (boot.test.ts sets none).
+  // Torn down in close() below.
   const syncConfig = isMirror ? loadMirrorSyncConfig(env) : loadSyncConfig(env);
   const syncController = new AbortController();
   let syncDb: Database | undefined;
@@ -1509,21 +1505,21 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // instead, the same `codeOf`-classified shape `loop.ts` and `error-boundary.ts` already use.
     syncWorker.catch((err) => log("error", "sync.worker_rejected", { errorCode: codeOf(err) }));
 
-    // The scheduled retention sweep (spec §3.2) — this is what finally SCHEDULES the previously-unwired
-    // pruneSyncLog. Opt-in: only when a `sync_retention`-member URL is configured. It opens its OWN
-    // pool (that dedicated whole-log, cross-tenant role — NOT the app/sync_tailer pools, which cannot
-    // DELETE sync_log) and starts runRetentionSweep under the SAME syncController the pull worker uses,
-    // so close()'s single `syncController.abort()` stops the sweep too. Each tick prunes the log to the
-    // min across every subscriber's cursor and alarms a stalled one; it NEVER evicts and NEVER
-    // alive-filters the prune (an inherited owner decision — a human decides eviction, spec §3.4). Torn
-    // down in close() below. `.catch` logs a settle-by-rejection the same way the pull worker's does —
-    // runRetentionSweep swallows its own per-tick faults, so in practice this only ever fires under a
-    // mocked worker in the test, but an unhandled rejection in the pre-close() window would be silent
-    // otherwise.
-    // Retention is a SINGLETON duty: only the singleton primary prunes the shared `sync_log`. A mirror
-    // holds no `sync_log` (it applies, never captures) and a sell-only local secondary must not run a
-    // SECOND pruner against the primary's log — so both skip the sweep AND the `sync.retention_unconfigured`
-    // warn (C2a design §8). Gates on `isSingletonPrimary`, not `!isMirror`.
+    // The scheduled retention sweep (spec §3.2) — this is what finally SCHEDULES the
+    // previously-unwired pruneSyncLog. Opt-in: only when a retention URL is configured. It opens
+    // its OWN pool using app_user grants, including DELETE on sync_log, and starts
+    // runRetentionSweep under the SAME syncController the pull worker uses, so close()'s single
+    // `syncController.abort()` stops the sweep too. Each tick prunes the log to the min across
+    // every subscriber's cursor and alarms a stalled one; it NEVER evicts and NEVER alive-filters
+    // the prune (an inherited owner decision — a human decides eviction, spec §3.4). Torn down in
+    // close() below. `.catch` logs a settle-by-rejection the same way the pull worker's does —
+    // runRetentionSweep swallows its own per-tick faults, so in practice this only ever fires
+    // under a mocked worker in the test, but an unhandled rejection in the pre-close() window
+    // would be silent otherwise. Retention is a SINGLETON duty: only the singleton primary prunes
+    // the shared `sync_log`. A mirror holds no `sync_log` (it applies, never captures) and a
+    // sell-only local secondary must not run a SECOND pruner against the primary's log — so both
+    // skip the sweep AND the `sync.retention_unconfigured` warn (C2a design §8). Gates on
+    // `isSingletonPrimary`, not `!isMirror`.
     if (isSingletonPrimary && syncConfig.retentionDatabaseUrl !== undefined) {
       retentionDb = await createPostgresDb(syncConfig.retentionDatabaseUrl);
       retentionWorker = runRetentionSweep({
@@ -1549,46 +1545,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     }
   }
 
-  // The scheduled local pg_dump backup (onboarding slice 4b-ii). OPT-IN on WAITRON_BACKUP_DIR
-  // (`loadBackupConfig` → undefined otherwise), and a SINGLETON duty: the singleton primary owns the
-  // backup, so it takes the SAME `isSingletonPrimary` gate the retention sweep and the tunnel client take
-  // (a mirror holds a pulled copy, not the source of record it must dump, and its RLS probe below needs a
-  // SUPERUSER/BYPASSRLS role it is not provisioned with; a sell-only local secondary must not run a SECOND
-  // backup writer against the same dir/source either). It MIRRORS
-  // the retention worker's shape exactly: its OWN AbortController + worker promise (declared beside the
-  // sync/tunnel ones so close() below tears it down), a `.catch` logging `codeOf`, and a teardown that
-  // aborts + awaits. Unlike the pre-BR-2 dump-only sweep, `runBackupSweep` now DOES hold a long-lived
-  // pool: BR-2's archive embeds a manifest, and `buildManifest` reads each module's applied schema
-  // version off the `__drizzle_migrations_*` journal — which `app_user` holds no SELECT on — so it needs
-  // a PRIVILEGED pool. That pool is `backupDb` below (the SAME connection the RLS probe just validated,
-  // reused rather than reopened), closed in `closePools` like `syncDb`/`retentionDb`; the dump itself
-  // still shells out to a fresh `pg_dump` process over `backupConfig.databaseUrl`.
-  //
-  // Before the worker starts, an RLS PROBE (`assertBackupCanReadFiscal`): under FORCE RLS a `pg_dump`
-  // as a role that is neither SUPERUSER nor BYPASSRLS either loud-fails or silently emits an empty
-  // fiscal dump, so a fenced backup role must never be enabled (backup-probe.ts). The probe opens a
-  // pool to `backupConfig.databaseUrl` — the EXACT connection string `runBackupSweep` /
-  // `realPgDump` dump with, no SET ROLE and no second role — so a green probe is evidence about the
-  // real dump connection, not an adjacent one; on success that pool is HANDED to the worker as
-  // `backupDb` for its manifest's journal reads too. The probe only checks fiscal-table readability
-  // (rolsuper/rolbypassrls), not the journal specifically — that read's receipt is `pg_dump` itself
-  // (see the `db` field doc on `BackupSweepDeps` in backup-sweep.ts): it connects with the SAME
-  // connection string / role (a separate process, opening its own connection) and must read those
-  // ordinary journal tables for a complete dump, so a role able to dump them holds SELECT on them,
-  // and `buildManifest` fails the tick visibly (`backup.failed`) before `pg_dump` runs if it somehow
-  // does not. Only on a
-  // FAILURE path is the probe pool closed here in the `finally` instead of being handed off. It is
-  // FAIL-SAFE, NEVER fatal (CLAUDE.md §5 — nothing may
-  // block a sale): a fenced role, an unreachable backup database, or ANY other probe error leaves
-  // backup off (`backupWorker` stays undefined) and logs `backup.disabled_probe_failed` (with the
-  // structured `errorCode` so a connection/network fault is distinguishable from an RLS fence — the
-  // event name covers ANY probe failure, not just a fence) rather than throwing out of boot — a bad backup
-  // role must not brick the till. The whole open+assert sits inside the `try`, and the pool is closed in
-  // the `finally` on any path that did NOT hand it to the worker, so nothing leaks. `backupWorker` is the single
-  // source of truth for "backup is on": it is assigned ONLY on the probe's success path (so a fenced or
-  // unreachable role leaves it `undefined`), and the box-status wiring and teardown below both gate on
-  // `backupWorker !== undefined`. When `backupConfig` is set on a non-singleton node (mirror or local
-  // secondary) the config is simply not consulted (the `isSingletonPrimary` gate), matching retention/tunnel.
+  // Start backups only on a singleton primary after the configured backup connection
+  // passes assertBackupCanReadFiscal. The worker reuses that pool for manifest reads;
+  // pg_dump opens its own connection with the same URL. A probe failure leaves backup
+  // disabled and is logged without stopping sales. Close any pool not handed to the worker.
   const backupConfig = loadBackupConfig(env);
   const backupController = new AbortController();
   // Build the `StorageBackend`s ONCE, here in boot scope, so the sweep worker below and the
@@ -1604,29 +1564,30 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // mid-dump. `runBackupSweep` re-creates it (recursively) each tick, so a wiped dir self-heals.
   const backupStagingDir = join(config.stateDir, "backup-staging");
   let backupWorker: Promise<void> | undefined;
-  // The privileged pool the sweep's `buildManifest` reads the drizzle journal off. Assigned ONLY on the
-  // probe's success path (the probe pool is reused), so it is `undefined` whenever backup is off/fenced;
-  // closed in `closePools` below, AFTER `stopWork` has aborted + awaited `backupWorker`, so no tick can
-  // touch it mid-close.
+  // The backup read pool the sweep's `buildManifest` reads the drizzle journal off. Assigned ONLY
+  // on the probe's success path (the probe pool is reused), so it is `undefined` whenever backup
+  // is off/fenced; closed in `closePools` below, AFTER `stopWork` has aborted + awaited
+  // `backupWorker`, so no tick can touch it mid-close.
   let backupDb: Database | undefined;
   if (isSingletonPrimary && backupConfig !== undefined) {
     let probeDb: Database | undefined;
     try {
       probeDb = await createPostgresDb(backupConfig.databaseUrl);
       await assertBackupCanReadFiscal(probeDb);
-      // The probe just validated this exact privileged connection; hand it to the worker as `backupDb`
-      // (rather than opening a SECOND pool to the same role) and null `probeDb` so the `finally` no
-      // longer closes it — ownership has passed to `backupDb`, closed in `closePools`.
+      // The probe just validated this exact backup read connection; hand it to the worker as
+      // `backupDb` (rather than opening a SECOND pool to the same role) and null `probeDb` so the
+      // `finally` no longer closes it — ownership has passed to `backupDb`, closed in
+      // `closePools`.
       backupDb = probeDb;
       probeDb = undefined;
       backupWorker = runBackupSweep({
         // The full fan-out: the same encrypted archive is `put` to EVERY configured destination each
         // tick (`WAITRON_BACKUP_DIR`'s "primary" entry plus any in `WAITRON_BACKUP_DESTINATIONS`).
         backends: backupBackends,
-        // The privileged pool for the manifest's schema-version reads (NOT the app pool — app_user has
-        // no SELECT on the `__drizzle_migrations_*` journal), plus the composition the archive captures:
-        // every module's non-DB state + schema versions, this box's environment, the media resolver, and
-        // the state dir the recovery secrets are read from.
+        // The backup read pool for the manifest's schema-version reads (NOT the app pool —
+        // app_user has no SELECT on the `__drizzle_migrations_*` journal), plus the composition
+        // the archive captures: every module's non-DB state + schema versions, this box's
+        // environment, the media resolver, and the state dir the recovery secrets are read from.
         db: backupDb,
         modules: ALL_MODULES,
         environment: config.environment,
@@ -1657,34 +1618,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     log("info", "backup.disabled", {});
   }
 
-  // The operator box-status surface (onboarding slice 4a). Mounted AFTER the sync block so it can hand
-  // box-status the sync-pool lag reader when sync is on; when sync is off (`syncDb === undefined`, the
-  // free-tier single box) the reader stays absent and `replication.configured:false`. GET-only, so the
-  // mirror read-only gate passes it. On a mirror the ambient viewer primes the session cookie on the
-  // RESPONSE, so a cookieless first request 401s AND emits the Set-Cookie; the browser's next request
-  // carries that ambient cookie and `requireManagementSession` passes (see `mirror-e2e.rls.test.ts` —
-  // Hono setCookie is a response header, not readable within the same request). `health` and `now` are
-  // the same bindings `healthApp(health, now)` used above; `config.tls?.certFile` is the served-leaf
-  // path (absent on a plain-HTTP boot → `cert.available:false`).
-  //
-  // `syncDb` (the sync_tailer + app_user member pool the sync block opened) is captured into a `const`
-  // so TS keeps its non-`undefined` narrowing inside the reader closure — a captured `let` widens back
-  // to `Database | undefined`, the same reason the sync block hoists `localSyncDb`. It is the pool the
-  // reader must use: `lagFor` reads `sync_log`, which `app_user` (the `db` pool) holds no SELECT on at
-  // all (0000_sync_outbox.sql REVOKEs it, granting only INSERT for capture), so the app pool cannot
-  // read the lag — only this sync-tailer pool can.
-  //
-  // The reader runs `lagFor` INSIDE `withTenant(till.tenantId)`, not bare: `sync_tailer`'s SELECT on
-  // `sync_log` is fenced by the per-tenant `sync_log_tenant_isolation` policy (no TO clause → applies
-  // under FORCE RLS to this login too), and with no `app.tenant_id` set `current_tenant_id()` is NULL,
-  // so a BARE `lagFor(syncDb)` sees ZERO `sync_log` rows and reports every subscriber at lag 0 — a
-  // silent false-healthy. This is PINNED by the box-status durability guard
-  // (`packages/sync/src/retention.gate.test.ts`), which asserts a bare `sync_tailer` `lagFor` and the
-  // SAME member under `withTenant` DISAGREE — the invariant, not any specific number (the guard's own
-  // probe happens to see 0 vs a real lag). The box is single-venue (one tenant, `till.tenantId`), so every captured
-  // outbox row carries that tenant_id and its context reveals the whole log. NO `asAppUser` here — that
-  // `SET ROLE app_user`s and would drop the sync_tailer membership's SELECT on `sync_log`; `withTenant`
-  // only sets the GUC (packages/db/src/tenancy.ts), leaving the login's inherited grants intact.
+  // Read replication lag through the sync pool when sync is configured. Capture the pool in a
+  // const so its non-undefined type is preserved inside the reader closure. The deployment holds
+  // one tenant per database. app_user can read its sync log.
   const lagPool = syncDb;
   // Hoisted to a plain `const` so TS keeps the `carrierNodeId !== undefined` narrowing inside the
   // `readDisposal` arrow below (a captured `const`, unlike a `let`, does not widen — same rule the
@@ -1702,14 +1638,14 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // rely on this same convention or enforce it (enrol the carrier under its nodeId, or key on the node id).
   const carrierNodeId = heldMembership === null ? undefined : servingPrimaryNodeId(heldMembership);
   // The fenced node's own drain-progress reader, computed ONCE and shared by both consumers: the
-  // box-status `disposal` surface (which wraps it with `carrierNodeId` for the wire shape) and the
-  // retire/evict endpoint (`mountBoxRetireApi`, which gates the self-eviction on its `drained`). Present
-  // only on a FENCED node whose held document names a carrier — reads the own-origin tail vs the
-  // carrier's reported cursor on the SAME sync_tailer pool under `withTenant` the lag reader uses;
-  // absent (undefined) otherwise, which box-status reports as `disposal.applicable:false` and retire
-  // refuses as `node.retire_no_carrier`. Factored to one reader so the fragile carrier-keying coupling
-  // documented above has a single copy — a future change to how the drain read is scoped cannot desync
-  // the two consumers.
+  // box-status `disposal` surface (which wraps it with `carrierNodeId` for the wire shape) and
+  // the retire/evict endpoint (`mountBoxRetireApi`, which gates the self-eviction on its
+  // `drained`). Present only on a FENCED node whose held document names a carrier — reads the
+  // own-origin tail vs the carrier's reported cursor on the SAME sync pool under `withTenant` the
+  // lag reader uses; absent (undefined) otherwise, which box-status reports as
+  // `disposal.applicable:false` and retire refuses as `node.retire_no_carrier`. Factored to one
+  // reader so the fragile carrier-keying coupling documented above has a single copy — a future
+  // change to how the drain read is scoped cannot desync the two consumers.
   //
   // Two distinct staleness couplings, and only one is fail-safe:
   //  - Subscriber-id keying (documented above): if the carrier were enrolled under a non-nodeId
@@ -1748,21 +1684,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         lagPool === undefined
           ? undefined
           : () => withTenant(lagPool, till.tenantId, (tx) => lagFor(tx)),
-      // The backup freshness reader (Task 6): present only when the RLS probe above ENABLED backup, so
-      // `configured:false` covers both "no backup env" and "backup env set but the role is fenced /
-      // unreachable" — the box-status surface reports the effective state, not merely the config. Reads
-      // freshness PER destination off the SAME `backupBackends` the sweep writes to, each via
-      // `list("waitron-")` (which matches the encrypted `.backup.enc` archives the sweep produces); `now`
-      // is the live wall-clock factory (`() => new Date()`) established at boot, CALLED per box-status
-      // request so `ageSeconds` is measured against request time. `backupConfig!` is safe: `backupWorker`
-      // is only ever assigned when `backupConfig` was defined (the probe block above runs under
-      // `backupConfig !== undefined`), and when it is defined `backupBackends` is that config's mapped
-      // destinations.
-      // The producer-side disposal guard (membership rejoin R2, design §5.1): wraps the shared
-      // `readFenceDrainProgress` (above) with the carrier id for the wire shape. Absent (undefined) on a
-      // serving node → box-status reports disposal.applicable:false. The `carrierNodeId !== undefined`
-      // arm is what narrows it to a string for the spread (a captured `const`, so the narrowing holds
-      // inside the arrow); it is redundant with `readFenceDrainProgress`'s own guard but free.
+      // Expose freshness only when the backup worker started successfully. This reports
+      // the effective worker state, including a failed probe, rather than configuration alone.
+      // The disposal reader carries the retiring node id when its fence is active.
       readDisposal:
         readFenceDrainProgress !== undefined && carrierNodeId !== undefined
           ? async () => ({ carrierNodeId, ...(await readFenceDrainProgress()) })
@@ -1771,14 +1695,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         backupWorker !== undefined
           ? () => readBackupStatus(backupBackends, backupConfig!.staleAfterMs, now())
           : undefined,
-      // The Slice-7 config-conflict count surface. Present iff sync is on (`lagPool !== undefined`) —
-      // the sync module is `toggleable`, so its `sync_config_conflicts` table exists only when the
-      // module is migrated; without sync no conflict can ever be recorded, so box-status reports
-      // configured:false (the same gate the replication lag reader uses). Reads through `lagPool` (the
-      // sync_tailer pool), NOT the app `db` pool: `row_image` is tenant business data, so SELECT is
-      // granted to `sync_tailer` only (0009), the same isolation `sync_log` enforces — see
-      // readConfigConflictCount. No `withTenant`/`asAppUser` here (the table has no RLS/tenant_id, and
-      // asAppUser would drop the sync_tailer SELECT), mirroring the lag reader above.
+      // Expose the configuration-conflict count when the sync pool exists.
       readConfigConflicts:
         lagPool === undefined ? undefined : () => readConfigConflictCount(lagPool),
       // Report the effective mode the box is actually serving as — the same holder the read-only gate
@@ -1865,17 +1782,19 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     log("info", "tunnel.disabled", {});
   }
 
-  // The C2b operator flow's PRIMARY endpoint: POST /management-api/mirror-bundle mints a MirrorBundle a
-  // cloud mirror adopts (design §4). PRIMARY-only, and only when the retention sweep opened its
-  // `sync_retention` connection — the handler mints the peer token as that role via `enrolPeer`, so the
-  // endpoint exists exactly when the connection it needs does (a mirror never opens one, and a primary
-  // that configured no retention role cannot mint). `relayUrl` is this primary's own relay coordinates
-  // (`loadTunnelConfig`, undefined when no tunnel is configured — the route then refuses `mirror.no_relay`
-  // before minting); `boxHostname` is the same box leaf SAN the discovery-api and cert-minting use;
-  // `designated` is `config.till` (the five WAITRON_TILL_*_ID). Mounted before the SPA catch-alls below.
-  // Kept consistent with retention's gate (`isSingletonPrimary`): `retentionDb` is now only opened on the
-  // singleton primary, so the `!== undefined` already implies it, but gating explicitly on
-  // `isSingletonPrimary` keeps this primary-only endpoint reading the same axis as the sweep it depends on.
+  // The C2b operator flow's PRIMARY endpoint: POST /management-api/mirror-bundle mints a
+  // MirrorBundle a cloud mirror adopts (design §4). PRIMARY-only, and only when the retention
+  // sweep opened its retention connection — the handler mints the peer token using app_user's
+  // INSERT grant via `enrolPeer`, so the endpoint exists exactly when the connection it needs
+  // does (a mirror never opens one, and a primary with no retention connection does not mount
+  // this endpoint). `relayUrl` is this primary's own relay coordinates (`loadTunnelConfig`,
+  // undefined when no tunnel is configured — the route then refuses `mirror.no_relay` before
+  // minting); `boxHostname` is the same box leaf SAN the discovery-api and cert-minting use;
+  // `designated` is `config.till` (the five WAITRON_TILL_*_ID). Mounted before the SPA catch-alls
+  // below. Kept consistent with retention's gate (`isSingletonPrimary`): `retentionDb` is now
+  // only opened on the singleton primary, so the `!== undefined` already implies it, but gating
+  // explicitly on `isSingletonPrimary` keeps this primary-only endpoint reading the same axis as
+  // the sweep it depends on.
   if (isSingletonPrimary && retentionDb !== undefined) {
     mountMirrorBundleApi(
       app,
@@ -2090,20 +2009,21 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         // back off every error), and holds no connection pool of its own — nothing to add to
         // closePools.
         if (tunnelWorker !== undefined) await tunnelWorker.catch(() => {});
-        // The scheduled backup sweep worker, torn down the identical way: backupController.abort() above
-        // already signalled it, so this only awaits its settle, swallowing a settle-by-rejection so it
-        // can never skip the guaranteed pool teardown below. runBackupSweep swallows its own per-tick
-        // faults (a wedged pg_dump, a full disk) so it never rejects in production. Awaiting it HERE
-        // before `closePools` is what lets `closePools` close its privileged manifest pool (`backupDb`)
-        // safely — no tick is left mid-flight reading the journal off it.
+        // The scheduled backup sweep worker, torn down the identical way:
+        // backupController.abort() above already signalled it, so this only awaits its settle,
+        // swallowing a settle-by-rejection so it can never skip the guaranteed pool teardown
+        // below. runBackupSweep swallows its own per-tick faults (a wedged pg_dump, a full disk)
+        // so it never rejects in production. Awaiting it HERE before `closePools` is what lets
+        // `closePools` close its backup manifest read pool (`backupDb`) safely — no tick is left
+        // mid-flight reading the journal off it.
         if (backupWorker !== undefined) await backupWorker.catch(() => {});
       },
       closePools: async () => {
         await db.close();
         if (syncDb !== undefined) await syncDb.close();
         if (retentionDb !== undefined) await retentionDb.close();
-        // The backup sweep's privileged manifest pool. `stopWork` above already aborted + awaited
-        // `backupWorker`, so no tick can be reading the journal off it as it closes.
+        // The backup sweep's backup manifest read pool. `stopWork` above already aborted +
+        // awaited `backupWorker`, so no tick can be reading the journal off it as it closes.
         if (backupDb !== undefined) await backupDb.close();
       },
     },

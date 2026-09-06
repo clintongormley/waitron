@@ -295,9 +295,10 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const to = body.to as TicketState;
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
-        // `advanceTicketItem` NEVER checks the station (KDS-1), so the station-ownership guard is the
-        // route's job: fetch the item's own station and refuse a foreign one BEFORE the bump. An item
-        // that reads back undefined (unknown/RLS-hidden) is left to the verb → `ticket.invalid_transition`.
+        // `advanceTicketItem` NEVER checks the station (KDS-1), so the station-ownership guard is
+        // the route's job: fetch the item's own station and refuse a foreign one BEFORE the bump.
+        // An item that reads back undefined (unknown) is left to the verb →
+        // `ticket.invalid_transition`.
         const [item] = await tx
           .select({ stationId: ticketItems.stationId })
           .from(ticketItems)
@@ -395,8 +396,8 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   app.get("/management-api/devices", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // No explicit tenant filter — isolation is entirely `withTenant` + `asAppUser` RLS (the
-      // differential proof is packages/db's devices.rls.test.ts). Newest enrolment first.
+      // The deployment holds one tenant per database. This read has no tenant filter. Newest
+      // enrolment first.
       const rows = await gated(sessionId, (tx) =>
         tx
           .select({
@@ -424,9 +425,9 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // A malformed id names no device — a clean `device.not_found` (404), never a `22P02` 500. Screened
       // before `gated` the way `purchasing-api.ts` screens its `:id` before the tenant transaction.
       if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
-      // Revoke = flip `active = false` (instant — `requireDevice` rejects it), NEVER a hard DELETE: a
-      // device is a durable identity and app_user holds no DELETE on `devices`. 0 rows updated (unknown
-      // or RLS-hidden id) → `device.not_found`.
+      // Revoke = flip `active = false` (instant — `requireDevice` rejects it), NEVER a hard
+      // DELETE: a device is a durable identity and app_user holds no DELETE on `devices`. 0 rows
+      // updated (unknown id) → `device.not_found`.
       const updated = await gated(sessionId, (tx) =>
         tx
           .update(devices)
@@ -477,15 +478,16 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         }
         throw error;
       }
-      // 0 rows updated (unknown or RLS-hidden device id) → `device.not_found`, the revoke idiom.
+      // 0 rows updated (unknown device id) → `device.not_found`, the revoke idiom.
       if (updated.length === 0) throw new AppError("device.not_found", { deviceId: id });
       return c.body(null, 204);
     }),
   );
 
-  // ── Dev-only per-tab device switcher surface (SP-C) ──────────────────────────────────────────────────
-  // Mounted ONLY in devMode, so outside dev these routes DO NOT EXIST (404) — the same fail-closed
-  // shape as the override header. All reads are RLS-scoped (`withTenant` + `asAppUser`); nothing here
+  // ── Dev-only per-tab device switcher surface (SP-C)
+  // ────────────────────────────────────────────────── Mounted ONLY in devMode, so outside dev
+  // these routes DO NOT EXIST (404) — the same fail-closed shape as the override header. All
+  // reads run under `withTenant` + `asAppUser` in the database holding this tenant; nothing here
   // returns a token or reader credential.
   if (deps.devMode) {
     app.get("/api/dev/devices", (c) =>
@@ -508,11 +510,12 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
               .from(devices)
               .where(eq(devices.active, true))
               .orderBy(desc(devices.enrolledAt));
-            // The option-sources for minting a new device (`POST /api/dev/devices`): the tenant's tills
-            // (RLS-scoped, no explicit tenant filter), its kitchen stations, and its device profiles.
-            // (Since the Task 10 cutover a device binds its canvas + capabilities through a device
-            // profile, so the dev mint offers a PROFILE picker where it used to offer a canvas one — the
-            // exact analogue, `listDeviceProfiles` in the SAME RLS-scoped tx the canvas list used.)
+            // The deployment holds one tenant per database. The option-sources for minting a new
+            // device (`POST /api/dev/devices`): the tenant's tills (no explicit tenant filter),
+            // its kitchen stations, and its device profiles. (Since the Task 10 cutover a device
+            // binds its canvas + capabilities through a device profile, so the dev mint offers a
+            // PROFILE picker where it used to offer a canvas one — the exact analogue,
+            // `listDeviceProfiles` in the SAME transaction the canvas list used.)
             const tillRows = await tx
               .select({ id: tills.id, name: tills.name, locationId: tills.locationId })
               .from(tills);

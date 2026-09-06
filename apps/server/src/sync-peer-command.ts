@@ -19,10 +19,11 @@ async function withDb<T>(
 }
 
 /**
- * The operator-run peer registry CLI (spec §7). A human runs this locally against the source node to
- * enrol a subscriber (minting its bearer token, printed ONCE), revoke one (instant — active := false),
- * or list them. Connects as the sync_retention member (WAITRON_SYNC_RETENTION_DATABASE_URL), the role
- * waitron-sync-evict uses. The evictSubscriberCommand shape: pure deps for the process wrapper to fill.
+ * The operator-run peer registry CLI (spec §7). A human runs this locally against the source node
+ * to enrol a subscriber (minting its bearer token, printed ONCE), revoke one (instant — active :=
+ * false), or list them. Connects as an app_user member (WAITRON_SYNC_RETENTION_DATABASE_URL), the
+ * role waitron-sync-evict uses. The evictSubscriberCommand shape: pure deps for the process
+ * wrapper to fill.
  */
 export async function syncPeerCommand(deps: {
   argv: string[];

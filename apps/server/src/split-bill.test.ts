@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -30,8 +30,8 @@ import { joinTable, openTab, splitOffCheck, unjoinTable } from "./working-order.
 import "./errors.js";
 
 // PGlite is enough HERE: the check being table-less and the line partition are plain row state a single
-// backend proves. The FISCAL filing (exactly-one-registro per check, desglose, contiguity, RLS) is the
-// real-Postgres job of the split-bill fiscal suite (Tasks 2–4, CLAUDE.md §4).
+// backend proves. The FISCAL filing (exactly-one-registro per check, desglose, contiguity) is the
+// real-Postgres job of the split-bill fiscal suite (CLAUDE.md §4).
 const LOCALE = "es-ES";
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 let db: Database;
@@ -75,9 +75,9 @@ async function setupVenue(): Promise<Seeded> {
   };
   const seeded = await withTenant(db, tenantId, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, { name: "Carta" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
-    const agua = await createProduct(tx, {
+    const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
+    const bebidas = await createCategory(tx, tenantId, { name: "Bebidas" });
+    const agua = await createProduct(tx, tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       descriptions: { [LOCALE]: "Agua" },
@@ -85,7 +85,7 @@ async function setupVenue(): Promise<Seeded> {
       unitPrice: "1.50",
       vatClass: "general",
     });
-    const jamon = await createProduct(tx, {
+    const jamon = await createProduct(tx, tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       descriptions: { [LOCALE]: "Jamón" },
@@ -110,7 +110,9 @@ async function setupVenue(): Promise<Seeded> {
   return { cfg, ...seeded };
 }
 
-/** Run `fn` on a fresh app-scoped transaction (RLS in force, `app_user` role), like production. */
+/**
+ * Run fn in one transaction as app_user.
+ */
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTenant(db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
@@ -241,7 +243,10 @@ describe("splitOffCheck", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, tabId))
         .orderBy(workingOrderLines.lineNo);
-      const orders = await tx.select({ id: workingOrders.id }).from(workingOrders);
+      const orders = await tx
+        .select({ id: workingOrders.id })
+        .from(workingOrders)
+        .where(eq(workingOrders.tenantId, cfg.tenantId));
       return { originLines, orderCount: orders.length };
     });
     // Origin untouched — still the whole agua×3, quantity conserved (NOT split down to 2.000).
@@ -287,7 +292,10 @@ describe("splitOffCheck", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, tabId))
         .orderBy(workingOrderLines.lineNo);
-      const orders = await tx.select({ id: workingOrders.id }).from(workingOrders);
+      const orders = await tx
+        .select({ id: workingOrders.id })
+        .from(workingOrders)
+        .where(eq(workingOrders.tenantId, cfg.tenantId));
       return { originLines, orderCount: orders.length };
     });
     // Origin untouched — still the whole agua×3.
@@ -358,7 +366,7 @@ describe("unjoinTable", () => {
       const [{ count }] = await tx
         .select({ count: sql<number>`count(*)::int` })
         .from(workingOrders)
-        .where(eq(workingOrders.status, "open"));
+        .where(and(eq(workingOrders.status, "open"), eq(workingOrders.tenantId, cfg.tenantId)));
       return { anchor, count };
     });
     expect(state.anchor?.tabId).toBe(tabId); // unchanged — the guard threw before the repoint

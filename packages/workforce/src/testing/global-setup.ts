@@ -21,19 +21,16 @@ import { WORKFORCE_MIGRATIONS } from "../migrations.js";
  * beyond nothing — CORE + IDENTITY + WORKFORCE — following the `core_<schema>` convention (#116) and
  * matching apps/server's `core_identity` shape for its larger stack.
  *
- * The three non-superuser probe roles are the only cluster roles any suite here creates — two drive
- * RLS suites, while `workforce_clock_probe` drives the `clocking.concurrency` TOCTOU suite, where being
- * non-superuser proves the app role is PERMITTED its `FOR NO KEY UPDATE` lock rather than that FORCE
- * RLS applies. They are created ONCE
- * here, idempotently, in place of the per-file `probeRole` those suites passed to `useRealPostgres`.
+ * ONE non-superuser probe role is the only cluster role any suite here creates:
+ * `workforce_clock_probe`, for the `clocking.concurrency` TOCTOU suite, where being non-superuser
+ * proves the app role is PERMITTED its `FOR NO KEY UPDATE` lock. It is created ONCE
+ * here, idempotently, in place of the per-file `probeRole` that suite passed to `useRealPostgres`.
  * Roles are CLUSTER-global: a shared container is one cluster and every suite clones its own DATABASE
- * from the template but shares that cluster's roles, so all three coexist. That is why a per-file
+ * from the template but shares that cluster's roles. That is why a per-file
  * `CREATE ROLE` cannot stay — `probeRoleStatement` emits a bare `create role …`, so the moment two
  * files created a role of the same name against the shared cluster the second would fail
- * `role … already exists`. `scheduling.rls.test.ts` and `rls.test.ts` already share ONE name,
- * `workforce_rls_probe`, so it is created a single time here and both files `pg.connectAs` it; the
- * other two suites each use a distinct name. Each role inherits `app_user`'s grants via `inRole`;
- * `app_user` exists by the time the roles run because CORE's `0001_tenancy_rls.sql` creates it and
+ * `role … already exists`. It inherits `app_user`'s grants via `inRole`;
+ * `app_user` exists by the time the roles run because CORE's `0001_db_baseline_sql.sql` creates it and
  * roles run AFTER the templates migrate.
  *
  * A globalSetup's return value is its globalTeardown, so returning `teardown` stops the container
@@ -44,10 +41,10 @@ import { WORKFORCE_MIGRATIONS } from "../migrations.js";
  * real-PG suites — a real broadening of what needs Docker, the same one db and apps/server accepted.
  * What makes it acceptable is not an assumption that every machine has Docker, but that this
  * package's reason to be in the real-PG tier at all — its chain/clocking/scheduling concurrency
- * suites and its RLS/immutability suites — needs Docker regardless: they reach it through
+ * suites and `immutability.test.ts` — needs Docker regardless: they reach it through
  * `useTemplateDb` and cannot run under PGlite, which serialises every query onto one backend (so a
- * contention test is a false pass) and whose superuser bypasses the row-level security and
- * append-only privilege floor the RLS and immutability suites exist to verify. CLAUDE.md §4
+ * contention test is a false pass) and whose superuser holds every grant (so the append-only
+ * privilege floor is invisible). CLAUDE.md §4
  * documents that this repo's real-Postgres test tier needs a local Docker daemon (plus
  * TESTCONTAINERS_RYUK_DISABLED); `dockerRequired` turns the raw testcontainers daemon error into
  * guidance when Docker is absent.
@@ -57,22 +54,18 @@ export default async function ({ provide }: GlobalSetupContext) {
     dockerRequired:
       "@waitron/workforce's real-Postgres suites require a running Docker daemon. They cannot be " +
       "skipped: PGlite serialises every query onto one backend, so it cannot exercise the lock " +
-      "contention the concurrency suites prove, and its superuser bypasses the row-level security " +
-      "and append-only privilege floor the RLS and immutability suites exist to verify (see " +
+      "contention the concurrency suites prove, and its superuser holds every grant, so the " +
+      "append-only privilege floor immutability.test.ts verifies is invisible there (see " +
       "chain.pglite-cannot-test-contention.test.ts).",
     templates: {
       core_identity_workforce: (uri) =>
         runMigrationSets(uri, [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS]),
     },
     roles: [
-      // Non-superuser LOGIN roles inheriting app_user's grants. Being non-superuser is the point:
-      // for the two RLS suites it makes FORCE ROW LEVEL SECURITY apply; for clocking.concurrency
-      // (workforce_clock_probe) it proves the app role is PERMITTED its row lock, not merely that it
-      // serialises. (Which role serves which suite is in the docblock above.)
-      { name: "workforce_planning_rls_probe", password: "probe", inRole: "app_user" },
+      // A non-superuser LOGIN role inheriting app_user's grants. Being non-superuser is the point:
+      // for clocking.concurrency it proves the app role is PERMITTED its row lock, not merely that
+      // it serialises.
       { name: "workforce_clock_probe", password: "probe", inRole: "app_user" },
-      // Shared by scheduling.rls.test.ts and rls.test.ts.
-      { name: "workforce_rls_probe", password: "probe", inRole: "app_user" },
     ],
   });
   provide("sharedPg", handle);

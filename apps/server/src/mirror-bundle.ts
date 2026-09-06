@@ -1,13 +1,11 @@
-// The PRIMARY side of the C2b cloud-mirror operator flow (design §10). `assembleMirrorBundle` reads a
-// venue's parent rows + the box's connection details and mints ONE per-peer sync token, returning a
-// `MirrorBundle` a later task's endpoint serves and the mirror consumes via `adoptVenue`.
+// The PRIMARY side of the C2b cloud-mirror operator flow (design §10). `assembleMirrorBundle`
+// reads a venue's parent rows + the box's connection details and mints ONE per-peer sync token,
+// returning a `MirrorBundle` the endpoint serves and the mirror consumes via `adoptVenue`.
 //
-// The rows are read as `app_user` under `withTenant`: RLS scopes locations/nodes/tills/invoiceSeries to
-// the tenant, and the tenant itself is a single keyed select. `app_user` holds SELECT on ALL FIVE
-// parent tables — tenants + locations + tills (0001_tenancy_rls.sql), invoice_series (0003) and nodes
-// (0017_nodes_rls.sql) — so no broader connection is needed and none is used (CLAUDE.md §3: never widen
-// a grant). The token is minted in PLAINTEXT via `enrolPeer` and returned ONCE; it is NOT sealed here —
-// sealing is mirror-side, a later task (design §10) — and it is never logged.
+// The deployment holds one tenant per database. The tenant row is selected by id; locations,
+// nodes, tills and invoice series are read without tenant predicates. `app_user` holds SELECT on
+// these parent tables in the core baseline. The token is minted in PLAINTEXT via `enrolPeer` and
+// returned ONCE; sealing is mirror-side (design §10), and the token is never logged.
 import "./errors.js";
 import { readFile } from "node:fs/promises";
 import { eq } from "drizzle-orm";
@@ -77,16 +75,16 @@ export interface MirrorBundle {
 }
 
 /**
- * `appDb` reads the venue rows under RLS as `app_user`; `retentionDb` (a `sync_retention` member) mints
- * the peer token via `enrolPeer` — the two roles that hold exactly the privileges each step needs.
- * `appDb` ALSO runs the modules' reservations: `app_user` holds the reads and writes each enabled
- * module's `provisioning.standby.reserve` needs (for fiscal, SELECT/INSERT/UPDATE on
- * `contadores_instalacion`/`registro_sif`/`cadenas`, `0001_registros_inmutables.sql`, and SELECT on
+ * `appDb` reads the venue rows as `app_user`; `retentionDb` mints the peer token via `enrolPeer`.
+ * Both operations use grants held by `app_user`. `appDb` ALSO runs the modules' reservations:
+ * `app_user` holds the reads and writes each enabled module's `provisioning.standby.reserve`
+ * needs (for fiscal, SELECT/INSERT/UPDATE on `contadores_instalacion`/`registro_sif`/`cadenas`,
+ * `packages/fiscal-verifactu/drizzle/0001_fiscal_baseline_sql.sql`, and SELECT on
  * `invoice_series`), so no broader connection is used (CLAUDE.md §3: never widen a grant). `ring`
  * unseals the primary's identity PRIVATE key (`readNodeIdentityKey`, as `app_user`) to sign the
- * standby's endorsement; `standby` is the node the primary vouches for.
- * `designated` are the five ids the till was provisioned with (`config.till.*`); `stateDir` locates the
- * box CA; `relayUrl`/`boxHostname` are the box's dial-in.
+ * standby's endorsement; `standby` is the node the primary vouches for. `designated` are the five
+ * ids the till was provisioned with (`config.till.*`); `stateDir` locates the box CA;
+ * `relayUrl`/`boxHostname` are the box's dial-in.
  */
 export interface AssembleDeps {
   appDb: Database;
@@ -113,11 +111,11 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
     deps.appDb,
     deps.designated.tenantId,
     async (tx) => ({
-      // `[0]!` is safe: `designated.tenantId` is the primary till's provisioned tenant (`config.till`),
-      // and a provisioned till always has its tenant row (minted as its FK parent at provision), so the
-      // by-id lookup under that same tenant's RLS scope always returns exactly one row.
+      // `[0]!` is safe: `designated.tenantId` is the primary till's provisioned tenant
+      // (`config.till`), and a provisioned till always has its tenant row (minted as its FK
+      // parent at provision), so the by-id lookup always returns exactly one row.
       tenant: (await tx.select().from(tenants).where(eq(tenants.id, deps.designated.tenantId)))[0]!,
-      locations: await tx.select().from(locations), // RLS scopes each of these to the tenant
+      locations: await tx.select().from(locations), // The deployment holds one tenant per database. These reads are unfiltered.
       nodes: await tx.select().from(nodes),
       tills: await tx.select().from(tills),
       invoiceSeries: await tx.select().from(invoiceSeries),

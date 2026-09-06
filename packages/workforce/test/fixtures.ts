@@ -36,8 +36,7 @@ export function makeRuleset(overrides: Partial<WorkTimeRuleset> = {}): WorkTimeR
 }
 
 /**
- * Seed helpers for the workforce suites, run as the connection OWNER (superuser) so RLS is bypassed
- * — pure setup, exactly as `@waitron/db`'s own `seedTenant` documents. English fixture strings
+ * Seed helpers for the workforce suites, using the fixture connection directly. English strings
  * throughout: this file is under `test/`, out of the English-only guard's `src` scan, but the
  * package's vocabulary is English regardless.
  */

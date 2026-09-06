@@ -9,10 +9,9 @@ import { endSession, loginWithPin } from "./login.js";
 import { codeOf, seedPerson, seedTill } from "../test/fixtures.js";
 
 // PGlite, not real Postgres: loginWithPin/endSession are LOGIC — the not-found / suspended / bad-PIN
-// gates and the open→closed transition. Nothing here depends on the privilege set or on RLS
-// enforcement (a PGlite connection is superuser, so RLS is a false pass, CLAUDE.md §4); the
-// tenant-isolation of `sessions` is proven as the app role in sessions.rls.test.ts and is not
-// re-proven here.
+// gates and the open→closed transition. Nothing here depends on the privilege set (a PGlite
+// connection is superuser holding every grant, so a grant assertion would be a false pass,
+// CLAUDE.md §4).
 let tenantId: string;
 
 const suite = usePgliteDb({

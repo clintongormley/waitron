@@ -1,13 +1,7 @@
 // Bounded sync_log retention, per-subscriber lag, explicit eviction, and the scheduled retention
 // sweep, for the commercial-lane outbox.
 //
-// Every DELETE/read here runs as a member of the dedicated `sync_retention` role (packages/sync/
-// drizzle/0001_sync_retention.sql, plus the sync_cursor DELETE grant in 0003_sync_cursor_evict.sql),
-// whose per-role permissive policy makes them WHOLE-LOG, cross-tenant: they set NO `app.tenant_id`
-// and operate across every tenant at once. That is why none may run as `app_user` or `sync_tailer` —
-// `sync_tailer`'s SELECT is per-tenant, and no other role holds DELETE on `sync_log` at all
-// (CLAUDE.md §3 "never widen a grant"; the mechanism was proven as a genuine non-superuser member in
-// retention.gate.test.ts, since a superuser prune bypasses RLS — a false pass, CLAUDE.md §4).
+// app_user reads and prunes the database's log and cursors.
 //
 // Retention alone is deliberately NOT enough to release the log past a truly-dead subscriber:
 // pruneSyncLog holds the log at the slowest subscriber's cursor, alive or down. Declaring a
@@ -63,8 +57,7 @@ export interface SubscriberLag {
  * The boundary is per origin: for each origin, `min(last_applied_seq)` across ALL its `sync_cursor`
  * rows (alive or down), and rows with `seq <= that min` are deleted. An origin nobody subscribes to
  * matches no cursor group and is never pruned; an origin whose subscribers are all caught up drains
- * fully. Runs as a `sync_retention` member with no tenant context, so its permissive policy makes the
- * DELETE cross-tenant.
+ * fully. Runs through app_user's SELECT and DELETE grants.
  *
  * **No subscribers → no prune.** With an empty `sync_cursor` the min is undefined: nothing has
  * confirmed a single row, so deleting anything would be data loss. That case short-circuits to
@@ -102,19 +95,8 @@ export async function pruneSyncLog(db: Database): Promise<PruneResult> {
  * `alive` flag, worst-lagging first. A drained/empty origin (no `sync_log` rows) reads lag 0 via the
  * LEFT JOIN's `coalesce`, never negative. Reporting only — no threshold, no throw (§12 ops-policy).
  *
- * The `sync_log` visibility is the CALLER's: run as a `sync_retention` member the whole-log permissive
- * policy makes the `max(seq)` cross-tenant (the retention sweep's path); run as a `sync_tailer` member
- * INSIDE `withTenant(tenantId)` the per-tenant `sync_log_tenant_isolation` policy scopes it to that one
- * tenant — complete on a single-venue box, which is how box-status's replication summary reads the lag
- * (a bare `sync_tailer` call with no tenant context sees ZERO `sync_log` rows and would report lag 0).
- * `sync_cursor` carries no RLS, so it is always fully visible. Accepts a `Transaction` as well as a
- * `Database` so the box-status reader can pass the tenant-scoped `tx` from `withTenant` (both expose
- * the `execute` this uses).
- *
- * Correctness rests on a runtime invariant the types cannot see: the connection must authenticate as a
- * role that can SELECT `sync_log` AND carry the intended tenant context (e.g. `sync_tailer` under
- * `withTenant`); a bare/no-tenant call reads zero `sync_log` rows and reports a false-healthy lag 0.
- * Pinned by the box-status durability guard in `retention.gate.test.ts`.
+ * app_user reads the database's log and cursors. Accepts a Transaction as well as a Database so
+ * callers can compose this read with their transaction; both expose execute.
  */
 export async function lagFor(db: Database | Transaction): Promise<SubscriberLag[]> {
   const result = await db.execute<{
@@ -151,8 +133,7 @@ export async function lagFor(db: Database | Transaction): Promise<SubscriberLag[
 /**
  * Releases a genuinely-dead subscriber by DELETEing all its `sync_cursor` rows (every origin, every
  * lane), so `pruneSyncLog`'s per-origin `min(last_applied_seq)` no longer includes it and the next
- * sweep advances the log past its position. Runs as a `sync_retention` member — the DELETE grant
- * `0003_sync_cursor_evict.sql` added (`sync_tailer`/`app_user` are NOT widened, CLAUDE.md §3).
+ * sweep advances the log past its position. Uses app_user's DELETE grant on sync_cursor.
  *
  * EXPLICIT, NEVER AUTOMATIC (spec §3.4, an inherited owner decision): "slow" and "dead" are
  * indistinguishable from the log, so an operator invokes this only after independently confirming
@@ -171,7 +152,7 @@ export async function evictSubscriber(
 }
 
 export interface RetentionSweepDeps {
-  /** A LOGIN pool that is a member of sync_retention (the whole-log permissive policy). */
+  /** A LOGIN pool inheriting app_user for log and cursor access. */
   db: Database;
   sleep: (ms: number, signal: AbortSignal) => Promise<void>;
   signal: AbortSignal;

@@ -43,7 +43,7 @@ function deps(db: Database): WebhookDeps {
     db,
     ring,
     // Value irrelevant on PGlite (superuser, no sync capture triggers here); the origin-capture guard
-    // lives in webhook.rls.test.ts against the full manifest. Required by WebhookDeps.
+    // lives in webhook.pg.test.ts against the full manifest. Required by WebhookDeps.
     nodeId: "11111111-1111-4111-8111-111111111111",
     environment: "preproduction",
     // The secret key is ignored by the HMAC double — verification depends only on the per-tenant
@@ -58,9 +58,11 @@ interface SeededPayment {
   webhookSecret: string;
 }
 
-/** Seeds a tenant with an open working order, one `initiated` stripe payment (external_ref =
+/**
+ * Seeds a tenant with an open working order, one `initiated` stripe payment (external_ref =
  * sessionId), and a `payments.stripe` credential carrying `webhookSecret`. Run as the PGlite
- * superuser — RLS is bypassed, so this is pure setup. */
+ * superuser for fixture setup.
+ */
 async function seedInitiated(
   db: Database,
   opts: { webhookSecret: string; secretKey?: string; amount?: string; sessionId?: string },

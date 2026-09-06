@@ -14,23 +14,9 @@ import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixt
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 
 /**
- * The end-to-end counterpart to `./correction-path.e2e.test.ts`, for
- * `VerifactuBackend.recordSubstitution` — the F3 canje write path.
- *
- * **Real Postgres, not PGlite** (like `correction-path.e2e.test.ts`, unlike the pure-assembly
- * suites): the concurrency suite at the foot genuinely requires it — PGlite serialises every query
- * onto one backend, so a contention test on it is a false pass (CLAUDE.md §4). The correctness suite
- * runs the write path as the non-superuser deployment role (`withTenant` + `asAppUser`) so RLS is
- * enforced during the append rather than bypassed by a superuser session.
- *
- * What this proves that the PGlite `backend.test.ts` refusals cannot: an F3 registro is a real ALTA
- * at the next chain position (NOT an anulación, and NOT a rectificativa), its stored huella recomputes
- * from its own columns (including the POSITIVE `ImporteTotal`/`CuotaTotal` it hashes and its
- * `TipoFactura = F3`), its `FacturasSustituidas` carries each substituted ticket's exact stored
- * identity, its `Destinatarios` carries the recipient the F3 must always name, the substituted tickets
- * are NEVER annulled (no anulación registro appears for them — the crux of how AEAT avoids
- * double-counting: `TipoFactura=F3` + `FacturasSustituidas`, not negation), and it advances the same
- * chain the tickets sit on with its own `pendiente` sidecar.
+ * Record an F3 substitution as app_user on real PostgreSQL, including concurrent writers.
+ * Check its chain position, hash, substituted identities, recipients and pending sidecar,
+ * and verify that the original tickets retain their alta records. PGlite cannot exercise contention.
  */
 // A clone of the shared container's `manifest` template (the full migration manifest).
 const suite = useTemplateDb({ template: "manifest" });
@@ -130,8 +116,7 @@ async function recordTicket(invoiceNumber: number): Promise<string> {
   return ticketId;
 }
 
-/** Inserts one F3 `sales` row (positive total, `corrects_sale_id` NULL, the three counterparty_*
- * columns) as the RLS-bypassing admin, returning its generated id. */
+/** Insert an F3 sale with counterparty columns as the fixture owner and return its id. */
 async function seedSubstitutionRow(invoiceNumber: number): Promise<string> {
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
     insert into sales (tenant_id, till_id, node_id, series_id, invoice_number, issued_at,
@@ -259,12 +244,7 @@ describe("recordSubstitution against the real Veri*Factu backend", () => {
   });
 
   it("refuses duplicate ids in substitutedSaleIds — a ticket may be substituted at most once per F3", async () => {
-    // Defense-in-depth (§5): a repeated id would emit a DOUBLED FacturasSustituidas entry into an
-    // unrepairable filing. Rejected at this last layer before AEAT, regardless of what core passes.
-    // Real PG so the deletion proof can observe the doubled entry actually chain: with the guard
-    // removed, the loop reads the recorded F2 twice, builds a 2-entry FacturasSustituidas and appends
-    // the F3 registro (its sales row is seeded by `substitute`), so both the reject AND the
-    // nothing-chained assertion below flip.
+    // Reject repeated ids before appending: each substituted invoice appears once in the record.
     const ticketId = await recordTicket(1);
     await expect(substitute([ticketId, ticketId])).rejects.toThrow(/duplicate/i);
 

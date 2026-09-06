@@ -58,11 +58,12 @@ export function readSessionId(c: Context): string | null {
 }
 
 /**
- * Resolves the request's cookie to an OPEN shift session, or throws `session.required`. This is real
- * validation against the database, not a presence check: the cookie's id is looked up as the app role
- * under the till's tenant with `ended_at IS NULL`, so a forged or guessed id, an id belonging to
- * another tenant (RLS hides it), and an already-logged-out session all fail exactly as a missing
- * cookie does — the cookie merely NAMES a session, it does not prove one is open.
+ * The deployment holds one tenant per database. Resolves the request's cookie to an OPEN shift
+ * session, or throws `session.required`. The lookup is by id only. This is validation against the
+ * database, not a presence check: the cookie's id is looked up as the app role under the till's
+ * tenant with `ended_at IS NULL`, so an absent id and an already-logged-out session both fail
+ * exactly as a missing cookie does — the cookie merely NAMES a session, it does not prove one is
+ * open.
  *
  * Returns the operator's `personId` (for sale attribution) and the `sessionId`. The operator-scoped
  * routes Tasks 5/6 add (`GET /api/staff`, `POST /api/sales`) call this before doing any work; the

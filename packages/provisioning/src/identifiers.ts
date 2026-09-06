@@ -39,7 +39,7 @@ export function quoteIdent(value: string): string {
  * naive `'${value}'` this replaced. It exists because `applyInstance` and `InstanceAction` are
  * EXPORTED (`index.ts`) and `InstanceAction.password` is typed `string`, so the safety was a
  * property of one caller rather than of the code — and this package's own
- * `instance-apply.rls.test.ts` already passes a hand-written password through that path today. A
+ * `instance-apply.pg.test.ts` already passes a hand-written password through that path today. A
  * comment asserting a guarantee the type does not enforce is this repository's dominant defect
  * class; escaping makes it structural instead.
  *

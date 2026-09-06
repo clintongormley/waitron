@@ -14,9 +14,8 @@ import { locationId as brandLocationId, type NodeId, type TenantId } from "@wait
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 
-// PGlite, not real Postgres: this suite exercises the crypto/read/write ROUND-TRIP of the term-0
-// document. PGlite's only role is superuser, which bypasses RLS, so it proves the mint + persist +
-// verify path, not the RLS enforcement (which node-identity's real-Postgres siblings cover). §4.
+// PGlite exercises the crypto/read/write round-trip of the term-0 document: mint, persist and
+// verify. These assertions need neither a non-superuser role nor concurrent backends (§4).
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",

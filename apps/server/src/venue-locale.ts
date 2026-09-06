@@ -8,9 +8,9 @@ import { resolveVenueLocale, type SupportedLocale } from "@waitron/shared";
 /**
  * The venue's default UI locale, resolved ONCE at boot from geography + an optional env override.
  * Reads the tenant's country and the till location's province under the app role (`withTenant` +
- * `asAppUser`, so RLS scopes both reads to this tenant), then applies the shared
- * `override → province → country → English` chain (`resolveVenueLocale`, which always returns a
- * SUPPORTED code, so nothing here post-processes its result).
+ * `asAppUser`, with explicit id predicates on both reads), then applies the shared `override →
+ * province → country → English` chain (`resolveVenueLocale`, which always returns a SUPPORTED
+ * code, so nothing here post-processes its result).
  *
  * This is a DISPLAY value — the UI language the apps default to. It is DELIBERATELY separate from the
  * fiscal `cfg.locale` / `cfg.invoiceLocales`, which feed the receipt/invoice rendering and are

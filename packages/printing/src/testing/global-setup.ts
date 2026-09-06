@@ -10,13 +10,13 @@ import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
  *
  * One template, because every real-PG suite here migrates exactly `CORE_MIGRATIONS` — the print
  * tables (`print_agents`, `print_agent_pairing_codes`, `printers`, `print_jobs`) ship in CORE's
- * `0062_printing.sql`/`0063_printing_rls.sql`, so there is no printing-specific migration set to
- * layer on top. Suites clone it with `useTemplateDb({ template: "core" })`.
+ * `0000_db_baseline.sql`/`0001_db_baseline_sql.sql`, so there is no printing-specific migration
+ * set to layer on top. Suites clone it with `useTemplateDb({ template: "core" })`.
  *
  * NO cluster `roles` are provided: the enrol/auth suites drive the real deployment role by switching
  * to it inside a superuser transaction (`withTenant` + `asAppUser`, i.e. `set local role app_user`),
- * exactly as packages/db's own printing.rls.test.ts does — they need no separate LOGIN probe role.
- * `app_user` itself exists by the time any clone is used: CORE's `0001_tenancy_rls.sql` creates it.
+ * exactly as packages/db's own printing.test.ts does — they need no separate LOGIN probe role.
+ * `app_user` itself exists by the time any clone is used: CORE's `0001_db_baseline_sql.sql` creates it.
  *
  * A globalSetup's return value is its globalTeardown, so returning `teardown` stops the container
  * once the run finishes. Because globalSetup runs before every worker, a Docker-absent run dies HERE,

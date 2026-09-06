@@ -35,4 +35,4 @@ export const paymentPolicy = pgTable(
     ),
     check("payment_policy_cap_ck", sql`${t.offlineAmountCap} >= 0`),
   ],
-).enableRLS();
+);

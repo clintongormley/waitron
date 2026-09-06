@@ -10,9 +10,8 @@ import { codeOf, openSession, seedPerson, seedTill } from "../test/fixtures.js";
 
 // PGlite, not real Postgres: authorize() is pure LOGIC — the operator-holds path, the override
 // path's not-found / suspended / bad-PIN / lacks-permission gates, and the open-session guard.
-// Nothing here depends on the privilege set or on RLS enforcement (a PGlite connection is superuser,
-// so RLS is a false pass, CLAUDE.md §4); tenant-isolation of persons/sessions is proven as the app
-// role in persons.rls.test.ts / sessions.rls.test.ts and is not re-proven here.
+// Nothing here depends on the privilege set (a PGlite connection is superuser holding every grant,
+// so a grant assertion would be a false pass, CLAUDE.md §4).
 let tenantId: string;
 
 const suite = usePgliteDb({
@@ -94,7 +93,7 @@ describe("authorize", () => {
     expect(code).toBe("pin.invalid");
   });
 
-  it("throws person.not_found when the override personId is unknown (or another tenant's, RLS-hidden)", async () => {
+  it("throws person.not_found when the override personId is unknown", async () => {
     const tillId = await seedTill(suite.db, tenantId);
     const staffId = await seedPerson(suite.db, tenantId, "staff");
     const sessionId = await openSession(suite.db, tenantId, tillId, staffId);

@@ -4,29 +4,17 @@ export default defineConfig({
   test: {
     globals: true,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
-    // globalSetup boots ONE shared Postgres container and migrates the `core` template the real-PG
-    // (RLS) suite clones (~26ms) instead of that file booting and migrating its own (~1.5s). See
-    // src/testing/global-setup.ts. Because it precedes every worker, a Docker-absent run now fails the
-    // whole package (that file's header explains the broadening).
+    // globalSetup boots one shared Postgres container and makes the migrated `core` template
+    // available. The retained suites use PGlite; globalSetup still precedes every worker, so a
+    // Docker-absent run fails the whole package. See src/testing/global-setup.ts.
     globalSetup: ["./src/testing/global-setup.ts"],
-    // The PGlite suite (operations.test.ts) boots PGlite (a WASM PostgreSQL) and applies `@waitron/db`'s
-    // migrations, longer than Vitest's 5s default on a cold CI runner; the real-PG (RLS) suite now
-    // clones the shared container's migrated `core` template (globalSetup, above). Each per-suite cost
-    // is paid in a beforeAll — the PGlite WASM boot, or the real-PG ~26ms clone — so hookTimeout stays
-    // generous for the PGlite boot; the ~26ms clone is a harmless ceiling under it. The container boot /
-    // image pull is NOT in a beforeAll: it moved to globalSetup, which vitest does NOT bound by
-    // hookTimeout.
+    // The PGlite suites boot a WASM PostgreSQL and apply migrations in beforeAll, so hookTimeout
+    // covers that setup. The container boot/image pull runs in globalSetup, outside hookTimeout.
+    // testTimeout covers work inside an individual test.
     testTimeout: 30_000,
     hookTimeout: 180_000,
-    // NO poolOptions: this package stays MULTI-FORK, deliberately. It is not held to `singleFork` for
-    // the @vitest/coverage-v8 branch-merge artifact (unlike scheduler/credentials/workforce-es):
-    // purchasing had no `poolOptions` before this branch, so it has been multi-fork on `main` all along
-    // and passes the unfiltered `main` merge's `pnpm -r` coverage that way — this batch changes where
-    // the DB comes from, not how coverage merges across forks, so it neither introduces nor worsens the
-    // artifact (an isolated `test:coverage` here proves nothing about the concurrent case, per
-    // CLAUDE.md §2; the pre-existing main history is the evidence). It needs no `maxForks` connection
-    // cap either: only ONE real-PG file runs here, opening a handful of `connectAs` backends, far under
-    // the shared cluster's ~100-connection budget.
+    // The suites use PGlite and do not open PostgreSQL backend pools, so they need no
+    // shared-cluster connection cap. Coverage merges across the default fork workers.
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "json-summary"],

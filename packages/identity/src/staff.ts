@@ -181,9 +181,8 @@ export async function setEmail(
  * Sets a person's preferred UI language. Validates against the supported set (throws
  * `locale.unsupported`) so a bad code never reaches the row. Unlike every other mutator in this file
  * there is NO `authorizeManager` gate: a person sets their OWN locale, so the server routes pass the
- * SESSION's `personId` (never a body value), and RLS scopes the UPDATE to the current tenant. It
- * takes `tenantId` for signature parity with the gated mutators and to name the tenant the write is
- * scoped to, though the RLS predicate — not this argument — is what enforces it.
+ * SESSION's `personId` (never a body value). `tenantId` is retained for signature parity; the
+ * UPDATE matches the person's id.
  */
 export async function setPersonLocale(
   tx: Transaction,
@@ -225,12 +224,12 @@ export interface StaffListEntry {
 }
 
 /**
- * Pre-login roster for the till lock screen. Unlike the rest of this file it is NOT gated on
- * `authorize` — it runs before any session exists — so it is deliberately tenant-scoped by RLS via
- * the caller's transaction (opened under `withTenant`) and returns only `{ personId, displayName }`
- * for `active` persons. No PIN material, no role, no status: nothing that is unsafe to show before
- * anyone has logged in. Suspended persons are excluded — a `status = 'active'` filter, which the
- * suite proves load-bearing by flipping it.
+ * Pre-login roster for the till lock screen. This read has no tenant predicate. The deployment
+ * holds one tenant per database. Unlike the rest of this file it is NOT gated on `authorize` — it
+ * runs before any session exists — and returns only `{ personId, displayName }` for `active`
+ * persons. No PIN material, no role, no status: nothing that is unsafe to show before anyone has
+ * logged in. Suspended persons are excluded — a `status = 'active'` filter, which the suite
+ * checks.
  */
 export async function listActiveStaff(tx: Transaction): Promise<StaffListEntry[]> {
   const rows = await tx
@@ -245,11 +244,11 @@ export async function listActiveStaff(tx: Transaction): Promise<StaffListEntry[]
  * The active persons whose ROLE holds `permission`, in the same `{ personId, displayName }` shape
  * `listActiveStaff` returns. This is the roster a till surfaces when an operator must pick an
  * authorizing supervisor for a privileged action under a gated policy (the cash-drawer override —
- * cash-drawer-authorization §5): the eligible authorizers are exactly the active persons whose role
- * holds the action's permission.
+ * cash-drawer-authorization §5): the eligible authorizers are exactly the active persons whose
+ * role holds the action's permission. The active-person read has no tenant predicate. The
+ * deployment holds one tenant per database.
  *
- * Like `listActiveStaff` it is tenant-scoped by RLS via the caller's transaction (opened under
- * `withTenant`) and returns ONLY `{ personId, displayName }` — no PIN material, role or status: the
+ * Like `listActiveStaff` it returns ONLY `{ personId, displayName }` — no PIN material, role or status: the
  * caller shows the picker before the authorizing supervisor has entered a credential, so nothing
  * unsafe to show may travel. The role→permission map stays authoritative in permissions.ts: this
  * fetches every active person + their role and keeps those `roleHasPermission(role, permission)`

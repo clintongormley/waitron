@@ -20,8 +20,7 @@ export interface Session {
   locale: string | null;
 }
 
-/** Opens a shift session for a person at a till after verifying their PIN. RLS-scoped: `personId`
- * must belong to the current tenant. Throws `person.not_found`, `person.suspended`, `pin.invalid`. */
+/** Opens a shift session for a person at a till after verifying their PIN. Throws `person.not_found`, `person.suspended`, `pin.invalid`. */
 export async function loginWithPin(
   tx: Transaction,
   input: { tenantId: string; tillId: string; personId: string; pin: string },

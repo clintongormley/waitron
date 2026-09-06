@@ -38,8 +38,8 @@ import "./errors.js";
 
 // PGlite, not real Postgres: this suite proves the WRITE behaviour of `transferLines` and
 // `moveTabLines` — the split arithmetic, the guards, the line renumbering, the price-lock — all plain
-// SQL a single backend proves. The concurrency race and the RLS cross-tenant isolation (which PGlite's
-// superuser single-backend connection CANNOT show) are `transfer-lines.rls.test.ts`'s real-Postgres job.
+// SQL a single backend proves. The concurrency race and the per-tab fiscal filing as the app role
+// (which PGlite's superuser single-backend connection CANNOT show) are `transfer-lines.pg.test.ts`'s job.
 const LOCALE = "es-ES";
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 let db: Database;
@@ -82,9 +82,9 @@ async function setupVenue(): Promise<Seeded> {
   };
   const seeded = await withTenant(db, tenantId, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, { name: "Carta" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
-    const cafe = await createProduct(tx, {
+    const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
+    const bebidas = await createCategory(tx, tenantId, { name: "Bebidas" });
+    const cafe = await createProduct(tx, tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       descriptions: { [LOCALE]: "Café" },
@@ -92,7 +92,7 @@ async function setupVenue(): Promise<Seeded> {
       unitPrice: "1.50",
       vatClass: "general",
     });
-    const agua = await createProduct(tx, {
+    const agua = await createProduct(tx, tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       descriptions: { [LOCALE]: "Agua" },
@@ -100,7 +100,7 @@ async function setupVenue(): Promise<Seeded> {
       unitPrice: "2.00",
       vatClass: "general",
     });
-    const jamon = await createProduct(tx, {
+    const jamon = await createProduct(tx, tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       descriptions: { [LOCALE]: "Jamón" },
@@ -116,7 +116,7 @@ async function setupVenue(): Promise<Seeded> {
   return { cfg, ...seeded };
 }
 
-/** Run `fn` on a fresh app-scoped transaction (RLS in force, `app_user` role), like production. */
+/** Run `fn` on a fresh app-scoped transaction (`app_user` role), like production. */
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTenant(db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
@@ -124,7 +124,7 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
   });
 }
 
-/** The lines on a tab, owner-read (bypasses RLS), by `line_no`. */
+/** The lines on a tab, owner-read, by `line_no`. */
 async function linesOf(tabId: string): Promise<
   {
     lineNo: number;
@@ -287,7 +287,7 @@ describe("transferLines — partial split", () => {
     const tabA = await openTabWith(cfg, tableAId, [{ productId: cafeId, quantity: "3" }]);
     const tabB = await openTabWith(cfg, tableBId, [{ productId: aguaId, quantity: "1" }]);
 
-    // Change the catalogue's café price AFTER the ring, BEFORE the transfer (owner write, bypasses RLS).
+    // Change the catalogue's café price AFTER the ring, BEFORE the transfer (owner write).
     // If `transferLines` re-consulted the catalogue, the moved/kept line would jump to 9.99.
     await db.execute(sql`update products set unit_price = '9.99' where id = ${cafeId}`);
 
@@ -515,11 +515,16 @@ describe("transferLines — duplicate line_no in the batch", () => {
 
 describe("transferLines — ordering modifiers (FIX 2 cascade / FIX 4 split)", () => {
   /** Attach a single-item option group to `productId`, returning the item id. */
-  async function addOption(tx: Transaction, productId: string, name: string): Promise<string> {
+  async function addOption(
+    tx: Transaction,
+    tenantId: TillConfig["tenantId"],
+    productId: string,
+    name: string,
+  ): Promise<string> {
     const [group] = await tx
       .insert(optionGroups)
       .values({
-        tenantId: sql`current_tenant_id()`,
+        tenantId,
         name: { [LOCALE]: `${name} group` },
         minSelect: 0,
         maxSelect: 1,
@@ -530,7 +535,7 @@ describe("transferLines — ordering modifiers (FIX 2 cascade / FIX 4 split)", (
     const [item] = await tx
       .insert(optionGroupItems)
       .values({
-        tenantId: sql`current_tenant_id()`,
+        tenantId,
         groupId: group!.id,
         name: { [LOCALE]: name },
         priceDelta: "0.50",
@@ -539,7 +544,7 @@ describe("transferLines — ordering modifiers (FIX 2 cascade / FIX 4 split)", (
       })
       .returning({ id: optionGroupItems.id });
     await tx.insert(productOptionGroups).values({
-      tenantId: sql`current_tenant_id()`,
+      tenantId,
       productId,
       groupId: group!.id,
       sort: 0,
@@ -587,7 +592,7 @@ describe("transferLines — ordering modifiers (FIX 2 cascade / FIX 4 split)", (
 
   it("carries a parent dish's modifier children along on a whole-line transfer", async () => {
     const { cfg, cafeId, aguaId, tableAId, tableBId } = await setupVenue();
-    const bacon = await asApp(cfg, (tx) => addOption(tx, cafeId, "Bacon"));
+    const bacon = await asApp(cfg, (tx) => addOption(tx, cfg.tenantId, cafeId, "Bacon"));
     // Tab A: café (parent, line 1) + bacon child (line 2). Tab B: agua (line 1).
     const tabA = await openModifierTab(cfg, tableAId, [
       { productId: cafeId, quantity: "1", options: [{ optionGroupItemId: bacon }] },
@@ -609,7 +614,7 @@ describe("transferLines — ordering modifiers (FIX 2 cascade / FIX 4 split)", (
 
   it("refuses transferring a modifier CHILD line on its own (tab.transfer_modifier_line)", async () => {
     const { cfg, cafeId, aguaId, tableAId, tableBId } = await setupVenue();
-    const bacon = await asApp(cfg, (tx) => addOption(tx, cafeId, "Bacon"));
+    const bacon = await asApp(cfg, (tx) => addOption(tx, cfg.tenantId, cafeId, "Bacon"));
     const tabA = await openModifierTab(cfg, tableAId, [
       { productId: cafeId, quantity: "1", options: [{ optionGroupItemId: bacon }] },
     ]);
@@ -628,7 +633,7 @@ describe("transferLines — ordering modifiers (FIX 2 cascade / FIX 4 split)", (
 
   it("refuses a partial split of a dish that carries modifiers (tab.transfer_modifier_line)", async () => {
     const { cfg, cafeId, aguaId, tableAId, tableBId } = await setupVenue();
-    const bacon = await asApp(cfg, (tx) => addOption(tx, cafeId, "Bacon"));
+    const bacon = await asApp(cfg, (tx) => addOption(tx, cfg.tenantId, cafeId, "Bacon"));
     // café ×2 (parent, line 1) + bacon child (line 2).
     const tabA = await openModifierTab(cfg, tableAId, [
       { productId: cafeId, quantity: "2", options: [{ optionGroupItemId: bacon }] },

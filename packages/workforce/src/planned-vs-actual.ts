@@ -9,7 +9,7 @@ import { localDate, minutesBetween, type PlannedShift } from "./roster-validatio
  * shift may be a no-show — so it is a read model over two independent streams (design §2.1).
  *
  * Pure logic over the two inputs, DB-free for the same reason the projection is (CLAUDE.md §4): no
- * privileges, no RLS, no concurrency, so it is unit-tested directly. `WorkSession.startedAt` and
+ * privileges, no concurrency, so it is unit-tested directly. `WorkSession.startedAt` and
  * `PlannedShift.startsAt` are both ABSOLUTE instants, so lateness is their difference; the JOIN key is
  * the LOCAL day (`WorkSession.workDate` is already local; a shift's is its start shifted by its wall
  * offset), so a shift and the session that fulfilled it meet on the day the worker experienced.

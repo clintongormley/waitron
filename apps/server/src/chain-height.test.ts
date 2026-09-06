@@ -8,9 +8,9 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import { readChainHeight } from "./chain-height.js";
 import { ALL_MODULES } from "./modules.js";
 
-// Real Postgres, not PGlite: `cadenas` is RLS + FORCE ROW LEVEL SECURITY, and the reader relies on
-// the caller's tenant context + `app_user` role to scope the row. PGlite runs every connection as a
-// superuser, which bypasses FORCE RLS, so the tenant scope would be a false pass there (CLAUDE.md §4).
+// This suite retains the real-Postgres manifest fixture and reads cadenas as app_user. The cases
+// check the node-id lookup and absent-row fallback. The deployment holds one tenant per database.
+// Real PostgreSQL retains the app_user read-privilege check.
 const LOCALE = "es-ES";
 
 const suite = useTemplateDb({ template: "manifest" });
@@ -69,12 +69,12 @@ describe("readChainHeight (real postgres)", () => {
   });
 
   it("returns 0 / null for a node with no cadenas row", async () => {
-    // Provisioning seeds this venue's own chain head at `secuencia = 0` (verified 2026-08-29 against
-    // the manifest template: applyVenue leaves a `cadenas` row with a non-null `actualizado_en`), so
-    // the "absent row" branch is NOT reached by a freshly provisioned node — it is reached by a
-    // node_id that has no chain row under this tenant. A random uuid is exactly that: RLS scopes the
-    // read to the tenant, the `node_id` predicate then matches nothing, and the reader falls back to
-    // `{ height: 0, lastAt: null }`.
+    // Provisioning seeds this venue's own chain head at `secuencia = 0` (verified 2026-08-29
+    // against the manifest template: applyVenue leaves a `cadenas` row with a non-null
+    // `actualizado_en`), so the "absent row" branch is NOT reached by a freshly provisioned node
+    // — it is reached by a node_id that has no chain row under this tenant. A random uuid is
+    // exactly that: the `node_id` predicate matches nothing, and the reader falls back to `{
+    // height: 0, lastAt: null }`.
     const result = await withTenant(suite.admin, tenantId, async (tx) => {
       await asAppUser(tx);
       return readChainHeight(tx, randomUUID());
@@ -84,9 +84,9 @@ describe("readChainHeight (real postgres)", () => {
 
   it("returns the cadenas secuencia + actualizado_en once a chain row exists", async () => {
     // Seed the chain head as OWNER. `app_user` does hold SELECT/INSERT/UPDATE on `cadenas`
-    // (0001_registros_inmutables.sql:58), but the app never writes an arbitrary `secuencia` this way —
-    // it advances the head through `registerSif`'s locked upsert. Seeding as owner keeps that
-    // bypass out of the app role and out of RLS, and the READ below is what runs under the app role.
+    // (0001_fiscal_baseline_sql.sql), but the app never writes an arbitrary `secuencia` this way
+    // — it advances the head through `registerSif`'s locked upsert. Seeding as owner keeps that
+    // bypass out of the app role, and the READ below is what runs under the app role.
     await suite.admin.execute(sql`
       insert into cadenas (tenant_id, node_id, secuencia, actualizado_en)
       values (${tenantId}, ${nodeId}, 7, '2026-08-29T10:00:00Z')

@@ -9,12 +9,8 @@ import { createPrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
 import type { PrintConfig } from "./printers.js";
 
-// Real Postgres (a `core` template clone), NOT PGlite: the "deactivated printer is not lease-reclaimed"
-// case depends on the claim being COMMITTED and the stuck `printing` row UNLOCKED between transactions —
-// the "an agent claimed, committed, then died" shape PGlite (one serialised backend) cannot exercise
-// (CLAUDE.md §4). The `p.active = true` conjunct on the pull predicate (runtime.ts) is PROVEN
-// load-bearing by deletion: remove it and the deactivated printer's queued job below is claimed and its
-// stuck `printing` job is reclaimed; keep it and both are left untouched until the printer is reactivated.
+// Real PostgreSQL exercises claims and lease updates after SET ROLE app_user.
+// These cases use sequential transactions; competing agents are covered by runtime.race.test.ts.
 const suite = useTemplateDb({ template: "core" });
 
 async function setup(): Promise<PrintConfig> {
@@ -42,7 +38,7 @@ async function seedAgent(cfg: PrintConfig): Promise<string> {
   return rows[0]!.id;
 }
 
-/** Observe one outbox row's status directly as the (superuser) admin, bypassing RLS. */
+/** Observe one outbox row's status directly as the (superuser) admin. */
 async function jobStatus(jobId: string): Promise<string> {
   const { rows } = await suite.admin.execute<{ status: string }>(
     sql`select status from print_jobs where id = ${jobId}`,

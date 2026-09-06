@@ -17,7 +17,7 @@ const postgres = useTemplateDb({ template: "core_payments" });
 
 const NOW = new Date("2026-07-25T12:00:00Z");
 /** Older than NOW - DEFAULT_SETTLEMENT_LAG_MS, so the in-flight tolerance has expired — the same
- * fixture reconcile.test.ts / reconcile.rls.test.ts already use, so the orphan shape below is not
+ * fixture reconcile.test.ts already uses, so the orphan shape below is not
  * an artifact of a boundary this suite happens to dodge. */
 const OLD_SETTLED = new Date("2026-07-01T12:00:00Z");
 const PERIOD = { from: new Date("2026-07-01T00:00:00Z"), to: new Date("2026-07-02T00:00:00Z") };
@@ -27,8 +27,8 @@ const PERIOD = { from: new Date("2026-07-01T00:00:00Z"), to: new Date("2026-07-0
  * `markReconcileRemediated`'s state-guarded UPDATE (store.ts, matches only a row whose
  * `reconcile_remediated_at` is still NULL) and `recordIncidentOnce`'s partial unique index on
  * `(tenant_id, till_id, code, sale_id) WHERE acknowledged_at IS NULL` (@waitron/core). Every
- * existing proof of either primitive runs a single sweep (reconcile.test.ts,
- * reconcile.rls.test.ts) or races bare store calls against each other by hand
+ * existing proof of either primitive runs a single sweep (reconcile.test.ts) or races bare store
+ * calls against each other by hand
  * (incident-dedup.concurrency.test.ts, reversal.concurrency.test.ts). None of them proves the thing
  * that actually matters in production: two independent, unsynchronised SCHEDULER RUNS of the whole
  * `reconcilePayments` sweep landing on the same orphan at once. A regression here — either
@@ -43,14 +43,14 @@ const PERIOD = { from: new Date("2026-07-01T00:00:00Z"), to: new Date("2026-07-0
  * starts both full sweeps together and lets Postgres decide who wins; every assertion below checks
  * only that exactly one of them did, never which.
  *
- * The settlement report below deliberately MATCHES the local row (same reference, same amount),
- * unlike reconcile.rls.test.ts's empty report against this same OLD_SETTLED/PERIOD fixture. That
- * empty-report shape is correct there — it exists specifically to prove the row is genuinely BOTH
- * `orphan` and `unsettled` (classify()'s classes are independent predicates, not a switch) and to
- * exercise the extra incidents-table grant a second class needs. Reusing it here would race TWO
- * independent single-winner incident codes at once and dilute this suite's one job: isolating the
- * orphan-reversal race alone, exactly as reconcile.test.ts's own orphan-remediation tests do with a
- * matching `settlement()`.
+ * The settlement report below deliberately MATCHES the local row (same reference, same amount) — the
+ * shape reconcile.test.ts's own orphan-remediation tests use, `auto-reverses an orphan on an
+ * ABANDONED order and stamps the marker` among them, against this same OLD_SETTLED/PERIOD fixture. A
+ * report that does NOT mention the reference makes the row genuinely BOTH `orphan` and `unsettled`
+ * (classify()'s classes are independent predicates, not a switch — reconcile.test.ts's
+ * `still claims and reverses an abandoned orphan whose reference matches NOTHING in the report` is
+ * where that overlap is asserted). Reusing that shape here would race TWO independent single-winner
+ * incident codes at once and dilute this suite's one job: isolating the orphan-reversal race alone.
  */
 describe("concurrent reconcile sweeps", () => {
   it("reverse an orphan exactly once and raise one incident, however they interleave", async () => {

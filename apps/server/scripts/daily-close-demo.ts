@@ -88,8 +88,8 @@ interface Venue {
 
 /**
  * Seeds tenant → location → till → node → standard series → rectificative series as the PGlite
- * superuser (which bypasses RLS), exactly as the package's own test fixtures do — `app_user` holds
- * no INSERT on `tenants`, deliberately (a running POS cannot create tenants).
+ * superuser, exactly as the package's own test fixtures do — `app_user` holds no INSERT on
+ * `tenants`, deliberately (a running POS cannot create tenants).
  */
 async function seedVenue(db: Database): Promise<Venue> {
   const t = await db.execute<{ id: string }>(
@@ -250,7 +250,7 @@ async function main(): Promise<void> {
       await recordCorrection(tx, backend, correctionInput);
     });
 
-    // The read: RLS-safe, as the application role, exactly as a till/report consumer would call it.
+    // The read: as the application role, exactly as a till/report consumer would call it.
     const close = await withTenant(db, venue.tenantId, async (tx) => {
       await asAppUser(tx);
       return computeDailyClose(tx, {

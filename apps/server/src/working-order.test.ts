@@ -77,17 +77,8 @@ import { decodeTicket } from "./testing/decode-ticket.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import "./errors.js";
 
-// PGlite, not real Postgres: this suite proves the WRITE behaviour of `parkOrder` — the working-order
-// state machine (an OPEN row plus its lines), the refuse-empty/refuse-unknown guards, and that the
-// database's own FK + trigger constraints (the composite node/product FKs, `require_open_parent`, the
-// `check_locales` trigger) hold on the rows it inserts — AND the READ behaviour of `listHeldOrders`
-// (the sum/count aggregate, the open-status and node filters, the ordering) and `getHeldOrder` (the
-// open-only lookup and its `working_order.not_found`). All of that is plain SQL a single backend
-// proves; none of it needs a genuine non-superuser role — RLS/cross-tenant isolation and the per-node
-// concurrency of `allocateOrderNumber` are proven against real Postgres in Task 7's `*.rls.test.ts`.
-// Every read and write still runs through `withTenant` + `asAppUser` (as `app_user`, so RLS is in
-// force even here) exactly as production does, so the tenant scope and the `check_locales` trigger
-// (which reads the location under the caller's own scope) are exercised, not bypassed.
+// PGlite exercises working-order state, validation, foreign keys, triggers and node-scoped reads.
+// Writes run as app_user. Real PostgreSQL covers concurrent order-number allocation.
 const LOCALE = "es-ES";
 
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
@@ -128,9 +119,9 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
 
   const { cafeId, aguaId, catalogueId } = await withTenant(db, tenantId, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, { name: "Carta" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
-    const cafe = await createProduct(tx, {
+    const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
+    const bebidas = await createCategory(tx, tenantId, { name: "Bebidas" });
+    const cafe = await createProduct(tx, tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       descriptions: { [LOCALE]: "Café" },
@@ -140,7 +131,7 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
     });
     // Deliberately category-less: `listAvailableProducts` resolves its `category` to NULL (LEFT JOIN),
     // so its priced line snapshots `category: null` — the other side of `parkOrder`'s `?? null`.
-    const agua = await createProduct(tx, {
+    const agua = await createProduct(tx, tenantId, {
       catalogueId: cat.id,
       categoryId: null,
       descriptions: { [LOCALE]: "Agua" },
@@ -288,7 +279,7 @@ describe("parkOrder", () => {
     // committed row on the SAME backend. It is NOT concurrency (two backends racing, which would need a
     // real non-superuser role to serialise): one connection replaying its own committed write is exactly
     // what a single backend proves. The CONCURRENT park backstop — two backends racing the same id — is
-    // proven separately against real Postgres in `working-order.rls.test.ts` ("parkOrder concurrent replay").
+    // proven separately against real Postgres in `working-order.pg.test.ts` ("parkOrder concurrent replay").
     const { cfg, cafeId } = await setupVenue();
     const id = randomUUID();
     const lines = [{ productId: cafeId, quantity: "2" }];
@@ -429,13 +420,7 @@ async function setStatus(id: string, status: "settled" | "abandoned"): Promise<v
 // `setStatus` needs the tenant of the venue it is acting on; each test assigns this before using it.
 let testTenant: string;
 
-/**
- * Insert a lineless OPEN order on a SECOND node under the SAME tenant + location, and return its id.
- * RLS is tenant-scoped, so it does NOT hide this row from `cfg`'s node — only `node_id = cfg.nodeId`
- * does. The by-id held-order lookups must fail closed on it, exactly as `listHeldOrders` omits it
- * (its `node scope, not just RLS` sibling). Inserted directly as superuser: the row only has to EXIST
- * to be wrongly returned/edited/abandoned when the node filter is missing (prove-by-deletion target).
- */
+/** Insert an open order on another node at the same location to test by-id node filtering. */
 async function seedForeignNodeOrder(cfg: TillConfig): Promise<string> {
   const id = randomUUID();
   const otherNode = await seedNode(db, cfg.tenantId, cfg.locationId);
@@ -508,15 +493,12 @@ describe("listHeldOrders", () => {
     expect(held.map((o) => o.id)).toEqual([openId]);
   });
 
-  it("excludes an open order on ANOTHER node of the same tenant — node scope, not just RLS", async () => {
+  it("excludes an open order on ANOTHER node of the same tenant — node scope", async () => {
     const { cfg, cafeId } = await setupVenue();
     const mine = randomUUID();
     await parkOrder({ db }, cfg, { id: mine, lines: [{ productId: cafeId, quantity: "1" }] });
 
-    // A second node under the SAME tenant with its own open order. RLS is tenant-scoped, so it does
-    // NOT hide this row — only `node_id = cfg.nodeId` does. Removing that filter makes this order
-    // appear and fails the assertion (CLAUDE.md §4, prove the guard by deletion). Inserted directly
-    // (no lines) as superuser: this row only has to EXIST to be wrongly listed.
+    // Only the node predicate excludes this same-tenant order from the list.
     const otherNode = await seedNode(db, cfg.tenantId, cfg.locationId);
     await db.execute(sql`
       insert into working_orders (tenant_id, till_id, node_id, order_number, status)
@@ -576,13 +558,11 @@ describe("getHeldOrder", () => {
     });
   });
 
-  it("throws working_order.not_found for an open order on ANOTHER node of the same tenant — node scope, not just RLS", async () => {
+  it("throws working_order.not_found for an open order on ANOTHER node of the same tenant — node scope", async () => {
     const { cfg } = await setupVenue();
     const foreign = await seedForeignNodeOrder(cfg);
 
-    // RLS (tenant-scoped) does NOT hide a same-tenant order parked on another node; only
-    // `node_id = cfg.nodeId` does. Without that filter `getHeldOrder` returns the foreign order instead
-    // of throwing (prove the guard by deletion, CLAUDE.md §4).
+    // The node predicate must exclude the other node's order from this by-id lookup.
     await expect(getHeldOrder({ db }, cfg, foreign)).rejects.toMatchObject({
       code: "working_order.not_found",
       params: { workingOrderId: foreign },
@@ -721,7 +701,7 @@ describe("updateHeldOrder", () => {
     });
   });
 
-  it("throws working_order.not_open for an open order on ANOTHER node of the same tenant — node scope, not just RLS", async () => {
+  it("throws working_order.not_open for an open order on ANOTHER node of the same tenant — node scope", async () => {
     const { cfg, cafeId } = await setupVenue();
     const foreign = await seedForeignNodeOrder(cfg);
 
@@ -783,7 +763,7 @@ describe("abandonHeldOrder", () => {
     });
   });
 
-  it("throws working_order.not_open for an open order on ANOTHER node of the same tenant — node scope, not just RLS", async () => {
+  it("throws working_order.not_open for an open order on ANOTHER node of the same tenant — node scope", async () => {
     const { cfg } = await setupVenue();
     const foreign = await seedForeignNodeOrder(cfg);
 
@@ -800,13 +780,13 @@ describe("abandonHeldOrder", () => {
 // KDS-1 Task 3 — fire → ticket items. `fireLines` resolves `product ?? category ?? default` and
 // SNAPSHOTS the station onto each ticket item; the three fire points (placeOrder, sendToPrep, and a
 // tab's round-send via addTabRound) funnel through it. PGlite proves the resolver, the snapshot rule
-// and the no-default refusal — plain SQL a single backend proves; RLS/node isolation of `ticket_items`
-// is real-Postgres's job (packages/db `ticket-items.rls.test.ts`). Every write runs through
+// and the no-default refusal — plain SQL a single backend proves; the `ticket_items` schema's own
+// columns, unique and cascade are real-Postgres's job (packages/db `ticket-items.test.ts`). Every write runs through
 // `withTenant` + `asAppUser`, so the tenant scope and grants are exercised, not bypassed.
 // ---------------------------------------------------------------------------------------------------
 
 /** The accountable operator a placing amendment is attributed to (a fixed fixture uuid — only ever
- *  stored, never joined; mirrors working-order.rls.test.ts's OPERATOR). */
+ *  stored, never joined; mirrors working-order.pg.test.ts's OPERATOR). */
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
 
 /** A trusted-clock stub: placeOrder reads only `now()` for its amendment's wall-clock. */
@@ -828,7 +808,7 @@ async function makeProduct(
   catalogueId: string,
   route: { categoryId?: string; stationId?: string },
 ): Promise<string> {
-  const { id } = await createProduct(tx, {
+  const { id } = await createProduct(tx, cfg.tenantId, {
     catalogueId,
     categoryId: route.categoryId ?? null,
     descriptions: { [LOCALE]: `P-${randomUUID().slice(0, 8)}` },
@@ -908,6 +888,7 @@ async function placeOrderWith(
  *  line's `options: [{ optionGroupItemId }]` selects, for the modifier sub-item tests. */
 async function addOption(
   tx: Transaction,
+  tenantId: TillConfig["tenantId"],
   productId: string,
   name: string,
   // The allergen OVERLAY this option carries as served (Task 8): the codes it adds and the codes it
@@ -924,7 +905,7 @@ async function addOption(
   const [group] = await tx
     .insert(optionGroups)
     .values({
-      tenantId: sql`current_tenant_id()`,
+      tenantId,
       name: { [LOCALE]: `${name} group` },
       minSelect: 0,
       maxSelect: 1,
@@ -935,7 +916,7 @@ async function addOption(
   const [item] = await tx
     .insert(optionGroupItems)
     .values({
-      tenantId: sql`current_tenant_id()`,
+      tenantId,
       groupId: group!.id,
       name: { [LOCALE]: name },
       priceDelta: "0.50",
@@ -948,7 +929,7 @@ async function addOption(
     })
     .returning({ id: optionGroupItems.id });
   await tx.insert(productOptionGroups).values({
-    tenantId: sql`current_tenant_id()`,
+    tenantId,
     productId,
     groupId: group!.id,
     sort: 0,
@@ -1019,7 +1000,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const barra = await createStation(tx, cfg, { name: "Barra" });
-      const drinks = await createCategory(tx, { name: "Copas" });
+      const drinks = await createCategory(tx, cfg.tenantId, { name: "Copas" });
       await setCategoryStation(tx, cfg, drinks.id, barra.id);
       const cana = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id }); // → barra (category)
       const cafe = await makeProduct(tx, cfg, catalogueId, {
@@ -1209,9 +1190,9 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
 // `returning` → `ticket.invalid_transition`); `advanceTicket` bumps every not-yet-`to` line of one
 // order at one station together; `listStationQueue` groups a station's items by order, dropping
 // collected and abandoned orders. PGlite proves the transition logic, the whole-ticket fan-out and the
-// grouping/exclusion filters — plain SQL a single backend proves; the RLS/tenant-isolation + node
-// scoping are real-Postgres's job (working-order.rls.test.ts). Every write runs through
-// `withTenant` + `asAppUser`, so grants and RLS are in force, not bypassed.
+// grouping/exclusion filters — plain SQL a single backend proves; the NODE scoping is real-Postgres's
+// job (working-order.pg.test.ts). Every write runs through `withTenant` + `asAppUser`, so the app
+// role's grants are in force, not bypassed.
 // ---------------------------------------------------------------------------------------------------
 
 /** The order's ticket items joined to their line, in line_no order — each item's id (the bump target),
@@ -1297,7 +1278,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       await expect(advanceTicketItem(tx, cfg, item!.id, "queued")).rejects.toMatchObject({
         code: "ticket.invalid_transition",
       });
-      // An absent id (or another tenant's, RLS-hidden) matches no row — the same fail-closed code.
+      // An absent id matches no row and returns the same not-found code.
       const missing = randomUUID();
       await expect(advanceTicketItem(tx, cfg, missing, "preparing")).rejects.toMatchObject({
         code: "ticket.invalid_transition",
@@ -1354,6 +1335,13 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       const { id: order1 } = await placeOrderWith(tx, cfg, [line(cafe), line(cafe)]);
       const { id: order2 } = await placeOrderWith(tx, cfg, [line(cafe), line(copa)]);
 
+      // now() is constant inside this transaction; give the ordering fixture distinct times.
+      await tx.execute(
+        sql`update ticket_items set queued_at = '2026-07-20T10:00:00Z' where working_order_id = ${order1}`,
+      );
+      await tx.execute(
+        sql`update ticket_items set queued_at = '2026-07-20T10:01:00Z' where working_order_id = ${order2}`,
+      );
       const cocinaQueue = await listStationQueue(tx, cfg, cocina.id);
       // Two groups, oldest order first; order 1 has two Cocina lines, order 2 has one (its copa went
       // to Barra, so it is NOT in this station's group).
@@ -1414,8 +1402,8 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       // Café with TWO selected options — each a child modifier line, never its own ticket item.
-      const grande = await addOption(tx, cafeId, "Grande");
-      const avena = await addOption(tx, cafeId, "Leche avena");
+      const grande = await addOption(tx, cfg.tenantId, cafeId, "Grande");
+      const avena = await addOption(tx, cfg.tenantId, cafeId, "Leche avena");
       const { id: orderId } = await placeOrderWith(tx, cfg, [
         {
           productId: cafeId,
@@ -1515,7 +1503,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       // A gluten burger with a gluten-free-bun swap: base `{gluten: contains}`, the option removes it.
-      const burger = await createProduct(tx, {
+      const burger = await createProduct(tx, cfg.tenantId, {
         catalogueId,
         categoryId: null,
         descriptions: { [LOCALE]: "Hamburguesa" },
@@ -1524,7 +1512,9 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         vatClass: "general",
         allergens: { gluten: { presence: "contains" } },
       });
-      const gfBun = await addOption(tx, burger.id, "Pan sin gluten", { remove: ["gluten"] });
+      const gfBun = await addOption(tx, cfg.tenantId, burger.id, "Pan sin gluten", {
+        remove: ["gluten"],
+      });
       const { id: orderId } = await placeOrderWith(tx, cfg, [
         { productId: burger.id, quantity: "1", options: [{ optionGroupItemId: gfBun }] },
       ]);
@@ -1564,7 +1554,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const dish = await makeProduct(tx, cfg, catalogueId, {}); // no allergens → published NULL
-      const opt = await addOption(tx, dish, "Extra", { remove: ["gluten"] });
+      const opt = await addOption(tx, cfg.tenantId, dish, "Extra", { remove: ["gluten"] });
       await placeOrderWith(tx, cfg, [
         { productId: dish, quantity: "1", options: [{ optionGroupItemId: opt }] },
       ]);
@@ -1607,7 +1597,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const dish = await createProduct(tx, {
+      const dish = await createProduct(tx, cfg.tenantId, {
         catalogueId,
         categoryId: null,
         descriptions: { [LOCALE]: "Ensalada" },
@@ -1616,7 +1606,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         vatClass: "general",
         allergens: { gluten: { presence: "contains" } },
       });
-      const nuts = await addOption(tx, dish.id, "Con nueces", {
+      const nuts = await addOption(tx, cfg.tenantId, dish.id, "Con nueces", {
         add: { nuts: { presence: "contains" } },
       });
       await placeOrderWith(tx, cfg, [
@@ -1641,7 +1631,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const dish = await createProduct(tx, {
+      const dish = await createProduct(tx, cfg.tenantId, {
         catalogueId,
         categoryId: null,
         descriptions: { [LOCALE]: "Crema" },
@@ -1651,7 +1641,9 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       });
       // Recipe-derived: the only origin is dairy (reviewed, not pending) ⇒ vegetarian but not vegan.
       await applyDietDerivation(tx, dish.id, { origins: ["dairy"], pending: false });
-      const dairyFree = await addOption(tx, dish.id, "Sin lácteos", { removeOrigins: ["dairy"] });
+      const dairyFree = await addOption(tx, cfg.tenantId, dish.id, "Sin lácteos", {
+        removeOrigins: ["dairy"],
+      });
       const { id: orderId } = await placeOrderWith(tx, cfg, [
         { productId: dish.id, quantity: "1", options: [{ optionGroupItemId: dairyFree }] },
       ]);
@@ -1740,15 +1732,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   });
 });
 
-// KDS-2 Task 4 — hold-and-fire. `fireLines` now snapshots each line's `course_id` and decides
-// fired-vs-held: an item fires (`fired_at = now()`) when its course is the order's EARLIEST (min
-// display_order, a null course treated as earliest) OR is already fired for the order; otherwise it is
-// HELD (`fired_at NULL`). `fireCourse` releases a held course's items; `advanceTicketItem` refuses a
-// held item (`ticket.item_held`). PGlite proves the auto-fire arithmetic, the held-advance refusal and
-// `fireCourse`'s idempotency — plain SQL a single backend proves, with no privilege or concurrency
-// dimension (RLS/node isolation of `ticket_items` is real-Postgres's job, packages/db). Every write
-// runs through `withTenant` + `asAppUser`, so grants and RLS are in force, not bypassed.
-// ---------------------------------------------------------------------------------------------------
+// PGlite exercises course hold/fire decisions, held-item refusal and fireCourse idempotency.
 
 /** The order's ticket items joined to their line, carrying the fields the hold-and-fire tests read:
  *  the item id (the bump target), its product (to key by line), its snapshotted course and — the
@@ -2012,8 +1996,9 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
 // the config/fire verbs use (`course.not_found` for an absent / foreign / retired course), and throws
 // `tab.line_not_found` for a `line_no` not on the tab. Non-fiscal: it touches only `working_order_lines`
 // (open tab) and `ticket_items` (kitchen), never a filed record. PGlite proves the update + the guards —
-// plain SQL a single backend proves; RLS/node isolation is real-Postgres's job (working-order.rls.test.ts).
-// Every write runs through `withTenant` + `asAppUser`, so grants and RLS are in force, not bypassed.
+// plain SQL a single backend proves; the two-backend serialisation of a concurrent send/recall/fire is
+// real-Postgres's job (working-order.pg.test.ts). Every write runs through `withTenant` + `asAppUser`,
+// so the app role's grants are in force, not bypassed.
 // ---------------------------------------------------------------------------------------------------
 describe("setLineCourse (A1: move a held line to another course)", () => {
   it("moves a HELD line to another course, updating both course_id snapshots", async () => {
@@ -2151,16 +2136,8 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
   });
 });
 
-// Coursing editing (A2) — `sendLines` fires SPECIFIC held lines of an open tab (finer than a whole
-// course): it stamps `fired_at = now()` on the named lines' HELD ticket items, refreshes `queued_at =
-// now()` so the KDS timing clock (#185) restarts from the send rather than the ring, and enqueues each
-// sent line's kitchen print (a held line prints nothing until it is sent). An EMPTY line list releases
-// EVERY held line of the tab ("send all together"). An already-fired line in the set is skipped by the
-// `fired_at IS NULL` predicate, so it is idempotent like `fireCourse`. Non-fiscal: it writes only
-// `ticket_items` (the mutable kitchen table), never a filed record. PGlite proves the line-keyed
-// update, the queued_at refresh, and the print enqueue — plain SQL a single backend proves; RLS/node
-// isolation is real-Postgres's job. Every write runs through `withTenant` + `asAppUser`.
-// ---------------------------------------------------------------------------------------------------
+// sendLines releases selected held items, refreshes queue time and enqueues their kitchen prints.
+// PGlite exercises these writes and skips already-fired items.
 describe("sendLines (A2: fire specific held lines / send-all)", () => {
   /** A fixed instant well in the past — an aged `queued_at` a same-tx `now()` refresh moves off, so the
    *  refresh is observable (within one transaction `now()` is constant, so an un-aged held line rung and
@@ -2367,17 +2344,8 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
   });
 });
 
-// Coursing editing (A4) — `recallLines` UN-sends a not-yet-started line: it clears `fired_at` back to
-// NULL on the named lines' ticket items WHERE `state = 'queued'` (the clean recall window), so a line the
-// kitchen has not begun greys back to held and is re-courseable (A1) / re-sendable (A2). A line the kitchen
-// has already STARTED (`state` = `preparing`/`ready`) is a state conflict → `ticket.already_started` (the
-// till offers cancel instead), and the offending `ticketItemId` is read BEFORE the update so the refusal can
-// name it. An already-held line (`fired_at` already null) is a no-op; an absent `line_no` is
-// `tab.line_not_found` (the same resolve-or-throw the sibling single-line tab verbs use). Non-fiscal: it
-// writes only `ticket_items` (the mutable kitchen table), never a filed record; no correction print here
-// (that is A6). PGlite proves the state-gated un-fire, the started-refusal and the no-op — plain SQL a
-// single backend proves; RLS/node isolation is real-Postgres's job. Every write runs `withTenant`/`asAppUser`.
-// ---------------------------------------------------------------------------------------------------
+// recallLines clears fired_at only while a ticket is queued. Started items refuse recall;
+// already-held items are unchanged. PGlite exercises these state transitions.
 describe("recallLines (A4: un-send a not-started line — fired → held)", () => {
   it("un-fires a fired-not-started line back to held (fired_at → null, state stays queued)", async () => {
     const { cfg, catalogueId } = await setupVenue();
@@ -2528,7 +2496,7 @@ describe("correction slips on recall & void (A6)", () => {
     name: string,
     courseId?: string,
   ): Promise<string> {
-    const { id } = await createProduct(tx, {
+    const { id } = await createProduct(tx, cfg.tenantId, {
       catalogueId,
       categoryId: null,
       descriptions: { [LOCALE]: name },
@@ -2540,7 +2508,7 @@ describe("correction slips on recall & void (A6)", () => {
     return id;
   }
 
-  /** The whole print-job outbox (RLS scopes it to the caller's tenant), for the before/after id diff. */
+  /** Read print-job ids for the before/after enqueue comparison. */
   function jobRows(tx: Transaction): Promise<{ id: string; printerId: string; payload: Buffer }[]> {
     return tx
       .select({ id: printJobs.id, printerId: printJobs.printerId, payload: printJobs.payload })
@@ -2725,7 +2693,7 @@ describe("addTabRound hold-on-send (A3)", () => {
       );
       const modified = await makeProduct(tx, cfg, catalogueId, {});
       const plain = await makeProduct(tx, cfg, catalogueId, {});
-      const extra = await addOption(tx, modified, "Extra");
+      const extra = await addOption(tx, cfg.tenantId, modified, "Extra");
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openTab(tx, cfg, { tableId });
 
@@ -2760,8 +2728,8 @@ describe("addTabRound hold-on-send (A3)", () => {
 // by course in display_order with per-course fired/away roll-ups. Unlike `listStationQueue` (one
 // station, no station name) it joins `kitchen_stations` to label each item's station. PGlite proves the
 // join, the collected/abandoned/fully-away exclusions, the course grouping and the roll-ups — plain SQL a
-// single backend proves; the node/tenant RLS scoping is real-Postgres's job (working-order.rls.test.ts).
-// Every read/write runs through `withTenant` + `asAppUser`, so grants and RLS are in force, not bypassed.
+// single backend proves; the NODE scoping is real-Postgres's job (working-order.pg.test.ts).
+// Every read/write runs through `withTenant` + `asAppUser`, so the app role's grants are in force.
 // ---------------------------------------------------------------------------------------------------
 describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
   it("aggregates one order's two-station single-course lines into one course with station names, excluding collected/abandoned orders", async () => {
@@ -3009,9 +2977,9 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
 // items and no-op when none match). `markCourseAway` stamps `away_at = now()` on every READY item of the
 // course (dispatch what is plated), gated on the course EXISTING (`requireCourse` → course.not_found),
 // idempotent via `away_at IS NULL`. PGlite proves the set-based logic, the held-skip and the ready-only
-// dispatch — plain SQL a single backend proves; the RLS/node scoping is real-Postgres's job
-// (working-order.rls.test.ts, the folded-in listExpoQueue RLS test). Every write runs through
-// `withTenant` + `asAppUser`, so grants and RLS are in force, not bypassed.
+// dispatch — plain SQL a single backend proves; the NODE scoping is real-Postgres's job
+// (working-order.pg.test.ts's `listExpoQueue` node-symmetry case). Every write runs through
+// `withTenant` + `asAppUser`, so the app role's grants are in force, not bypassed.
 // ---------------------------------------------------------------------------------------------------
 
 /** Fire ONE course of an order across TWO stations — two products in the SAME (earliest, so auto-fired)
@@ -3157,11 +3125,16 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
   /** Attach a maxSelect≥2 option group whose item allows ×2 to `productId`, returning the first item's
    *  id. A group that ACCEPTS a tally of two AND an item cap of two, so a doubled selection now SUMS to
    *  a per-option quantity of 2 (per-option quantity) rather than being dropped, and is valid. */
-  async function addMultiOption(tx: Transaction, productId: string, name: string): Promise<string> {
+  async function addMultiOption(
+    tx: Transaction,
+    tenantId: TillConfig["tenantId"],
+    productId: string,
+    name: string,
+  ): Promise<string> {
     const [group] = await tx
       .insert(optionGroups)
       .values({
-        tenantId: sql`current_tenant_id()`,
+        tenantId,
         name: { [LOCALE]: `${name} group` },
         minSelect: 0,
         maxSelect: 2,
@@ -3172,7 +3145,7 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
     const [item] = await tx
       .insert(optionGroupItems)
       .values({
-        tenantId: sql`current_tenant_id()`,
+        tenantId,
         groupId: group!.id,
         name: { [LOCALE]: name },
         priceDelta: "0.50",
@@ -3182,7 +3155,7 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
       })
       .returning({ id: optionGroupItems.id });
     await tx.insert(productOptionGroups).values({
-      tenantId: sql`current_tenant_id()`,
+      tenantId,
       productId,
       groupId: group!.id,
       sort: 0,
@@ -3204,11 +3177,16 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
     return id;
   }
 
-  async function addOption(tx: Transaction, productId: string, name: string): Promise<string> {
+  async function addOption(
+    tx: Transaction,
+    tenantId: TillConfig["tenantId"],
+    productId: string,
+    name: string,
+  ): Promise<string> {
     const [group] = await tx
       .insert(optionGroups)
       .values({
-        tenantId: sql`current_tenant_id()`,
+        tenantId,
         name: { [LOCALE]: `${name} group` },
         minSelect: 0,
         maxSelect: 1,
@@ -3219,7 +3197,7 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
     const [item] = await tx
       .insert(optionGroupItems)
       .values({
-        tenantId: sql`current_tenant_id()`,
+        tenantId,
         groupId: group!.id,
         name: { [LOCALE]: name },
         priceDelta: "0.50",
@@ -3228,7 +3206,7 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
       })
       .returning({ id: optionGroupItems.id });
     await tx.insert(productOptionGroups).values({
-      tenantId: sql`current_tenant_id()`,
+      tenantId,
       productId,
       groupId: group!.id,
       sort: 0,
@@ -3240,7 +3218,7 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
     const { cfg, cafeId, aguaId } = await setupVenue();
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      const bacon = await addOption(tx, cafeId, "Bacon");
+      const bacon = await addOption(tx, cfg.tenantId, cafeId, "Bacon");
       const tableId = await makeTable(tx, cfg);
       // line 1 = café (parent), line 2 = bacon (child), line 3 = agua (plain).
       const tabId = await openModifierTab(tx, cfg, tableId, [
@@ -3267,7 +3245,7 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
     const { cfg, cafeId } = await setupVenue();
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      const bacon = await addOption(tx, cafeId, "Bacon");
+      const bacon = await addOption(tx, cfg.tenantId, cafeId, "Bacon");
       const tableId = await makeTable(tx, cfg);
       // line 1 = café (parent), line 2 = bacon (child).
       const tabId = await openModifierTab(tx, cfg, tableId, [
@@ -3292,7 +3270,7 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
     const { cfg, cafeId } = await setupVenue();
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      const bacon = await addMultiOption(tx, cafeId, "Bacon"); // maxSelect 2, item maxQuantity 2
+      const bacon = await addMultiOption(tx, cfg.tenantId, cafeId, "Bacon"); // maxSelect 2, item maxQuantity 2
       const id = randomUUID();
       await createOpenOrder(
         tx,
@@ -3337,6 +3315,7 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
    *  max_quantity; returns the single item's id. `priceDelta` is 0.50 reduced, like the other helpers. */
   async function addQtyOption(
     tx: Transaction,
+    tenantId: TillConfig["tenantId"],
     productId: string,
     name: string,
     opts: {
@@ -3349,7 +3328,7 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
     const [group] = await tx
       .insert(optionGroups)
       .values({
-        tenantId: sql`current_tenant_id()`,
+        tenantId,
         name: { [LOCALE]: `${name} group` },
         minSelect: opts.minSelect ?? 0,
         maxSelect: opts.maxSelect ?? 1,
@@ -3360,7 +3339,7 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
     const [item] = await tx
       .insert(optionGroupItems)
       .values({
-        tenantId: sql`current_tenant_id()`,
+        tenantId,
         groupId: group!.id,
         name: { [LOCALE]: name },
         priceDelta: "0.50",
@@ -3370,7 +3349,7 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
       })
       .returning({ id: optionGroupItems.id });
     await tx.insert(productOptionGroups).values({
-      tenantId: sql`current_tenant_id()`,
+      tenantId,
       productId,
       groupId: group!.id,
       sort: 0,
@@ -3382,13 +3361,14 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
    *  returns both item ids. For the max_select-tally cases with distinct picks. */
   async function addTwoItemGroup(
     tx: Transaction,
+    tenantId: TillConfig["tenantId"],
     productId: string,
     opts: { maxSelect?: number; maxQuantity?: number } = {},
   ): Promise<[string, string]> {
     const [group] = await tx
       .insert(optionGroups)
       .values({
-        tenantId: sql`current_tenant_id()`,
+        tenantId,
         name: { [LOCALE]: "Extras group" },
         minSelect: 0,
         maxSelect: opts.maxSelect ?? 2,
@@ -3400,7 +3380,7 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
       .insert(optionGroupItems)
       .values([
         {
-          tenantId: sql`current_tenant_id()`,
+          tenantId,
           groupId: group!.id,
           name: { [LOCALE]: "Uno" },
           priceDelta: "0.50",
@@ -3409,7 +3389,7 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
           sort: 0,
         },
         {
-          tenantId: sql`current_tenant_id()`,
+          tenantId,
           groupId: group!.id,
           name: { [LOCALE]: "Dos" },
           priceDelta: "0.50",
@@ -3420,7 +3400,7 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
       ])
       .returning({ id: optionGroupItems.id });
     await tx.insert(productOptionGroups).values({
-      tenantId: sql`current_tenant_id()`,
+      tenantId,
       productId,
       groupId: group!.id,
       sort: 0,
@@ -3432,7 +3412,10 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
     const { cfg, cafeId } = await setupVenue();
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      const shot = await addQtyOption(tx, cafeId, "Extra shot", { maxSelect: 5, maxQuantity: 5 });
+      const shot = await addQtyOption(tx, cfg.tenantId, cafeId, "Extra shot", {
+        maxSelect: 5,
+        maxQuantity: 5,
+      });
       const id = randomUUID();
       await createOpenOrder(
         tx,
@@ -3477,7 +3460,10 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
       await asAppUser(tx);
       // Cap 2, but max_select 5 so a tally of 3 does NOT trip above_max first — the quantity cap is what
       // must reject it.
-      const shot = await addQtyOption(tx, cafeId, "Extra shot", { maxSelect: 5, maxQuantity: 2 });
+      const shot = await addQtyOption(tx, cfg.tenantId, cafeId, "Extra shot", {
+        maxSelect: 5,
+        maxQuantity: 2,
+      });
       await expect(
         createOpenOrder(
           tx,
@@ -3503,7 +3489,10 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
     const { cfg, cafeId } = await setupVenue();
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      const shot = await addQtyOption(tx, cafeId, "Extra shot", { maxSelect: 5, maxQuantity: 5 });
+      const shot = await addQtyOption(tx, cfg.tenantId, cafeId, "Extra shot", {
+        maxSelect: 5,
+        maxQuantity: 5,
+      });
       await expect(
         createOpenOrder(
           tx,
@@ -3529,7 +3518,10 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
     const { cfg, cafeId } = await setupVenue();
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      const shot = await addQtyOption(tx, cafeId, "Extra shot", { maxSelect: 5, maxQuantity: 5 });
+      const shot = await addQtyOption(tx, cfg.tenantId, cafeId, "Extra shot", {
+        maxSelect: 5,
+        maxQuantity: 5,
+      });
       await expect(
         createOpenOrder(
           tx,
@@ -3555,7 +3547,10 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
     const { cfg, cafeId } = await setupVenue();
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      const shot = await addQtyOption(tx, cafeId, "Extra shot", { maxSelect: 5, maxQuantity: 5 });
+      const shot = await addQtyOption(tx, cfg.tenantId, cafeId, "Extra shot", {
+        maxSelect: 5,
+        maxQuantity: 5,
+      });
       // Crafted duplicates whose components are individually invalid (a negative; a fraction) but whose
       // SUM is a valid integer must still be refused — each entry is validated before summing, so an
       // invalid component cannot be washed out by the total.
@@ -3591,7 +3586,10 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
       await asAppUser(tx);
       // max_quantity 5 so the ×3 passes the per-option cap; the group's max_select 2 is what the summed
       // tally (3) must exceed — proving the tally is the SUM of quantities, not the distinct-item count.
-      const shot = await addQtyOption(tx, cafeId, "Extra shot", { maxSelect: 2, maxQuantity: 5 });
+      const shot = await addQtyOption(tx, cfg.tenantId, cafeId, "Extra shot", {
+        maxSelect: 2,
+        maxQuantity: 5,
+      });
       await expect(
         createOpenOrder(
           tx,
@@ -3617,7 +3615,10 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
     const { cfg, cafeId } = await setupVenue();
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      const [uno, dos] = await addTwoItemGroup(tx, cafeId, { maxSelect: 2, maxQuantity: 5 });
+      const [uno, dos] = await addTwoItemGroup(tx, cfg.tenantId, cafeId, {
+        maxSelect: 2,
+        maxQuantity: 5,
+      });
       // one ×1 + one ×1 → tally 2 ≤ max_select 2 → OK (two child lines).
       const okId = randomUUID();
       await createOpenOrder(
@@ -3671,7 +3672,10 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
     const { cfg, cafeId } = await setupVenue();
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      const shot = await addQtyOption(tx, cafeId, "Extra shot", { maxSelect: 1, maxQuantity: 1 });
+      const shot = await addQtyOption(tx, cfg.tenantId, cafeId, "Extra shot", {
+        maxSelect: 1,
+        maxQuantity: 1,
+      });
       const id = randomUUID();
       await createOpenOrder(
         tx,

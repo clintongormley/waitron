@@ -16,7 +16,7 @@ import type { TopSeller, TopSellersInput } from "./types.js";
  * Groups `sale_lines` on the frozen `descriptions` snapshot — a filed line carries no product_id, so
  * the label frozen at sale time IS the bucket (architecture §6); a later catalogue rename can never
  * reach back into a completed row. Same exclusions and predicates as the VAT roll-up
- * (`aggregateVatByRate`): the explicit tenant predicate is belt-and-suspenders over RLS, the node
+ * (`aggregateVatByRate`): the explicit tenant predicate scopes the tenant, the node
  * predicate applies only when `nodeId` is given, and `activeSalesClause` drops voided sales and
  * F3-canje substitutes. Corrections (rectificativas) are NOT excluded — their negative lines net the
  * quantity and total down, so a returned coffee reduces its rank.

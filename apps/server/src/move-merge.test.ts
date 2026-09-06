@@ -76,9 +76,9 @@ async function setupVenue(): Promise<Seeded> {
   };
   const { cafeId, aguaId } = await withTenant(db, tenantId, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, { name: "Carta" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
-    const cafe = await createProduct(tx, {
+    const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
+    const bebidas = await createCategory(tx, tenantId, { name: "Bebidas" });
+    const cafe = await createProduct(tx, tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       descriptions: { [LOCALE]: "Café" },
@@ -86,7 +86,7 @@ async function setupVenue(): Promise<Seeded> {
       unitPrice: "1.50",
       vatClass: "general",
     });
-    const agua = await createProduct(tx, {
+    const agua = await createProduct(tx, tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       descriptions: { [LOCALE]: "Agua" },
@@ -121,7 +121,7 @@ async function openTabOn(
   return asApp(cfg, (tx) => openTab(tx, cfg, { tableId, lines }).then((r) => r.tabId));
 }
 
-/** The dining table's current tab_id — owner read (bypasses RLS). */
+/** The dining table's current tab_id — owner read. */
 async function tabIdOf(tableId: string): Promise<string | null> {
   const { rows } = await db.execute<{ tab_id: string | null }>(
     sql`select tab_id from dining_tables where id = ${tableId}`,
@@ -129,7 +129,7 @@ async function tabIdOf(tableId: string): Promise<string | null> {
   return rows[0]!.tab_id;
 }
 
-/** The dining table's current status_id — owner read (bypasses RLS). Consumes TS-2's status_id column. */
+/** The dining table's current status_id — owner read. Consumes TS-2's status_id column. */
 async function statusIdOf(tableId: string): Promise<string | null> {
   const { rows } = await db.execute<{ status_id: string | null }>(
     sql`select status_id from dining_tables where id = ${tableId}`,
@@ -215,7 +215,7 @@ describe("moveTabLines", () => {
     const t2 = await seedTable(cfg, "N2");
     const from = await openTabOn(cfg, t1, [{ productId: cafeId, quantity: "1" }]);
     const to = await openTabOn(cfg, t2, []);
-    // Abandon the destination (owner write, RLS bypassed — pure setup).
+    // Abandon the destination (owner write, fixture setup).
     await db.execute(sql`update working_orders set status = 'abandoned' where id = ${to}`);
     await expect(asApp(cfg, (tx) => moveTabLines(tx, from, to))).rejects.toMatchObject({
       code: "tab.not_open",
@@ -446,7 +446,7 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
       const [group] = await tx
         .insert(optionGroups)
         .values({
-          tenantId: sql`current_tenant_id()`,
+          tenantId: cfg.tenantId,
           name: { [LOCALE]: "Extras" },
           minSelect: 0,
           maxSelect: 2,
@@ -457,7 +457,7 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
       const [bacon] = await tx
         .insert(optionGroupItems)
         .values({
-          tenantId: sql`current_tenant_id()`,
+          tenantId: cfg.tenantId,
           groupId: group!.id,
           name: { [LOCALE]: "Bacon" },
           priceDelta: "0.50",
@@ -466,7 +466,7 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
         })
         .returning({ id: optionGroupItems.id });
       await tx.insert(productOptionGroups).values({
-        tenantId: sql`current_tenant_id()`,
+        tenantId: cfg.tenantId,
         productId: cafeId,
         groupId: group!.id,
         sort: 0,

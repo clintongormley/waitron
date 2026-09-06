@@ -110,8 +110,7 @@ export const payments = pgTable(
       name: "payments_sale_fk",
     }).onDelete("restrict"),
     // Tenant-consistent composite FK to the owning node (Copilot #54): a payment cannot point at a
-    // node belonging to another tenant, independently of whether RLS is in force on this
-    // connection. Mirrors `payments_working_order_fk`/`payments_sale_fk` and `sales_node_fk`. MATCH
+    // node belonging to another tenant. Mirrors `payments_working_order_fk`/`payments_sale_fk` and `sales_node_fk`. MATCH
     // SIMPLE (the default) satisfies it while node_id is NULL, so the column stays nullable.
     foreignKey({
       columns: [t.tenantId, t.nodeId],
@@ -125,4 +124,4 @@ export const payments = pgTable(
     index("payments_reconcile_idx").on(t.tenantId, t.provider, t.settledAt),
     check("payments_amount_ck", sql`${t.amount} > 0`),
   ],
-).enableRLS();
+);

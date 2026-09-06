@@ -5,13 +5,9 @@ import type { KeyRing, Purpose } from "@waitron/credentials";
 import type { TenantId } from "@waitron/shared";
 
 /**
- * One tenant-scoped vault read. `tenant_credentials` is under FORCE ROW LEVEL SECURITY and
- * `getCredential` takes a `Transaction`, so the scope has to be established here — a bare
- * `db.transaction` sets no `app.tenant_id` and, under the real deployment role, matches no rows.
- *
- * Read per pass rather than cached at boot (design §6): a newly provisioned tenant is served
- * without a restart, a rotation takes effect without one, and a decrypted secret lives for one pass
- * instead of for the process's lifetime.
+ * Read the credential for this tenant on each pass. Provisioning and rotation
+ * therefore take effect without a restart, and decrypted secrets are not cached
+ * for the lifetime of the process.
  */
 export function readCredential(
   db: Database,

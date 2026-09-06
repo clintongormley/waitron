@@ -16,10 +16,7 @@ import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { FIXTURE_CERT_PEM } from "./testing/tls-fixture.js";
 
-// Real Postgres, not PGlite: the route AUTHORIZES with `authorizeManager`, which reads
-// persons + management_sessions under the app role's RLS, and reads the tenant's `cadenas` chain row —
-// both false passes on PGlite's superuser connection (CLAUDE.md §4). The manager-login harness
-// (`applyVenue`/`planVenue` + password `login`) is the one `management-api.status.test.ts` uses.
+// Exercise box-status authorization and chain reads on PostgreSQL with manager login.
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the seeded manager's dashboard password.
 // Dashboard sign-in resolves the person by EMAIL, so the seeded manager carries a login email
@@ -28,12 +25,10 @@ const MANAGER_EMAIL = "manager@x.com";
 
 const suite = useTemplateDb({ template: "manifest" });
 
-// The config-conflict count reader under test reads through the `sync_tailer` role — `row_image` is
-// tenant business data, so 0009 grants SELECT on `sync_config_conflicts` to `sync_tailer` only, NOT
-// `app_user` (the same isolation `sync_log` enforces; proven by `config-conflict.grants.test.ts`). So
-// the READER must be a sync_tailer connection, not the superuser `suite.admin` (which would bypass the
-// grant and hide a regression). `sync_reader` is a LOGIN member of `sync_tailer`, created once in the
-// shared-container global setup; seeding still runs as `suite.admin`. Guarded close (CLAUDE.md §4).
+// The config-conflict count reader uses sync_reader, a LOGIN member of app_user created by global
+// setup. The sync baseline grants app_user SELECT on sync_config_conflicts, whose row_image holds
+// tenant business data. Seeding uses suite.admin; the read exercises the grant through a
+// non-superuser connection. Guarded close (CLAUDE.md §4).
 let conflictsReaderDb: Database | undefined;
 beforeAll(async () => {
   conflictsReaderDb = await suite.pg.connectAs("sync_reader", "rp");
@@ -50,12 +45,7 @@ function nextNif(): string {
   return `${String(72_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/**
- * Stand up a fresh provisioned venue (as the owner), then seed — as the app role under the tenant, so
- * RLS is exercised — a MANAGER (role `manager`, which holds `till.configure`) WITH a dashboard
- * password so it can log in. Provisioning creates only the ADMIN, so the manager is seeded directly;
- * `pin_hash` is NOT NULL, so a value is supplied even though it logs in by password.
- */
+/** Provision a venue as owner and seed the people and sessions this route fixture needs. */
 async function setupTenant(): Promise<{ tenantId: string; nodeId: string; managerId: string }> {
   const venue = await applyVenue(
     planVenue(
@@ -94,7 +84,7 @@ async function setupTenant(): Promise<{ tenantId: string; nodeId: string; manage
     await asAppUser(tx);
     const manager = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
+      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
       returning id`);
     return manager.rows[0]!.id;
   });
@@ -139,9 +129,10 @@ function buildApp(
       readReplicationLag: undefined,
       readDisposal: undefined,
       readBackup: opts.readBackup,
-      // The Slice-7 config-conflict count reader, on the sync_tailer pool (the manifest template carries
-      // the sync module, so sync_config_conflicts exists). Reads through `sync_tailer` — the role that
-      // holds SELECT on the table (0009) — exactly as boot.ts wires it via `lagPool`.
+      // The Slice-7 config-conflict count reader, on the sync pool (the manifest template carries
+      // the sync module, so sync_config_conflicts exists). Reads through `app_user` — the role
+      // that holds SELECT on the table in the sync baseline — exactly as boot.ts wires it via
+      // `lagPool`.
       readConfigConflicts: () => readConfigConflictCount(conflictsReaderDb!),
       readMode: () => "primary",
       readSingletonRole: () => "primary",
@@ -244,9 +235,7 @@ describe("GET /api/box/status surfaces the config-conflict count (real postgres)
     managerCookie = await login(app, MANAGER_EMAIL);
   });
 
-  // sync_config_conflicts is whole-DB (no tenant_id/RLS), so its count(*) spans this file's clone.
-  // Clear it after this suite so the seeded rows never leak into another suite's count read (§4
-  // order-independence fix, whole-branch review).
+  // Clear whole-database conflict rows so they do not affect later cases in this file.
   afterAll(async () => {
     await suite.admin.execute(sql`delete from sync_config_conflicts`);
   });

@@ -14,9 +14,9 @@ import "./errors.js";
 
 // PGlite, not real Postgres: the me routes are LOGIC (management session → verb → JSON) over mutable
 // planning rows, the browser twin of `schedule-api.ts`. Every DB touch runs through `withTenant` +
-// `asAppUser` exactly as production does, but RLS as the deployment role and — the crux — the
+// `asAppUser` exactly as production does, but the app role's grants and — the crux — the
 // "requester is the SESSION's personId, never the body's" identity property need a real non-superuser
-// role to MEAN anything, so they are proven against real Postgres in `me-api.rls.test.ts`. Here we
+// role to MEAN anything, so they are proven against real Postgres in `me-api.pg.test.ts`. Here we
 // prove the route mechanics: whoami, the happy paths, the request-shape 400s and the not-logged-in 401.
 
 const noopLog: Logger = () => {};
@@ -68,7 +68,7 @@ const VENUE_LOCALE = "en-GB";
 // A fixed sentinel node id: this hermetic suite runs on PGlite WITHOUT the sync migrations, so no
 // `persons` capture trigger fires and no test here asserts a sync origin — the value only has to be
 // present so the widened `MeApiDeps.cfg` (`{ tenantId, nodeId }`) is satisfied. The origin-attribution
-// proof for this route lives in `sync-origin.rls.test.ts` (real Postgres, manifest template).
+// proof for this route lives in `sync-origin.test.ts` (real Postgres, manifest template).
 const NODE_ID = "11111111-1111-4111-8111-111111111111";
 
 function mountApp(): Hono {

@@ -6,7 +6,7 @@
  *
  * Pure and DB-free on purpose: overtime is projection LOGIC over `time_entries`, and CLAUDE.md §4
  * says pick the lighter target when the heavier one's justification does not apply — there are no
- * privileges, no RLS and no concurrency here, so this is unit-tested on PGlite/directly, never
+ * privileges, no concurrency here, so this is unit-tested on PGlite/directly, never
  * against a real-role Postgres.
  *
  * Overtime has TWO lawful readings under Spanish labour law, and the code returns BOTH rather than

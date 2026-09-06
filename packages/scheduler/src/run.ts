@@ -71,8 +71,7 @@ export interface TickResult {
  * One pass. No loop and no timer: the host decides cron versus long-running, and `now` is injected
  * on exactly the contract `drain(now)` / `forward(now)` / `reconcile(…, now)` already use.
  *
- * Tenants are a PARAMETER rather than an interface: enumerating them means an RLS bypass whose
- * correct form differs per deployment model, and that is the host's knowledge.
+ * The host supplies the tenants to run; the scheduler does not discover them.
  *
  * Transaction discipline mirrors `reconcilePayments`: a short read, then the duty OUTSIDE every
  * transaction because it makes network calls, then a short write.

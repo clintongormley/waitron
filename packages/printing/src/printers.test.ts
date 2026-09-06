@@ -11,14 +11,16 @@ import "./errors.js";
 
 // PGlite, not real Postgres: `createPrinter` is a single INSERT gated by an app-layer required-field
 // pre-check plus the DB's transport CHECK + composite FK — none of which is a CONCURRENCY or
-// deployment-role-privilege property. RLS-as-app_user and the FK/CHECK integrity are already proven
-// on real Postgres in packages/db's printing.rls.test.ts (and the enrol race in agent.test.ts), so
-// the heavier target buys this suite nothing (CLAUDE.md §4). A superuser PGlite connection bypasses
-// RLS, so the explicit `tenant_id` the verb writes/reads is what scopes these rows.
+// deployment-role-privilege property. The FK/CHECK integrity is already proven on real Postgres in
+// packages/db's printing.test.ts (and the enrol race in agent.test.ts), so the heavier target buys
+// this suite nothing (CLAUDE.md §4). The explicit `tenant_id` the verb writes/reads is what scopes
+// these rows.
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
 
-/** A fresh tenant + venue per test, seeded on the superuser connection (RLS bypassed for setup). Each
- * test gets its OWN tenant (via seedTenant's fresh NIF) so rows are order-independent. */
+/**
+ * A fresh tenant + venue per test, seeded on the superuser connection. Each test gets its OWN
+ * tenant (via seedTenant's fresh NIF) so rows are order-independent.
+ */
 async function setup(): Promise<PrintConfig> {
   const tenantId = await seedTenant(suite.db);
   const { rows } = await suite.db.execute<{ id: string }>(sql`

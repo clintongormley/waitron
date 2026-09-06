@@ -1,16 +1,8 @@
-// Real-Postgres proof of `seedSales` (Phase 2, Task 10): it fills the last N days with back-dated,
-// PREPRODUCTION, hash-chained sales through the real `recordSale` path so the reports screens
-// (VAT summary, cash-up) are non-blank in the demo. Real Postgres, not PGlite: the fiscal write is
-// the whole point, and PGlite's superuser connection bypasses the RLS/immutability guards that make
-// a `registros_facturacion` row real (CLAUDE.md §4). Uses the shared `manifest` template, cloned per
-// file via `useTemplateDb`, the same pattern as `till-sale.test.ts` / `seed-catalogue.test.ts`.
-//
-// Runs under preproduction: `WAITRON_ENV` is left unset, which `deploymentEnvironment` resolves to
-// `preproduction` — the safe default, and the environment every `entorno` row below is asserted to
-// carry. This suite MUST NOT run under `production` (a wrong `entorno` stamp is unrecoverable, §5).
+// Exercise backdated preproduction sales through recordSale on PostgreSQL as app_user.
+// Clone the whole manifest once per file and assert the stored environment and chain.
 
 import { describe, expect, it } from "vitest";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { asAppUser, sales, saleLines, withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -135,7 +127,8 @@ describe("seedSales", () => {
       await asAppUser(tx);
       const saleRows = await tx
         .select({ id: sales.id, issuedAt: sales.issuedAt, total: sales.total })
-        .from(sales);
+        .from(sales)
+        .where(eq(sales.tenantId, venue.tenantId));
       const registros = await tx
         .select({ entorno: registrosFacturacion.entorno })
         .from(registrosFacturacion);
@@ -208,7 +201,7 @@ describe("seedSales", () => {
 
     const saleRows = await withTenant(suite.admin, brandTenantId(venue.tenantId), async (tx) => {
       await asAppUser(tx);
-      return tx.select({ id: sales.id }).from(sales);
+      return tx.select({ id: sales.id }).from(sales).where(eq(sales.tenantId, venue.tenantId));
     });
     expect(saleRows.length).toBe(0);
   });
@@ -311,7 +304,8 @@ describe("seedSales", () => {
           descriptions: saleLines.descriptions,
           vatRate: saleLines.vatRate,
         })
-        .from(saleLines);
+        .from(saleLines)
+        .where(eq(saleLines.tenantId, venue.tenantId));
     });
 
     const parents = rows.filter((r) => r.parentLineId === null);

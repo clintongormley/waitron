@@ -42,7 +42,7 @@ async function appendAltas(n: number): Promise<void> {
  * (that file's own note), so no role switch is needed here to reach the trigger-disable step.
  *
  * Trigger name is `registros_facturacion_enforce_immutability`
- * (packages/fiscal-verifactu/drizzle/0001_registros_inmutables.sql) — NOT
+ * (packages/fiscal-verifactu/drizzle/0001_fiscal_baseline_sql.sql) — NOT
  * `registros_facturacion_immutable` as an earlier draft of this file had it.
  */
 async function corrupt(secuencia: number, column: string, value: string): Promise<void> {

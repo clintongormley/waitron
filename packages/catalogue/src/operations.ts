@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
-import { AppError } from "@waitron/shared";
+import { AppError, type TenantId } from "@waitron/shared";
 import {
   catalogues,
   categories,
@@ -34,14 +34,11 @@ import type { PricingUnit, VatClass } from "./pricing.js";
  * Catalogue operations — CRUD over `catalogues`/`categories`/`products`, catalogue↔location
  * assignment, and the read the till sells from (`listAvailableProducts`).
  *
- * Every function takes a `(tx, …)` and runs under the CALLER's tenant context: the caller opens the
- * transaction with `withTenant` (and `asAppUser` in the running POS), so writes adopt that tenant
- * through `current_tenant_id()` and reads are filtered to it by the tenant-isolation policy (0027).
- * Nothing here takes a `tenantId` argument — the GUC the caller already set is the single source of
- * it, which is also what satisfies every table's `WITH CHECK (tenant_id = current_tenant_id())`.
+ * Inserts take the tenant id explicitly and share the caller's transaction.
  *
  * Deactivation is `active = false`, never DELETE: a product may sit behind historical sale-line
- * snapshots, and the app role holds no DELETE grant anyway (0027; proven in operations.rls.test.ts).
+ * snapshots, and the app role holds no DELETE grant (`products: "SIU"` in
+ * `packages/fiscal-verifactu/src/privileges.expected.ts`).
  * All SQL is built with Drizzle query builders — no string concatenation.
  */
 
@@ -278,17 +275,14 @@ function toProduct(row: RawProduct): Product {
   };
 }
 
-/** The tenant scope, as an insertable value. `current_tenant_id()` reads the `app.tenant_id` GUC the
- * caller set via `withTenant`, so the inserted row satisfies each table's WITH CHECK. */
-const CURRENT_TENANT = sql`current_tenant_id()`;
-
 export async function createCatalogue(
   tx: Transaction,
+  tenantId: TenantId,
   input: { name: string },
 ): Promise<Catalogue> {
   const [row] = await tx
     .insert(catalogues)
-    .values({ tenantId: CURRENT_TENANT, name: input.name })
+    .values({ tenantId, name: input.name })
     .returning(CATALOGUE_COLUMNS);
   return row!;
 }
@@ -298,13 +292,10 @@ export async function listCatalogues(tx: Transaction): Promise<Catalogue[]> {
 }
 
 /**
- * Whether `catalogueId` names a catalogue VISIBLE to the current tenant — the trust-boundary check the
- * location-menu write routes run on an untrusted `catalogueId` before {@link addCatalogueToLocation} /
- * {@link setLocationDefaultCatalogue}. The read is RLS-filtered, so another tenant's catalogue reads as
- * absent (`false`). This is the FRONT of a two-layer defense: both `locations.catalogue_id` and
- * `location_catalogues.catalogue_id` now carry tenant-consistent COMPOSITE FKs (migrations 0078 / 0074),
- * so a cross-tenant id is rejected at the DATA layer too (23503) — this check's job is the CLEAN error,
- * turning that opaque 500 into `catalogue.not_found` (404) uniformly across both routes.
+ * Check an untrusted catalogue id before a location-menu write, so an absent catalogue produces
+ * `catalogue.not_found` (404) instead of an opaque FK failure (23503). Composite FKs on
+ * `locations.catalogue_id` and `location_catalogues.catalogue_id` remain the data-layer backstop
+ * for missing or tenant-inconsistent references; this read checks existence only.
  */
 export async function catalogueExists(tx: Transaction, catalogueId: string): Promise<boolean> {
   const [row] = await tx
@@ -328,10 +319,14 @@ export async function deactivateCatalogue(tx: Transaction, id: string): Promise<
     .where(eq(catalogues.id, id));
 }
 
-export async function createCategory(tx: Transaction, input: { name: string }): Promise<Category> {
+export async function createCategory(
+  tx: Transaction,
+  tenantId: TenantId,
+  input: { name: string },
+): Promise<Category> {
   const [row] = await tx
     .insert(categories)
-    .values({ tenantId: CURRENT_TENANT, name: input.name })
+    .values({ tenantId, name: input.name })
     .returning(CATEGORY_COLUMNS);
   return row!;
 }
@@ -459,7 +454,11 @@ export async function applyDietDerivation(
   await republishProductDiet(tx, productId);
 }
 
-export async function createProduct(tx: Transaction, input: CreateProductInput): Promise<Product> {
+export async function createProduct(
+  tx: Transaction,
+  tenantId: TenantId,
+  input: CreateProductInput,
+): Promise<Product> {
   // Validate before the write: an unreviewed product stores null, a supplied map is checked against
   // the EU-14 taxonomy and rejected (throws `allergen.invalid_code`/`allergen.invalid_presence`)
   // before any row is inserted. The map is the MANUAL overlay; at create there is no recipe, so the
@@ -479,7 +478,7 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
   const [row] = await tx
     .insert(products)
     .values({
-      tenantId: CURRENT_TENANT,
+      tenantId,
       catalogueId: input.catalogueId,
       categoryId: input.categoryId,
       descriptions: input.descriptions,
@@ -572,6 +571,7 @@ export async function assignCatalogueToLocation(
  */
 export async function setLocationDefaultCatalogue(
   tx: Transaction,
+  tenantId: TenantId,
   locationId: string,
   catalogueId: string,
 ): Promise<void> {
@@ -584,7 +584,7 @@ export async function setLocationDefaultCatalogue(
     .where(eq(locations.id, locationId));
   const defaultId = row?.id ?? null;
   if (defaultId !== null && defaultId !== catalogueId) {
-    await addCatalogueToLocation(tx, locationId, defaultId);
+    await addCatalogueToLocation(tx, tenantId, locationId, defaultId);
   }
   await assignCatalogueToLocation(tx, locationId, catalogueId);
 }
@@ -597,12 +597,13 @@ export async function setLocationDefaultCatalogue(
  */
 export async function addCatalogueToLocation(
   tx: Transaction,
+  tenantId: TenantId,
   locationId: string,
   catalogueId: string,
 ): Promise<void> {
   await tx
     .insert(locationCatalogues)
-    .values({ tenantId: CURRENT_TENANT, locationId, catalogueId })
+    .values({ tenantId, locationId, catalogueId })
     .onConflictDoNothing();
 }
 
@@ -611,7 +612,7 @@ export async function addCatalogueToLocation(
  * location stops selling from it. Idempotent — deleting a row that is not there is a no-op. This
  * NEVER touches the default (`locations.catalogue_id`), which is not stored as a member row, so it
  * cannot strip a location's default menu; call {@link assignCatalogueToLocation} to change the
- * default. `app_user` holds DELETE on `location_catalogues` (0074).
+ * default. `app_user` holds DELETE on `location_catalogues`.
  */
 export async function removeCatalogueFromLocation(
   tx: Transaction,
@@ -868,14 +869,6 @@ export async function listAvailableProducts(
   return { products: available, invoiceLocales };
 }
 
-// ── Option group + item authoring (ordering modifiers, Task 11) ──────────────────────────────────
-// The dashboard's modifier-authoring surface: CRUD the reusable `option_groups` and their
-// `option_group_items`, and attach an ordered set of groups to a product (`product_option_groups`).
-// The sale-time READ lives above (`listAvailableProducts`); these are the WRITES that build what it
-// reads. Every function runs under the caller's tenant context (withTenant + asAppUser), so
-// `current_tenant_id()` scopes each write and RLS filters each read — the same posture as the
-// catalogue/category/product ops above.
-
 /** A reusable `option_groups` row for the authoring editor (the whole row — active AND inactive, unlike
  * the sale-time {@link ResolvedOptionGroup}, which is active-only and carries resolved items). */
 export interface OptionGroup {
@@ -1095,6 +1088,7 @@ function normalizeOriginOverlay(input: {
 
 export async function createOptionGroup(
   tx: Transaction,
+  tenantId: TenantId,
   input: CreateOptionGroupInput,
 ): Promise<OptionGroup> {
   // Resolve the column defaults HERE so the invariant is validated against the values that will land
@@ -1106,7 +1100,7 @@ export async function createOptionGroup(
   const [row] = await tx
     .insert(optionGroups)
     .values({
-      tenantId: CURRENT_TENANT,
+      tenantId,
       name: input.name,
       minSelect,
       maxSelect,
@@ -1156,6 +1150,7 @@ export async function updateOptionGroup(
 
 export async function createOptionGroupItem(
   tx: Transaction,
+  tenantId: TenantId,
   groupId: string,
   input: CreateOptionGroupItemInput,
 ): Promise<OptionGroupItem> {
@@ -1166,7 +1161,7 @@ export async function createOptionGroupItem(
   const [row] = await tx
     .insert(optionGroupItems)
     .values({
-      tenantId: CURRENT_TENANT,
+      tenantId,
       groupId,
       name: input.name,
       maxQuantity,
@@ -1249,15 +1244,14 @@ export async function updateOptionGroupItem(
 }
 
 /**
- * Replace a product's attached option groups with `groupIds`, IN ORDER — a full replace, not a merge.
- * Every existing `product_option_groups` row for the product is deleted, then one row per id is
- * inserted with `sort` = its index, so the list's order becomes the per-attachment display order the
- * till read (`listAvailableProducts`) sorts by. An empty list detaches everything. Runs in the caller's
- * tenant transaction, so `current_tenant_id()` scopes both the delete and the inserts, and the
- * tenant-consistent (tenant_id, group_id) FK refuses a group that is not this tenant's.
+ * Fully replace the product's option groups with `groupIds`. Delete the existing attachments,
+ * then insert each id with `sort` equal to its list index; an empty list detaches everything.
+ * The caller's transaction keeps replacement atomic, and composite FKs reject tenant-inconsistent
+ * product or group references.
  */
 export async function setProductOptionGroups(
   tx: Transaction,
+  tenantId: TenantId,
   productId: string,
   groupIds: string[],
 ): Promise<void> {
@@ -1265,7 +1259,7 @@ export async function setProductOptionGroups(
   if (groupIds.length === 0) return;
   await tx.insert(productOptionGroups).values(
     groupIds.map((groupId, index) => ({
-      tenantId: CURRENT_TENANT,
+      tenantId,
       productId,
       groupId,
       sort: index,

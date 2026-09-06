@@ -16,39 +16,24 @@ import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
  * set. `core` is the established key for a CORE-only template — packages/db and apps/server both name
  * theirs `core`. Suites clone it with `useTemplateDb({ template: "core" })`.
  *
- * NO `roles` here, unlike the RLS-probe packages (payments-stripe, identity, db). Those create a
- * non-superuser LOGIN role per suite and connect AS it (`pg.connectAs`); reporting's four real-PG
- * suites instead reach the non-superuser path with `asAppUser(tx)`, which `SET ROLE`s the admin
- * connection to the `app_user` GROUP role that CORE's `0001_tenancy_rls.sql` already creates inside
- * the template. A superuser that has `SET ROLE`d to non-superuser `app_user` is itself subject to
- * FORCE ROW LEVEL SECURITY — the very thing these suites verify — so no additional cluster LOGIN role
- * has to be created.
+ * No additional LOGIN roles are needed: the suites use `asAppUser(tx)` to SET ROLE to the
+ * non-owner application role created by the core baseline.
  *
- * A globalSetup's return value is its globalTeardown, so returning `teardown` stops the container
- * once the run finishes.
+ * Docker is required for `record-daily-close.pg.test.ts`: concurrent transactions contend on
+ * the chain's FOR UPDATE lock and one close receives `close.already_closed`. PGlite serialises
+ * queries on one backend and cannot stage that contention. The real-PG verifier suite also checks
+ * a committed chain corrupted by its owner with the named immutability trigger disabled inside
+ * the mutation transaction, then restored to ALWAYS.
  *
- * Because globalSetup runs before every worker, a Docker-absent run dies HERE, taking the WHOLE
- * @waitron/reporting suite (its PGlite-only and hermetic files included) with it, not only the
- * real-PG suites — a real broadening of what needs Docker, the same one db and apps/server accepted.
- * What makes it acceptable is not an assumption that every machine has Docker, but that this package's
- * reason to be in the real-PG tier at all needs Docker regardless: `input-vat.rls` / `vat-return.rls`
- * read under `app_user` with FORCE ROW LEVEL SECURITY, which PGlite's superuser bypasses;
- * `record-daily-close.rls` proves a single-writer `FOR UPDATE` lock and a concurrent
- * `close.already_closed`, which PGlite — serialising every query onto one backend — cannot stage (a
- * false pass, not a weak one); and `verify-daily-close-chain.rls` tampers with a committed chain via a
- * superuser-only `session_replication_role = replica`, which has no PGlite analogue. CLAUDE.md §4
- * documents that this repo's real-Postgres test tier needs a local Docker daemon (plus
- * `TESTCONTAINERS_RYUK_DISABLED`); `dockerRequired` turns the raw testcontainers daemon error into
- * that guidance when Docker is absent.
+ * globalSetup runs for every package test, so Docker is required even for filtered PGlite cases.
+ * Returning teardown stops the shared container when the run finishes.
  */
 export default async function ({ provide }: GlobalSetupContext) {
   const { handle, teardown } = await startSharedContainer({
     dockerRequired:
       "@waitron/reporting's real-Postgres suites require a running Docker daemon. They cannot be " +
-      "skipped: PGlite's superuser bypasses FORCE ROW LEVEL SECURITY, so it cannot exercise the " +
-      "reads under app_user the VAT-return RLS suites verify (see vat-return.rls.test.ts), and it " +
-      "serialises every query onto one backend, so it cannot stage the single-writer lock and " +
-      "concurrent close that record-daily-close.rls.test.ts exists to prove.",
+      "skipped: PGlite serialises every query onto one backend, so it cannot stage the single-writer " +
+      "lock and concurrent close record-daily-close.pg.test.ts exists to prove.",
     templates: {
       core: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS]),
     },

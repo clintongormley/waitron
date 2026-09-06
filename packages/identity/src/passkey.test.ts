@@ -12,9 +12,8 @@ import { codeOf, openManagementSession, seedPerson } from "../test/fixtures.js";
 
 // PGlite, not real Postgres: this suite tests the registration AND authentication LOGIC — options
 // issued, challenge stored then consumed, credential persisted, counter bumped, person resolved. A
-// PGlite connection is superuser, so RLS is a false pass here (CLAUDE.md §4); tenant-isolation and
-// FORCE RLS on the webauthn tables are proven as the app role in webauthn.rls.test.ts (Task 1) and
-// not re-proven here.
+// PGlite connection is superuser holding every grant, so a privilege or trigger assertion would be a
+// false pass here (CLAUDE.md §4); nothing below makes one.
 //
 // `generateRegistrationOptions` and `generateAuthenticationOptions` run FOR REAL (they just mint a
 // random challenge); only the two VERIFY calls are mocked, because a genuine authenticator response
@@ -369,8 +368,7 @@ describe("passkey registration", () => {
     // untranslated. finishPasskeyRegistration inserts with `input.tenantId`; a tenant id with no
     // `tenants` row makes `webauthn_credentials_tenant_fk` raise 23503 (foreign_key_violation), not
     // 23505 — so `isUniqueViolation` is false and the raw error is rethrown, never masked as
-    // passkey.already_registered. (PGlite is superuser, so the WITH CHECK tenant policy does not
-    // pre-empt the FK; app-role tenant isolation is proven in webauthn.rls.test.ts.)
+    // passkey.already_registered.
     const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
     mockVerify.mockResolvedValue(verified("cred-fk"));
     const begun = await begin(sessionId);

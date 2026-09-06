@@ -1,3 +1,4 @@
+// Real PostgreSQL: checks app_user SELECT and withheld write privileges on deployment.
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";

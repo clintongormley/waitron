@@ -1,2 +1,0 @@
-ALTER TABLE "payments" ADD COLUMN "node_id" uuid;--> statement-breakpoint
-ALTER TABLE "payments" ADD CONSTRAINT "payments_node_id_nodes_id_fk" FOREIGN KEY ("node_id") REFERENCES "public"."nodes"("id") ON DELETE no action ON UPDATE no action;

@@ -18,11 +18,6 @@ import { tenants } from "./tenants.js";
  * a never-invoked arrow as an uncovered function (drizzle-kit resolves it in a separate CLI process),
  * the same reason management-sessions.ts uses this form. `restrict`, not cascade: removing a tenant
  * must never silently discard its authored theme.
- *
- * `.enableRLS()` emits only `ENABLE ROW LEVEL SECURITY`. The `FORCE`, the tenant-isolation policy and
- * the app_user grants (SELECT/INSERT/UPDATE — no DELETE, config is replaced in place) are hand-written
- * in the paired `--custom` migration (CLAUDE.md §3). No separate tenant_id index: the PRIMARY KEY
- * already provides a unique index on it. inmutabilidad requires FORCE.
  */
 export const tenantThemes = pgTable(
   "tenant_themes",
@@ -43,4 +38,4 @@ export const tenantThemes = pgTable(
       name: "tenant_themes_tenant_fk",
     }).onDelete("restrict"),
   ],
-).enableRLS();
+);

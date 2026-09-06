@@ -1,10 +1,11 @@
-// Real-Postgres proof of `seedMedia` (Phase 2, Task 9): it reads the committed per-dish PNG tiles,
-// content-addresses them into a media dir under their SHA-256, and rewrites each seeded product's
-// `image` from the plain basename to the served `<sha256hex>.png` name. Real Postgres (not PGlite):
-// the media step runs under RLS as `app_user` (it UPDATEs `products`, a tenant-scoped FORCE-RLS
-// table), exactly as the demo scripts do; PGlite's superuser connection would bypass FORCE ROW LEVEL
-// SECURITY and prove nothing about that grant (CLAUDE.md §4). Uses the shared `manifest` template
-// cloned per file via `useTemplateDb`, the same pattern as `seed-catalogue.test.ts`.
+import { tenantId as brandTenantId } from "@waitron/shared";
+// Real-Postgres proof of `seedMedia` (Phase 2, Task 9): it reads the committed per-dish PNG
+// tiles, content-addresses them into a media dir under their SHA-256, and rewrites each seeded
+// product's `image` from the plain basename to the served `<sha256hex>.png` name. Real Postgres
+// (not PGlite): the media step runs as `app_user` (it UPDATEs `products`, a table app_user holds
+// UPDATE on), exactly as the demo scripts do; PGlite's superuser connection cannot check that
+// grant (CLAUDE.md §4). Uses the shared `manifest` template cloned per file via `useTemplateDb`,
+// the same pattern as `seed-catalogue.test.ts`.
 
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, readdir } from "node:fs/promises";
@@ -82,7 +83,10 @@ describe("seedMedia", () => {
 
     const { productsByImage, images } = await withTenant(suite.admin, tenantId, async (tx) => {
       await asAppUser(tx);
-      const { productsByImage } = await seedCatalogues(tx, { locationId, locale: LOCALE });
+      const { productsByImage } = await seedCatalogues(tx, brandTenantId(tenantId), {
+        locationId,
+        locale: LOCALE,
+      });
       await seedMedia(tx, { mediaDir, productsByImage });
       // Read every product's stored image back, as app_user, keyed by product id.
       const { rows } = await tx.execute<{ id: string; image: string | null }>(
@@ -134,7 +138,10 @@ describe("seedMedia", () => {
 
     await withTenant(suite.admin, tenantId, async (tx) => {
       await asAppUser(tx);
-      const { productsByImage } = await seedCatalogues(tx, { locationId, locale: LOCALE });
+      const { productsByImage } = await seedCatalogues(tx, brandTenantId(tenantId), {
+        locationId,
+        locale: LOCALE,
+      });
       await seedMedia(tx, { mediaDir, productsByImage });
     });
 

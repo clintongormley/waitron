@@ -1,26 +1,20 @@
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { readSyncLogSince } from "./source.js";
 
-// NOTE: `catalogues` is an enrolled table, so seedBase's own catalogue INSERT (as admin, no node id)
-// captures a sync_log row with the all-zero origin BEFORE any products write — exactly why
-// origin.gate.test.ts filters by table_name. The tests below account for that noise: they locate the
-// `products` row explicitly, and the RLS control uses a bare `seedTenant` tenant (tenants is NOT
-// enrolled, so it captures nothing at all).
-
-// Real Postgres, not PGlite: the source read runs under FORCE ROW LEVEL SECURITY as the non-superuser
-// sync_tailer role, which PGlite (superuser) bypasses — a false pass (CLAUDE.md §4). The full manifest
-// runs (`sync` last), so the container carries sync_log + sync_capture over the enrolled tables. The
-// reader is a sync_tailer MEMBER LOGIN role, the sanctioned per-tenant read path (spec §7).
-// Two roles, now created once in src/testing/global-setup.ts and shared across the gate suites (a
-// shared cluster is one cluster, so a per-file `create role` would collide on the second): app_login,
-// an app_user member that CAPTURES writes via app_user's INSERT on sync_log, and sync_reader, a
-// sync_tailer member that READS them back per-tenant. Both non-superuser, so FORCE RLS genuinely
-// applies. Reached below with `connectAs("app_login", "app_pw")` / `connectAs("sync_reader", "rp")`.
+// Catalogue fixture writes are captured with the all-zero origin before product writes. Tests
+// locate the product explicitly. PostgreSQL exercises source reads through a non-superuser app_user
+// member; PGlite's superuser sessions cannot check its grants. Global setup creates both LOGIN
+// fixtures once per cluster, and this file clones one migrated template.
 const postgres = useTemplateDb({ template: "manifest" });
+
+// Reads cover the whole database, so each case removes the previous case's captured rows.
+afterEach(async () => {
+  await postgres.admin.execute(sql`delete from sync_log`);
+});
 
 const NODE_A = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
@@ -39,7 +33,7 @@ async function seedBase(): Promise<Base> {
 }
 
 /** An app_login write under withTenant{nodeId: NODE_A} — sync_capture writes one products row into
- * sync_log with vat_class carrying `unit_price` as the captured numeric so we can assert byte-identity
+ * sync_log carrying `unit_price` as the captured numeric so we can assert byte-identity
  * of the raw jsonb text. `price` is a JSON number (via to_jsonb) so a JS re-parse would collapse it. */
 async function captureAProductWrite(b: Base, price: string): Promise<void> {
   const app = await postgres.pg.connectAs("app_login", "app_pw");
@@ -86,10 +80,9 @@ async function capturePaymentPolicyWrite(b: Base): Promise<void> {
   }
 }
 
-describe("readSyncLogSince reads sync_log as sync_tailer under the tenant context", () => {
-  it("selects sync_log rows past afterSeq as sync_tailer, with row_image as raw jsonb TEXT", async () => {
-    // Failing case: no readSyncLogSince yet. It must (a) run under withTenant so RLS admits sync_tailer,
-    // (b) return seq as bigint (never a lossy number), (c) return row_image as raw TEXT (design §4b) —
+describe("readSyncLogSince reads sync_log as app_user", () => {
+  it("selects sync_log rows past afterSeq as app_user, with row_image as raw jsonb TEXT", async () => {
+    // seq must remain bigint and row_image must remain raw TEXT (design §4b):
     // a numeric 1.50 must arrive as the string "…1.50…", never a JS-parsed object.
     const b = await seedBase();
     await captureAProductWrite(b, "1.50"); // an app_login write -> sync_capture -> sync_log
@@ -112,10 +105,8 @@ describe("readSyncLogSince reads sync_log as sync_tailer under the tenant contex
     }
   });
 
-  it("afterSeq is EXCLUSIVE, and RLS fences a reader for a different tenant to nothing", async () => {
-    // Two captured rows on ONE tenant at strictly ascending seqs; a read past the first seq returns
-    // only the second (afterSeq is a strict lower bound). Control (the two directions differ, §1): a
-    // sync_reader read under a DIFFERENT tenant's context returns nothing — RLS visibly bites.
+  it("afterSeq is EXCLUSIVE", async () => {
+    // Captured rows have ascending seqs; a read past the first returns only later rows.
     const b = await seedBase();
     await captureAProductWrite(b, "2.00");
     await captureAProductWrite(b, "3.00");
@@ -131,16 +122,6 @@ describe("readSyncLogSince reads sync_log as sync_tailer under the tenant contex
       );
       expect(past.every((r) => r.seq > firstSeq)).toBe(true); // exclusive lower bound
       expect(past.some((r) => r.seq === firstSeq)).toBe(false);
-
-      // Control: a fresh tenant with NO captured rows (bare seedTenant — `tenants` is not enrolled, so
-      // it captures nothing) — the same reader under its context sees nothing, so the tenant scoping is
-      // RLS, not an artefact of which rows happen to exist. A seedBase tenant would carry its catalogue
-      // capture and mask this, so the control deliberately uses a tenant that captures none.
-      const otherTenant = await seedTenant(postgres.admin);
-      const fenced = await withTenant(reader, otherTenant, (tx) =>
-        readSyncLogSince(tx, { afterSeq: 0n, limit: 100 }),
-      );
-      expect(fenced).toEqual([]);
     } finally {
       await reader.close();
     }

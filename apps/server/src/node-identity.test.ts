@@ -10,10 +10,8 @@ import type { NodeId, TenantId } from "@waitron/shared";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 
 // PGlite, not real Postgres: `establishNodeIdentity` seals a credential owner-side and stamps
-// `nodes.public_key`, both under `withTenant`. PGlite's only role is superuser, which bypasses RLS —
-// so this proves the crypto + stamp ROUND-TRIP, not the RLS enforcement. The role/path enforcement is
-// proven for `nodes` in Task 1 (packages/db) and for the vault in the credentials package's own
-// real-Postgres suites (both unchanged here). CLAUDE.md §4.
+// `nodes.public_key`, both under `withTenant`. PGlite exercises this round-trip and its
+// behavioural assertions on a superuser connection; it does not check grants. CLAUDE.md §4.
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",

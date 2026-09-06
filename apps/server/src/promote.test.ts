@@ -47,13 +47,14 @@ const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 
-// PGlite is sufficient for the promote LOGIC (fence, idempotency, mirror-guard, the holder flip, and
-// now the mint): none of these has an RLS / privilege / concurrency dependency, and the reads/writes
-// all succeed as the PGlite superuser (CLAUDE.md §4 — pick the lighter target when the heavier one's
-// justification does not apply). `appDb` and `ownerDb` are the same handle here; the owner-vs-app
-// distinction is exercised for real only against Postgres. Setup now also runs CREDENTIALS_MIGRATIONS
-// and establishes a node identity so the mint has a key to sign with — the fence/mirror/already-primary
-// paths return before any mint, so the established identity is harmless to them.
+// PGlite is sufficient for the promote LOGIC (fence, idempotency, mirror-guard, the holder flip,
+// and now the mint): none of these has a privilege / concurrency dependency, and the reads/writes
+// all succeed as the PGlite superuser (CLAUDE.md §4 — pick the lighter target when the heavier
+// one's justification does not apply). `appDb` and `ownerDb` are the same handle here; the
+// owner-vs-app distinction is exercised for real only against Postgres. Setup now also runs
+// CREDENTIALS_MIGRATIONS and establishes a node identity so the mint has a key to sign with — the
+// fence/mirror/already-primary paths return before any mint, so the established identity is
+// harmless to them.
 async function localSecondary(): Promise<{
   db: Database;
   tenantId: string;
@@ -318,16 +319,16 @@ function docAtTerm(term: number, nodeId: string): SignedMembershipDocument {
   };
 }
 
-// The mirror fixture: a read-only cloud node that already holds its OWN dormant identity (R2/R3a) —
-// a sealed signing key under NODE_KEY_PURPOSE, an endorsement on its `nodes` row, and a reserved
-// standard invoice_series — established exactly as the adopt path does via
-// `establishReservedStandbyIdentity`. Stamped `mirror` (co-sets singleton_role='secondary'). PGlite is
-// sufficient for the promote LOGIC (the mode/singleton flip, the endorsed term-bumped mint, and the
-// term-guard): none has an RLS/privilege/concurrency dependency here — the reserved SIF's `currentSif`
-// behaviour on reboot is Task 5's real-PG e2e. Migrates the FULL manifest because
-// `establishReservedStandbyIdentity` writes the reserved SIF (`registro_sif`), and fiscal's SP-3a
-// capture migration (0014) needs sync's `sync_capture()` — so the whole manifest is applied (sync
-// before fiscal), the production order.
+// The mirror fixture: a read-only cloud node that already holds its OWN dormant identity (R2/R3a)
+// — a sealed signing key under NODE_KEY_PURPOSE, an endorsement on its `nodes` row, and a
+// reserved standard invoice_series — established exactly as the adopt path does via
+// `establishReservedStandbyIdentity`. Stamped `mirror` (co-sets singleton_role='secondary').
+// PGlite is sufficient for the promote LOGIC (the mode/singleton flip, the endorsed term-bumped
+// mint, and the term-guard): none has a privilege/concurrency dependency here — the reserved
+// SIF's `currentSif` behaviour on reboot is Task 5's real-PG e2e. Migrates the FULL manifest
+// because `establishReservedStandbyIdentity` writes the reserved SIF (`registro_sif`), and
+// fiscal's SP-3a capture migration needs sync's `sync_capture()` — so the whole manifest
+// is applied (sync before fiscal), the production order.
 async function mirror(): Promise<{
   db: Database;
   tenantId: string;

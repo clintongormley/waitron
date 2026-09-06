@@ -118,11 +118,7 @@ describe("drain — happy path, an anulación row", () => {
     expect(result.recordsSubmitted).toBe(2);
     expect(result.recordsAccepted).toBe(2);
 
-    // Filtered explicitly by tenant, not left to RLS alone: PGlite's default connection is a
-    // superuser, which bypasses row-level security unconditionally (this package's own recurring
-    // note, e.g. `../test/fixtures.ts`'s `seedTenantTillSif` doc comment) — so an unfiltered
-    // `select … from envios` here would also pick up every earlier test's own accumulated rows in
-    // this shared `pg.db`, the same reason `backend.ts`'s real `pendingCount` filters explicitly too.
+    // Restrict the read to this case's tenant because the database is shared across cases.
     const rows = await withTenant(pg.db, tenantId, (tx) =>
       tx.execute<{ estado: string; csv: string | null }>(sql`
         select estado, csv from envios where tenant_id = ${tenantId}
@@ -239,11 +235,7 @@ describe("drain — flow control (envio_flujo)", () => {
   it("persists the server's TiempoEsperaEnvio into envio_flujo and sets nextDueAt when a partial batch remains for next time", async () => {
     // 3 records → one envío that drains the whole backlog; the tenant's NEXT envío waits t.
     const result = await backend.drain(new Date("2026-07-21T00:01:00Z"));
-    // Filtered explicitly by tenant, not left to RLS alone: PGlite's default connection is a
-    // superuser, which bypasses row-level security unconditionally (this package's own recurring
-    // note — see e.g. the anulación test above, or `backend.ts`'s `pendingCount` doc comment) — an
-    // unfiltered `select … from envio_flujo` here would pick up whichever tenant's row (this
-    // describe reseeds a FRESH tenant per `it`) sorts first, not necessarily this test's own.
+    // Each case seeds a fresh tenant; select that tenant's flow-control row.
     const flujo = await withTenant(pg.db, seeded.tenantId, (tx) =>
       tx.execute<{ proximo_envio_en: string; tiempo_espera_seg: number }>(
         sql`select proximo_envio_en, tiempo_espera_seg from envio_flujo where tenant_id = ${seeded.tenantId}`,
@@ -266,10 +258,7 @@ describe("drain — flow control (envio_flujo)", () => {
       resolveClient: staticResolver(big.client()),
     });
     await backend2.drain(new Date("2026-07-21T00:01:00Z"));
-    // Same explicit-tenant-filter reasoning as the test above — this file's own shared `pg.db` may
-    // still hold an EARLIER test's own `envio_flujo` row (e.g. this describe's previous `it`,
-    // t=60) at the time this query runs, and RLS alone will not exclude it under PGlite's
-    // superuser connection.
+    // Earlier cases may retain flow-control rows for other tenants in this shared database.
     const flujo = await withTenant(pg.db, seeded.tenantId, (tx) =>
       tx.execute<{ tiempo_espera_seg: number }>(
         sql`select tiempo_espera_seg from envio_flujo where tenant_id = ${seeded.tenantId}`,
@@ -303,7 +292,7 @@ describe("drain — flow control (envio_flujo)", () => {
     expect(result.recordsSubmitted).toBe(0);
     expect(result.nextDueAt).toEqual(proximoEnvioEn);
 
-    // Filtered explicitly by tenant — same PGlite-superuser-bypasses-RLS reasoning as above.
+    // Select only this case's tenant.
     const rows = await withTenant(pg.db, seeded.tenantId, (tx) =>
       tx.execute<{ estado: string }>(
         sql`select estado from envios where tenant_id = ${seeded.tenantId}`,

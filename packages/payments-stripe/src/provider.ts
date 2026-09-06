@@ -34,7 +34,7 @@ export interface StripeTerminalProviderOptions {
    * `2026-07-26-provider-tenant-scoping-design.md` for the full account. Here it meant `collect`
    * failed on `insertAttempting` with `42501` under any real role, on every sale. It failed CLOSED
    * (T1 precedes the reader network call, so no money moved), which is the only reason this
-   * adapter's version was less serious than the on-device one. `stripe.rls.test.ts` is the proof. */
+   * adapter's version was less serious than the on-device one. `stripe.test.ts` is the proof. */
   db: Database;
   /** The tenant this provider serves. A terminal provider is a per-till object and a till belongs
    * to exactly one tenant, so the scope is known at construction — which is what makes every
@@ -87,8 +87,8 @@ export class StripeTerminalProvider implements PaymentProvider {
    * carrying `a1b2…` from a database read hold the same tenant in Postgres's eyes and different
    * strings in JavaScript's. A `!==` here would reject every sale on that till.
    *
-   * Throws `stripe.tenant_mismatch` BEFORE any network call. Leaving the disagreement to the
-   * isolation policy's WITH CHECK would be too late on the on-device path — see the code's doc. */
+   * Throws `stripe.tenant_mismatch` before any network call: the on-device path charges the card
+   * before writing its local row. */
   private requireOwnTenant(supplied: TenantId): void {
     if (supplied.toLowerCase() !== this.opts.tenantId.toLowerCase()) {
       throw new AppError("stripe.tenant_mismatch", {
@@ -193,13 +193,7 @@ export class StripeTerminalProvider implements PaymentProvider {
 
   /** The one place a reversal's tenant scope is derived, for the same reason `inTenant` is the one
    * place a transaction's is. The three public methods below differ only in kind and amount.
-   *
-   * Supplying `tenantId` is what makes a reversal work at all: `reverseViaStripe` opens with the
-   * untenanted `findPaymentByRef`, which under a real role matches zero rows with no GUC set, so
-   * every reversal failed closed with `payment.not_found` for a payment sitting right there.
-   * `reverse.ts` diagnosed exactly that, then defaulted these callers to omitting the option
-   * because their options "already REQUIRE a tenant-scoped handle" — the requirement that could
-   * not be met. */
+   * The reversal checks the returned payment's tenant id before any money moves. */
   private reverse(kind: "void" | "refund", ref: string, amount?: Decimal): Promise<PaymentResult> {
     return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, kind, amount, {
       tenantId: this.opts.tenantId,

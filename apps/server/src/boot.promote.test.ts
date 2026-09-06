@@ -40,11 +40,11 @@ import { mintMtlsMaterial } from "./testing/tls.js";
 
 // The headline e2e for the promote action (promote runbook design §8): a booted LOCAL SECONDARY
 // (mode='primary', singleton_role='secondary') files NOTHING; an in-process promote flips
-// singleton_role live; and the running fiscal pass BEGINS draining on its next tick — with the till
-// surface answering 200 throughout (no restart). Real Postgres is mandatory (CLAUDE.md §4): it drives
-// the real wall-clock loop, the owner-role `setSingletonRole` write (app_user holds no UPDATE on
-// `deployment`), and an RLS-served till route as the non-superuser `app_login` pool — all false
-// passes on PGlite (every PGlite connection is a superuser and serialises onto one backend).
+// singleton_role live; and the running fiscal pass BEGINS draining on its next tick — with the
+// till surface answering 200 throughout (no restart). Real Postgres is mandatory (CLAUDE.md §4):
+// it drives the real wall-clock loop, the owner-role `setSingletonRole` write (app_user holds no
+// UPDATE on `deployment`), and a till route as the non-superuser `app_login` pool — PGlite cannot
+// check the privilege split and serialises every query onto one backend.
 //
 // `undici`'s `fetch` is module-mocked to REJECT so the AEAT submit the post-promote drain makes fails
 // fast: the seeded `envios` row transitions to an OBSERVABLE attempted state (`backoffBatch` sets
@@ -94,9 +94,10 @@ const suite = useTemplateDb({ template: "manifest" });
 
 let migrationsRoot: string;
 // The app pool the running box uses (`app_login`, an `app_user` member — created cluster-wide by
-// apps/server's globalSetup), exactly as a real trading box's pool is. The drain writes and the till
-// route's RLS both resolve through this role. Migrations + the promote's owner write run over the
-// SUPERUSER uri (`suite.pg.uri`) instead, so this pool needs no CREATE / UPDATE-on-deployment grant.
+// apps/server's globalSetup), exactly as a real trading box's pool is. The drain writes and the
+// till route's queries both resolve through this role. Migrations + the promote's owner write run
+// over the SUPERUSER uri (`suite.pg.uri`) instead, so this pool needs no CREATE /
+// UPDATE-on-deployment grant.
 let appDatabaseUrl: string;
 
 // The box key ring, built from the SAME credentials key boot loads from `KEY_ENV` — so the identity
@@ -106,10 +107,13 @@ const PROMOTE_RING = loadKeyRing({
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 
-/** Seed the boot till's tenant + location + node as the container superuser (RLS bypassed), so boot's
- * `readOrderFlow` / `readVenueLocale` reads resolve — the same minimal identity boot.test.ts's drain
- * suite seeds — plus a node identity (sealed signing key + stamped `nodes.public_key`) so the promote's
- * membership-document mint has a key to sign with. `order_flow` defaults to `prepay`. */
+/**
+ * Seed the boot till's tenant + location + node as the container superuser, so boot's
+ * `readOrderFlow` / `readVenueLocale` reads resolve — the same minimal identity boot.test.ts's
+ * drain suite seeds — plus a node identity (sealed signing key + stamped `nodes.public_key`) so
+ * the promote's membership-document mint has a key to sign with. `order_flow` defaults to
+ * `prepay`.
+ */
 async function seedTillIdentity(admin: Database): Promise<void> {
   await admin.execute(sql`
     insert into tenants (id, country, tax_id, legal_name)
@@ -133,7 +137,7 @@ async function seedTillIdentity(admin: Database): Promise<void> {
 }
 
 beforeAll(async () => {
-  // The migrations root, built exactly as boot.test.ts / boot.mirror.rls.test.ts do: boot's
+  // The migrations root, built exactly as boot.test.ts / boot.mirror.test.ts do: boot's
   // from-source default (`apps/server/src/drizzle`) does not exist under source, so
   // `WAITRON_MIGRATIONS_DIR` must point `applyMigrations` at the real journal content per manifest set.
   const fromSource = migrationOptionsFor(manifestSets(), null);
@@ -193,10 +197,12 @@ async function waitForPass(state: { lastPassAt: Date | null }): Promise<void> {
   expect(state.lastPassAt).not.toBeNull();
 }
 
-/** Seeds ONE due registro + its `envios` sidecar (estado='pendiente', intentos=0, incidencia=false,
- * due immediately) and seals a usable `fiscal.aeat` credential for that tenant, so the drain ATTEMPTS
- * the row (rather than skipping it for a missing credential) once this node holds the singleton. Seeded
- * against the SUPERUSER connection (RLS bypassed, as every setup here is). */
+/**
+ * Seeds ONE due registro + its `envios` sidecar (estado='pendiente', intentos=0,
+ * incidencia=false, due immediately) and seals a usable `fiscal.aeat` credential for that tenant,
+ * so the drain ATTEMPTS the row (rather than skipping it for a missing credential) once this node
+ * holds the singleton. Seeded against the SUPERUSER connection (as every setup here is).
+ */
 async function seedFiscalWork(): Promise<{ registroIds: string[]; tenantId: string }> {
   const seeded = await seedPendingEnvios(suite.admin, { count: 1 });
   const material = mintMtlsMaterial();
@@ -226,7 +232,7 @@ async function readEnvio(
 
 /** Deletes the fiscal sidecar rows a test seeded so the clone stays order-independent (CLAUDE.md §4):
  * `envios` (keyed by registro id) is what makes the tenant perpetually due; `incidents` (keyed by
- * tenant id — it carries no registro_id column, 0007_incidents.sql) is defensive against a failure
+ * tenant id — it carries no registro_id column, 0000_db_baseline.sql) is defensive against a failure
  * path that raises one, matching boot.test.ts's own drain-cleanup convention. */
 async function cleanupFiscalWork(seeded: {
   registroIds: string[];

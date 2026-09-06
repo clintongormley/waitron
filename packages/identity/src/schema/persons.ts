@@ -26,7 +26,7 @@ export const personStatus = pgEnum("person_status", ["active", "suspended"]);
 /**
  * A member of staff who can log in, ring sales, and (by role) authorize privileged actions.
  * Deliberately MUTABLE, unlike the fiscal tables: a PIN is reset, a role changes, an account is
- * suspended — so the app role holds SELECT, INSERT, UPDATE (drizzle/0001_identity_rls.sql), never a
+ * suspended — so the app role holds SELECT, INSERT, UPDATE (drizzle/0001_identity_baseline_sql.sql), never a
  * DELETE and never an append-only trigger.
  */
 export const persons = pgTable(
@@ -41,7 +41,7 @@ export const persons = pgTable(
     passwordHash: text("password_hash"),
     /** Stored plaintext base32 — a TOTP secret must be RECOVERABLE to verify a rolling code, so it
      * cannot be hashed the way `pinHash`/`passwordHash` are. `app_user` holds SELECT on persons
-     * (drizzle/0001_identity_rls.sql), so a table or app-role leak exposes every enrolled second
+     * (drizzle/0001_identity_baseline_sql.sql), so a table or app-role leak exposes every enrolled second
      * factor. Latent in this slice: nothing writes it yet (TOTP enrollment is a later slice; only
      * tests set it via raw SQL). DEFERRED — the enrollment slice MUST encrypt `totp_secret` at rest
      * via the credentials vault (AES-256-GCM, the house pattern also cited in ./secret-hash.ts),
@@ -84,4 +84,4 @@ export const persons = pgTable(
     check("persons_totp_secret_ck", sql`${t.totpSecret} is null or length(${t.totpSecret}) > 0`),
     check("persons_locale_ck", sql`${t.locale} is null or length(${t.locale}) > 0`),
   ],
-).enableRLS();
+);

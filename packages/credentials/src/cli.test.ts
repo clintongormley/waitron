@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { runCli, type CliDeps } from "./cli.js";
 import { loadKeyRing, type KeyRing } from "./keyring.js";
@@ -30,6 +30,11 @@ const STRIPE_JSON = JSON.stringify({
 });
 
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
+
+// Listing reads the whole vault, so each case starts with an empty credential table.
+beforeEach(async () => {
+  await suite.db.execute(sql`truncate tenant_credentials`);
+});
 
 interface Harness {
   deps: CliDeps;
@@ -274,9 +279,8 @@ describe("waitron-credentials set", () => {
   });
 
   it("propagates an unexpected, non-AppError failure rather than swallowing it", async () => {
-    // A syntactically valid but never-seeded tenant: `withTenant`'s own RLS check passes (the
-    // inserted row's tenant_id matches the session's app.tenant_id), so what fails is the foreign
-    // key against `tenants` — a raw database error, not one of this package's `AppError`s.
+    // A syntactically valid but never-seeded tenant fails the foreign key against `tenants`: a
+    // raw database error, not one of this package's `AppError`s.
     // `reportFailure` deliberately does not swallow that: an unrecognised failure should crash
     // loudly rather than be reported as an ordinary, expected rejection.
     const neverSeeded = "00000000-0000-0000-0000-000000000000";
@@ -314,6 +318,28 @@ describe("waitron-credentials list", () => {
     expect(printed).toContain(tenantId);
     expect(printed).toContain("payments.stripe");
     expect(printed).not.toContain("sk_test_cli");
+  });
+
+  it("lists a tenant holding two purposes exactly once each — the no---tenant de-duplication", async () => {
+    // `list` without --tenant enumerates through `credentialTenants` ONCE PER PURPOSE and flattens
+    // the results, so a tenant holding BOTH purposes is in that list twice before `cli.ts`'s
+    // `new Set(...)` collapses it. What makes the duplicate visible is an otherwise EMPTY table:
+    // `listCredentials` carries no tenant predicate (store.ts), so each visit prints every row it can
+    // see. With the Set the tenant is visited once and prints its 2 rows; without it, twice and 4.
+    // Truncating first is the fixture shape rotate.test.ts uses for the same reason — every test in
+    // this file seeds its own tenant and credential, so nothing later depends on the rows dropped
+    // here. Proven by deletion: removing the `new Set(...)` from cli.ts's no---tenant branch makes
+    // this read 4.
+    await suite.db.execute(sql`truncate tenant_credentials cascade`);
+    const tenantId = await seedTenant(suite.db);
+    const stripe = harness(STRIPE_JSON);
+    await runCli(["set", "--tenant", tenantId, "--purpose", "payments.stripe"], stripe.deps);
+    const aeat = harness(JSON.stringify({ pfxBase64: "AAAA", passphrase: "p", certKind: "sello" }));
+    await runCli(["set", "--tenant", tenantId, "--purpose", "fiscal.aeat"], aeat.deps);
+
+    const h = harness();
+    expect(await runCli(["list"], h.deps)).toBe(0);
+    expect(h.out.filter((line) => line.startsWith(`${tenantId}\t`))).toHaveLength(2);
   });
 
   it("rejects a malformed --tenant instead of throwing out of runCli", async () => {

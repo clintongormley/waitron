@@ -9,19 +9,16 @@ import type { SharedContainerHandle } from "./shared-container.js";
 /**
  * Suite lifecycle helpers: the hooks live HERE, not in the suites.
  *
- * `postgres.ts` says how to *start* a database; this module says who *owns* it. That split is why
- * this file is the only one under `testing/` that imports vitest — a suite gets an accessor, never
- * a handle it is responsible for closing, so the unguarded-teardown defect that
- * `guarded-teardowns.test.ts` polices cannot be written in the first place. The guard remains as a
- * backstop for the few suites that legitimately construct their own container
- * (`client.test.ts`, `migrate.test.ts` — see `postgres.ts` for why).
+ * `postgres.ts` starts databases; these helpers own their setup and cleanup hooks. A caller gets
+ * an accessor without taking responsibility for closing the handle. `guarded-teardowns.test.ts`
+ * also checks suites that construct their own resources (`client.test.ts`, `migrate.test.ts`).
  *
  * Accessors throw rather than returning `undefined` when read before their hook has run. That is
  * the whole point: `undefined` is what turns a setup failure into
  * `Cannot read properties of undefined` two frames away from the real error.
  */
 
-/** PGlite boots a WASM PostgreSQL and then runs migrations — well past vitest's 5s hook default. */
+/** Setup budget for booting PGlite and applying its migration sets. */
 const DEFAULT_SETUP_TIMEOUT_MS = 60_000;
 
 export interface PgliteSuiteOptions {
@@ -71,9 +68,8 @@ export interface RealPostgresSuiteOptions {
   /** The package's own migrated-container starter — each package migrates a different set. */
   start: () => Promise<RealPostgres>;
   /**
-   * A non-superuser LOGIN role created once the container is up, for suites that probe RLS. The
-   * container's default user is a superuser and bypasses `FORCE ROW LEVEL SECURITY`, so a policy
-   * test needs one of these; `inRole` carries the grants.
+   * A non-superuser LOGIN role created once the container is up for privilege tests. The default
+   * superuser connection bypasses privilege checks; `inRole` supplies the role memberships.
    */
   probeRole?: ProbeRole;
   /** Extra setup once the container is up — doubles that wrap the admin connection, extra roles. */
@@ -107,10 +103,8 @@ export function useRealPostgres(options: RealPostgresSuiteOptions): RealPostgres
   let pg: RealPostgres | undefined;
   let admin: Database | undefined;
 
-  // Each handle is assigned the instant it exists, so a later failure still leaves it closable. A
-  // container that outlives a failed `connect()` or a throwing `setup` is a leaked Docker container,
-  // and with `TESTCONTAINERS_RYUK_DISABLED=true` — required locally, see CLAUDE.md §4 — nothing
-  // reaps it. Assigning both at the end of the hook, as this first did, made that the default.
+  // Assign each handle as soon as it exists so teardown can close it after a later setup failure.
+  // TESTCONTAINERS_RYUK_DISABLED=true disables automatic Ryuk cleanup.
   beforeAll(async () => {
     pg = await options.start();
     admin = await pg.connect();

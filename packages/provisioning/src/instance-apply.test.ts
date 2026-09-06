@@ -10,12 +10,12 @@ import { describeAction, type InstanceAction } from "./instance-plan.js";
  *
  * What these tests exercise is how `applyInstance` CLASSIFIES a failure its admin connection hands
  * back — which `code` it rethrows, and what it keeps of the original. None of that involves
- * privileges, RLS or concurrency, so neither PGlite nor a container is needed: a fake `admin` whose
+ * privileges or concurrency, so neither PGlite nor a container is needed: a fake `admin` whose
  * `execute` throws exactly the error under test reaches the branch directly, and is the only way to
  * reach the "the driver gave us no SQLSTATE at all" branch at all — a real Postgres always gives
  * one.
  *
- * The real-shape receipts live in `instance-apply.rls.test.ts`, against a container: that a genuine
+ * The real-shape receipts live in `instance-apply.pg.test.ts`, against a container: that a genuine
  * Drizzle failure actually carries `42704` where this file's walk looks for it, and that a genuine
  * non-owning CREATEROLE admin actually fails a membership grant with `42501`.
  */
@@ -77,7 +77,7 @@ describe("applyInstance's create-role failure", () => {
   it("finds a SQLSTATE that the driver's wrapper buried under .cause", async () => {
     // Drizzle does not re-expose the pg error's `code` on its own wrapper; it attaches the original
     // as `cause`. Asserted here against a hand-built two-level shape, and against the REAL Drizzle
-    // shape in `instance-apply.rls.test.ts` ("never lets the generated password reach a thrown
+    // shape in `instance-apply.pg.test.ts` ("never lets the generated password reach a thrown
     // error", which pins `sqlState: "42704"` from an actual container).
     const buried = Object.assign(new Error("Failed query: create role ..."), {
       cause: Object.assign(new Error('role "app_user" does not exist'), { code: "42704" }),
@@ -202,7 +202,7 @@ describe("applyInstance's grant-membership failure", () => {
     // Before this catch existed the driver's own error escaped raw. That is a reachable path for a
     // real operator, not a hypothetical: a CREATEROLE admin that did not itself create `app_user`
     // holds no ADMIN OPTION on it and Postgres refuses the grant with 42501 — proven against a
-    // container in `instance-apply.rls.test.ts`.
+    // container in `instance-apply.pg.test.ts`.
     const thrown = await thrownBy(
       GRANT_MEMBERSHIP,
       Object.assign(new Error('permission denied to grant role "app_user"'), { code: "42501" }),
@@ -272,7 +272,7 @@ describe("applyInstance's post-apply grant verification", () => {
   it("refuses when the GRANT succeeded but the ACL does not carry it", async () => {
     // The silent case, and the whole reason this check exists: PostgreSQL answers a GRANT from a
     // grantor that holds some privilege on the object but no grant option with a WARNING, so
-    // `execute` resolves and the privilege is absent. `instance-apply.rls.test.ts` is where that
+    // `execute` resolves and the privilege is absent. `instance-apply.pg.test.ts` is where that
     // is reproduced against a real cluster; here the ACL is supplied directly.
     let thrown: unknown;
     try {
@@ -299,10 +299,8 @@ describe("applyInstance's post-apply grant verification", () => {
   });
 
   it("treats a bare C as missing when the plan asked for WITH GRANT OPTION", async () => {
-    // The `*` is not cosmetic: the empty-database migrations re-grant CREATE ON SCHEMA public to
-    // each support role they create and then revoke it, and a grant this role cannot pass on fails
-    // partway through that dance (instance-plan.ts). A check that ignored the option would call a
-    // half-provisioned deployment good.
+    // This tests ACL interpretation: C permits creating schema objects; C* also permits delegation.
+    // It does not establish that the migrator needs to delegate that privilege.
     await expect(
       applyInstance(SCHEMA_GRANT, cluster({ nspacl: ["waitron_migrator=C/pg_database_owner"] })),
     ).rejects.toMatchObject({ code: "provisioning.grant_ineffective" });

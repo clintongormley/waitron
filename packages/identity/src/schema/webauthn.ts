@@ -14,8 +14,7 @@ import { persons } from "./persons.js";
 /**
  * A registered passkey (WebAuthn credential) for a person. Deliberately MUTABLE, not an audit trail:
  * `counter` is bumped on every successful authentication, and a stale or revoked passkey is removed
- * outright — so app_user holds SELECT, INSERT, UPDATE, DELETE (the FORCE-RLS policy and grants land
- * in the next migration, the way management-sessions splits its table from its RLS). DELETE is
+ * outright — so app_user holds SELECT, INSERT, UPDATE, DELETE. DELETE is
  * granted here, unlike `management_sessions`, mirroring `tenant_credentials`: a credential row is
  * live configuration, not a record anyone needs preserved.
  */
@@ -59,7 +58,7 @@ export const webauthnCredentials = pgTable(
     unique("webauthn_credentials_credential_id_uq").on(t.tenantId, t.credentialId),
     index("webauthn_credentials_person_idx").on(t.tenantId, t.personId),
   ],
-).enableRLS();
+);
 
 /**
  * A short-lived WebAuthn challenge issued at the start of a registration or authentication ceremony
@@ -94,4 +93,4 @@ export const webauthnChallenges = pgTable(
     }).onDelete("restrict"),
     index("webauthn_challenges_tenant_idx").on(t.tenantId),
   ],
-).enableRLS();
+);

@@ -4,19 +4,8 @@ import { describe, expect, it } from "vitest";
  * Makes the tenant-scoping invariant STRUCTURAL rather than a rule three doc comments happen to
  * describe.
  *
- * Every adapter in this package was once handed a `Database` and opened bare `db.transaction(…)`
- * calls on it, on the strength of an option doc requiring a "TENANT-SCOPED `Database` handle"
- * that nothing in the repo can construct (`withTenant` sets the GUC transaction-locally, from
- * inside a transaction it opens itself). Under a real non-superuser role that meant `collect`
- * threw `42501` on every sale, `forward` matched zero rows silently, and every reversal failed
- * closed — while PGlite, which connects as superuser and bypasses FORCE ROW LEVEL SECURITY,
- * reported the whole suite green. See `2026-07-26-provider-tenant-scoping-design.md`.
- *
- * That was fixed in three adapters. This is what stops a FOURTH reintroducing it: a bare
- * `.transaction(` anywhere in this package's production sources now fails CI, rather than failing
- * in production under a role no hermetic suite can simulate. The repo's own idiom —
- * `payments/src/no-provider-vocabulary.test.ts`, `scripts/english-only.test.ts`,
- * `payments/src/monetary-columns.test.ts` — is a source scan exactly like this one.
+ * Adapters use `withTenant` for their transaction boundaries and node origin attribution.
+ * The source scan rejects bare `.transaction(` calls in production sources.
  *
  * The local `ImportMeta.glob` declaration mirrors that file's, and for its reason: this package
  * carries no `vite` dependency, and adding one for a type reference would be a dependency bought

@@ -13,9 +13,9 @@ import {
 import { codeOf, seedPerson } from "../test/fixtures.js";
 
 // PGlite, not real Postgres: this suite tests the lifecycle LOGIC — start/resolve/end, the idle
-// timeout, and the mid-session status re-check. A PGlite connection is superuser, so RLS is a false
-// pass here (CLAUDE.md §4); tenant-isolation of management_sessions is proven as the app role in
-// management-sessions.rls.test.ts and is not re-proven here.
+// timeout, and the mid-session status re-check. A PGlite connection is superuser holding every
+// grant, so a privilege or trigger assertion would be a false pass here (CLAUDE.md §4); nothing
+// below makes one.
 let tenantId: string;
 
 const suite = usePgliteDb({

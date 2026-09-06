@@ -30,7 +30,7 @@ import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 // INSERT/UPDATE grant on node_membership — PGlite is a superuser and would not exercise that grant,
 // CLAUDE.md §4): `source` (serves /hello + /log + /cursor), `subscriber` (adopts under the fixture
 // trust set), and `untrusted` (the empty-trust-set control that must adopt nothing). Modelled on the
-// two-node shape of `mirror-e2e.rls.test.ts`, minus the tunnel — an in-process `HttpClient` routes
+// two-node shape of `mirror-e2e.test.ts`, minus the tunnel — an in-process `HttpClient` routes
 // every pull request straight to the source app's `request()`.
 const log: Logger = () => {};
 
@@ -58,7 +58,7 @@ const source = useTemplateDb({ template: "manifest" });
 const subscriber = useTemplateDb({ template: "manifest" });
 const untrusted = useTemplateDb({ template: "manifest" });
 
-let sourceReader: Database; // sync_applier (sync_tailer + app_user): the /hello handler reads node_membership through this
+let sourceReader: Database; // sync_applier (app_user): the /hello handler reads node_membership through this
 let subscriberPool: Database; // sync_applier: runSyncPull's localDb + the adoption persist pool
 let untrustedPool: Database; // the empty-trust control's equivalent
 let peerToken: string; // enrolled on the SOURCE; the Bearer every pull presents
@@ -116,8 +116,8 @@ async function pullOneRound(localDb: Database, trustSet: TrustSet): Promise<Acce
 
 beforeAll(async () => {
   // The source serves node_membership through a sync_applier pool (app_user's SELECT), exactly as
-  // boot.ts:1053 builds it. The subscriber/untrusted pools are the same role: runSyncPull reads the
-  // cursor + applies as sync_tailer/app_user, and the adoption persist runs as app_user (Slice-3 grant).
+  // boot.ts:1053 builds it. The subscriber/untrusted pools are the same role: runSyncPull reads
+  // the cursor + applies as app_user, and the adoption persist runs as app_user (Slice-3 grant).
   sourceReader = await source.pg.connectAs("sync_applier", "ap");
   subscriberPool = await subscriber.pg.connectAs("sync_applier", "ap");
   untrustedPool = await untrusted.pg.connectAs("sync_applier", "ap");
@@ -125,7 +125,7 @@ beforeAll(async () => {
   // applyBatch refuses to apply a peer's rows into an UNSTAMPED database (CLAUDE.md §5 — a mirror must
   // be environment-stamped first), and runSyncPull drains through applyBatch before it ever reaches the
   // adopt callback. Stamp both puller databases `preproduction` to match the source's advertised
-  // environment, exactly as `mirror-e2e.rls.test.ts` stamps its booted mirrors. The source needs no
+  // environment, exactly as `mirror-e2e.test.ts` stamps its booted mirrors. The source needs no
   // stamp — it only SERVES its log + membership, advertising its environment from mountSyncApi's deps.
   await stampDeployment(subscriber.admin, "preproduction");
   await stampDeployment(untrusted.admin, "preproduction");

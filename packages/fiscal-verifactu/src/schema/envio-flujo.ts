@@ -21,4 +21,4 @@ export const envioFlujo = pgTable("envio_flujo", {
   // column holds it exactly, where baking it into a timestamptz would not make the seconds
   // re-readable.
   tiempoEsperaSeg: integer("tiempo_espera_seg").notNull(),
-}).enableRLS();
+});

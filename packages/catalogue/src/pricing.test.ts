@@ -269,13 +269,14 @@ describe("priceBasketWithOptions — parent + child priced lines", () => {
   });
 });
 
-// Pure arithmetic — no DB, RLS or concurrency involved, so these are plain unit tests (no
+// Pure arithmetic — no DB or concurrency involved, so these are plain unit tests (no
 // PGlite/Testcontainers): `priceLockedLines` reprices from the STORED gross unit exactly as
-// `priceBasket` prices from the live catalogue, and both funnel through the same `priceRows` core.
+// `priceBasket` prices from the live catalogue, and both funnel through the same `priceRows`
+// core.
 describe("priceLockedLines — files a locked line to the walk-up VAT breakdown", () => {
   it("prices locked lines to the difference-method VAT breakdown (base 4.55 / tax 0.95), like a walk-up", () => {
     // café×1 (gross 1.50) + agua×2 (gross unit 2.00, qty 2). Group base 4.55, gross 5.50, tax 0.95
-    // (NOT round(4.55×21%)=0.96) — the exact property working-order.rls.test.ts:363-378 pins.
+    // (NOT round(4.55×21%)=0.96) — the exact property working-order.pg.test.ts:363-378 pins.
     const priced = priceLockedLines([
       {
         grossUnitPrice: "1.50",

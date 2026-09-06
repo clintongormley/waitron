@@ -12,8 +12,8 @@ import type { PrintConfig } from "./printers.js";
 import "./errors.js";
 
 // PGlite is the right target here: `enqueuePrintJob` is a single INSERT plus a not_found pre-check
-// SELECT — no concurrency, no deployment-role privilege behaviour (both proven on real Postgres in
-// Task 1/3: packages/db printing.rls.test.ts + agent.test.ts). The load-bearing assertion is the
+// SELECT — no concurrency, and `app_user`'s privileges on the printing tables are pinned by the
+// matrix in packages/fiscal-verifactu (the enrol race is agent.test.ts's). The load-bearing assertion is the
 // NEVER-BLOCK invariant (CLAUDE.md §5 / design §5): enqueue opens NO socket. PGlite is in-process
 // WASM, so the DB access itself opens no socket either — which makes "Socket.prototype.connect was
 // never called" a clean structural proof rather than one muddied by driver traffic.

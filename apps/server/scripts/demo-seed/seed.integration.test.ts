@@ -6,10 +6,10 @@
 // end-to-end proof of Phase 1's union-reprice: `parkOrder` re-prices the basket against the
 // location's WHOLE accessible catalogue set, so a line drawn from a non-default menu must resolve.
 //
-// Real Postgres (not PGlite): the sub-seeds run under RLS as `app_user`, `seedSales` writes real
+// Real Postgres (not PGlite): the sub-seeds run as `app_user`, `seedSales` writes real
 // hash-chained preproduction `registros_facturacion` rows through `recordSale`, and `parkOrder`
-// re-prices under the tenant GUC — PGlite's superuser connection bypasses the FORCE-RLS/immutability
-// guards and would prove none of it (CLAUDE.md §4). Cloned per file from the shared `manifest`
+// re-prices in the same app-role transaction — PGlite's superuser connection cannot check those
+// grants; its triggers still fire (CLAUDE.md §4). Cloned per file from the shared `manifest`
 // template via `useTemplateDb`.
 //
 // Preproduction only: `WAITRON_ENV` is left unset, which `deploymentEnvironment` resolves to

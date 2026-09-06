@@ -797,12 +797,8 @@ export class VerifactuBackend implements FiscalBackend {
    * How many of this node's records AEAT has not yet confirmed — the art. 16.4 unsent count
    * (node-id rekey, 2026-08-03: the chain is per-node, so the unsent count is per-node too).
    *
-   * Filters on `tenant_id` explicitly (defense-in-depth alongside the RLS policy). `withTenant`
-   * sets `app.tenant_id` (transaction-local) so `current_tenant_id()` resolves and the RLS
-   * tenant-isolation policy matches this tenant's rows. Without it, a non-superuser deployment
-   * role sees NULL and counts zero — the art. 16.4 gap. On PGlite (superuser) the GUC is set but
-   * irrelevant; the count is correct either way, which is why only real Postgres proves this
-   * (`pending-count.rls.test.ts`).
+   * Filters on `tenant_id` explicitly, and opens its OWN `withTenant` because it takes no caller
+   * transaction (unlike `filedReceiptFor` and `checkIntegrity`, which are handed one).
    */
   async pendingCount(tenantId: TenantId, nodeId: NodeId): Promise<number> {
     return withTenant(this.db, tenantId, async (tx) => {

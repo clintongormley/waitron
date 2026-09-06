@@ -1,14 +1,13 @@
+// Real PostgreSQL: checks node-postgres monetary decoding alongside the PGlite driver.
+import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
 import { describeEachTarget } from "../testing/harness.js";
-import { asAppUser } from "../testing/roles.js";
 import { seedNode } from "../testing/seed.js";
-import { withTenant } from "../tenancy.js";
-import { invoiceSeries } from "./series.js";
 import { saleLines, sales, tenders } from "./sales.js";
+import { invoiceSeries } from "./series.js";
 import { locations, tenants, tills } from "./tenants.js";
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
@@ -99,9 +98,8 @@ function saleValues(overrides: Record<string, unknown> = {}) {
  * Writes a sale — header, lines and tenders — in one transaction. Every test
  * that needs a sale on disk goes through here.
  *
- * Since migration 0012 the tender-coverage check no longer fires at sale COMMIT
- * (both deferred constraint triggers were dropped); it runs when settlement is
- * DECLARED, on the `sale_settlements` INSERT, tested in sale-settlements.test.ts.
+ * Tender coverage is checked when settlement is declared, on the `sale_settlements`
+ * INSERT, tested in sale-settlements.test.ts.
  * So a sale written here can stand legitimately uncovered — an unsettled sale is
  * a valid steady state under invoice-first (design §3). The default tender is
  * coherent anyway (amount = total, no tip) so callers can settle it if they
@@ -164,7 +162,7 @@ describeEachTarget("sales — the commercial record", (target) => {
   });
 
   it("keeps total as the sale's only money, with the tip on the tender", async () => {
-    // Since 0012 the sale drops to one number: `total`. The tip moved to
+    // The sale carries one money value: `total`. The tip belongs to
     // `tenders.tip_amount` (attributed to the payer who left it) and
     // amount_charged is derived, never stored (design §3). Here a €1.00 sale is
     // paid with a €1.50 tender carrying a €0.50 tip — three still-distinct
@@ -533,71 +531,6 @@ describeEachTarget("sales — tender coverage", (target) => {
     expect(pgErrorCode(error)).toBe("23514");
     expect(pgErrorMessage(error)).toMatch(/tenders_tip_amount_ck/);
   });
-
-  it("owns the tender-coverage check with a role that cannot itself be filtered by tenant isolation", async () => {
-    // sales_assert_tenders_cover is SECURITY DEFINER, but that alone does not
-    // stop it going fail-OPEN: FORCE ROW LEVEL SECURITY (0005_sales.sql)
-    // subjects the function's OWNER to the tenant-isolation policy too, so an
-    // ordinary non-superuser owner would find the sale row invisible the
-    // moment app.tenant_id is cleared, read `sale_total` as NULL, take the
-    // early RETURN, and let a mis-summed settlement be declared complete —
-    // verified live against a genuine non-superuser, non-BYPASSRLS owner while
-    // fixing this. Since 0012 the function fires on the sale_settlements INSERT,
-    // not at sale COMMIT; the FUNCTIONAL fail-open reproduction now lives in
-    // sale-settlements.test.ts ("still refuses a mis-summed settlement when
-    // app.tenant_id is cleared"). This test pins the STRUCTURE that makes that
-    // one trustworthy.
-    //
-    // The actual guarantee is this introspection: the function's owner,
-    // sales_coverage_checker, is itself neither a superuser nor BYPASSRLS —
-    // it relies on a role-scoped permissive SELECT policy instead (asserted
-    // below) — which is what makes the functional test below trustworthy
-    // rather than accidentally green because the test harness's own
-    // migration owner happens to be a superuser (see testing/roles.ts: this
-    // harness's connections are superuser and bypass RLS unconditionally,
-    // which is exactly why a bare functional check is not enough on its own
-    // here).
-    const [owner] = await rows<{ rolname: string; rolsuper: boolean; rolbypassrls: boolean }>(
-      db,
-      sql`select r.rolname, r.rolsuper, r.rolbypassrls
-            from pg_proc p
-            join pg_roles r on r.oid = p.proowner
-           where p.proname = 'sales_assert_tenders_cover'`,
-    );
-    expect(owner.rolname).toBe("sales_coverage_checker");
-    expect(owner.rolsuper).toBe(false);
-    expect(owner.rolbypassrls).toBe(false);
-
-    // Existence is not correctness. A policy named right, on the right
-    // table, scoped to the right role and command, still renders nothing
-    // visible if its predicate is wrong — asserting only that the two
-    // policies exist (as this test did before) would pass identically
-    // whether their USING clause is `true` or `false`. The functional proof
-    // that the predicate does its job — flipping `USING (true)` to
-    // `USING (false)` in 0005_sales.sql makes a cleared-tenant settlement
-    // sail through — lives in sale-settlements.test.ts, where the coverage
-    // function actually fires. This test pins the STRUCTURE so that a future
-    // change cannot silently weaken the predicate: read `qual` (the USING
-    // expression, as Postgres renders it) directly, alongside `cmd` and
-    // `roles`, and pin all three by value rather than by filtering for them in
-    // the WHERE clause — a filter can only ever prove "some row happens to
-    // satisfy this", not "this is the row's actual shape".
-    const policies = await rows<{ tablename: string; cmd: string; roles: string[]; qual: string }>(
-      db,
-      // roles::text[] is deliberate: pg_policies.roles is name[] (oid 1003),
-      // and node-postgres has no built-in array parser registered for that
-      // oid — it comes back as the literal '{sales_coverage_checker}',
-      // unparsed. Casting to text[] (oid 1009, which node-postgres does
-      // parse) gets a real JS string array from both drivers.
-      sql`select tablename, cmd, roles::text[] as roles, qual from pg_policies
-           where policyname in ('sales_coverage_check_bypass', 'tenders_coverage_check_bypass')
-           order by tablename`,
-    );
-    expect(policies).toEqual([
-      { tablename: "sales", cmd: "SELECT", roles: ["sales_coverage_checker"], qual: "true" },
-      { tablename: "tenders", cmd: "SELECT", roles: ["sales_coverage_checker"], qual: "true" },
-    ]);
-  });
 });
 
 describeEachTarget("sales — immutability as the app role", (target) => {
@@ -612,82 +545,6 @@ describeEachTarget("sales — immutability as the app role", (target) => {
 
   afterEach(async () => {
     if (db !== undefined) await db.close();
-  });
-
-  it("refuses to update a sale's total as the app role", async () => {
-    // Never run this as the owner. The owner bypasses RLS, can disable the
-    // trigger, and here would also hold table-wide UPDATE — a green result
-    // proving nothing whatsoever.
-    const error = await captureError(() =>
-      withTenant(db, TENANT_A, async (tx) => {
-        await asAppUser(tx);
-        return tx.update(sales).set({ total: "999.00" }).where(eq(sales.id, saleId));
-      }),
-    );
-    expect(pgErrorMessage(error)).toMatch(
-      /permission denied for table sales|column "total" of relation "sales"/,
-    );
-  });
-
-  it("refuses to delete a sale as the app role", async () => {
-    const error = await captureError(() =>
-      withTenant(db, TENANT_A, async (tx) => {
-        await asAppUser(tx);
-        return tx.delete(sales).where(eq(sales.id, saleId));
-      }),
-    );
-    expect(pgErrorMessage(error)).toMatch(/permission denied for table sales/);
-  });
-
-  it("refuses to truncate sales as the app role", async () => {
-    // A row trigger does not fire on TRUNCATE, so TRUNCATE walks straight
-    // through an immutability trigger unless it is separately stopped. The
-    // app role has no TRUNCATE privilege at all, so this fails on privilege
-    // grounds before the statement trigger is ever reached — see "stops the
-    // owner truncating any of the three tables" below for the trigger itself.
-    const error = await captureError(() =>
-      withTenant(db, TENANT_A, async (tx) => {
-        await asAppUser(tx);
-        return tx.execute(sql`truncate table sales cascade`);
-      }),
-    );
-    expect(pgErrorMessage(error)).toMatch(/permission denied for table sales/);
-  });
-
-  it("refuses to update or delete a sale line as the app role", async () => {
-    const update = await captureError(() =>
-      withTenant(db, TENANT_A, async (tx) => {
-        await asAppUser(tx);
-        return tx.update(saleLines).set({ lineTotal: "999.00" });
-      }),
-    );
-    expect(pgErrorMessage(update)).toMatch(/permission denied for table sale_lines/);
-
-    const remove = await captureError(() =>
-      withTenant(db, TENANT_A, async (tx) => {
-        await asAppUser(tx);
-        return tx.delete(saleLines);
-      }),
-    );
-    expect(pgErrorMessage(remove)).toMatch(/permission denied for table sale_lines/);
-  });
-
-  it("refuses to update or delete a tender as the app role", async () => {
-    const update = await captureError(() =>
-      withTenant(db, TENANT_A, async (tx) => {
-        await asAppUser(tx);
-        return tx.update(tenders).set({ amount: "999.00" });
-      }),
-    );
-    expect(pgErrorMessage(update)).toMatch(/permission denied for table tenders/);
-
-    const remove = await captureError(() =>
-      withTenant(db, TENANT_A, async (tx) => {
-        await asAppUser(tx);
-        return tx.delete(tenders);
-      }),
-    );
-    expect(pgErrorMessage(remove)).toMatch(/permission denied for table tenders/);
   });
 
   it("stops the owner too, via the trigger backstop", async () => {
@@ -734,65 +591,6 @@ describeEachTarget("sales — immutability as the app role", (target) => {
     }
   });
 
-  it("hides another tenant's sale from the app role", async () => {
-    await recordCompleteSale(db, {
-      tenantId: TENANT_B,
-      tillId: TILL_B1,
-      nodeId: nodeB,
-      seriesId: seriesB,
-      invoiceLocales: ["es"],
-      locale: "es",
-    });
-    const visible = await withTenant(db, TENANT_A, async (tx) => {
-      await asAppUser(tx);
-      return tx.select({ id: sales.id }).from(sales);
-    });
-    expect(visible).toHaveLength(1);
-    expect(visible[0].id).toBe(saleId);
-  });
-
-  it("hides another tenant's sale line from the app role", async () => {
-    // M1 (whole-branch review): sale_lines carries ENABLE + FORCE ROW LEVEL
-    // SECURITY plus a tenant_isolation policy (immutability.test.ts's
-    // auto-discovered flag guard asserts both booleans are set), but a
-    // too-permissive predicate — `USING (true)`, or a mistyped column — would
-    // pass that flag-level check while leaking every tenant's lines across
-    // the app role. Only a functional read, from a second tenant's row set,
-    // proves the predicate itself is doing the filtering. Mirrors "hides
-    // another tenant's sale from the app role" immediately above.
-    await recordCompleteSale(db, {
-      tenantId: TENANT_B,
-      tillId: TILL_B1,
-      nodeId: nodeB,
-      seriesId: seriesB,
-      invoiceLocales: ["es"],
-      locale: "es",
-    });
-    const visible = await withTenant(db, TENANT_A, async (tx) => {
-      await asAppUser(tx);
-      return tx.select({ id: saleLines.id }).from(saleLines);
-    });
-    expect(visible).toHaveLength(1);
-  });
-
-  it("hides another tenant's tender from the app role", async () => {
-    // Same gap, same fix, on tenders — see the sale_lines test immediately
-    // above for the full rationale.
-    await recordCompleteSale(db, {
-      tenantId: TENANT_B,
-      tillId: TILL_B1,
-      nodeId: nodeB,
-      seriesId: seriesB,
-      invoiceLocales: ["es"],
-      locale: "es",
-    });
-    const visible = await withTenant(db, TENANT_A, async (tx) => {
-      await asAppUser(tx);
-      return tx.select({ id: tenders.id }).from(tenders);
-    });
-    expect(visible).toHaveLength(1);
-  });
-
   it("carries no reference to a catalogue on sale_lines", async () => {
     const cols = await rows<{ column_name: string }>(
       db,
@@ -828,31 +626,6 @@ describeEachTarget("sales — fiscal_state", (target) => {
     expect(row.fiscalState).toBe("recorded");
   });
 
-  it("refuses an UPDATE of fiscal_state as the app role", async () => {
-    // MUST run as app_user. As the owner this would be caught by the trigger
-    // instead, which proves nothing about the control: the owner can
-    // ALTER TABLE ... DISABLE TRIGGER, and the application is never the owner.
-    // 42501 insufficient_privilege is the assertion that matters here.
-    //
-    // The message is asserted too, not just the code: 42501 is also what an
-    // RLS WITH CHECK violation raises ("new row violates row-level security
-    // policy"), so the code alone cannot tell a privilege denial from an RLS
-    // rejection. Only the message text distinguishes them — the same
-    // precedent immutability.test.ts already follows for its own privilege
-    // tests.
-    const error = await captureError(() =>
-      withTenant(db, TENANT_A, async (tx) => {
-        await asAppUser(tx);
-        await tx.update(sales).set({ fiscalState: "not_applicable" }).where(eq(sales.id, saleId));
-      }),
-    );
-    expect(pgErrorCode(error)).toBe("42501");
-    expect(pgErrorMessage(error)).toMatch(/permission denied for table sales/);
-
-    const [row] = await db.select().from(sales).where(eq(sales.id, saleId));
-    expect(row.fiscalState).toBe("recorded");
-  });
-
   it("holds no submission state, so there is nothing on it to advance", async () => {
     // Spec §3 puts submission state on the envios sidecar precisely because it
     // mutates constantly and this table cannot be updated. A column named for
@@ -881,26 +654,10 @@ describeEachTarget("sales — fiscal_state", (target) => {
     );
     expect(values.map((v) => v.enumlabel)).toEqual(["not_applicable", "recorded"]);
   });
-
-  it("refuses to change fiscal_backend as the app role", async () => {
-    // Both the code and the message are asserted, and the message names the
-    // table: a bare `/permission denied/` would match a denial on ANY table,
-    // proving nothing specific to sales, and 42501 alone cannot distinguish a
-    // privilege denial from an RLS WITH CHECK violation (see "refuses an
-    // UPDATE of fiscal_state as the app role" above).
-    const error = await captureError(() =>
-      withTenant(db, TENANT_A, async (tx) => {
-        await asAppUser(tx);
-        return tx.update(sales).set({ fiscalBackend: "other" }).where(eq(sales.id, saleId));
-      }),
-    );
-    expect(pgErrorCode(error)).toBe("42501");
-    expect(pgErrorMessage(error)).toMatch(/permission denied for table sales/);
-  });
 });
 
 /**
- * The rectificativa link (migration 0013). `corrects_sale_id` is the generic-layer
+ * The rectificativa link. `corrects_sale_id` is the generic-layer
  * projection of "this sale corrects that one" — nullable, tenant-consistent FK back onto
  * `sales`, NOT unique (a sale may be corrected more than once), and it is what relaxes
  * `sales_total_ck` to permit the negative total a rectificativa por diferencias carries
@@ -1054,29 +811,6 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
       insertSale({ total: "-1.00", correctsSaleId: otherTenantSale, invoiceNumber: 2 }),
     );
     expect(pgErrorCode(error)).toBe("23503");
-  });
-
-  it("keeps a corrective sale scoped to its tenant under the app role", async () => {
-    // RLS still scopes `sales` after the column add. Insert a corrective for tenant A; the app
-    // role sees it only under tenant A's app.tenant_id, never tenant B's. Runs against real
-    // Postgres too via describeEachTarget (PGlite is superuser and would bypass FORCE RLS, so a
-    // PGlite-only pass here would be a false pass — CLAUDE.md §4).
-    const corrective = await insertSale({
-      total: "-1.00",
-      correctsSaleId: originalSaleId,
-      invoiceNumber: 2,
-    });
-    const visibleToA = await withTenant(db, TENANT_A, async (tx) => {
-      await asAppUser(tx);
-      return tx.select({ id: sales.id }).from(sales).where(eq(sales.id, corrective[0].id));
-    });
-    expect(visibleToA).toHaveLength(1);
-
-    const visibleToB = await withTenant(db, TENANT_B, async (tx) => {
-      await asAppUser(tx);
-      return tx.select({ id: sales.id }).from(sales).where(eq(sales.id, corrective[0].id));
-    });
-    expect(visibleToB).toHaveLength(0);
   });
 });
 

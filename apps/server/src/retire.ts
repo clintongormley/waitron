@@ -15,10 +15,10 @@ import type { Logger } from "./logger.js";
 
 export interface RetireDeps {
   /** The app pool — `node_membership` read/write and the identity-key read, all app-role. `app_user`
-   * holds SELECT on `node_membership` (0096) and, via `readNodeIdentityKey`, SELECT on
-   * `tenant_credentials` (0001_credentials_rls.sql); `evicted` flips no deployment axis, so unlike the
-   * promote paths this action needs NO owner pool — `app_user` holds INSERT/UPDATE on `node_membership`
-   * (0097), which is all the term-guarded persist requires. */
+   * holds SELECT on `node_membership` and, via `readNodeIdentityKey`, SELECT on
+   * `tenant_credentials` (0001_credentials_baseline_sql.sql); `evicted` flips no deployment axis, so unlike the
+   * promote paths this action needs NO owner pool — `app_user` holds INSERT/UPDATE on `node_membership`,
+   * which is all the term-guarded persist requires. */
   readonly appDb: Database;
   /** The box key ring — unseals this node's identity private key to sign the minted document. */
   readonly ring: KeyRing;
@@ -26,11 +26,13 @@ export interface RetireDeps {
   readonly tenantId: string;
   /** THIS (departing) node — the node that becomes `evicted`, and the document's `signerNodeId`. */
   readonly nodeId: string;
-  /** The disposal/drain-progress reader (the same drain the box-status `disposal` surface reports),
-   *  or `undefined` when the held document names no carrier. `undefined` on a fenced node means
-   *  "fenced, no carrier" → refuse `node.retire_no_carrier`. The caller (boot/Task 3) wraps
-   *  `readDrainProgress` on the sync_tailer pool under `withTenant`, exactly as box-status's
-   *  `readDisposal` does; retire never touches that pool itself. */
+  /**
+   * The disposal/drain-progress reader (the same drain the box-status `disposal` surface
+   * reports), or `undefined` when the held document names no carrier. `undefined` on a fenced
+   * node means "fenced, no carrier" → refuse `node.retire_no_carrier`. The caller (boot/Task 3)
+   * wraps `readDrainProgress` on the sync pool under `withTenant`, exactly as box-status's
+   * `readDisposal` does; retire never touches that pool itself.
+   */
   readonly readDrainProgress: (() => Promise<DrainProgress>) | undefined;
   /** The carrier node id the injected `readDrainProgress` reader keys its cursor lookup on — captured at
    *  BOOT (`servingPrimaryNodeId` of the held doc at boot). retireSelf re-derives the CURRENT carrier
@@ -54,7 +56,7 @@ export interface RetireResult {
  * A fenced (`sell-only`) node that has fully drained onto its carrier SELF-EVICTS (retire/evict R3;
  * decommission design §3, §6): it mints a `sell-only → evicted` membership document signed with its
  * OWN identity key and persists it term-guarded. No HTTP, no owner-pool write — `evicted` flips no
- * deployment axis, and `app_user` holds INSERT/UPDATE on `node_membership` (0097).
+ * deployment axis, and `app_user` holds INSERT/UPDATE on `node_membership`.
  *
  * ABORT-BEFORE-WRITE (promote's discipline): every gate throws BEFORE any write, and the document is
  * built and signed in memory BEFORE the persist, so a refusal or a signing failure leaves the node

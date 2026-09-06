@@ -25,15 +25,7 @@ import { locations, tenants } from "./tenants.js";
  *
  * "Exactly one default per location" is a PARTIAL unique — `UNIQUE (tenant_id, location_id) WHERE
  * is_default` — which drizzle-kit does not model, so it is hand-written in the --custom migration
- * alongside FORCE/policy/grants (the deletion-proof target of kitchen-stations.rls.test.ts).
- *
- * Deactivate, never hard-delete (`active`): a `ticket_items.station_id` snapshot may reference a row,
- * so the config CRUD flips `active = false` rather than DELETE — and `app_user` holds no DELETE here
- * (the custom migration grants only SELECT/INSERT/UPDATE). `.enableRLS()` emits only ENABLE ROW LEVEL
- * SECURITY; the FORCE ROW LEVEL SECURITY, the `kitchen_stations_tenant_isolation` policy and the grant
- * are hand-written in the paired --custom migration, exactly as 0052 does for `floor_zones`. The
- * `inmutabilidad` guard in packages/fiscal-verifactu scans every
- * tenant_id-bearing table for both RLS flags, so a missing FORCE here fails that suite.
+ * alongside the app_user grants.
  */
 export const kitchenStations = pgTable(
   "kitchen_stations",
@@ -74,12 +66,10 @@ export const kitchenStations = pgTable(
     unique("kitchen_stations_tenant_id_key").on(t.tenantId, t.id),
     // No two stations share a name within a venue.
     unique("kitchen_stations_name_key").on(t.tenantId, t.locationId, t.name),
-    // Tenant-consistent composite FK to the owning location: a station cannot point at a location of
-    // another tenant, independently of whether RLS is in force on this connection.
     foreignKey({
       columns: [t.tenantId, t.locationId],
       foreignColumns: [locations.tenantId, locations.id],
       name: "kitchen_stations_location_fk",
     }),
   ],
-).enableRLS();
+);

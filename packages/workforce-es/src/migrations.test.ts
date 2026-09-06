@@ -20,20 +20,6 @@ const suite = usePgliteDb({
 });
 
 describe("the workforce-es (convenio_config) migration set", () => {
-  it("creates convenio_config with row-level security both enabled and forced", async () => {
-    // relforcerowsecurity is the load-bearing half: ENABLE alone (drizzle's .enableRLS(), migration
-    // 0000) leaves the table owner and every superuser exempt, so the tenant policy would not bind
-    // the deployment role. FORCE comes from the hand-written 0001 — deleting its FORCE line drops
-    // relforcerowsecurity to false and fails this.
-    const result = await suite.db.execute<{
-      relrowsecurity: boolean;
-      relforcerowsecurity: boolean;
-    }>(
-      sql`select relrowsecurity, relforcerowsecurity from pg_class where relname = 'convenio_config'`,
-    );
-    expect(result.rows[0]).toEqual({ relrowsecurity: true, relforcerowsecurity: true });
-  });
-
   it("defaults every rule to the ET statutory floor / today's default for a bare row", async () => {
     // A DEFAULT row — only tenant_id and location_id supplied. Every rule takes its column default,
     // which is exactly what lets D2.0 reproduce current behaviour: 5-day week, daily-accrual headline,

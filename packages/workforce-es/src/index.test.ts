@@ -24,7 +24,7 @@ describe("the public surface", () => {
  * select never runs it, which is why convenio-config.ts's FK/unique/index/check block shows as
  * uncovered even though the resolver imports the table. Calling `getTableConfig` forces the callback
  * to run, and the assertions below are the meaningful check that convenio_config's constraints exist
- * under the names the migration and the RLS policy depend on — not a coverage stunt. Mirrors
+ * under the names the baseline uses — not a coverage stunt. Mirrors
  * packages/workforce/src/index.test.ts.
  */
 describe("convenio_config constraint declarations (forces the lazy extraConfig callback)", () => {

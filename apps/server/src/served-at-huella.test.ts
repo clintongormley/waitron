@@ -164,11 +164,12 @@ interface Shop {
  * This mirrors verify.test.ts's entorno test, which likewise uses a fresh tenant per record while
  * pinning IDEmisorFactura to one constant (there via `altaFor`'s hardcoded TEST_NIF).
  *
- * `applyVenue` registers the node's SIF under the tenant's own tax_id; re-registering under `emisorNif`
- * (registerSif revokes the old identity, mints a fresh installation number, and resets the chain to
- * empty) is what makes both shops file under one obligado NIF while each starts a first record. The
- * NumeroInstalacion differs between the two shops (a per-NIF counter) but is not hashed. Run as the
- * owner under the tenant GUC — exactly how applyVenue itself runs registerSif (no asAppUser).
+ * `applyVenue` registers the node's SIF under the tenant's own tax_id; re-registering under
+ * `emisorNif` (registerSif revokes the old identity, mints a fresh installation number, and
+ * resets the chain to empty) is what makes both shops file under one obligado NIF while each
+ * starts a first record. The NumeroInstalacion differs between the two shops (a per-NIF counter)
+ * but is not hashed. Run as the owner inside withTenant — exactly how applyVenue itself runs
+ * registerSif (no asAppUser).
  */
 async function seedShop(emisorNif: string): Promise<Shop> {
   const venue = await applyVenue(planVenue(venueRequest(nextNif()), ALL_MODULES), {
@@ -186,9 +187,9 @@ async function seedShop(emisorNif: string): Promise<Shop> {
   );
   const seeded = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
-    const agua = await createProduct(tx, {
+    const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
+    const bebidas = await createCategory(tx, cfg.tenantId, { name: "Bebidas" });
+    const agua = await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       descriptions: { [LOCALE]: "Agua mineral" },
@@ -196,7 +197,7 @@ async function seedShop(emisorNif: string): Promise<Shop> {
       unitPrice: "1.50",
       vatClass: "general",
     });
-    const cafe = await createProduct(tx, {
+    const cafe = await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       descriptions: { [LOCALE]: "Café solo" },
@@ -584,19 +585,19 @@ async function attachOption(
 ): Promise<{ groupId: string; itemId: string }> {
   return withTenant(suite.admin, shop.cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-    const group = await createOptionGroup(tx, {
+    const group = await createOptionGroup(tx, shop.cfg.tenantId, {
       name: { [LOCALE]: "Pan" },
       minSelect: 0,
       maxSelect: 1,
       required: false,
     });
-    const item = await createOptionGroupItem(tx, group.id, {
+    const item = await createOptionGroupItem(tx, shop.cfg.tenantId, group.id, {
       name: OPTION_ITEM_NAME,
       priceDelta: OPTION_ITEM_PRICE_DELTA,
       vatClass: OPTION_ITEM_VAT_CLASS,
       removeAllergens: overlay.removeAllergens,
     });
-    await setProductOptionGroups(tx, shop.aguaId, [group.id]);
+    await setProductOptionGroups(tx, shop.cfg.tenantId, shop.aguaId, [group.id]);
     return { groupId: group.id, itemId: item.id };
   });
 }

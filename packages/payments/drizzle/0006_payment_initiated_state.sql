@@ -1,1 +1,0 @@
-ALTER TYPE "public"."payment_state" ADD VALUE 'initiated';

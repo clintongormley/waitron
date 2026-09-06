@@ -23,9 +23,10 @@ import {
 import "./errors.js";
 
 // PGlite, not real Postgres: these are CONFIG verbs — a live-check SELECT plus an INSERT/DELETE with no
-// privilege or concurrency dimension. The `printer.manage` gate lives on the ROUTE (Task 5), and the
-// cross-tenant RLS + the SELECT/INSERT/DELETE grant under `app_user` are already proven against real
-// Postgres in packages/db's station-printers.rls.test.ts (Task 1). PGlite serialises every query onto
+// privilege or concurrency dimension. The `printer.manage` gate lives on the ROUTE (Task 5), the
+// composite PK and both tenant-consistent FKs are proven against real Postgres in packages/db's
+// station-printers.test.ts (Task 1), and `app_user`'s grant is pinned by the privilege matrix in
+// packages/fiscal-verifactu. PGlite serialises every query onto
 // one backend, so it would be a FALSE PASS for a concurrency test — but there is no concurrency here,
 // so it is the correct lighter target (CLAUDE.md §4), the same choice kitchen.test.ts / outbox.test.ts
 // make for their config/outbox verbs.

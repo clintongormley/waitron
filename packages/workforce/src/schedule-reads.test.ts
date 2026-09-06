@@ -19,10 +19,9 @@ import {
 } from "../test/fixtures.js";
 
 // PGlite, not real Postgres: these are person-scoped READ models over mutable planning rows — the
-// scoping predicate is application-code (RLS is tenant-only, plan fact 3), so there is no privilege
-// set and no RLS decision to prove here. The app role's grants on shifts/shift_swaps/absences are
-// proven against real Postgres elsewhere (scheduling-planning.rls.test.ts); the ROUTE that passes the
-// session's personId is proven against real Postgres in schedule-api.rls.test.ts.
+// scoping predicate is application code, so there is no privilege decision to prove here. The app
+// role's grants on shifts/shift_swaps/absences are in the privilege matrix, `packages/fiscal-verifactu/src/privileges.expected.ts`; the ROUTE that
+// passes the session's personId is proven against real Postgres in schedule-api.pg.test.ts.
 
 let tenantId: string;
 let locationId: string;
@@ -41,7 +40,7 @@ function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 
 describe("listShiftsForPerson", () => {
   it("returns only the requester's shifts in the window (never a second person's), ordered by starts_at", async () => {
-    // Person-scoping is application code (RLS is tenant-only). Prove by deletion — drop the
+    // Person-scoping is application code. Prove by deletion — drop the
     // `person_id = ${personId}` predicate and the OTHER person's shift (seeded under the same tenant)
     // leaks into the result, reddening the `map((r) => r.id)` assertion.
     const me = await seedPerson(suite.db, tenantId, `me-${crypto.randomUUID()}`);

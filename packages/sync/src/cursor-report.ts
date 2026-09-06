@@ -1,9 +1,8 @@
 // The source-side cursor-report writer: cross-node visibility for retention (spec §3.1). A
 // subscriber POSTs how far it has applied a source's log; the source records it into its OWN
 // sync_cursor as (subscriber=<peer>, origin=self, lane, seq), so pruneSyncLog — which runs where
-// sync_log lives — can hold the log at the min across every subscriber's reported cursor. Runs as
-// sync_tailer, which already holds INSERT, UPDATE on sync_cursor (0000_sync_outbox.sql:109) — no
-// new grant. sync_cursor has no tenant_id and no RLS (0000:95-99), so no withTenant is needed.
+// sync_log lives — can hold the log at the min across every subscriber's reported cursor.
+// app_user writes this database-wide operational state directly through the pool.
 import { sql } from "drizzle-orm";
 import { type Database } from "@waitron/db";
 import type { SyncLane } from "@waitron/sync-enrolment";

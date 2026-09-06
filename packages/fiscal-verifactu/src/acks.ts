@@ -95,8 +95,7 @@ export async function deleteAck(tx: Transaction, registroId: string): Promise<vo
   await tx.execute(sql`delete from acks where registro_id = ${registroId}`);
 }
 
-/** Every undelivered ack for the tenant, oldest submission first — the transport read side. Runs
- * inside `withTenant`, so the acks tenant-isolation policy matches under a non-superuser role. */
+/** Every undelivered ack for the requested tenant, oldest submission first. */
 export async function pendingAcks(db: Database, tenantId: string): Promise<Ack[]> {
   return withTenant(db, tenantId, async (tx) => {
     const { rows } = await tx.execute<{

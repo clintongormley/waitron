@@ -234,11 +234,11 @@ export function tryLoadTillConfig(
 
 /**
  * Read the venue's pay-timing mode from the till's own LOCATION row — the DB half of the config
- * `loadTillConfig` cannot resolve from the environment. Runs as the app role under the till's tenant
- * (`withTenant` + `asAppUser`), so RLS scopes the lookup to this tenant and the `eq(id)` filter
- * selects exactly the till's own location. Called ONCE at boot (`boot.ts`), not per request: the mode
- * is provisioning-time config, stable for the process lifetime, so re-reading it on every place/collect
- * would be a needless round trip on the till's hottest path.
+ * `loadTillConfig` cannot resolve from the environment. Runs as the app role under the till's
+ * tenant (`withTenant` + `asAppUser`), in the database holding this tenant; the `eq(id)` filter
+ * selects exactly the till's own location. Called ONCE at boot (`boot.ts`), not per request: the
+ * mode is provisioning-time config, stable for the process lifetime, so re-reading it on every
+ * place/collect would be a needless round trip on the till's hottest path.
  */
 export async function readOrderFlow(
   db: Database,
@@ -252,9 +252,10 @@ export async function readOrderFlow(
       .where(eq(locations.id, cfg.locationId));
     /* v8 ignore start */
     if (row === undefined) {
-      // Structurally unreachable: provisioning stamped this till with its own location, so the row
-      // always exists and RLS returns it. A till pointed at a nonexistent location is a
-      // misconfiguration that fails loudly at boot rather than dispatching against a guessed mode.
+      // Structurally unreachable: provisioning stamped this till with its own location, so the
+      // row always exists and the by-id lookup returns it. A till pointed at a nonexistent
+      // location is a misconfiguration that fails loudly at boot rather than dispatching against
+      // a guessed mode.
       throw new Error(`readOrderFlow: no location ${cfg.locationId}`);
     }
     /* v8 ignore stop */
@@ -279,11 +280,11 @@ export async function readFilingModule(
       .where(eq(nodes.id, cfg.nodeId));
     /* v8 ignore start */
     if (row === undefined) {
-      // Reachable only by operator misconfiguration: a till whose WAITRON_TILL_NODE_ID names a node
-      // that does not exist (or that RLS hides from its tenant). Provisioning stamps the till with
-      // its own node, so a correctly configured deployment never gets here; when it does, boot fails
-      // loudly rather than selecting a fiscal backend against a guessed regime. Excluded from
-      // coverage deliberately — no fixture should build that state.
+      // Reachable only by operator misconfiguration: a till whose WAITRON_TILL_NODE_ID names a
+      // node that does not exist. Provisioning stamps the till with its own node, so a correctly
+      // configured deployment never gets here; when it does, boot fails loudly rather than
+      // selecting a fiscal backend against a guessed regime. Excluded from coverage deliberately
+      // — no fixture should build that state.
       throw new Error(`readFilingModule: no node ${cfg.nodeId}`);
     }
     /* v8 ignore stop */

@@ -1,15 +1,34 @@
-import { eq, sql } from "drizzle-orm";
-import { afterEach, beforeEach, expect, it } from "vitest";
 import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { eq, sql } from "drizzle-orm";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
-import { describeEachTarget } from "../testing/harness.js";
-import { asAppUser } from "../testing/roles.js";
+import { usePgliteDb } from "../testing/lifecycle.js";
+import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedNode } from "../testing/seed.js";
-import { withTenant } from "../tenancy.js";
 import { catalogues, optionGroupItems, optionGroups, products } from "./catalogue.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
 import { locations, tenants, tills } from "./tenants.js";
+
+const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+
+afterEach(async () => {
+  await suite.db.transaction(async (tx) => {
+    // Fixture cleanup uses the sync gate to remove lines whose parent is already terminal.
+    // SET LOCAL restores the gate before the next case exercises the ordinary write path.
+    await tx.execute(sql`set local app.sync_apply = 'on'`);
+    await tx.execute(sql`delete from working_order_lines`);
+    await tx.execute(sql`delete from working_orders`);
+    await tx.execute(sql`delete from option_group_items`);
+    await tx.execute(sql`delete from option_groups`);
+    await tx.execute(sql`delete from products`);
+    await tx.execute(sql`delete from catalogues`);
+    await tx.execute(sql`delete from nodes`);
+    await tx.execute(sql`delete from tills`);
+    await tx.execute(sql`delete from locations`);
+    await tx.execute(sql`delete from tenants`);
+  });
+});
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
@@ -117,25 +136,12 @@ const LINE = {
   lineTotal: "1.30",
 };
 
-describeEachTarget("working_orders", (target) => {
+describe("working_orders", () => {
   let db: Database;
 
   beforeEach(async () => {
-    // No truncate before seed(): target.create() already returns a freshly
-    // migrated, empty database per test (see allocate-number.test.ts's
-    // beforeEach for why the truncate that used to run here was always a
-    // no-op, and why Task 8 made it an active problem rather than harmless
-    // boilerplate).
-    db = await target.create();
+    db = suite.db;
     await seed(db);
-  });
-
-  // This package's convention (see tenancy.test.ts): without it, a pg Pool
-  // per test is left open when the postgres target's container stops at
-  // describe-level teardown, and it surfaces as an unhandled FATAL 57P01
-  // rejection rather than a test failure.
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
   });
 
   it("opens an order in the open state with no settled_at", async () => {
@@ -290,16 +296,6 @@ describeEachTarget("working_orders", (target) => {
     expect(pgErrorMessage(error)).toMatch(/cannot transition from abandoned to abandoned/);
   });
 
-  it("hides another tenant's order from the app role", async () => {
-    await openOrder(db);
-    await openOrder(db, TENANT_B, TILL_B1);
-    const visible = await withTenant(db, TENANT_A, async (tx) => {
-      await asAppUser(tx);
-      return tx.select({ id: workingOrders.id }).from(workingOrders);
-    });
-    expect(visible).toHaveLength(1);
-  });
-
   it("carries a nullable node_id column referencing nodes", async () => {
     // Node rekey scaffolding (Task 3): node_id is added NULLABLE with a plain FK to `nodes`, and
     // working_orders stays nullable permanently in this slice — no writer yet (design §5).
@@ -365,21 +361,12 @@ describeEachTarget("working_orders", (target) => {
   });
 });
 
-describeEachTarget("working_order_lines", (target) => {
+describe("working_order_lines", () => {
   let db: Database;
 
   beforeEach(async () => {
-    // No truncate before seed(): target.create() already returns a freshly
-    // migrated, empty database per test (see allocate-number.test.ts's
-    // beforeEach for why the truncate that used to run here was always a
-    // no-op, and why Task 8 made it an active problem rather than harmless
-    // boilerplate).
-    db = await target.create();
+    db = suite.db;
     await seed(db);
-  });
-
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
   });
 
   it("adds a line to an open order", async () => {
@@ -514,9 +501,6 @@ describeEachTarget("working_order_lines", (target) => {
   });
 
   it("carries nullable note + doneness columns (KDS-only, NON-FISCAL — spec §2/§3)", async () => {
-    // Per-line kitchen customisation: `note` (free-text instruction) and `doneness` (the meat-doneness
-    // enum) are additive NULLABLE columns, covered by working_order_lines' existing FORCE-RLS policy +
-    // app_user grants. NON-FISCAL: snapshotted to ticket_items at fire, never read into a filed record.
     const meta = await rows<{
       column_name: string;
       is_nullable: string;
@@ -573,28 +557,6 @@ describeEachTarget("working_order_lines", (target) => {
     );
     expect(pgErrorMessage(error)).toMatch(/violates foreign key constraint/);
   });
-
-  it("hides another tenant's line from the app role", async () => {
-    const orderA = await openOrder(db);
-    await db
-      .insert(workingOrderLines)
-      .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: orderA });
-    const orderB = await openOrder(db, TENANT_B, TILL_B1);
-    // LOCATION_B configures only "es" (see seed()), so tenant B's line must
-    // carry exactly that locale rather than the shared bilingual LINE fixture.
-    await db.insert(workingOrderLines).values({
-      ...LINE,
-      productId: productB,
-      tenantId: TENANT_B,
-      workingOrderId: orderB,
-      descriptions: { es: "Café solo" },
-    });
-    const visible = await withTenant(db, TENANT_A, async (tx) => {
-      await asAppUser(tx);
-      return tx.select({ id: workingOrderLines.id }).from(workingOrderLines);
-    });
-    expect(visible).toHaveLength(1);
-  });
 });
 
 /**
@@ -612,16 +574,12 @@ describeEachTarget("working_order_lines", (target) => {
  *   working_order_lines only, never on the filed sale_lines (which stay decoupled from the mutable
  *   catalogue).
  */
-describeEachTarget("working_order_lines — modifier links", (target) => {
+describe("working_order_lines — modifier links", () => {
   let db: Database;
 
   beforeEach(async () => {
-    db = await target.create();
+    db = suite.db;
     await seed(db);
-  });
-
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
   });
 
   // Raw insert so the RED phase fails on the missing column, not a TypeScript compile error against

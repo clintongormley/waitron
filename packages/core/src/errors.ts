@@ -74,7 +74,7 @@ import "@waitron/shared";
  * only move available. `sale.tender_shortfall`'s identity is now `sum(amount) = total +
  * sum(corrections) + sum(tip_amount)`: the tip moved off the sale and onto each tender
  * (`tenders.tip_amount`), and `due` nets in every rectificativa correcting the sale (invoice-first
- * slice, 2026-08-03 — in lockstep with migration 0021's coverage trigger).
+ * slice, 2026-08-03 — in lockstep with the baseline's coverage trigger).
  *
  * **Catalogue slice addition (2026-08-05).** `sale.total_mismatch`, by the same `declare module`
  * mechanism and for the same reason as every code above: it names a DOMAIN concept ("the supplied
@@ -99,7 +99,7 @@ declare module "@waitron/shared" {
      * per tender (`tenders.tip_amount`), not on the sale, and `due` nets in every rectificativa
      * correcting this sale (signed `sales.total` where `corrects_sale_id = saleId`; usually
      * negative), so a corrected-down sale settles at the corrected amount (invoice-first slice,
-     * 2026-08-03). This matches migration 0021's coverage trigger identity in lockstep, so the app
+     * 2026-08-03). This matches the baseline's coverage trigger identity in lockstep, so the app
      * check and the trigger cannot drift. Despite the name it still fires in BOTH directions:
      * `charged` under OR over `due`. Kept distinct from
      * `sale.tender_unsettled` so a translator can tell "still waiting on a payment" from "the
@@ -112,8 +112,7 @@ declare module "@waitron/shared" {
       charged: string;
     };
     /** Thrown by `recordSale` when `RecordSaleInput.seriesId` names no row in `invoice_series` —
-     * either it never existed, or row-level security hid a series belonging to another tenant,
-     * which reads identically from here (spec's own fail-closed shape for a cross-tenant probe). */
+     * either it never existed, or the tenant predicate excluded it. */
     "sale.series_not_found": { seriesId: string; tenantId: string };
     /** Thrown by `recordSale` when `RecordSaleInput.seriesId` names a real series, but one that
      * belongs to a DIFFERENT node than `RecordSaleInput.nodeId` (node-id rekey, 2026-08-03: a
@@ -143,12 +142,11 @@ declare module "@waitron/shared" {
      * the same way `record-sale.test.ts`'s "never reissues a number" test already does — neither
      * `recordSale` nor `recordVoid` catches and translates that violation into this code. */
     "sale.number_reused": { seriesId: string; invoiceNumber: number };
-    /** Thrown by `recordVoid` (`./record-void.ts`) when `saleId` names no row in `sales` — either
-     * it never existed, or row-level security hid a sale belonging to another tenant, which reads
-     * identically from here (the same fail-closed shape `sale.series_not_found` already uses for
-     * an analogous cross-tenant probe). An operational failure, not a fiscal one: NO FISCAL
-     * CONDITION BLOCKS a void applies to a chain-integrity failure, never to "there is nothing
-     * here to void". */
+    /**
+     * Thrown by `recordVoid` (`./record-void.ts`) when `saleId` names no row in `sales`. An
+     * operational failure, not a fiscal one: NO FISCAL CONDITION BLOCKS a void applies to a
+     * chain-integrity failure, never to "there is nothing here to void".
+     */
     "sale.not_found": { saleId: string };
     /** Thrown by `recordVoid` when `sale_voids.sale_id` already carries a row for this sale — the
      * translation of `sale_voids_sale_id_key`'s unique violation (`packages/db/src/schema/
@@ -157,7 +155,7 @@ declare module "@waitron/shared" {
      * condition, and must not be confused with a chain-verification failure. */
     "sale.already_voided": { saleId: string };
     /** Thrown by `settleSale` when the sale is already settled. Three sources converge on this one
-     * code (`packages/db/drizzle/0012_sale_settlement.sql`): the sequential retry is caught by the
+     * code (`packages/db/drizzle/0001_db_baseline_sql.sql`): the sequential retry is caught by the
      * prior SELECT, and a concurrent loser is caught at *whichever* insert it reaches — the
      * `sale_settlements` `UNIQUE (tenant_id, sale_id)` violation (`sale_settlements_sale_key`,
      * detected via `isUniqueViolation`) when it collides on the settlement row, OR the `tenders`

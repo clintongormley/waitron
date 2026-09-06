@@ -40,11 +40,12 @@ import type { Logger } from "./logger.js";
 
 /**
  * Everything the dashboard's booking routes need: `db` + this venue's FULL `TillConfig`. Unlike
- * `PurchasingApiDeps`'s `{ tenantId }`, bookings carry the whole box config because `seatBooking` opens
- * a real TS-1 tab (`openTab` → `allocateOrderNumber`) that reads `cfg.tillId`/`cfg.nodeId` to mint the
- * order number, which a narrow `{ tenantId, locationId }` cannot supply; `createBooking`/`listBookings`
- * additionally read `cfg.locationId` (the day-list / creation scope RLS cannot supply). `boot.ts` passes
- * the same `till` object every sibling mount holds, so scope cannot drift.
+ * `PurchasingApiDeps`'s `{ tenantId }`, bookings carry the whole box config because `seatBooking`
+ * opens a real TS-1 tab (`openTab` → `allocateOrderNumber`) that reads `cfg.tillId`/`cfg.nodeId`
+ * to mint the order number, which a narrow `{ tenantId, locationId }` cannot supply;
+ * `createBooking`/`listBookings` additionally read `cfg.locationId` (the day-list / creation
+ * location scope). `boot.ts` passes the same `till` object every sibling mount holds, so scope
+ * cannot drift.
  */
 export interface BookingsApiDeps {
   db: Database;
@@ -161,12 +162,13 @@ function screenPatch(v: Record<string, unknown>): UpdateBookingPatch {
 }
 
 /**
- * Mounts the dashboard's gated booking write group on an existing Hono app — `mountPurchasingApi`'s
- * sibling, attached to the SAME app (the `mountWebhook`/`mountTillApi` convention). Every route wraps
- * its handler in `run`, calls `requireManagementSession(c)` (→ 401 before any DB work) and then, inside
- * `withTenant` + `asAppUser`, `authorizeManager(...)` (→ 403) before the `./bookings.js` verb, so RLS
- * scopes each read/write to this server's one tenant and the `booking.manage` gate runs on every route
- * through one constant. No fiscal path is touched: `seatBooking` opens a pre-fiscal working order only.
+ * The deployment holds one tenant per database. Mounts the dashboard's gated booking write group
+ * on an existing Hono app — `mountPurchasingApi`'s sibling, attached to the SAME app (the
+ * `mountWebhook`/`mountTillApi` convention). Every route wraps its handler in `run`, calls
+ * `requireManagementSession(c)` (→ 401 before any DB work) and then, inside `withTenant` +
+ * `asAppUser`, `authorizeManager(...)` (→ 403) before the `./bookings.js` verb, in this database.
+ * The `booking.manage` gate runs on every route through one constant. No fiscal path is touched:
+ * `seatBooking` opens a pre-fiscal working order only.
  */
 export function mountBookingsApi(app: Hono, deps: BookingsApiDeps, log: Logger): void {
   const { cfg } = deps;

@@ -11,16 +11,8 @@ import { mountReportApi } from "./report-api.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
 import "./errors.js";
 
-// PGlite, not real Postgres: this suite proves the `/reports/overview` ROUTE — its request/response
-// boundary, the `report.view` gate + STATUS map, and the value mapping from `computeDailyClose` /
-// `computeTopSellers` / the open-tables count onto the overview JSON — end to end in-process, the way
-// `report-api.test.ts` proves the modelo 303 export route. Its own file (not that suite's) because the
-// overview anchors on TODAY's business day (`currentBusinessDay`), and today's date falls inside the
-// modelo 303 suite's August 2026 período — a today-sale seeded into that suite's tenant would corrupt
-// its box-27 fixtures. A fresh tenant here keeps the two independent. The differential RLS-isolation +
-// the app-role-can-SELECT-dining_tables proofs are the real-Postgres suite (report-api.rls.test.ts),
-// which PGlite cannot show because every PGlite connection is a superuser that bypasses grants + FORCE
-// RLS (CLAUDE.md §4).
+// PGlite exercises the overview route and its value mapping from report aggregates.
+// Keep current-day sales in this fixture separate from the fixed-period VAT-return fixture.
 const noopLog: Logger = () => {};
 
 let tenantId: string;
@@ -48,7 +40,7 @@ const SEED = {
 
 /** Seed one sale + its tender + one sale_line ON TODAY's business day (issued/settled at `now()`, so
  * the venue-clock business day the route computes from `now()` always contains them — the insert and
- * the read share the DB clock). Superuser insert (RLS bypassed — pure setup). */
+ * the read share the DB clock). Superuser insert (fixture setup). */
 async function seedTodaySale(db: Database): Promise<void> {
   const sale = await db.execute<{ id: string }>(sql`
     insert into sales (
@@ -138,10 +130,10 @@ const suite = usePgliteDb({
       await asAppUser(tx);
       const mgr = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
-        values (current_tenant_id(), 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+        values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
       const stf = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
-        values (current_tenant_id(), 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+        values (${tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
       const managerSession = await startManagementSession(tx, {
         tenantId,
         personId: mgr.rows[0]!.id,

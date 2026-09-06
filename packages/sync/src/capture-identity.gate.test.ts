@@ -4,34 +4,28 @@ import { withTenant, type Database, type Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 
-// Real Postgres, not PGlite: this suite proves the identity CONFIG capture triggers under a genuine
-// non-superuser app role, with FORCE RLS active on persons/webauthn_credentials. PGlite connects as a
-// superuser and bypasses RLS, so it is a false pass here (CLAUDE.md §4). The whole migration manifest
-// runs (with `sync` last), so the container carries the 0007 identity capture triggers over the
-// already-created identity tables. The deployment role app_login — a non-superuser, non-BYPASSRLS
-// LOGIN member of app_user — is created once in src/testing/global-setup.ts and shared across the gate
-// suites; the suite reaches it below with `postgres.pg.connectAs("app_login", "app_pw")`.
+// PostgreSQL exercises identity capture through a non-superuser app_user member; PGlite's
+// superuser sessions cannot check the caller's grants. The shared template includes identity tables
+// and their capture triggers. Global setup creates app_login once per cluster.
 const postgres = useTemplateDb({ template: "manifest" });
 
 // A producing node's id — capture writes it into sync_log.origin_id from the app.node_id GUC.
 const NODE_A = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
-/** Mirrors withTenant, but also sets app.node_id so the capture trigger records the origin. */
-async function withTenantNode<T>(
+/** Runs the callback in one transaction with app.node_id set for capture's producing origin. */
+async function withNode<T>(
   db: Database,
-  tenantId: string,
   nodeId: string,
   fn: (tx: Transaction) => Promise<T>,
 ): Promise<T> {
   return db.transaction(async (tx) => {
-    await tx.execute(sql`select set_config('app.tenant_id', ${tenantId}, true)`);
     await tx.execute(sql`select set_config('app.node_id', ${nodeId}, true)`);
     return fn(tx);
   });
 }
 
 /**
- * Seeds one tenant plus a location, till and person, as the superuser admin (RLS bypassed; this is
+ * Seeds one tenant plus a location, till and person, as the superuser admin (fixture
  * setup, not the thing under test). English fixture values throughout — packages/sync/src is inside
  * the english-only guard.
  */
@@ -72,14 +66,14 @@ describe("identity CONFIG tables capture; ephemeral auth tables do NOT (spec §2
     const tenantId = await seedTenant(postgres.admin);
     const probe = await postgres.pg.connectAs("app_login", "app_pw");
     try {
-      const ins = await withTenantNode(probe, tenantId, NODE_A, (tx) =>
+      const ins = await withNode(probe, NODE_A, (tx) =>
         tx.execute<{ id: string }>(
           sql`insert into persons (tenant_id, display_name, pin_hash, role)
               values (${tenantId}, 'Ada', 'hash', 'staff') returning id`,
         ),
       );
       const personId = ins.rows[0]!.id;
-      await withTenantNode(probe, tenantId, NODE_A, (tx) =>
+      await withNode(probe, NODE_A, (tx) =>
         tx.execute(sql`update persons set role = 'manager' where id = ${personId}`),
       );
       const rows = await postgres.admin.execute<{ op: string; origin: string }>(sql`
@@ -98,14 +92,14 @@ describe("identity CONFIG tables capture; ephemeral auth tables do NOT (spec §2
     const { tenantId, personId } = await seedTenantPersonTill(postgres.admin);
     const probe = await postgres.pg.connectAs("app_login", "app_pw");
     try {
-      const cred = await withTenantNode(probe, tenantId, NODE_A, (tx) =>
+      const cred = await withNode(probe, NODE_A, (tx) =>
         tx.execute<{ id: string }>(
           sql`insert into webauthn_credentials (tenant_id, person_id, credential_id, public_key)
               values (${tenantId}, ${personId}, 'cred-1', 'pk-1') returning id`,
         ),
       );
       const credId = cred.rows[0]!.id;
-      await withTenantNode(probe, tenantId, NODE_A, (tx) =>
+      await withNode(probe, NODE_A, (tx) =>
         tx.execute(sql`delete from webauthn_credentials where id = ${credId}`),
       );
       const del = await postgres.admin.execute<{ id: string }>(sql`
@@ -160,7 +154,6 @@ describe("identity CONFIG tables capture; ephemeral auth tables do NOT (spec §2
     const probe = await postgres.pg.connectAs("app_login", "app_pw");
     async function applyStyleInsert(name: string): Promise<void> {
       await probe.transaction(async (tx) => {
-        await tx.execute(sql`select set_config('app.tenant_id', ${tenantId}, true)`);
         await tx.execute(sql`select set_config('app.sync_apply', 'on', true)`);
         await tx.execute(sql`insert into persons (tenant_id, display_name, pin_hash, role)
                              values (${tenantId}, ${name}, 'hash', 'staff')`);

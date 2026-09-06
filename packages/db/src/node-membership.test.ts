@@ -1,3 +1,4 @@
+// Real PostgreSQL: checks JSONB decoding through the node-postgres driver alongside PGlite logic tests.
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { SignedMembershipDocument } from "@waitron/membership";
@@ -11,11 +12,13 @@ import {
 } from "./node-membership.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { captureError } from "./testing/errors.js";
-import { usePgliteDb } from "./testing/lifecycle.js";
+import { usePgliteDb, useTemplateDb } from "./testing/lifecycle.js";
 
-// PGlite, not real Postgres: the accessor round-trip is pure SQL logic (upsert/read of a singleton),
-// with no privilege or RLS behaviour to observe. The grant read-back PGlite cannot show
-// authoritatively lives in node-membership.rls.test.ts.
+// PGlite for the accessor round-trip: it is pure SQL logic (upsert/read of a singleton), with no
+// privilege behaviour to observe. The one thing PGlite cannot answer is how the REAL `pg` driver
+// decodes the `document` jsonb column, so that single case runs against a container at the bottom of
+// this file. `app_user`'s grants on `node_membership` are pinned by the privilege matrix
+// (packages/fiscal-verifactu/src/privileges.expected.ts).
 
 function doc(term: number): SignedMembershipDocument {
   return {
@@ -146,5 +149,40 @@ describe("persistNodeMembershipIfNewer (the term-guarded runtime-adoption write)
       }),
     ).rejects.toThrow("superseded");
     expect((await readNodeMembership(pg.db))?.body.term).toBe(7); // untouched
+  });
+});
+
+// Real Postgres, not PGlite: the `document` column is `jsonb`, and CLAUDE.md §4 records that type
+// parsing can diverge between PGlite and a real pg driver (the `name[]` OID 1003 case) — so a real-pg
+// write→read `toEqual` is the receipt that the driver hands `readNodeMembership` a parsed object, not
+// a wire literal, exactly as PGlite does.
+describe("node_membership on real Postgres", () => {
+  const suite = useTemplateDb({ template: "core" });
+
+  it("round-trips the whole document through the jsonb column on real Postgres", async () => {
+    // Owner connection (suite.admin) — the owner/promote write path (app_user's INSERT/UPDATE is the
+    // runtime-adoption path, not this). Proves the jsonb read returns a parsed object equal to what
+    // was written, on the real pg driver as well as PGlite.
+    const document: SignedMembershipDocument = {
+      body: {
+        term: 4,
+        nodes: [
+          { nodeId: "server-1", contactUrl: "https://s1", standing: "sell-only" },
+          { nodeId: "server-2", contactUrl: "https://s2", standing: "serving-primary" },
+        ],
+      },
+      signerNodeId: "server-2",
+      signature: "sig-4",
+      endorsements: [
+        { nodeId: "server-2", publicKey: "pk-2", endorsedBy: "server-1", signature: "esig" },
+      ],
+    };
+    await writeNodeMembership(suite.admin, document);
+    expect(await readNodeMembership(suite.admin)).toEqual(document);
+
+    const term = await suite.admin.execute<{ term: string }>(
+      sql`select term from node_membership where id = 1`,
+    );
+    expect(Number(term.rows[0]?.term)).toBe(4);
   });
 });

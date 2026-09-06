@@ -7,15 +7,6 @@ import { tenants } from "./tenants.js";
  * the other per-tenant config tables (`kitchen_stations`, `floor_zones`). One status is set on a
  * table at a time via `dining_tables.status_id`
  * (a single nullable composite FK, design §2b); this table is the authorable SET.
- *
- * Deactivate, never hard-delete (`active`): a `dining_tables.status_id` may reference a row, so the
- * config CRUD flips `active = false` rather than DELETE — and `app_user` holds no DELETE here (the
- * custom migration grants only SELECT/INSERT/UPDATE). `.enableRLS()` emits only ENABLE ROW LEVEL
- * SECURITY; the FORCE ROW LEVEL SECURITY, the `table_service_statuses_tenant_isolation` policy and the
- * grant are hand-written in the paired --custom migration, exactly as the other per-tenant config
- * tables' custom migrations do.
- * The `inmutabilidad` guard in packages/fiscal-verifactu scans every tenant_id-bearing table for both
- * RLS flags, so a missing FORCE here fails that suite.
  */
 export const tableServiceStatuses = pgTable(
   "table_service_statuses",
@@ -47,4 +38,4 @@ export const tableServiceStatuses = pgTable(
     // map to `status.label_taken`.
     unique("table_service_statuses_tenant_label_key").on(t.tenantId, t.label),
   ],
-).enableRLS();
+);

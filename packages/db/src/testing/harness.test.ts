@@ -1,3 +1,4 @@
+// Real PostgreSQL: tests both target factories, including creation of a real PostgreSQL database.
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { describeEachTarget, dockerAvailable, resolveTargets } from "./harness.js";

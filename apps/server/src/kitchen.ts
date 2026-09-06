@@ -14,11 +14,12 @@ import {
 import type { Transaction } from "@waitron/db";
 import type { TillConfig } from "./till-config.js";
 
-// KDS-1 (design §3a) station config + routing verbs. Config only — plain inserts / by-id UPDATEs on the
-// caller's transaction under its tenant/app_user scope; the `till.configure` gate is applied at the ROUTE
-// layer (Task 7, the layout-routes model), exactly as the FP-1 zone/table verbs in tables.ts rely on RLS
-// + the route's authorizeManager rather than gating inside the verb. Deliberately imports nothing from
-// working-order.ts — the `order_prep` rework (Tasks 3/4/6) leaves that module broken mid-branch.
+// KDS-1 (design §3a) station config + routing verbs. Config only — plain inserts / by-id UPDATEs
+// on the caller's transaction under its tenant/app_user scope; the `till.configure` gate is
+// applied at the ROUTE layer (Task 7, the layout-routes model), exactly as the FP-1 zone/table
+// verbs in tables.ts rely on the route's authorizeManager rather than gating inside the verb.
+// Deliberately imports nothing from working-order.ts — the `order_prep` rework (Tasks 3/4/6)
+// leaves that module broken mid-branch.
 
 /** A configured kitchen station as the CRUD surface returns it — the slim shape the config editor and
  *  the station picker both read. `createdAt` is INTERNAL, not part of this surface (the same choice
@@ -41,14 +42,15 @@ export interface Station {
 }
 
 /**
- * Assert `stationId` names a LIVE station of THIS venue — present, `active`, and in `cfg.locationId`.
- * NULL-or-false → `station.not_found`, folding "absent / another tenant's (RLS-hidden) / another venue's"
- * and "deactivated" into the one code (errors.ts explains why the inactive case is not distinct). The
- * tenant-consistent `categories_station_fk`/`products_station_fk` (and the default's own scope) enforce
- * only same-TENANT existence — they can see neither `active` nor the location — so this explicit read is
- * what rejects a retired or cross-venue station the FK would accept. One round trip via a scalar subquery,
- * the shape tables.ts's `setTableStatus` uses; RLS confines the read to the tenant, the `location_id`
- * predicate narrows it to this venue.
+ * The deployment holds one tenant per database. Assert `stationId` names a LIVE station of THIS
+ * venue — present, `active`, and in `cfg.locationId`. NULL-or-false → `station.not_found`,
+ * folding "absent / another venue's" and "deactivated" into the one code (errors.ts explains why
+ * the inactive case is not distinct). The tenant-consistent
+ * `categories_station_fk`/`products_station_fk` (and the default's own scope) enforce only
+ * same-TENANT existence — they can see neither `active` nor the location — so this explicit read
+ * is what rejects a retired or cross-venue station the FK would accept. One round trip via a
+ * scalar subquery, the shape tables.ts's `setTableStatus` uses; the `location_id` predicate
+ * narrows it to this venue.
  */
 export async function requireLiveStation(
   tx: Transaction,
@@ -122,9 +124,12 @@ export async function createStation(
   }
 }
 
-/** The venue's ACTIVE stations, by `display_order` then `name`. RLS confines the read to the tenant; the
- *  location filter narrows to this till's venue — the same active-only, location-scoped shape tables.ts's
- *  {@link listZones} uses (a deactivated station is not a routing/display target). */
+/**
+ * The venue's ACTIVE stations, by `display_order` then `name`. The deployment holds one tenant
+ * per database. The location filter narrows to this till's venue — the same active-only,
+ * location-scoped shape tables.ts's {@link listZones} uses (a deactivated station is not a
+ * routing/display target).
+ */
 export async function listStations(tx: Transaction, cfg: TillConfig): Promise<Station[]> {
   return tx
     .select({
@@ -143,21 +148,22 @@ export async function listStations(tx: Transaction, cfg: TillConfig): Promise<St
 }
 
 /**
- * Edit a station's `name`/`displayOrder`/`active`/timing-thresholds (any subset) — NOT `is_default`,
- * which only {@link setDefaultStation} may flip (so the partial unique is never risked by a plain
- * update). Reactivation is `updateStation({ active: true })`, the `update`-shaped surface tables.ts's
- * {@link updateZone} uses. An absent id (or another tenant's, RLS-hidden) throws `station.not_found`; a
- * name collision throws `station.name_taken`. The three `*AfterMinutes` fields (KDS order-timing
- * alerts, design §8) are validated by the ROUTE before this is called — positive integers with
- * `warm < overdue < forgotten` — so the raw `kitchen_stations_thresholds_ordered` CHECK (23514) is
- * never reachable from here; this verb only forwards whatever the caller already validated, the same
- * division of labour `name`/`displayOrder` already have with their route-side screens.
+ * Edit a station's `name`/`displayOrder`/`active`/timing-thresholds (any subset) — NOT
+ * `is_default`, which only {@link setDefaultStation} may flip (so the partial unique is never
+ * risked by a plain update). Reactivation is `updateStation({ active: true })`, the
+ * `update`-shaped surface tables.ts's {@link updateZone} uses. An absent id throws
+ * `station.not_found`; a name collision throws `station.name_taken`. The three `*AfterMinutes`
+ * fields (KDS order-timing alerts, design §8) are validated by the ROUTE before this is called —
+ * positive integers with `warm < overdue < forgotten` — so the raw
+ * `kitchen_stations_thresholds_ordered` CHECK (23514) is never reachable from here; this verb
+ * only forwards whatever the caller already validated, the same division of labour
+ * `name`/`displayOrder` already have with their route-side screens.
  */
 export async function updateStation(
   tx: Transaction,
-  // Kept for a uniform `(tx, cfg, …)` verb surface; this by-id update relies on RLS for the tenant
-  // scope, so the config is unused here (the repo idiom for an interface-mandated unused param — see
-  // tables.ts's updateZone).
+  // The deployment holds one tenant per database. Kept for a uniform `(tx, cfg, …)` verb surface;
+  // this update filters by id, so the config is unused here (the repo idiom for an
+  // interface-mandated unused param — see tables.ts's updateZone).
   _cfg: TillConfig,
   id: string,
   patch: {
@@ -248,13 +254,15 @@ export async function setDefaultStation(
 }
 
 /**
- * Set (or clear, with `null`) a category's DEFAULT routing station (KDS-1 §2b) — the category-level route
- * a fired line falls to when its product names no override. A non-null `stationId` must be a LIVE station
- * of this venue ({@link requireLiveStation}, `station.not_found` otherwise); clearing (null) skips the
- * check, the shape tables.ts's `setTableStatus` uses for a null status. The UPDATE is by category id under
- * RLS (categories are tenant-wide, no location column): a `categoryId` this tenant does not own matches no
- * row and is a no-op — the route layer (Task 7) resolves category ids against the catalogue surface, and
- * KDS-1 mints no `category.not_found` (spec §6 enumerates only the three `station.*` codes + `ticket.*`).
+ * The deployment holds one tenant per database. Set (or clear, with `null`) a category's DEFAULT
+ * routing station (KDS-1 §2b) — the category-level route a fired line falls to when its product
+ * names no override. A non-null `stationId` must be a LIVE station of this venue ({@link
+ * requireLiveStation}, `station.not_found` otherwise); clearing (null) skips the check, the shape
+ * tables.ts's `setTableStatus` uses for a null status. The UPDATE is by category id in this
+ * database (categories have no location column): an absent `categoryId` matches no row and is a
+ * no-op — the route layer (Task 7) resolves category ids against the catalogue surface, and KDS-1
+ * mints no `category.not_found` (spec §6 enumerates only the three `station.*` codes +
+ * `ticket.*`).
  */
 export async function setCategoryStation(
   tx: Transaction,
@@ -269,11 +277,12 @@ export async function setCategoryStation(
 }
 
 /**
- * Set (or clear, with `null`) a product's OVERRIDE routing station (KDS-1 §2b) — the per-product route
- * that wins over its category default. Same shape as {@link setCategoryStation}: a non-null `stationId`
- * must be a LIVE station of this venue (`station.not_found` otherwise), null clears it, and the UPDATE is
- * by product id under RLS (a `productId` this tenant does not own is a no-op — the route layer resolves
- * product ids, and KDS-1 mints no `product.not_found`).
+ * The deployment holds one tenant per database. Set (or clear, with `null`) a product's OVERRIDE
+ * routing station (KDS-1 §2b) — the per-product route that wins over its category default. Same
+ * shape as {@link setCategoryStation}: a non-null `stationId` must be a LIVE station of this
+ * venue (`station.not_found` otherwise), null clears it, and the UPDATE is by product id in this
+ * database (an absent `productId` is a no-op — the route layer resolves product ids, and KDS-1
+ * mints no `product.not_found`).
  */
 export async function setProductStation(
   tx: Transaction,
@@ -295,14 +304,16 @@ export async function setProductStation(
 export type BumpMode = "line" | "ticket";
 
 /**
- * Set the venue's whole-ticket bump mode (KDS-1 §2e) — a single per-location flag on `locations.bump_mode`
- * (`line` default / `ticket`), scoped to `cfg.locationId` under RLS. Written via a parameterised `sql`
- * update rather than a Drizzle `.update(locations)` because `@waitron/db`'s enumerated exports map does
- * NOT publish the `locations` table object (CLAUDE.md §3) — the same raw-`sql` shape the `order_flow`
- * flip uses in the till suites. `mode` is a typed `BumpMode`, so the value reaching the enum column is
- * always one of its two members (the route validates the request field before calling); `${mode}` binds
- * as a parameter (never string-concatenated) and PostgreSQL coerces it to the `bump_mode` enum in the
- * assignment context. `till.configure`-gated at the ROUTE (Task 7), as the other config verbs are.
+ * Set the venue's whole-ticket bump mode (KDS-1 §2e) — a single per-location flag on
+ * `locations.bump_mode` (`line` default / `ticket`), scoped to `cfg.locationId` in the database
+ * holding this tenant. Written via a parameterised `sql` update rather than a Drizzle
+ * `.update(locations)` because `@waitron/db`'s enumerated exports map does NOT publish the
+ * `locations` table object (CLAUDE.md §3) — the same raw-`sql` shape the `order_flow` flip uses
+ * in the till suites. `mode` is a typed `BumpMode`, so the value reaching the enum column is
+ * always one of its two members (the route validates the request field before calling); `${mode}`
+ * binds as a parameter (never string-concatenated) and PostgreSQL coerces it to the `bump_mode`
+ * enum in the assignment context. `till.configure`-gated at the ROUTE (Task 7), as the other
+ * config verbs are.
  */
 export async function setBumpMode(tx: Transaction, cfg: TillConfig, mode: BumpMode): Promise<void> {
   await tx.execute(sql`update locations set bump_mode = ${mode} where id = ${cfg.locationId}`);
@@ -323,13 +334,14 @@ export async function setBumpMode(tx: Transaction, cfg: TillConfig, mode: BumpMo
 export type FireControl = (typeof fireControlMode.enumValues)[number];
 
 /**
- * Read the venue's fire-control setting (`locations.fire_control`), scoped to `cfg.locationId` under RLS.
- * The read counterpart of {@link setFireControl}, for the dashboard config surface's toggle (spec §3a:
- * the setting is read AND written with the other venue config). Read via a parameterised `sql` select
- * via a parameterised `sql` select — the house shape the sibling venue-config verbs ({@link setBumpMode})
- * use for these single-column `locations` read/writes. (A Drizzle `.select(locations)` is available too:
- * `@waitron/db`'s barrel DOES re-export `locations`, imported at e.g. till-api.ts:5 — the raw `sql` is a
- * style choice, not a necessity.) The column is `NOT NULL DEFAULT 'waiter'`, so a row always yields one
+ * Read the venue's fire-control setting (`locations.fire_control`), scoped to `cfg.locationId` in
+ * the database holding this tenant. The read counterpart of {@link setFireControl}, for the
+ * dashboard config surface's toggle (spec §3a: the setting is read AND written with the other
+ * venue config). Read via a parameterised `sql` select via a parameterised `sql` select — the
+ * house shape the sibling venue-config verbs ({@link setBumpMode}) use for these single-column
+ * `locations` read/writes. (A Drizzle `.select(locations)` is available too: `@waitron/db`'s
+ * barrel DOES re-export `locations`, imported at e.g. till-api.ts:5 — the raw `sql` is a style
+ * choice, not a necessity.) The column is `NOT NULL DEFAULT 'waiter'`, so a row always yields one
  * of its enum members.
  */
 export async function getFireControl(tx: Transaction, cfg: TillConfig): Promise<FireControl> {
@@ -340,14 +352,16 @@ export async function getFireControl(tx: Transaction, cfg: TillConfig): Promise<
 }
 
 /**
- * Set the venue's fire-control setting (`locations.fire_control`, `waiter` default / `kitchen`), scoped
- * to `cfg.locationId` under RLS. The exact shape of {@link setBumpMode}: a parameterised `sql` update —
- * the house style for these single-column `locations` config writes (a Drizzle `.update(locations)` is
- * available too; `@waitron/db`'s barrel re-exports `locations`, so raw `sql` is a choice, not a
- * necessity). `mode` is a typed {@link FireControl}, so the value reaching the enum column is
- * always one of its members (the route validates the request field before calling); `${mode}` binds as a
- * parameter (never string-concatenated) and PostgreSQL coerces it to the `fire_control_mode` enum in the
- * assignment context. `till.configure`-gated at the ROUTE (Task 5), as the other config verbs are.
+ * Set the venue's fire-control setting (`locations.fire_control`, `waiter` default / `kitchen`),
+ * scoped to `cfg.locationId` in the database holding this tenant. The exact shape of {@link
+ * setBumpMode}: a parameterised `sql` update — the house style for these single-column
+ * `locations` config writes (a Drizzle `.update(locations)` is available too; `@waitron/db`'s
+ * barrel re-exports `locations`, so raw `sql` is a choice, not a necessity). `mode` is a typed
+ * {@link FireControl}, so the value reaching the enum column is always one of its members (the
+ * route validates the request field before calling); `${mode}` binds as a parameter (never
+ * string-concatenated) and PostgreSQL coerces it to the `fire_control_mode` enum in the
+ * assignment context. `till.configure`-gated at the ROUTE (Task 5), as the other config verbs
+ * are.
  */
 export async function setFireControl(
   tx: Transaction,
@@ -376,12 +390,13 @@ export interface Course {
 }
 
 /**
- * Assert `courseId` names a LIVE course of THIS venue — present, `active`, and in `cfg.locationId`.
- * NULL-or-false → `course.not_found`, folding "absent / another tenant's (RLS-hidden) / another venue's"
- * and "deactivated" into the one code (errors.ts explains why the inactive case is not distinct), exactly
- * as {@link requireLiveStation} does for a station. The tenant-consistent `products_course_fk` enforces
- * only same-TENANT existence — it can see neither `active` nor the location — so this explicit read is
- * what rejects a retired or cross-venue course the FK would accept. One round trip via a scalar subquery.
+ * Assert `courseId` names a LIVE course of THIS venue — present, `active`, and in
+ * `cfg.locationId`. NULL-or-false → `course.not_found`, folding "absent / another venue's" and
+ * "deactivated" into the one code (errors.ts explains why the inactive case is not distinct),
+ * exactly as {@link requireLiveStation} does for a station. The tenant-consistent
+ * `products_course_fk` enforces only same-TENANT existence — it can see neither `active` nor the
+ * location — so this explicit read is what rejects a retired or cross-venue course the FK would
+ * accept. One round trip via a scalar subquery.
  *
  * Exported so `fireCourse` (working-order.ts) validates the fired course against the SAME `course.not_found`
  * definition the config verbs use — one meaning of "not a live course", not a second copy that could drift.
@@ -402,12 +417,12 @@ export async function requireLiveCourse(
 }
 
 /**
- * Assert `courseId` names a course that EXISTS in THIS venue — present and in `cfg.locationId`, whether
- * `active` or not. The existence-only sibling of {@link requireLiveCourse}: it drops the `active` gate so
- * a DEACTIVATED course still passes, folding only "absent / another tenant's (RLS-hidden) / another
- * venue's" into `course.not_found`. `kitchen_courses.active` is `NOT NULL`, so the scalar subquery yields
- * NULL only when NO row of this venue matches — that NULL is the sole "not found" signal, and a present
- * row (`true` OR `false`) passes.
+ * Assert `courseId` names a course that EXISTS in THIS venue — present and in `cfg.locationId`,
+ * whether `active` or not. The existence-only sibling of {@link requireLiveCourse}: it drops the
+ * `active` gate so a DEACTIVATED course still passes, folding only "absent / another venue's"
+ * into `course.not_found`. `kitchen_courses.active` is `NOT NULL`, so the scalar subquery yields
+ * NULL only when NO row of this venue matches — that NULL is the sole "not found" signal, and a
+ * present row (`true` OR `false`) passes.
  *
  * Used by `fireCourse` (working-order.ts): a course deactivated WHILE it holds items must stay fireable —
  * the held items already carry the `course_id` snapshot, so releasing them must not need the course still
@@ -460,9 +475,12 @@ export async function createCourse(
   }
 }
 
-/** The venue's ACTIVE courses, by `display_order` then `name` — the coursing SEQUENCE (spec §2a: lowest
- *  display_order fires first). RLS confines the read to the tenant; the location filter narrows to this
- *  till's venue — the same active-only, location-scoped shape {@link listStations} uses. */
+/**
+ * The venue's ACTIVE courses, by `display_order` then `name` — the coursing SEQUENCE (spec §2a:
+ * lowest display_order fires first). The deployment holds one tenant per database. The location
+ * filter narrows to this till's venue — the same active-only, location-scoped shape {@link
+ * listStations} uses.
+ */
 export async function listCourses(tx: Transaction, cfg: TillConfig): Promise<Course[]> {
   return tx
     .select({
@@ -477,15 +495,15 @@ export async function listCourses(tx: Transaction, cfg: TillConfig): Promise<Cou
 }
 
 /**
- * Edit a course's `name`/`displayOrder`/`active` (any subset). Reactivation is
- * `updateCourse({ active: true })`, the `update`-shaped surface {@link updateStation} uses. An absent id
- * (or another tenant's, RLS-hidden) throws `course.not_found`; a name collision throws `course.name_taken`.
+ * Edit a course's `name`/`displayOrder`/`active` (any subset). Reactivation is `updateCourse({
+ * active: true })`, the `update`-shaped surface {@link updateStation} uses. An absent id throws
+ * `course.not_found`; a name collision throws `course.name_taken`.
  */
 export async function updateCourse(
   tx: Transaction,
-  // Kept for a uniform `(tx, cfg, …)` verb surface; this by-id update relies on RLS for the tenant
-  // scope, so the config is unused here (the repo idiom for an interface-mandated unused param — see
-  // {@link updateStation}).
+  // The deployment holds one tenant per database. Kept for a uniform `(tx, cfg, …)` verb surface;
+  // this update filters by id, so the config is unused here (the repo idiom for an
+  // interface-mandated unused param — see {@link updateStation}).
   _cfg: TillConfig,
   id: string,
   patch: { name?: string; displayOrder?: number; active?: boolean },
@@ -534,11 +552,12 @@ export async function deactivateCourse(
 }
 
 /**
- * Set (or clear, with `null`) a product's DEFAULT kitchen course (KDS-2 §2b) — the per-product course a
- * line falls to at ring time when the line carries no override. Same shape as {@link setProductStation}:
- * a non-null `courseId` must be a LIVE course of this venue ({@link requireLiveCourse}, `course.not_found`
- * otherwise), null clears it, and the UPDATE is by product id under RLS (a `productId` this tenant does
- * not own is a no-op — the route layer resolves product ids, and KDS-2 mints no `product.not_found`).
+ * The deployment holds one tenant per database. Set (or clear, with `null`) a product's DEFAULT
+ * kitchen course (KDS-2 §2b) — the per-product course a line falls to at ring time when the line
+ * carries no override. Same shape as {@link setProductStation}: a non-null `courseId` must be a
+ * LIVE course of this venue ({@link requireLiveCourse}, `course.not_found` otherwise), null
+ * clears it, and the UPDATE is by product id in this database (an absent `productId` is a no-op —
+ * the route layer resolves product ids, and KDS-2 mints no `product.not_found`).
  */
 export async function setProductCourse(
   tx: Transaction,

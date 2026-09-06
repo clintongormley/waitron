@@ -18,18 +18,13 @@ import { seedTenant } from "../test/fixtures.js";
 import { settleSale } from "./settle-sale.js";
 import type { SettleSaleInput } from "./settle-sale.js";
 
-// Real Postgres, not PGlite, for the whole suite — mandatory here (design §7, CLAUDE.md §4). The
-// cross-tenant `not_found` path needs a non-superuser role that RLS is FORCED against, and the
-// settlement race needs two callers on two backend processes; PGlite gives neither (its one
-// superuser backend bypasses RLS and serialises every query).
+// Real Postgres provides the two backends needed for the settlement race.
 const postgres = useTemplateDb({ template: "core_identity" });
 
 const SETTLED_AT = new Date("2026-08-01T12:00:00Z");
 
 /**
- * Inserts one `sales` row as the seeding (superuser) connection — RLS is bypassed there, exactly as
- * `test/fixtures.ts`'s `seedTenant` relies on for the tenant/till/node/series it seeds. Written on
- * the NEW schema: `total` is the only money column left (the tip moved to `tenders.tip_amount` and
+ * Inserts one `sales` row on the seeding connection: `total` is the only money column left (the tip moved to `tenders.tip_amount` and
  * `amount_charged` was dropped in migration 0012), and `node_id` is NOT NULL (node-id rekey).
  * `correctsSaleId` defaults to NULL for an ordinary sale; pass it to seed a rectificativa correcting
  * another sale (its negative/positive total is what `sales_total_ck` permits once it is set).
@@ -64,10 +59,7 @@ async function seedSale(
 }
 
 /**
- * Runs `settleSale` exactly as the application will: inside a tenant-scoped transaction, AS the
- * non-superuser app role. Both matter — `withTenant` sets `app.tenant_id`, `asAppUser` switches off
- * the superuser bypass — so a cross-tenant sale is genuinely hidden by RLS rather than merely
- * filtered by a predicate the superuser would ignore.
+ * Runs `settleSale` inside one transaction as the non-superuser app role.
  */
 function settle(db: Database, tenantId: TenantId, input: SettleSaleInput): Promise<void> {
   return withTenant(db, tenantId, async (tx) => {
@@ -178,6 +170,21 @@ describe("settleSale — the happy path", () => {
 });
 
 describe("settleSale — guards", () => {
+  it("throws sale.not_found for a cross-tenant sale", async () => {
+    // The sale exists, but the explicit sales.tenantId predicate excludes it from this lookup.
+    const other = await seedTenant(postgres.admin);
+    const foreignSaleId = await seedSale(postgres.admin, other, { total: "65.00" });
+    const seed = await seedTenant(postgres.admin);
+
+    await expect(
+      settle(postgres.admin, seed.tenantId, {
+        tenantId: seed.tenantId,
+        saleId: foreignSaleId,
+        tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
+      }),
+    ).rejects.toMatchObject({ code: "sale.not_found", params: { saleId: foreignSaleId } });
+  });
+
   it("throws sale.tender_unsettled for a null settledAt", async () => {
     const seed = await seedTenant(postgres.admin);
     const saleId = await seedSale(postgres.admin, seed, { total: "65.00" });
@@ -233,25 +240,6 @@ describe("settleSale — guards", () => {
         tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
       }),
     ).rejects.toMatchObject({ code: "sale.not_found" });
-  });
-
-  it("throws sale.not_found for a cross-tenant sale (RLS-hidden, not forbidden)", async () => {
-    // The load-bearing RLS test, and why this suite is real-PG. The sale is real, but belongs to
-    // another tenant; under `FORCE ROW LEVEL SECURITY` as `app_user`, `settleSale`'s own tenant-
-    // unqualified `where(eq(sales.id, ...))` reads back zero rows, so it is genuinely not-found
-    // rather than forbidden. As a superuser (PGlite) the same SELECT would return the row and this
-    // test would fail — which is the point.
-    const other = await seedTenant(postgres.admin);
-    const foreignSaleId = await seedSale(postgres.admin, other, { total: "65.00" });
-    const seed = await seedTenant(postgres.admin);
-
-    await expect(
-      settle(postgres.admin, seed.tenantId, {
-        tenantId: seed.tenantId,
-        saleId: foreignSaleId,
-        tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
-      }),
-    ).rejects.toMatchObject({ code: "sale.not_found", params: { saleId: foreignSaleId } });
   });
 
   it("throws sale.voided when the sale carries a sale_voids row", async () => {

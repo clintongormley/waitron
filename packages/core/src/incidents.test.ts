@@ -358,9 +358,7 @@ describe("openIncidents", () => {
     await withTenant(suite.db, tenantId, async (tx) => {
       await asAppUser(tx);
       // The one permitted mutation, and it must be permitted for app_user — a column-level GRANT
-      // that omitted acknowledged_at would fail here. No WHERE clause: RLS already scopes this
-      // update to the current tenant, and this test's tenant owns exactly the one row `sell` just
-      // wrote.
+      // that omitted acknowledged_at would fail here. This update acknowledges the fixture rows.
       await tx.update(incidents).set({ acknowledgedAt: new Date().toISOString() });
     });
     const rows = await withTenant(suite.db, tenantId, async (tx) => {

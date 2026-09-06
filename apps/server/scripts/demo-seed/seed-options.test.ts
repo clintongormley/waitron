@@ -1,9 +1,9 @@
+import { tenantId as brandTenantId } from "@waitron/shared";
 // Real-Postgres proof of `seedOptions` (Phase 4, Task 13): it creates the demo modifier groups
-// (menu.ts's `PRODUCT_OPTION_GROUPS`) and attaches them to their named products, so the till shows a
-// picker on those two dishes and a plain ring on everything else. Real Postgres, not PGlite: the
-// option-group tables are under FORCE ROW LEVEL SECURITY and this runs as `app_user` (the same posture
-// `seedCatalogues` proves itself under, CLAUDE.md §4) — PGlite's superuser connection would bypass that
-// and prove nothing about the grants.
+// (menu.ts's `PRODUCT_OPTION_GROUPS`) and attaches them to their named products, so the till
+// shows a picker on those two dishes and a plain ring on everything else. Real Postgres, not
+// PGlite: this runs as `app_user` against the option-group tables, matching `seedCatalogues`.
+// PGlite's superuser connection cannot check the grants used by these writes (CLAUDE.md §4).
 
 import { describe, expect, it } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
@@ -73,8 +73,11 @@ describe("seedOptions", () => {
 
     const products = await withTenant(suite.admin, tenantId, async (tx) => {
       await asAppUser(tx);
-      const { productsByImage } = await seedCatalogues(tx, { locationId, locale: LOCALE });
-      await seedOptions(tx, { productsByImage, locale: LOCALE });
+      const { productsByImage } = await seedCatalogues(tx, brandTenantId(tenantId), {
+        locationId,
+        locale: LOCALE,
+      });
+      await seedOptions(tx, brandTenantId(tenantId), { productsByImage, locale: LOCALE });
       return (await listAvailableProducts(tx, locationId)).products;
     });
 

@@ -1,3 +1,4 @@
+// Real PostgreSQL checks startup through app_user connections and contending backends.
 import { createServer } from "node:net";
 import type { AddressInfo } from "node:net";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -142,7 +143,7 @@ beforeEach(() => {
 
 /**
  * `startServer`'s only test subject. Everything else in this package tests one composed piece
- * (`pass.rls.test.ts` builds its own, separate wiring to prove the composed PASS runs as the
+ * (`pass.pg.test.ts` builds its own, separate wiring to prove the composed PASS runs as the
  * deployment role); nothing before this file called `startServer` itself, so the field mapping in
  * `boot.ts` — `config.scheduler.*` into `SchedulerDeps`, `minTickMs`/`maxTickMs`, `onPass` into
  * `recordPass`, the `settlementLagMs` conditional spread, the migrations-root default, and the
@@ -157,17 +158,18 @@ beforeEach(() => {
  *
  * `DATABASE_URL` is the deployment role, not the container's superuser default (`pg.connect()`'s
  * role): spec §10 states plainly that `DATABASE_URL` "must be the non-superuser deployment role".
- * Whether that role ALSO needs migration-grade grants depends on `WAITRON_MIGRATIONS_DATABASE_URL`
- * (config.ts): unset, it defaults to `DATABASE_URL`, so migrations run under the same role the pool
- * uses, and that role needs `CREATE` on top of `app_user`'s grants — not `app_user`'s grants alone.
- * `PROBE_ROLE` below is exactly that: `app_user` membership for the RLS-scoped duty work, plus the
- * `CREATE`/`SELECT` Drizzle's migrator needs to re-run idempotently against an already-migrated
- * database — confirmed empirically that Postgres checks each privilege before Drizzle's own
- * `IF NOT EXISTS` existence check ever runs, so a role with only `app_user`'s `USAGE` grant fails on
- * the very first `CREATE SCHEMA IF NOT EXISTS "public"`, no-op or not. The first two tests below use
- * `PROBE_ROLE` this way — as `DATABASE_URL` alone, `WAITRON_MIGRATIONS_DATABASE_URL` unset — which is
- * also that variable's DEFAULT case and therefore the one every existing deployment keeps until it
- * opts into the split.
+ * Whether that role ALSO needs migration-grade grants depends on
+ * `WAITRON_MIGRATIONS_DATABASE_URL` (config.ts): unset, it defaults to `DATABASE_URL`, so
+ * migrations run under the same role the pool uses, and that role needs `CREATE` on top of
+ * `app_user`'s grants — not `app_user`'s grants alone. `PROBE_ROLE` below is exactly that:
+ * `app_user` membership for the app-role duty work, plus the `CREATE`/`SELECT` Drizzle's migrator
+ * needs to re-run idempotently against an already-migrated database — confirmed empirically that
+ * Postgres checks each privilege before Drizzle's own `IF NOT EXISTS` existence check ever runs,
+ * so a role with only `app_user`'s `USAGE` grant fails on the very first `CREATE SCHEMA IF NOT
+ * EXISTS "public"`, no-op or not. The first two tests below use `PROBE_ROLE` this way — as
+ * `DATABASE_URL` alone, `WAITRON_MIGRATIONS_DATABASE_URL` unset — which is also that variable's
+ * DEFAULT case and therefore the one every existing deployment keeps until it opts into the
+ * split.
  *
  * `RUNTIME_ROLE`, below, is the OTHER case: the genuinely least-privileged role spec §10 actually
  * names, carrying only `app_user` membership and NONE of `PROBE_ROLE`'s extra `CREATE`/`SELECT`
@@ -229,12 +231,9 @@ const suite = useTemplateDb({ template: "manifest" });
 let migrationsRoot: string;
 let databaseUrl: string;
 let runtimeDatabaseUrl: string;
-// The sync-api pool's URL — a `sync_applier` (app_user + sync_tailer member) URL, the exact
-// "sync_tailer + app_user member" shape boot.ts documents for the sync pool. It is NOT the deployment
-// role (PROBE_ROLE = app_user only): since Task 5 the source authenticates every request against
-// `sync_peers`, so its pool needs sync_tailer's SELECT + UPDATE(last_seen_at) on that table, which
-// app_user does not hold. `syncPeerToken` is a peer enrolled below (as the superuser admin), the token
-// the /sync-api/hello probes present.
+// The sync-api pool uses sync_applier, an app_user member with SELECT on sync_peers and
+// UPDATE(last_seen_at). syncPeerToken is enrolled below through the superuser admin and presented
+// by the /sync-api/hello probes.
 let syncDatabaseUrl: string;
 let syncPeerToken: string;
 
@@ -264,19 +263,21 @@ beforeAll(async () => {
   // built here; no per-DATABASE grant is added, which is exactly what makes it least-privileged.
   runtimeDatabaseUrl = roleUrl(suite.pg.uri, RUNTIME_ROLE, RUNTIME_PASSWORD);
 
-  // The sync pool's role + a peer enrolled on this clone. `sync_applier` (app_user + sync_tailer) is
-  // created cluster-wide by the package globalSetup; enrolPeer runs as the superuser admin (setup
-  // bypasses grants). The sync tests below present `syncPeerToken` to /sync-api/hello, which the source
-  // now resolves against sync_peers through this pool (Task 5 — the auth path touches the DB).
+  // The sync pool's role + a peer enrolled on this clone. `sync_applier` (app_user) is created
+  // cluster-wide by the package globalSetup; enrolPeer runs as the superuser admin (setup
+  // bypasses grants). The sync tests below present `syncPeerToken` to /sync-api/hello, which the
+  // source now resolves against sync_peers through this pool (Task 5 — the auth path touches the
+  // DB).
   syncDatabaseUrl = roleUrl(suite.pg.uri, "sync_applier", "ap");
   syncPeerToken = (await enrolPeer(suite.admin, { subscriberId: "boot-mirror", name: "boot" }))
     .token;
 
-  // The till's own tenant, location and node, seeded once as the container superuser (RLS bypassed,
-  // exactly as `seedTenant`/`seedNode` do). `startServer` reads the location's `order_flow` at boot
+  // The till's own tenant, location and node, seeded once as the container superuser (exactly as
+  // `seedTenant`/`seedNode` do). `startServer` reads the location's `order_flow` at boot
   // (`readOrderFlow`) to complete the `TillConfig` it hands the routes, so the location must
-  // exist or every successful-boot test would fail at that read. `order_flow` defaults to `prepay`. A
-  // distinctive NIF (90M base) stays clear of every other seed generator sharing this database.
+  // exist or every successful-boot test would fail at that read. `order_flow` defaults to
+  // `prepay`. A distinctive NIF (90M base) stays clear of every other seed generator sharing this
+  // database.
   await suite.admin.execute(sql`
     insert into tenants (id, country, tax_id, legal_name)
     values (${TILL_ENV.WAITRON_TILL_TENANT_ID}, 'ES', '90000000K', 'Boot Till SL')`);
@@ -631,10 +632,11 @@ describe("startServer, against a real container as the deployment role", () => {
       const body = (await response.json()) as { ok: boolean };
       expect(body.ok).toBe(true);
 
-      // The till API is mounted on the same app (`mountTillApi` in `boot.ts`). `GET /api/staff` is
-      // the unauthenticated roster route — it needs no session: under RLS scoped to this till's own
-      // tenant (seeded minimally in `beforeAll`, with NO staff) it returns an empty array rather than
-      // 404, which is the proof the route exists. A 404 here would mean `mountTillApi` never ran.
+      // The deployment holds one tenant per database. The till API is mounted on the same app
+      // (`mountTillApi` in `boot.ts`). `GET /api/staff` is the unauthenticated roster route — it
+      // needs no session: in this database (seeded minimally in `beforeAll`, with NO staff) it
+      // returns an empty array rather than 404, which is the proof the route exists. A 404 here
+      // would mean `mountTillApi` never ran.
       const staff = await fetch(`http://127.0.0.1:${port}/api/staff`);
       expect(staff.status).toBe(200);
       // The request-id middleware is live and wraps every route mounted after it (registered on the
@@ -817,12 +819,12 @@ describe("startServer, against a real container as the deployment role", () => {
     // boot (seam still on `manifestSets()`) it is GREEN, because the pin makes the two lists equal.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-empty-state-"));
-    // A pristine database in the shared cluster. `template0` carries no app objects, so nothing but
-    // boot's migration run can populate the journals below; the superuser URL doubles as the app
-    // pool's and the migrator's (this test proves migrations run, not RLS as the deployment role).
-    // `cloneTemplate` validates the identifiers it interpolates into the CREATE/DROP DATABASE
-    // utility statements (CLAUDE.md §3) and its `stop()` drops the clone WITH (FORCE) on a fresh
-    // admin connection.
+    // A pristine database in the shared cluster. `template0` carries no app objects, so nothing
+    // but boot's migration run can populate the journals below; the superuser URL doubles as the
+    // app pool's and the migrator's (this test proves migrations run, not grants as the
+    // deployment role). `cloneTemplate` validates the identifiers it interpolates into the
+    // CREATE/DROP DATABASE utility statements (CLAUDE.md §3) and its `stop()` drops the clone
+    // WITH (FORCE) on a fresh admin connection.
     const pg = await cloneTemplate(suite.pg.uri, "template0", nextCloneName());
     let server: StartedServer | undefined;
     let probe: Awaited<ReturnType<typeof createPostgresDb>> | undefined;
@@ -1363,8 +1365,9 @@ describe("startServer, against a real container as the deployment role", () => {
           // The tenant id the endpoint returned is the one persisted for the trading boot.
           expect(trading.WAITRON_TILL_TENANT_ID).toBe(json.tenantId);
 
-          // The DB is now stamped preproduction and holds exactly one venue (one tenant, one node/SIF).
-          // `check` is the clone's superuser connection, so it BYPASSES RLS and sees the true counts.
+          // The DB is now stamped preproduction and holds exactly one venue (one tenant, one
+          // node/SIF). `check` is the clone's superuser connection, used for the count
+          // assertions.
           expect(await readDeploymentEnvironment(check)).toBe("preproduction");
           const tenants = await check.execute<{ n: number }>(
             sql`select count(*)::int as n from tenants`,
@@ -1529,8 +1532,9 @@ describe("startServer, against a real container as the deployment role", () => {
           expect(json.error.code).toBe("setup.request_invalid");
           expect(json.error.params.field).toBe("aeatCert");
 
-          // Nothing was minted and nothing was sealed — the request was refused before `provision`.
-          // `check` is the clone's superuser connection, so it BYPASSES the FORCE-RLS on both tables.
+          // Nothing was minted and nothing was sealed — the request was refused before
+          // `provision`. `check` is the clone's superuser connection, used for both table
+          // observations.
           const tenants = await check.execute<{ n: number }>(
             sql`select count(*)::int as n from tenants`,
           );
@@ -1613,8 +1617,8 @@ describe("startServer, against a real container as the deployment role", () => {
           const json = (await response.json()) as { provisioned: boolean; tenantId: string };
           expect(json.provisioned).toBe(true);
 
-          // The live fork stamped PRODUCTION (mode-derived, not the box's preproduction boot env).
-          // `check` is the clone's superuser connection, so it BYPASSES RLS on both reads.
+          // The live fork stamped PRODUCTION (mode-derived, not the box's preproduction boot
+          // env). `check` is the clone's superuser connection, used for both observations.
           expect(await readDeploymentEnvironment(check)).toBe("production");
 
           // Exactly one `fiscal.aeat` credential was sealed, for the tenant just provisioned — the real
@@ -1662,8 +1666,9 @@ describe("startServer, against a real container as the deployment role", () => {
       WAITRON_SKIP_RETRY_MS: "100",
     });
     try {
-      // The trading surface is live: the unauthenticated roster route returns this till's (empty) staff
-      // list under RLS — 200 [], not 404 — exactly as the first test in this block asserts.
+      // The deployment holds one tenant per database. The trading surface is live: the
+      // unauthenticated roster route returns this till's (empty) staff list in this database —
+      // 200 [], not 404 — exactly as the first test in this block asserts.
       const staff = await fetch(`http://127.0.0.1:${port}/api/staff`);
       expect(staff.status).toBe(200);
       expect(await staff.json()).toEqual([]);
@@ -1717,8 +1722,9 @@ describe("startServer, against a real container as the deployment role", () => {
       expect((await fetch(`http://127.0.0.1:${port}/setup-api/ca.crt`)).status).toBe(404);
       expect((await fetch(`http://127.0.0.1:${port}/setup/trust`)).status).toBe(404);
 
-      // The trading surface is unchanged: the unauthenticated roster route answers this till's empty
-      // staff list under RLS (200 [], not 404), and /health still answers its JSON.
+      // The deployment holds one tenant per database. The trading surface is unchanged: the
+      // unauthenticated roster route answers this till's empty staff list in this database (200
+      // [], not 404), and /health still answers its JSON.
       const staff = await fetch(`http://127.0.0.1:${port}/api/staff`);
       expect(staff.status).toBe(200);
       expect(await staff.json()).toEqual([]);
@@ -1796,16 +1802,16 @@ describe("startServer, against a real container as the deployment role", () => {
   }, 60_000);
 
   it("mounts the peer-authenticated sync API and starts the pull worker AND the retention sweep when WAITRON_SYNC_* is configured", async () => {
-    // The sync transport is enabled by WAITRON_SYNC_PEERS. The peer URL is unreachable, so the pull
-    // worker's one handshake attempt goes through fetchHttpClient (undici's fetch, MOCKED to reject in
-    // this file) and the peer backs off — which is all this test needs from the worker: it exercises
-    // the production HttpClient adapter and the boot wiring without a second live node. /sync-api/hello
-    // with an enrolled peer's token proves mountSyncApi ran with this node's till.nodeId AND that the
-    // auth path resolves against sync_peers (Task 5); a tokenless request proves the fail-closed guard
-    // is live. The sync DB URL is a sync_applier (app_user + sync_tailer) URL — the auth path now reads
-    // sync_peers, which the app-only deployment role cannot; the worker never reaches a sync_log read
-    // (it fails at the peer handshake first). close() must tear the worker + pool down alongside the
-    // main loop.
+    // The sync transport is enabled by WAITRON_SYNC_PEERS. The peer URL is unreachable, so the
+    // pull worker's one handshake attempt goes through fetchHttpClient (undici's fetch, MOCKED to
+    // reject in this file) and the peer backs off — which is all this test needs from the worker:
+    // it exercises the production HttpClient adapter and the boot wiring without a second live
+    // node. /sync-api/hello with an enrolled peer's token proves mountSyncApi ran with this
+    // node's till.nodeId AND that the auth path resolves against sync_peers (Task 5); a tokenless
+    // request proves the fail-closed guard is live. The sync DB URL is a sync_applier (app_user)
+    // URL — the auth path now reads sync_peers, which the app-only deployment role cannot; the
+    // worker never reaches a sync_log read (it fails at the peer handshake first). close() must
+    // tear the worker + pool down alongside the main loop.
     //
     // WAITRON_SYNC_RETENTION_DATABASE_URL is also set (reusing the deployment role), so this same boot
     // schedules the retention sweep (spec §3.2 — what finally wires pruneSyncLog). runRetentionSweep is
@@ -1853,7 +1859,7 @@ describe("startServer, against a real container as the deployment role", () => {
         // Real boot computes the per-module applied versions from the migrated DB (SP-2b) and /hello
         // echoes them; the exact numbers drift with every migration, so assert the map is genuinely
         // populated (`core` a real number) rather than pinning drift-prone values — the content is
-        // covered exactly in sync-api.rls.test.ts.
+        // covered exactly in sync-api.test.ts.
         moduleVersions: expect.objectContaining({ core: expect.any(Number) }),
       });
       // A tokenless request is refused — the fail-closed guard, not just the route, is live.
@@ -1901,8 +1907,8 @@ describe("startServer, against a real container as the deployment role", () => {
     // proven separately in membership-gossip.e2e.test.ts.
     const SIGNER = "77777777-7777-4777-8777-777777777777";
     const kp = generateNodeKeyPair();
-    // Stamp the trusted node BEFORE boot: `membershipTrustSet` is read once at startup, so the row must
-    // exist first. Inserted as the container superuser (RLS bypassed), tenant-scoped to this venue.
+    // Stamp the trusted node BEFORE boot: `membershipTrustSet` is read once at startup, so the
+    // row must exist first. Inserted as the container superuser, tenant-scoped to this venue.
     await suite.admin.execute(sql`
       insert into nodes (id, tenant_id, location_id, name, public_key)
       values (${SIGNER}, ${TILL_ENV.WAITRON_TILL_TENANT_ID}, ${TILL_ENV.WAITRON_TILL_LOCATION_ID},
@@ -2165,12 +2171,13 @@ describe("startServer, against a real container as the deployment role", () => {
   }, 60_000);
 
   it("does not schedule the backup sweep when WAITRON_BACKUP_DIR is unset, and boots unaffected", async () => {
-    // The backup off-switch (slice 4b-ii): no WAITRON_BACKUP_DIR, so loadBackupConfig returns undefined
-    // and boot runs neither the RLS probe nor the sweep — it logs the backup-off line and leaves backup
-    // OFF. Every OTHER trading boot in this suite is this same case (none sets WAITRON_BACKUP_*), so the
-    // real guard is that they all still pass; this asserts the off branch explicitly. Proven via the
-    // logged backup.disabled event (the wiring ran the else branch) plus a clean shutdown. Box-status's
-    // own configured:false report on this branch is covered directly by box-status.route.test.ts.
+    // The backup off-switch (slice 4b-ii): no WAITRON_BACKUP_DIR, so loadBackupConfig returns
+    // undefined and boot runs neither the read-privilege probe nor the sweep — it logs the
+    // backup-off line and leaves backup OFF. Every OTHER trading boot in this suite is this same
+    // case (none sets WAITRON_BACKUP_*), so the real guard is that they all still pass; this
+    // asserts the off branch explicitly. Proven via the logged backup.disabled event (the wiring
+    // ran the else branch) plus a clean shutdown. Box-status's own configured:false report on
+    // this branch is covered directly by box-status.route.test.ts.
     const port = await freePort();
     const [server, disabled] = await withCapturedStdout(async (lines) => {
       const started = await startServer({
@@ -2191,7 +2198,7 @@ describe("startServer, against a real container as the deployment role", () => {
     await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow(); // listener gone
   }, 60_000);
 
-  it("boots and TRADES when the backup DB is unreachable — the RLS probe failure disables backup, never aborts boot (§5)", async () => {
+  it("boots and TRADES when the backup DB is unreachable — the read-privilege probe failure disables backup, never aborts boot (§5)", async () => {
     // The strict CLAUDE.md §5 case, driven through startServer rather than reasoned about: WAITRON_BACKUP_DIR
     // is set (so loadBackupConfig returns a config and the probe runs) but WAITRON_BACKUP_DATABASE_URL points
     // at a REFUSED port (127.0.0.1:1 — connection refused, resolves fast and deterministically, not a hang).
@@ -2464,9 +2471,9 @@ describe("startServer, against a real container as the deployment role", () => {
     const port = await freePort();
     // `seedPendingEnvios`'s own fixed `proximo_intento_en` ('2026-07-21T00:00:00Z') is always in
     // the past relative to `startServer`'s real wall clock (`boot.ts` hardcodes `new Date()`,
-    // deliberately not injectable — see its own doc comment), so this tenant is due the instant the
-    // first pass runs. Seeded against `suite.admin` (the container's own superuser default), matching
-    // `pass.rls.test.ts`'s identical convention for setup that must bypass RLS.
+    // deliberately not injectable — see its own doc comment), so this tenant is due the instant
+    // the first pass runs. Seeded against `suite.admin` (the container's own superuser default),
+    // matching `pass.pg.test.ts`'s identical convention for owner-side setup.
     const seeded = await seedPendingEnvios(suite.admin, { count: 1 });
 
     try {
@@ -2628,7 +2635,7 @@ describe("startServer, against a real container as the deployment role", () => {
   // would produce this exact same error and pass this exact same assertion. Under RUNTIME_ROLE it
   // cannot: a late or bypassed guard would surface a permission-denied failure instead, a distinct
   // and distinguishable error from `deployment.environment_mismatch`. RUNTIME_ROLE still reads the
-  // stamp `assertDeploymentMatches` needs to see: `0010_deployment_stamp.sql` grants `deployment`'s
+  // stamp `assertDeploymentMatches` needs to see: `0001_db_baseline_sql.sql` grants `deployment`'s
   // own `SELECT` to `app_user`, and `RUNTIME_ROLE` is an `app_user` member (this file's own
   // `beforeAll`).
   it("refuses to start, and runs no migration, against another environment's database", async () => {
@@ -2725,8 +2732,8 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
 
   beforeAll(async () => {
     const cfg: TillConfig = { ...loadTillConfig(TILL_ENV), orderFlow: "prepay" };
-    // Two `tills` rows in this till's own tenant/location, inserted as the container superuser (RLS
-    // bypassed, exactly as the tenant/location seed above). The (tenant_id, till_id) composite FK on
+    // Two `tills` rows in this till's own tenant/location, inserted as the container superuser
+    // (exactly as the tenant/location seed above). The (tenant_id, till_id) composite FK on
     // `devices` (MATCH SIMPLE, both columns non-null here) requires a real row per bound device.
     const insertTill = async (name: string): Promise<string> => {
       const res = await suite.admin.execute<{ id: string }>(sql`
@@ -2737,9 +2744,9 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
     };
     const till1 = await insertTill("SP-C dev override till 1");
     till2 = await insertTill("SP-C dev override till 2");
-    // Enrol a `till`-kind device bound to `boundTillId` and return its id — the mint->redeem runs on
-    // the app role under the tenant (the production enrol path), so `tryReadDevice`'s id-selected,
-    // RLS-scoped, `active = true` read resolves a genuine binding.
+    // Enrol a `till`-kind device bound to `boundTillId` and return its id — the mint->redeem runs
+    // on the app role under the tenant (the production enrol path), so `tryReadDevice`'s
+    // id-selected, `active = true` read resolves a genuine binding.
     const enrolTillDevice = async (boundTillId: string): Promise<string> => {
       const { code } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
         await asAppUser(tx);

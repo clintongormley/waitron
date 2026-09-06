@@ -20,18 +20,9 @@ export interface SettleSaleInput {
  * touches no chain, takes no chain-head lock, and submits nothing (design §4).
  */
 export async function settleSale(tx: Transaction, input: SettleSaleInput): Promise<void> {
-  // The sale's fiscal total, and every rectificativa correcting it netted in a correlated scalar
-  // subquery (design §2) — the same correlated corrections-sum subquery approach listOutstandingSales
-  // uses for its correctionTotal, and, since both files carry explicit belt-and-suspenders tenant
-  // predicates, its inner subquery now carries the same explicit `c.tenant_id` this one does.
-  // Fail-closed on cross-tenant: RLS hides another tenant's row, and the explicit
-  // `eq(sales.tenantId, input.tenantId)` in the WHERE below is belt-and-suspenders alongside it — a
-  // cross-tenant/hidden sale is still genuinely not-found (yielding `sale.not_found`) rather than
-  // forbidden (as record-void). Those explicit tenant predicates — the outer lookup's and the
-  // corrective subquery's — are redundant under RLS and under the tenant-consistent
-  // `sales_corrects_fk (tenant_id, corrects_sale_id) → sales(tenant_id, id)`, which together already
-  // guarantee any corrective shares the sale's tenant, but they guard a non-scoped connection too,
-  // the same convention recordCorrection (and now listOutstandingSales) follows.
+  // Net the sale's fiscal total with every correction in a correlated scalar subquery,
+  // as listOutstandingSales does for correctionTotal. The outer lookup and corrective sum
+  // each filter by tenant.
   // `${sales}.id` (not `${sales.id}`) so the column renders table-qualified — inside a select-list
   // sql template Drizzle emits a bare `"id"`, which the subquery's own `sales c` would capture.
   const [sale] = await tx
@@ -132,7 +123,7 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
     } catch (error) {
       // The other concurrent-loser interleaving. When the winner has already COMMITTED its
       // settlement, this INSERT trips the `tenders_reject_post_settlement` trigger, which raises
-      // SQLSTATE WT002 (`packages/db/drizzle/0012_sale_settlement.sql`). That trigger fires iff a
+      // SQLSTATE WT002 (`packages/db/drizzle/0001_db_baseline_sql.sql`). That trigger fires iff a
       // `sale_settlements` row already exists for the sale, so WT002 here ALWAYS means "already
       // settled" — translate it to the same code the `sale_settlements` UNIQUE path maps to below,
       // so a retry/idempotency caller keying on `sale.already_settled` recognises the loser
@@ -159,7 +150,7 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
 }
 
 // SQLSTATE raised by the `tenders_reject_post_settlement` trigger
-// (`packages/db/drizzle/0012_sale_settlement.sql`) when a tender INSERT lands after the sale is
+// (`packages/db/drizzle/0001_db_baseline_sql.sql`) when a tender INSERT lands after the sale is
 // already settled. `WT001` is `reject_mutation`; `WT002` is this guard specifically.
 const POST_SETTLEMENT_VIOLATION = "WT002";
 

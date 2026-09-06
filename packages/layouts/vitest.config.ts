@@ -5,13 +5,13 @@ export default defineConfig({
     globals: true,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
     // globalSetup boots ONE shared Postgres container and migrates the `core_identity` template each
-    // real-PG suite (canvas-store.rls.test.ts, theme-store.rls.test.ts, receipt-store.rls.test.ts)
-    // clones (~26ms each) instead of each file booting and migrating its own (~1.5s). See
+    // real-PG suite (canvas-store.pg.test.ts, device-profile-store.pg.test.ts, theme-store.test.ts,
+    // receipt-store.test.ts) clones (~26ms each) instead of each file booting and migrating its own
+    // (~1.5s). See
     // src/testing/global-setup.ts. Because it precedes every worker, a Docker-absent run now fails the
     // whole package (that file's header explains the broadening).
     globalSetup: ["./src/testing/global-setup.ts"],
-    // This package has NO PGlite suites — its DB-backed files (canvas-store.rls.test.ts,
-    // theme-store.rls.test.ts, receipt-store.rls.test.ts) each clone the shared container's migrated
+    // This package has NO PGlite suites — its four DB-backed files each clone the shared container's migrated
     // `core_identity` template in a ~26ms beforeAll (the container boot / image pull moved to
     // globalSetup, which vitest does NOT bound by hookTimeout). So hookTimeout is just a harmless
     // ceiling far above that clone, not a budget for any WASM boot; errors.test.ts and validate.test.ts

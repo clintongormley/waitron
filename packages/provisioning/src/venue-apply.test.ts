@@ -9,11 +9,10 @@ import { planVenue, type VenueAction, type VenueRequest } from "./venue-plan.js"
 import { obligadoTenantId } from "./tenant-id.js";
 import { applyVenue } from "./venue-apply.js";
 
-// PGlite's default connection is a SUPERUSER, so it BYPASSES row-level security (ENABLE and FORCE
-// alike). That is fine here: this suite exercises the wiring and idempotency logic, and the
-// privilege behaviour under FORCE RLS as the non-superuser owner is proven separately by C1's
-// container test (`venue-apply.node-privilege.rls.test.ts`) and by the container end-to-end that
-// runs the real `applyVenue` over the owner connection.
+// PGlite's default connection is a SUPERUSER holding every grant, so a privilege or trigger
+// assertion here would be a false pass (CLAUDE.md §4). That is fine: this suite exercises the wiring
+// and idempotency logic, and the run as the non-superuser owner against a real, migrated database is
+// `venue-apply.pg.test.ts`.
 //
 // The full manifest is migrated (identity before fiscal; sync before fiscal, which fiscal's SP-3a
 // 0014 capture migration needs): applyVenue

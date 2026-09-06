@@ -47,7 +47,7 @@ function deps(report: FakeSettlementReport, reverse = recordingReverse().fn): Re
     incidents: recordIncidentOnce,
     settlementLagMs: DEFAULT_SETTLEMENT_LAG_MS,
     // Any node id: this suite asserts the sweep's classification/remediation, not the captured origin
-    // (proven in apps/server's sync-origin.rls.test.ts); the payments container carries no capture.
+    // (proven in apps/server's sync-origin.test.ts); the payments container carries no capture.
     nodeId: "11111111-1111-4111-8111-111111111111",
   };
 }

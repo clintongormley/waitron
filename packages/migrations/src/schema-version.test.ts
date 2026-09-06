@@ -1,3 +1,4 @@
+// Real PostgreSQL: checks real node-postgres error propagation after closing its pool.
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -119,7 +120,9 @@ describe("appliedSchemaVersion — against a real Postgres", () => {
           `(id serial primary key, hash text not null, created_at bigint)`,
       ),
     );
-    const n = 2;
+    // Core ships a two-file baseline (generated + custom), so its journal head is 2; N must stay
+    // strictly below that shipped head for the partial state to read as behind.
+    const n = 1;
     for (let i = 0; i < n; i++) {
       await db.execute(sql.raw(`insert into "${partialTable}" (hash, created_at) values ('h', 0)`));
     }

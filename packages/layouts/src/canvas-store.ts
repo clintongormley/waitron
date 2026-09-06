@@ -17,11 +17,10 @@ import { validateCanvas } from "./validate-canvas.js";
  * The list/get/create/update/delete service over `canvases` (design §4, SP-A.2 §16.3). MANY
  * rows per tenant, keyed by `id`, names unique per tenant.
  *
- * Every function takes a `(tx, …)` the CALLER has already scoped — the management routes open it with
- * `withTenant(deps.db, tenantId, …)` + `asAppUser(tx)`, so the app role's tenant-isolation policy
- * supplies `current_tenant_id()` and no function here sets a GUC. Proven under that exact shape in
- * `canvas-store.rls.test.ts` (real Postgres — RLS as the app role is a false pass on PGlite,
- * CLAUDE.md §4). Mirrors the other stores in this package (`theme-store.ts`, `receipt-store.ts`).
+ * Every function takes the caller's transaction, opened with
+ * `withTenant(deps.db, tenantId, …)` + `asAppUser(tx)`. Exercised in
+ * `canvas-store.pg.test.ts` (real Postgres, as a non-superuser `app_user` member — PGlite holds
+ * every grant, CLAUDE.md §4). Mirrors the other stores in this package (`theme-store.ts`, `receipt-store.ts`).
  *
  * The writers run, in order: (1) `authorizeManager(..., "till.configure")` — the write gate, before
  * any DB write, proven by-deletion in the suite; (2) `validateCanvas` — fail-closed on an invalid
@@ -53,7 +52,7 @@ import { validateCanvas } from "./validate-canvas.js";
  * Detection goes through `@waitron/db`'s `isUniqueViolation` / `pgErrorConstraint` (cause-chain walks),
  * not a top-level `.code` read, because the driver wraps every failure in Drizzle's `DrizzleQueryError`.
  * Pinned by crafted-error unit tests in `canvas-store.test.ts` and end to end in
- * `canvas-store.rls.test.ts`. Exported for the unit test, NOT from the package barrel.
+ * `canvas-store.pg.test.ts`. Exported for the unit test, NOT from the package barrel.
  */
 export function translateWriteError(err: unknown): never {
   if (isUniqueViolation(err)) {
@@ -68,7 +67,7 @@ export function translateWriteError(err: unknown): never {
   throw err;
 }
 
-/** All of the current tenant's canvases. RLS scopes the read to the caller's tenant. */
+/** All of the current tenant's canvases. The tenant predicate scopes the read. */
 export async function listCanvases(
   tx: Transaction,
   tenantId: string,
@@ -129,7 +128,7 @@ export async function createCanvas(
 
 /**
  * Replace a canvas's name + definition in place. Manager/admin only (`till.configure`). An absent id
- * (or another tenant's row, RLS-hidden) throws `canvas.not_found` — the by-id config-CRUD idiom the
+ * (or another tenant's row, excluded by the tenant predicate) throws `canvas.not_found` — the by-id config-CRUD idiom the
  * direct siblings on this same management surface use (`updateZone`/`updateTable`/`updateStatus` in
  * `apps/server/src/tables.ts`), read back via `.returning({ id })` so a PUT that matched zero rows is
  * a 404, never a masked "saved" 204 (e.g. a PUT to a canvas another session just deleted). A name
@@ -167,7 +166,7 @@ export async function updateCanvas(
 
 /**
  * Delete a canvas. Manager/admin only (`till.configure`). No definition to validate. An absent id (or
- * another tenant's row, RLS-hidden) throws `canvas.not_found`, read back via `.returning({ id })` —
+ * another tenant's row, excluded by the tenant predicate) throws `canvas.not_found`, read back via `.returning({ id })` —
  * the same by-id config-CRUD idiom `deactivateZone`/`deactivateTable`/`deactivateStatus` (`tables.ts`)
  * use, so a DELETE that matched zero rows is a 404 rather than a silent success. A device profile still
  * referencing the canvas (the composite FK `device_profiles_canvas_fk`, ON DELETE RESTRICT) trips a

@@ -56,7 +56,7 @@ beforeEach(async () => {
   ({ tenantId, tillId, nodeId, seriesId } = await seedTenant(suite.db));
   // A manager (holds `sale.void`), a supervisor (holds it too — the override authorizer), and a
   // staff member (holds nothing). Seeded as the superuser owner exactly like `seedTenant` above:
-  // PGlite bypasses RLS for the seeding connection, so no `app.tenant_id` is needed here.
+  // Seed directly on the fixture connection.
   managerId = await seedPerson("manager");
   supervisorId = await seedPerson("supervisor");
   const staffId = await seedPerson("staff");
@@ -67,7 +67,7 @@ beforeEach(async () => {
   staffSessionId = await openSession(staffId);
 });
 
-/** A person of `role` whose PIN is "1234", inserted as the superuser owner (RLS bypassed on PGlite),
+/** A person of `role` whose PIN is "1234", inserted as the superuser owner,
  * the same shape identity's own suites seed. */
 async function seedPerson(role: "staff" | "supervisor" | "manager" | "admin"): Promise<string> {
   const { rows } = await suite.db.execute<{ id: string }>(

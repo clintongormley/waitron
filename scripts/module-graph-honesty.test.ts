@@ -5,71 +5,72 @@ import { ALL_MODULES } from "../packages/composition/src/index.js";
 import { packageDirOf } from "../packages/module/src/module.js";
 
 /**
- * Every module descriptor's `requires` must NAME every cross-module dependency its migrations create
- * in SQL. A module depends on another when its `drizzle/*.sql` either FK-`REFERENCES` a table the
- * other module owns, installs a `CREATE TRIGGER … ON <table>` against one, OR calls another module's
- * `sync_capture` SPI via `EXECUTE FUNCTION sync_capture()` in a trigger — all three edges force a
- * migration-order dependency, because the referenced/triggered table or the called function must
- * exist first.
+ * Every module descriptor's `requires` must NAME every cross-module dependency its migrations
+ * create in SQL. A module depends on another when its `drizzle/*.sql` either FK-`REFERENCES` a
+ * table the other module owns, installs a `CREATE TRIGGER … ON <table>` against one, OR calls
+ * another module's `sync_capture` SPI via `EXECUTE FUNCTION sync_capture()` in a trigger — all
+ * three edges force a migration-order dependency, because the referenced/triggered table or the
+ * called function must exist first.
  *
  * WHY THIS HAS TO BE A TREE-WIDE ROOT-PROJECT PROGRAM. The `requires` graph lives in one package
- * (`@waitron/composition`) but the evidence for it — the `CREATE TABLE`/`REFERENCES`/
- * `CREATE TRIGGER` statements — is spread across every domain package's `drizzle/` directory. No
- * per-package suite can see both: a package that under-declares `requires` has, by construction, the
- * SQL in one package and the descriptor in another, and each package's own `test:coverage` loads only
- * its own tree. Only a program that reads the composition list's descriptors AND every
- * `packages/<pkg>/drizzle` at once can cross-check them. That is why it sits in the root Vitest project beside
- * `errors-reachable.test.ts` and `guarded-teardowns.test.ts` (see the repo-root `vitest.config.ts`),
- * not in any package.
+ * (`@waitron/composition`) but the evidence for it — the `CREATE TABLE`/`REFERENCES`/ `CREATE
+ * TRIGGER` statements — is spread across every domain package's `drizzle/` directory. No
+ * per-package suite can see both: a package that under-declares `requires` has, by construction,
+ * the SQL in one package and the descriptor in another, and each package's own `test:coverage`
+ * loads only its own tree. Only a program that reads the composition list's descriptors AND every
+ * `packages/<pkg>/drizzle` at once can cross-check them. That is why it sits in the root Vitest
+ * project beside `errors-reachable.test.ts` and `guarded-teardowns.test.ts` (see the repo-root
+ * `vitest.config.ts`), not in any package.
  *
  * WHAT IT COST. SP-1c derived the first `requires` graph from FK `REFERENCES` ALONE and declared
  * `sync` as depending on `core` only. That missed the two TRIGGER edges — `sync → identity` and
- * `sync → payments` — because `sync` enrols other modules' tables by installing capture triggers on
- * them (`persons`/`webauthn_credentials` from identity; `payments`/`payment_refunds`/`payment_policy`
- * from payments), with no FK between them. Review caught all three by hand and CLAUDE.md §3 recorded
- * the lesson: "a dependency graph has TWO kinds of cross-set edge, not one — grep for both." SP-1c
- * deferred the automated guard to SP-2, where descriptor package-ownership begins. This is it.
+ * `sync → payments` — because `sync` enrols other modules' tables by installing capture triggers
+ * on them (`persons`/`webauthn_credentials` from identity;
+ * `payments`/`payment_refunds`/`payment_policy` from payments), with no FK between them. Review
+ * caught all three by hand and CLAUDE.md §3 recorded the lesson: "a dependency graph has TWO
+ * kinds of cross-set edge, not one — grep for both." SP-1c deferred the automated guard to SP-2,
+ * where descriptor package-ownership begins. This is it.
  *
- * MECHANISM. This reads SQL as TEXT (never executing it). It maps every `CREATE TABLE "<name>"` to
- * its owning module and every `CREATE FUNCTION "<name>"` to the module that defines it, then for each
- * module scans for the edge kinds (FK reference, trigger, and the `sync_capture` SPI call), resolves
- * each target table/function to its owner, drops same-module targets, and asserts the surviving
- * cross-module set is a subset of the descriptor's declared `requires`. A package is in scope only if a descriptor's `migrations.from`
- * (`../<pkg>/drizzle`) points at it, so the module NAME (e.g. `fiscal`) is derived from the descriptor
- * rather than assumed equal to the package DIR name (e.g. `fiscal-verifactu`).
+ * MECHANISM. This reads SQL as TEXT (never executing it). It maps every `CREATE TABLE "<name>"`
+ * to its owning module and every `CREATE FUNCTION "<name>"` to the module that defines it, then
+ * for each module scans for the edge kinds (FK reference, trigger, and the `sync_capture` SPI
+ * call), resolves each target table/function to its owner, drops same-module targets, and asserts
+ * the surviving cross-module set is a subset of the descriptor's declared `requires`. A package
+ * is in scope only if a descriptor's `migrations.from` (`../<pkg>/drizzle`) points at it, so the
+ * module NAME (e.g. `fiscal`) is derived from the descriptor rather than assumed equal to the
+ * package DIR name (e.g. `fiscal-verifactu`).
  *
  * KNOWN LIMITATIONS, stated rather than papered over (CLAUDE.md §1):
- *   - The SPI-call edge is scoped to the `sync_capture` function SPECIFICALLY, not to arbitrary
- *     cross-module function calls. `EXECUTE_SYNC_CAPTURE` matches only `EXECUTE FUNCTION sync_capture`;
- *     the OWNER of `sync_capture` is auto-resolved from `CREATE FUNCTION` across the tree (so it is
- *     `sync`, not hardcoded), but a trigger calling some OTHER module's function would not surface.
- *     This is deliberate — a general function-call scan would surface unrelated edges (RLS helpers,
- *     shared trigger functions) beyond SP-3a's scope. Extend `EXECUTE_SYNC_CAPTURE` when another
- *     cross-module SPI appears. The `fiscal→sync` vacuous-pass anchor pins that this edge is actually
- *     found in the tree's real spelling.
- *   - It is a regex over comment- and string-stripped text, NOT a SQL parser. `stripSql` blanks
- *     slash-star blocks, `--` line comments, and `'…'` string literals (preserving line numbers), so a
- *     `references`/`create trigger` mention in any of those is ignored — pinned by the detector's
- *     negative controls below. Both trigger forms are matched — plain `CREATE TRIGGER` AND
- *     `CREATE CONSTRAINT TRIGGER` (core's deferrable coverage checks). But a trigger whose
- *     `ON <table>` is separated from the trigger name by content the `.*?` cannot span cleanly, or a
- *     table named with unusual quoting the
- *     `"?(?:public"?\.)?"?(\w+)"?` shape does not cover, could be missed. The defence against that is
- *     not a proof of totality — it is the vacuous-pass anchor, which asserts the scan actually FOUND
- *     the three known real edges (`sync→identity`, `sync→payments`, `workforce→identity`) in the
- *     tree's ACTUAL spelling. If the tree's SQL dialect drifts out from under these regexes, that
- *     anchor goes red rather than the guard passing empty (CLAUDE.md §1, "a measurement where both
- *     answers look alike measures nothing").
- *   - The stripping is single-pass and naive: `--` is treated as a comment start even inside a string
- *     literal (line comments are blanked before strings), and a `'` inside a `--` comment cannot open
- *     a string (comments are blanked first). The real tree is clean under this order — verified by the
- *     anchor and the empty tree-wide result — but a future migration mixing the two on one line could
- *     confuse it. A full tokenizer was not built; the failure mode is a stale anchor, not a silent
- *     pass.
- *   - Like every file under `scripts/`, this is NOT typechecked — `pnpm typecheck` is `pnpm -r
- *     typecheck` and never visits the workspace root (CLAUDE.md §2/§4). So it is kept plain and its
- *     one cross-package import (`ALL_MODULES`) is used only for runtime values, never for a shape only
- *     a typechecker would validate.
+ * - The SPI-call edge is scoped to the `sync_capture` function SPECIFICALLY, not to arbitrary
+ *   cross-module function calls. `EXECUTE_SYNC_CAPTURE` matches only `EXECUTE FUNCTION
+ *   sync_capture`; the OWNER of `sync_capture` is auto-resolved from `CREATE FUNCTION` across the
+ *   tree (so it is `sync`, not hardcoded), but a trigger calling some OTHER module's function
+ *   would not surface. This is deliberate — a general function-call scan would surface unrelated
+ *   edges (shared trigger functions) beyond SP-3a's scope. Extend `EXECUTE_SYNC_CAPTURE` when
+ *   another cross-module SPI appears. The `fiscal→sync` vacuous-pass anchor pins that this edge
+ *   is actually found in the tree's real spelling.
+ * - It is a regex over comment- and string-stripped text, NOT a SQL parser. `stripSql` blanks
+ *   slash-star blocks, `--` line comments, and `'…'` string literals (preserving line numbers),
+ *   so a `references`/`create trigger` mention in any of those is ignored — pinned by the
+ *   detector's negative controls below. Both trigger forms are matched — plain `CREATE TRIGGER`
+ *   AND `CREATE CONSTRAINT TRIGGER` (including deferrable checks). But a trigger whose `ON
+ *   <table>` is separated from the trigger name by content the `.*?` cannot span cleanly, or a
+ *   table named with unusual quoting the `"?(?:public"?\.)?"?(\w+)"?` shape does not cover, could
+ *   be missed. The defence against that is not a proof of totality — it is the vacuous-pass
+ *   anchor, which asserts the scan actually FOUND the three known real edges (`sync→identity`,
+ *   `sync→payments`, `workforce→identity`) in the tree's ACTUAL spelling. If the tree's SQL
+ *   dialect drifts out from under these regexes, that anchor goes red rather than the guard
+ *   passing empty (CLAUDE.md §1, "a measurement where both answers look alike measures nothing").
+ * - The stripping is single-pass and naive: `--` is treated as a comment start even inside a
+ *   string literal (line comments are blanked before strings), and a `'` inside a `--` comment
+ *   cannot open a string (comments are blanked first). The real tree is clean under this order —
+ *   verified by the anchor and the empty tree-wide result — but a future migration mixing the two
+ *   on one line could confuse it. A full tokenizer was not built; the failure mode is a stale
+ *   anchor, not a silent pass.
+ * - Like every file under `scripts/`, this is NOT typechecked — `pnpm typecheck` is `pnpm -r
+ *   typecheck` and never visits the workspace root (CLAUDE.md §2/§4). So it is kept plain and its
+ *   one cross-package import (`ALL_MODULES`) is used only for runtime values, never for a shape
+ *   only a typechecker would validate.
  */
 
 const REPO_ROOT = join(import.meta.dirname, "..");
@@ -81,7 +82,7 @@ const CREATE_TABLE = /\bcreate\s+table\s+(?:if\s+not\s+exists\s+)?"?(?:public"?\
 const REFERENCES = /\breferences\s+"?(?:public"?\.)?"?(\w+)"?/gi;
 /** `CREATE [CONSTRAINT] TRIGGER <name> … ON ["public".]"<table>"` — the trigger edge, in both the
  * plain `CREATE TRIGGER` form (sync's capture triggers, the immutability triggers) and the
- * `CREATE CONSTRAINT TRIGGER` form (core's deferrable coverage checks, e.g. `0005_sales.sql`). The
+ * `CREATE CONSTRAINT TRIGGER` form (including deferrable checks). The
  * `s` (dotAll) flag lets `.*?` span the multi-line triggers the tree writes (name on line 1, `ON`
  * clause on a later line); `\bon\b` first-matches the real ON clause because no keyword between it and
  * the trigger name (`AFTER`/`INSERT`/`UPDATE`/`DELETE`/`OR`/`BEFORE`/`TRUNCATE`/`CONSTRAINT`/
@@ -91,10 +92,12 @@ const CREATE_TRIGGER =
 
 /** `CREATE [OR REPLACE] FUNCTION ["public".]"<name>"` — to resolve which module DEFINES a function. */
 const CREATE_FUNCTION = /\bcreate\s+(?:or\s+replace\s+)?function\s+"?(?:public"?\.)?"?(\w+)"?/gi;
-/** `EXECUTE (FUNCTION|PROCEDURE) sync_capture` — a trigger calling sync's capture SPI. Scoped to
- * sync_capture deliberately: a general cross-module function-call scan would surface unrelated edges
- * (RLS helper calls, shared trigger functions) beyond SP-3a's scope. Limitation stated, not papered
- * over (CLAUDE.md §1) — extend to other SPIs when one appears. */
+/**
+ * `EXECUTE (FUNCTION|PROCEDURE) sync_capture` — a trigger calling sync's capture SPI. Scoped to
+ * sync_capture deliberately: a general cross-module function-call scan would surface unrelated
+ * edges (shared trigger functions) beyond SP-3a's scope. Limitation stated, not papered over
+ * (CLAUDE.md §1) — extend to other SPIs when one appears.
+ */
 const EXECUTE_SYNC_CAPTURE =
   /\bexecute\s+(?:function|procedure)\s+"?(?:public"?\.)?"?(sync_capture)"?(?!\w)/gi;
 
@@ -251,18 +254,18 @@ describe("the detector itself", () => {
     expect([...edgesFor(sql, "alpha", OWNER)]).toEqual(["beta"]);
   });
 
-  // The CONSTRAINT-trigger form is a distinct spelling PostgreSQL accepts and the tree uses (core's
-  // deferrable coverage checks); it must be caught too, or the guard has a silent gap in the very
+  // The CONSTRAINT-trigger form is a distinct spelling PostgreSQL accepts (including
+  // deferrable checks); it must be caught too, or the guard has a silent gap in the very
   // edge-kind it exists to check.
   it("flags a cross-module CREATE CONSTRAINT TRIGGER", () => {
     const sql = `create constraint trigger gadgets_check after insert on gadgets\n  deferrable initially deferred\n  for each row execute function gadgets_check();`;
     expect([...edgesFor(sql, "alpha", OWNER)]).toEqual(["beta"]);
   });
 
-  // The real spelling, not a synthetic one: mirrors `packages/db/drizzle/0005_sales.sql:310`. Pins
-  // that the regex matches the tree's ACTUAL constraint-trigger DDL. Owner here is a different module
-  // than the file's, so it must surface as a cross-module edge.
-  it("matches the real CREATE CONSTRAINT TRIGGER spelling from 0005_sales.sql", () => {
+  // A complete CONSTRAINT-trigger spelling, including deferred timing. Pins that the regex
+  // matches this DDL form. Owner here is a different module than the file's, so it must surface
+  // as a cross-module edge.
+  it("accepts the CREATE CONSTRAINT TRIGGER spelling", () => {
     const sql = `CREATE CONSTRAINT TRIGGER sales_check_tender_coverage\n  AFTER INSERT ON sales\n  DEFERRABLE INITIALLY DEFERRED\n  FOR EACH ROW EXECUTE FUNCTION sales_check_tender_coverage();`;
     const owner = new Map([["sales", "core"]]);
     expect([...edgesFor(sql, "sync", owner)]).toEqual(["core"]);

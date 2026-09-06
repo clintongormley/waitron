@@ -1,1 +1,0 @@
-ALTER TABLE "working_orders" ADD COLUMN "delivery_table_id" uuid;

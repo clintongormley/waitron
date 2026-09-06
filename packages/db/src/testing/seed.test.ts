@@ -2,8 +2,19 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { locationId as brandLocationId } from "@waitron/shared";
 import type { Database } from "../client.js";
-import { describeEachTarget } from "./harness.js";
+import { usePgliteDb } from "./lifecycle.js";
+import { CORE_MIGRATIONS } from "../migrations.js";
 import { freshNif, seedKitchenStation, seedNode, seedTenant } from "./seed.js";
+
+const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+
+// Each case gets empty mutable fixture tables while sharing the migrated database.
+afterEach(async () => {
+  await suite.db.execute(sql`delete from kitchen_stations`);
+  await suite.db.execute(sql`delete from nodes`);
+  await suite.db.execute(sql`delete from locations`);
+  await suite.db.execute(sql`delete from tenants`);
+});
 
 describe("freshNif", () => {
   // Deliberately asserts the SHAPE and the base, never a specific counter value: the counter is
@@ -19,19 +30,11 @@ describe("freshNif", () => {
   });
 });
 
-describeEachTarget("seedTenant", (target) => {
-  // beforeEach/afterEach rather than a per-test `const db`, matching every other
-  // describeEachTarget suite in this package: on the postgres target `target.create()` opens a
-  // real pool against the suite's shared container, so a database this file opens and never
-  // closes holds its backend for the rest of the run.
+describe("seedTenant", () => {
   let db: Database;
 
   beforeEach(async () => {
-    db = await target.create();
-  });
-
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
+    db = suite.db;
   });
 
   it("inserts one tenant and returns its id", async () => {
@@ -53,15 +56,11 @@ describeEachTarget("seedTenant", (target) => {
   });
 });
 
-describeEachTarget("seedNode", (target) => {
+describe("seedNode", () => {
   let db: Database;
 
   beforeEach(async () => {
-    db = await target.create();
-  });
-
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
+    db = suite.db;
   });
 
   it("inserts one node for the tenant + location and returns its id", async () => {
@@ -81,15 +80,11 @@ describeEachTarget("seedNode", (target) => {
   });
 });
 
-describeEachTarget("seedKitchenStation", (target) => {
+describe("seedKitchenStation", () => {
   let db: Database;
 
   beforeEach(async () => {
-    db = await target.create();
-  });
-
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
+    db = suite.db;
   });
 
   // Build the tenant + location the station FKs first (as seedNode's suite does), then seed the station.

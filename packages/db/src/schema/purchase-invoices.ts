@@ -102,7 +102,7 @@ export const purchaseInvoices = pgTable(
       sql`${t.deductibleProportion} >= 0 and ${t.deductibleProportion} <= 100`,
     ),
   ],
-).enableRLS();
+);
 
 /**
  * The per-rate VAT desglose of a received invoice (mutable, one-to-many). Normalized rows rather than
@@ -117,9 +117,6 @@ export const purchaseInvoiceVat = pgTable(
   "purchase_invoice_vat",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    // Carried on every tenant-scoped table (the FORCE-RLS guard keys on it); tenant consistency with
-    // the parent is enforced by the composite FK below, not a direct FK to `tenants` (mirrors
-    // `sale_lines`).
     tenantId: uuid("tenant_id").notNull(),
     purchaseInvoiceId: uuid("purchase_invoice_id").notNull(),
     // The VAT percentage as stored, e.g. "21.00".
@@ -131,9 +128,6 @@ export const purchaseInvoiceVat = pgTable(
     kind: purchaseVatKind("kind").notNull().default("ordinary"),
   },
   (t) => [
-    // Tenant-consistent composite FK: a VAT line cannot reference an invoice of another tenant,
-    // independently of whether RLS is in force on this connection (mirrors `sale_lines_sale_fk`).
-    // Cascade: deleting an invoice removes its VAT lines.
     foreignKey({
       columns: [t.tenantId, t.purchaseInvoiceId],
       foreignColumns: [purchaseInvoices.tenantId, purchaseInvoices.id],
@@ -142,4 +136,4 @@ export const purchaseInvoiceVat = pgTable(
     index("purchase_invoice_vat_invoice_idx").on(t.tenantId, t.purchaseInvoiceId),
     check("purchase_invoice_vat_rate_ck", sql`${t.rate} >= 0 and ${t.rate} <= 100`),
   ],
-).enableRLS();
+);

@@ -35,11 +35,11 @@ let seriesId: SeriesId; // the ordinary (purpose='standard') series — the F3 r
 // requires `sale.void`, and only the void's authorization matters here, not the substitution's caller.
 let voidSessionId: string;
 
-// PGlite for everything in this file: the guards here are pure logic (an empty list, a duplicate id,
-// an unknown/voided/already-substituted ticket, a wrong-node series) that a superuser backend
-// exercises just as well as a forced-RLS one. The two cross-tenant "hidden reads as not-found" cases
-// genuinely need RLS and live in record-substitution.rls.test.ts (real Postgres), per the plan's §6
-// target split — the same split record-correction.test.ts / .rls.test.ts already use.
+// The deployment holds one tenant per database. PGlite for everything in this file: the guards
+// here are pure logic (an empty list, a duplicate id, an unknown/voided/already-substituted
+// ticket, a wrong-node series) that a superuser backend exercises just as well as a non-superuser
+// one. `sale.not_found` and `sale.series_not_found` are asserted below for a genuinely ABSENT
+// row, which is what those codes mean here — the same shape record-correction.test.ts uses.
 const suite = usePgliteDb({
   // IDENTITY_MIGRATIONS after CORE: recordVoid now calls `authorize`, which reads persons/sessions.
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
@@ -270,19 +270,16 @@ describe("recordSubstitution — error propagation", () => {
     // the caller as-is rather than being misreported as `sale.already_substituted` — mirrors
     // record-void.ts's identical "not a unique violation" test.
     //
-    // Provoked with a cross-tenant substituted ticket, visible to the existence check ONLY because
-    // PGlite connects as a superuser (RLS bypassed — no `asAppUser` here). Under the real
-    // deployment role this would be `sale.not_found` instead (the .rls.test.ts suite proves that),
-    // but as a superuser the ticket is found, and the composite FK `(tenant_id, substituted_sale_id)
-    // → sales` then rejects the insert with a foreign-key violation (23503), not a unique one —
-    // exercising the untranslated rethrow.
+    // Provoked with a ticket belonging to a second seeded tenant: the existence check reads `sales`
+    // by id alone (no tenant predicate — record-substitution.ts step 1b) on a PGlite superuser
+    // connection, so the ticket IS found; the composite FK `(tenant_id, substituted_sale_id) →
+    // sales` then rejects the insert with a foreign-key violation (23503), not a unique one — which
+    // is what exercises the untranslated rethrow.
     const backend = new FakeFiscalBackend(suite.db);
     const other = await seedTenant(suite.db);
     const foreignTicket = await seedBareSale(suite.db, other);
 
     const error = await captureError(() =>
-      // Deliberately NOT the `substitute` helper: that switches to `app_user`, whose RLS would hide
-      // the cross-tenant ticket. Run as the superuser connection so the ticket reaches the FK.
       withTenant(suite.db, tenantId, (tx) =>
         recordSubstitution(tx, backend, substitutionInput([foreignTicket])),
       ),

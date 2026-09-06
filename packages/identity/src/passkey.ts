@@ -314,8 +314,8 @@ export async function finishPasskeyAuthentication(
   if (typeof input.response?.id !== "string") throw new AppError("passkey.not_registered", {});
 
   // Resolve the credential the authenticator returned, joining the owning person for their status.
-  // Tenant scoping is by RLS (withTenant), the same as the challenge consume above; (tenant_id,
-  // credential_id) is unique, so at most one matches. The inner join cannot drop a matched credential:
+  // The database holds one tenant and (tenant_id, credential_id) is unique.
+  // The inner join cannot drop a matched credential:
   // `person_id` is a FK to `persons`, so the owner always exists.
   const [cred] = await tx
     .select({

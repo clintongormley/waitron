@@ -1,14 +1,9 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { clearProvisionFixture } from "./testing/clear-provision-fixture.js";
+import { afterEach, describe, expect, it } from "vitest";
 import { randomBytes } from "node:crypto";
 import { withTenant, type Database } from "@waitron/db";
-import {
-  cloneTemplate,
-  nextCloneName,
-  pickTemplate,
-  resolveSharedHandle,
-} from "@waitron/db/testing/lifecycle.js";
-import type { RealPostgres } from "@waitron/db/testing/postgres.js";
-import type { SharedContainerHandle } from "@waitron/db/testing/shared-container.js";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { getCredential, loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { hashPassword, hashPin } from "@waitron/identity";
 import type { VenueRequest } from "@waitron/provisioning";
@@ -22,14 +17,8 @@ import { sealAeatCredential, type AeatCert } from "./aeat-credential.js";
 // refused by the SP-1b fiscal gate (that gate is exercised in provision.test.ts).
 const ALL_ENABLED = parseModuleConfig({}, ALL_MODULES);
 
-// Real Postgres, not PGlite: `tenant_credentials` is FORCE-RLS, so `putCredential` must run under
-// `withTenant`, and the seal FKs to a `tenants` row `provisionVenue` mints under the OWNER
-// connection — neither of which PGlite (every connection a superuser) faithfully represents
-// (CLAUDE.md §4). The shared-container clone's default connection is the container superuser, which
-// OWNS the manifest tables and so is the owner connection `provisionVenue`/`applyVenue` documents.
-
-// Each provisioned venue needs its own NIF (`tenants_country_tax_id_key` is unique); a fresh clone
-// per test still draws from one generator, the same nextNif shape `provision.test.ts` uses.
+// Each provisioned venue needs its own NIF (`tenants_country_tax_id_key` is unique); the shared database
+// draws from one generator, the same nextNif shape `provision.test.ts` uses.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -84,41 +73,18 @@ function testRing(): KeyRing {
   });
 }
 
-let handle: SharedContainerHandle;
-beforeAll(() => {
-  handle = resolveSharedHandle(undefined);
-});
+const suite = usePgliteDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
-// A FRESH manifest clone per test: `provisionVenue` stamps the GLOBAL `deployment` singleton and
-// mints a tenant, so a shared clone would leak one test's tenant/stamp into the next. A clone per
-// test keeps the scenarios order-independent (CLAUDE.md §4).
-let pg: RealPostgres | undefined;
-let db: Database | undefined;
+afterEach(() => clearProvisionFixture(suite.db));
 
-beforeEach(async () => {
-  pg = await cloneTemplate(handle.uri, pickTemplate(handle, "manifest"), nextCloneName());
-  db = await pg.connect();
-});
-
-afterEach(async () => {
-  const connection = db;
-  const started = pg;
-  db = undefined;
-  pg = undefined;
-  if (connection !== undefined) await connection.close();
-  if (started !== undefined) await started.stop();
-});
-
-/** The clone's owner connection, or a throw if read before `beforeEach` ran. */
 function ownerDb(): Database {
-  if (db === undefined) throw new Error("aeat-credential.test: clone not started");
-  return db;
+  return suite.db;
 }
 
-/** Provision a fresh venue and return its tenant id — the FK/RLS target the seal needs. */
+/** Provision a fresh venue and return its tenant id — the FK target the seal needs. */
 async function provisionTenant(target: Database): Promise<string> {
   const result = await provisionVenue(
-    { ownerDb: target, moduleConfig: ALL_ENABLED },
+    { ownerDb: target, moduleConfig: ALL_ENABLED, database: "waitron" },
     { environment: "preproduction", venue: venueRequest(nextNif()) },
   );
   return result.tenantId;

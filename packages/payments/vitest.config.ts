@@ -8,12 +8,13 @@ export default defineConfig({
     // src/testing/global-setup.ts. Because it precedes every worker, a Docker-absent run now fails
     // the whole package (that file's header explains the broadening).
     globalSetup: ["./src/testing/global-setup.ts"],
-    // PGlite boots a WASM PostgreSQL and applies two migration sets, and the RLS / concurrency
-    // suites clone the shared container's migrated template (globalSetup, above). Each per-suite cost
-    // is paid in a beforeAll — the PGlite WASM boot + migrations, or the real-PG ~26ms clone — so
-    // hookTimeout stays generous for the PGlite boot. The container boot/pull is NOT in a beforeAll:
-    // it moved to globalSetup, which vitest does not bound by hookTimeout. testTimeout covers the
-    // ordinary risk of a migration suite booting a second database inside a single `it`.
+    // PGlite boots a WASM PostgreSQL and applies two migration sets, and the real-Postgres suites
+    // clone the shared container's migrated template (globalSetup, above). Each per-suite cost is
+    // paid in a beforeAll — the PGlite WASM boot + migrations, or the real-PG ~26ms clone — so
+    // hookTimeout stays generous for the PGlite boot. The container boot/pull is NOT in a
+    // beforeAll: it moved to globalSetup, which vitest does not bound by hookTimeout. testTimeout
+    // covers the ordinary risk of a migration suite booting a second database inside a single
+    // `it`.
     testTimeout: 120_000,
     hookTimeout: 180_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],

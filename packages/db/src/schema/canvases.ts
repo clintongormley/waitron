@@ -13,15 +13,11 @@ import { tenants } from "./tenants.js";
  * jsonb. Same rationale — and same precedent — as `tenant_themes` (tenant-themes.ts).
  *
  * FK `restrict`, not cascade: removing a tenant must never silently discard its authored canvases.
- * The `/* v8 ignore next *\/` on the thunk arrow addresses the SAME v8 quirk the FK-thunk form has —
+ * The ` v8 ignore next *\/` on the thunk arrow addresses the SAME v8 quirk the FK-thunk form has —
  * drizzle-kit resolves the FK in a separate CLI process, so v8 counts the never-invoked arrow as an
  * uncovered function — but by a DIFFERENT remedy than the array `foreignKey({...})` form
  * `management_sessions` and `tenant_themes` use (no thunk): this table keeps the `.references(() => …)`
  * thunk and silences the false uncovered-function with the v8-ignore.
- *
- * `.enableRLS()` emits only `ENABLE ROW LEVEL SECURITY`. The `FORCE`, the tenant-isolation policy and
- * the app_user grants (SELECT/INSERT/UPDATE/DELETE — canvases are deletable) are hand-written in the
- * paired `--custom` migration (CLAUDE.md §3). inmutabilidad requires FORCE.
  */
 export const canvases = pgTable(
   "canvases",
@@ -47,4 +43,4 @@ export const canvases = pgTable(
     unique("canvases_tenant_id_key").on(t.tenantId, t.id), // composite-FK target (devices)
     unique("canvases_tenant_name_key").on(t.tenantId, t.name), // names unique per tenant
   ],
-).enableRLS();
+);

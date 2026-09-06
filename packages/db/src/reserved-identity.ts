@@ -21,7 +21,7 @@ export interface ReservedNodeInput {
 /**
  * Insert the standby's OWN dormant node row (design §6 R2): its distinct nodeId, its public key, and
  * the primary's endorsement of that key, all in one INSERT so public_key and endorsement land together.
- * Owner-role: `nodes` grants app_user SELECT only (`0017_nodes_rls.sql`), so these writes need the
+ * Owner-role: `nodes` grants app_user SELECT only (`drizzle/0001_db_baseline_sql.sql`), so these writes need the
  * owner (adopt already runs on ownerDb). Caller supplies a `withTenant` tx so this commits with the
  * reserved SIF + sealed key in one transaction (CLAUDE.md §3 — a write-path helper takes a `tx`).
  */
@@ -53,10 +53,9 @@ export async function insertReservedSeriesTx(
 }
 
 /**
- * The endorsement stored on a node's row, or null for a node that carries none (a self-trusted
- * primary). The R3 promote-signer reads it to attach to the membership document it mints. Read under
- * `withTenant`, mirroring `readMembershipTrustSet` (its sibling reader of `nodes`): `nodes` is
- * FORCE-RLS, so the read must carry the tenant GUC and rides app_user's SELECT.
+ * Returns the node's endorsement, or null when the row or endorsement is absent.
+ * A provisioned primary with no endorsement trusts its own key; mirror promotion includes a
+ * stored endorsement when signing its new membership document.
  */
 export function readNodeEndorsement(
   db: Database,
@@ -67,8 +66,6 @@ export function readNodeEndorsement(
     const [row] = await tx
       .select({ endorsement: nodes.endorsement })
       .from(nodes)
-      // `nodes` is FORCE-RLS and this read runs inside `withTenant`, so the tenant GUC policy already
-      // scopes it — no `eq(nodes.tenantId, …)` needed (matches sibling `readMembershipTrustSet`).
       .where(eq(nodes.id, nodeId))
       .limit(1);
     return row?.endorsement ?? null;
@@ -124,7 +121,7 @@ export function readStandardSeriesId(
 /**
  * Retire every LIVE series of a node (`retired_at = now()`), returning how many were retired.
  * Owner-role only: `app_user`'s UPDATE on this table is column-scoped to `next_number`
- * (`0003_invoice_series.sql`), and no runtime path retires a series — a restore does, on its
+ * (`drizzle/0001_db_baseline_sql.sql`), and no runtime path retires a series — a restore does, on its
  * privileged connection, before opening the node's replacement series.
  */
 export async function retireNodeSeriesTx(

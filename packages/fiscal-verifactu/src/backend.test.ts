@@ -510,18 +510,9 @@ describe("pendingCount", () => {
 });
 
 /**
- * The idempotent-replay read-back (Counter POS 7b, Task 14): re-derives the QR and returns the EXACT
- * filed desglose for an already-recorded sale, so a lost-response retry's reprinted ticket carries the
- * mandatory Veri*Factu QR and the authoritative VAT breakdown rather than a QR-less, recomputed one.
- *
- * PGlite, deliberately (CLAUDE.md §4): this is a pure READ-BACK of the stored `desglose` plus a QR
- * derivation — the identical read `write-path.e2e.test.ts` ("makes the QR payload derivable from the
- * stored record", "hands back a verificationUrl built from the same stored record") and `recordVoid`'s
- * own `select … where sale_id = …` already do on PGlite. It has no privilege / RLS-as-deployment-role /
- * concurrency dimension, so the heavier target's justification does not apply. The REAL-Postgres
- * read-back of the registro (the app role reading it under RLS on a live replay) is exercised at the
- * integration layer by `apps/server`'s `working-order.rls.test.ts` / `till-api.rls.test.ts` replay
- * tests, which drive THIS method through the real backend.
+ * Idempotent replay returns the filed desglose and derives its QR from the stored record.
+ * PGlite exercises this read-back without concurrent writers. The server
+ * working-order.pg.test.ts and till-api.pg.test.ts suites exercise replay through the backend.
  */
 describe("filedReceiptFor", () => {
   it("returns the exact filed difference-method desglose, not a recompute", async () => {

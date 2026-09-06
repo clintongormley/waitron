@@ -10,12 +10,12 @@ import type { CashCountInput, DailyCloseRecord } from "./close-types.js";
 
 // PGlite, deliberately — and the right target for the WALK. The re-walk (contiguity, genesis,
 // broken-link, hash recomputation from the jsonb read-back) is deterministic logic over rows already
-// committed; it does not turn on the non-superuser deployment role, FORCE RLS, or two writers
-// contending — the three things PGlite cannot show (CLAUDE.md §4). The break cases are crafted with
+// committed; it does not turn on the non-superuser deployment role or on two writers contending —
+// two of the things PGlite cannot show (CLAUDE.md §4). The break cases are crafted with
 // raw INSERTs, which the append-only trigger does NOT guard (it is BEFORE UPDATE OR DELETE), so they
 // need no privilege bypass. The verifier's teeth against a real mutation of a COMMITTED chain — a
 // privileged UPDATE/DELETE that bypasses the app-role immutability — are proven on real Postgres in
-// verify-daily-close-chain.rls.test.ts, where that bypass is the whole point. Mirrors
+// verify-daily-close-chain.pg.test.ts, where that bypass is the whole point. Mirrors
 // record-daily-close.test.ts's split.
 
 const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";
@@ -41,7 +41,7 @@ function record(businessDay: string, cashCounts: CashCountInput[]): Promise<Dail
   });
 }
 
-// Verify under the real app role + tenant GUC — the shape a caller (Task 5's demo) uses, which also
+// Verify under the app role with an explicit tenant id — the shape a caller (Task 5's demo) uses, which also
 // proves app_user's SELECT grant is enough to re-walk the chain.
 function verify() {
   return withTenant(suite.db, venue.tenantId, async (tx) => {
@@ -59,7 +59,7 @@ const SNAPSHOT = JSON.stringify({
   cashReconciliation: { byTill: [], nodeVariance: "0.00" },
 });
 
-/** Raw superuser INSERT of one close row, bypassing RLS (PGlite is superuser). INSERT is not what
+/** Owner INSERT of one close row. INSERT is not what
  * the append-only trigger guards, so no bypass is needed; this is how a break is staged without
  * mutating a committed row. */
 function craftClose(opts: {

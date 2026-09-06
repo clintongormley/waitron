@@ -27,10 +27,10 @@ import "./errors.js";
 
 // PGlite, not real Postgres, for the SEQUENTIAL crypto/round-trip properties here — generate a code,
 // enrol a device, verify the scrypt token, reject an unknown/consumed/expired code. None of these has a
-// privilege or concurrency dimension: the FORCE-RLS grants (SELECT/INSERT/DELETE on device_pairing_codes,
-// SELECT/INSERT/UPDATE on devices) are already proven against real Postgres in packages/db's
-// devices.rls.test.ts (Task 1), and the SINGLE-USE RACE — the one property PGlite would FALSE-PASS,
-// because it serialises every query onto one backend — lives in device.rls.test.ts against real Postgres
+// privilege or concurrency dimension: `app_user`'s grants on device_pairing_codes and devices are pinned
+// by the privilege matrix in packages/fiscal-verifactu, the schema's CHECKs and unique index by
+// packages/db's devices.test.ts, and the SINGLE-USE RACE — the one property PGlite would FALSE-PASS,
+// because it serialises every query onto one backend — lives in device.pg.test.ts against real Postgres
 // (CLAUDE.md §4). So PGlite is the correct lighter target for this file, the same choice kitchen.test.ts
 // makes for the station-config verbs.
 const LOCALE = "es-ES";
@@ -70,8 +70,10 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
   });
 }
 
-/** Read the enrolled device's `token_hash` as the superuser (RLS bypassed) — the load-bearing check
- * for the round-trip is that the stored hash verifies the raw token and is NOT the plaintext. */
+/**
+ * Read the enrolled device's `token_hash` as the superuser — the load-bearing check for the
+ * round-trip is that the stored hash verifies the raw token and is NOT the plaintext.
+ */
 async function deviceRow(deviceId: string): Promise<{ tokenHash: string }> {
   const { rows } = await db.execute<{ token_hash: string }>(
     sql`select token_hash from devices where id = ${deviceId}`,
@@ -88,9 +90,11 @@ async function pairingCodeCount(cfg: TillConfig): Promise<number> {
   return rows[0]!.n;
 }
 
-/** Backdate this tenant's pairing codes past PAIRING_TTL_MS. Run as the superuser db connection:
- * `app_user` holds no UPDATE on device_pairing_codes (a code is consumed, never edited), and a
- * superuser bypasses RLS, so this pure test-setup mutation cannot go through the app role. */
+/**
+ * Backdate this tenant's pairing codes past PAIRING_TTL_MS. Run as the superuser db connection:
+ * `app_user` holds no UPDATE on device_pairing_codes (a code is consumed, never edited), so this
+ * pure test-setup mutation cannot go through the app role.
+ */
 async function expirePairingCodes(cfg: TillConfig): Promise<void> {
   await db.execute(
     sql`update device_pairing_codes set created_at = now() - interval '16 minutes'
@@ -261,7 +265,7 @@ describe("kindRequiresStation", () => {
 describe("bindingFkField", () => {
   // The 23503 → field accessor, exercised with CRAFTED errors (no DB) so every branch is covered: the
   // `tables.ts` `isZoneFkViolation` / `uniqueViolationConstraint` idiom. The end-to-end 23503 translation
-  // is proven against real Postgres in device.rls.test.ts; here we pin the constraint-name mapping and
+  // is proven against real Postgres in device.pg.test.ts; here we pin the constraint-name mapping and
   // the deliberate NON-matches (a different constraint, a different SQLSTATE, no constraint name).
   const fk = (constraint: string): Error =>
     Object.assign(new Error("fk"), { code: "23503", constraint });

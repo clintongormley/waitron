@@ -1,3 +1,4 @@
+// Real PostgreSQL checks refund writers contending on the payment row lock.
 import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";

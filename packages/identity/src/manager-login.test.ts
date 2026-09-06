@@ -20,8 +20,8 @@ vi.mock("./verify-password.js", async (importOriginal) => {
 });
 
 // PGlite, not real Postgres: this suite tests the verifier LOGIC — the password/TOTP/suspended
-// branches and the role gate. A PGlite connection is superuser, so RLS is a false pass here
-// (CLAUDE.md §4); tenant-isolation is proven as the app role in the *.rls suites, not re-proven here.
+// branches and the role gate. A PGlite connection is superuser holding every grant, so a privilege
+// or trigger assertion would be a false pass here (CLAUDE.md §4); nothing below makes one.
 let tenantId: string;
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
@@ -73,9 +73,8 @@ describe("loginManager", () => {
     expect(spy).toHaveBeenCalledWith("some password", expect.any(String));
   });
   it("does not authenticate a person from another tenant (tenant filter)", async () => {
-    // A person with a valid email + password, but in a DIFFERENT tenant. Even on PGlite (superuser,
-    // RLS bypassed), loginManager scoped to `tenantId` must not find them — so a caller that forgets
-    // withTenant cannot mint a session with a mismatched tenant_id. The hardened code is the same
+    // A person with a valid email + password, but in a DIFFERENT tenant. The explicit tenant filter must not find them, so loginManager cannot
+    // mint a session with a mismatched tenant_id. The hardened code is the same
     // `password.invalid` an unknown email yields.
     const otherTenant = await seedTenant(suite.db);
     await seedManager(suite.db, otherTenant, { email: "owner@x.com" });

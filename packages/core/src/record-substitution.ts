@@ -52,8 +52,7 @@ export interface RecordSubstitutionInput {
   seriesId: SeriesId;
   /**
    * The simplified (F2) tickets being exchanged for this one full invoice — one or many (the N:1
-   * fan-out a rectificativa's single `correctsSaleId` does not have). Each is read RLS-scoped, so a
-   * cross-tenant id is `sale.not_found`. Must be non-empty and free of duplicates (both caller
+   * fan-out a rectificativa's single `correctsSaleId` does not have). An unknown id is `sale.not_found`. Must be non-empty and free of duplicates (both caller
    * preconditions, rejected in step 1 before any row is written); a ticket already exchanged by a
    * prior F3 is `sale.already_substituted`.
    */
@@ -129,10 +128,8 @@ export async function recordSubstitution(
     );
   }
 
-  // Step 1b. Every substituted ticket must exist, RLS-scoped and tenant-unqualified exactly as
-  // `./record-void.ts`: RLS filters a row belonging to another tenant, so a cross-tenant ticket is
-  // genuinely not-found rather than forbidden — the right answer to leak. Reported per-id, in input
-  // order, so the caller learns WHICH ticket is missing.
+  // Step 1b. Every substituted ticket must exist; look up each by id.
+  // Report the first missing id in input order so the caller knows which ticket is missing.
   const found = await tx
     .select({ id: sales.id })
     .from(sales)
@@ -163,10 +160,10 @@ export async function recordSubstitution(
   // decision — no separate `'substitution'` purpose), so it must draw its number from a
   // `purpose='standard'` series, exactly as `recordSale` does: a series reserved for another purpose
   // (a `rectificative` one) numbers a different kind of document «en todo caso» (RD 1619/2012 art.
-  // 6.1.a), and drawing an F3's number from it would corrupt a legally-load-bearing, unrepairable
+  // 6.1.a), and drawing an F3's number from it would corrupt a legally significant, unrepairable
   // series. The purpose guard is the mirror of the one `./record-correction.ts` applies from its
   // side (which demands `rectificative`). The explicit tenant predicate mirrors `recordSale` and is
-  // redundant under RLS but guards a non-scoped connection too.
+  // applied to the series lookup.
   const [series] = await tx
     .select({
       code: invoiceSeries.code,
@@ -276,8 +273,7 @@ export async function recordSubstitution(
 
   /* v8 ignore start */
   if (inserted === undefined) {
-    // Unreachable for the same reason as `recordSale`: this INSERT carries no WHERE clause, and
-    // RLS's WITH CHECK fails a mismatched tenant with an error rather than inserting zero rows.
+    // This unconditional INSERT returns its row or throws on a constraint violation.
     throw new Error("sales: insert returned no row");
   }
   /* v8 ignore stop */
@@ -344,7 +340,7 @@ export async function recordSubstitution(
   if (location === undefined) {
     // Structurally unreachable given the schema: `tills.location_id` is a NOT NULL foreign key, so
     // a till that exists joins to exactly one location. Reaching here means the till does not exist
-    // or RLS hid another tenant's — a caller programming error, not a fiscal condition.
+    // or the tenant predicate excluded it — a caller programming error, not a fiscal condition.
     throw new Error(`recordSubstitution: no location found for till ${input.tillId}`);
   }
   /* v8 ignore stop */

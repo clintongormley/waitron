@@ -10,8 +10,8 @@
 //
 // PGlite is the right target for a demo: everything shown here is deterministic logic over immutable
 // commercial rows (the snapshot, the per-till variance arithmetic, the hash chain). The non-superuser
-// deployment role, FORCE RLS and two-writer contention — the three things PGlite cannot show — are
-// covered by `record-daily-close.rls.test.ts` on real Postgres, not by a demo.
+// deployment role and two-writer contention — two of the things PGlite cannot show — are
+// covered by `record-daily-close.pg.test.ts` on real Postgres, not by a demo.
 //
 // The day it rings up — business day 2026-08-04, Europe/Madrid, across TWO tills at one node:
 //   Caja 1: base 100.00 @ 21% → 121.00 CASH  ;  base 40.00 @ 10% → 44.00 CARD
@@ -93,9 +93,9 @@ interface Venue {
 }
 
 /**
- * Seeds tenant → location → two tills → node → standard series as the PGlite superuser (which
- * bypasses RLS), exactly as the package's own fixtures do — `app_user` holds no INSERT on `tenants`,
- * deliberately (a running POS cannot create tenants).
+ * Seeds tenant → location → two tills → node → standard series as the PGlite superuser, exactly
+ * as the package's own fixtures do — `app_user` holds no INSERT on `tenants`, deliberately (a
+ * running POS cannot create tenants).
  */
 async function seedVenue(db: Database): Promise<Venue> {
   const t = await db.execute<{ id: string }>(
@@ -176,7 +176,7 @@ async function ringSale(
   });
 }
 
-/** `recordDailyClose` for one business day, run RLS-safe as the application role. */
+/** `recordDailyClose` for one business day, run as the application role. */
 function closeDay(
   db: Database,
   venue: Venue,

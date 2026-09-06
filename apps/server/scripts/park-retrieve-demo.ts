@@ -19,11 +19,12 @@
 //
 // Like `till-demo.ts` (and unlike `daily-close-demo.ts`'s in-memory PGlite) this uses a real
 // PostgreSQL, because the whole point is to file genuine huella-chained, append-only
-// `registros_facturacion` rows AS THE APP ROLE UNDER RLS — which PGlite's superuser-only connection
-// cannot prove. `applyVenue` and the extra till run as the connection OWNER (which those inserts need);
-// the park/list/retrieve/pay functions drop to `app_user` via `withTenant` + `asAppUser` internally,
-// the same as the deployed host. `resolveClient` is supplied but never reached: `recordSale` never
-// contacts AEAT (that is `drain`'s job), so the stub below throws if it is ever called.
+// `registros_facturacion` rows AS THE APP ROLE — which PGlite's superuser-only connection cannot
+// prove. `applyVenue` and the extra till run as the connection OWNER (which those inserts need);
+// the park/list/retrieve/pay functions drop to `app_user` via `withTenant` + `asAppUser`
+// internally, the same as the deployed host. `resolveClient` is supplied but never reached:
+// `recordSale` never contacts AEAT (that is `drain`'s job), so the stub below throws if it is
+// ever called.
 //
 // Run it against a throwaway database (NEVER a real one — it creates a tenant and chains real fiscal
 // records, and a pre-production stamp on a production chain is unrecoverable, see CLAUDE.md §5):
@@ -184,10 +185,10 @@ async function main(): Promise<void> {
     // sale requests carry real product ids (the till never invents one).
     const available = await withTenant(db, caja1.tenantId, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, { name: "Delicatessen" });
-      const comida = await createCategory(tx, { name: "Comida" });
-      const bebidas = await createCategory(tx, { name: "Bebidas" });
-      await createProduct(tx, {
+      const cat = await createCatalogue(tx, caja1.tenantId, { name: "Delicatessen" });
+      const comida = await createCategory(tx, caja1.tenantId, { name: "Comida" });
+      const bebidas = await createCategory(tx, caja1.tenantId, { name: "Bebidas" });
+      await createProduct(tx, caja1.tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,
         descriptions: { [LOCALE]: "Jamón cortado" },
@@ -195,7 +196,7 @@ async function main(): Promise<void> {
         unitPrice: "24.90", // €/kg, gross (VAT-inclusive), reduced (10%)
         vatClass: "reduced",
       });
-      await createProduct(tx, {
+      await createProduct(tx, caja1.tenantId, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
         descriptions: { [LOCALE]: "Agua mineral" },

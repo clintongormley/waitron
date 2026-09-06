@@ -55,8 +55,7 @@ beforeEach(() => {
 });
 
 /** A fresh tenant with one active person, one registered credential, and one login challenge on file.
- * Seeded as the superuser (RLS bypassed) — the concurrency property under test is row-locking, proven
- * on distinct backends; tenant isolation is proven separately in webauthn.rls.test.ts. */
+ * Seeded as the owner — the property under test is row-locking, proven on distinct backends. */
 async function seedFixture(): Promise<{ tenant: string; personId: string; handle: string }> {
   const tenant = await seedTenant(suite.admin);
   const personId = await seedPerson(suite.admin, tenant);

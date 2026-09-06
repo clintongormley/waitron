@@ -12,14 +12,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-/**
- * The default IANA time zone for a venue — the SINGLE source of truth for `"Europe/Madrid"`. It is
- * `locations.time_zone`'s schema default (below) AND the runtime fallback the reserved-on-floor read
- * uses for a missing/RLS-hidden row and a stored value `Intl` rejects (`safeTimeZone` /
- * `listTablesWithState` in `apps/server/src/working-order.ts`). Exported so those three copies stay in
- * sync from one literal rather than drifting. Changing it here changes the schema default, which
- * `db:generate` re-emits as the same literal into the migration — verify no spurious migration results.
- */
+/** The venue time-zone default, shared with runtime fallbacks. */
 export const DEFAULT_TIME_ZONE = "Europe/Madrid";
 
 /**
@@ -86,7 +79,7 @@ export const tenants = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("tenants_country_tax_id_key").on(t.country, t.taxId)],
-).enableRLS();
+);
 
 /**
  * A venue. `invoiceLocales` is an ORDERED list of one or two locales: one means
@@ -175,7 +168,7 @@ export const locations = pgTable(
     // (0078; 0077 first drops the original single-column FK) exactly like `location_catalogues`'s FKs —
     // deliberately NOT a single-column `.references()`
     // here — so a location cannot take another tenant's catalogue as its default (0028's single-column
-    // FK to catalogues(id) let it; proven in locations-default-catalogue.rls.test.ts). `catalogue_id` is
+    // FK to catalogues(id) let it; proven in locations-default-catalogue.test.ts). `catalogue_id` is
     // nullable, so a MATCH SIMPLE composite FK skips the check when it is NULL (no default). Declaring
     // the FK in the migration rather than the schema drops the tenants→catalogue import edge the
     // single-column thunk needed; `catalogue.ts` still imports `tenants` for its own tenant FK, so the
@@ -194,7 +187,7 @@ export const locations = pgTable(
     unique("locations_tenant_id_key").on(t.tenantId, t.id),
     index("locations_tenant_id_idx").on(t.tenantId),
   ],
-).enableRLS();
+);
 
 /**
  * A point of sale. Deliberately REGIME-NEUTRAL: `NúmeroInstalación` and
@@ -236,4 +229,4 @@ export const tills = pgTable(
     unique("tills_tenant_id_key").on(t.tenantId, t.id),
     index("tills_tenant_id_idx").on(t.tenantId),
   ],
-).enableRLS();
+);

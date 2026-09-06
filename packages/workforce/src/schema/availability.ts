@@ -16,7 +16,7 @@ import { persons } from "@waitron/identity";
 /**
  * A person's STATED availability window on a given weekday — "available Mondays 09:00–17:00 from 1
  * March". PLANNING data, ordinary mutable rows: the app role holds SELECT, INSERT, UPDATE and DELETE
- * (drizzle/0008_scheduling_planning_rls.sql), no append-only trigger and no chain — a person's stated
+ * (drizzle/0001_workforce_baseline_sql.sql), no append-only trigger and no chain — a person's stated
  * availability changes freely (design 2026-07-22 §2.1 / plan §2.1).
  *
  * `weekday` is 0–6 (Monday..Sunday is a rendering choice, not fixed here — only the 0–6 domain is).
@@ -71,4 +71,4 @@ export const availability = pgTable(
       sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`,
     ),
   ],
-).enableRLS();
+);

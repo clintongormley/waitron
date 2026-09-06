@@ -160,7 +160,7 @@ export function activeSalesClause(input: { tenantId: TenantId }): SQL {
 /**
  * The optional node predicate every sales aggregate applies: `and s.node_id = <nodeId>` when a node is
  * fixed (a node-grain view — the dashboard overview/daily-close/period), an empty fragment when it is
- * omitted (a tenant-wide aggregate — e.g. modelo 303 — relying on RLS + the tenant predicate). Assumes
+ * omitted (a tenant-wide aggregate — e.g. modelo 303 — relying on the tenant predicate). Assumes
  * the outer query aliases `sales` as `s`, and carries its own leading `and`, so the caller writes it
  * inline as `${nodeScopeClause(input.nodeId)}` — the `activeSalesClause` convention. Shared by
  * `aggregateVatByRate` and `computeTopSellers` so the two cannot drift on how a node is scoped.

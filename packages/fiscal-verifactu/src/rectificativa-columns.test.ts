@@ -7,15 +7,12 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
 
 /**
- * The four AEAT rectificativa columns on `registros_facturacion` (migration 0010) and their two
+ * The four AEAT rectificativa columns on `registros_facturacion` (the baseline) and their two
  * CHECK constraints. docs/superpowers/plans/2026-08-02-rectificativas.md §2.2.
  *
  * PGlite (via usePgliteDb), matching this package's own `inmutabilidad.test.ts`: these are CHECK,
  * jsonb round-trip and trigger-backstop assertions, none of which needs the non-superuser
- * deployment role or lock contention that would require real Postgres (CLAUDE.md §4). The one
- * assertion that DOES — RLS still scopes the table as a non-superuser after the column add — lives
- * in `rectificativa-columns.rls.test.ts` against a real container, mirroring this package's other
- * `*.rls.test.ts` files.
+ * deployment role or lock contention that would require real Postgres (CLAUDE.md §4).
  */
 const pg = usePgliteDb({
   migrations: TEST_MIGRATIONS,
@@ -46,11 +43,7 @@ interface RegistroFields {
   importeRectificacion?: unknown;
 }
 
-/**
- * Inserts one alta registro carrying the rectificativa columns. Runs on the given executor —
- * `pg.db` (superuser, RLS bypassed) for the CHECK/jsonb tests, or an app-role transaction for the
- * trigger test. Negative totals throughout, as a rectificativa carries.
- */
+/** Insert a rectificativa alta using the owner for CHECK/jsonb cases or app_user for triggers. */
 async function insertRegistro(
   exec: { execute: (q: ReturnType<typeof sql>) => Promise<unknown> },
   fields: RegistroFields = {},
@@ -104,9 +97,7 @@ describe("registros_tipo_rectificativa_ck — the value domain", () => {
   });
 
   it("rejects an unknown tipo_rectificativa", async () => {
-    // PROVEN BY DELETION (manual, recorded in this task's report): with
-    // registros_tipo_rectificativa_ck removed from migration 0010, this exact insert succeeds.
-    // The check is what rejects a value outside {S, I}.
+    // registros_tipo_rectificativa_ck rejects values outside {S, I}.
     const error = await captureError(() =>
       insertRegistro(pg.db, { tipoFactura: "R5", tipoRectificativa: "X" }),
     );
@@ -117,8 +108,7 @@ describe("registros_tipo_rectificativa_ck — the value domain", () => {
 
 describe("registros_tipo_factura_rectificativa_ck — rule 1115 at the DB", () => {
   it("rejects a tipo_rectificativa sitting on a non-rectificativa tipo_factura", async () => {
-    // Defense-in-depth (§2.2): a tipo_rectificativa may only appear on an R1–R5 invoice. An 'I'
-    // on an F2 is the shape this check forbids.
+    // tipo_rectificativa may appear only on an R1–R5 invoice.
     const error = await captureError(() =>
       insertRegistro(pg.db, { tipoFactura: "F2", tipoRectificativa: "I" }),
     );
@@ -199,7 +189,7 @@ describe("the new columns inherit the table's immutability", () => {
   class RollbackSignal extends Error {}
 
   it("refuses an UPDATE of tipo_rectificativa by the trigger backstop", async () => {
-    // Confirms the table-wide reject_mutation() trigger (0001_registros_inmutables.sql) covers the
+    // Confirms the table-wide reject_mutation() trigger (0001_fiscal_baseline_sql.sql) covers the
     // new column with NO new DDL. Revocation fires first for the app role, so — exactly as
     // inmutabilidad.test.ts does for `huella` — grant UPDATE inside a rolled-back transaction and
     // watch the SECOND layer (the trigger) catch it. WT001 is the trigger's SQLSTATE.

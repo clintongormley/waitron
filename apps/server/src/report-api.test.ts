@@ -20,15 +20,8 @@ import { MANAGEMENT_COOKIE } from "./management-session.js";
 import { BOX_27, packAeatNumeric } from "./testing/dr303.js";
 import "./errors.js";
 
-// PGlite, not real Postgres: this suite proves the modelo 303 export ROUTE — the request/response
-// boundary, the year/period/declarationType screens, the permission gate and STATUS map, and the
-// ISO-8859-1 fixed-layout body — end to end in-process, the same way `purchasing-api.test.ts` proves
-// the purchase-invoice routes. It seeds sales + received invoices DIRECTLY as the PGlite superuser
-// (RLS bypassed — pure setup, the `modelo-303-demo.ts` seed idiom), never through the fiscal write
-// path: the route (and `computeVatReturn` beneath it) only READS the filed `sales.vat_breakdown` and
-// the purchase tables. The differential RLS-isolation proof and the gate-by-DELETION proof are the
-// real-Postgres suite (Task 2d), which PGlite cannot show because it connects as a superuser that
-// bypasses FORCE RLS (CLAUDE.md §4).
+// PGlite exercises VAT-export validation, permissions, status mapping and the encoded body.
+// Sales and received invoices are seeded directly because the report reads their stored values.
 const noopLog: Logger = () => {};
 
 let tenantId: string;
@@ -85,7 +78,7 @@ const expectedBox27Q1 = packAeatNumeric(
   BOX_27.len,
 );
 
-/** Seeds one sale directly (superuser bypasses RLS — pure setup), with a single-rate filed desglose on
+/** Seeds one sale directly (fixture owner), with a single-rate filed desglose on
  * `sales.vat_breakdown` — the only column the reporting aggregate reads. */
 async function seedSale(db: Database, s: SeededSale | typeof Q1_SALE): Promise<void> {
   await db.insert(sales).values({
@@ -167,10 +160,10 @@ const suite = usePgliteDb({
       await asAppUser(tx);
       const mgr = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
-        values (current_tenant_id(), 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+        values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
       const stf = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
-        values (current_tenant_id(), 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+        values (${tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
       const managerSession = await startManagementSession(tx, {
         tenantId,
         personId: mgr.rows[0]!.id,

@@ -2,12 +2,8 @@ import { createHash } from "node:crypto";
 
 /**
  * A fixed, arbitrary namespace UUID. NEVER change it: the derived tenant ids are how a re-run
- * finds the obligado it created before. Under FORCE ROW LEVEL SECURITY a provisioning connection
- * cannot look a tenant up by (country, tax_id) before it knows which tenant scope to adopt
- * (0011_provisioner_role.sql:117-123), so the id is DERIVED from (country, tax_id) instead — the
- * provisioner picks it, sets app.tenant_id to it, and inserts under that scope (spec D8) — the same
- * pick-the-uuid / set-the-GUC / insert-with-an-explicit-id technique `venue-apply.ts` uses under
- * `withTenant`.
+ * finds the obligado it created before. The country and tax id determine the id
+ * used by the tenant insert and its dependent location rows.
  */
 const OBLIGADO_NAMESPACE = "6f9c1e2a-3b4d-4e6f-8a9b-0c1d2e3f4a5b";
 
@@ -26,10 +22,10 @@ function uuidV5(name: string, namespace: string): string {
  * The obligado's stable tenant id, derived from its fiscal identity.
  *
  * INVARIANT: any future PRODUCTION tenant-creation path MUST derive its id through this function,
- * never a random one. `applyVenue`'s re-run idempotency adopts this derived id as its RLS scope and
+ * never a random one. `applyVenue`'s re-run idempotency uses this derived id and
  * inserts the tenant with `ON CONFLICT DO NOTHING` (venue-apply.ts), and `locations.tenant_id`
- * FK-references `tenants.id` (0000_tenancy.sql) — a second path that minted a RANDOM id for the same
- * (country, tax_id) would make the re-run's ON CONFLICT a no-op while the scope adopts the derived
+ * FK-references `tenants.id` (packages/db/drizzle/0000_db_baseline.sql) — a second path that minted a
+ * RANDOM id for the same (country, tax_id) would make the re-run's ON CONFLICT a no-op while the scope adopts the derived
  * id, so every location insert would fail the FK. `venue` is the only such path today; `seedTenant`
  * and the fixtures use `defaultRandom()` ids but are test-only.
  *
@@ -40,8 +36,8 @@ function uuidV5(name: string, namespace: string): string {
  * whitespace is NOT normalized (and must not be — a taxId's inner content is not ours to alter):
  * `"B123 45678"` and `"B12345678"` remain DISTINCT obligados. Any caller gets the canonical id. This
  * is a no-op for the primary caller (`planVenue`, which canonicalizes country/taxId itself before it
- * builds the tenant row), and load-bearing for the secondary one: `provisionVenue`'s double-provision
- * guard (apps/server) recomputes the id from the RAW request to look the obligado up under RLS, and
+ * builds the tenant row), and required by the secondary one: `provisionVenue`'s double-provision
+ * guard (apps/server) recomputes the id from the RAW request to look the obligado up by id, and
  * normalizing here keeps that lookup aligned with the id `planVenue`/`applyVenue` stored. Without it,
  * `es`/`ES` for one business would derive two ids and mint two permanent, unmergeable obligados — a
  * re-run meant to add a shop would silently start a second SIF/hash chain (§5). ISO-3166 alpha-2 is

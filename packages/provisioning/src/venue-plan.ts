@@ -81,7 +81,7 @@ export type VenueAction =
  * The location/till/node ids are NOT in the actions: they are generated at apply time and threaded
  * by order (ensure-tenant sets the scope; create-location makes a location; create-node makes the
  * node the following actions reference). Only the tenant id is here, and it is DERIVED — so a
- * re-run reuses the same obligado under RLS without a tax_id lookup (spec D8).
+ * re-run reuses the same obligado by its deterministic id without a tax_id lookup (spec D8).
  */
 export function planVenue(request: VenueRequest, modules: readonly WaitronModule[]): VenueAction[] {
   // Canonicalize the fiscal identity ONCE, at the top, and use these values for BOTH the derived id

@@ -25,8 +25,8 @@ import "./errors.js";
 
 // PGlite, not real Postgres: the `POST /api/tables/:id/status` route is wiring — session guard +
 // isUuid screen + STATUS mapping over the operator `setTableStatus` verb, which is LOGIC (no privilege
-// or concurrency behaviour to prove here). The verb's own real-PG proofs (RLS, the reset trigger) live
-// in `set-table-status.test.ts` / the `*.rls.test.ts` suites; they are not re-proven at the HTTP layer.
+// or concurrency behaviour to prove here). The verb's own real-PG proofs (the reset trigger) live in
+// `set-table-status.test.ts` and `clear-table-status.test.ts`; they are not re-proven at the HTTP layer.
 let cfg: TillConfig;
 let ana: { id: string };
 // A persistent dining table and two statuses (one active, one inactive) seeded once. The inactive one
@@ -55,8 +55,7 @@ const suite = usePgliteDb({
       values (${tenantId}, 'Ana', ${hashPin("5555")}, 'staff') returning id`);
     ana = { id: person.rows[0]!.id };
     cfg = makeCfg(tenantId, till.rows[0]!.id, locationId, nodeId);
-    // One dining table + one active and one inactive status, seeded on the APP role under the tenant so
-    // the writes go through the same RLS-scoped path the routes use (not a superuser bypass insert).
+    // Seed a table and active/inactive statuses through the application transaction.
     const seeded = await withTenant(db, tenantId, async (tx) => {
       await asAppUser(tx);
       const { id: tableId } = await createTable(tx, cfg, { label: "T1" });
@@ -278,73 +277,5 @@ describe("GET /api/statuses", () => {
     const res = await noAuth.request("/api/statuses");
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
-  });
-
-  it("does not leak another tenant's status — B's status is invisible to A, and vice versa, through the real route", async () => {
-    // Route wiring and `table_service_statuses` RLS are each proven independently; this COMPOSES them
-    // end to end — a distinct second tenant's status must never appear in the first tenant's picker.
-    // Two directions, so neither pass is the vacuous "it was never seeded on this tenant anyway".
-    const db = suite.db;
-    const tenantB = await seedTenant(db);
-    const locB = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantB}, 'Barra B', array['es-ES'], 'Venta en establecimiento') returning id`);
-    const locationB = locB.rows[0]!.id;
-    const tillB = await db.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name) values (${tenantB}, ${locationB}, 'Caja B') returning id`);
-    const nodeB = await seedNode(db, tenantB, brandLocationId(locationB));
-    const brunoRow = await db.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantB}, 'Bruno', ${hashPin("6666")}, 'staff') returning id`);
-    const brunoId = brunoRow.rows[0]!.id;
-    // B's own distinctive status, inserted on the APP role under B's tenant (the RLS-scoped path).
-    const statusB = await withTenant(db, tenantB, async (tx) => {
-      await asAppUser(tx);
-      return tx.execute<{ id: string }>(
-        sql`insert into table_service_statuses (tenant_id, label, color) values (${tenantB}, 'Solo B', '#22c55e') returning id`,
-      );
-    });
-    const statusBId = statusB.rows[0]!.id;
-
-    // A's route (A's session cookie) must NOT see B's status.
-    const aOptions = (await (await request("/api/statuses")).json()) as {
-      id: string;
-      label: string;
-    }[];
-    expect(aOptions.some((o) => o.id === statusBId)).toBe(false);
-    expect(aOptions.some((o) => o.label === "Solo B")).toBe(false);
-
-    // B's OWN route DOES see it (proving the seed is real and RLS — not a missing insert — is why A
-    // cannot), and symmetrically B does not see A's "Bill requested".
-    const cfgB = makeCfg(tenantB, tillB.rows[0]!.id, locationB, nodeB);
-    const appB = new Hono();
-    mountTillApi(
-      appB,
-      {
-        db,
-        backend: {} as FiscalBackend,
-        clock: systemClock(),
-        cfg: cfgB,
-        secureCookies: false,
-        venueLocale: "es-ES",
-      },
-      collect([]),
-    );
-    const sessionB = await withTenant(db, tenantB, async (tx) => {
-      await asAppUser(tx);
-      return loginWithPin(tx, {
-        tenantId: cfgB.tenantId,
-        tillId: cfgB.tillId,
-        personId: brunoId,
-        pin: "6666",
-      });
-    });
-    const bOptions = (await (
-      await appB.request("/api/statuses", {
-        headers: { cookie: `${SESSION_COOKIE}=${sessionB.id}` },
-      })
-    ).json()) as { id: string; label: string }[];
-    expect(bOptions.some((o) => o.id === statusBId)).toBe(true);
-    expect(bOptions.some((o) => o.id === STATUS_ID)).toBe(false);
   });
 });

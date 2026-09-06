@@ -1,28 +1,21 @@
+import { CORE_MIGRATIONS } from "../migrations.js";
 import { sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
-import { useTemplateDb } from "../testing/lifecycle.js";
+import { usePgliteDb } from "../testing/lifecycle.js";
 
-// Real Postgres (a template clone), not PGlite: the tenant-consistent composite FK is enforced by the
-// engine regardless of RLS, but the sibling suite (device-profiles.rls.test.ts) already runs on real
-// PG, so this stays on the same target for a single template. The composite FK is hand-written in the
-// --custom migration (0107) — a bare uuid column carries no FK, the `devices.station_id` idiom. These
-// tests pin that a profile's canvas_id cannot point at ANOTHER tenant's canvas, that a NULL canvas_id
-// is unconstrained (MATCH SIMPLE skips the check on any NULL column), and that a referenced canvas
-// cannot be hard-deleted (ON DELETE RESTRICT). Seeded as the superuser admin (bypasses RLS; the FK
-// still applies).
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const CANVAS_A = "11111111-0000-4000-8000-0000000000a2";
 const CANVAS_B = "22222222-0000-4000-8000-0000000000b2";
 
 describe("device_profiles composite canvas FK (tenant_id, canvas_id) → canvases", () => {
-  const suite = useTemplateDb({ template: "core" });
+  const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
   let admin: Database;
 
   beforeAll(async () => {
-    admin = suite.admin;
+    admin = suite.db;
     await admin.execute(sql`
       insert into tenants (id, country, tax_id, legal_name) values
         (${TENANT_A}, 'ES', 'B00000000', 'Fixture Tenant A'),
@@ -33,6 +26,11 @@ describe("device_profiles composite canvas FK (tenant_id, canvas_id) → canvase
         (${CANVAS_A}, ${TENANT_A}, 'Canvas A', '{}'::jsonb),
         (${CANVAS_B}, ${TENANT_B}, 'Canvas B', '{}'::jsonb)
       on conflict (id) do nothing`);
+  });
+
+  afterEach(async () => {
+    await suite.db.execute(sql`delete from device_profiles`);
+    await suite.db.execute(sql`delete from canvases where id not in (${CANVAS_A}, ${CANVAS_B})`);
   });
 
   it("rejects a canvas_id naming a DIFFERENT tenant's canvas (composite FK)", async () => {

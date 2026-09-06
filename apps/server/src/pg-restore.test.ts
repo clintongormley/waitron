@@ -1,3 +1,4 @@
+// Real PostgreSQL: runs pg_dump/pg_restore and checks the restored fiscal ledger and triggers.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createPostgresDb } from "@waitron/db";
@@ -101,7 +102,7 @@ describe("pgRestoreWith", () => {
 //
 // The load-bearing claim BR-3 rests on: `pg_restore` can reconstruct the IMMUTABLE fiscal ledger —
 // `registros_facturacion`, which carries REVOKE ALL, a BEFORE UPDATE OR DELETE append-only trigger
-// and a BEFORE TRUNCATE block trigger (packages/fiscal-verifactu/drizzle/0001_registros_inmutables.sql)
+// and a BEFORE TRUNCATE block trigger (packages/fiscal-verifactu/drizzle/0001_fiscal_baseline_sql.sql)
 // — without the restore tripping those triggers. It is proven, not asserted (CLAUDE.md §5): seed one
 // real fiscal row, `pg_dump --format=custom`, restore into a FRESH database, and assert the row
 // landed, no `reject_mutation` fired anywhere in the restore output, the two triggers are present on
@@ -130,12 +131,11 @@ const F = {
   nodeId: "c0000000-0000-4000-8000-000000000008",
 };
 
-// Seeds exactly the FK closure `registros_facturacion` needs plus the row itself, as plain unscoped
-// statements: `suite.admin` is the container's superuser, which bypasses row-level security outright
-// (FKs are still enforced), so no `app.tenant_id` is set. The column shapes are
-// packages/fiscal-verifactu/test/fixtures.ts's `seedTenantTillSif` + inmutabilidad.test.ts's
-// `insertRegistro`, which is the current migrated schema (country/tax_id on tenants, vat_breakdown on
-// sales, node-keyed series/sif/registro).
+// Seeds exactly the FK closure `registros_facturacion` needs plus the row itself, as plain
+// unscoped statements: `suite.admin` is the container's superuser, and FKs are still enforced.
+// The column shapes are packages/fiscal-verifactu/test/fixtures.ts's `seedTenantTillSif` +
+// inmutabilidad.test.ts's `insertRegistro`, which is the current migrated schema (country/tax_id
+// on tenants, vat_breakdown on sales, node-keyed series/sif/registro).
 async function seedFiscalRegistro(admin: Database): Promise<void> {
   await admin.execute(sql`
     insert into tenants (id, country, tax_id, legal_name)
@@ -253,7 +253,7 @@ describe("realPgRestore restores the immutable fiscal ledger (real container, do
       const restoreOutput = `${stdout}\n${stderr}`;
 
       // 6a. The immutability guard NEVER fired during the restore. `reject_mutation()` (raised by the
-      // append-only trigger, 0001_registros_inmutables.sql) would print its function name and an
+      // append-only trigger, 0001_fiscal_baseline_sql.sql) would print its function name and an
       // "errors ignored on restore" tail into pg_restore's output; their absence is the direct proof
       // the COPY-insert did not trip the trigger, and pg_restore prints ignored errors here rather
       // than throwing. (No `not.toContain("WT001")`: the SQLSTATE is not printed at pg_restore's

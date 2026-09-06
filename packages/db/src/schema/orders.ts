@@ -116,20 +116,11 @@ export const workingOrders = pgTable(
     // (tenant_id, delivery_table_id) → dining_tables(tenant_id, id) is hand-written in the mutual-FK
     // migration (the schema-module import cycle a `foreignKey()` here would close — see dining-tables.ts).
     deliveryTableId: uuid("delivery_table_id"),
-    // The counter handover marker (KDS-1, §2d/§3e): set by the existing collect flow when a walk-up
-    // order is handed to the customer, replacing #63's order_prep `collected` state (kitchen-done and
-    // customer-handed were conflated there). The default-station display drops an order once this is
-    // set. Nullable — NULL until collected; NON-FISCAL (never read into a filed record, design H2).
-    // Additive nullable column; working_orders' existing FORCE-RLS policy + app_user grants cover it.
     collectedAt: timestamp("collected_at", { withTimezone: true, mode: "string" }),
   },
   (t) => [
     unique("working_orders_tenant_id_key").on(t.tenantId, t.id),
     index("working_orders_tenant_status_idx").on(t.tenantId, t.status),
-    // Tenant-consistent composite FK to the owning node (Copilot #54): a working order cannot
-    // point at a node belonging to another tenant, independently of whether RLS is in force on
-    // this connection. Mirrors `working_order_lines_order_fk` here and `sales_node_fk`. MATCH
-    // SIMPLE (the default) satisfies it while node_id is NULL, so the column stays nullable.
     foreignKey({
       columns: [t.tenantId, t.nodeId],
       foreignColumns: [nodes.tenantId, nodes.id],
@@ -142,7 +133,7 @@ export const workingOrders = pgTable(
       sql`(${t.status} = 'settled') = (${t.settledAt} is not null)`,
     ),
   ],
-).enableRLS();
+);
 
 /**
  * Prices and descriptions are still snapshotted here, never read live from the catalogue
@@ -202,73 +193,29 @@ export const workingOrderLines = pgTable(
     // value is frozen onto the line so a stale catalogue is a freshness problem, never a
     // correctness one, exactly as `descriptions` above is snapshotted rather than referenced.
     category: text("category"),
-    // When this line was marked served on the live floor (FP-1). Nullable — NULL until a runner marks
-    // it delivered; a coursing/served-state signal for the floor UI only. Additive nullable column;
-    // working_order_lines' TS-1 FORCE-RLS policy + app_user grants already cover it (grants table-wide,
-    // RLS row-level). NON-FISCAL: never read into a filed record — the pay path rebuilds filed
-    // sale_lines from the locked price snapshot, not from this column (design H2).
     servedAt: timestamp("served_at", { withTimezone: true, mode: "string" }),
-    // The kitchen COURSE this line was rung to (KDS-2, §2b), resolved at ring time as
-    // `<override> ?? product.course_id` and snapshotted onto the fired ticket item. Bare NULLABLE
-    // uuid: the tenant-consistent (tenant_id, course_id) → kitchen_courses(tenant_id, id) FK is
-    // hand-written in the --custom migration (no plain single-column `.references()`), the same split
-    // KDS-1's routing columns use. NULL = no course; such a line fires earliest (spec §2b). Additive
-    // nullable column; working_order_lines' TS-1 FORCE-RLS policy + app_user grants already cover it.
-    // NON-FISCAL: never read into a filed record — kitchen coordination only.
     courseId: uuid("course_id"),
-    // The parent DISH line this line modifies (ordering modifiers, Task 2). Set ⇒ this line is a
-    // child MODIFIER (an option chosen against the dish above); NULL ⇒ a top-level line. Bare
-    // NULLABLE uuid: the tenant-consistent self-FK (tenant_id, parent_line_id) →
-    // working_order_lines(tenant_id, id) is hand-written in the --custom migration (drizzle does not
-    // emit a self-referential composite FK — the same split sales_corrects_fk uses). MATCH SIMPLE
-    // means a NULL parent satisfies it, so a top-level line is unaffected. Additive nullable column;
-    // working_order_lines' TS-1 FORCE-RLS policy + app_user grants already cover it.
     parentLineId: uuid("parent_line_id"),
-    // The catalogue option item this line was authored from — authoring TRACEABILITY only (ordering
-    // modifiers, Task 2). The option's price/name/VAT are snapshotted onto the line by value
-    // (descriptions/unit_price/vat_rate above), so this is a back-reference for editing/reporting,
-    // NOT a pricing input. Bare NULLABLE uuid: the tenant-consistent (tenant_id, option_group_item_id)
-    // → option_group_items(tenant_id, id) FK is in the --custom migration, with onDelete SET NULL —
-    // a catalogue DELETE of an option item must NOT be blocked (not RESTRICT) and must NOT strip the
-    // line's own snapshot columns; it only clears this back-reference. Working-order table ONLY: it is
-    // never copied to the filed sale_lines (design §4), which stay decoupled from the mutable
-    // catalogue. Additive nullable column; the existing FORCE-RLS policy + grants cover it.
     optionGroupItemId: uuid("option_group_item_id"),
-    // Free-text kitchen instruction ("hold the mayo"), per line (spec §2). Additive nullable;
-    // working_order_lines' TS-1 FORCE-RLS policy + app_user grants already cover it (grants table-wide,
-    // RLS row-level). NON-FISCAL: snapshotted onto ticket_items at fire time, never read into a filed
-    // record — the pay path rebuilds filed sale_lines from the locked price snapshot, not from this.
     note: text("note"),
-    // How the dish is cooked, for meat dishes (spec §3). NON-FISCAL, same as `note`. NULL = not chosen
-    // (also every non-meat line). Additive nullable enum; the existing FORCE-RLS policy + grants cover it.
     doneness: doneness("doneness"),
   },
   (t) => [
-    // Composite FK: a line cannot point at an order belonging to another
-    // tenant, independently of whether RLS is in force on this connection.
     foreignKey({
       columns: [t.tenantId, t.workingOrderId],
       foreignColumns: [workingOrders.tenantId, workingOrders.id],
       name: "working_order_lines_order_fk",
     }).onDelete("cascade"),
-    // Tenant-consistent composite FK to the product this line prices against (park & retrieve): a
-    // draft line cannot reference a product of another tenant, independently of RLS. onDelete
-    // "restrict" mirrors the catalogue's own rule that a product is deactivated, never deleted
-    // (catalogue.ts) — an in-flight draft must not lose the product under it.
     foreignKey({
       columns: [t.tenantId, t.productId],
       foreignColumns: [products.tenantId, products.id],
       name: "working_order_lines_product_fk",
     }).onDelete("restrict"),
     unique("working_order_lines_line_no_key").on(t.workingOrderId, t.lineNo),
-    // Composite (tenant_id, id) UNIQUE — the target for ticket_items' tenant-consistent (tenant_id,
-    // working_order_line_id) FK (KDS-1, hand-written --custom migration), the same role
-    // products_tenant_id_key plays for working_order_lines_product_fk. A line cannot be referenced by a
-    // ticket item of another tenant, independently of RLS.
     unique("working_order_lines_tenant_id_key").on(t.tenantId, t.id),
     index("working_order_lines_order_idx").on(t.workingOrderId),
     check("working_order_lines_quantity_ck", sql`${t.quantity} <> 0`),
     check("working_order_lines_vat_rate_ck", sql`${t.vatRate} >= 0 and ${t.vatRate} <= 100`),
     check("working_order_lines_line_no_ck", sql`${t.lineNo} >= 1`),
   ],
-).enableRLS();
+);

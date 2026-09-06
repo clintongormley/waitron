@@ -17,9 +17,9 @@ import "./errors.js";
 // `computeVatSummaryForPeriod` / `computeTopSellers` onto the JSON — end to end in-process, the way
 // `report-api.overview.test.ts` proves the overview route. Unlike the overview (which anchors on
 // TODAY), these routes take an explicit day/range, so the fixtures seed sales on FIXED historical
-// business days and query them by date — no dependence on the wall clock. The differential
-// RLS-isolation proof is the real-Postgres suite (report-api.rls.test.ts), which PGlite cannot show
-// because every PGlite connection is a superuser that bypasses grants + FORCE RLS (CLAUDE.md §4).
+// business days and query them by date — no dependence on the wall clock. The `report.view` gate run
+// as the non-superuser app role is the real-Postgres suite's (report-api.pg.test.ts), which PGlite
+// cannot show because every PGlite connection is a superuser holding every grant (CLAUDE.md §4).
 const noopLog: Logger = () => {};
 
 let tenantId: string;
@@ -71,7 +71,7 @@ interface DaySeed {
 }
 
 /** Seed one sale + its tender + one sale_line on a FIXED business day (issued/settled at a literal
- * midday-UTC instant). Superuser insert (RLS bypassed — pure setup, the demo idiom). */
+ * midday-UTC instant). Superuser insert (fixture setup, the demo idiom). */
 async function seedDay(db: Database, invoiceNumber: number, d: DaySeed): Promise<void> {
   const sale = await db.execute<{ id: string }>(sql`
     insert into sales (
@@ -126,7 +126,7 @@ const suite = usePgliteDb({
       const mkPerson = async (name: string, role: string): Promise<string> => {
         const p = await tx.execute<{ id: string }>(sql`
           insert into persons (tenant_id, display_name, pin_hash, role)
-          values (current_tenant_id(), ${name}, ${hashPin("1234")}, ${role}) returning id`);
+          values (${tenantId}, ${name}, ${hashPin("1234")}, ${role}) returning id`);
         const session = await startManagementSession(tx, { tenantId, personId: p.rows[0]!.id });
         return session.id;
       };

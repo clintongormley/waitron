@@ -25,6 +25,7 @@ import {
   recordFailedRefund,
   recordRefund,
   recordVoid,
+  resolvePaymentTenant,
   settleForwarded,
   settleInitiated,
   tillsForWorkingOrders,
@@ -399,9 +400,9 @@ describe("findPaymentByRef", () => {
 });
 
 describe("findCapturedPaymentForWorkingOrder", () => {
-  // PGlite: this asserts the STATE filter and column projection only — no RLS, no concurrency — so
-  // the hermetic superuser target is the right one (CLAUDE.md §4). Tenant isolation is proven on
-  // real Postgres in payments.rls.test.ts.
+  // PGlite: this asserts the STATE filter and column projection only — no privileges, no
+  // concurrency — so the hermetic superuser target is the right one (CLAUDE.md §4). The REPLAY
+  // branch (a non-null `saleId`) is asserted in store.pg.test.ts, on real Postgres.
   it("returns a captured payment for the working order, ignoring non-captured states", async () => {
     const s = await seedWorkingOrder(pg.db, freshNif());
     const key = { tenantId: s.tenantId, provider: "stripe", workingOrderId: s.workingOrderId };
@@ -839,6 +840,16 @@ async function setOrderStatus(
 }
 
 describe("listReconcilable", () => {
+  it("scopes to the given tenant by an explicit predicate", async () => {
+    // The explicit tenant predicate excludes the other tenant's payment from reconciliation.
+    const a = await seedTenant();
+    const b = await seedTenant();
+    await capture(a, "tenant-a-pay");
+    await capture(b, "tenant-b-pay");
+    const rows = await pg.db.transaction((tx) => listReconcilable(tx, a.tenantId, "fake", PERIOD));
+    expect(rows.map((r) => r.paymentRef)).toEqual(["tenant-a-pay"]);
+  });
+
   it("returns captured rows settled inside the period, joined to their working order", async () => {
     const seeded = await seedTenant();
     await capture(seeded, "in-period");
@@ -858,19 +869,6 @@ describe("listReconcilable", () => {
     });
     // auditedAt is the non-null tolerance anchor: settled_at for a captured row.
     expect(rows[0].auditedAt).toBe(rows[0].settledAt);
-  });
-
-  it("scopes to the given tenant by an EXPLICIT predicate, not just RLS", async () => {
-    // PGlite's connection is always a superuser (RLS never applies under it — see this suite's
-    // header note), so this is the one place able to prove the explicit `tenant_id` predicate is
-    // doing real work rather than RLS quietly covering for it. Without the fix, this query carries
-    // no tenant scoping at all under a bypassing connection, and BOTH tenants' rows come back.
-    const a = await seedTenant();
-    const b = await seedTenant();
-    await capture(a, "tenant-a-pay");
-    await capture(b, "tenant-b-pay");
-    const rows = await pg.db.transaction((tx) => listReconcilable(tx, a.tenantId, "fake", PERIOD));
-    expect(rows.map((r) => r.paymentRef)).toEqual(["tenant-a-pay"]);
   });
 
   it("returns settled rows too — the forwarded-offline state the orphan rule also reaches", async () => {
@@ -1012,6 +1010,17 @@ describe("listReconcilable", () => {
 });
 
 describe("existingReferences", () => {
+  it("excludes another tenant's reference by an explicit predicate", async () => {
+    // The tenant predicate prevents another tenant's reference from suppressing a missingLocal finding.
+    const a = await seedTenant();
+    const b = await seedTenant();
+    await seedReference(b, "b-init", "ext-b");
+    const found = await pg.db.transaction((tx) =>
+      existingReferences(tx, a.tenantId, "fake", ["ext-b"]),
+    );
+    expect(found).toEqual(new Set());
+  });
+
   /** Inserts an `initiated` row so its `externalRef` becomes visible to `existingReferences` —
    * mirrors the fixture the old `anyPaymentWithReference` tests used: state and settlement time are
    * irrelevant to the check (it is unbounded by both), only `provider` + `externalRef` are. */
@@ -1073,19 +1082,6 @@ describe("existingReferences", () => {
       existingReferences(tx, seeded.tenantId, "fake", references),
     );
     expect(found).toEqual(new Set(["ext-5"]));
-  });
-
-  it("does not leak another tenant's reference by an EXPLICIT predicate, not just RLS", async () => {
-    // Same reasoning as listReconcilable's tenant-scoping test above, but the consequence here is
-    // sharper: leaking tenant B's reference into tenant A's check would suppress a real
-    // `missingLocal` finding — exactly the money-loss case this audit exists to catch.
-    const a = await seedTenant();
-    const b = await seedTenant();
-    await seedReference(b, "b-init", "ext-b");
-    const found = await pg.db.transaction((tx) =>
-      existingReferences(tx, a.tenantId, "fake", ["ext-b"]),
-    );
-    expect(found).toEqual(new Set());
   });
 });
 
@@ -1150,6 +1146,15 @@ async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
 }
 
 describe("tillsForWorkingOrders", () => {
+  it("excludes another tenant's working order by an explicit predicate", async () => {
+    const a = await seedTenant();
+    const b = await seedTenant();
+    const tills = await pg.db.transaction((tx) =>
+      tillsForWorkingOrders(tx, a.tenantId, [b.workingOrderId]),
+    );
+    expect(tills).toEqual(new Map());
+  });
+
   it("resolves several working orders across two tills in one pass, skipping one that does not exist", async () => {
     const seeded = await seedTenant();
     const second = await seedSecondTill(seeded);
@@ -1189,13 +1194,29 @@ describe("tillsForWorkingOrders", () => {
     const tills = await pg.db.transaction((tx) => tillsForWorkingOrders(tx, seeded.tenantId, ids));
     expect(tills).toEqual(new Map([[seeded.workingOrderId, seeded.tillId]]));
   });
+});
 
-  it("does not leak another tenant's working order by an EXPLICIT predicate, not just RLS", async () => {
-    const a = await seedTenant();
-    const b = await seedTenant();
-    const tills = await pg.db.transaction((tx) =>
-      tillsForWorkingOrders(tx, a.tenantId, [b.workingOrderId]),
+describe("resolvePaymentTenant", () => {
+  it("returns the owning tenant for a (provider, external_ref) an initiated row carries", async () => {
+    const seeded = await seedTenant();
+    await pg.db.transaction((tx) =>
+      insertInitiated(tx, {
+        tenantId: seeded.tenantId,
+        workingOrderId: seeded.workingOrderId,
+        provider: "fake",
+        paymentRef: "res-1",
+        externalRef: "hosted-res-1",
+        amount: decimal("10.00"),
+      }),
     );
-    expect(tills).toEqual(new Map());
+    expect(await resolvePaymentTenant(pg.db, "fake", "hosted-res-1")).toBe(seeded.tenantId);
+  });
+
+  it("returns null for a reference no local row carries — the missingLocal case reconcile audits", async () => {
+    // The `?? null` arm of the seam's single expression: `resolve_payment_tenant` is a scalar select,
+    // so it always returns one ROW; when nothing matches, that row's `tenant_id` is SQL NULL, and this
+    // is what turns it into a JS null the webhook route can branch on rather than an undefined. Both
+    // arms have to be exercised here: the test above is the non-null one.
+    expect(await resolvePaymentTenant(pg.db, "fake", "nothing-ever-initiated-this")).toBeNull();
   });
 });

@@ -110,25 +110,9 @@ type PricedBasket = PricedLines;
 export type LineExtras = { note?: string; doneness?: Doneness };
 
 /**
- * Re-read THIS location's sellable catalogue, resolve every requested line against it, and price the
- * basket authoritatively with `priceBasket` — returning BOTH the ready-to-insert `working_order_lines`
- * rows for `workingOrderId` AND the raw `priceBasket` result (`{ lines, total, vatBreakdown }`) they
- * were derived from. The second half is what lets a caller that will also FILE the sale from the same
- * basket (a walk-up, via `createOpenOrder` → `payWorkingOrder`) reuse this one price rather than
- * re-reading the catalogue and re-pricing the identical `lines` a second time. Shared by `parkOrder`
- * (a fresh order) and `updateHeldOrder` (a repriced one), which use only `lineRows`: the server never
- * trusts a browser-computed price, so the caller's `lines` carry none, and a product not sellable here
- * (deactivated, unassigned, or another tenant's, which RLS hides) is refused with the same
- * `sale.unknown_product` `recordTillSale` uses — a fact about the order, not the process. Runs on the
- * CALLER's transaction under its tenant/app_user scope.
- *
- * The empty-basket refusal and the order row itself stay with each caller: park mints and inserts an
- * OPEN order (allocating its number), update rewrites an existing one's lines and label — this helper
- * owns only the lines, which are identical between the two. `priced.lines` is in `lines` order
- * (priceBasket iterates in order and stamps `lineNo = i + 1`), so row `i` takes its `product_id` from
- * `lines[i]`; the display columns (`descriptions`, `unit_price`, `category`) are the snapshot
- * priceBasket produced, while `unit_price_gross` is the AUTHORITATIVE gross unit LOCKED at add-time —
- * the input a retrieved order is later filed from without a re-price (see that column's comment below).
+ * Price requested lines from this location's sellable catalogue. Return both the
+ * insertable line snapshots and the basket result so a caller filing the same basket
+ * can reuse it. Stored gross unit prices preserve the price agreed at add time.
  */
 async function priceOrderLines(
   tx: Transaction,
@@ -675,17 +659,9 @@ export async function createOpenOrder(
   // not an order column, so openTab passes no placement and this never stamps a delivery table on it.
   placement: { deliveryTableId?: string | null } = {},
 ): Promise<{ orderNumber: number; priced: PricedBasket }> {
-  // A counter delivery names the dining table it is carried to. Verify it exists FIRST — the SELECT
-  // runs as `app_user` under the caller's tenant scope, so an absent id AND another tenant's table (RLS
-  // hides it) both read as absent — so a bad id surfaces the domain `table.not_found` (a 4xx) rather
-  // than the raw `working_orders_delivery_table_fk` violation (23503) the insert would otherwise raise,
-  // which `payWorkingOrder`'s `isUniqueViolation`-only catch re-throws to an opaque `server.internal`
-  // 500. The FK stays the DB backstop; this is the actionable app check, mirroring `openTab`'s own
-  // existence check (the same `table.not_found` code). It is EXISTENCE-ONLY, though — no `active` gate
-  // and no `FOR UPDATE`, unlike `openTab` — so a counter delivery MAY name a DEACTIVATED table (whether
-  // to block that is the owner's product call, deferred); the parity is the code, not the full guard. A
-  // walk-up/park/tab passes no `deliveryTableId`, so this never fires for them. Tables are deactivated,
-  // never deleted (`deactivateTable`), so this cannot race a delete between the check and the insert below.
+  // Check the delivery table exists before insertion so an unknown id produces
+  // table.not_found rather than a raw foreign-key failure. This check permits an
+  // inactive table and does not take a row lock.
   const deliveryTableId = placement.deliveryTableId ?? null;
   if (deliveryTableId !== null) {
     const [table] = await tx
@@ -859,17 +835,9 @@ export async function openTab(
 }
 
 /**
- * Lock a working order's row `FOR UPDATE` and confirm it is `open`, else `tab.not_open` (naming `tabId`) —
- * the shared locked-open-status primitive. An absent id (or another tenant's, RLS-hidden) matches no row
- * and fails closed the same way. This checks ONLY the `working_orders` row; it does NOT require a
- * `dining_tables` back-pointer, so it accepts a table-LESS open order (a split-off check) as well as a
- * tab — {@link lockOpenTab} layers the is-a-tab back-pointer assertion on top.
- *
- * Lock ORDER: this takes the `working_orders` row lock and nothing else. Callers that ALSO lock
- * `dining_tables` must take THIS lock FIRST, then `dining_tables` — the class order the sale/settle path
- * uses (`payWorkingOrder` locks `working_orders`, then its settle UPDATE fires the 0050
- * `working_orders_clear_table_status` trigger touching `dining_tables`), so a concurrent op and pay
- * cannot cross-lock into a 40P01 (see {@link mergeTabs}/{@link unjoinTable}).
+ * Lock an open working-order row, otherwise tab.not_open. This accepts table-less
+ * orders; lockOpenTab adds the table back-pointer check. Callers that also lock dining
+ * tables acquire working-order locks first, matching the settlement path.
  */
 async function lockOpenTabRow(tx: Transaction, tabId: string): Promise<void> {
   const [row] = await tx
@@ -883,14 +851,8 @@ async function lockOpenTabRow(tx: Transaction, tabId: string): Promise<void> {
 }
 
 /**
- * Lock an OPEN tab's working-order row `FOR UPDATE` and confirm a dining table points at it — the shared
- * guard `addTabRound` and `voidTabLine` open with. The lock is held on the caller's `tx` until commit,
- * so a `line_no` allocation or a line delete that follows is serialised against a concurrent round/void
- * (load-bearing for QR ordering — several guests appending to one tab at once). A tab is an OPEN working
- * order some `dining_tables.tab_id` points at (design §2b): a non-open order, one no table points at (a
- * walk-up / counter delivery), or an absent id (or another tenant's, RLS-hidden) all throw
- * `tab.not_open` — the fail-closed shape `working_order.not_open` uses for the modify side. This is
- * {@link lockOpenTabRow} (the locked-open-status check) PLUS the is-a-tab back-pointer assertion.
+ * Lock the open working-order row and require a dining-table back-pointer.
+ * The caller holds the lock through its line allocation or deletion until commit.
  */
 async function lockOpenTab(tx: Transaction, tabId: string): Promise<void> {
   await lockOpenTabRow(tx, tabId);
@@ -987,12 +949,8 @@ export async function fireLines(
     );
   const defaultStationId = fallback?.id ?? null;
 
-  // Every fired product's own override AND its category's default, in ONE batched read (no per-line
-  // round trip). Both `station_id`s are nullable; the LEFT JOIN yields a null category route for a
-  // product with no category. RLS confines both tables to the caller's tenant.
-  // The parent-only filter above already removed every child modifier line, so every surviving `lines`
-  // row is a parent dish with a non-null `product_id`; the `!== null` filter here is a defensive no-op
-  // kept because the row shape still types `productId` as nullable.
+  // Read product and category station overrides in one batch. A missing category
+  // yields a null route; modifier children have already been removed from this list.
   const productIds = [
     ...new Set(lines.map((line) => line.productId).filter((id): id is string => id !== null)),
   ];
@@ -1020,25 +978,9 @@ export async function fireLines(
   // one round trip cheaper.
   const courseByLine = new Map(lines.map((line) => [line.id, line.courseId ?? null]));
 
-  // ONE aggregate over THIS venue's courses LEFT JOINed to the order's ticket items (E2+E3) — replacing
-  // the former `existing` (all the order's items) + `courseOrderRows` (per-course display orders) read
-  // PAIR with a single grouped read (4→3 reads on a fire, and the cost no longer scales with the whole
-  // tab's item history). It derives the SAME two order-wide facts the auto-fire decision needs, computed
-  // over the WHOLE order (a tab fires round by round), per venue course:
-  //  - `anyFired` — some EXISTING item of this order+course is fired: a new item of it joins food already
-  //    cooking, so it fires too. `bool_or(fired_at IS NOT NULL)` — and `fired_at IS NOT NULL` is `false`
-  //    (never NULL) on a course with no joined item, so an itemless course yields `false`, not NULL.
-  //  - `itemCount` — how many existing items of it the order carries (prior rounds); unioned with this
-  //    batch's courses below, this is the order's course SET the earliest is taken over. Without prior
-  //    rounds a later round of only a late course would see itself as the sole — hence earliest — course.
-  // RLS confines both tables to the tenant; the join's tenant predicate keeps the composite key aligned;
-  // the venue filter enumerates THIS venue's courses — the set the min `display_order` runs over. A1
-  // screens every OVERRIDE to a live this-venue course, but a product DEFAULT is NOT location-checked
-  // (`products.course_id`'s FK is tenant-scoped only), so a catalogue shared across venues can leave a
-  // line carrying a FOREIGN venue's course. Such a course is absent from this venue-filtered result, so
-  // that line is treated as held (see the fired-decision note below). This diverges — in that one
-  // incoherent shared-catalogue corner only — from the former read, which read the foreign course
-  // cross-venue; deliberately accepted, no coherent setup produces it, no fiscal effect (Debt → KDS-2).
+  // Aggregate existing items per venue course: anyFired lets later rounds join food
+  // already cooking, and itemCount includes prior rounds when choosing the earliest
+  // course. The join matches tenant ids and the course list is location-scoped.
   const courseRows = await tx
     .select({
       id: kitchenCourses.id,
@@ -1153,31 +1095,9 @@ export async function fireLines(
 }
 
 /**
- * Fire a HELD course of an order (KDS-2 §3c) — the operator's "release this course" verb, the release
- * counterpart to {@link fireLines}'s auto-fire-first. Stamps `fired_at = now()` on every HELD item
- * (`fired_at IS NULL`) of this order + course, so those items stop being greyed on the station display
- * and become advanceable ({@link advanceTicketItem}'s held guard passes once `fired_at` is set).
- *
- * The course must EXIST in this venue — an unknown or cross-venue id is `course.not_found`
- * ({@link requireCourse}), NOT a silent no-op: a zero-match UPDATE is otherwise ambiguous between
- * "unknown course" and "nothing held", so the existence check is what tells them apart. It is EXISTENCE,
- * not LIVENESS ({@link requireCourse}, not {@link requireLiveCourse}): a course DEACTIVATED while it
- * holds items must still be fireable — the items already carry the `course_id` snapshot, so releasing
- * them needs the course still real, not still offered. Otherwise those held items would be stranded
- * (can't fire, can't advance) the moment the course is retired. The config/override paths keep
- * `requireLiveCourse`. IDEMPOTENT: an already-fired item (`fired_at` set) is not
- * matched by the `IS NULL` predicate, so re-firing leaves its timestamp untouched; and a course with
- * nothing held (all already fired, or none on the order) updates zero rows and does NOT throw — the same
- * no-op convenience {@link advanceTicket} makes for an empty bulk bump.
- *
- * OPERATIONAL, not fiscal: `ticket_items` is the mutable kitchen table, so this writes no sale, tender,
- * registro or huella. The `requireSession` gate (a waiter or kitchen operator) lives at the route
- * (Task 5), not here — this runs on the CALLER's transaction under its tenant/app_user scope, RLS
- * confining the update to the tenant.
- *
- * SIDE EFFECT (KDS-4 print-on-fire, §3b): the `IS NULL` UPDATE's `.returning()` is exactly this round's
- * newly-fired items, which are handed to `enqueueKitchenTickets` to INSERT kitchen print jobs into the
- * outbox on this same tx — never blocking the fire (see `kitchen-print.ts`).
+ * Release held items of a course by stamping fired_at. Require the course to exist
+ * in this venue, including a deactivated course whose food still needs release.
+ * Already-fired items retain their timestamps; an empty held set is a no-op.
  */
 export async function fireCourse(
   tx: Transaction,
@@ -1208,32 +1128,8 @@ export async function fireCourse(
 }
 
 /**
- * Fire SPECIFIC held lines of an OPEN tab (coursing editing A2, design §3b) — a finer-grained release
- * than {@link fireCourse}'s whole-course lever, for the operator who wants to send just line 3 and 5
- * now while the rest of their course waits. Stamps `fired_at = now()` on the named lines' HELD ticket
- * items (`fired_at IS NULL`) and, unlike {@link fireCourse}, ALSO refreshes `queued_at = now()`: the KDS
- * order-timing clock (#185) measures a line's age from when the kitchen was told to cook it, so a line
- * held back and sent later must start its clock at the SEND, not at the original ring — otherwise a
- * deliberately-delayed course would show as overdue the instant it is released. {@link lockOpenTab}
- * locks the tab row `FOR UPDATE` and confirms it is an open tab a `dining_tables.tab_id` points at
- * (else `tab.not_open`), serialising this release against a concurrent round/void the way every tab
- * verb does.
- *
- * `lineNos` is a set of `line_no`s on the tab; an EMPTY list means "send all together" — release EVERY
- * held line of the tab regardless of course (the `undefined` line filter, so only the tab + `IS NULL`
- * predicates remain). A non-empty list restricts the fire to the ticket items whose line is in that set,
- * via a subquery from `working_order_lines` (an unknown `line_no` simply matches no row — no throw, the
- * same no-op convenience {@link fireCourse} makes for an empty course). IDEMPOTENT: an already-fired
- * line named in the set is not matched by `fired_at IS NULL`, so re-sending it leaves its timestamps
- * untouched.
- *
- * SIDE EFFECT (KDS-4 print-on-fire, §3b): the `IS NULL` UPDATE's `.returning()` is EXACTLY this send's
- * newly-fired items — a held line prints nothing until it is sent — handed to {@link enqueueKitchenTickets}
- * to INSERT kitchen print jobs on this same tx (never blocking the fire; see `kitchen-print.ts`).
- *
- * OPERATIONAL, not fiscal: writes only the mutable `ticket_items` kitchen table — no sale, tender,
- * registro or huella. The `requireSession` gate lives at the route, not here — this runs on the CALLER's
- * transaction under its tenant/`app_user` scope, RLS confining the update to the tenant.
+ * Send selected held lines of an open tab, refreshing queued_at when they fire.
+ * The caller's transaction includes kitchen writes and their print jobs.
  */
 export async function sendLines(
   tx: Transaction,
@@ -1283,35 +1179,10 @@ export async function sendLines(
 }
 
 /**
- * UN-SEND not-yet-started lines of an OPEN tab — the inverse of {@link sendLines} (coursing editing A4,
- * design §3b). Clears `fired_at` back to NULL on the named lines' ticket items WHERE `state = 'queued'`
- * (the clean recall window), so a line the kitchen has been told to cook but has NOT begun greys back to
- * held — re-courseable ({@link setLineCourse}) or re-sendable ({@link sendLines}) again. {@link lockOpenTab}
- * locks the tab row `FOR UPDATE` and confirms it is an open tab a `dining_tables.tab_id` points at (else
- * `tab.not_open`), serialising this recall against a concurrent round/void the way every tab verb does.
- *
- * Each named `line_no` must exist on the tab — an absent one is `tab.line_not_found` (the same
- * resolve-or-throw {@link setLineCourse}/{@link voidTabLine} make), NOT the silent no-op {@link sendLines}
- * makes for an unknown line. A named line whose item the kitchen has already STARTED (`state` is
- * `preparing`/`ready`, not `queued`) is a state conflict → `ticket.already_started` naming that item: once
- * cooking has begun the food is real, so the correction is a CANCEL (void), not a recall. The items are
- * read BEFORE the un-fire so the refusal can name the exact offending `ticketItemId`, and the check refuses
- * the WHOLE call — no line is un-fired if any named line has started. An already-HELD line (`fired_at`
- * already null, `state = 'queued'`) is a clean no-op: it is in the recall window, and clearing an
- * already-null `fired_at` changes nothing.
- *
- * CORRECTION PRINT (A6): a recalled line that had ALREADY FIRED (printed) gets a RECALLED correction slip
- * so the paper kitchen is told to pull it. Only PREVIOUSLY-FIRED lines produce a slip — the read below
- * captures those whose `fired_at` was NON-null AND `state = 'queued'` (the ones this recall actually
- * un-fires) and hands exactly them to {@link enqueueCorrectionSlips}; a recall of an already-HELD line
- * (`fired_at` already null) never printed, so it enqueues nothing. `queued_at` is deliberately left
- * untouched: a later {@link sendLines} refreshes it at the re-send, the point from which the KDS timing
- * clock should run.
- *
- * OPERATIONAL, not fiscal: writes only the mutable `ticket_items` kitchen table plus the `print_jobs`
- * outbox — no sale, tender, registro or huella. The `requireSession` gate lives at the route, not here —
- * this runs on the CALLER's transaction under its tenant/`app_user` scope, RLS confining the writes to the
- * tenant, and the correction enqueue rides the same tx (rolls back with the recall).
+ * Recall selected lines of an open tab only while their items remain queued.
+ * Refuse the whole call if a line is missing or any item has started. Previously
+ * fired lines enqueue correction slips in the same transaction; held lines do not.
+ * Leave queued_at untouched until a later send refreshes it.
  */
 export async function recallLines(
   tx: Transaction,
@@ -1394,31 +1265,8 @@ export async function recallLines(
 }
 
 /**
- * BUMP a whole course to `ready` across every station (KDS-3 §3b) — the expediter's "this course is all
- * plated" lever on the pass. A single set-based UPDATE advances EVERY fired, not-yet-`ready` item of this
- * order + course — regardless of which station cooked it — straight to `ready`. It is {@link advanceTicket}'s
- * bulk shape (same `fired_at IS NOT NULL` held-skip, same no-throw-on-empty convenience, same
- * {@link advanceSet} stamp) keyed on COURSE (order + `course_id`) rather than on one station: a course's
- * items fan out across stations and the pass bumps them together.
- *
- * Two deliberate differences from {@link advanceTicket}:
- *  - it matches `state != 'ready'` (not the single legal predecessor `TICKET_TRANSITIONS.ready.from`), so a
- *    `queued` item jumps STRAIGHT to `ready` — a whole-course plate-up, not a one-step walk. It reuses
- *    {@link advanceSet}("ready"), which stamps only `ready_at` (never `preparing_at`) — the SAME payload
- *    every "reach ready" write in KDS-1 uses. A `queued`-skips-`preparing` item therefore lands with
- *    `preparing_at` still null, exactly as an `advanceTicket`-to-`ready` leaves an item that was already
- *    `preparing`; nothing reads `preparing_at`, so there is no ordering invariant to hold.
- *  - HELD items (`fired_at IS NULL`) are SKIPPED (the `fired_at IS NOT NULL` predicate), so a course still
- *    holding un-fired items bumps only what was fired; the pass releases a held course via {@link fireCourse}
- *    first, then bumps.
- *
- * No existence check and no throw: an unknown course, or a course with nothing left to bump, updates zero
- * rows and returns — the same no-op convenience {@link advanceTicket} makes (a bulk bump has no single item
- * to name in an error, and the pass re-bumps idempotently). Contrast {@link markCourseAway}, which DOES
- * require the course. Runs on the CALLER's transaction under its tenant/`app_user` scope; RLS confines the
- * update to the tenant and (orderId, courseId) address one order's items, so `_cfg` is unused — the uniform
- * tab-verb signature shape {@link advanceTicket} keeps. OPERATIONAL, not fiscal: writes only the mutable
- * `ticket_items` kitchen table. The `requireSession` gate lives at the route (Task 5), not here.
+ * Bump every fired item of this order and course directly to ready. Held items
+ * are skipped. An empty match is a no-op; this operation changes kitchen state only.
  */
 export async function bumpCourseReady(
   tx: Transaction,
@@ -1440,23 +1288,9 @@ export async function bumpCourseReady(
 }
 
 /**
- * DISPATCH a plated course to the floor (KDS-3 §3b) — the expediter's "this course is away" verb, the pass
- * counterpart to {@link bumpCourseReady}. Stamps `away_at = now()` on every `ready` item of this order +
- * course that is not already away. `away_at` is KDS-3's dispatch marker (the item has left the pass for the
- * floor); it is the terminal display state after `ready` (item lifecycle held → fired → queued → preparing →
- * ready → away, `ticket-items.ts`).
- *
- * Only `ready` items go away (`state = 'ready'`): you dispatch what the kitchen has PLATED, never a
- * still-cooking (`queued`/`preparing`) line — those stay on the pass until bumped. The course must EXIST in
- * this venue — an unknown or cross-venue id is `course.not_found` ({@link requireCourse}), the same
- * EXISTENCE-not-liveness check {@link fireCourse} uses: a course DEACTIVATED while it holds plated items must
- * still be dispatchable (the items already carry the `course_id` snapshot), so {@link requireCourse}, not
- * {@link requireLiveCourse}. IDEMPOTENT: the `away_at IS NULL` predicate skips already-away items, so
- * re-dispatching leaves their timestamps untouched (and a course with nothing `ready` updates zero rows).
- *
- * Runs on the CALLER's transaction under its tenant/`app_user` scope; RLS confines the update to the tenant.
- * OPERATIONAL, not fiscal: writes only the mutable `ticket_items` kitchen table — no sale, tender, registro
- * or huella. The `requireSession` gate lives at the route (Task 5), not here.
+ * Dispatch ready items of a course by stamping away_at once. Require an existing
+ * course in this venue, including deactivated courses with plated food remaining.
+ * Items still cooking and items already away are unchanged.
  */
 export async function markCourseAway(
   tx: Transaction,
@@ -1737,14 +1571,8 @@ async function setLineServed(
 }
 
 /**
- * Mark ONE line of an OPEN tab as delivered — `served_at = now()` (design §3b, FP-1). An OPERATIONAL
- * verb a logged-in runner uses like ringing a sale, so it is gated by the operator SESSION at the route
- * (`requireSession`, Task 6), NOT by a permission. `tab.not_open` if the order is not an open tab a
- * table points at (settled/abandoned, a walk-up, or absent/foreign — RLS-hidden); `tab.line_not_found`
- * if the `line_no` matches nothing on it. See {@link setLineServed} for the shared body and the H2
- * pre-fiscal note. `_cfg` is unused (the write is by tab id + line no, RLS-scoped) but kept for the
- * uniform `(tx, cfg, …)` tab-verb signature the route calls, underscore-prefixed the way
- * {@link voidTabLine} keeps it.
+ * Mark one line of an open tab as served. The route requires an operator session;
+ * setLineServed performs the shared update. The marker is operational data.
  */
 export async function markLineServed(
   tx: Transaction,
@@ -1958,22 +1786,8 @@ export interface TabLine {
 }
 
 /**
- * Read one OPEN tab's lines for the table-order screen (FP-1, design §3b), in `line_no` order — each
- * line's `line_no`, `product_id`, `quantity`, its LOCKED gross unit price (`unit_price_gross`) and its
- * `served_at` marker. A dedicated read, distinct from `getHeldOrder`/`HeldOrder` (which returns
- * `product_id` + `quantity` only, for a basket rebuild that RE-prices): a tab does NOT re-price, so this
- * MUST return the STORED `unit_price_gross` the line locked at add-time (`addTabRound`/`openTab` via
- * `priceOrderLines`), never a catalogue recompute — a re-price would misreport a locked tab. Names no
- * product (the screen resolves names from its own catalogue prop), mirroring `HeldOrder`'s productId-only
- * philosophy.
- *
- * Gated by {@link assertTabOpen} (an absent or non-`open` order → `tab.not_open`), the SAME unlocked
- * status read `moveTab`/`joinTable` use — deliberately NOT `lockOpenTab`: this is a READ, so it takes no
- * `FOR UPDATE` write lock and needs no `dining_tables` back-pointer check. RLS confines the tenant (the
- * read runs as `app_user` under `withTenant`); `_cfg` is unused — the read is by tab id, RLS-scoped —
- * but kept for the uniform `(tx, cfg, …)` tab-verb signature the route calls, underscore-prefixed the way
- * {@link voidTabLine}/{@link markLineServed} keep it. PRE-FISCAL (design H2, ruling R4): `served_at` is an
- * operational floor field never read into a filed record; this touches nothing fiscal.
+ * Read an open tab's lines in line-number order, including their stored gross prices
+ * and served markers. No catalogue re-price or write lock is taken.
  */
 export async function readTabLines(
   tx: Transaction,
@@ -2111,18 +1925,8 @@ export async function moveTab(
 }
 
 /**
- * Extend a tab's coverage to a free table (design §3): validates `tabId` is an `open` working order
- * (`tab.not_open`) and `tableId` is `active` and FREE (`table.not_found`/`table.inactive`/`table.occupied`),
- * then points the free table's `tab_id` at the tab too — now BOTH the tab's original table(s) and this
- * one point at it, a join. NO line-move (the free table had no tab) and NO status clear (nothing is
- * freed — the table joins, it does not turn over; design §4). On pay the one tab files one sale; on
- * settle the TS-2 trigger clears status on ALL its tables (keyed on `tab_id`).
- *
- * The target table is locked `FOR UPDATE` — the concurrency guard, exactly as `moveTab`'s: a second
- * concurrent join onto the same free table blocks, then reads its set `tab_id` and is refused
- * `table.occupied`. `_cfg` is unused (the row is addressed by id and RLS confines it to the tenant) but
- * kept for signature symmetry with `moveTab`/`mergeTabs` — underscore-prefixed so `noUnusedParameters`
- * leaves it, the repo convention `voidTabLine`/`deactivateTable` follow for an interface-shape parameter.
+ * Join an active, free table to an open tab. Lock the target table before checking
+ * occupancy so concurrent joins serialize. The existing tab lines remain in place.
  */
 export async function joinTable(
   tx: Transaction,
@@ -2163,7 +1967,7 @@ export async function joinTable(
  * Acquiring in that identical order is what PREVENTS a mergeTabs-vs-pay/settle/abandon DEADLOCK:
  * a concurrent merge and pay both take `working_orders` before `dining_tables`, so they cannot
  * cross-lock and trip a 40P01. THIS leg's order is load-bearing and proven — the concurrent merge/pay
- * race test (move-merge.rls.test.ts) asserts no 40P01, and by deletion the previous
+ * race test (move-merge.pg.test.ts) asserts no 40P01, and by deletion the previous
  * `dining_tables`-first order reproduces the 40P01 against the real trigger.
  *
  * The `dining_tables` leg's OWN ascending-id order is, by contrast, DEFENSIVE not proven load-bearing:
@@ -2171,7 +1975,7 @@ export async function joinTable(
  * backends seq-scan the two rows in identical heap order and serialise on the first regardless of the
  * `.orderBy`. The ascending-id discipline on that leg only future-proofs against a schema/plan change
  * that lets scan orders diverge; a same-verb race cannot prove it load-bearing (a §1 "both answers look
- * alike" measurement). The deterministic hazard control (move-merge.rls.test.ts) proves the general
+ * alike" measurement). The deterministic hazard control (move-merge.pg.test.ts) proves the general
  * inconsistent-order 40P01 hazard is real.
  *
  * ORDER MATTERS (Plan note 2): the re-point (step 2) precedes the abandon (step 3). The TS-2
@@ -2191,11 +1995,8 @@ export async function mergeTabs(
     throw new AppError("tab.merge_self", { tabId: intoTabId });
   }
 
-  // Lock order (see the docstring): both working_orders rows FIRST (ascending id), THEN the involved
-  // dining_tables rows (ascending id) — the SAME order the sale/settle/abandon path acquires them in
-  // (payWorkingOrder locks working_orders, then the 0050 settle trigger updates dining_tables), so a
-  // concurrent merge and pay cannot cross-lock into a 40P01. The status check throws before the
-  // dining_tables lock, so a non-open (or RLS-hidden foreign) tab is refused holding only working_orders.
+  // Lock working-order rows before dining-table rows, with each set ordered by id.
+  // Check the order status before acquiring table locks.
   const tabs = await tx
     .select({ id: workingOrders.id, status: workingOrders.status })
     .from(workingOrders)
@@ -2281,84 +2082,11 @@ function assertDistinctTransferLines(tabId: string, transfers: { lineNo: number 
 }
 
 /**
- * Move SELECTED items from one open tab to another (design §3) — the transfer verb. Each entry of
- * `transfers` names a source `line_no` and optionally a `quantity`:
- *
- * - A WHOLE-line move (`quantity` omitted, OR equal to the line's own quantity) is delegated to
- *   {@link moveTabLines}: the line's locked `working_order_lines.unit_price_gross` is carried across
- *   UNCHANGED (a move NEVER re-prices — that add-time locked column is what the filed sale is later
- *   rebuilt from) and it is appended at the destination's next `line_no`. Routing an equal-quantity
- *   transfer here (rather than down the split path below) is deliberate: splitting the full quantity
- *   would reduce the source to zero, which violates `working_order_lines_quantity_ck`
- *   (`quantity <> 0`, orders.ts:194) — so the source line is REMOVED entirely, never left as a
- *   zero-quantity remnant. `compareDecimal` makes the equality value-wise across scales, so an
- *   explicit `"2"` transfer against a `"2.000"` line (and a weighed `"0.320"` against `"0.320"`) both
- *   count as whole-line moves, identically to `quantity` omitted.
- * - A PARTIAL split (`quantity` given and strictly less than the line's own quantity) REDUCES the
- *   named source line's quantity and INSERTS a NEW destination line inheriting every per-unit value
- *   from the source — `product_id`, `descriptions`, `unit_price` (net), `unit_price_gross` (locked
- *   gross), `vat_rate`, `category` — with `quantity = transferred`. Nothing is re-fetched from the
- *   catalogue: both the kept source line's and the new destination line's `line_total` are recomputed
- *   by {@link grossLineTotal} over the SAME locked `unit_price_gross`, so a catalogue price change
- *   after add moves NEITHER (the price-lock test proves this by changing the catalogue between the
- *   ring and the transfer). Quantity is conserved — `source.remaining + dest.transferred = original`
- *   — and a `weight` line splits identically, no special case. `line_total` is a per-line re-compute
- *   (each tab keeps `Σ line_total = its total`); pre-fiscal, so a sub-céntimo split rounding
- *   difference is harmless (design §3).
- *
- * Guarded (Task 5): a batch may name each source `line_no` AT MOST once (`tab.transfer_duplicate_line`,
- * refused up front before any lock or write — a repeat would validate each entry against the STATIC
- * pre-batch quantity snapshot and INVENT quantity, since the split sets the source to `original − q`
- * rather than a cumulative decrement, and a whole-line + partial pair on one line is contradictory);
- * every named `line_no` must exist on `fromTab` (`tab.line_not_found`); and any given `quantity` must
- * be well-formed and satisfy `0 < quantity ≤ line.quantity` (`tab.transfer_quantity_invalid` — zero,
- * negative, over-quantity, or a malformed decimal literal). All are checked for EVERY transfer BEFORE
- * any move or split runs, so one bad entry in a batch leaves the source untouched rather than
- * half-transferred.
- *
- * Both tabs' `working_orders` rows are locked `FOR UPDATE` in ASCENDING id order:
- * `[fromTabId, toTabId].sort()` then a `lockOpenTab` per id, each a SEPARATE `where id = X ... for update`.
- * Two things that buys, at DIFFERENT strengths — kept apart deliberately:
- *
- * - PROVEN: a transfer racing ANOTHER transfer on the same pair serialises without deadlock. Both acquire
- *   their two row locks lowest-id-first (the `.sort()` + `lockOpenTab` loop below), so the
- *   reverse-orientation race — A→B against B→A — cannot form a lock cycle; one backend simply waits on the
- *   lower id until the other commits. `transfer-lines.rls.test.ts` proves this on real Postgres by
- *   DELETION: strip the `.sort()` (each transfer then locks in its own direction) and that race raises
- *   `40P01 deadlock detected` in every looped iteration; restore it and the race goes green.
- * - PROVEN: this verb holds NO `dining_tables` lock. `lockOpenTab` locks the `working_orders` row ONLY —
- *   its `dining_tables` back-pointer read is an UNLOCKED select — so a transfer is NOT in the
- *   `dining_tables`↔`working_orders` cross-lock class and cannot deadlock with pay/settle/abandon (those
- *   lock `working_orders`, then `dining_tables` via the settle trigger; a transfer never holds a
- *   `dining_tables` lock).
- *
- * NOT proven, and stated as such: a transfer racing a MERGE (or a direct `moveTabLines`) on the same pair.
- * Those lock their two `working_orders` rows in a SINGLE statement (`where id = a or id = b order by id for
- * update`), and PostgreSQL takes the row locks in SCAN order, applying the `order by` to the query OUTPUT
- * afterwards — it does NOT promise the locks are ACQUIRED in id order. A two-row primary-key lookup very
- * likely index-scans the key ascending, matching this verb's order, so the interaction is very likely safe
- * and a reviewer could not reproduce a deadlock — but that is a property of the chosen PLAN, not a Postgres
- * guarantee, so this is NOT claimed to be un-cross-lockable. It is also pre-fiscal (nothing is filed), and
- * any 40P01 would surface as a caught, retryable error rather than corruption.
- *
- * That ascending-id discipline is defensive and plan-level, and this PGlite suite cannot itself prove it:
- * `transfer-lines.test.ts` runs on a single backend that serialises every query, so a contention test on
- * it is a false pass — the real-Postgres race is `transfer-lines.rls.test.ts`'s job.
- *
- * `lockOpenTab` requires each tab to be an OPEN working order some `dining_tables.tab_id` points at,
- * else `tab.not_open`; an absent/foreign (RLS-hidden) tab matches no row → the same fail-closed
- * `tab.not_open`. (For a destination that is absent or closed, `moveTabLines` ALSO throws `tab.not_open`
- * from its own status read — so that particular guard is backstopped, and the lock loop's own
- * contribution is the stricter is-a-tab back-pointer check plus the explicit lock ordering.) A
- * self-transfer (`fromTabId === toTabId`) is refused with `tab.transfer_self` BEFORE any lock — moving a
- * tab's items to itself is a no-op the caller did not mean, and would take the same row `FOR UPDATE`
- * twice (mirrors `mergeTabs`' `tab.merge_self` self-guard).
- *
- * A tx-level verb (takes the caller's `tx`, like `moveTabLines`/`mergeTabs`): the HTTP route opens the
- * `withTenant`/`asAppUser` transaction around it. Pre-fiscal — nothing is filed; each tab files its own
- * sale on its own pay (design §4). `cfg` (the till config) supplies the `tenant_id` the split path
- * stamps on each new destination line; `voidTabLine`/`joinTable` keep the same `TillConfig` parameter
- * for the uniform tab-verb signature the route layer calls.
+ * Transfer selected lines between two open tabs in the caller's transaction.
+ * Whole-line transfers move the line; partial transfers preserve its stored unit
+ * prices and divide its quantity. Validate the entire batch before any move.
+ * Lock both working-order rows in ascending id order so opposite transfers acquire
+ * the same first lock. Each tab files its own sale when paid.
  */
 export async function transferLines(
   tx: Transaction,
@@ -2377,12 +2105,8 @@ export async function transferLines(
   // repeated line_no cannot conserve quantity).
   assertDistinctTransferLines(fromTabId, transfers);
 
-  // Lock BOTH tab rows FOR UPDATE in ascending id order. `.sort()` is lexicographic, which for the
-  // canonical lowercase uuids `randomUUID()`/`gen_random_uuid()` emit matches PostgreSQL's own byte
-  // ordering of `uuid` — so this IS ascending id order as the DB sees it. `lockOpenTab` throws
-  // `tab.not_open` for a row that is absent, closed, not a tab (no `dining_tables` back-pointer), or
-  // (RLS) another tenant's. The last two are what this loop enforces beyond `moveTabLines`' own open
-  // check below, which accepts any open order — see the isolating not-open test in transfer-lines.test.ts.
+  // Acquire both working-order locks in ascending id order. lockOpenTab also
+  // requires each order to be open and referenced by a dining table.
   for (const tabId of [fromTabId, toTabId].sort()) {
     await lockOpenTab(tx, tabId);
   }
@@ -2544,10 +2268,7 @@ async function carveOffLines(
       // Destination: a NEW line inheriting every per-unit value, `quantity = transferred`, `line_total`
       // = round(transferred × locked gross). NEVER re-fetched from the catalogue.
       await tx.insert(workingOrderLines).values({
-        // cfg.tenantId is the source line's tenant here (moveTabLines stamps `line.tenantId`; same value):
-        // the source read above is RLS-filtered to current_tenant_id(), and
-        // working_order_lines_tenant_isolation's WITH CHECK rejects any other tenant_id on this INSERT — a
-        // cross-tenant value is unwritable, not a silent wrong-tenant row.
+        // Stamp the destination line with the configured tenant id.
         tenantId: cfg.tenantId,
         workingOrderId: toTabId,
         lineNo: maxLineNo! + i + 1,
@@ -2657,7 +2378,7 @@ export async function splitOffCheck(
  * includes `tableId` while it is joined) — i.e. `working_orders` THEN `dining_tables`. Acquiring in that
  * SAME class order is what PREVENTS an unjoin-vs-pay/settle DEADLOCK: a concurrent unjoin and pay both
  * take `working_orders` before `dining_tables`, so they cannot cross-lock and trip a 40P01. This is
- * load-bearing and proven — the concurrent unjoin/pay race test (split-bill.rls.test.ts) asserts no
+ * load-bearing and proven — the concurrent unjoin/pay race test (split-bill.pg.test.ts) asserts no
  * 40P01, and by deletion the previous `dining_tables`-first order reproduces the 40P01 against the real
  * trigger. (The status check therefore fires BEFORE the `dining_tables` lock; in every tested scenario
  * only one guard fails at a time, so the thrown code is unchanged from the old order.)
@@ -2766,16 +2487,8 @@ export interface HeldOrder {
 }
 
 /**
- * The open working orders parked on THIS server's node (park & retrieve, sub-project 7b) — the
- * cross-till held list any register on the node shows. `total` is the summed `line_total` — the GROSS
- * (VAT-inclusive) draft total, equal to the basket total the operator saw — and `itemCount` the line
- * count, from a LEFT JOIN aggregate so an order with no lines would still list (`total` coalesced to
- * 0); ordered by the human `order_number` the counter types back in.
- *
- * Scoped by `status = 'open'` and `node_id = cfg.nodeId`; RLS already confines it to the tenant
- * (the read runs as `app_user` under `withTenant`, exactly as `parkOrder` writes). PGlite is enough
- * for THIS behaviour — the aggregate, the status/node filter and the ordering are plain SQL that a
- * single backend proves; the RLS cross-tenant isolation is Task 7's real-Postgres suite.
+ * List this node's open parked orders, ordered by order number. Aggregate stored
+ * gross line totals and line counts, retaining orders with no lines.
  */
 export async function listHeldOrders(
   deps: WorkingOrderDeps,
@@ -2816,17 +2529,8 @@ export async function listHeldOrders(
 }
 
 /**
- * One parked order's lines, to rebuild the basket on retrieve. Returns only each line's `product_id`
- * and `quantity` (the pricing INPUTS) in `line_no` order — the till re-reads the catalogue and
- * re-prices, never trusting a stored price, so the snapshot columns are deliberately not returned.
- *
- * Scoped to `status = 'open'` AND `node_id = cfg.nodeId` (RLS additionally confines it to the tenant):
- * an absent id, a `settled`/`abandoned` order, another tenant's order, or a same-tenant order parked
- * on ANOTHER node all surface the one `working_order.not_found` — see that code's note. Node-scoped to
- * match `listHeldOrders` and the rest of the by-id family (`updateHeldOrder`/`abandonHeldOrder`): a
- * retrieve follows the node-scoped list, so a foreign-node id names nothing this register should
- * reach, and failing it closed here is the fail-closed posture the whole by-id family now shares (7b).
- * RLS is tenant-scoped and would NOT hide a same-tenant order on another node — only this filter does.
+ * Read an open parked order on this node. Return product ids and quantities in
+ * line-number order so the till can rebuild and re-price the basket.
  */
 export async function getHeldOrder(
   deps: WorkingOrderDeps,
@@ -2882,30 +2586,8 @@ export interface UpdateHeldOrderRequest {
 }
 
 /**
- * Edit a parked order (park & retrieve, sub-project 7b): re-price `req.lines` authoritatively, REPLACE
- * the order's `working_order_lines` with the result, and update its `label` — all in ONE
- * `withTenant`/`asAppUser` transaction, so the delete + re-insert commit as a unit (or roll back
- * together, leaving the parked order exactly as it was). Only an `open` order on THIS node may
- * change; a `settled`/`abandoned` order, an absent id, another tenant's order (RLS hides it), or a
- * same-tenant order parked on ANOTHER node all throw `working_order.not_open`.
- *
- * The row is taken `for update` so a concurrent update/abandon/pay cannot race this read-modify-write
- * of its lines; the `status` is read off THAT locked row rather than added to the `WHERE`, so an
- * order that exists but is closed is told apart from one that never existed only inside the tx — both
- * still surface the one `working_order.not_open`, the fail-closed shape that code's note describes.
- * The UPDATE writes neither `order_number` nor `node_id` (they are fixed at park); `node_id` is only
- * READ, in the lock predicate below.
- *
- * Node-scoped (`node_id = cfg.nodeId` in the lock predicate), consistent with `getHeldOrder` and
- * `abandonHeldOrder`: an edit follows a retrieve which follows the node-scoped `listHeldOrders`, so a
- * same-tenant order parked on ANOTHER node is refused `working_order.not_open` (fail-closed) rather
- * than found and rewritten. RLS still confines the row to the tenant on top of that. The whole by-id
- * family moved to this fail-closed posture together (7b).
- *
- * PGlite is enough for THIS behaviour — the state machine (open-only), the FK/`require_open_parent`/
- * `check_locales` triggers on the replaced lines, and the `enforce_transition` trigger the label
- * update runs over — all hold on a single backend. RLS cross-tenant isolation and the `for update`
- * concurrency are Task 7's real-Postgres suite; the lock is still issued here exactly as production.
+ * Update an open held order on this node using the current catalogue prices.
+ * The caller's transaction keeps the order and replacement lines together.
  */
 export async function updateHeldOrder(
   deps: WorkingOrderDeps,
@@ -2962,17 +2644,8 @@ export async function updateHeldOrder(
 }
 
 /**
- * Discard a parked order (park & retrieve, sub-project 7b): `open → abandoned`, a terminal transition
- * the `working_orders_enforce_transition` trigger (0004) validates. A single conditional UPDATE —
- * `set status = 'abandoned' where id = … and status = 'open' and node_id = …` — so the open-and-on-this-
- * node guard IS the write: a `settled`/`abandoned` order, an absent id, another tenant's order (RLS
- * hides it), or a same-tenant order on another node all match no row, and the empty `returning` throws
- * `working_order.not_open`. No `settled_at` is set — abandoned is not settled, and the `settled_at`
- * biconditional (0004) requires it stay NULL.
- *
- * Node-scoped (`node_id = cfg.nodeId`), matching `updateHeldOrder`/`getHeldOrder` — the whole by-id
- * family fails closed on a foreign-node id. PGlite proves this state machine (the conditional update
- * and the trigger); RLS cross-tenant isolation is Task 7's real-Postgres suite.
+ * Abandon an open held order on this node. The conditional status update leaves
+ * settled_at null because abandonment does not settle an order.
  */
 export async function abandonHeldOrder(
   deps: WorkingOrderDeps,
@@ -3023,46 +2696,11 @@ export interface PlaceOrderResult {
 }
 
 /**
- * Place a working order (spec §3): `open → placed`, which FREEZES its composition and OPENS the
- * art. 29.2.j amendment log with an `order_placed` genesis entry — all in ONE `withTenant`/`asAppUser`
- * transaction, so the transition, the genesis amendment and the kitchen fire commit as one unit (or
- * roll back together, leaving the order open and un-logged).
- *
- * The freeze is FREE: once the row is `placed`, `working_orders_enforce_transition` rejects a
- * non-status update of it and `working_order_lines_require_open_parent` rejects any line write under
- * it, so the stored composition can no longer be silently rewritten — a further edit must become a
- * logged amendment (the future correction slice), not a line rewrite. `updateHeldOrder` also refuses
- * a placed order at the app layer with `working_order.not_open`.
- *
- * The mode dispatch (Task 8, design §3's state-machine table) keys on the location's `order_flow`:
- *  - `invoice_first` (Mode I): file `recordSale` DEFERRED here — an unpaid, chained invoice issued at
- *    placing — from the order's stored locked lines, and return its invoice number. `collectOrder`
- *    settles it later.
- *  - `ticket_then_pay` (Mode T) and `prepay` (Mode P): file NO fiscal document here. Mode T pays at
- *    collect (`collectOrder`); Mode P never reaches placing at all — a walk-up/prepay order pays and
- *    issues at ORDER via `payWorkingOrder` (open → settled, no placed state). So `placeOrder` under
- *    `prepay` is a bare place with no fiscal doc, the same as Mode T.
- * `deps` is the fuller `TillSaleDeps` because Mode I needs `backend`/`clock` to file.
- *
- * The order is locked `for update` and its status read off the locked row: a non-`open` order (already
- * placed/settled/abandoned, or absent / another tenant's, RLS-hidden) fails closed with
- * `working_order.not_open`, the same shape `payWorkingOrder`/`updateHeldOrder` use for the modify side.
- * That FOR UPDATE lock is ALSO the Mode-I double-place idempotency: a concurrent second place blocks
- * on the lock, then re-reads the row as `placed` and is refused `working_order.not_open` BEFORE it
- * files — so the `sales_working_order_id_key` guard is never even reached, and at most one deferred
- * invoice is ever filed per order (the order row always exists here, unlike a walk-up, so the lock
- * fully serialises; there is no create-race backstop to add).
- *
- * `operatorId` is REQUIRED: `order_amendments.actor_id` is NOT NULL and the genesis entry's
- * accountability rests on a real operator (the session's `personId`, wired by the till), so there is
- * no system sentinel to fall back to. The amendment's local wall-clock is `deps.clock.now()` — the
- * venue's trusted clock, the same source `recordSale` reads for a sale's `issued_at`/offset.
- *
- * `saleTillId` is the DEVICE till (SP-A.2 §16.4): the deferred fiscal record's `till_id` is the
- * authenticated device's till, while the `order_placed` amendment's `capturedByTillId` stays the box's
- * CONFIGURED register (`cfg.tillId`) — matching `cancelPlacedOrder`, so a re-homed box's place/cancel
- * history for one order agrees. Only the fiscal record carries the device till; `nodeId`/`seriesId`
- * stay `cfg`.
+ * Place an open order, append its genesis amendment and fire kitchen items in one
+ * transaction. invoice_first also files a deferred invoice from the stored prices.
+ * Lock the order before checking status so concurrent placement cannot file twice.
+ * The operator and trusted clock identify the amendment; saleTillId identifies the
+ * authenticated device's register on the fiscal record.
  */
 export async function placeOrder(
   deps: TillSaleDeps,
@@ -3183,31 +2821,9 @@ export async function placeOrder(
 }
 
 /**
- * Cancel a PLACED working order (spec §4): `placed → abandoned`, appending an `order_cancelled`
- * amendment that carries the operator's reason — both in ONE `withTenant`/`asAppUser` transaction, so
- * the transition and the logged amendment commit as one unit (or roll back together).
- *
- * The reason is REQUIRED and non-empty, enforced HERE by the app: `order_amendments.reason` is
- * nullable (null is the `order_placed` genesis's own legitimate value) and no DB CHECK forces a reason
- * on `order_cancelled`, so this guard is the ONLY thing stopping a reasonless cancel from writing an
- * accountability-empty entry (art. 29.2.j — the reason is the contestable content; 7c carry-forward
- * from Task 3's review). An absent, empty or whitespace-only reason is refused with
- * `working_order.reason_required` — deliberately its OWN code, not `working_order.not_placed`: this
- * guard runs BEFORE the order is locked and its status read, so the order's state is unknown here (it
- * may be open, settled, abandoned or absent). A missing reason is a client/request-shape error
- * independent of that state, so `not_placed` would mislabel it as a state conflict (CLAUDE.md §1).
- * The guard runs BEFORE any database work, so a reasonless cancel neither transitions the order nor
- * touches the log.
- *
- * The order is locked `for update` and its status read off the locked row: a non-`placed` order (still
- * `open` — edit it via `updateHeldOrder` or discard it via `abandonHeldOrder` instead — or already
- * `settled`/`abandoned`, or absent / another tenant's, RLS-hidden) fails closed with
- * `working_order.not_placed`, the fail-closed shape `working_order.not_open` uses for the modify side.
- *
- * `deps` is `TillSaleDeps` so the venue's trusted clock is available for the amendment's local
- * wall-clock (its `backend` is unused), keeping the dep shape consistent with `placeOrder` — cancel is
- * a till operation beside place and pay. `operatorId` is the accountable actor, required for the same
- * reason `placeOrder`'s is.
+ * Cancel a placed order and append its reasoned amendment in one transaction.
+ * Require a non-empty reason before database work, then lock and check the order.
+ * The operator and trusted clock identify the cancellation amendment.
  */
 export async function cancelPlacedOrder(
   deps: TillSaleDeps,
@@ -3263,23 +2879,8 @@ export async function cancelPlacedOrder(
 }
 
 /**
- * Fire a SETTLED order's lines to the kitchen (KDS-1 §3b) — the Mode-P counterpart to `placeOrder`'s
- * own fire. Modes I/T fire INSIDE `placeOrder` (open → placed), because placing is where their order
- * becomes an order of record. Mode P (prepay) never places at all — it pays and issues at ORDER via
- * `payWorkingOrder` (open → settled, no placed state) — so its order has no `placeOrder` call to fire
- * from, and this is that pickup: called once the order is already `settled`.
- *
- * The order's status IS checked first, and enforced: an id naming NO working order (absent, or another
- * tenant's — RLS hides it), or one that is `open` (never paid) or `placed` (Modes I/T's own route,
- * `placeOrder`, already fired at placing — sending it here too would be the wrong path), all refuse with
- * the domain `working_order.not_settled` (409) BEFORE any write.
- *
- * Past that guard it fires the order's lines through the shared {@link fireLines} — one `ticket_items`
- * row per line, each routed to a station (product ?? category ?? default) SNAPSHOTTED at fire time
- * (§2b). A double send-to-prep re-fires already-fired lines and collides on `ticket_items`'
- * `(tenant_id, working_order_line_id)` unique — the structural one-item-per-line guard; `fireLines`
- * catches that 23505 and throws `ticket.already_fired` (a clean 409, mapped in `till-api.ts`), so this
- * verb inherits the re-fire surface from the shared fire point without minting a code of its own.
+ * Fire a settled prepay order through fireLines. Reject other statuses before any
+ * kitchen write; the unique item-per-line constraint rejects a repeated fire.
  */
 export async function sendToPrep(
   deps: WorkingOrderDeps,
@@ -3289,9 +2890,7 @@ export async function sendToPrep(
   return withTenant(deps.db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
 
-    // Only a SETTLED order is eligible — `settled` is terminal, so there is no race between this read
-    // and the fire below that could invalidate it. Absent, foreign (RLS-hidden), `open` and `placed`
-    // orders all match the SAME `undefined`/non-settled branch, one fail-closed code.
+    // Only settled orders are eligible for firing. Settled is a terminal status.
     const [order] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
@@ -3320,32 +2919,9 @@ export async function sendToPrep(
 }
 
 /**
- * Mark a SETTLED, FIRED order as handed to the customer (KDS-1 §3e, the Mode-P counter handover) — stamp
- * the order-level `working_orders.collected_at`, which drops the order off {@link listStationQueue} (the
- * display shows an order until it is collected). A Mode-P walk-up settles BEFORE it is fired
- * (`payWorkingOrder` → {@link sendToPrep}), so it never reaches the placed → settled transition where
- * `collectOrder` stamps `collected_at` for Modes I/T — this is that missing handover, on an
- * already-settled order.
- *
- * NON-FISCAL: it writes ONLY `collected_at` — no sale, registro, tender or huella (the order was paid and
- * filed at settle; the alta path never reads this marker — the H2 huella-identity test). DISTINCT from
- * `collectOrder` (the placed → settled FISCAL collect); the two are deliberately not folded together.
- *
- * Guards, each fail-closed BEFORE any write (an absent/foreign id, RLS-hidden, reads the same as a
- * wrong-state one):
- *  - not `settled` (open, placed, abandoned, or absent/foreign) → `working_order.not_settled`, the SAME
- *    code {@link sendToPrep} uses for its own settled guard;
- *  - already collected (`collected_at` set) → `working_order.already_collected` — a repeat, refused the
- *    way the old `advancePrep('collected')` did, and BEFORE the enforce_transition trigger (0056), which
- *    permits the stamp only NULL → non-null and would otherwise RAISE an opaque 500 on a re-stamp;
- *  - never fired (no `ticket_items`) → `ticket.not_fired` — there is nothing on a station display to hand
- *    over, and stamping now would silently hide a LATER {@link sendToPrep}'s fired lines.
- *
- * The stamp is `now()` (the venue's DATABASE clock), the non-fiscal precedent {@link setLineServed} uses —
- * no `TrustedClock` is involved since nothing fiscal is written. The UPDATE's own `collected_at IS NULL`
- * predicate makes a concurrent double-collect safe: the loser's UPDATE matches no row (0 rows, no trigger
- * fire), so one call stamps and the other is a silent no-op rather than a P0001. Runs in its OWN
- * `withTenant` + `asAppUser` scope (the `db`-only {@link WorkingOrderDeps}), the shape {@link sendToPrep} uses.
+ * Stamp a settled, fired order as collected so it leaves the kitchen queue.
+ * Refuse an already-collected or never-fired order. The conditional update stamps
+ * only an unset collected_at, leaving a concurrent second stamp as a no-op.
  */
 export async function markCollected(
   deps: WorkingOrderDeps,
@@ -3355,9 +2931,7 @@ export async function markCollected(
   return withTenant(deps.db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
 
-    // Only a SETTLED order can be handed over; settled is terminal, so this read cannot be invalidated by
-    // a concurrent status change before the stamp below. Absent/foreign (RLS-hidden), open and placed all
-    // match the SAME fail-closed code.
+    // Only settled orders are eligible for collection. Settled is a terminal status.
     const [order] = await tx
       .select({ status: workingOrders.status, collectedAt: workingOrders.collectedAt })
       .from(workingOrders)
@@ -3424,36 +2998,10 @@ function advanceSet(to: Exclude<TicketState, "queued">) {
 }
 
 /**
- * Advance ONE ticket item one kitchen step (KDS-1 §3c): `queued → preparing → ready`. The common path is
- * a single conditional UPDATE — `set state = to, <to>_at = now() where id = itemId and state = <the one
- * legal predecessor of to> and fired_at is not null` — so the legality of the move IS the write: a skip
- * (`queued → ready`), a repeat, a jump backwards, an absent/foreign item (RLS hides another tenant's), or
- * a KDS-2 HELD item (`fired_at` NULL) all match no row. On an empty match a single disambiguating read
- * then picks the code: an existing held item throws `ticket.item_held`, everything else
- * `ticket.invalid_transition` naming the offending item — so the frequent success is one query and only
- * the rare miss pays a second. The per-line
- * successor to #63's order-level `advancePrep`, over `ticket_items` — the same fail-closed
- * conditional-UPDATE shape `advancePrep` used over `order_prep`, and the shape `abandonHeldOrder` uses
- * for `working_orders`.
- *
- * `to` must name a key of {@link TICKET_TRANSITIONS} (`"preparing" | "ready"`) — anything else is
- * refused immediately, before any query, with the same domain code the empty-`returning` branch below
- * throws for an illegal move. That covers `to = "queued"` (no kitchen state legally advances INTO it —
- * reaching it is a FIRE's job, {@link fireLines}'s insert) AND a missing/garbage `to`: the till route
- * (`till-api.ts`) casts `body.to as TicketState` with no route-level screen, so an absent JSON field or
- * an arbitrary string reaches here at runtime despite the narrower static type, and `to` is looked up in
- * the table BEFORE {@link advanceSet} or the predecessor is read — a lookup miss must not reach either,
- * or it throws a raw `TypeError` (`Cannot read properties of undefined`) that the error boundary maps to
- * an opaque `server.internal` 500, not the documented 409. This one guard is what the old
- * `switch (to) { … default: throw … }` did before the table refactor; the table replaced the three arms,
- * not the default.
- *
- * Runs on the CALLER's transaction under its tenant/app_user scope; RLS confines the update to the
- * tenant and the item id addresses one row, so `_cfg` is unused (the tab-verb signature shape the route
- * calls uniformly) — underscore-prefixed the way {@link voidTabLine}/{@link markLineServed} keep it.
- * Advances independently of the parent order's FISCAL status (a settled Mode-P order's lines still
- * cook), as `ticket_items` is a MUTABLE table separate from the frozen `working_orders` row. It DOES
- * refuse a KDS-2 held item (`fired_at` NULL) with `ticket.item_held` — a kitchen gate, not a fiscal one.
+ * Advance one fired ticket item from queued to preparing or preparing to ready.
+ * The conditional update enforces the predecessor and held-item gate together.
+ * On a miss, distinguish a held item from an invalid transition. Reject an unknown
+ * target before looking up its transition.
  */
 export async function advanceTicketItem(
   tx: Transaction,
@@ -3474,18 +3022,8 @@ export async function advanceTicketItem(
   }
   const validTo = to as Exclude<TicketState, "queued">;
 
-  // KDS-2 hold-and-fire guard (§3c): a HELD item (`fired_at IS NULL`) cannot advance — the kitchen must
-  // not bump food it has not been told to start. The guard is FOLDED into the UPDATE's WHERE as
-  // `fired_at IS NOT NULL` (alongside the id + predecessor-state predicates), so the common SUCCESS path
-  // — a fired item at the legal predecessor — is ONE query. Only when the UPDATE matches NO row (the rare
-  // failure) does a second read run to say WHICH miss it was: an EXISTING held item (`fired_at IS NULL`)
-  // is refused `ticket.item_held`; anything else — a wrong/absent predecessor state, or an absent/foreign
-  // RLS-hidden item that reads back `undefined` — is refused `ticket.invalid_transition` (unchanged KDS-1
-  // behaviour). So a "no such item" never becomes the held code, and a held item is refused `item_held`
-  // whatever its state (the `fired_at IS NOT NULL` predicate drops it before the state predicate can
-  // matter), exactly as the prior read-first form did. The held disambiguation sits under the
-  // `to`-validity check above, so a garbage/`queued` target is still a malformed request
-  // (`invalid_transition`) regardless of the item's fired state.
+  // A held item cannot advance. Read back an unsuccessful update to distinguish
+  // ticket.item_held from ticket.invalid_transition.
   const updated = await tx
     .update(ticketItems)
     .set(advanceSet(validTo))
@@ -3510,28 +3048,9 @@ export async function advanceTicketItem(
 }
 
 /**
- * Whole-ticket bump (KDS-1 §3c): advance EVERY not-yet-`to` line of one order at one station together —
- * the convenience the `bump_mode = 'ticket'` venue setting (and a "bump all" affordance) drives, over
- * the per-line {@link advanceTicketItem} truth. A single bulk conditional UPDATE — `set state = to,
- * <to>_at = now() where working_order_id = orderId and station_id = stationId and state = <the legal
- * predecessor of to>` — so it moves exactly the items still AT that predecessor and leaves the rest
- * untouched (a line already `ready` is not at `queued`, so a `to = "preparing"` bump skips it). Unlike
- * the per-line verb it does NOT throw on an empty match: bumping a ticket whose lines have all already
- * advanced is a no-op convenience, not an illegal move (there is no single item to name in
- * `ticket.invalid_transition`).
- *
- * `to` is `"preparing" | "ready"` — the two forward targets; there is no whole-ticket move INTO `queued`
- * (a fire, not a bump, reaches it), so unlike the per-line verb this needs no runtime `queued` guard,
- * and the type forbids it at the call site. Runs on the CALLER's transaction under its tenant/app_user
- * scope; RLS confines the update to the tenant, and the (orderId, stationId) pair addresses one node's
- * items (a working order is node-local), so `_cfg` is unused — the uniform tab-verb signature shape.
- *
- * KDS-2 hold-and-fire (§3c, §5a "bump ... only on fired items"): the `fired_at IS NOT NULL` predicate
- * makes the bulk sweep SKIP held items, so a mixed ticket's fired lines advance while its held ones stay
- * put. Note the deliberate asymmetry with {@link advanceTicketItem}: the per-line verb THROWS
- * `ticket.item_held` because it is a targeted action on one item that must not be workable; the
- * whole-ticket bump is a bulk convenience, so a held item is simply not in the match (no throw), the same
- * way a line already past the predecessor is not in the match. Fired items behave exactly as before.
+ * Advance fired items of one order and station from the legal predecessor state.
+ * Held items and items already past that predecessor are skipped; an empty match
+ * is a no-op.
  */
 export async function advanceTicket(
   tx: Transaction,
@@ -3667,10 +3186,9 @@ export interface StationQueueGroup {
  * Ordered by `ticket_items.queued_at` ascending, so within the grouping the oldest line seen for an
  * order fixes that group's position (oldest-first) and its `queuedAt`. Node-scoped
  * (`node_id = cfg.nodeId`) exactly as `listPrepQueue` was — the queue is one node's — so `cfg` is used
- * here (unlike the advance verbs). Runs on the CALLER's transaction under its tenant/app_user scope; RLS
- * confines the tenant. PGlite proves the join, the exclusions, the grouping and the ordering; the
- * node/tenant SCOPING is real-Postgres's job (working-order.rls.test.ts), the same split `listPrepQueue`
- * used (CLAUDE.md §4).
+ * here (unlike the advance verbs). Runs on the CALLER's transaction under its tenant/app_user scope.
+ * PGlite proves the join, the exclusions, the grouping and the ordering; the NODE scoping is
+ * real-Postgres's job (working-order.pg.test.ts), the same split `listPrepQueue` used (CLAUDE.md §4).
  *
  * On a mirror this `cfg.nodeId` filter is the mirror's OWN reserved id, not the origin whose replicated
  * rows carry the primary's — see the latent-mirror-trap comment on the `GET /api/working-orders` cluster
@@ -3678,27 +3196,9 @@ export interface StationQueueGroup {
  * is not.
  */
 /**
- * Read a set of PARENT dish lines' CHILD modifier lines AND compute their AS-SERVED allergen profiles
- * in ONE child read plus one base read — the shared sub-item read `listStationQueue`/`listExpoQueue`
- * attach beneath each queue item. Returns two maps keyed by parent line id:
- *
- *  - `modifiersByParent` — each parent's options' snapshotted `descriptions` (for the KDS sub-text),
- *    in `line_no` (selection) order; a parent with no options has no key (the caller defaults to `[]`);
- *  - `asServedByParent` — each parent's `{ asServed, removed }` (modifier↔allergen, Task 8): the parent
- *    product's published `allergens` folded with its options' overlays (`deriveAsServedAllergens`,
- *    Cautious), plus the base codes the fold subtracted (`asServed.removed`).
- *
- * The CHILD read is a SINGLE `inArray` over the parents' ids (NOT an N+1), LEFT-joined to
- * `option_group_items` on the nullable `option_group_item_id` (`ON DELETE SET NULL`, so a child whose
- * option was deleted contributes an EMPTY overlay). Both the modifier `descriptions` AND the add/remove
- * overlay come from those SAME child rows, so one query + one pass builds both maps — collapsing what
- * would otherwise be a second child read (for the option allergen overlay) into the same join. The BASE
- * read is one `inArray` over the parents
- * themselves, LEFT-joined to `products` (a parent with a null/pending base yields `pending: true`). Both
- * are plain `inArray` reads (never a correlated subquery — CLAUDE.md §3). Tenant-scoped (belt-and-braces
- * beside RLS). An empty `parentLineIds` skips both round trips. `removed` is empty for a pending (null)
- * base, since a remove cannot act on an unknown base. `AllergenMap`/`ProductAllergens` are structurally
- * identical; cast at the query boundary as the option-item reads do.
+ * Read modifier descriptions and allergen overlays for the supplied parent lines,
+ * then their base product allergens. Both reads have explicit tenant predicates.
+ * An empty parent list skips the reads; a missing base leaves allergens pending.
  */
 async function readQueueSubItems(
   tx: Transaction,
@@ -4105,10 +3605,10 @@ export interface ExpoOrder {
  *
  * Ordered by `opened_at` (oldest order first — the most urgent to dispatch), then course `display_order`
  * NULLS FIRST (the null course fires earliest), then `line_no`/item id for a stable within-course order.
- * Runs on the CALLER's transaction under its tenant/`app_user` scope; RLS confines the tenant. PGlite
- * proves the join, the exclusions, the course grouping and the fired/away roll-ups — plain SQL a single
- * backend proves; the node/tenant RLS SCOPING is real-Postgres's job (working-order.rls.test.ts), the
- * same split `listStationQueue` uses (CLAUDE.md §4).
+ * Runs on the CALLER's transaction under its tenant/`app_user` scope. PGlite proves the join, the
+ * exclusions, the course grouping and the fired/away roll-ups — plain SQL a single backend proves; the
+ * NODE scoping is real-Postgres's job (working-order.pg.test.ts), the same split `listStationQueue`
+ * uses (CLAUDE.md §4).
  *
  * Same mirror caveat as `listStationQueue`'s own `cfg.nodeId` filter above — see that comment.
  */
@@ -4407,21 +3907,9 @@ export interface TableState {
 }
 
 /**
- * The venue's ACTIVE tables with their DERIVED occupancy (design §4). ONE location-scoped query: each
- * table LEFT JOINs its at-most-one OPEN tab — the order its own `tab_id` back-pointer names, filtered to
- * `status = 'open'` (a `tab_id` pointing at a settled/abandoned order finds nothing here and reads free,
- * design §2b) — with a line count + gross total, plus a count of pending deliveries (orders with
- * `delivery_table_id` = this table that were FIRED to the kitchen — a `ticket_items` row exists — and are
- * not yet collected (`working_orders.collected_at IS NULL`) nor `abandoned`). This is the KDS-1 successor
- * to the dropped `order_prep` join (§2d/§3e): `EXISTS(ticket_items)` replaces "has a prep row" and
- * `collected_at` replaces `order_prep.state = 'collected'`, so an instant handover that was never fired
- * (no ticket item — e.g. a walk-up counter delivery) leaves no lingering occupancy, exactly as a
- * no-prep-row handover did. The collect flow (till-sale.ts's settle paths) stamps `collected_at` at
- * handover; this read only consumes it.
- *
- * Precedence for the rolled-up `state`: open-tab dominates delivery-pending dominates free. Runs as the
- * app role under the caller's tenant scope (RLS), so it gathers orders across NODES by construction (a
- * table lives at the venue, not the register). `locationId` defaults to the till's own.
+ * Read active tables in the location with open-tab and pending-delivery occupancy.
+ * An open tab takes precedence over a delivery; otherwise the table is free.
+ * Pending deliveries must have kitchen items and remain uncollected and unabandoned.
  */
 /** Resolve a stored IANA time zone, substituting the schema default for an unrecognised value.
  *  `locations.time_zone` is free-text with NO CHECK constraint (`.notNull().default("Europe/Madrid")`),
@@ -4488,15 +3976,12 @@ export async function listTablesWithState(
   now: Date = new Date(),
 ): Promise<TableState[]> {
   const loc = locationId ?? cfg.locationId;
-  // Venue-local "today"/"now" for the reserved-on-floor lookup (§2b/§4). Read the location's time zone,
-  // then do the tz math in JS and pass the resulting wall-clock date/time as bound SQL params — the
-  // reservation sub-select never does timezone arithmetic. A location hidden by RLS (or missing)
-  // falls back to the schema default, matching `locations.time_zone`'s own default.
+  // Compute the reservation date and time using the location's time zone, then
+  // bind those wall-clock values into the query. Missing locations use the default.
   const tzRow = await tx.execute<{ time_zone: string }>(
     sql`select time_zone from locations where id = ${loc}`,
   );
-  // `?? default` covers a missing/RLS-hidden row; `safeTimeZone` covers a STORED value `Intl` rejects
-  // (the column is unvalidated free text) — either way the read never throws on bad tz config.
+  // Use the default for a missing location and safeTimeZone for an invalid stored zone.
   const timeZone = safeTimeZone(tzRow.rows[0]?.time_zone ?? DEFAULT_TIME_ZONE);
   const { date: venueToday, time: venueNow } = venueWallClock(now, timeZone);
   // Reserved-on-floor grace window (§4): surface reservations from `RESERVATION_GRACE_MINUTES` BEFORE

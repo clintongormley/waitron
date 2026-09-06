@@ -6,15 +6,10 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { applyBatch } from "./apply.js";
 
-// Real Postgres, not PGlite: this suite proves the Slice-7 config-conflict gate on the apply path
-// under a genuine non-superuser, non-BYPASSRLS role (sync_applier — member of app_user + sync_tailer),
-// so the sync_config_conflicts INSERT genuinely runs through the app_user grant and the reject/settle
-// bookkeeping is exercised as it is in production. PGlite connects as a superuser and bypasses the
-// role model — a false pass here (CLAUDE.md §4). The whole migration manifest runs (sync last), so the
-// container carries sync_config_conflicts (0009) plus every enrolled table + capture trigger. The
-// injected enrolment set is CORE_ENROLMENT (@waitron/db) — it carries products (configClass: true),
-// dining_tables (configClass: false, the excluded mixed table) and working_orders (runtime), the three
-// tables this suite exercises.
+// PostgreSQL exercises the config-conflict gate through a non-superuser app_user member, including
+// the conflict INSERT and reject/settle bookkeeping. PGlite's superuser sessions cannot check the
+// caller's grants. CORE_ENROLMENT supplies products (config), dining_tables (mixed, excluded from
+// config rejection) and working_orders (runtime), the three tables this suite exercises.
 const postgres = useTemplateDb({ template: "manifest" });
 
 const uuid = (): string => randomUUID();
@@ -22,7 +17,7 @@ const uuid = (): string => randomUUID();
 // The gate keys on two node ids: the serving-primary (the carrier draining a returned node's tail) and
 // the fenced/returned node whose config writes primary-wins overrides. They are generated FRESH per
 // test — the suite shares one cloned DB across all its tests (useTemplateDb: one clone per file), and
-// sync_config_conflicts is whole-DB (no tenant_id/RLS), so a fixed origin id would let one test's
+// sync_config_conflicts is whole-DB (no tenant_id), so a fixed origin id would let one test's
 // recorded conflict leak into another test's origin-keyed read-back.
 
 /** Stamps (or re-stamps) the singleton deployment.environment so each test is order-independent. */
@@ -41,7 +36,7 @@ interface Base {
 }
 
 /** Seeds a tenant plus the FK parents the fixture rows reference (a location, a till, a catalogue),
- * as the superuser admin (RLS bypassed; pure setup). English fixture values throughout: packages/sync/src
+ * as the superuser admin (fixture setup). English fixture values throughout: packages/sync/src
  * is inside the english-only guard (CLAUDE.md §3). */
 async function seedBase(): Promise<Base> {
   const admin = postgres.admin;
@@ -135,7 +130,7 @@ function workingOrderImage(b: Base, orderNumber: number, over: Image = {}): Imag
   };
 }
 
-// Admin (RLS-bypassing) read-backs of the mirror's actual stored state.
+// Admin read-backs of the mirror's actual stored state.
 async function scalar(query: ReturnType<typeof sql>): Promise<string | null> {
   const r = await postgres.admin.execute<{ v: string | null }>(query);
   return r.rows[0]?.v ?? null;
@@ -156,7 +151,7 @@ async function laneCursor(subscriberId: string, originId: string, lane: string):
   return r.rows[0]?.seq ? BigInt(r.rows[0].seq) : 0n;
 }
 
-/** All sync_config_conflicts rows for one origin, read back as the admin (no RLS on this ops table). */
+/** All sync_config_conflicts rows for one origin, read back as the admin (operational table). */
 async function conflicts(
   originId: string,
 ): Promise<{ table_name: string; origin_id: string; lane: string; row_image_id: string | null }[]> {

@@ -1,12 +1,11 @@
 // The producer-side disposal guard (parent design §5.1; rejoin §6 step 3). A returned/fenced node
-// proves LOCALLY whether its own-origin sync_log tail has fully drained onto the CARRIER (the current
-// serving-primary): its own latest seq per lane versus the carrier's reported sync_cursor for that
-// lane. A non-empty tail on ANY lane means "not safely disposable". `seq` is a single global identity,
-// but each lane's cursor advances only over its own tables (tablesForLane), so "drained" is answered
-// per lane and ANDed. Runs the way the box-status lag reader does: a sync_tailer member INSIDE
-// withTenant(tenantId), so the sync_log_tenant_isolation RLS policy scopes the own-origin max to this
-// venue; sync_cursor carries no RLS. Reads only (no write), so it composes with the fenced read-only
-// posture. Values bind as parameters (CLAUDE.md §3); `in ${tables}` is drizzle's array-expansion shape
+// proves LOCALLY whether its own-origin sync_log tail has fully drained onto the CARRIER (the
+// current serving-primary): its own latest seq per lane versus the carrier's reported sync_cursor
+// for that lane. A non-empty tail on ANY lane means "not safely disposable". `seq` is a single
+// global identity, but each lane's cursor advances only over its own tables (tablesForLane), so
+// "drained" is answered per lane and ANDed. app_user reads the database's own-origin log and
+// carrier cursors. Reads only (no write), so it composes with the fenced read-only posture.
+// Values bind as parameters (CLAUDE.md §3); `in ${tables}` is drizzle's array-expansion shape
 // (source.ts), never `= any(...)`.
 import { sql } from "drizzle-orm";
 import { type Database, type Transaction } from "@waitron/db";
@@ -44,14 +43,14 @@ export async function readDrainProgress(
   for (const lane of SYNC_LANES) {
     const tables = tablesForLane(args.enrolments, lane);
     // This lane's own-origin high-water AND the carrier's reported cursor for it, as two scalar
-    // subqueries in ONE round-trip per lane. `max(seq)` always yields one row (max_seq null when there
-    // are no matching rows); the cursor subquery is null when the carrier has drained nothing on this
-    // lane. `tablesForLane` returns `[]` for a lane a partial enrolment set omits — the full 22-table
-    // set boot injects today (assembled from ALL_MODULES) never does, but a future (deferred)
-    // enabled-set filter (spec §2/§7) can, so the empty-lane case is guarded with `and false`
-    // (mirroring readSyncLogSince in source.ts)
-    // rather than emitting an invalid `in ()`. An omitted lane thus contributes no own rows → `max_seq`
-    // null → the `continue` below treats it as nothing to drain, which is the correct semantics.
+    // subqueries in ONE round-trip per lane. `max(seq)` always yields one row (max_seq null when
+    // there are no matching rows); the cursor subquery is null when the carrier has drained
+    // nothing on this lane. `tablesForLane` returns `[]` for a lane a partial enrolment set omits
+    // — the full 22-table set boot injects today (assembled from ALL_MODULES) never does, but a
+    // future (deferred) enabled-set filter (spec §2/§7) can, so the empty-lane case is guarded
+    // with `and false` (mirroring readSyncLogSince in source.ts) rather than emitting an invalid
+    // `in ()`. An omitted lane thus contributes no own rows → `max_seq` null → the `continue`
+    // below treats it as nothing to drain, which is the correct semantics.
     const tablesClause = tables.length === 0 ? sql`and false` : sql`and table_name in ${tables}`;
     const laneRes = await db.execute<{
       max_seq: string | null;

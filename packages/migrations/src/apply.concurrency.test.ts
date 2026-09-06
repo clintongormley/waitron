@@ -1,3 +1,4 @@
+// Real PostgreSQL: exercises two migration hosts contending on an advisory lock.
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";

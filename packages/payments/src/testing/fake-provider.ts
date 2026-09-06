@@ -36,7 +36,7 @@ const nextRef = (): string => `fake-${String(++counter).padStart(8, "0")}`;
 /**
  * A genuine DB-backed test double, not a stub. It persists to the real `payments`/`payment_refunds`
  * tables through short transactions of its own (it takes no caller transaction — the interface
- * forbids it), so the online path, the associate-back, and RLS behave exactly as a real adapter's
+ * forbids it), so the online path, the associate-back, and foreign keys behave exactly as a real adapter's
  * would. There is no network; a captured result and its persistence share one transaction, and the
  * outcome is deterministic (configurable via `failNextCollect`). NOT re-exported from the package
  * barrel — a production import cannot reach it.

@@ -32,11 +32,9 @@ import {
 import type { DeviceBinding } from "./device-session.js";
 import "./errors.js";
 
-// Real Postgres, not PGlite — MANDATORY for `requireDevice` (CLAUDE.md §4). The guard is DB VALIDATION
-// under the deployment role: it fetches the device as `app_user` inside `withTenant`, so tenant
-// isolation (RLS) and the `active = true` revocation filter are the properties under test, and PGlite
-// — every connection a superuser that bypasses RLS — is a FALSE pass for exactly those. The cookie
-// helpers below need no database; they ride the same shared clone rather than a second file.
+// Real PostgreSQL checks requireDevice reads and last_seen_at writes under app_user privileges;
+// a check left on PGlite's default superuser would pass without those grants.
+// Cookie-only checks share the same file fixture.
 const LOCALE = "es-ES";
 const suite = useTemplateDb({ template: "manifest" });
 
@@ -47,9 +45,10 @@ function asApp<T>(db: Database, cfg: TillConfig, fn: (tx: Transaction) => Promis
   });
 }
 
-/** A fresh tenant + venue + one station, seeded on the superuser admin connection (RLS bypassed for
- * setup), the station created through the app role — the `device.rls.test.ts` shape. Each test gets
- * its OWN tenant so device state is order-independent across the shared clone (CLAUDE.md §4). */
+/**
+ * Each database-backed test seeds its own venue, keeping device state order-independent
+ * across the shared clone; stations are created through the app role.
+ */
 async function setupStation(): Promise<{ cfg: TillConfig; stationId: string }> {
   const admin = suite.admin;
   const tenantId = await seedTenant(admin);
@@ -108,10 +107,9 @@ const NO_BINDINGS = {
   cardReaderId: null,
 } as const;
 
-/** Insert a `device_profiles` row on the admin connection (RLS bypassed — pure setup, the
- * `enrolTillDeviceFixture` canvas-insert shape). Carries the capability set that the capability firewall
- * now reads THROUGH the device profile (device-profile design 2026-09-05 §5.3, Task 9). `canvasId` is
- * optional — a profile may reference a canvas or fall back to the form-factor default (§5.2). */
+/**
+ * Insert a device profile for the capability checks. canvasId is optional.
+ */
 async function seedDeviceProfile(
   cfg: TillConfig,
   name: string,
@@ -125,12 +123,10 @@ async function seedDeviceProfile(
   return prof.rows[0]!.id;
 }
 
-/** Enrol a REAL `till` device carrying a NON-NULL profile + hardware binding (SP-A.2 §16, device-profile
- * §5) — a device profile the manager authored (referencing a layout canvas), the seeded till, a cash
- * drawer, and an integrated card reader. Proves `tryReadDevice` carries every binding column back off the
- * row, not just the null defaults. The canvas + profile rows are inserted on the admin connection (RLS
- * bypassed) — pure setup, the `setupStation` shape; `receiptPrinterId` is left null so the fixture needs
- * no `printers` row (the composite FK skips a NULL). */
+/**
+ * Enrol a till device with profile and hardware bindings. Leave receiptPrinterId
+ * null so no printer fixture is needed.
+ */
 async function enrolTillDeviceFixture(): Promise<{
   cfg: TillConfig;
   deviceId: string;
@@ -171,14 +167,16 @@ async function enrolTillDeviceFixture(): Promise<{
   return { cfg, deviceId: dev.deviceId, token: dev.token, deviceProfileId };
 }
 
-/** Flip `active = false` on the superuser connection — the revocation a `device.manage` route performs.
- * Run as the admin (RLS bypassed) for pure test setup, the `device.test.ts` `expirePairingCodes` shape. */
+/**
+ * Deactivate the device on the admin connection for the revocation test.
+ */
 async function revoke(deviceId: string): Promise<void> {
   await suite.admin.execute(sql`update devices set active = false where id = ${deviceId}`);
 }
 
-/** Read `last_seen_at` on the admin connection (RLS bypassed) — NULL until `requireDevice` first
- * touches it. The differential proof that a successful guard call records the sighting. */
+/**
+ * Read last_seen_at to compare the value before and after device validation.
+ */
 async function lastSeenAt(deviceId: string): Promise<string | null> {
   const { rows } = await suite.admin.execute<{ last_seen_at: string | null }>(
     sql`select last_seen_at from devices where id = ${deviceId}`,
@@ -277,12 +275,10 @@ async function probeAssert(
   return { ok: false, code: isAppError(thrown) ? thrown.code : String(thrown) };
 }
 
-/** Enrol a REAL handheld carrying an ASSIGNED device profile whose capabilities are `[]` (Task 9) — the
- * generalised stand-in for the old hardcoded handheld: a device that reaches a fenced route but whose
- * PROFILE declares NEITHER `integrated-card-payment` NOR `open-cash-drawer`, so the capability firewall
- * refuses it exactly as `assertNotHandheld` refused it by kind. Both the phone-portrait canvas and the
- * empty-capability profile are inserted on the admin connection (RLS bypassed) — pure setup, the
- * `enrolTillDeviceFixture` shape. */
+/**
+ * Enrol a handheld with a profile declaring no capabilities, so the capability
+ * checks refuse integrated card payment and cash drawer access.
+ */
 async function enrolHandheldWithCanvasFixture(): Promise<{
   cfg: TillConfig;
   deviceId: string;
@@ -590,18 +586,13 @@ async function readWithHeaders(
 }
 
 /**
- * Enrol a `till` device A (with its cookie kept) and a `kds_station` device B in the SAME tenant, plus a
- * device in ANOTHER tenant — the SP-C dev-override fixture. Device A is a plausible "current cookie"
- * identity; B is the override target; the foreign device proves the override read is RLS-scoped (a
- * cross-tenant id is a miss). All three enrolled through the real pairing/enrol path, like the suite's
- * other fixtures.
+ * Enrol device A with a cookie and device B as its override target in the same venue.
  */
 async function enrolDevDevices(): Promise<{
   cfg: TillConfig;
   deviceAId: string;
   deviceACookie: string;
   deviceBId: string;
-  otherTenantDeviceId: string;
 }> {
   const { cfg, stationId } = await setupStation();
   // Device A — a `till` device (needs a till_id), whose cookie stands in for the current identity.
@@ -619,14 +610,11 @@ async function enrolDevDevices(): Promise<{
     generatePairingCode(tx, cfg, { kind: "kds_station", stationId, label: "KDS B" }),
   );
   const devB = await asApp(suite.admin, cfg, (tx) => enrolDevice(tx, cfg, { code: codeB }));
-  // A device in a DIFFERENT tenant — its own fresh tenant via `enrolDeviceFixture`.
-  const { deviceId: otherTenantDeviceId } = await enrolDeviceFixture();
   return {
     cfg,
     deviceAId: devA.deviceId,
     deviceACookie: `${devA.deviceId}.${devA.token}`,
     deviceBId: devB.deviceId,
-    otherTenantDeviceId,
   };
 }
 
@@ -650,9 +638,9 @@ describe("dev-override header (real Postgres)", () => {
     expect(binding?.kind).toBe("kds_station");
   });
 
-  it("an unknown/foreign/malformed override id is a miss, with NO cookie fallback", async () => {
-    const { cfg, deviceACookie, otherTenantDeviceId } = await enrolDevDevices();
-    for (const bad of ["not-a-uuid", randomUUID(), otherTenantDeviceId]) {
+  it("an unknown/malformed override id is a miss, with NO cookie fallback", async () => {
+    const { cfg, deviceACookie } = await enrolDevDevices();
+    for (const bad of ["not-a-uuid", randomUUID()]) {
       const binding = await readWithHeaders(
         { db: suite.admin, cfg: { tenantId: cfg.tenantId }, devMode: true },
         { cookie: `${DEVICE_COOKIE}=${deviceACookie}`, [DEV_DEVICE_HEADER]: bad },

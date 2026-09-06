@@ -7,19 +7,19 @@ import type { BackupDestination } from "./storage-backend.js";
 import "./errors.js";
 
 /**
- * The scheduled `pg_dump` backup config (slice 4b-ii, widened for BR-1 storage fan-out). OPT-IN and
- * fail-closed, the same posture `loadTunnelConfig`/`loadSyncConfig` take: with no destination
- * configured the whole thing is `undefined` and no backup duty runs. `WAITRON_BACKUP_DIR` remains the
- * single-destination convenience — it becomes one local-fs destination with `id: "primary"` —
- * and `WAITRON_BACKUP_DESTINATIONS` (a JSON array) appends any further destinations after it, so a
- * box can fan a dump out to more than one place without dropping the simple case. When at least one
- * destination is configured the whole rest of the config is required: a privileged
- * `WAITRON_BACKUP_DATABASE_URL` `pg_dump` connects as (the app pool's least-privileged role cannot
- * dump every table), and an operator `WAITRON_BACKUP_RECOVERY_KEY` the artifact is encrypted under —
- * required so an unattended backup can never write an unencrypted artifact — with a 12-char floor
- * shared with the recovery bundle (`MIN_PASSPHRASE_LENGTH`). A blank value for any of these fails
- * closed rather than resolving to a degenerate default ("an empty connection string is a valid
- * connection string", CLAUDE.md §3).
+ * The scheduled `pg_dump` backup config (slice 4b-ii, widened for BR-1 storage fan-out). OPT-IN
+ * and fail-closed, the same posture `loadTunnelConfig`/`loadSyncConfig` take: with no destination
+ * configured the whole thing is `undefined` and no backup duty runs. `WAITRON_BACKUP_DIR` remains
+ * the single-destination convenience — it becomes one local-fs destination with `id: "primary"` —
+ * and `WAITRON_BACKUP_DESTINATIONS` (a JSON array) appends any further destinations after it, so
+ * a box can fan a dump out to more than one place without dropping the simple case. When at least
+ * one destination is configured the whole rest of the config is required: a
+ * `WAITRON_BACKUP_DATABASE_URL` with schema access and SELECT on the dump sources and migration
+ * journals (checked by the boot probe), and an operator `WAITRON_BACKUP_RECOVERY_KEY` the
+ * artifact is encrypted under — required so an unattended backup can never write an unencrypted
+ * artifact — with a 12-char floor shared with the recovery bundle (`MIN_PASSPHRASE_LENGTH`). A
+ * blank value for any of these fails closed rather than resolving to a degenerate default ("an
+ * empty connection string is a valid connection string", CLAUDE.md §3).
  */
 export interface BackupConfig {
   /** Where dumps are written. At least one destination when this config exists at all; a lone
@@ -33,9 +33,11 @@ export interface BackupConfig {
    * value throws `backup.recovery_key_missing`, and one under `MIN_PASSPHRASE_LENGTH` characters
    * throws `backup.recovery_key_too_short`. */
   recoveryKey: string;
-  /** The privileged connection `pg_dump` runs over — a role that can read every table, NOT the app
-   * pool's least-privileged deployment role. Required when a destination is configured; a blank value
-   * fails closed. */
+  /**
+   * The connection `pg_dump` runs over. The boot probe accepts ownership or effective read grants
+   * on the dump sources and migration journals. Required when a destination is configured; a
+   * blank value fails closed.
+   */
   databaseUrl: string;
   /** How often the backup duty takes a dump, from `WAITRON_BACKUP_INTERVAL_MS`. */
   intervalMs: number;

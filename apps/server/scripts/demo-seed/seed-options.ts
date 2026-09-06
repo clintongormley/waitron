@@ -3,12 +3,13 @@
 // the steak — so the till shows a picker on those two products, the receipt/basket group their
 // modifier lines, and the dashboard's option-group manager has real content to show off.
 //
-// It runs inside the CALLER's transaction, under the tenant GUC + app_user role the caller set with
-// `withTenant`/`asAppUser` — the same posture `seedCatalogues` uses, and the option-group tables carry
-// the same tenant-scoped RLS. `createOptionGroup`/`createOptionGroupItem`/`setProductOptionGroups`
-// (`@waitron/catalogue`) are plain catalogue operations, not session-gated the way `createPerson`
-// (`@waitron/identity`) is, so — like `seedCatalogues`'s `createProduct` — this calls them directly
-// rather than raw-inserting.
+// The deployment holds one tenant per database. `seedOptions` runs inside the CALLER's
+// transaction, under the app_user role the caller selected with `withTenant`/`asAppUser` — the same posture
+// `seedCatalogues` uses in this database.
+// `createOptionGroup`/`createOptionGroupItem`/`setProductOptionGroups` (`@waitron/catalogue`) are
+// plain catalogue operations, not session-gated the way `createPerson` (`@waitron/identity`) is,
+// so — like `seedCatalogues`'s `createProduct` — this calls them directly rather than
+// raw-inserting.
 //
 // Only EACH-priced products may carry option groups: the ring path rejects options on a `weight`
 // product (`options.unsupported_product`, apps/server/src/working-order.ts). `PRODUCT_OPTION_GROUPS`
@@ -20,6 +21,7 @@ import {
   createOptionGroupItem,
   setProductOptionGroups,
 } from "@waitron/catalogue";
+import type { TenantId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { CASA_DELGADO, MENU_DEL_DIA, PRODUCT_OPTION_GROUPS, type SeedLocale } from "./menu.js";
 
@@ -53,6 +55,7 @@ function pricingUnitFor(image: string): "each" | "weight" | undefined {
  */
 export async function seedOptions(
   tx: Transaction,
+  tenantId: TenantId,
   { productsByImage, locale }: SeedOptionsInput,
 ): Promise<void> {
   for (const { productImage, groups } of PRODUCT_OPTION_GROUPS) {
@@ -70,7 +73,7 @@ export async function seedOptions(
 
     const groupIds: string[] = [];
     for (const group of groups) {
-      const created = await createOptionGroup(tx, {
+      const created = await createOptionGroup(tx, tenantId, {
         name: { [locale]: group.name[locale] },
         minSelect: group.minSelect,
         maxSelect: group.maxSelect,
@@ -81,7 +84,7 @@ export async function seedOptions(
       // rather than the authored order. Pass the array index explicitly so "Small" sorts before
       // "Large", "Rare" before "Medium" before "Well done", etc.
       for (const [index, item] of group.items.entries()) {
-        await createOptionGroupItem(tx, created.id, {
+        await createOptionGroupItem(tx, tenantId, created.id, {
           name: { [locale]: item.name[locale] },
           priceDelta: item.priceDelta,
           vatClass: item.vatClass,
@@ -90,6 +93,6 @@ export async function seedOptions(
       }
       groupIds.push(created.id);
     }
-    await setProductOptionGroups(tx, productId, groupIds);
+    await setProductOptionGroups(tx, tenantId, productId, groupIds);
   }
 }

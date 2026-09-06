@@ -42,8 +42,7 @@ export type OrphanRemediation =
 declare module "@waitron/shared" {
   interface ErrorParams {
     /** Thrown by the store / a provider when `paymentRef` names no `payments` row for this tenant
-     * and provider — either it never existed, or RLS hid another tenant's row (identical from
-     * here). */
+     * and provider. */
     "payment.not_found": { provider: string; paymentRef: string };
     /** Thrown when a refund (or the running total of refunds) would exceed the captured amount. */
     "payment.refund_exceeds_capture": {

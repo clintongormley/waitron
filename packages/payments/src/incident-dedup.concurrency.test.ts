@@ -1,3 +1,4 @@
+// Real PostgreSQL checks same-key incident writers blocking across independent backends.
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";

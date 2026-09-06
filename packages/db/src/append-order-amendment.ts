@@ -53,9 +53,6 @@ export async function appendOrderAmendment(
   tx: Transaction,
   input: AppendAmendmentInput,
 ): Promise<{ id: string; sequenceNo: number; entryHash: string }> {
-  // Serialise concurrent appends for this order on the parent row. FOR UPDATE, not FOR SHARE: two
-  // appenders must not both read the same max sequence and then both insert max + 1. The parent is
-  // filtered by tenant too, so the lock is tenant-consistent under RLS and under the owner alike.
   await tx
     .select({ id: workingOrders.id })
     .from(workingOrders)

@@ -79,7 +79,7 @@ export async function applyInstance(
           // (identifiers.ts), no quote and no backslash, so the emitted SQL is byte-identical to
           // what it was. It is there because `applyInstance` and `InstanceAction` are EXPORTED
           // (`index.ts`) and `password` is typed `string`: the old safety was a property of one
-          // caller rather than of the code, and this package's own `instance-apply.rls.test.ts`
+          // caller rather than of the code, and this package's own `instance-apply.pg.test.ts`
           // already passes a hand-written password down this path. `CREATE ROLE` is a utility
           // statement and takes no bind parameters, so building the literal is the only option and
           // escaping it is the whole defence.
@@ -130,7 +130,7 @@ export async function applyInstance(
             // holding `login createdb createrole` that did NOT itself create `app_user` holds no
             // ADMIN OPTION on it, and PostgreSQL refuses with `permission denied to grant role
             // "app_user"`. Verified against a real `postgres:18-alpine` container, not reasoned
-            // about — see `instance-apply.rls.test.ts`'s "refuses a membership grant the admin
+            // about — see `instance-apply.pg.test.ts`'s "refuses a membership grant the admin
             // holds no ADMIN OPTION for", which pins the 42501 this branch reports. The remedy is
             // in `packages/provisioning/README.md`.
             throw new AppError("provisioning.membership_grant_failed", {
@@ -159,22 +159,11 @@ export async function applyInstance(
           break;
         }
         case "migrate":
-          // Over the ADMIN string against the target database, not the migrator role's: on a
-          // first provision `waitron_migrator` was created seconds ago and this tool holds its
-          // password only in memory — composing a URL from it here would be the one place a
-          // generated password travels somewhere it need not.
-          //
-          // `ApplyDeps.admin`'s own contract is CREATEDB + CREATEROLE (this file's doc comment;
-          // spec table, "an admin connection with CREATEDB and CREATEROLE"), not superuser — and on
-          // a first provision `admin` is also the very connection that just ran `create-database`
-          // above, which makes it that database's OWNER. Verified directly against a throwaway
-          // `postgres:18-alpine` container: a role created with only `login createdb createrole`,
-          // with no further grant, created a database as itself and then created a table in that
-          // database's `public` schema without error — ownership of the database is enough,
-          // independent of any grant this file issues. That is what lets the migrations below
-          // (CREATE TABLE, CREATE ROLE for `app_user`/`tenant_provisioner`, etc.) run directly over
-          // this connection. A re-run against a database `admin` did NOT create is a narrower case
-          // this comment does not cover.
+          // Migrate with the admin connection string so the generated migrator password is not
+          // used to open another connection. On a first provision
+          // that admin just created the database and owns it; the deployment logins
+          // are created only after the migrations create their app_user membership target.
+          // Re-running against a database owned by another admin requires explicit grants.
           //
           // The database name comes from `deps`, NOT from a `create-database` action in the list:
           // on a re-run that action is absent (the database already exists) while `migrate` can
@@ -236,7 +225,7 @@ export async function applyInstance(
  * correctly, and an earlier version of this comment wrongly said they could not.
  *
  * **The membership check is belt-and-braces, and the object checks are not.** A role-membership
- * `GRANT` without ADMIN OPTION genuinely ERRORS (42501, pinned in `instance-apply.rls.test.ts`), so
+ * `GRANT` without ADMIN OPTION genuinely ERRORS (42501, pinned in `instance-apply.pg.test.ts`), so
  * `grant-membership` already fails loudly. Only the object-privilege grants have the silent path.
  * The membership is verified anyway because a revoke racing this run would otherwise pass unnoticed,
  * but it is not the reason this function exists.
@@ -317,7 +306,7 @@ async function verifyGrants(
  * An ACL item is `<grantee>=<privileges>/<grantor>` — e.g. `r_mig=C/owner_a`, and with WITH GRANT
  * OPTION the privileges read `C*` instead of `C` (grantor `pg_database_owner` for `public`). Both
  * were read off a real container. A `*` immediately after a privilege letter is that option;
- * `instance-apply.rls.test.ts` already pins the same encoding for `nspacl`.
+ * `instance-apply.pg.test.ts` already pins the same encoding for `nspacl`.
  *
  * A grantee of PUBLIC has an EMPTY left-hand side (`=Tc/owner_a`), so matching on `${role}=` cannot
  * collide with it. Role names here are `^[a-z][a-z0-9_]{0,62}$` (identifiers.ts), which PostgreSQL

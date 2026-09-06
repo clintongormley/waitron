@@ -12,7 +12,7 @@ import { locations, tenants } from "./tenants.js";
  * NOT land here as a `nodes.role`. Which role a whole deployment plays — a `primary` that writes and
  * originates, or a read-only `mirror` of it — is a fact about the DATABASE, not about a node row, so
  * it lives on the singleton `deployment.mode` (`primary`|`mirror`; packages/db/src/deployment.ts,
- * drizzle/0069_deployment_mode.sql), which carries no tenant/node scope. A future reader adding
+ * drizzle/0001_db_baseline_sql.sql), which carries no tenant/node scope. A future reader adding
  * active-active/failover must not add a `role` column here for the mirror/primary split — that
  * concept already has its flag. Deliberately regime-neutral, like `tills`: the Veri*Factu SIF
  * identity (NúmeroInstalación, IdSistemaInformatico) lives in the module-owned `registro_sif`
@@ -60,4 +60,4 @@ export const nodes = pgTable(
     unique("nodes_tenant_id_key").on(t.tenantId, t.id),
     index("nodes_tenant_id_idx").on(t.tenantId),
   ],
-).enableRLS();
+);

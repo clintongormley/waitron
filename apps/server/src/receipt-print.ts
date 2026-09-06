@@ -106,13 +106,14 @@ export async function resolveReceiptPrinter(
 }
 
 /**
- * Build the customer-receipt bytes for a filed `ticket`: the issuer identity (`tenants` legal name + NIF,
- * art. 7.1.d — the SAME source `GET /api/till`'s boot handler prints, RLS-scoped to this tenant), the
- * owner-authored header/footer trim (`getReceipt` from `tenant_receipts`, or the built-in default when
- * the tenant has never opened the editor), rendered in the FISCAL invoice locale (`cfg.locale`, NOT the operator UI
- * language). Shared by the print-on-sale hook and the reprint, so the mandated-element rendering lives in
- * one place. Returns `undefined` ONLY on the structurally-unreachable missing-issuer path (see below), so
- * a caller inside the sale tx degrades to no-print rather than throwing (§5).
+ * Build the customer-receipt bytes for a filed `ticket`: the issuer identity (`tenants` legal
+ * name + NIF, art. 7.1.d — the SAME source `GET /api/till`'s boot handler prints, selected by
+ * tenant id), the owner-authored header/footer trim (`getReceipt` from `tenant_receipts`, or the
+ * built-in default when the tenant has never opened the editor), rendered in the FISCAL invoice
+ * locale (`cfg.locale`, NOT the operator UI language). Shared by the print-on-sale hook and the
+ * reprint, so the mandated-element rendering lives in one place. Returns `undefined` ONLY on the
+ * structurally-unreachable missing-issuer path (see below), so a caller inside the sale tx
+ * degrades to no-print rather than throwing (§5).
  */
 async function buildReceiptBytes(
   tx: Transaction,
@@ -125,10 +126,10 @@ async function buildReceiptBytes(
     .where(eq(tenants.id, cfg.tenantId));
   /* v8 ignore start */
   if (issuer === undefined) {
-    // Structurally unreachable: `cfg.tenantId` is this till's own tenant (provisioning stamped it), so
-    // the row always exists and RLS returns it. Degrade to NOT printing rather than throwing — a throw
-    // in the sale-tx hook would roll the filed sale back (§5). The boot handler treats the same absence
-    // as corruption.
+    // Structurally unreachable: `cfg.tenantId` is this till's own tenant (provisioning stamped
+    // it), so the row always exists and the by-id lookup returns it. Degrade to NOT printing
+    // rather than throwing — a throw in the sale-tx hook would roll the filed sale back (§5). The
+    // boot handler treats the same absence as corruption.
     return undefined;
   }
   /* v8 ignore stop */
@@ -185,13 +186,14 @@ export async function enqueueSaleReceipt(
   saleId: string,
   operatorId?: string,
 ): Promise<void> {
-  // 1. `auto` mode only. Read from the till's own LOCATION (tenant-scoped beside RLS), the way
-  //    `readOrderFlow`/the boot handler read location config. `on_request`/`never` → nothing to enqueue.
+  // 1. `auto` mode only. Read from the till's own LOCATION (explicitly tenant-filtered), the way
+  // `readOrderFlow`/the boot handler read location config. `on_request`/`never` → nothing to
+  // enqueue.
   const [loc] = await tx
     .select({ mode: locations.receiptPrintMode })
     .from(locations)
     .where(and(eq(locations.tenantId, cfg.tenantId), eq(locations.id, cfg.locationId)));
-  /* v8 ignore next -- the till's own location always exists (RLS returns it); degrade to no-print, never abort the sale (§5) */
+  /* v8 ignore next -- the till's own location always exists (selected by id); degrade to no-print, never abort the sale (§5) */
   if (loc === undefined) return;
   if (loc.mode !== "auto") return;
 

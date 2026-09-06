@@ -20,21 +20,14 @@ import { workingOrderCounters } from "./schema/working-order-counters.js";
  * the winner's uncommitted index tuple, then sees the conflict and takes DO
  * UPDATE to 2; once the row exists, concurrent allocators serialise on its row
  * lock and each re-evaluates `next_number + 1` against the previous committed
- * value. Distinct numbers, never a duplicate. Proven against real PostgreSQL in
- * allocate-order-number.rls.test.ts — PGlite serialises onto one backend and so
- * cannot observe this at all.
+ * value. Distinct numbers, never a duplicate. Proven against real PostgreSQL by
+ * the "under concurrency" suite at the bottom of allocate-order-number.test.ts —
+ * PGlite serialises onto one backend and so cannot observe this at all.
  *
  * Unlike allocate-number.ts, this returns `next_number` directly (1 on the
  * first call) rather than the pre-increment value: an order number is a plain
  * per-node counter starting at 1, not a fiscal series that may carry a
  * migrated starting point.
- *
- * RLS makes the isolation the till depends on: `working_order_counters`'s
- * FOR ALL policy (0029) filters both the USING read and the WITH CHECK write to
- * `tenant_id = current_tenant_id()`, so an allocation scoped to another tenant
- * cannot see, create, or advance this tenant's counter — it is rejected, never
- * returned empty. `row` is therefore always present when this resolves; the
- * non-null assertion cannot fire on a live database.
  */
 export async function allocateOrderNumber(
   tx: Transaction,

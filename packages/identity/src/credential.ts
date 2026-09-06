@@ -14,9 +14,6 @@ import type { PersonRoleValue } from "./permissions.js";
  * the role against the requested permission and ignores the locale) call this, so the guard ORDER and
  * its error codes are declared in exactly one place — a security gate that must behave identically for
  * both. Throws `person.not_found`, `person.suspended`, `pin.invalid`.
- *
- * RLS-scoped: `personId` resolves only within the current tenant, so an id from another tenant is
- * `person.not_found` (hidden, not forbidden) — the right answer to leak.
  */
 export async function verifyPersonCredential(
   tx: Transaction,

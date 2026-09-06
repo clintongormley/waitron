@@ -30,12 +30,6 @@ export const floorTableShape = pgEnum("floor_table_shape", ["round", "square", "
  * ever sets one table's tab_id per tab. It is a BARE column here — its FK to working_orders is
  * hand-written in the mutual-FK migration (Task 2), because the reverse FK
  * (working_orders.delivery_table_id → dining_tables) would otherwise close a load-time import cycle.
- *
- * Deactivate, never hard-delete (`active`), because a table has order history. `.enableRLS()` emits only
- * ENABLE ROW LEVEL SECURITY; the FORCE ROW LEVEL SECURITY, the `dining_tables_tenant_isolation` policy
- * and the SELECT/INSERT/UPDATE grant (no DELETE — deactivate) are hand-written in the custom migration,
- * exactly as 0039 does for `ingredients`. The `inmutabilidad` guard in packages/fiscal-verifactu scans
- * every tenant_id-bearing table for both RLS flags, so a missing FORCE here fails that suite.
  */
 export const diningTables = pgTable(
   "dining_tables",
@@ -65,15 +59,7 @@ export const diningTables = pgTable(
     // `open` working order. BARE column — its (tenant_id, tab_id) → working_orders(tenant_id, id) FK is
     // hand-written in Task 2's custom migration (the mutual-FK cycle note above).
     tabId: uuid("tab_id"),
-    // The table's single current MANUAL status (design §2b), or NULL for none. Shown ALWAYS — a
-    // just-vacated `free` table may still carry a "needs-cleaning" status. Additive nullable column;
-    // dining_tables' TS-1 FORCE-RLS policy + app_user grants already cover it (grants table-wide, RLS
-    // row-level). The FK is the tenant-consistent COMPOSITE in extraConfig below.
     statusId: uuid("status_id"),
-    // FP-2 spatial placement on the floor-plan canvas. All four are nullable — a table need not be
-    // placed. Additive columns on this existing FORCE-RLS table, so dining_tables' TS-1 policy and
-    // app_user grants already cover them (grants table-wide, RLS row-level); no --custom migration is
-    // needed, unlike a new table. Coordinates are smallint (canvas units); `rotation` is degrees.
     posX: smallint("pos_x"),
     posY: smallint("pos_y"),
     shape: floorTableShape("shape"),
@@ -86,21 +72,15 @@ export const diningTables = pgTable(
     unique("dining_tables_tenant_id_key").on(t.tenantId, t.id),
     // No duplicate labels within a venue.
     unique("dining_tables_location_label_key").on(t.tenantId, t.locationId, t.label),
-    // Tenant-consistent composite FK to the owning location: a table cannot point at a location of
-    // another tenant, independently of whether RLS is in force on this connection.
     foreignKey({
       columns: [t.tenantId, t.locationId],
       foreignColumns: [locations.tenantId, locations.id],
       name: "dining_tables_location_fk",
     }),
-    // Tenant-consistent composite FK to the venue's configured status set (design §2b): a table cannot
-    // point at a status of another tenant, independently of RLS. MATCH SIMPLE satisfies it while the
-    // column is NULL, so it stays nullable. `table_service_statuses` deactivates rather than deletes,
-    // so this FK never dangles (no ON DELETE path is exercised).
     foreignKey({
       columns: [t.tenantId, t.statusId],
       foreignColumns: [tableServiceStatuses.tenantId, tableServiceStatuses.id],
       name: "dining_tables_status_fk",
     }),
   ],
-).enableRLS();
+);

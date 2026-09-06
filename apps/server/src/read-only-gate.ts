@@ -53,13 +53,13 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
  * throwing: a Hono middleware is not inside a route's `createErrorBoundary` wrapper; the code is built
  * through `AppError` so `tsc` checks it and `import "./errors.js"` keeps it reachable.
  *
- * `isExempt` (optional) lets a specific request surface through the fence even on a write verb. The
- * peer-sync source (membership rejoin R2) is the one write surface a read-only node legitimately
- * serves: the carrier POSTs `/sync-api/cursor` to report how far it has drained a fenced node's tail —
- * the disposal guard's only input. That surface is peer-Bearer-authenticated machine-to-machine sync
- * writing only `sync_cursor` (whole-DB operational state, no tenant_id, no RLS), never a client
- * tenant/fiscal write, which is what this fence exists to stop. Boot passes the predicate; absent, the
- * gate is unchanged (safe verbs pass, write verbs 403 when read-only).
+ * `isExempt` (optional) lets a specific request surface through the fence even on a write verb.
+ * The peer-sync source (membership rejoin R2) is the one write surface a read-only node
+ * legitimately serves: the carrier POSTs `/sync-api/cursor` to report how far it has drained a
+ * fenced node's tail — the disposal guard's only input. That surface is peer-Bearer-authenticated
+ * machine-to-machine sync writing only `sync_cursor` (whole-DB operational state, no tenant_id),
+ * never a client tenant/fiscal write, which is what this fence exists to stop. Boot passes the
+ * predicate; absent, the gate is unchanged (safe verbs pass, write verbs 403 when read-only).
  */
 export function readOnlyGate(
   isReadOnly: () => boolean,

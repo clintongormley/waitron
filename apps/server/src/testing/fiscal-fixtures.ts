@@ -4,7 +4,7 @@ import { withTenant, type Database, type Transaction } from "@waitron/db";
 
 // Shared fiscal seeding for the SP-3a fiscal-record-lane suites (fiscal-capture, fiscal-apply,
 // fiscal-upsert, fiscal-fk-defer, fiscal-park-env). Extracted and generalised from pg-restore.test.ts's
-// `seedFiscalRegistro` + fiscal-capture.rls.test.ts's `seedParents`/`insertRegistro`. It lives under
+// `seedFiscalRegistro` + fiscal-capture.test.ts's `seedParents`/`insertRegistro`. It lives under
 // apps/server/src/testing/ because its consumers do: the apply-lane gates drive `mountSyncApi` +
 // `ALL_SYNC_ENROLMENTS`, which live only in the composition root and `fiscal-verifactu` cannot import.
 // Coverage-excluded (this package's vitest.config.ts `exclude`). Spanish fiscal column names are used
@@ -12,7 +12,7 @@ import { withTenant, type Database, type Transaction } from "@waitron/db";
 // fiscal-verifactu is exempt too).
 //
 // Column shapes are the current migrated schema (country/tax_id on tenants, vat_breakdown on sales,
-// node-keyed series/sif/registro), asserted against by fiscal-capture.rls.test.ts already.
+// node-keyed series/sif/registro), asserted against by fiscal-capture.test.ts already.
 
 /** Deployment-environment stamp carried on a registro (never HASHED, but replicated verbatim). */
 export type Entorno = "production" | "preproduction";
@@ -69,9 +69,8 @@ export interface SeedParentsOptions {
 }
 
 /**
- * Inserts the single `sales` row of a FK closure through `db` (superuser/admin — plain, unscoped, no
- * capture). Split out of {@link seedFiscalParents} so a test can plant the sale AFTER a registro has
- * already parked on the absent `sale_id` FK, the parent-arrives half of the FK-defer gate (Task 8).
+ * Inserts the single `sales` row of a FK closure through the admin connection. Split out of
+ * {@link seedFiscalParents} so a test can plant the sale AFTER a registro has already parked on the absent `sale_id` FK, the parent-arrives half of the FK-defer gate (Task 8).
  */
 export async function insertFiscalSale(db: Database, ids: FiscalIds): Promise<void> {
   await db.execute(sql`
@@ -92,8 +91,7 @@ export async function insertFiscalSale(db: Database, ids: FiscalIds): Promise<vo
  * caller can insert that row where it wants it captured (see {@link captureFiscalRegistro}) or seed
  * the same parents on a mirror's target database without also planting the ledger row there.
  *
- * Runs as plain unscoped statements: pass a superuser connection (the clone's `admin`), which bypasses
- * RLS — this is setup, not the thing under test.
+ * Pass the clone's admin connection for these fixture inserts.
  */
 export async function seedFiscalParents(
   db: Database,
@@ -204,7 +202,7 @@ export async function insertFiscalRegistro(
  * Inserts a registro AS THE APP WRITER so the fiscal `sync_capture` trigger fires and the row lands in
  * `sync_log` — the SOURCE side of an apply test. `writer` must be an `app_login`-class connection (a
  * non-superuser `app_user` member); the insert runs inside ONE `withTenant(writer, tenantId, …, { nodeId })`
- * so both the `app.tenant_id` (RLS) and `app.node_id` (capture origin_id) GUCs are bound transaction-locally.
+ * so app.node_id, the capture origin, is set for that transaction.
  */
 export async function captureFiscalRegistro(
   writer: Database,

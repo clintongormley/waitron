@@ -1,36 +1,131 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { sql } from "drizzle-orm";
+import { idempotentRoleStatement } from "@waitron/db/testing/shared-container.js";
 import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { assertBackupCanReadFiscal } from "./backup-probe.js";
+import { locateSharedContainer } from "./testing/locate-shared-container.js";
 import "./errors.js";
 
-// Real Postgres, not PGlite: the whole point of this probe is to tell a SUPERUSER/BYPASSRLS role
-// (for which FORCE ROW LEVEL SECURITY is inert, so `pg_dump` reads the fiscal tables) apart from a
-// plain app_user member (for which FORCE RLS truncates the dump silently). PGlite's only role is a
-// superuser, so it could not exhibit the app_user side of that contrast — it would be a false pass.
-// CLAUDE.md §4. Needs `TESTCONTAINERS_RYUK_DISABLED=true`.
+// Real Postgres enforces the read grants and runs pg_dump; PGlite cannot test this privilege boundary.
 const suite = useTemplateDb({ template: "manifest" });
-
-// app_login → app_user: a NOBYPASSRLS member, the role a naive backup connection would run as.
 let appDb: Database;
+let reader: Database;
+const execFileAsync = promisify(execFile);
 
 beforeAll(async () => {
   appDb = await suite.pg.connectAs("app_login", "app_pw");
+  // Roles are cluster-global, so fixture setup must tolerate a reused test container.
+  await suite.admin.execute(
+    sql.raw(idempotentRoleStatement({ name: "backup_probe_reader", password: "reader" })),
+  );
+  await suite.admin.execute(
+    sql`grant select on all tables in schema public to backup_probe_reader`,
+  );
+  await suite.admin.execute(
+    sql`grant select on all sequences in schema public to backup_probe_reader`,
+  );
+  await suite.admin.execute(
+    sql`create schema backup_probe_owned authorization backup_probe_reader`,
+  );
+  await suite.admin.execute(sql`create view public.backup_probe_view as select 42 as id`);
+  reader = await suite.pg.connectAs("backup_probe_reader", "reader");
+  await reader.execute(sql`create table backup_probe_owned.receipt (id integer)`);
+  await reader.execute(sql`create sequence backup_probe_owned.counter`);
+  await reader.execute(sql`insert into backup_probe_owned.receipt values (42)`);
 }, 180_000);
 
 afterAll(async () => {
-  // Guard the connectAs pool teardown: it throws if read before setup ran (CLAUDE.md §4).
   if (appDb !== undefined) await appDb.close();
+  if (reader !== undefined) await reader.close();
 });
 
-describe("assertBackupCanReadFiscal (real Postgres — the two roles must DISAGREE)", () => {
-  it("resolves for the container superuser (RLS is inert, so the dump is complete)", async () => {
+describe("assertBackupCanReadFiscal checks backup read privileges", () => {
+  it("accepts the superuser owner", async () => {
     await expect(assertBackupCanReadFiscal(suite.admin)).resolves.toBeUndefined();
   });
 
-  it("throws backup.role_rls_fenced for a non-bypassing app_user member", async () => {
+  it("accepts a non-superuser with table and sequence reads, including objects it owns", async () => {
+    const facts = await reader.execute<{ rolsuper: boolean }>(sql`
+      select rolsuper from pg_roles where rolname = current_user`);
+    expect(facts.rows).toEqual([{ rolsuper: false }]);
+    const missing = await suite.admin.execute<{ name: string }>(sql`
+      select c.relname::text as name from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public' and c.relkind in ('r', 'p', 'S', 'm')
+      and not exists (
+        select 1 from aclexplode(c.relacl) a
+        where a.grantee = (select oid from pg_roles where rolname = 'backup_probe_reader')
+        and a.privilege_type = 'SELECT')`);
+    expect(missing.rows).toEqual([]);
+    await expect(assertBackupCanReadFiscal(reader)).resolves.toBeUndefined();
+  });
+
+  it("refuses the app login, which cannot read the migration journals", async () => {
     await expect(assertBackupCanReadFiscal(appDb)).rejects.toMatchObject({
       code: "backup.role_rls_fenced",
     });
+  });
+
+  it("refuses a reader missing a table grant", async () => {
+    await suite.admin.execute(
+      sql`revoke select on public.__drizzle_migrations_db from backup_probe_reader`,
+    );
+    try {
+      await expect(assertBackupCanReadFiscal(reader)).rejects.toMatchObject({
+        code: "backup.role_rls_fenced",
+      });
+    } finally {
+      await suite.admin.execute(
+        sql`grant select on public.__drizzle_migrations_db to backup_probe_reader`,
+      );
+    }
+  });
+
+  it("refuses a reader missing a sequence grant", async () => {
+    await suite.admin.execute(sql`create sequence public.backup_probe_sequence`);
+    try {
+      await expect(assertBackupCanReadFiscal(reader)).rejects.toMatchObject({
+        code: "backup.role_rls_fenced",
+      });
+    } finally {
+      await suite.admin.execute(sql`drop sequence public.backup_probe_sequence`);
+    }
+  });
+
+  it("refuses a reader missing schema access even with a table grant", async () => {
+    await suite.admin.execute(sql`create schema backup_probe_private`);
+    await suite.admin.execute(sql`create table backup_probe_private.receipt (id integer)`);
+    await suite.admin.execute(
+      sql`grant select on backup_probe_private.receipt to backup_probe_reader`,
+    );
+    try {
+      await expect(assertBackupCanReadFiscal(reader)).rejects.toMatchObject({
+        code: "backup.role_rls_fenced",
+      });
+    } finally {
+      await suite.admin.execute(sql`drop schema backup_probe_private cascade`);
+    }
+  });
+
+  it("dumps the migrated database through the accepted non-superuser connection", async () => {
+    await assertBackupCanReadFiscal(reader);
+    const uri = new URL(suite.pg.uri);
+    const containerId = await locateSharedContainer(uri, {
+      tag: "backup reader",
+      unproven: "Non-superuser pg_dump is unproven.",
+    });
+    // This suite establishes that an accepted ordinary login can actually dump the database.
+    // Skipping the dump would leave that privilege claim untested, so fail if it cannot run.
+    expect(containerId).toBeDefined();
+    const connection = `postgresql://backup_probe_reader:reader@localhost:5432${uri.pathname}`;
+    const { stdout } = await execFileAsync(
+      "docker",
+      ["exec", containerId!, "pg_dump", "--format=custom", connection],
+      { encoding: "buffer", maxBuffer: 20 * 1024 * 1024 },
+    );
+    expect(stdout.subarray(0, 5).toString()).toBe("PGDMP");
   });
 });

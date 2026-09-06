@@ -6,7 +6,7 @@
 // trade through the REAL write path (`recordSale` / `recordCorrection` from `@waitron/core`) against
 // the fake `FiscalBackend` from `@waitron/fiscal` — no external Postgres, no AEAT, no SIF
 // registration. Both functions read only `sales.vat_breakdown` (a queryable copy of the filed
-// desglose, migration 0032), so CORE_MIGRATIONS alone suffices; the fiscal chain is never read.
+// desglose), so CORE_MIGRATIONS alone suffices; the fiscal chain is never read.
 //
 // It then produces the SUBMITTABLE output end-to-end: `mapModelo303` maps the reconciled aggregate
 // onto the modelo 303 casillas and `toDr303Record` serializes it to the AEAT sede "por fichero"
@@ -276,8 +276,8 @@ interface Venue {
 }
 
 /**
- * Seeds tenant → location → till → supervisor → TWO nodes, each with a standard and a rectificative
- * series, as the PGlite superuser (which bypasses RLS), exactly as `daily-close-demo.ts` does —
+ * Seeds tenant → location → till → supervisor → TWO nodes, each with a standard and a
+ * rectificative series, as the PGlite superuser, exactly as `daily-close-demo.ts` does —
  * `app_user` holds no INSERT on `tenants` deliberately (a running POS cannot create tenants).
  */
 async function seedVenue(db: Database): Promise<Venue> {
@@ -367,8 +367,10 @@ function printPeriodSummary(label: string, summary: VatSummary): void {
   console.log("");
 }
 
-/** Seeds the received supplier invoices directly (as the PGlite superuser, RLS bypassed), exactly as
- * seedVenue seeds the tenant — a received invoice is a plain accounting record, no fiscal write path. */
+/**
+ * Seeds the received supplier invoices directly (as the PGlite superuser), exactly as seedVenue
+ * seeds the tenant — a received invoice is a plain accounting record, no fiscal write path.
+ */
 async function seedPurchaseInvoices(db: Database, tenantId: TenantId): Promise<void> {
   for (const p of PURCHASE_INVOICES) {
     const total = addDecimal(decimal(p.base), decimal(p.tax));
@@ -565,7 +567,7 @@ async function main(): Promise<void> {
     // record — no fiscal write path — so seeded directly like the tenant itself.
     await seedPurchaseInvoices(db, venue.tenantId);
 
-    // The reads: RLS-safe, as the application role, exactly as a report consumer would call them.
+    // The reads: as the application role, exactly as a report consumer would call them.
     const monthLabel = `${YEAR}-${String(MONTH).padStart(2, "0")}`;
     const period = { fromBusinessDay: `${monthLabel}-01`, toBusinessDay: `${monthLabel}-31` };
     const { periodAll, periodNode1, periodNode2, weekOne, vatReturn } = await withTenant(

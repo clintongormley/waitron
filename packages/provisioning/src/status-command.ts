@@ -8,7 +8,7 @@ import { INSTANCE_ROLES, type InstanceState } from "./instance-state.js";
  * whole report is testable without a container and `runCli` owns the connections. Carries no
  * secret by construction: `InstanceState` (instance-state.ts) declares only `database: string`,
  * `databaseExists: boolean`, `roles: Partial<Record<InstanceRole, RoleFacts>>` — whose `RoleFacts`
- * is `canLogin`/`createRole`/`superuser`/`bypassRls`/`memberOf: string[]` — and
+ * is `canLogin`/`createRole`/`superuser`/`memberOf: string[]` — and
  * `inside: InsideState | null`, whose `InsideState` is `migratedSets: string[]` and
  * `stamp: DeploymentEnvironment | null`. None of those fields is, or could hold, a password, a
  * connection string or a key.
@@ -26,7 +26,6 @@ export function formatStatus(state: InstanceState): string[] {
       facts.canLogin ? "login" : "NOLOGIN",
       ...(facts.createRole ? ["createrole"] : []),
       ...(facts.superuser ? ["SUPERUSER"] : []),
-      ...(facts.bypassRls ? ["BYPASSRLS"] : []),
       `member of ${facts.memberOf.length > 0 ? facts.memberOf.join(", ") : "nothing"}`,
     ];
     lines.push(`role ${role}: present — ${notes.join(", ")}`);

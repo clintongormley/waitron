@@ -25,7 +25,7 @@ export interface StripeHostedProviderOptions {
    * `2026-07-26-provider-tenant-scoping-design.md` for the full account. Here it meant `initiate`
    * threw `42501` on `insertInitiated` under any real role, AFTER the Checkout Session had been
    * created: an orphaned session with no local row, on every hosted payment.
-   * `hosted.rls.test.ts` is the proof. */
+   * `hosted.test.ts` is the proof. */
   db: Database;
 }
 

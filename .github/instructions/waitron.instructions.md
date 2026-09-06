@@ -68,11 +68,11 @@ guard means some test suite member exercises that code without noticing when it'
 Two traps make a database test pass while proving nothing — both hit once already, both worth
 catching again on review:
 
-- **PGlite runs as superuser, and superusers bypass RLS — even under `FORCE ROW LEVEL SECURITY`.**
-  A tenant-isolation test that never switches role passes green while asserting nothing, because
-  its query never hits a policy at all. Every RLS assertion must call `asAppUser(tx)`
-  (`packages/db/src/testing/roles.ts` — `set local role app_user`) before the query under test; an
-  RLS test that skips this checks nothing about tenant isolation regardless of what it asserts.
+- **PGlite runs as superuser, and a superuser holds every privilege — grants are not enforced.**
+  A privilege test that never switches role passes green while asserting nothing, because it runs as
+  the owner. Every grant assertion must call `asAppUser(tx)`
+  (`packages/db/src/testing/roles.ts` — `set local role app_user`) before the query under test; a
+  grant test that skips this checks nothing about `app_user`'s reach regardless of what it asserts.
 - **PGlite cannot test lock contention, on any schema.** All queries serialise onto one backend
   (`packages/fiscal-verifactu/src/chain.pglite-cannot-test-contention.test.ts` is a permanent,
   executable demonstration of why), so `FOR UPDATE` parses and runs but never blocks — a

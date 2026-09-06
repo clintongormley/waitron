@@ -73,11 +73,6 @@ export const invoiceSeries = pgTable(
     // child row cannot point at a parent belonging to another tenant.
     unique("invoice_series_tenant_id_key").on(t.tenantId, t.id),
     index("invoice_series_tenant_idx").on(t.tenantId),
-    // Tenant-consistent composite FK to the owning node (Copilot #54 follow-through): a series
-    // cannot point at a node belonging to another tenant, independently of whether RLS is in force
-    // on this connection. node_id is NOT NULL, so unlike the nullable node FKs on
-    // `working_orders`/`payments` this one ALWAYS checks — the strongest form, and fiscally
-    // load-bearing (the series↔node guard reads `node_id`). Mirrors `sales_node_fk`.
     foreignKey({
       columns: [t.tenantId, t.nodeId],
       foreignColumns: [nodes.tenantId, nodes.id],
@@ -90,4 +85,4 @@ export const invoiceSeries = pgTable(
     check("invoice_series_next_number_ck", sql`${t.nextNumber} >= 1`),
     check("invoice_series_code_ck", sql`${t.code} <> ''`),
   ],
-).enableRLS();
+);

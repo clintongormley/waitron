@@ -1,3 +1,4 @@
+// Real PostgreSQL exercises authorization and replication reads after SET ROLE app_user.
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -11,14 +12,8 @@ import { mountBoxStatusApi } from "./box-status.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 
-// Real Postgres, not PGlite: the route AUTHORIZES with `authorizeManager` (persons +
-// management_sessions under the app role's RLS) and reads the tenant's `cadenas` chain row — both
-// false passes on PGlite's superuser connection (CLAUDE.md §4). This suite ALSO seeds `sync_log` +
-// `sync_cursor` and drives the real `lagFor` reader, which is the wiring Task 6 adds to boot.ts. The
-// OWNER connection (`suite.admin`) reads both tables here — sync_log carries FORCE RLS + a
-// tenant-isolation policy, but the owner bypasses RLS, which is sufficient to prove the summary; the
-// role split (`sync_tailer` per-tenant SELECT vs `sync_retention`'s whole-log policy) is exercised in
-// packages/sync's own `retention.gate.test.ts`, not here.
+// Exercise the box-status route with PostgreSQL-backed authorization and the real lagFor reader.
+// The owner seeds sync_log and sync_cursor for the requested origin.
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the seeded manager's dashboard password.
 // Dashboard sign-in resolves the person by EMAIL, so the seeded manager carries a login email
@@ -40,13 +35,7 @@ function nextNif(): string {
   return `${String(73_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/**
- * Stand up a fresh provisioned venue (as the owner), then seed — as the app role under the tenant, so
- * RLS is exercised — a MANAGER (role `manager`, which holds `till.configure`) WITH a dashboard
- * password so it can log in. Provisioning creates only the ADMIN, so the manager is seeded directly;
- * `pin_hash` is NOT NULL, so a value is supplied even though it logs in by password. Mirrors the
- * sibling `box-status.route.test.ts` scaffolding.
- */
+/** Provision a venue as owner and seed the people and sessions this route fixture needs. */
 async function setupTenant(): Promise<{ tenantId: string; nodeId: string; managerId: string }> {
   const venue = await applyVenue(
     planVenue(
@@ -85,21 +74,14 @@ async function setupTenant(): Promise<{ tenantId: string; nodeId: string; manage
     await asAppUser(tx);
     const manager = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (current_tenant_id(), 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
+      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
       returning id`);
     return manager.rows[0]!.id;
   });
   return { tenantId: venue.tenantId, nodeId: venue.nodeId, managerId };
 }
 
-/**
- * Seed a replication state the summary can read: `sync_log` at `max(seq)=10` for ORIGIN, and two
- * `sync_cursor` rows — s1 at 3 (lag 7), s2 at 10 (lag 0). Inserted as the OWNER superuser (RLS
- * bypassed; pure setup). `overriding system value` forces the `seq` identity so `max(seq)` is exactly
- * 10 regardless of the shared container's identity-sequence state (the seeding shape
- * `retention.gate.test.ts` uses). `sync_cursor` has no tenant_id and no RLS (0000_sync_outbox.sql), so
- * a bare insert is enough.
- */
+/** Seed origin sequence 10 and peer cursors at 3 and 10, producing lag 7 and 0. */
 async function seedReplication(tenantId: string): Promise<void> {
   await suite.admin.execute(
     sql`insert into sync_log (seq, origin_id, table_name, op, tenant_id, row_image)

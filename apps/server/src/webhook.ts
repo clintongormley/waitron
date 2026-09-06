@@ -138,7 +138,7 @@ export async function settleWebhook(
 
   // Cross-check the #26 seam: the resolved owner must be the path tenant. `resolvePaymentTenant`
   // runs on a plain handle OUTSIDE any tenant scope — its SECURITY DEFINER function is the single
-  // controlled RLS bypass, returning only `tenant_id`.
+  // lookup function, returning only `tenant_id`.
   const resolved = await resolvePaymentTenant(deps.db, event.provider, event.externalRef);
   if (resolved === null) {
     // No local `initiated` row: a session minted-then-crashed before its row was written, or one

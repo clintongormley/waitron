@@ -10,7 +10,7 @@ import {
 /**
  * A signed membership document at `term`, signed by `signerNodeId` (default "A") with a generated —
  * or caller-supplied — node identity key. Shared equivalent of the tiny local fixture three suites
- * hand-built independently (membership-adopt.test.ts, sync-api.rls.test.ts,
+ * hand-built independently (membership-adopt.test.ts, sync-api.test.ts,
  * membership-gossip.e2e.test.ts): @waitron/membership's own `sampleBody`/`signDoc` fixtures are
  * package-internal (not on the barrel), so this is built from the exported `signDocumentBody` rather
  * than widening that package's surface.

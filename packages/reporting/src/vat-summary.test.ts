@@ -163,7 +163,7 @@ describe("computeVatSummary", () => {
     });
   });
 
-  it("excludes another tenant's sales (RLS + the tenant predicate)", async () => {
+  it("excludes another tenant's sales (the tenant predicate)", async () => {
     const other = await seedVenue(suite.db); // a different tenant entirely
     await seedSale(suite.db, other, {
       invoiceNumber: 1,
@@ -174,8 +174,8 @@ describe("computeVatSummary", () => {
     expect((await run()).byRate).toEqual([]); // our tenant has nothing
   });
 
-  it("excludes another node in the SAME tenant (the node predicate, which RLS does not enforce)", async () => {
-    // RLS scopes by tenant only, so a second node under our own tenant is NOT hidden — only
+  it("excludes another node in the SAME tenant (the node predicate)", async () => {
+    // A second node under the same tenant is excluded by the node predicate.
     // `s.node_id = ${input.nodeId}` excludes it. Dropping that predicate would count 300.00, not 100.00.
     await seedSale(suite.db, venue, {
       invoiceNumber: 1,

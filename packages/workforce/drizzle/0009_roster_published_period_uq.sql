@@ -1,1 +1,0 @@
-CREATE UNIQUE INDEX "roster_versions_published_period_uq" ON "roster_versions" USING btree ("tenant_id","location_id","period_start","period_end") WHERE "roster_versions"."status" = 'published';

@@ -24,11 +24,7 @@ export interface OutstandingSale {
 /**
  * Lists a tenant's outstanding sales: ordinary altas (corrects_sale_id NULL) that are neither an F3
  * canje substitute (already paid via their tickets — AEAT "no cobrar dos veces"), settled, nor
- * voided. RLS scopes every table reference to the tenant; the explicit tenant predicate on the outer
- * query AND on each subquery (the corrective sum and the three `not exists` existence checks) is
- * belt-and-suspenders — redundant under RLS and under the composite tenant-consistent FKs, but
- * guarding a non-scoped connection too (mirrors recordCorrection and settleSale). No SECURITY
- * DEFINER — a plain read.
+ * voided. The outer query and every subquery filter by tenant. This is a plain read.
  */
 export async function listOutstandingSales(
   tx: Transaction,

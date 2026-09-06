@@ -32,13 +32,9 @@ declare module "@waitron/shared" {
      * stream before the file is measured — so a consumer must not render it as "your file was N bytes".
      */
     "media.too_large": { size: number; limit: number };
-    /**
-     * A catalogue id supplied to a location-menu write (add-member / set-default) names no catalogue
-     * VISIBLE to the current tenant — it is absent, or another tenant's (RLS hides it). Thrown at the
-     * trust boundary as the CLEAN error in front of the data layer: both `locations.catalogue_id` and
-     * `location_catalogues.catalogue_id` carry tenant-consistent composite FKs (0078 / 0074), so a
-     * foreign id is `23503`-rejected there too — this guard turns that opaque 500 into a uniform 404.
-     */
+    /** A location-menu write names no catalogue. The trust-boundary check returns 404 before
+     * the composite FK backstop would reject the missing reference with 23503. Composite FKs also
+     * reject tenant-inconsistent references; catalogue existence alone does not check that. */
     "catalogue.not_found": { catalogueId: string };
     /**
      * An option group's AUTHORING config violated one of its DB invariants (ordering modifiers, Task

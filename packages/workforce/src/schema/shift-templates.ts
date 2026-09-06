@@ -15,7 +15,7 @@ import { locations, tenants } from "@waitron/db";
 /**
  * A reusable shift SHAPE at a location — "Monday bar, 18:00–02:00" — from which concrete `shifts` are
  * generated. PLANNING data, ordinary mutable rows: the app role holds SELECT, INSERT, UPDATE and
- * DELETE (drizzle/0008_scheduling_planning_rls.sql), no append-only trigger and no chain (design
+ * DELETE (drizzle/0001_workforce_baseline_sql.sql), no append-only trigger and no chain (design
  * 2026-07-22 §2.1 / plan §2.1). A template names no person — it is a slot on a weekday, not a rostered
  * shift.
  *
@@ -66,4 +66,4 @@ export const shiftTemplates = pgTable(
     check("shift_templates_starts_minute_ck", sql`${t.startsMinute} between 0 and 1440`),
     check("shift_templates_ends_minute_ck", sql`${t.endsMinute} between 0 and 1440`),
   ],
-).enableRLS();
+);

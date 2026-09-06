@@ -1,3 +1,6 @@
+import { beforeEach } from "vitest";
+import { CORE_MIGRATIONS } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { sql } from "drizzle-orm";
 import {
   locationId as brandLocationId,
@@ -22,11 +25,6 @@ export interface SeededVenue {
   seriesId: SeriesId;
 }
 
-// Mirrors packages/reporting/test/fixtures.ts's seedVenue: tenant + node come off @waitron/db's own
-// seeders (they own the NIF counter and the tenants/nodes inserts), this file adds the
-// location/till/series db has no seeder for. Run as the connection owner (superuser) — RLS is
-// bypassed, so this is pure setup. Catalogue tests only read `tenantId`/`locationId`, but the full
-// shape is kept so a later catalogue test that needs a till or a sale reuses one fixture.
 export async function seedVenue(db: Database): Promise<SeededVenue> {
   const tenantId = await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
@@ -52,21 +50,14 @@ export interface SeededCatalogue {
   productIds: { each: string; weight: string };
 }
 
-/**
- * Seeds one catalogue, two categories ("Food"/"Drinks") and two products (one `each`, one `weight`),
- * then assigns the catalogue to `venue.locationId`. Runs through the operations under test on a `tx`
- * already scoped to a tenant (via `withTenant` + `asAppUser`), so the inserted rows adopt that
- * tenant through `current_tenant_id()`. English test strings only (this package is english-only
- * guarded).
- */
 export async function seedCatalogueFixture(
   tx: Transaction,
-  venue: { locationId: string },
+  venue: { tenantId: TenantId; locationId: string },
 ): Promise<SeededCatalogue> {
-  const catalogue = await createCatalogue(tx, { name: "Deli" });
-  const food = await createCategory(tx, { name: "Food" });
-  const drinks = await createCategory(tx, { name: "Drinks" });
-  const slicedHam = await createProduct(tx, {
+  const catalogue = await createCatalogue(tx, venue.tenantId, { name: "Deli" });
+  const food = await createCategory(tx, venue.tenantId, { name: "Food" });
+  const drinks = await createCategory(tx, venue.tenantId, { name: "Drinks" });
+  const slicedHam = await createProduct(tx, venue.tenantId, {
     catalogueId: catalogue.id,
     categoryId: food.id,
     descriptions: { en: "sliced ham" },
@@ -74,7 +65,7 @@ export async function seedCatalogueFixture(
     unitPrice: "24.90",
     vatClass: "reduced",
   });
-  const water = await createProduct(tx, {
+  const water = await createProduct(tx, venue.tenantId, {
     catalogueId: catalogue.id,
     categoryId: drinks.id,
     descriptions: { en: "water" },
@@ -88,4 +79,24 @@ export async function seedCatalogueFixture(
     categoryIds: { food: food.id, drinks: drinks.id },
     productIds: { each: water.id, weight: slicedHam.id },
   };
+}
+
+/** Share the migrated database; clear authoring rows before each fixture is seeded. */
+export function useCatalogueDb(): { readonly db: Database } {
+  const fx = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+  beforeEach(async () => {
+    // DELETE avoids TRUNCATE CASCADE following catalogue references into locations and immutable
+    // sales tables. These tests write mutable authoring rows; venue identity rows can stay.
+    await fx.db.transaction(async (tx) => {
+      await tx.execute(sql`delete from product_option_groups`);
+      await tx.execute(sql`delete from option_group_items`);
+      await tx.execute(sql`delete from option_groups`);
+      await tx.execute(sql`delete from products`);
+      await tx.execute(sql`delete from categories`);
+      await tx.execute(sql`delete from location_catalogues`);
+      await tx.execute(sql`update locations set catalogue_id = null`);
+      await tx.execute(sql`delete from catalogues`);
+    });
+  });
+  return fx;
 }
