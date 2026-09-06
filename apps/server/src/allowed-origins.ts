@@ -25,7 +25,9 @@ function originOf(url: string): string | null {
  * the venue's own servers, nothing else. The document is re-read at most once per `ttlMs` (default
  * 30 s): a preflight or a cross-origin request must not cost a DB read each.
  */
-export function createOriginAllowlist(deps: AllowedOriginsDeps): (origin: string) => Promise<boolean> {
+export function createOriginAllowlist(
+  deps: AllowedOriginsDeps,
+): (origin: string) => Promise<boolean> {
   const ttl = deps.ttlMs ?? 30_000;
   let cached: { at: number; origins: Set<string> } | undefined;
   return async (origin) => {
