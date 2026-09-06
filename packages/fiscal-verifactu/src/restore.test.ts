@@ -23,15 +23,6 @@ const SIF = { nif: "89890001K", idSistemaInformatico: "WT" } as const;
 const NOW = new Date("2026-09-06T10:00:00.000Z");
 const FLOOR = installationFloor(NOW);
 
-beforeEach(async () => {
-  db = await createPgliteDb();
-  for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
-  await seedTenants(db);
-});
-afterEach(async () => {
-  if (db !== undefined) await db.close();
-});
-
 /** A live node: registered SIF + `FA` (standard, next_number 5) and `RE` (rectificative). */
 async function seedLiveNode(): Promise<SifRegistration> {
   const sif = await withTenant(db, TENANT_A.id, (tx) =>
@@ -71,6 +62,15 @@ describe("installationFloor", () => {
 });
 
 describe("restoreFiscal", () => {
+  beforeEach(async () => {
+    db = await createPgliteDb();
+    for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
+    await seedTenants(db);
+  });
+  afterEach(async () => {
+    if (db !== undefined) await db.close();
+  });
+
   it("revokes the live SIF, mints a floored number, resets the chain head, keeps the ledger, returns disjoint series", async () => {
     const first = await seedLiveNode();
     await seedSoldRegistro(db, {

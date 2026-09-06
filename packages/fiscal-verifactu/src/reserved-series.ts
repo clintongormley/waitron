@@ -66,18 +66,16 @@ export async function liveSeriesBases(
     .where(eq(registroSif.tenantId, node.tenantId));
   const registered = new Set(numbers.map((r) => r.n));
   const seen = new Set<string>();
-  const bases = live
-    .map((s) => ({ code: stripOwnSuffixes(s.code, registered), purpose: s.purpose }))
-    .filter(({ code, purpose }) => {
-      const key = JSON.stringify([code, purpose]);
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  for (const base of bases) {
-    if (base.code.length > MAX_BASE_CODE_LENGTH) {
-      throw new AppError("series.code_too_long", { code: base.code });
+  const bases: { code: string; purpose: string }[] = [];
+  for (const series of live) {
+    const code = stripOwnSuffixes(series.code, registered);
+    const key = JSON.stringify([code, series.purpose]);
+    if (seen.has(key)) continue;
+    if (code.length > MAX_BASE_CODE_LENGTH) {
+      throw new AppError("series.code_too_long", { code });
     }
+    seen.add(key);
+    bases.push({ code, purpose: series.purpose });
   }
   return bases;
 }

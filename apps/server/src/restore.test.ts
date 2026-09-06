@@ -124,6 +124,25 @@ let mediaDir: string;
 let stateDir: string;
 let stagingDir: string;
 
+function makeRestoreDeps(overrides: Partial<RestoreDeps> = {}): RestoreDeps {
+  return {
+    artifact: buildArtifact(FULL_ENTRIES),
+    recoveryKey: KEY,
+    databaseUrl: "postgres://admin@localhost/fresh",
+    mediaDir,
+    stateDir,
+    stagingDir,
+    migrationsRoot: null,
+    modules: withHooks({}),
+    environment: "preproduction",
+    runRestore: vi.fn(async () => {}),
+    openDb,
+    migrate: vi.fn(async () => {}),
+    log: noopLog,
+    ...overrides,
+  };
+}
+
 function useTempDirs(prefix: string): void {
   beforeEach(async () => {
     mediaDir = await mkdtemp(join(tmpdir(), `${prefix}media-`));
@@ -150,23 +169,8 @@ describe("restoreFromArtifact", () => {
     });
   });
 
-  function deps(overrides: Partial<Parameters<typeof restoreFromArtifact>[0]> = {}) {
-    return {
-      artifact: buildArtifact(FULL_ENTRIES),
-      recoveryKey: KEY,
-      databaseUrl: "postgres://admin@localhost/fresh",
-      mediaDir,
-      stateDir,
-      stagingDir,
-      migrationsRoot: null as string | null,
-      modules: withHooks({}),
-      openDb,
-      migrate: vi.fn(async () => {}),
-      environment: "preproduction" as const,
-      runRestore,
-      log: noopLog,
-      ...overrides,
-    };
+  function deps(overrides: Partial<RestoreDeps> = {}): RestoreDeps {
+    return makeRestoreDeps({ runRestore, ...overrides });
   }
 
   it("restores db dump, media and secrets, then cleans staging", async () => {
@@ -300,29 +304,14 @@ describe("restoreFromArtifact", () => {
 
 describe("validateArtifact / writeValidated (R3 validate-before-wipe split)", () => {
   useTempDirs("waitron-validate-");
-  let runRestore: ReturnType<typeof vi.fn>;
+  let runRestore: PgRestoreRunner;
 
   beforeEach(() => {
     runRestore = vi.fn(async () => {});
   });
 
-  function deps(overrides: Partial<Parameters<typeof validateArtifact>[0]> = {}) {
-    return {
-      artifact: buildArtifact(FULL_ENTRIES),
-      recoveryKey: KEY,
-      databaseUrl: "postgres://admin@localhost/fresh",
-      mediaDir,
-      stateDir,
-      stagingDir,
-      migrationsRoot: null as string | null,
-      modules: withHooks({}),
-      openDb,
-      migrate: vi.fn(async () => {}),
-      environment: "preproduction" as const,
-      runRestore: runRestore as unknown as PgRestoreRunner,
-      log: noopLog,
-      ...overrides,
-    };
+  function deps(overrides: Partial<RestoreDeps> = {}): RestoreDeps {
+    return makeRestoreDeps({ runRestore, ...overrides });
   }
 
   it("validateArtifact throws on a wrong recovery key and writes NOTHING", async () => {
@@ -464,25 +453,6 @@ describe("restore hooks (identity phase)", () => {
   useTempDirs("waitron-hooks-");
   beforeEach(resetSeries);
 
-  function deps(overrides: Partial<RestoreDeps> = {}): RestoreDeps {
-    return {
-      artifact: buildArtifact(FULL_ENTRIES),
-      recoveryKey: KEY,
-      databaseUrl: "postgres://admin@localhost/fresh",
-      mediaDir,
-      stateDir,
-      stagingDir,
-      migrationsRoot: null,
-      modules: withHooks({}),
-      environment: "preproduction",
-      runRestore: vi.fn(async () => {}),
-      openDb,
-      migrate: vi.fn(async () => {}),
-      log: noopLog,
-      ...overrides,
-    };
-  }
-
   it("migrates after pg_restore and BEFORE any hook; hooks run BEFORE secrets are written", async () => {
     const order: string[] = [];
     const migrate = vi.fn(async () => {
@@ -494,7 +464,7 @@ describe("restore hooks (identity phase)", () => {
       return { report: "ok" };
     };
     await restoreFromArtifact(
-      deps({
+      makeRestoreDeps({
         migrate,
         modules: withHooks({ fiscal: hook }),
         runRestore: vi.fn(async () => {
@@ -511,7 +481,7 @@ describe("restore hooks (identity phase)", () => {
     const hook = vi.fn(async () => ({ report: "must not run" }));
     const noIdentity = FULL_ENTRIES.filter((e) => e.name !== "secrets/trading.env");
     await restoreFromArtifact(
-      deps({
+      makeRestoreDeps({
         skipSecrets: true,
         artifact: buildArtifact(noIdentity),
         modules: withHooks({ fiscal: hook }),
@@ -531,7 +501,7 @@ describe("restore hooks (identity phase)", () => {
       }),
     );
     const hook = vi.fn(async () => ({ report: "ok" }));
-    await restoreFromArtifact(deps({ modules: withHooks({ fiscal: hook }) }));
+    await restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ fiscal: hook }) }));
     expect(hook).toHaveBeenCalledWith(expect.anything(), {
       tenantId: T.tenantId,
       locationId: T.locationId,
@@ -558,7 +528,7 @@ describe("restore hooks (identity phase)", () => {
       throw new AppError("restore.unexpected_entry", { name: "boom" });
     };
     await expect(
-      restoreFromArtifact(deps({ runRestore, modules: withHooks({ fiscal: boom }) })),
+      restoreFromArtifact(makeRestoreDeps({ runRestore, modules: withHooks({ fiscal: boom }) })),
     ).rejects.toMatchObject({
       code: "restore.hook_failed",
       params: { module: "fiscal", code: "restore.unexpected_entry" },
@@ -571,7 +541,7 @@ describe("restore hooks (identity phase)", () => {
   it("a pre-existing identity is UNTOUCHED under skipSecrets (the rejoin shape keeps its own)", async () => {
     const own = formatEnvFile({ WAITRON_TILL_NODE_ID: "own" });
     await writeFile(join(stateDir, "trading.env"), own);
-    await restoreFromArtifact(deps({ skipSecrets: true }));
+    await restoreFromArtifact(makeRestoreDeps({ skipSecrets: true }));
     expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(own);
     await expect(stat(join(stateDir, "trading.env.replaced"))).rejects.toMatchObject({
       code: "ENOENT",
@@ -583,7 +553,7 @@ describe("restore hooks (identity phase)", () => {
       report: "ok",
       series: [{ code: "FA-9", purpose: "standard" }],
     });
-    await restoreFromArtifact(deps({ modules: withHooks({ fiscal: hook }) }));
+    await restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ fiscal: hook }) }));
     const rows = await suite.db.execute<{ code: string; retired: boolean; next: number }>(
       sql`select code, retired_at is not null as retired, next_number as next from invoice_series where node_id = ${T.nodeId} order by code`,
     );
@@ -602,14 +572,16 @@ describe("restore hooks (identity phase)", () => {
 
   it("no series returned → the node must still hold one live standard series, and trading.env is byte-identical", async () => {
     await restoreFromArtifact(
-      deps({ modules: withHooks({ fiscal: async () => ({ report: "ok" }) }) }),
+      makeRestoreDeps({ modules: withHooks({ fiscal: async () => ({ report: "ok" }) }) }),
     );
     expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV);
     // The restored node has NO live standard series (retired in the backup) → refuse, no identity written.
     await suite.db.execute(
       sql`update invoice_series set retired_at = now() where id = ${T.seriesId}`,
     );
-    await expect(restoreFromArtifact(deps({ modules: withHooks({}) }))).rejects.toMatchObject({
+    await expect(
+      restoreFromArtifact(makeRestoreDeps({ modules: withHooks({}) })),
+    ).rejects.toMatchObject({
       code: "restore.hook_failed",
       params: { module: "core", code: "series.no_standard_for_node" },
     });
@@ -623,7 +595,7 @@ describe("restore hooks (identity phase)", () => {
     await suite.db.execute(
       sql`update invoice_series set retired_at = now() where id = ${T.seriesId}`,
     );
-    await restoreFromArtifact(deps({ modules: withHooks({}) }));
+    await restoreFromArtifact(makeRestoreDeps({ modules: withHooks({}) }));
     const written = parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8"));
     const [fb] = (
       await suite.db.execute<{ id: string }>(sql`select id from invoice_series where code = 'FB'`)
@@ -635,7 +607,7 @@ describe("restore hooks (identity phase)", () => {
     await suite.db.execute(
       sql`insert into invoice_series (tenant_id, node_id, code) values (${T.tenantId}, ${T.nodeId}, 'FB')`,
     );
-    await expect(restoreFromArtifact(deps({ modules: withHooks({}) }))).rejects.toThrow(
+    await expect(restoreFromArtifact(makeRestoreDeps({ modules: withHooks({}) }))).rejects.toThrow(
       /more than one standard series/,
     );
     await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
@@ -652,7 +624,7 @@ describe("restore hooks (identity phase)", () => {
       ],
     });
     await expect(
-      restoreFromArtifact(deps({ modules: withHooks({ fiscal: hook }) })),
+      restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ fiscal: hook }) })),
     ).rejects.toThrow(/more than one standard series/);
     const rows = await suite.db.execute<{ code: string; retired: boolean }>(
       sql`select code, retired_at is not null as retired from invoice_series where node_id = ${T.nodeId} order by code`,
@@ -669,7 +641,7 @@ describe("restore hooks (identity phase)", () => {
       series: [{ code: "FA", purpose: "standard" }],
     });
     await expect(
-      restoreFromArtifact(deps({ modules: withHooks({ fiscal: hook }) })),
+      restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ fiscal: hook }) })),
     ).rejects.toMatchObject({
       code: "restore.hook_failed",
       params: { module: "fiscal", code: "series.code_collision" },
@@ -692,14 +664,14 @@ describe("restore hooks (identity phase)", () => {
       series: [{ code: "FA-2", purpose: "standard" }],
     });
     await expect(
-      restoreFromArtifact(deps({ modules: withHooks({ core: a, fiscal: b }) })),
+      restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ core: a, fiscal: b }) })),
     ).rejects.toMatchObject({
       code: "restore.series_conflict",
       params: { modules: "core,fiscal" },
     });
     const empty: RestoreHook = async () => ({ report: "a", series: [] });
     await expect(
-      restoreFromArtifact(deps({ modules: withHooks({ fiscal: empty }) })),
+      restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ fiscal: empty }) })),
     ).rejects.toMatchObject({
       code: "restore.hook_failed",
       params: { module: "fiscal", code: "series.no_standard_for_node" },
@@ -725,7 +697,11 @@ describe("restore hooks (identity phase)", () => {
       }
       const runRestore = vi.fn(async () => {});
       const migrate = vi.fn(async () => {});
-      const restoreDeps = deps({ artifact: buildArtifact(entries), runRestore, migrate });
+      const restoreDeps = makeRestoreDeps({
+        artifact: buildArtifact(entries),
+        runRestore,
+        migrate,
+      });
       const error = {
         code: "restore.identity_incomplete",
         params: { missing: missing === "key" ? "WAITRON_TILL_NODE_ID" : "trading.env" },
@@ -748,7 +724,7 @@ describe("restore hooks (identity phase)", () => {
       buildArtifact([...base, { name: "secrets/trading.env", bytes: Buffer.from(body) }]);
     await expect(
       restoreFromArtifact(
-        deps({
+        makeRestoreDeps({
           artifact: withEnv(
             formatEnvFile({ ...parseEnvFile(TRADING_ENV), WAITRON_TILL_NODE_ID: "" }),
           ),
@@ -759,14 +735,14 @@ describe("restore hooks (identity phase)", () => {
       params: { missing: "WAITRON_TILL_NODE_ID" },
     });
     await expect(
-      restoreFromArtifact(deps({ artifact: buildArtifact(base) })),
+      restoreFromArtifact(makeRestoreDeps({ artifact: buildArtifact(base) })),
     ).rejects.toMatchObject({
       code: "restore.identity_incomplete",
       params: { missing: "trading.env" },
     });
     await expect(
       restoreFromArtifact(
-        deps({
+        makeRestoreDeps({
           artifact: withEnv(
             formatEnvFile({
               ...parseEnvFile(TRADING_ENV),

@@ -220,9 +220,8 @@ beforeAll(async () => {
       );
       expect(head.rows).toEqual([{ secuencia: 1, ultima_huella: HUELLA }]);
       if (older) {
-        const olderAdmin = baselineAdmin;
-        await olderAdmin.execute(sql`alter table invoice_series drop column retired_at`);
-        await olderAdmin.execute(
+        await baselineAdmin.execute(sql`alter table invoice_series drop column retired_at`);
+        await baselineAdmin.execute(
           sql`delete from __drizzle_migrations_db where id = (select max(id) from __drizzle_migrations_db)`,
         );
       }

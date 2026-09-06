@@ -32,10 +32,7 @@ describe("backup.restore seat", () => {
       series: [{ code: "A-1", purpose: "standard" }],
     });
     const withHook: WaitronModule = {
-      name: "x",
-      version: "0.0.0",
-      tier: "toggleable",
-      migrations: { name: "x", table: "__drizzle_migrations_x", from: "../x/drizzle" },
+      ...mod("x"),
       backup: { restore: hook },
     };
     const without: WaitronModule = { ...withHook, backup: {} };
