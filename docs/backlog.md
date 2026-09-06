@@ -314,8 +314,14 @@ All three decisions are now taken.
    the auth model does not change — the device cookie stays httpOnly and gains a tenant-domain scope;
    `devices`/`tills`/`device_profiles`/`canvases` must replicate first (config-class, no new table);
    the promoted cloud serves tills on its public name; the app never talks to the local agent.
-   **S1 (server truth) LANDED #244 (2026-09-06). Next: S2 (CORS + tenant-domain cookie, plan Tasks
-   7–10) in its own worktree, then S3–S6:**
+   **S1 (server truth) LANDED #244 (2026-09-06). S2 (CORS + tenant-domain device cookie, plan Tasks
+   7–10) LANDED #257 (2026-09-06) — origin allow-list (single-flighted, evicted nodes excluded),
+   `hono/cors` on `/api/*` + `/media/*` for venue origins only, device cookie scoped to
+   `WAITRON_TENANT_DOMAIN`. OWED: plan Task 10's manual same-site cookie browser receipt (needs
+   `/etc/hosts` + mkcert + interactive Chrome; the `cookieDomainFor` logic is unit-proven, S6's e2e
+   covers the browser path) — run it or fold it into S6 before relying on cross-subdomain cookie
+   delivery in production. Next: S3 (venue-wide till reads, plan Tasks 11+) in its own worktree, then
+   S4–S6:**
    [`2026-09-05-till-reroute-design.md`](superpowers/specs/2026-09-05-till-reroute-design.md) — the
    till FOLLOWS THE PRIMARY (probe every server, obey `acceptingSales`; no manual switch — owner
    2026-09-05; a status line + "check again" instead), server list = the membership document's
