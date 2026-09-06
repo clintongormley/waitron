@@ -1,24 +1,21 @@
 // Self-contained, human-checkable demonstration of the allergens seam: EU 1169/2011 Annex II
-// declarations authored on catalogue products and read back for the till, end-to-end and headless.
-// Modelled on `daily-close-demo.ts` (in-memory PGlite, self-migrating, tsx-run) rather than
-// `catalogue-demo.ts` (real Postgres) — this demo never writes a fiscal record, so it needs neither a
-// real backend nor the RLS-as-deployment-role proof that forces catalogue-demo onto a real server.
-// `CORE_MIGRATIONS` alone suffices: it creates the catalogue tables (0026) and the `products.allergens`
-// jsonb column (0031), which is everything read here.
+// declarations authored on catalogue products and read back for the till, end-to-end and
+// headless. Modelled on `daily-close-demo.ts` (in-memory PGlite, self-migrating, tsx-run) rather
+// than `catalogue-demo.ts` (real Postgres) — this demo never writes a fiscal record, so it needs
+// neither a real backend nor a proof of the non-superuser grants used by catalogue-demo.
+// `CORE_MIGRATIONS` alone suffices: it creates the catalogue tables (0026) and the
+// `products.allergens` jsonb column (0031), which is everything read here.
 //
-// It:
-//   1. boots an in-memory PGlite and applies `CORE_MIGRATIONS`;
-//   2. seeds a tenant + location as the PGlite superuser (which bypasses RLS) — `app_user` holds no
-//      INSERT on `tenants`, deliberately (a running POS cannot create tenants);
-//   3. as the application role, seeds ONE catalogue with four products carrying VARIED allergen
-//      states, then assigns the catalogue to the location:
-//        - "Empanada de trigo"    → contains gluten (source: wheat) + eggs  — a `contains` with a SOURCE
-//        - "Tarta de la casa"     → contains milk, MAY contain nuts          — a `may_contain`
-//        - "Ensalada de la huerta"→ {} — reviewed, no declarable allergens   — the empty-but-reviewed case
-//        - "Sopa del día"         → allergens unset (null)                    — NOT yet reviewed → PENDING
-//   4. reads the sellable products back with `listAvailableProducts` (as the app role, exactly as the
-//      till does) and prints (a) an allergen matrix (product × allergen) and (b) a single-product
-//      operator-lookup view.
+// It: 1. boots an in-memory PGlite and applies `CORE_MIGRATIONS`; 2. seeds a tenant + location as
+// the PGlite superuser — `app_user` holds no INSERT on `tenants`, deliberately (a running POS
+// cannot create tenants); 3. as the application role, seeds ONE catalogue with four products
+// carrying VARIED allergen states, then assigns the catalogue to the location: - "Empanada de
+// trigo" → contains gluten (source: wheat) + eggs — a `contains` with a SOURCE - "Tarta de la
+// casa" → contains milk, MAY contain nuts — a `may_contain` - "Ensalada de la huerta"→ {} —
+// reviewed, no declarable allergens — the empty-but-reviewed case - "Sopa del día" → allergens
+// unset (null) — NOT yet reviewed → PENDING 4. reads the sellable products back with
+// `listAvailableProducts` (as the app role, exactly as the till does) and prints (a) an allergen
+// matrix (product × allergen) and (b) a single-product operator-lookup view.
 //
 // The load-bearing distinction (design D4): a reviewed product with no allergens ({}) is allergen-FREE,
 // while a product with `allergens = null` is PENDING — never yet reviewed, and must NEVER be shown as
@@ -51,8 +48,8 @@ interface Venue {
 }
 
 /**
- * Seeds tenant → location as the PGlite superuser (which bypasses RLS), exactly as the package's own
- * fixtures do. Only these two rows are needed: this demo rings no sale, so no till / node / series.
+ * Seeds tenant → location as the PGlite superuser, exactly as the package's own fixtures do. Only
+ * these two rows are needed: this demo rings no sale, so no till / node / series.
  */
 async function seedVenue(db: Database): Promise<Venue> {
   const t = await db.execute<{ id: string }>(
@@ -173,8 +170,9 @@ async function main(): Promise<void> {
     await runMigrations(db, CORE_MIGRATIONS);
     const venue = await seedVenue(db);
 
-    // Author the catalogue as the application role (not the superuser owner), exactly as the running
-    // POS does: `withTenant` sets the tenant GUC, `asAppUser` drops to the RLS-bound role.
+    // Author the catalogue as the application role (not the superuser owner), exactly as the
+    // running POS does: `withTenant` opens the transaction, `asAppUser` selects the app role on
+    // PostgreSQL.
     await withTenant(db, venue.tenantId, async (tx) => {
       await asAppUser(tx);
       const cat = await createCatalogue(tx, venue.tenantId, { name: "Delicatessen" });
@@ -233,11 +231,11 @@ async function main(): Promise<void> {
       await assignCatalogueToLocation(tx, venue.locationId, cat.id);
     });
 
-    // The read the till performs: sellable products at the location, with their allergens, as the app
-    // role under RLS. `listAvailableProducts` orders by (catalogue.name, created_at, id); all four
+    // The read the till performs: sellable products at the location, with their allergens, as the
+    // app role. `listAvailableProducts` orders by (catalogue.name, created_at, id); all four
     // share both a catalogue and a created_at, so the print order falls to the random-uuid id
-    // tiebreak, not seed order. Order is immaterial here — the matrix labels each row's review state
-    // explicitly.
+    // tiebreak, not seed order. Order is immaterial here — the matrix labels each row's review
+    // state explicitly.
     const products = await withTenant(db, venue.tenantId, async (tx) => {
       await asAppUser(tx);
       return (await listAvailableProducts(tx, venue.locationId)).products;

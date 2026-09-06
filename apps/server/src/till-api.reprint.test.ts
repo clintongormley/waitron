@@ -29,11 +29,12 @@ import type { TillConfig } from "./till-config.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import "./errors.js";
 
-// PGlite, not real Postgres: this file proves the HTTP SHAPE of the reprint route — the `requireSession`
-// guard, the `requireUuidId` screen, and that `reprintOrderTickets` re-enqueues through the SAME outbox
-// path the fire uses. The reprint VERB's logic (re-query all fired items, R-D whole-ticket, never-block)
-// is proven at the verb level in `kitchen-print.test.ts`; `station_printers` RLS/grants are real-Postgres's
-// job (Task 1's rls suite). Schema is CORE (kitchen_stations / ticket_items / printers / station_printers /
+// PGlite, not real Postgres: this file proves the HTTP SHAPE of the reprint route — the
+// `requireSession` guard, the `requireUuidId` screen, and that `reprintOrderTickets` re-enqueues
+// through the SAME outbox path the fire uses. The reprint VERB's logic (re-query all fired items,
+// R-D whole-ticket, never-block) is proven at the verb level in `kitchen-print.test.ts`; the
+// app_user privilege matrix in @waitron/fiscal-verifactu covers station_printers grants on real
+// PostgreSQL. Schema is CORE (kitchen_stations / ticket_items / printers / station_printers /
 // print_jobs all land in CORE) + IDENTITY (the sessions/persons the login path needs).
 const CAFE = "Cafe con leche";
 let cfg: TillConfig;
@@ -201,7 +202,7 @@ async function placeAndFire(): Promise<string> {
   return id;
 }
 
-/** Create a live cloud_poll printer and attach it to the default station (app role, RLS in force). */
+/** Create a live cloud_poll printer and attach it to the default station (app role). */
 async function attachPrinterToDefaultStation(): Promise<string> {
   return withTenant(suite.db, cfg.tenantId, async (tx: Transaction) => {
     await asAppUser(tx);
@@ -215,7 +216,7 @@ async function attachPrinterToDefaultStation(): Promise<string> {
   });
 }
 
-/** The tenant's print-job outbox (RLS-scoped), each job's printer + decoded ESC/POS bytes. */
+/** The database's print-job outbox, each job's printer + decoded ESC/POS bytes. */
 async function printJobsFor(printerId: string): Promise<{ id: string; ticket: string }[]> {
   const rows = await withTenant(suite.db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);

@@ -22,8 +22,8 @@ import { locateSharedContainer } from "./testing/locate-shared-container.js";
 
 const execFileAsync = promisify(execFile);
 
-// A privileged `db` is required by the deps type but never touched under an injected manifest builder,
-// so the pure-DI fan-out/assembly tests hand in this inert stand-in.
+// A `db` handle is required by the deps type but never touched under an injected manifest
+// builder, so the pure-DI fan-out/assembly tests hand in this inert stand-in.
 const NO_DB = {} as Database;
 
 // A fixed manifest, no journal read — keeps the fan-out/assembly tests off a real container.
@@ -301,11 +301,12 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
       if (d !== undefined) await rm(d, { recursive: true, force: true });
   });
 
-  // Mirrors the `deps()` helper in the runOnce block: the constant loop fields in one place (including
-  // the BR-2 archive deps — a privileged `db` stand-in, the module set, the media resolver and state
-  // dir, and the injected manifest builder so the loop never needs a real journal), with the per-test
-  // signal/sleep/log (and optional runDump/now) supplied as overrides. `signal`/`sleep`/`log` are
-  // required here because every loop test drives its own AbortController through them.
+  // Mirrors the `deps()` helper in the runOnce block: the constant loop fields in one place
+  // (including the BR-2 archive deps — a `db` stand-in for backup reads, the module set, the
+  // media resolver and state dir, and the injected manifest builder so the loop never needs a
+  // real journal), with the per-test signal/sleep/log (and optional runDump/now) supplied as
+  // overrides. `signal`/`sleep`/`log` are required here because every loop test drives its own
+  // AbortController through them.
   type LoopOverrides = Partial<BackupSweepDeps> & Pick<BackupSweepDeps, "signal" | "sleep" | "log">;
   const loopDeps = (backend: StorageBackend, overrides: LoopOverrides): BackupSweepDeps => ({
     backends: [backend],
@@ -435,10 +436,11 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
 // in the rewrite, since it is the ONLY coverage of the real shell-out (pg-dump.ts says so explicitly).
 const suite = useTemplateDb({ template: "manifest" });
 
-// The DEFAULT (non-injected) manifest path against a REAL journal: proves runOnce's archive carries a
-// real BackupManifest built off `suite.admin` (a privileged pool — `appliedSchemaVersion` reads the
-// `__drizzle_migrations_*` journal `app_user` cannot). A pure-DI test would never notice the default
-// builder being wrong, so this drives it end to end. Needs `TESTCONTAINERS_RYUK_DISABLED=true` (§4).
+// The DEFAULT (non-injected) manifest path against a REAL journal: proves runOnce's archive
+// carries a real BackupManifest built off `suite.admin` (the owner connection —
+// `appliedSchemaVersion` reads the `__drizzle_migrations_*` journal `app_user` cannot). A pure-DI
+// test would never notice the default builder being wrong, so this drives it end to end. Needs
+// `TESTCONTAINERS_RYUK_DISABLED=true` (§4).
 describe("runOnce with the real buildManifest (useTemplateDb)", () => {
   let staging: string;
   let mediaDir: string;
@@ -457,7 +459,7 @@ describe("runOnce with the real buildManifest (useTemplateDb)", () => {
     const a = new FakeBackend("a");
     await runOnce({
       backends: [a],
-      db: suite.admin, // privileged: reads the drizzle journal the app role cannot
+      db: suite.admin, // owner read of the drizzle journal, which has no app_user SELECT grant
       modules: ALL_MODULES,
       environment: "preproduction",
       resolvers: { media: mediaDir },

@@ -85,7 +85,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    // No integrated card terminal for these move/merge RLS suites.
+    // No integrated card terminal for these move/merge PostgreSQL suites.
     cardProvider: "none",
     tipsEnabled: false,
     orderFlow: "prepay",
@@ -189,7 +189,7 @@ async function openTabOn(
   });
 }
 
-/** The dining table's current tab_id — owner read (bypasses RLS). */
+/** The dining table's current tab_id — owner read. */
 async function tabIdOf(tableId: string): Promise<string | null> {
   const { rows } = await suite.admin.execute<{ tab_id: string | null }>(
     sql`select tab_id from dining_tables where id = ${tableId}`,
@@ -197,7 +197,7 @@ async function tabIdOf(tableId: string): Promise<string | null> {
   return rows[0]!.tab_id;
 }
 
-/** How many `sales` rows reference this working order — read as the superuser owner (bypasses RLS). */
+/** How many `sales` rows reference this working order — read as the superuser owner. */
 async function saleCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.admin.execute<{ count: string }>(sql`
     select count(*)::text as count from sales where working_order_id = ${workingOrderId}
@@ -224,8 +224,10 @@ async function registroCount(workingOrderId: string): Promise<number> {
   return Number(rows[0]!.count);
 }
 
-/** The IMMUTABLE filed `sales.total` for this working order's sale — read as the owner (bypasses RLS).
- *  The witness that a retrieved order files at the LOCKED price, not a re-price at pay. */
+/**
+ * The IMMUTABLE filed `sales.total` for this working order's sale — read as the owner. The
+ * witness that a retrieved order files at the LOCKED price, not a re-price at pay.
+ */
 async function filedSaleTotal(workingOrderId: string): Promise<string> {
   const { rows } = await suite.admin.execute<{ total: string }>(sql`
     select total from sales where working_order_id = ${workingOrderId}

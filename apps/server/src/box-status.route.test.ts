@@ -25,12 +25,10 @@ const MANAGER_EMAIL = "manager@x.com";
 
 const suite = useTemplateDb({ template: "manifest" });
 
-// The config-conflict count reader under test reads through the `sync_tailer` role — `row_image` is
-// tenant business data, so 0009 grants SELECT on `sync_config_conflicts` to `sync_tailer` only, NOT
-// `app_user` (the same isolation `sync_log` enforces; proven by `config-conflict.grants.test.ts`). So
-// the READER must be a sync_tailer connection, not the superuser `suite.admin` (which would bypass the
-// grant and hide a regression). `sync_reader` is a LOGIN member of `sync_tailer`, created once in the
-// shared-container global setup; seeding still runs as `suite.admin`. Guarded close (CLAUDE.md §4).
+// The config-conflict count reader uses sync_reader, a LOGIN member of app_user created by global
+// setup. The sync baseline grants app_user SELECT on sync_config_conflicts, whose row_image holds
+// tenant business data. Seeding uses suite.admin; the read exercises the grant through a
+// non-superuser connection. Guarded close (CLAUDE.md §4).
 let conflictsReaderDb: Database | undefined;
 beforeAll(async () => {
   conflictsReaderDb = await suite.pg.connectAs("sync_reader", "rp");
@@ -131,9 +129,10 @@ function buildApp(
       readReplicationLag: undefined,
       readDisposal: undefined,
       readBackup: opts.readBackup,
-      // The Slice-7 config-conflict count reader, on the sync_tailer pool (the manifest template carries
-      // the sync module, so sync_config_conflicts exists). Reads through `sync_tailer` — the role that
-      // holds SELECT on the table (0009) — exactly as boot.ts wires it via `lagPool`.
+      // The Slice-7 config-conflict count reader, on the sync pool (the manifest template carries
+      // the sync module, so sync_config_conflicts exists). Reads through `app_user` — the role
+      // that holds SELECT on the table in the sync baseline — exactly as boot.ts wires it via
+      // `lagPool`.
       readConfigConflicts: () => readConfigConflictCount(conflictsReaderDb!),
       readMode: () => "primary",
       readSingletonRole: () => "primary",

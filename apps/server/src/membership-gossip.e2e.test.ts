@@ -58,7 +58,7 @@ const source = useTemplateDb({ template: "manifest" });
 const subscriber = useTemplateDb({ template: "manifest" });
 const untrusted = useTemplateDb({ template: "manifest" });
 
-let sourceReader: Database; // sync_applier (sync_tailer + app_user): the /hello handler reads node_membership through this
+let sourceReader: Database; // sync_applier (app_user): the /hello handler reads node_membership through this
 let subscriberPool: Database; // sync_applier: runSyncPull's localDb + the adoption persist pool
 let untrustedPool: Database; // the empty-trust control's equivalent
 let peerToken: string; // enrolled on the SOURCE; the Bearer every pull presents
@@ -116,8 +116,8 @@ async function pullOneRound(localDb: Database, trustSet: TrustSet): Promise<Acce
 
 beforeAll(async () => {
   // The source serves node_membership through a sync_applier pool (app_user's SELECT), exactly as
-  // boot.ts:1053 builds it. The subscriber/untrusted pools are the same role: runSyncPull reads the
-  // cursor + applies as sync_tailer/app_user, and the adoption persist runs as app_user (Slice-3 grant).
+  // boot.ts:1053 builds it. The subscriber/untrusted pools are the same role: runSyncPull reads
+  // the cursor + applies as app_user, and the adoption persist runs as app_user (Slice-3 grant).
   sourceReader = await source.pg.connectAs("sync_applier", "ap");
   subscriberPool = await subscriber.pg.connectAs("sync_applier", "ap");
   untrustedPool = await untrusted.pg.connectAs("sync_applier", "ap");

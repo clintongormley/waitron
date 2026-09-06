@@ -67,7 +67,7 @@ const PRIMARY_NUM = 900_001;
 const RESERVED_NUM = 900_002;
 const COLLIDE_NUM = 900_003;
 
-let targetApplier: Database; // sync_applier: app_user (apply) + sync_tailer (cursor)
+let targetApplier: Database; // sync_applier: app_user grants for apply and cursor writes
 let sourceReader: Database; // the mounted source's serve pool (sync_applier)
 let sourceWriter: Database; // app_login: the app writer whose writes the capture triggers see
 let sourcePeerToken: string;
@@ -77,9 +77,11 @@ async function stampEnv(db: Database, environment: "production" | "preproduction
     on conflict (id) do update set environment = excluded.environment`);
 }
 
-/** A source serve mounted for `tenantId`: `/sync-api/log` reads sync_log inside `withTenant(tenantId)`
- * under FORCE RLS (sync-api.ts), so it MUST be mounted for the captured rows' tenant or it streams
- * nothing. Each test uses its own tenant, so the source is mounted per-pull with it (Task 6/7 shape). */
+/**
+ * Mount the source for this test's tenant configuration. The source reads sync_log through
+ * withTenant, which adds no tenant filter; the suite has a separate source database and selects
+ * captured rows by origin when pulling.
+ */
 function sourceHttp(tenantId: string): HttpClient {
   const app = new Hono();
   mountSyncApi(
@@ -112,9 +114,11 @@ function depsFor(tenantId: string) {
   } as const;
 }
 
-/** Run one write on the SOURCE as the app writer so the fiscal capture trigger fires and the row lands in
- * sync_log under origin = `originNodeId`. Both `app.tenant_id` (RLS) and `app.node_id` (capture origin)
- * are bound transaction-locally by `withTenant` (Task 7's `captureWrite`). */
+/**
+ * Run one write on the SOURCE as the app writer so the fiscal capture trigger fires and the row
+ * lands in sync_log under origin = `originNodeId`. `app.node_id` (capture origin) is bound
+ * transaction-locally by `withTenant` (Task 7's `captureWrite`).
+ */
 async function captureWrite(
   tenantId: string,
   originNodeId: string,
@@ -134,7 +138,7 @@ async function insertNode(
     values (${nodeId}, ${tenantId}, ${locationId}, 'Mirror node')`);
 }
 
-/** Read a scalar off the MIRROR as the superuser (RLS-bypassing) — the observed post-apply state. */
+/** Read a scalar off the MIRROR as the superuser — the observed post-apply state. */
 async function mirror<T>(query: Parameters<Database["execute"]>[0]): Promise<T | undefined> {
   const r = await target.admin.execute<{ v: T }>(query);
   return r.rows[0]?.v;

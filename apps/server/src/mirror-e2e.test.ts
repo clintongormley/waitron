@@ -115,7 +115,8 @@ const wrongMirror = useTemplateDb({ template: "manifest" });
 
 let migrationsRoot: string;
 let boxCaPem: string; // the box leaf's CA PEM — seeded into each mirror's `mirror_config.box_ca_pem`
-let sourceReader: Database; // sync_applier (sync_tailer + app_user): the HTTPS sync-api reads source.sync_log and node_membership through this
+let sourceReader: Database; // sync_applier (app_user): the HTTPS sync-api reads source.sync_log and node_membership through
+// this
 let sourceWriter: Database; // app_login: captures the catalogues into source.sync_log
 let peerToken: string; // enrolled on the SOURCE; the Bearer every pull presents
 let relay: RelayStandin;
@@ -124,9 +125,11 @@ const tunnelAc = new AbortController();
 let tunnelWorker: Promise<void>;
 let relayClientUrl: string;
 
-/** Seed the FK identity (tenant, location, node, till, series) with the WAITRON_TILL_*_ID on one clone
- * as the container superuser (RLS bypassed). None of these tables is sync-enrolled, so this captures no
- * sync_log rows. Mirrors boot.mirror.test.ts's `seedIdentity`. */
+/**
+ * Seed the FK identity (tenant, location, node, till, series) with the WAITRON_TILL_*_ID on one
+ * clone as the container superuser. None of these tables is sync-enrolled, so this captures no
+ * sync_log rows. Mirrors boot.mirror.test.ts's `seedIdentity`.
+ */
 async function seedIdentity(admin: Database): Promise<void> {
   await admin.execute(sql`insert into tenants (id, country, tax_id, legal_name)
     values (${TENANT}, 'ES', '90333333P', 'Mirror E2E SL') on conflict do nothing`);
@@ -260,8 +263,8 @@ beforeAll(async () => {
   await stampDeployment(wrongMirror.admin, "preproduction");
   await setDeploymentMode(wrongMirror.admin, "mirror");
 
-  // Production source serve pool (boot.ts:1053): sync_tailer + app_user, since /hello now reads
-  // node_membership (app_user's SELECT) as well as sync_peers.
+  // Production source serve pool (boot.ts:1053): app_user, since /hello now reads node_membership
+  // (app_user's SELECT) as well as sync_peers.
   sourceReader = await source.pg.connectAs("sync_applier", "ap");
   sourceWriter = await source.pg.connectAs("app_login", "app_pw");
   peerToken = (await enrolPeer(source.admin, { subscriberId: PEER_SUBSCRIBER, name: "mirror-e2e" }))

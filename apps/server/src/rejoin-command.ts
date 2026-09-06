@@ -72,7 +72,7 @@ function parseDbTarget(url: string): { host: string; port: string; database: str
  *    `WAITRON_RESTORE_DATABASE_URL` (the target-invariant check below), or the guards would vouch for a
  *    different db than the one wiped. Closed by `closePreWipe` BEFORE the wipe — the `WITH (FORCE)` drop
  *    terminates any lingering backend.
- *  - `WAITRON_SYNC_DATABASE_URL` — the sync_tailer pool. Carries the carrier-keyed drain read
+ *  - `WAITRON_SYNC_DATABASE_URL` — the sync pool. Carries the carrier-keyed drain read
  *    (`withTenant` + `readDrainProgress`). Also closed by `closePreWipe`.
  *  - `WAITRON_MAINTENANCE_DATABASE_URL` — a privileged connection to a DIFFERENT (maintenance)
  *    database (e.g. `postgres`); `dropAndCreateDatabase` cannot drop the database it is connected to.
@@ -290,8 +290,7 @@ export async function runRejoin(deps: {
   const drainReader =
     carrier === undefined
       ? undefined
-      : /* v8 ignore next 8 -- the withTenant + sync_tailer + readDrainProgress path needs a real PG
-           role and the sync tables; exercised by Task 3's real-DB integration, not this unit suite */
+      : /* v8 ignore next 8 -- the withTenant + app_user + readDrainProgress path needs a real PG role and the sync tables; exercised by Task 3's real-DB integration, not this unit suite */
         (): Promise<DrainProgress> =>
           withTenant(syncDb, cfg.tenantId, (tx) =>
             readDrainProgress(tx, {

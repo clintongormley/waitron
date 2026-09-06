@@ -87,7 +87,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    // No integrated card terminal for these transfer RLS suites.
+    // No integrated card terminal for these transfer PostgreSQL suites.
     cardProvider: "none",
     tipsEnabled: false,
     orderFlow: "prepay",
@@ -200,7 +200,7 @@ async function setupTwoTabs(): Promise<{
   return { cfg, tabA, tabB, cafe };
 }
 
-/** How many `sales` rows reference this working order — read as the superuser owner (bypasses RLS). */
+/** How many `sales` rows reference this working order — read as the superuser owner. */
 async function saleCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.admin.execute<{ count: string }>(sql`
     select count(*)::text as count from sales where working_order_id = ${workingOrderId}
@@ -219,8 +219,10 @@ async function registroCount(workingOrderId: string): Promise<number> {
   return Number(rows[0]!.count);
 }
 
-/** The IMMUTABLE filed `sales.total` for this working order's sale — read as the owner (bypasses RLS). The
- *  witness that each tab files at its OWN locked composition, not a re-price at pay. */
+/**
+ * The IMMUTABLE filed `sales.total` for this working order's sale — read as the owner. The
+ * witness that each tab files at its OWN locked composition, not a re-price at pay.
+ */
 async function filedSaleTotal(workingOrderId: string): Promise<string> {
   const { rows } = await suite.admin.execute<{ total: string }>(sql`
     select total from sales where working_order_id = ${workingOrderId}

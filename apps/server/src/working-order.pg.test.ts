@@ -116,7 +116,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    // No integrated card terminal for these working-order RLS suites.
+    // No integrated card terminal for these working-order PostgreSQL suites.
     cardProvider: "none",
     tipsEnabled: false,
     // The venue provisions with the DEFAULT `prepay` mode; a mode-specific test overrides both the
@@ -203,11 +203,11 @@ async function setupVenue(): Promise<SeededVenue> {
 }
 
 /**
- * A fresh venue set to a specific pay-timing `mode`: `setupVenue` provisions with the DEFAULT `prepay`
- * (planVenue has no mode input), then this flips the location's `order_flow` column to `mode` (as the
- * owner, RLS bypassed) AND sets `cfg.orderFlow` to match — so both the DB (what `readOrderFlow` reads)
- * and the in-memory config (what `placeOrder`/`collectOrder` dispatch on) agree, exactly as boot wires
- * them in production.
+ * A fresh venue set to a specific pay-timing `mode`: `setupVenue` provisions with the DEFAULT
+ * `prepay` (planVenue has no mode input), then this flips the location's `order_flow` column to
+ * `mode` (as the owner) AND sets `cfg.orderFlow` to match — so both the DB (what `readOrderFlow`
+ * reads) and the in-memory config (what `placeOrder`/`collectOrder` dispatch on) agree, exactly
+ * as boot wires them in production.
  */
 async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
   const venue = await setupVenue();
@@ -227,7 +227,7 @@ async function outstandingFor(cfg: TillConfig): Promise<{ saleId: string; amount
   });
 }
 
-/** How many `sales` rows reference this working order — read as the superuser owner (bypasses RLS). */
+/** How many `sales` rows reference this working order — read as the superuser owner. */
 async function saleCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.admin.execute<{ count: string }>(sql`
     select count(*)::text as count from sales where working_order_id = ${workingOrderId}
@@ -235,8 +235,10 @@ async function saleCount(workingOrderId: string): Promise<number> {
   return Number(rows[0]!.count);
 }
 
-/** The IMMUTABLE filed `sales.total` for this working order's sale — read as the owner (bypasses RLS).
- *  The witness that a retrieved order files at the LOCKED price, not a re-price at pay. */
+/**
+ * The IMMUTABLE filed `sales.total` for this working order's sale — read as the owner. The
+ * witness that a retrieved order files at the LOCKED price, not a re-price at pay.
+ */
 async function filedSaleTotal(workingOrderId: string): Promise<string> {
   const { rows } = await suite.admin.execute<{ total: string }>(sql`
     select total from sales where working_order_id = ${workingOrderId}
@@ -255,8 +257,10 @@ async function registroCount(workingOrderId: string): Promise<number> {
   return Number(rows[0]!.count);
 }
 
-/** The tenders filed against this working order's sale — method + amount, read as the owner
- *  (bypasses RLS). Ordered by method so a multi-tender assertion is stable. */
+/**
+ * The tenders filed against this working order's sale — method + amount, read as the owner.
+ * Ordered by method so a multi-tender assertion is stable.
+ */
 async function tendersFor(workingOrderId: string): Promise<{ method: string; amount: string }[]> {
   const { rows } = await suite.admin.execute<{ method: string; amount: string }>(sql`
     select t.method, t.amount
@@ -268,10 +272,12 @@ async function tendersFor(workingOrderId: string): Promise<{ method: string; amo
   return rows.map((r) => ({ method: r.method, amount: r.amount }));
 }
 
-/** The `payments` rows for this working order — provider/state/amount, plus whether `sale_id`
- *  actually points at the filed sale (the association witness) — read as the owner (bypasses RLS).
- *  The inner join to `sales` on `working_order_id` (unique per sale) is how `linkedToSale` compares
- *  the payment's `sale_id` against the ONE sale filed from this order. */
+/**
+ * The `payments` rows for this working order — provider/state/amount, plus whether `sale_id`
+ * actually points at the filed sale (the association witness) — read as the owner. The inner join
+ * to `sales` on `working_order_id` (unique per sale) is how `linkedToSale` compares the payment's
+ * `sale_id` against the ONE sale filed from this order.
+ */
 async function paymentsFor(
   workingOrderId: string,
 ): Promise<{ provider: string; state: string; amount: string; linkedToSale: boolean }[]> {
@@ -419,11 +425,11 @@ async function asTenant<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>)
 }
 
 /**
- * A SECOND register on the SAME node — a `cfg` that shares `cfg`'s tenant, node, series and location
- * and differs only in `till_id`. The row is inserted as the OWNER under `withTenant`, exactly as
- * `applyVenue` writes a till (an explicit `tenant_id` satisfies the RLS WITH CHECK whether or not the
- * owner is forced under it). Proving cross-till retrieval needs a genuine second till row because both
- * `working_orders.till_id` and `sales.till_id` FK onto `tills` — a fabricated uuid would fail those.
+ * A SECOND register on the SAME node — a `cfg` that shares `cfg`'s tenant, node, series and
+ * location and differs only in `till_id`. The row is inserted as the OWNER under `withTenant`,
+ * exactly as `applyVenue` writes a till (the insert carries an explicit `tenant_id`). Proving
+ * cross-till retrieval needs a genuine second till row because both `working_orders.till_id` and
+ * `sales.till_id` FK onto `tills` — a fabricated uuid would fail those.
  */
 async function addTill(cfg: TillConfig, name: string): Promise<TillConfig> {
   const id = randomUUID();
@@ -437,10 +443,10 @@ async function addTill(cfg: TillConfig, name: string): Promise<TillConfig> {
 
 /**
  * A SECOND node under the SAME tenant + location — a `cfg` differing only in `node_id`. It never
- * sells here; it exists so `listHeldOrders` on it proves the `node_id = cfg.nodeId` filter rather than
- * RLS (which is tenant-scoped and would NOT hide a same-tenant order on another node). Inserted as the
- * owner under `withTenant`, the way `applyVenue`'s create-node does; `filing_module`/`tax_module` are
- * nullable and unused for a listing-only node, so they are left out.
+ * sells here; it exists so `listHeldOrders` on it proves the `node_id = cfg.nodeId` filter within
+ * the one-tenant database. Inserted as the owner under `withTenant`, the way `applyVenue`'s
+ * create-node does; `filing_module`/`tax_module` are nullable and unused for a listing-only node,
+ * so they are left out.
  */
 async function addNode(cfg: TillConfig, name: string): Promise<TillConfig> {
   const id = randomUUID();
@@ -466,8 +472,10 @@ async function draftAggregate(id: string): Promise<{ itemCount: number; total: s
   return { itemCount: rows.length, total };
 }
 
-/** The till the SALE was filed under vs the till the working order was PARKED under — the cross-till
- *  witness (parked on A, sold on B). Read as the owner (bypasses RLS). */
+/**
+ * The till the SALE was filed under vs the till the working order was PARKED under — the
+ * cross-till witness (parked on A, sold on B). Read as the owner.
+ */
 async function saleAndOrderTill(
   workingOrderId: string,
 ): Promise<{ saleTillId: string; orderTillId: string }> {
@@ -632,7 +640,7 @@ describe("payWorkingOrder", () => {
 
     expect(res.total).toBe("1.50"); // the lock, not 9.99
     expect(res.change).toBe("3.50");
-    // The IMMUTABLE fiscal record carries the locked price — read back as the owner (bypasses RLS).
+    // The IMMUTABLE fiscal record carries the locked price — read back as the owner.
     expect(await filedSaleTotal(id)).toBe("1.50");
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
@@ -893,8 +901,8 @@ describe("parkOrder concurrent replay", () => {
 // The manual (unintegrated) card tender — the "datáfono" case: the operator runs the card on a
 // SEPARATE bank terminal, taps Card, and the till files the same legal Veri*Factu ticket with a
 // `card` tender AND a captured `payments` row, all in the ONE sale transaction (no network call,
-// `recordManualCardPayment` commits inline). Real Postgres because a captured payment is a
-// privilege/RLS-scoped write under the app role, exactly what THIS suite exists to exercise.
+// `recordManualCardPayment` commits inline). Real Postgres because a captured payment is a write
+// requiring grants under the app role, exactly what THIS suite exists to exercise.
 describe("card tender (manual / datáfono)", () => {
   it("files a card sale: a card tender AND a captured manual payment linked to the filed sale; no change", async () => {
     const { cfg, cafe } = await setupVenue();
@@ -1081,9 +1089,8 @@ describe("cross-till end-to-end", () => {
 
   it("node scope: a same-tenant register on a DIFFERENT node does not list an order parked on node A", async () => {
     const { cfg: nodeA, cafe } = await setupVenue();
-    // A second node under the SAME tenant. RLS is tenant-scoped, so it does NOT hide node A's order
-    // from node B — only the `node_id = cfg.nodeId` filter does, which is what this asserts. Same
-    // state, opposite answers: node A lists it, node B does not.
+    // A second node under the SAME tenant. The `node_id = cfg.nodeId` filter does, which is what
+    // this asserts. Same state, opposite answers: node A lists it, node B does not.
     const nodeB = await addNode(nodeA, "Servidor 2");
 
     const orderId = randomUUID();
@@ -1098,10 +1105,10 @@ describe("cross-till end-to-end", () => {
 
   it("node scope: the by-id family (get/update/abandon) fails closed on a foreign-node order", async () => {
     const { cfg: nodeA, cafe } = await setupVenue();
-    // A second register under the SAME tenant + location, differing only in node_id. RLS is
-    // tenant-scoped, so it does NOT hide node A's order from node B — only the `node_id = cfg.nodeId`
-    // filter now in each by-id lookup does. Same state, opposite answers: node A reaches it, node B is
-    // refused by all three (getHeldOrder/updateHeldOrder/abandonHeldOrder — the whole by-id family, 7b).
+    // A second register under the SAME tenant + location, differing only in node_id. The `node_id
+    // = cfg.nodeId` filter now in each by-id lookup does. Same state, opposite answers: node A
+    // reaches it, node B is refused by all three (getHeldOrder/updateHeldOrder/abandonHeldOrder —
+    // the whole by-id family, 7b).
     const nodeB = await addNode(nodeA, "Servidor 2");
 
     const orderId = randomUUID();
@@ -1351,13 +1358,13 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
   });
 });
 
-// The pay-timing config + the three-mode dispatch (Modes P/I/T — design §3's state-machine × config
-// table). FISCAL-CRITICAL: each mode must fire the right issuance primitive at the right point — a
-// wrong dispatch files the wrong kind of unrepairable fiscal record (CLAUDE.md §5). Real Postgres —
-// the fiscal writes run as `app_user` under RLS, and the idempotency proofs are genuine two-backend
-// races, both of which PGlite's superuser/single-backend connection cannot show (CLAUDE.md §4). No
-// primitive is reimplemented here: the dispatch ORCHESTRATES `recordSale` (immediate + deferred),
-// `settleSale` and `listOutstandingSales`.
+// The pay-timing config + the three-mode dispatch (Modes P/I/T — design §3's state-machine ×
+// config table). FISCAL-CRITICAL: each mode must fire the right issuance primitive at the right
+// point — a wrong dispatch files the wrong kind of unrepairable fiscal record (CLAUDE.md §5).
+// Real Postgres — the fiscal writes run as `app_user`, and the idempotency proofs are genuine
+// two-backend races, both of which PGlite's superuser/single-backend connection cannot show
+// (CLAUDE.md §4). No primitive is reimplemented here: the dispatch ORCHESTRATES `recordSale`
+// (immediate + deferred), `settleSale` and `listOutstandingSales`.
 describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   it("readOrderFlow reads the venue's configured mode from its location", async () => {
     const { cfg } = await modeVenue("invoice_first");
@@ -1948,11 +1955,11 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
 
   it("listStationQueue node scope is SYMMETRIC: each node sees only its own order's items, both non-empty", async () => {
     const { cfg: nodeA, cafe } = await modeVenue("ticket_then_pay");
-    // A second node under the SAME tenant + location — `addNode`'s established 7b shape: it differs only
-    // in `node_id`, so RLS (tenant-scoped) would NOT hide either node's items from the other; only
-    // `listStationQueue`'s `node_id = cfg.nodeId` filter does. BOTH nodes fire a genuine order, so this
-    // proves "A shows A, B shows B" rather than "one empty, one not" — a measurement where both answers
-    // look alike measures nothing (CLAUDE.md §1). Both nodes share the location's one default station.
+    // A second node under the SAME tenant + location — `addNode`'s established 7b shape: it
+    // differs only in `node_id`, so only `listStationQueue`'s `node_id = cfg.nodeId` filter does.
+    // BOTH nodes fire a genuine order, so this proves "A shows A, B shows B" rather than "one
+    // empty, one not" — a measurement where both answers look alike measures nothing (CLAUDE.md
+    // §1). Both nodes share the location's one default station.
     const nodeB = await addNode(nodeA, "Servidor 2");
     const station = await defaultStationId(nodeA);
 
@@ -2015,10 +2022,10 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
 describe("listExpoQueue (KDS-3 cross-station expo/pass read) — node scope", () => {
   it("node scope is SYMMETRIC: each node's expo board shows only its own order, both non-empty", async () => {
     const { cfg: nodeA, cafe } = await modeVenue("ticket_then_pay");
-    // A second node under the SAME tenant + location (addNode's 7b shape) — RLS is tenant-scoped and would
-    // NOT hide either node's items from the other; only `listExpoQueue`'s `node_id = cfg.nodeId` filter
-    // does. BOTH nodes fire a genuine order, so this proves "A shows A, B shows B", not "one empty, one
-    // not" — a measurement where both answers look alike measures nothing (CLAUDE.md §1).
+    // A second node under the SAME tenant + location (addNode's 7b shape) — only
+    // `listExpoQueue`'s `node_id = cfg.nodeId` filter does. BOTH nodes fire a genuine order, so
+    // this proves "A shows A, B shows B", not "one empty, one not" — a measurement where both
+    // answers look alike measures nothing (CLAUDE.md §1).
     const nodeB = await addNode(nodeA, "Servidor 2");
 
     const idA = randomUUID();
@@ -2040,8 +2047,8 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read) — node scope", ()
     const expoA = await asTenant(nodeA, (tx) => listExpoQueue(tx, nodeA));
     const expoB = await asTenant(nodeB, (tx) => listExpoQueue(tx, nodeB));
 
-    // Same tenant + location on both sides, each expo board holding exactly its own order, opposite
-    // membership — the node filter, not RLS, is what separates them.
+    // Same tenant + location on both sides, each expo board holding exactly its own order,
+    // opposite membership — the node filter is what separates them.
     expect(expoA.map((o) => o.orderId)).toEqual([idA]);
     expect(expoB.map((o) => o.orderId)).toEqual([idB]);
   });

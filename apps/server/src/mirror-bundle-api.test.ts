@@ -31,9 +31,9 @@ import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
 // Real Postgres, not PGlite: the endpoint authenticates + authorizes as `app_user` (the dashboard
-// login shape) and mints the token as a `sync_retention` member — neither is observable under a
-// PGlite superuser, which holds every grant (CLAUDE.md §4). The two non-superuser roles and the
-// INSERT on sync_peers are the whole point, exactly as mirror-bundle.test.ts.
+// login shape) and mints the token as an `app_user` member — neither is observable under a PGlite
+// superuser, which holds every grant (CLAUDE.md §4). The two non-superuser roles and the INSERT
+// on sync_peers are the whole point, exactly as mirror-bundle.test.ts.
 const LOCALE = "es-ES";
 const ADMIN_PASSWORD = "dashPass123";
 const STAFF_PASSWORD = "staffPass123";
@@ -62,7 +62,7 @@ function nextNif(): string {
 
 let stateDir: string;
 let appDb: Database; // app_login → app_user: authentication and venue reads
-let retentionDb: Database; // sync_pruner → sync_retention: mints the peer token
+let retentionDb: Database; // sync_pruner → app_user: mints the peer token
 
 /** Provision a fresh venue (as the owner) with standard FA + rectificative RF series and an ESTABLISHED
  * node identity, returning the five designated ids in AdoptResult shape, the seeded admin's person id,

@@ -98,13 +98,13 @@ declare module "@waitron/shared" {
      * the same fact, and a separate code would confirm the existence of another tenant's node to
      * whoever asked.
      *
-     * Note this is enforced by comparing `nodes.tenant_id`, NOT by relying on RLS to hide the
-     * foreign row — see `provisionNode`. The two agree for the deployment role; the explicit check
-     * is what makes them agree for a superuser as well. `node.*`, not `server.*`: it is a fact about a
-     * node, the rule `tenant.not_found`'s own note gives.
+     * This is enforced by comparing `nodes.tenant_id` in `provisionNode`, including on a
+     * superuser connection. `node.*`, not `server.*`: it is a fact about a node, the rule
+     * `tenant.not_found`'s own note gives.
      *
      * (The former `till.not_found` was removed with the rekey — pre-production, no bwc — since its
      * only thrower, `provisionTill`'s ownership check, is now `provisionNode`'s and throws this.)
+     *
      */
     "node.not_found": { id: string; tenantId: string };
     /**
@@ -214,15 +214,15 @@ declare module "@waitron/shared" {
     "payment.webhook_unresolved": { provider: string; externalRef: string };
     /**
      * A basket line named a product the till cannot sell at its location — it is not in the
-     * location's assigned catalogue, is deactivated, or belongs to another tenant (RLS hides it, so
-     * "not sellable here" and "another tenant's product" read identically, the same fail-closed shape
-     * `sale.series_not_found` uses). `productId` is a uuid the caller already holds, not a secret, so
-     * echoing it is what makes the error actionable.
+     * location's assigned catalogue or is deactivated. The catalogue reads assume one tenant per
+     * database. `productId` is a uuid the caller already holds, not a secret, so echoing it is
+     * what makes the error actionable.
      *
      * `sale.*`, not `server.*`: it is a fact about the SALE the till is ringing, not about the
      * process (`tenant.not_found`'s note above gives the rule). Registered here by the same
      * `declare module` this file uses for its other codes; `@waitron/core` owns the rest of the
      * `sale.*` family, and this adds to it by declaration merging rather than colliding with it.
+     *
      */
     "sale.unknown_product": { productId: string };
     /**
@@ -338,13 +338,13 @@ declare module "@waitron/shared" {
      */
     "session.required": Record<string, never>;
     /**
-     * No OPEN working order with this id that the caller may retrieve HERE. The id names none, or it
-     * names one already `settled`/`abandoned`, or it belongs to another tenant (RLS hides it), or it
-     * is a same-tenant order parked on ANOTHER node (the by-id lookups are node-scoped, like the held
-     * list) — all report THIS one code. To a till that only wants to rebuild a parked basket they are
-     * the same fact ("nothing to retrieve here"), and a distinct "it exists but is closed" code
-     * would confirm a closed or foreign order exists — the same fail-closed reasoning
-     * `node.not_found` and `sale.series_not_found` use.
+     * No OPEN working order with this id that the caller may retrieve HERE. The id names none, or
+     * it names one already `settled`/`abandoned`, or it is a same-tenant order parked on ANOTHER
+     * node (the by-id lookups are node-scoped, like the held list) — all report THIS one code. To
+     * a till that only wants to rebuild a parked basket they are the same fact ("nothing to
+     * retrieve here"), and a distinct "it exists but is closed" code would confirm a closed or
+     * foreign order exists — the same fail-closed reasoning `node.not_found` and
+     * `sale.series_not_found` use.
      *
      * `workingOrderId` is echoed because it is a caller-supplied uuid the till already holds, not a
      * secret — an id that matches nothing is unactionable if withheld (the rule `tenant.not_found`'s
@@ -357,18 +357,19 @@ declare module "@waitron/shared" {
      * (`tenant.not_found`'s note gives the rule). `@waitron/core` owns the rest of the order/sale
      * domain, so this belongs there once a package other than this host throws it — the same note
      * `sale.unknown_product` carries about its own placement.
+     *
      */
     "working_order.not_found": { workingOrderId: string };
     /**
      * A working order this caller tried to MODIFY is not `open` HERE — it names one already
-     * `settled`/`abandoned`, or it names none this node may reach (an absent id, another tenant's
-     * order that RLS hides, or a same-tenant order parked on ANOTHER node — the by-id lookups are
-     * node-scoped). All of those report THIS one code: to a till trying to edit or abandon a draft the
-     * distinction between "closed" and "never existed" is the same fact ("there is no open draft here
-     * to change"), and a distinct "it exists but is closed" code would confirm a closed or foreign
-     * order exists — the same fail-closed reasoning `working_order.not_found` uses for the RETRIEVE
-     * side. Mapped to HTTP 409 in Task 8, the mutation counterpart to `not_found`'s 404: the id may be
-     * perfectly valid, but the order's state forbids the edit.
+     * `settled`/`abandoned`, or it names none this node may reach (an absent id or an order
+     * parked on ANOTHER node — the by-id lookups are node-scoped). All of those report THIS one
+     * code: to a till trying to edit or abandon a draft the distinction between "closed" and
+     * "never existed" is the same fact ("there is no open draft here to change"), and a distinct
+     * "it exists but is closed" code would confirm a closed or foreign order exists — the same
+     * fail-closed reasoning `working_order.not_found` uses for the RETRIEVE side. Mapped to HTTP
+     * 409 in Task 8, the mutation counterpart to `not_found`'s 404: the id may be perfectly
+     * valid, but the order's state forbids the edit.
      *
      * The database is the backstop, not this code: `working_orders_enforce_transition` (0004) rejects
      * any UPDATE of a non-open row and `working_order_lines_require_open_parent` rejects a line
@@ -380,15 +381,17 @@ declare module "@waitron/shared" {
      * (a caller-supplied uuid, not a secret; qualified to match the domain-record family). And
      * `working_order.*`, not `server.*`, and destined for `@waitron/core` once a package other than
      * this host throws it — the same note `working_order.not_found` and `sale.unknown_product` carry.
+     *
      */
     "working_order.not_open": { workingOrderId: string };
     /**
-     * A working order this caller tried to CANCEL or AMEND is not `placed` — it names one still `open`
-     * (edit it silently via updateHeldOrder instead), one already `settled`/`abandoned`, or none at all
-     * (absent, or another tenant's, RLS-hidden). All report THIS one code, the same fail-closed shape
-     * `working_order.not_open` uses for the modify side. Mapped to 409 (the state forbids the operation).
-     * `working_order.*`, not `server.*`, and destined for @waitron/core once a package other than this
-     * host throws it — the note `working_order.not_open` carries.
+     * A working order this caller tried to CANCEL or AMEND is not `placed` — it names one still
+     * `open` (edit it silently via updateHeldOrder instead), one already `settled`/`abandoned`,
+     * or none at all (absent in this one-tenant database). All report THIS one code, the same
+     * fail-closed shape `working_order.not_open` uses for the modify side. Mapped to 409 (the
+     * state forbids the operation). `working_order.*`, not `server.*`, and destined for
+     * @waitron/core once a package other than this host throws it — the note
+     * `working_order.not_open` carries.
      */
     "working_order.not_placed": { workingOrderId: string };
     /**
@@ -412,17 +415,18 @@ declare module "@waitron/shared" {
      */
     "working_order.reason_required": { workingOrderId: string };
     /**
-     * A working order this caller tried to SEND TO PREP (`sendToPrep`, the Mode-P pickup — design §5)
-     * is not `settled`. It names one still `open` (never paid), one `placed` (Modes I/T enqueue their
-     * OWN prep row at PLACING, via `placeOrder` — `sendToPrep` is never their route, so a `placed`
-     * order here means the wrong path was called, not a legitimate double-enqueue), one `abandoned`,
-     * or it names none at all (absent, or another tenant's order that RLS hides). All report THIS one
-     * code, the same fail-closed shape `working_order.not_open`/`not_placed` use for their own state
-     * guards — to a caller trying to enqueue a Mode-P pickup, "wrong status" and "doesn't exist" are
-     * the same fact ("there is no settled order here to send to prep"). Mapped to 409: the id may be
-     * valid, but the order's state forbids the move (fix round 1 — a valid-but-wrong-state or
-     * valid-but-absent id was previously reaching a raw `order_prep_order_fk` violation, an opaque
-     * 500). `working_order.*`, not `server.*`, for the reason `working_order.not_open`'s note gives.
+     * A working order this caller tried to SEND TO PREP (`sendToPrep`, the Mode-P pickup — design
+     * §5) is not `settled`. It names one still `open` (never paid), one `placed` (Modes I/T
+     * enqueue their OWN prep row at PLACING, via `placeOrder` — `sendToPrep` is never their
+     * route, so a `placed` order here means the wrong path was called, not a legitimate
+     * double-enqueue), one `abandoned`, or it names none at all (absent in this one-tenant
+     * database). All report THIS one code, the same fail-closed shape
+     * `working_order.not_open`/`not_placed` use for their own state guards — to a caller trying
+     * to enqueue a Mode-P pickup, "wrong status" and "doesn't exist" are the same fact ("there is
+     * no settled order here to send to prep"). Mapped to 409: the id may be valid, but the
+     * order's state forbids the move (fix round 1 — a valid-but-wrong-state or valid-but-absent
+     * id was previously reaching a raw `order_prep_order_fk` violation, an opaque 500).
+     * `working_order.*`, not `server.*`, for the reason `working_order.not_open`'s note gives.
      */
     "working_order.not_settled": { workingOrderId: string };
     /**
@@ -441,31 +445,30 @@ declare module "@waitron/shared" {
      */
     "working_order.already_collected": { workingOrderId: string };
     /**
-     * A prep operation is not legal given the order's current prep state (design §5's prep surface):
-     *  - `advancePrep`: the requested `to` is not the order's IMMEDIATE next state
-     *    (queued → preparing → ready → collected — no skip, no repeat, no jump backwards), or the
-     *    order has no prep record to advance at all (never sent to prep, or an absent/foreign id RLS
-     *    hides — the same fail-closed shape `working_order.not_open` uses), or `to` is `"queued"`
-     *    itself: no prep state legally advances TO queued — reaching `queued` is `sendToPrep`'s job
-     *    (an INSERT), never a transition.
-     *  - `sendToPrep`: the order is settled and ELIGIBLE (already past the `working_order.not_settled`
-     *    guard above) but already has a prep record (`order_prep_pk`) — a double send-to-prep, not a
-     *    fresh enqueue.
-     * A fact about the order's PREP, not the process. Mapped to 409 (the id may be valid, but the
-     * prep state forbids the move — the same shape `working_order.not_open`/`not_placed` use for their
-     * own state machines). `order_prep.*` names the domain concept (order preparation), the rule
-     * `tenant.not_found`'s note above gives.
+     * A prep operation is not legal given the order's current prep state (design §5's prep
+     * surface): - `advancePrep`: the requested `to` is not the order's IMMEDIATE next state
+     * (queued → preparing → ready → collected — no skip, no repeat, no jump backwards), or the
+     * order has no prep record to advance at all (never sent to prep, or an absent id — the same
+     * fail-closed shape `working_order.not_open` uses), or `to` is `"queued"` itself: no prep
+     * state legally advances TO queued — reaching `queued` is `sendToPrep`'s job (an INSERT),
+     * never a transition. - `sendToPrep`: the order is settled and ELIGIBLE (already past the
+     * `working_order.not_settled` guard above) but already has a prep record (`order_prep_pk`) —
+     * a double send-to-prep, not a fresh enqueue. A fact about the order's PREP, not the process.
+     * Mapped to 409 (the id may be valid, but the prep state forbids the move — the same shape
+     * `working_order.not_open`/`not_placed` use for their own state machines). `order_prep.*`
+     * names the domain concept (order preparation), the rule `tenant.not_found`'s note above
+     * gives.
      */
     "order_prep.invalid_transition": { workingOrderId: string };
     /**
-     * No such dining table for this tenant. `tableId` is a caller-supplied uuid the till already holds,
-     * not a secret — an id that matches nothing is unactionable if withheld (the rule `tenant.not_found`'s
-     * note gives). Qualified `tableId` to match the domain-record not_found family
-     * (`working_order.not_found`'s `workingOrderId`). `table.*` names the DOMAIN CONCEPT, never the
-     * throwing package (`tenant.not_found`'s note); destined for @waitron/tables if that package is ever
-     * extracted. An absent id, or another tenant's table (RLS hides it), both report THIS one code.
-     * (A DEACTIVATED table is a different fact — `table.inactive` below — surfaced only where openTab
-     * needs it; CRUD operates on a deactivated row by id regardless.)
+     * No such dining table for this tenant. `tableId` is a caller-supplied uuid the till already
+     * holds, not a secret — an id that matches nothing is unactionable if withheld (the rule
+     * `tenant.not_found`'s note gives). Qualified `tableId` to match the domain-record not_found
+     * family (`working_order.not_found`'s `workingOrderId`). `table.*` names the DOMAIN CONCEPT,
+     * never the throwing package (`tenant.not_found`'s note); destined for @waitron/tables if
+     * that package is ever extracted. An absent id in this one-tenant database reports THIS one
+     * code. (A DEACTIVATED table is a different fact — `table.inactive` below — surfaced only
+     * where openTab needs it; CRUD operates on a deactivated row by id regardless.)
      */
     "table.not_found": { tableId: string };
     /**
@@ -495,16 +498,17 @@ declare module "@waitron/shared" {
      */
     "table.occupied": { tableId: string };
     /**
-     * A table this caller tried to UN-JOIN is not part of the named tab — its `tab_id` points at a
-     * different open tab, at a settled/abandoned one, or is NULL (a free table), or the id names none
-     * at all (absent, or another tenant's table that RLS hides). All report THIS one code, the same
-     * fail-closed shape `tab.not_open`/`table.occupied` use: to an operator un-joining a table, "not
-     * joined to this tab" and "no such table here" are the same fact, and a distinct code would confirm
-     * a foreign/other-tab table exists. Mapped to 409 in the route layer (the id may be valid, but the
-     * table's join state forbids the un-join). `tableId`/`tabId` are caller-supplied uuids the till
-     * already holds, not secrets. `table.*`, not `server.*`: it is a fact about a table, not the process
-     * (the rule `tenant.not_found`'s note gives); destined for `@waitron/core` once a package other than
-     * this host throws it, the note the `working_order.*` family carries.
+     * A table this caller tried to UN-JOIN is not part of the named tab — its `tab_id` points at
+     * a different open tab, at a settled/abandoned one, or is NULL (a free table), or the id
+     * names none at all (absent in this one-tenant database). All report THIS one code, the same
+     * fail-closed shape `tab.not_open`/`table.occupied` use: to an operator un-joining a table,
+     * "not joined to this tab" and "no such table here" are the same fact, and a distinct code
+     * would confirm a foreign/other-tab table exists. Mapped to 409 in the route layer (the id
+     * may be valid, but the table's join state forbids the un-join). `tableId`/`tabId` are
+     * caller-supplied uuids the till already holds, not secrets. `table.*`, not `server.*`: it is
+     * a fact about a table, not the process (the rule `tenant.not_found`'s note gives); destined
+     * for `@waitron/core` once a package other than this host throws it, the note the
+     * `working_order.*` family carries.
      */
     "table.not_joined": { tableId: string; tabId: string };
     /**
@@ -533,14 +537,15 @@ declare module "@waitron/shared" {
      */
     "tab.already_open": { tableId: string };
     /**
-     * No such reservation for this tenant. `bookingId` is a caller-supplied uuid the dashboard already
-     * holds, not a secret — an id that matches nothing is unactionable if withheld (the rule
-     * `tenant.not_found`'s note gives). Qualified `bookingId` to match the domain-record not_found family
-     * (`table.not_found`'s `tableId`, `working_order.not_found`'s `workingOrderId`). `booking.*` names the
-     * DOMAIN CONCEPT (a restaurant reservation), never the throwing package (the rule `tenant.not_found`'s
-     * note gives); destined for @waitron/bookings if that package is ever extracted. An absent id, or
-     * another tenant's booking (RLS hides it), both report THIS one code. Mapped to 404 in the route layer
-     * (Task 5's booking-api.ts STATUS map). Never renamed once shipped.
+     * No such reservation for this tenant. `bookingId` is a caller-supplied uuid the dashboard
+     * already holds, not a secret — an id that matches nothing is unactionable if withheld (the
+     * rule `tenant.not_found`'s note gives). Qualified `bookingId` to match the domain-record
+     * not_found family (`table.not_found`'s `tableId`, `working_order.not_found`'s
+     * `workingOrderId`). `booking.*` names the DOMAIN CONCEPT (a restaurant reservation), never
+     * the throwing package (the rule `tenant.not_found`'s note gives); destined for
+     * @waitron/bookings if that package is ever extracted. An absent id in this one-tenant
+     * database reports THIS one code. Mapped to 404 in the route layer (Task 5's booking-api.ts
+     * STATUS map). Never renamed once shipped.
      */
     "booking.not_found": { bookingId: string };
     /**
@@ -554,15 +559,16 @@ declare module "@waitron/shared" {
      */
     "booking.invalid": { partySize: number };
     /**
-     * A lifecycle verb (`cancel`/`no-show`/`complete`/`seat`) found the reservation is not in a state the
-     * move is legal from — e.g. a cancel of an already-`cancelled`/`completed` booking, or a seat of a
-     * booking that is not `booked` (design §3a). Carries the affected `bookingId`, NOT a from/to pair:
-     * this matches the house `*.invalid_transition` convention — `order_prep.invalid_transition`
-     * (`workingOrderId`) and `ticket.invalid_transition` (`ticketItemId`) both name the affected record's
-     * own qualified id, the fail-closed shape `working_order.not_open` uses for its own state machine. An
-     * absent/foreign id (RLS-hidden) surfaces `booking.not_found` before this. `bookingId` is a
-     * caller-supplied uuid, not a secret. `booking.*` names the DOMAIN CONCEPT (`tenant.not_found`'s note
-     * gives the rule). Mapped to 409 (the booking's state forbids the move). Never renamed once shipped.
+     * A lifecycle verb (`cancel`/`no-show`/`complete`/`seat`) found the reservation is not in a
+     * state the move is legal from — e.g. a cancel of an already-`cancelled`/`completed` booking,
+     * or a seat of a booking that is not `booked` (design §3a). Carries the affected `bookingId`,
+     * NOT a from/to pair: this matches the house `*.invalid_transition` convention —
+     * `order_prep.invalid_transition` (`workingOrderId`) and `ticket.invalid_transition`
+     * (`ticketItemId`) both name the affected record's own qualified id, the fail-closed shape
+     * `working_order.not_open` uses for its own state machine. An absent id surfaces
+     * `booking.not_found` before this. `bookingId` is a caller-supplied uuid, not a secret.
+     * `booking.*` names the DOMAIN CONCEPT (`tenant.not_found`'s note gives the rule). Mapped to
+     * 409 (the booking's state forbids the move). Never renamed once shipped.
      */
     "booking.invalid_transition": { bookingId: string };
     /**
@@ -576,16 +582,17 @@ declare module "@waitron/shared" {
      */
     "booking.table_required": Record<string, never>;
     /**
-     * A tab verb found the working order it was asked to modify is not an OPEN tab — it is not `open`
-     * (already settled/abandoned), no `dining_tables.tab_id` points at it (a walk-up or a counter
-     * delivery — a tab is an OPEN order a table points at, design §2b), or it names none (absent, or
-     * another tenant's, RLS-hidden). All the tab verbs share THIS one code for that state — the round/void
-     * guard and the TS-3 move/join/merge family alike — the fail-closed shape `working_order.not_open`
-     * uses for the held-order modify side. (A non-enumerating phrasing on purpose: the earlier
-     * `addTabRound`/`voidTabLine` list went stale the moment the move/join/merge verbs began throwing it
-     * too.) `tabId` — the caller-supplied uuid — is echoed and qualified to match the tab-verb
-     * vocabulary. `tab.*`, not `server.*`, for the reason
-     * `tenant.not_found`'s note gives. Mapped to 409 (the order's state forbids the tab edit).
+     * A tab verb found the working order it was asked to modify is not an OPEN tab — it is not
+     * `open` (already settled/abandoned), no `dining_tables.tab_id` points at it (a walk-up or a
+     * counter delivery — a tab is an OPEN order a table points at, design §2b), or it names none
+     * (absent in this one-tenant database). All the tab verbs share THIS one code for that state
+     * — the round/void guard and the TS-3 move/join/merge family alike — the fail-closed shape
+     * `working_order.not_open` uses for the held-order modify side. (A non-enumerating phrasing
+     * on purpose: the earlier `addTabRound`/`voidTabLine` list went stale the moment the
+     * move/join/merge verbs began throwing it too.) `tabId` — the caller-supplied uuid — is
+     * echoed and qualified to match the tab-verb vocabulary. `tab.*`, not `server.*`, for the
+     * reason `tenant.not_found`'s note gives. Mapped to 409 (the order's state forbids the tab
+     * edit).
      */
     "tab.not_open": { tabId: string };
     /**
@@ -665,11 +672,12 @@ declare module "@waitron/shared" {
      */
     "tab.transfer_modifier_line": { tabId: string; lineNo: number };
     /**
-     * No such service status for this tenant. `statusId` is a caller-supplied uuid the dashboard/till
-     * already holds, not a secret — an id that matches nothing is unactionable if withheld (the rule
-     * `tenant.not_found`'s note gives). `status.*` names the DOMAIN CONCEPT (a table's manual service
-     * status), never the throwing package; destined for @waitron/tables if that package is extracted.
-     * An absent id, or another tenant's status (RLS hides it), both report THIS one code. Mapped to 404.
+     * No such service status for this tenant. `statusId` is a caller-supplied uuid the
+     * dashboard/till already holds, not a secret — an id that matches nothing is unactionable if
+     * withheld (the rule `tenant.not_found`'s note gives). `status.*` names the DOMAIN CONCEPT (a
+     * table's manual service status), never the throwing package; destined for @waitron/tables if
+     * that package is extracted. An absent id in this one-tenant database reports THIS one code.
+     * Mapped to 404.
      */
     "status.not_found": { statusId: string };
     /**
@@ -694,9 +702,9 @@ declare module "@waitron/shared" {
      * withheld (the rule `tenant.not_found`'s note gives). Qualified `zoneId` to match the
      * domain-record not_found family (`table.not_found`'s `tableId`, `status.not_found`'s
      * `statusId`). `zone.*` names the DOMAIN CONCEPT, never the throwing package
-     * (`tenant.not_found`'s note). An absent id, or another tenant's zone (RLS hides it), both
-     * report THIS one code — the same fail-closed shape `table.not_found`/`status.not_found` use.
-     * Mapped to 404 by whichever route surface Task 3 wires the zone CRUD verbs into, matching
+     * (`tenant.not_found`'s note). An absent id in this one-tenant database reports THIS one code
+     * — the same fail-closed shape `table.not_found`/`status.not_found` use. Mapped to 404 by
+     * whichever route surface Task 3 wires the zone CRUD verbs into, matching
      * `table.not_found`/`status.not_found`. A DEACTIVATED-but-real zone is a different fact,
      * should Task 3 need one — `table.inactive`/`status.inactive`'s shape, not this code.
      */
@@ -724,24 +732,25 @@ declare module "@waitron/shared" {
      */
     "station.name_taken": { name: string };
     /**
-     * No such kitchen station for this tenant + venue (KDS-1), OR one that is DEACTIVATED. `createStation`
-     * maps only a NAME collision (above); the by-id verbs — `updateStation`, `deactivateStation`,
-     * `setDefaultStation`, and the routing verbs `setCategoryStation`/`setProductStation` — throw THIS when
-     * the station id names none this venue may reach (absent, another tenant's that RLS hides, or another
-     * VENUE's of the same tenant — the config verbs are `cfg.locationId`-scoped) or names a real but
-     * `active = false` row. All of those fold into the one code, the same fail-closed shape
-     * `zone.not_found`/`status.not_found`/`table.not_found` use — to a caller picking a routing/default
-     * target, "gone", "foreign" and "retired" are the same fact ("there is no live station here to use").
-     * The inactive case is deliberately folded in (not a distinct `station.inactive`): the spec enumerates
-     * only name_taken/not_found/no_default for KDS-1, and a routing target that cannot be used reads the
-     * same whether it is absent or retired — unlike `table.inactive`/`status.inactive`, which exist because
-     * a deactivated row is still addressable by the CRUD editor there.
+     * No such kitchen station for this tenant + venue (KDS-1), OR one that is DEACTIVATED.
+     * `createStation` maps only a NAME collision (above); `updateStation` and `deactivateStation`
+     * select by id and reject an absent row in this one-tenant database. `setDefaultStation` and
+     * the routing verbs `setCategoryStation`/`setProductStation` also require an active station
+     * in `cfg.locationId`. All of those fold into the one code, the same fail-closed shape
+     * `zone.not_found`/`status.not_found`/`table.not_found` use — to a caller picking a
+     * routing/default target, "gone", "foreign" and "retired" are the same fact ("there is no
+     * live station here to use"). The inactive case is deliberately folded in (not a distinct
+     * `station.inactive`): the spec enumerates only name_taken/not_found/no_default for KDS-1,
+     * and a routing target that cannot be used reads the same whether it is absent or retired —
+     * unlike `table.inactive`/`status.inactive`, which exist because a deactivated row is still
+     * addressable by the CRUD editor there.
      *
      * `stationId` is echoed because it is a caller-supplied uuid the dashboard/till already holds, not a
      * secret — an id that matches nothing is unactionable if withheld (the rule `tenant.not_found`'s note
      * gives). Qualified `stationId` to match the domain-record not_found family (`table.not_found`'s
      * `tableId`, `zone.not_found`'s `zoneId`, `status.not_found`'s `statusId`). `station.*`, not `server.*`,
      * for the reason `tenant.not_found`'s note gives. Mapped to 404. Never renamed once shipped.
+     *
      */
     "station.not_found": { stationId: string };
     /**
@@ -761,15 +770,15 @@ declare module "@waitron/shared" {
      */
     "station.no_default": { locationId: string };
     /**
-     * A per-line kitchen ticket-item bump is not legal given the item's current state (KDS-1 §3c) — the
-     * `ticket_items` successor to `order_prep.invalid_transition` (which stays declared but loses its
-     * throw sites with the KDS-1 rework, spec §6). Task 4's `advanceTicketItem` is the thrower: each bump
-     * is a single conditional UPDATE `set state = to where id = … and state = <the one legal predecessor>`,
-     * so the legality of the move IS the write — a skip, a repeat, a jump backwards, or an absent/foreign
-     * item (RLS hides another tenant's) all match no row, and the empty `returning` throws THIS. `to =
-     * 'queued'` is refused too: no state legally advances INTO queued (only firing reaches it). The same
-     * fail-closed conditional-UPDATE shape `working_order.not_open`/the prep family use for their own state
-     * machines.
+     * A per-line kitchen ticket-item bump is not legal given the item's current state (KDS-1 §3c)
+     * — the `ticket_items` successor to `order_prep.invalid_transition` (which stays declared but
+     * loses its throw sites with the KDS-1 rework, spec §6). Task 4's `advanceTicketItem` is the
+     * thrower: each bump is a single conditional UPDATE `set state = to where id = … and state =
+     * <the one legal predecessor>`, so the legality of the move IS the write — a skip, a repeat,
+     * a jump backwards, or an absent item in this one-tenant database all match no row, and the
+     * empty `returning` throws THIS. `to = 'queued'` is refused too: no state legally advances
+     * INTO queued (only firing reaches it). The same fail-closed conditional-UPDATE shape
+     * `working_order.not_open`/the prep family use for their own state machines.
      *
      * A fact about the ticket ITEM's state, not the process → mapped to 409 (the id may be valid, but the
      * item's state forbids the move). `ticketItemId` names the affected item's OWN id — a ticket item
@@ -779,6 +788,7 @@ declare module "@waitron/shared" {
      * makes the error actionable (the rule `tenant.not_found`'s note gives). `ticket.*` names the DOMAIN
      * CONCEPT (a kitchen ticket item), never the throwing package (that same note); destined for a
      * @waitron/kitchen package if one is ever extracted. Never renamed once shipped.
+     *
      */
     "ticket.invalid_transition": { ticketItemId: string };
     /**
@@ -875,20 +885,21 @@ declare module "@waitron/shared" {
      */
     "course.name_taken": { name: string };
     /**
-     * No such kitchen course for this tenant + venue (KDS-2), OR one that is DEACTIVATED. The by-id course
-     * config verbs (update/deactivate, and the routing verb that sets a product's default course) throw
-     * THIS when the course id names none this venue may reach (absent, another tenant's that RLS hides, or
-     * another VENUE's of the same tenant — the config verbs are location-scoped) or names a real but
-     * `active = false` row. All of those fold into the one code, the same fail-closed shape
-     * `station.not_found`/`zone.not_found` use — to a caller picking a course, "gone", "foreign" and
-     * "retired" are the same fact (there is no live course here to use). The inactive case is deliberately
-     * folded in (not a distinct `course.inactive`), exactly as `station.not_found` folds its own.
+     * No such kitchen course for this tenant + venue (KDS-2), OR one that is DEACTIVATED. The
+     * course update/deactivate verbs select by id and reject an absent row in this one-tenant
+     * database. The product-course routing verb also requires an active course in
+     * `cfg.locationId`. All of those fold into the one code, the same fail-closed shape
+     * `station.not_found`/`zone.not_found` use — to a caller picking a course, "gone", "foreign"
+     * and "retired" are the same fact (there is no live course here to use). The inactive case is
+     * deliberately folded in (not a distinct `course.inactive`), exactly as `station.not_found`
+     * folds its own.
      *
      * `courseId` is echoed because it is a caller-supplied uuid the dashboard/till already holds, not a
      * secret — an id that matches nothing is unactionable if withheld (the rule `tenant.not_found`'s note
      * gives). Qualified `courseId` to match the domain-record not_found family (`station.not_found`'s
      * `stationId`, `zone.not_found`'s `zoneId`). `course.*`, not `server.*`, for the reason
      * `tenant.not_found`'s note gives. Mapped to 404. Never renamed once shipped.
+     *
      */
     "course.not_found": { courseId: string };
     /**
@@ -1039,20 +1050,22 @@ declare module "@waitron/shared" {
      */
     "device.pairing_expired": Record<string, never>;
     /**
-     * No such device for this tenant — the device management surface (`POST /management-api/devices/:id/
-     * revoke` and the list, device-identity-1 §3e) named a device id that matches nothing: absent, or
-     * another tenant's that RLS hides (both report THIS one code, the fail-closed shape
-     * `node.not_found`/`station.not_found` use). Deliberately DISTINCT from `device.unauthorized`: this
-     * is the MANAGER-facing surface (an authenticated `device.manage` holder acting on a device by id),
-     * where echoing the id is safe and actionable — a mistyped uuid identifies nothing on its own;
-     * `device.unauthorized` is the DEVICE-auth guard, which folds "unknown id" in and carries NO params
-     * precisely so it cannot confirm a device's existence to an unauthenticated caller. `deviceId` is the
-     * caller-supplied uuid the dashboard already holds, not a secret; qualified `deviceId` to match the
-     * domain-record not_found family (`station.not_found`'s `stationId`).
+     * No such device for this tenant — the device management surface (`POST
+     * /management-api/devices/:id/ revoke` and the list, device-identity-1 §3e) named a device id
+     * that matches nothing: absent, in this one-tenant database (reporting THIS one code, the
+     * fail-closed shape `node.not_found`/`station.not_found` use). Deliberately DISTINCT from
+     * `device.unauthorized`: this is the MANAGER-facing surface (an authenticated `device.manage`
+     * holder acting on a device by id), where echoing the id is safe and actionable — a mistyped
+     * uuid identifies nothing on its own; `device.unauthorized` is the DEVICE-auth guard, which
+     * folds "unknown id" in and carries NO params precisely so it cannot confirm a device's
+     * existence to an unauthenticated caller. `deviceId` is the caller-supplied uuid the
+     * dashboard already holds, not a secret; qualified `deviceId` to match the domain-record
+     * not_found family (`station.not_found`'s `stationId`).
      *
      * `device.*` names the DOMAIN CONCEPT (an enrolled device), never the throwing package
      * (`tenant.not_found`'s note gives the rule). Mapped to HTTP 404 by `device-api.ts`'s local STATUS
      * map (Task 5), not here. Never renamed once shipped.
+     *
      */
     "device.not_found": { deviceId: string };
     /**

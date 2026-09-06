@@ -4,9 +4,9 @@
 // asserts every sub-seed actually ran: both menus present, the full floor, the staff, ≥1 back-dated
 // sale, and a product's `image` rewritten to the content-addressed served name.
 //
-// Real Postgres (not PGlite): the sub-seeds run under RLS as `app_user` and `seedSales` writes real
-// hash-chained preproduction `registros_facturacion` rows through `recordSale` — PGlite's superuser
-// connection bypasses the FORCE-RLS/immutability guards and would prove nothing (CLAUDE.md §4). Uses
+// Real Postgres (not PGlite): the sub-seeds run as `app_user` and `seedSales` writes real
+// hash-chained preproduction `registros_facturacion` rows through `recordSale` — PGlite's
+// superuser connection cannot check those grants; its triggers still fire (CLAUDE.md §4). Uses
 // the shared `manifest` template, cloned per file via `useTemplateDb`.
 //
 // Preproduction only: `WAITRON_ENV` is left unset, which `deploymentEnvironment` resolves to

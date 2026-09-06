@@ -70,8 +70,10 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
   });
 }
 
-/** Read the enrolled device's `token_hash` as the superuser (RLS bypassed) — the load-bearing check
- * for the round-trip is that the stored hash verifies the raw token and is NOT the plaintext. */
+/**
+ * Read the enrolled device's `token_hash` as the superuser — the load-bearing check for the
+ * round-trip is that the stored hash verifies the raw token and is NOT the plaintext.
+ */
 async function deviceRow(deviceId: string): Promise<{ tokenHash: string }> {
   const { rows } = await db.execute<{ token_hash: string }>(
     sql`select token_hash from devices where id = ${deviceId}`,
@@ -88,9 +90,11 @@ async function pairingCodeCount(cfg: TillConfig): Promise<number> {
   return rows[0]!.n;
 }
 
-/** Backdate this tenant's pairing codes past PAIRING_TTL_MS. Run as the superuser db connection:
- * `app_user` holds no UPDATE on device_pairing_codes (a code is consumed, never edited), and a
- * superuser bypasses RLS, so this pure test-setup mutation cannot go through the app role. */
+/**
+ * Backdate this tenant's pairing codes past PAIRING_TTL_MS. Run as the superuser db connection:
+ * `app_user` holds no UPDATE on device_pairing_codes (a code is consumed, never edited), so this
+ * pure test-setup mutation cannot go through the app role.
+ */
 async function expirePairingCodes(cfg: TillConfig): Promise<void> {
   await db.execute(
     sql`update device_pairing_codes set created_at = now() - interval '16 minutes'

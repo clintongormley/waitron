@@ -186,7 +186,7 @@ async function joinTableOn(cfg: TillConfig, tabId: string, tableId: string): Pro
   });
 }
 
-/** The dining table's current tab_id — owner read (bypasses RLS). */
+/** The dining table's current tab_id — owner read. */
 async function tabIdOf(tableId: string): Promise<string | null> {
   const { rows } = await suite.admin.execute<{ tab_id: string | null }>(
     sql`select tab_id from dining_tables where id = ${tableId}`,
@@ -194,7 +194,7 @@ async function tabIdOf(tableId: string): Promise<string | null> {
   return rows[0]!.tab_id;
 }
 
-/** How many `sales` rows reference this working order — read as the superuser owner (bypasses RLS). */
+/** How many `sales` rows reference this working order — read as the superuser owner. */
 async function saleCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.admin.execute<{ count: string }>(sql`
     select count(*)::text as count from sales where working_order_id = ${workingOrderId}
@@ -202,7 +202,7 @@ async function saleCount(workingOrderId: string): Promise<number> {
   return Number(rows[0]!.count);
 }
 
-/** The working order's own status — read as the owner (bypasses RLS). */
+/** The working order's own status — read as the owner. */
 async function orderStatus(id: string): Promise<string> {
   const { rows } = await suite.admin.execute<{ status: string }>(
     sql`select status from working_orders where id = ${id}`,

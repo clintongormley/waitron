@@ -1,9 +1,9 @@
 // Real-Postgres proof of `seedFloor` (Phase 2, Task 7): it stands up the three floor-plan zones,
-// ~16 placed tables, and the four service statuses. Real Postgres (not PGlite): the seed runs under
-// RLS as `app_user` (SELECT/INSERT on `floor_zones`/`dining_tables`/`table_service_statuses`) exactly
-// as the demo scripts do, and PGlite's superuser connection would bypass FORCE ROW LEVEL SECURITY and
-// prove nothing about those grants (CLAUDE.md §4). Uses the shared `manifest` template, cloned per
-// file via `useTemplateDb`, the same pattern as `seed-catalogue.test.ts`.
+// ~16 placed tables, and the four service statuses. Real Postgres (not PGlite): the seed runs as
+// `app_user` (SELECT/INSERT on `floor_zones`/`dining_tables`/`table_service_statuses`) exactly as
+// the demo scripts do, and PGlite's superuser connection cannot check those grants (CLAUDE.md
+// §4). Uses the shared `manifest` template, cloned per file via `useTemplateDb`, the same pattern
+// as `seed-catalogue.test.ts`.
 
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";

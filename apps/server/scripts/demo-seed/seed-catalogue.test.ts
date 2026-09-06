@@ -1,12 +1,12 @@
 import { tenantId as brandTenantId } from "@waitron/shared";
-// Real-Postgres proof of `seedCatalogues` (Phase 2, Task 6): it stands up the two demo menus, routes
-// categories to KDS stations, sets the default + the accessible second, and reports the image→product
-// map. Real Postgres (not PGlite): the seed runs under RLS as `app_user` (SELECT/INSERT on
-// `kitchen_stations`, INSERT on `catalogues`/`categories`/`products`, UPDATE of `categories.station_id`)
-// exactly as the demo scripts do, and PGlite's superuser connection would bypass FORCE ROW LEVEL
-// SECURITY and prove nothing about those grants (CLAUDE.md §4). Uses the shared `manifest` template
-// (which includes the KDS migrations, so `kitchen_stations` and `categories.station_id` exist), cloned
-// per file via `useTemplateDb`, the same pattern as `till-sale.test.ts`.
+// Real-Postgres proof of `seedCatalogues` (Phase 2, Task 6): it stands up the two demo menus,
+// routes categories to KDS stations, sets the default + the accessible second, and reports the
+// image→product map. Real Postgres (not PGlite): the seed runs as `app_user` (SELECT/INSERT on
+// `kitchen_stations`, INSERT on `catalogues`/`categories`/`products`, UPDATE of
+// `categories.station_id`) exactly as the demo scripts do, and PGlite's superuser connection
+// cannot check those grants (CLAUDE.md §4). Uses the shared `manifest` template (which includes
+// the KDS migrations, so `kitchen_stations` and `categories.station_id` exist), cloned per file
+// via `useTemplateDb`, the same pattern as `till-sale.test.ts`.
 
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";

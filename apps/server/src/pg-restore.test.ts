@@ -130,12 +130,11 @@ const F = {
   nodeId: "c0000000-0000-4000-8000-000000000008",
 };
 
-// Seeds exactly the FK closure `registros_facturacion` needs plus the row itself, as plain unscoped
-// statements: `suite.admin` is the container's superuser, which bypasses row-level security outright
-// (FKs are still enforced), so no `app.tenant_id` is set. The column shapes are
-// packages/fiscal-verifactu/test/fixtures.ts's `seedTenantTillSif` + inmutabilidad.test.ts's
-// `insertRegistro`, which is the current migrated schema (country/tax_id on tenants, vat_breakdown on
-// sales, node-keyed series/sif/registro).
+// Seeds exactly the FK closure `registros_facturacion` needs plus the row itself, as plain
+// unscoped statements: `suite.admin` is the container's superuser, and FKs are still enforced.
+// The column shapes are packages/fiscal-verifactu/test/fixtures.ts's `seedTenantTillSif` +
+// inmutabilidad.test.ts's `insertRegistro`, which is the current migrated schema (country/tax_id
+// on tenants, vat_breakdown on sales, node-keyed series/sif/registro).
 async function seedFiscalRegistro(admin: Database): Promise<void> {
   await admin.execute(sql`
     insert into tenants (id, country, tax_id, legal_name)

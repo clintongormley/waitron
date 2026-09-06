@@ -171,16 +171,12 @@ export type BoxStatusDeps = {
 };
 
 /**
- * Counts the append-only `sync_config_conflicts` ops rows (membership Slice 7) — config-class writes
- * primary-wins overrode while a carrier drained a returned node's tail (spec §7). Read through the
- * `sync_tailer` role, NOT `app_user`: `row_image` is a jsonb copy of a rejected CONFIG row (tenant
- * business data), so its SELECT is granted to the dedicated NOLOGIN `sync_tailer` reader only
- * (0009_sync_config_conflicts.sql), the same isolation `sync_log` enforces (app_user INSERT-only). So
- * `db` MUST be the sync_tailer pool (`lagPool`/`syncDb`, a sync_tailer member) and this MUST NOT
- * `asAppUser` — a `SET ROLE app_user` would drop the sync_tailer membership's SELECT and be refused —
- * mirroring the lag reader's "NO asAppUser here" note (boot.ts). The table carries no RLS and no
- * tenant_id (0009), so no `withTenant` GUC is needed: a bare `count(*)` is the whole read. It needs no
- * index (Slice-7 minor: an index is deferred until a list/filter surface lands).
+ * Counts the append-only `sync_config_conflicts` ops rows (membership Slice 7): config-class
+ * writes primary-wins overrode while a carrier drained a returned node's tail (spec §7).
+ * `row_image` contains tenant business data. The sync baseline grants SELECT to `app_user`; `db`
+ * is the sync pool (`lagPool`/`syncDb`). The table has no tenant_id and the database holds one
+ * tenant, so the read is a bare `count(*)`. An index is deferred until a list/filter surface
+ * needs one.
  */
 export async function readConfigConflictCount(db: Database): Promise<{ count: number }> {
   const r = await db.execute<{ count: number }>(

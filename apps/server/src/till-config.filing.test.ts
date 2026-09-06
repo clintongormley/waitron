@@ -7,8 +7,8 @@ import { nodeId as brandNodeId } from "@waitron/shared";
 import type { NodeId, TenantId } from "@waitron/shared";
 import { readFilingModule } from "./till-config.js";
 
-// PGlite (superuser, RLS bypassed) is enough: this proves the column read and the null case, not the
-// role path — `readOrderFlow`, its sibling, is proven under the app role by the boot suites.
+// PGlite (superuser) is enough: this proves the column read and the null case, not the role path
+// — `readOrderFlow`, its sibling, is proven under the app role by the boot suites.
 const suite = usePgliteDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
 let tenantId: TenantId;

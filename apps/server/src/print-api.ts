@@ -64,13 +64,14 @@ import {
 import type { Logger } from "./logger.js";
 
 /**
- * Everything `mountPrintApi` needs. `cfg` carries this venue's tenant + location — the scope every
- * `withTenant` below runs under (RLS confines each read/write to this server's one tenant) and the two
- * fields the `@waitron/printing` verbs stamp onto minted codes / created printers (`PrintAgentConfig`
- * / `PrintConfig`). No `nodeId`: `print_jobs` carries no sync-capture trigger in this slice (§4,
- * single-writer-per-row until replication lands), so there is no `sync_log.origin_id` to attribute. No
- * cookie config: the AGENT surface authenticates with a Bearer token (never a cookie), and the
- * MANAGEMENT surface reuses the browser management session the sibling gated APIs already carry.
+ * Everything `mountPrintApi` needs. `cfg` carries this venue's tenant + location — the scope
+ * every `withTenant` below runs under (the database holds this server's one tenant) and the two
+ * fields the `@waitron/printing` verbs stamp onto minted codes / created printers
+ * (`PrintAgentConfig` / `PrintConfig`). No `nodeId`: `print_jobs` carries no sync-capture trigger
+ * in this slice (§4, single-writer-per-row until replication lands), so there is no
+ * `sync_log.origin_id` to attribute. No cookie config: the AGENT surface authenticates with a
+ * Bearer token (never a cookie), and the MANAGEMENT surface reuses the browser management session
+ * the sibling gated APIs already carry.
  */
 export interface PrintApiDeps {
   db: Database;
@@ -337,8 +338,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   app.get("/management-api/print-agents", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // No explicit tenant filter — isolation is entirely `withTenant` + `asAppUser` RLS. Newest
-      // enrolment first. The `token_hash` is NEVER selected — a secret never leaves the row.
+      // This read has no tenant filter and assumes one tenant per database. Newest enrolment
+      // first. The `token_hash` is NEVER selected — a secret never leaves the row.
       const rows = await gated(sessionId, (tx) =>
         tx
           .select({
@@ -360,9 +361,9 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PrintAgentId");
-      // Revoke = flip `active = false` (instant — `requireAgent` rejects it), NEVER a hard DELETE: an
-      // agent is a durable identity referenced by printers/jobs and `app_user` holds no DELETE. 0 rows
-      // (unknown or RLS-hidden id) → `agent.not_found`.
+      // Revoke = flip `active = false` (instant — `requireAgent` rejects it), NEVER a hard
+      // DELETE: an agent is a durable identity referenced by printers/jobs and `app_user` holds
+      // no DELETE. 0 rows (unknown id) → `agent.not_found`.
       const updated = await gated(sessionId, (tx) =>
         tx
           .update(printAgents)
@@ -537,9 +538,11 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     }),
   );
 
-  // ── List a station's printers (printer.manage) ───────────────────────────────────────────────────
-  // The station-centric read: which printers a station prints to (the config editor's per-station view).
-  // `:sid` is `requireUuidParam`-screened first. `listStationPrinters` scopes by RLS + `cfg.tenantId`.
+  // ── List a station's printers (printer.manage)
+  // ─────────────────────────────────────────────────── The station-centric read: which printers
+  // a station prints to (the config editor's per-station view). `:sid` is
+  // `requireUuidParam`-screened first. `listStationPrinters` explicitly filters by
+  // `cfg.tenantId`.
   app.get("/management-api/stations/:sid/printers", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -561,17 +564,18 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     }),
   );
 
-  // ── List this tenant's tills (printer.manage) ────────────────────────────────────────────────────
-  // Counter receipt/drawer §3d/§5 — the DATA SOURCE for the dashboard's per-till receipt-printer picker
-  // (it does not exist elsewhere). Returns each till as `{ id, label, locationId, receiptPrinterId }`:
-  // `label` projects `tills.name` (the till's display name — the column is `name`, the picker calls it a
-  // label), `locationId` is the till's location (so the picker can offer that location's printers), and
+  // ── List this tenant's tills (printer.manage)
+  // ──────────────────────────────────────────────────── Counter receipt/drawer §3d/§5 — the DATA
+  // SOURCE for the dashboard's per-till receipt-printer picker (it does not exist elsewhere).
+  // Returns each till as `{ id, label, locationId, receiptPrinterId }`: `label` projects
+  // `tills.name` (the till's display name — the column is `name`, the picker calls it a label),
+  // `locationId` is the till's location (so the picker can offer that location's printers), and
   // `receiptPrinterId` the currently-set receipt printer (null = none) so the picker reflects the
-  // persisted value across a reload. Lives beside the sibling `PATCH …/tills/:id/receipt-printer`,
-  // funnelled through the SAME `gated` helper so `printer.manage` is enforced identically (the
-  // by-deletion proof on that helper covers this route too). Tenant-scoped by `gated`'s
-  // `withTenant` + `asAppUser` (RLS), with an explicit `tenant_id` predicate beside it — the same
-  // belt-and-braces the sibling till/location writes carry. Ordered by name for a stable list.
+  // persisted value across a reload. Lives beside the sibling `PATCH
+  // …/tills/:id/receipt-printer`, funnelled through the SAME `gated` helper so `printer.manage`
+  // is enforced identically (the by-deletion proof on that helper covers this route too). Runs in
+  // `gated`'s `withTenant` + `asAppUser` transaction, with an explicit `tenant_id` predicate
+  // matching the sibling till/location writes. Ordered by name for a stable list.
   app.get("/management-api/tills", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -616,8 +620,9 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const printerId =
         body.printerId === null ? null : requireBodyUuid(body.printerId, "printerId");
       await gated(sessionId, async (tx) => {
-        // The till must exist in this tenant (RLS-scoped). Read its location so a named printer is
-        // validated against the till's OWN location — "from the location's printers" (§5).
+        // The till must exist in this tenant (checked by the explicit tenant predicate). Read its
+        // location so a named printer is validated against the till's OWN location — "from the
+        // location's printers" (§5).
         const [till] = await tx
           .select({ locationId: tills.locationId })
           .from(tills)
@@ -648,13 +653,14 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     }),
   );
 
-  // ── Set a location's receipt print mode (printer.manage) ─────────────────────────────────────────
-  // Counter receipt/drawer §3d/§5 — the dashboard's per-location print-mode toggle
-  // (`auto`/`on_request`/`never`, which the print-on-sale hook reads). Same `gated` / `printer.manage`
-  // gate + `requireUuidParam` id screen as the till route above. `mode` is screened to the
-  // `receipt_print_mode` enum's members (`management.request_invalid`, 400, before the enum column). An
-  // unknown/foreign (RLS-hidden) location is `management.request_invalid` (400) — there is no `location.*`
-  // code, the same request-shape treatment the unknown-till case above takes.
+  // ── Set a location's receipt print mode (printer.manage)
+  // ───────────────────────────────────────── Counter receipt/drawer §3d/§5 — the dashboard's
+  // per-location print-mode toggle (`auto`/`on_request`/`never`, which the print-on-sale hook
+  // reads). Same `gated` / `printer.manage` gate + `requireUuidParam` id screen as the till route
+  // above. `mode` is screened to the `receipt_print_mode` enum's members
+  // (`management.request_invalid`, 400, before the enum column). An unknown location or one
+  // excluded by the tenant predicate is `management.request_invalid` (400) — there is no
+  // `location.*` code, the same request-shape treatment the unknown-till case above takes.
   app.patch("/management-api/locations/:id/receipt-print-mode", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -675,13 +681,15 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     }),
   );
 
-  // ── Set a location's cash-drawer-open policy (printer.manage) ─────────────────────────────────────
-  // Cash-drawer-authorization §5 — the dashboard's per-location drawer-policy toggle (`gated`/`open`,
-  // which the till's drawer-open authorize() hook reads). One-for-one SIBLING of the receipt-print-mode
-  // route above: same `gated` / `printer.manage` gate + `requireUuidParam` id screen. `policy` is
-  // screened to the `drawer_open_policy` enum's members (`management.request_invalid`, 400, before the
-  // enum column). An unknown/foreign (RLS-hidden) location is `management.request_invalid` (400) — there
-  // is no `location.*` code, the same request-shape treatment the receipt-print-mode route takes.
+  // ── Set a location's cash-drawer-open policy (printer.manage)
+  // ───────────────────────────────────── Cash-drawer-authorization §5 — the dashboard's
+  // per-location drawer-policy toggle (`gated`/`open`, which the till's drawer-open authorize()
+  // hook reads). One-for-one SIBLING of the receipt-print-mode route above: same `gated` /
+  // `printer.manage` gate + `requireUuidParam` id screen. `policy` is screened to the
+  // `drawer_open_policy` enum's members (`management.request_invalid`, 400, before the enum
+  // column). An unknown location or one excluded by the tenant predicate is
+  // `management.request_invalid` (400) — there is no `location.*` code, the same request-shape
+  // treatment the receipt-print-mode route takes.
   app.patch("/management-api/locations/:id/drawer-open-policy", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

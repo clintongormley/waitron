@@ -78,7 +78,7 @@ function laneParam(raw: string | undefined): SyncLane {
 }
 
 export interface SyncApiDeps {
-  db: Database; // a sync_tailer + app_user member pool: reads sync_peers/sync_log/node_membership and writes sync_cursor
+  db: Database; // a app_user member pool: reads sync_peers/sync_log/node_membership and writes sync_cursor
   tenantId: string; // the deli tenant the source reads under
   nodeId: string; // this node's origin id (config.till.nodeId), for /hello
   environment: string; // config.environment, for /hello + the peer handshake
@@ -109,18 +109,19 @@ async function requirePeer(db: Database, c: Context): Promise<{ subscriberId: st
 
 /**
  * Mounts this node's peer-authenticated sync source group on an existing Hono app (the
- * mountWebhook / mountTillApi / mountCatalogueApi convention). Every route is behind `requirePeer`,
- * which resolves the caller's Bearer token to its enrolled `sync_peers` identity (a missing/blank
- * token fails closed before any DB work). `/sync-api/hello` returns this node's
+ * mountWebhook / mountTillApi / mountCatalogueApi convention). Every route is behind
+ * `requirePeer`, which resolves the caller's Bearer token to its enrolled `sync_peers` identity
+ * (a missing/blank token fails closed before any DB work). `/sync-api/hello` returns this node's
  * { nodeId, environment, membership, moduleVersions } for the peer's environment handshake —
  * `membership` is the held SignedMembershipDocument (design §5), `null` when this node has never
- * adopted one, which the puller re-runs its accept fence against; `moduleVersions` is each module's
- * applied schema version (SP-2b), which the subscriber's version gate parks a row against. `/sync-api/log` streams the tenant's captured sync_log rows
- * past `after` as NDJSON with row_image as raw jsonb text (design §4c), and `/sync-api/cursor` records
- * how far the authenticated peer has applied this node's log. The DB connection is a sync_tailer AND
- * app_user member pool (production's `syncDb`, boot.ts): it looks the peer up in `sync_peers`, reads
- * sync_log under the deli tenant context (so the sync_log_tenant_isolation policy fences the read to
- * this tenant), reads the held node_membership document (app_user's SELECT), and writes sync_cursor.
+ * adopted one, which the puller re-runs its accept fence against; `moduleVersions` is each
+ * module's applied schema version (SP-2b), which the subscriber's version gate parks a row
+ * against. `/sync-api/log` streams the tenant's captured sync_log rows past `after` as NDJSON
+ * with row_image as raw jsonb text (design §4c), and `/sync-api/cursor` records how far the
+ * authenticated peer has applied this node's log. The DB connection is an app_user member pool
+ * (production's `syncDb`, boot.ts): it looks the peer up in `sync_peers`, reads sync_log in this
+ * one-tenant database, reads the held node_membership document (app_user's SELECT), and writes
+ * sync_cursor.
  */
 export function mountSyncApi(app: Hono, deps: SyncApiDeps, log: Logger): void {
   app.get("/sync-api/hello", (c) =>

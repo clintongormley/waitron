@@ -3,12 +3,12 @@
 // the steak — so the till shows a picker on those two products, the receipt/basket group their
 // modifier lines, and the dashboard's option-group manager has real content to show off.
 //
-// It runs inside the CALLER's transaction, under the tenant GUC + app_user role the caller set with
-// `withTenant`/`asAppUser` — the same posture `seedCatalogues` uses, and the option-group tables carry
-// the same tenant-scoped RLS. `createOptionGroup`/`createOptionGroupItem`/`setProductOptionGroups`
-// (`@waitron/catalogue`) are plain catalogue operations, not session-gated the way `createPerson`
-// (`@waitron/identity`) is, so — like `seedCatalogues`'s `createProduct` — this calls them directly
-// rather than raw-inserting.
+// It runs inside the CALLER's transaction, under the app_user role the caller selected with
+// `withTenant`/`asAppUser` — the same posture `seedCatalogues` uses in this one-tenant database.
+// `createOptionGroup`/`createOptionGroupItem`/`setProductOptionGroups` (`@waitron/catalogue`) are
+// plain catalogue operations, not session-gated the way `createPerson` (`@waitron/identity`) is,
+// so — like `seedCatalogues`'s `createProduct` — this calls them directly rather than
+// raw-inserting.
 //
 // Only EACH-priced products may carry option groups: the ring path rejects options on a `weight`
 // product (`options.unsupported_product`, apps/server/src/working-order.ts). `PRODUCT_OPTION_GROUPS`

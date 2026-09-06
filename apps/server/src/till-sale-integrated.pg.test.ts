@@ -185,12 +185,14 @@ async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
   return { ...venue, cfg: { ...venue.cfg, orderFlow: mode } };
 }
 
-/** Build the split-flow deps + a real `StripeTerminalProvider` over `FakeStripe`, sharing ONE
+/**
+ * Build the split-flow deps + a real `StripeTerminalProvider` over `FakeStripe`, sharing ONE
  * app-role handle for both the provider's writes and the orchestrator's P1/P3 (CLAUDE.md §4 — the
- * provider's writes run under a real RLS-subject role, not a superuser). Tips are driven by
+ * provider's writes run under a real non-superuser role, not a superuser). Tips are driven by
  * `cfg.tipsEnabled` (the sibling `TillConfig` every caller passes to `payWorkingOrderIntegrated`
- * alongside these deps), not a deps-level flag — `IntegratedPayDeps` carries no `tipsEnabled` of its
- * own; a "tips on" test overrides `cfg` instead (see the two below). */
+ * alongside these deps), not a deps-level flag — `IntegratedPayDeps` carries no `tipsEnabled` of
+ * its own; a "tips on" test overrides `cfg` instead (see the two below).
+ */
 function integratedDeps(
   cfg: TillConfig,
   app: Database,
@@ -830,12 +832,13 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 });
 
-// The §4 capture-idempotency guard: a lost-response retry where `collect` COMMITTED its capture (T2)
-// but P3 never ran (the sale was never filed) must NOT re-charge. Real Postgres, not PGlite (§4): the
-// recovery files the sale as the deployment role under RLS, and the two concurrency proofs need
-// TWO DISTINCT app-role connections racing one order — a superuser, single-backend PGlite is a false
-// pass, not a weak one. The lost-T2 state is seeded directly (`createOpenOrder` + `insertCapturedPayment`
-// with `sale_id` NULL), exactly the row `provider.collect`'s T2 leaves behind before P3.
+// The §4 capture-idempotency guard: a lost-response retry where `collect` COMMITTED its capture
+// (T2) but P3 never ran (the sale was never filed) must NOT re-charge. Real Postgres, not PGlite
+// (§4): the recovery files the sale as the deployment role, and the two concurrency proofs need
+// TWO DISTINCT app-role connections racing one order — a superuser, single-backend PGlite is a
+// false pass, not a weak one. The lost-T2 state is seeded directly (`createOpenOrder` +
+// `insertCapturedPayment` with `sale_id` NULL), exactly the row `provider.collect`'s T2 leaves
+// behind before P3.
 describe("payWorkingOrderIntegrated — capture idempotency (recovery window + concurrency)", () => {
   /** Seed the lost-T2 state: an OPEN order with a locked café line, plus a captured stripe payment for
    *  it whose `sale_id` is still NULL (collect committed, P3 never ran). `amount` is the GROSS the card
@@ -1084,13 +1087,14 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
 });
 
 // ORDERING 1 (invoice-first): the sale/invoice is issued (chained, filed) AT PLACING and sits
-// OUTSTANDING; the integrated card collect must SETTLE that already-issued invoice (`settleSale`, NOT a
-// second `recordSale`) and associate the captured payment. The real hazard this closes is NOT a
-// double-file (`sales_working_order_id_key` UNIQUE 23505s a second file for one order) — it is an
-// ORPHANED captured payment beside an UNSETTLED issued invoice (money taken, invoice left outstanding).
-// A decline files/voids nothing: the issued invoice stays outstanding, retryable (§5). Real Postgres,
-// not PGlite (§4): the settle writes as the deployment role under RLS, and the double-settle replay and
-// the concurrent recovery need distinct app-role connections racing one order.
+// OUTSTANDING; the integrated card collect must SETTLE that already-issued invoice (`settleSale`,
+// NOT a second `recordSale`) and associate the captured payment. The real hazard this closes is
+// NOT a double-file (`sales_working_order_id_key` UNIQUE 23505s a second file for one order) — it
+// is an ORPHANED captured payment beside an UNSETTLED issued invoice (money taken, invoice left
+// outstanding). A decline files/voids nothing: the issued invoice stays outstanding, retryable
+// (§5). Real Postgres, not PGlite (§4): the settle writes as the deployment role, and the
+// double-settle replay and the concurrent recovery need distinct app-role connections racing one
+// order.
 describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)", () => {
   /** Arrange an OUTSTANDING invoice-first sale: park, then `placeOrder` issues the DEFERRED invoice at
    *  placing (open → placed), leaving one chained-but-unsettled sale. Returns the order id + its saleId. */

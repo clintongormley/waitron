@@ -92,7 +92,7 @@ async function waitUntilLockBlocked(pid: number): Promise<void> {
   throw new Error(`backend ${pid} never became lock-blocked (the race never staged)`);
 }
 
-/** Count of `working_orders` for this tenant, read as the owner (bypasses RLS). */
+/** Count of `working_orders` for this tenant, read as the owner. */
 async function workingOrderCount(cfg: TillConfig): Promise<number> {
   const { rows } = await db.execute<{ n: number }>(
     sql`select count(*)::int as n from working_orders where tenant_id = ${cfg.tenantId}`,

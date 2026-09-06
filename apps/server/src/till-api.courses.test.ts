@@ -31,17 +31,18 @@ import { SESSION_COOKIE } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
-// PGlite, not real Postgres: these routes are wiring — the session guard + isUuid screens + STATUS
-// mapping over `fireCourse` / `listStationQueue`, which are LOGIC. The auto-fire arithmetic, the
-// held-advance refusal and `fireCourse`'s idempotency are proven at the verb level over a single
-// backend in `working-order.test.ts`; RLS / node isolation of `ticket_items` is real-Postgres's job
-// (`working-order.pg.test.ts`). This file proves the HTTP SHAPE: the fire route fires a held course,
-// the queue read carries each item's `course` + `firedAt`, and the advance route refuses a held item.
-// The KDS-3 block at the foot proves the expo (pass) HTTP shape on the SAME seed — the cross-station
-// `GET /api/expo/queue` aggregates the node's live orders into courses, and the `ready`/`away` routes
-// bump/dispatch a whole course; the aggregation, roll-ups, no-throw-on-empty and `requireCourse`
-// semantics are the verbs' (`working-order.test.ts`), the routes only the session guard + id screens.
-// The schema is CORE_MIGRATIONS (kitchen_courses / course_id / fired_at / away_at land in the KDS-2/3
+// PGlite, not real Postgres: these routes are wiring — the session guard + isUuid screens +
+// STATUS mapping over `fireCourse` / `listStationQueue`, which are LOGIC. The auto-fire
+// arithmetic, the held-advance refusal and `fireCourse`'s idempotency are proven at the verb
+// level over a single backend in `working-order.test.ts`; `working-order.pg.test.ts` also covers
+// node filtering of `ticket_items` (`working-order.pg.test.ts`). This file proves the HTTP SHAPE:
+// the fire route fires a held course, the queue read carries each item's `course` + `firedAt`,
+// and the advance route refuses a held item. The KDS-3 block at the foot proves the expo (pass)
+// HTTP shape on the SAME seed — the cross-station `GET /api/expo/queue` aggregates the node's
+// live orders into courses, and the `ready`/`away` routes bump/dispatch a whole course; the
+// aggregation, roll-ups, no-throw-on-empty and `requireCourse` semantics are the verbs'
+// (`working-order.test.ts`), the routes only the session guard + id screens. The schema is
+// CORE_MIGRATIONS (kitchen_courses / course_id / fired_at / away_at land in the KDS-2/3
 // migrations, part of CORE) + IDENTITY_MIGRATIONS (the sessions/persons the login path needs).
 let cfg: TillConfig;
 let ana: { id: string };

@@ -60,12 +60,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 const run = createErrorBoundary(STATUS, "schedule.failed");
 
 /**
- * Mounts the STAFF-FACING schedule request routes (prefix `/api/schedule`) — the counterpart to the
- * manager approval half. Every route resolves the requester via `requireSession(deps, c)` FIRST and
- * passes THAT `personId` into the verb; the request body is NEVER trusted for identity (the crux of
- * this surface — a staff member acts only as themselves). The verb then runs on the app role under the
- * till's tenant (`withTenant` + `asAppUser`), so RLS scopes it to this tenant and the app's own
- * `person_id` predicate scopes it to the requester (RLS is tenant-only).
+ * Mounts the STAFF-FACING schedule request routes (prefix `/api/schedule`) — the counterpart to
+ * the manager approval half. Every route resolves the requester via `requireSession(deps, c)`
+ * FIRST and passes THAT `personId` into the verb; the request body is NEVER trusted for identity
+ * (the crux of this surface — a staff member acts only as themselves). The verb then runs on the
+ * app role under the till's tenant (`withTenant` + `asAppUser`), in the database holding this
+ * tenant. The explicit `person_id` predicate scopes the operation to the requester.
  */
 export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger): void {
   /** Run `fn` on the app role under the till's tenant — the one place the withTenant/asAppUser pair

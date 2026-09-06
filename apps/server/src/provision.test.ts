@@ -19,10 +19,10 @@ import { ALL_MODULES } from "./modules.js";
 /** All modules enabled (an absent/empty modules.json) — the default the happy-path deps pass. */
 const ALL_ENABLED = parseModuleConfig({}, ALL_MODULES);
 
-// Real Postgres, not PGlite: provisionVenue stamps `deployment` and runs `applyVenue` under RLS as
-// the OWNER connection, which PGlite (every connection a superuser) cannot faithfully represent
-// (CLAUDE.md §4). The shared-container clone's default connection is the container superuser, which
-// OWNS the manifest tables and so is exactly the owner connection `applyVenue` documents it needs.
+// This suite retains the real-Postgres manifest fixture for provisionVenue and applyVenue. The
+// clone's default connection is the container superuser and table owner; it exercises
+// provisioning through that owner connection, not a non-superuser privilege boundary. Target
+// selection is deferred to Task 9 (§4).
 
 // Each provisioned venue needs its own NIF (`tenants_country_tax_id_key` is unique); a fresh clone
 // per test still draws from one generator, the same nextNif shape `till-sale.test.ts` uses.

@@ -15,10 +15,10 @@ export interface ProvisionNodeParams {
 }
 
 /**
- * Refuses a node this tenant does not own, and returns its location. `registro_sif` carries separate
- * foreign keys onto `tenants` and `nodes` and no composite one, so a row naming tenant A and a node of
- * tenant B satisfies both — and RLS's WITH CHECK only constrains `tenant_id`. Matching on
- * `nodes.tenant_id` explicitly is what makes this hold for a superuser too.
+ * Refuses a node this tenant does not own, and returns its location. `registro_sif` carries
+ * separate foreign keys onto `tenants` and `nodes` and no composite one, so a row naming tenant A
+ * and a node of tenant B satisfies both. Matching on `nodes.tenant_id` explicitly enforces tenant
+ * consistency regardless of the connection role.
  */
 async function ownedNodeLocation(
   tx: Transaction,

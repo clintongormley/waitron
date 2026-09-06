@@ -120,14 +120,15 @@ async function lockActivePrinters(
 }
 
 /**
- * Each line's printed `KitchenTicketItem` — quantity, localised name, and its `+ <name>`/` xN` modifier
- * sub-lines — keyed by LINE ID, each carrying the line's `line_no` for a stable within-station order.
- * Factored from the fire path so the correction path formats a recalled/voided line's item BYTE-FOR-BYTE
- * like the original ticket the cook is correcting: same `descriptions`→name pick ({@link ticketName}),
- * same per-option-quantity modifier labels, same locale (`cfg.locale`). Reads the fired parents' qty +
- * snapshotted `descriptions` and their child modifier lines in ONE grouped read each (never N+1),
- * tenant-scoped beside RLS. `lineIds` are the PARENT dish lines; a child modifier is never itself a key
- * here (it is fetched as sub-text of its parent).
+ * Each line's printed `KitchenTicketItem` — quantity, localised name, and its `+ <name>`/` xN`
+ * modifier sub-lines — keyed by LINE ID, each carrying the line's `line_no` for a stable
+ * within-station order. Factored from the fire path so the correction path formats a
+ * recalled/voided line's item BYTE-FOR-BYTE like the original ticket the cook is correcting: same
+ * `descriptions`→name pick ({@link ticketName}), same per-option-quantity modifier labels, same
+ * locale (`cfg.locale`). Reads the fired parents' qty + snapshotted `descriptions` and their
+ * child modifier lines in ONE grouped read each (never N+1), explicitly tenant-filtered.
+ * `lineIds` are the PARENT dish lines; a child modifier is never itself a key here (it is fetched
+ * as sub-text of its parent).
  */
 async function buildTicketItems(
   tx: Transaction,
@@ -153,9 +154,10 @@ async function buildTicketItems(
     );
   const lineById = new Map(lineRows.map((row) => [row.id, row]));
 
-  // The CHILD modifier lines of the fired parents (ordering modifiers) — one grouped read, keyed by
-  // `parent_line_id` over the fired parents' ids, printed as indented `+ <name>` sub-text beneath each
-  // dish. Ordered by `line_no` so the options print in selection order; tenant-scoped beside RLS.
+  // The CHILD modifier lines of the fired parents (ordering modifiers) — one grouped read, keyed
+  // by `parent_line_id` over the fired parents' ids, printed as indented `+ <name>` sub-text
+  // beneath each dish. Ordered by `line_no` so the options print in selection order; explicitly
+  // tenant-filtered.
   const childRows = await tx
     .select({
       parentLineId: workingOrderLines.parentLineId,
@@ -203,7 +205,10 @@ async function buildTicketItems(
   return byLine;
 }
 
-/** The involved stations' names (a ticket/slip header), keyed by station id, tenant-scoped beside RLS. */
+/**
+ * The involved stations' names (a ticket/slip header), keyed by station id, explicitly
+ * tenant-filtered.
+ */
 async function readStationNames(
   tx: Transaction,
   tenantId: string,
@@ -388,10 +393,11 @@ export async function enqueueKitchenTickets(
  * ({@link readOrderHeader}) are the SAME factored reads {@link enqueueKitchenTickets} uses — so a slip's
  * qty/name/modifiers, table label and order number match the original ticket exactly.
  *
- * NEVER-BLOCK (§5) and the two printer guards apply exactly as on the fire path: `lockActivePrinters`
- * ACTIVE-filters and FOR-SHARE-locks, so `enqueuePrintJob`'s `printer.not_found` stays unreachable and the
- * enqueue rides the caller's recall/void tx (rolls back with it). An empty `items` — the common case, a
- * recall/void of a held line — enqueues nothing. Tenant-scoped beside the caller's RLS.
+ * NEVER-BLOCK (§5) and the two printer guards apply exactly as on the fire path:
+ * `lockActivePrinters` ACTIVE-filters and FOR-SHARE-locks, so `enqueuePrintJob`'s
+ * `printer.not_found` stays unreachable and the enqueue rides the caller's recall/void tx (rolls
+ * back with it). An empty `items` — the common case, a recall/void of a held line — enqueues
+ * nothing. Explicitly tenant-filtered.
  *
  * NOTE for VOID: {@link voidTabLine}'s delete cascades the line + its ticket item away
  * (`ON DELETE CASCADE`), and this function RE-READS the line from `working_order_lines` via
@@ -468,12 +474,13 @@ export async function enqueueCorrectionSlips(
  * HELD items (`fired_at` NULL) are excluded — they are not in the kitchen yet, so there is nothing to
  * reprint for them.
  *
- * An order with no fired items (an unknown/never-fired order, or one whose items are all held) yields an
- * empty set and is a pure NO-OP: `enqueueKitchenTickets` short-circuits on the empty input and enqueues
- * nothing, so reprint needs — and throws — no error code of its own. It inherits the fire path's
- * never-block posture for free: enqueue is an outbox INSERT that opens no socket, and the `FOR SHARE`
- * lock in `enqueueKitchenTickets` keeps `enqueuePrintJob`'s `printer.not_found` unreachable exactly as it
- * does on the fire path (see the header). Tenant-scoped (belt-and-braces beside the caller's RLS).
+ * An order with no fired items (an unknown/never-fired order, or one whose items are all held)
+ * yields an empty set and is a pure NO-OP: `enqueueKitchenTickets` short-circuits on the empty
+ * input and enqueues nothing, so reprint needs — and throws — no error code of its own. It
+ * inherits the fire path's never-block posture for free: enqueue is an outbox INSERT that opens
+ * no socket, and the `FOR SHARE` lock in `enqueueKitchenTickets` keeps `enqueuePrintJob`'s
+ * `printer.not_found` unreachable exactly as it does on the fire path (see the header).
+ * Explicitly tenant-filtered.
  */
 export async function reprintOrderTickets(
   tx: Transaction,

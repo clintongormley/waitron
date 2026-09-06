@@ -93,9 +93,9 @@ interface Venue {
 }
 
 /**
- * Seeds tenant → location → two tills → node → standard series as the PGlite superuser (which
- * bypasses RLS), exactly as the package's own fixtures do — `app_user` holds no INSERT on `tenants`,
- * deliberately (a running POS cannot create tenants).
+ * Seeds tenant → location → two tills → node → standard series as the PGlite superuser, exactly
+ * as the package's own fixtures do — `app_user` holds no INSERT on `tenants`, deliberately (a
+ * running POS cannot create tenants).
  */
 async function seedVenue(db: Database): Promise<Venue> {
   const t = await db.execute<{ id: string }>(
@@ -176,7 +176,7 @@ async function ringSale(
   });
 }
 
-/** `recordDailyClose` for one business day, run RLS-safe as the application role. */
+/** `recordDailyClose` for one business day, run as the application role. */
 function closeDay(
   db: Database,
   venue: Venue,

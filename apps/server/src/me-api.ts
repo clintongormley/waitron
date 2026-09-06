@@ -85,16 +85,17 @@ const run = createErrorBoundary(STATUS, "me.failed");
 
 /**
  * Mounts the STAFF SELF-SERVICE routes on the management dashboard's HTTP surface (prefixes
- * `/management-api/session/me` and `/management-api/me/schedule`) — the browser twin of `apps/till`'s
- * till-PIN-gated `mountScheduleApi`. Every route resolves the requester from the MANAGEMENT SESSION
- * (`requireManagementSession` → `resolveManagementSession` → `personId`) FIRST and passes THAT
- * `personId` into the #90 verb; the request body is NEVER trusted for identity (the crux of this
- * surface — a staff member acts only as themselves). It is deliberately ROLE-BLIND: it calls
- * `resolveManagementSession` (which returns `personId` + `role` but gates only on idle-timeout +
- * suspension), NEVER `authorizeManager` — a `staff`-role person holds an EMPTY permission set, so an
- * `authorizeManager` gate would 403 every staff person, defeating the whole surface. The verb then runs
- * on the app role under this venue's tenant (`withTenant` + `asAppUser`), so RLS scopes it to this
- * tenant and the app's own `person_id` predicate scopes it to the requester (RLS is tenant-only).
+ * `/management-api/session/me` and `/management-api/me/schedule`) — the browser twin of
+ * `apps/till`'s till-PIN-gated `mountScheduleApi`. Every route resolves the requester from the
+ * MANAGEMENT SESSION (`requireManagementSession` → `resolveManagementSession` → `personId`) FIRST
+ * and passes THAT `personId` into the #90 verb; the request body is NEVER trusted for identity
+ * (the crux of this surface — a staff member acts only as themselves). It is deliberately
+ * ROLE-BLIND: it calls `resolveManagementSession` (which returns `personId` + `role` but gates
+ * only on idle-timeout + suspension), NEVER `authorizeManager` — a `staff`-role person holds an
+ * EMPTY permission set, so an `authorizeManager` gate would 403 every staff person, defeating the
+ * whole surface. The verb then runs on the app role under this venue's tenant (`withTenant` +
+ * `asAppUser`), in the database holding this tenant. The explicit `person_id` predicate scopes
+ * the operation to the requester.
  */
 export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   /** Run `fn` on the app role under this venue's tenant — the one place the withTenant/asAppUser pair
@@ -121,14 +122,16 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     run(c, log, async () => c.json({ locales: SUPPORTED_LOCALES, venueDefault: deps.venueLocale })),
   );
 
-  // Whoami: who is signed into this browser, with what role and in which language. `requireManagementSession`
-  // screens the cookie's SHAPE (401 before any DB work), then `resolveManagementSession` re-reads the live
-  // session + the person's current role, status and `locale` under RLS (a suspended person 403s here).
-  // Role-blind: NO `authorizeManager`, so a staff session answers `{ role: "staff" }` rather than 403 — this
-  // is the endpoint the dashboard shell probes to decide whether to open the staff view or the manager
-  // screens. `locale` is the signed-in person's OWN UI-language preference (`persons.locale`, null when
-  // unset); `venueLocale` is the geography-derived boot default (`deps.venueLocale`) the dashboard falls
-  // back to when that preference is null — the same value `GET /management-api/locales` echoes as `venueDefault`.
+  // Whoami: who is signed into this browser, with what role and in which language.
+  // `requireManagementSession` screens the cookie's SHAPE (401 before any DB work), then
+  // `resolveManagementSession` re-reads the live session + the person's current role, status and
+  // `locale` in this one-tenant database (a suspended person 403s here). Role-blind: NO
+  // `authorizeManager`, so a staff session answers `{ role: "staff" }` rather than 403 — this is
+  // the endpoint the dashboard shell probes to decide whether to open the staff view or the
+  // manager screens. `locale` is the signed-in person's OWN UI-language preference
+  // (`persons.locale`, null when unset); `venueLocale` is the geography-derived boot default
+  // (`deps.venueLocale`) the dashboard falls back to when that preference is null — the same
+  // value `GET /management-api/locales` echoes as `venueDefault`.
   app.get("/management-api/session/me", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

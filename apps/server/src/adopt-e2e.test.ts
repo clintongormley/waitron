@@ -65,24 +65,24 @@ import { readFileSync } from "node:fs";
 // through B's outbound tunnel. It ties the whole operator flow together, composing the two suites that
 // each cover one half:
 //
-//   * mirror-bundle-api.test.ts — mounts the primary's `POST /management-api/mirror-bundle`
-//     (provision via applyVenue, mint the bundle as app_user + sync_retention). Reused here as the
-//     primary side, served over plain HTTP so the mirror's real `fetchMirrorBundle` reaches it.
-//   * mirror-e2e.test.ts — stands up the relay stand-in + runTunnelClient in front of a box HTTPS
-//     sync-api and boots a real mirror whose own runSyncPull drains the primary through the tunnel.
-//     Reused VERBATIM for the transport scaffolding + the reboot-into-mirror-mode pull assertions.
+// * mirror-bundle-api.test.ts — mounts the primary's `POST /management-api/mirror-bundle`
+// (provision via applyVenue, mint the bundle as app_user). Reused here as the primary side,
+// served over plain HTTP so the mirror's real `fetchMirrorBundle` reaches it. *
+// mirror-e2e.test.ts — stands up the relay stand-in + runTunnelClient in front of a box HTTPS
+// sync-api and boots a real mirror whose own runSyncPull drains the primary through the tunnel.
+// Reused VERBATIM for the transport scaffolding + the reboot-into-mirror-mode pull assertions.
 //
 // What is genuinely NEW is the join across the SETUP→ADOPT→REBOOT transition: the mirror's identity,
 // its DB-stored connection config and its sealed sync token are NOT hand-seeded (as the two suites
 // above do) — they are produced by driving `POST /setup-api/adopt`, which fetches the primary's bundle
 // and calls the production `adoptFromPrimary`. The reboot then reads exactly what adopt wrote.
 //
-// Real Postgres × 2 (a mirror adopts + applies as the non-superuser roles, and the
-// vault seal/unseal runs under a real key — PGlite is a superuser-only false pass, CLAUDE.md §4):
-// `primary` (provisioned, holds the seeded catalogues + serves the bundle + the HTTPS sync source) and
-// `mirror` (the fresh box adopted then rebooted). The bundle-fetch, adopt orchestration and reboot pull
-// are the whole point, so the closest existing patterns (mirror-bundle-api.rls + mirror-e2e.rls) are
-// copied rather than re-derived.
+// Real Postgres × 2 (a mirror adopts + applies as the non-superuser roles, and the vault
+// seal/unseal runs under a real key — PGlite is a superuser-only false pass, CLAUDE.md §4):
+// `primary` (provisioned, holds the seeded catalogues + serves the bundle + the HTTPS sync
+// source) and `mirror` (the fresh box adopted then rebooted). The bundle-fetch, adopt
+// orchestration and reboot pull are the whole point, so the closest existing patterns
+// (mirror-bundle-api.test.ts + mirror-e2e.test.ts) are copied rather than re-derived.
 const log: Logger = () => {};
 const noopLog: Logger = () => {};
 
@@ -139,9 +139,10 @@ let mirrorModuleStateDir: string;
 let designated: AdoptResult; // the five ids the primary was provisioned with; the mirror adopts them
 let adminPersonId: string; // the primary admin the operator authenticates for the bundle
 
-let appDb: Database; // app_login → app_user: the bundle endpoint's auth + RLS venue reads
-let retentionDb: Database; // sync_pruner → sync_retention: mints the bundle's peer token
-let sourceReader: Database; // sync_applier (sync_tailer + app_user): the HTTPS sync-api reads primary.sync_log and node_membership through this
+let appDb: Database; // app_login → app_user: the bundle endpoint's auth + venue reads
+let retentionDb: Database; // sync_pruner → app_user: mints the bundle's peer token
+let sourceReader: Database; // sync_applier (app_user): the HTTPS sync-api reads primary.sync_log and node_membership through
+// this
 let sourceWriter: Database; // app_login: captures the catalogues into primary.sync_log
 
 let boxCaPem: string;
@@ -309,10 +310,10 @@ beforeAll(async () => {
     });
   }
 
-  // The PRIMARY is a real trading node: stamp it preproduction (the bundle reads its environment) and
-  // provision a full venue — applyVenue registers the primary's OWN SIF + chain (a `registro_sif` row on
-  // the primary, never on the mirror). The seeded admin carries ADMIN_PASSWORD; its id is read back under
-  // RLS as app_user, the only role the bundle endpoint uses.
+  // The PRIMARY is a real trading node: stamp it preproduction (the bundle reads its environment)
+  // and provision a full venue — applyVenue registers the primary's OWN SIF + chain (a
+  // `registro_sif` row on the primary, never on the mirror). The seeded admin carries
+  // ADMIN_PASSWORD; its id is read back as app_user, the only role the bundle endpoint uses.
   await stampDeployment(primary.admin, "preproduction");
   const venue = await applyVenue(
     planVenue(
@@ -366,8 +367,8 @@ beforeAll(async () => {
 
   appDb = await primary.pg.connectAs("app_login", "app_pw");
   retentionDb = await primary.pg.connectAs("sync_pruner", "pp");
-  // Production source serve pool (boot.ts:1053): sync_tailer + app_user, since /hello now reads
-  // node_membership (app_user's SELECT) as well as sync_peers.
+  // Production source serve pool (boot.ts:1053): app_user, since /hello now reads node_membership
+  // (app_user's SELECT) as well as sync_peers.
   sourceReader = await primary.pg.connectAs("sync_applier", "ap");
   sourceWriter = await primary.pg.connectAs("app_login", "app_pw");
 
@@ -393,14 +394,14 @@ beforeAll(async () => {
   }
 
   // A REAL trading venue is not freshly-provisioned: it assigns a menu to its location
-  // (`locations.catalogue_id`, catalogue.ts's `assignCatalogue`) and a receipt printer to its till
-  // (`tills.receipt_printer_id`, print-api.ts). Both are NULLABLE out-of-scope FK columns the mirror
-  // bundle carries VERBATIM, whose targets do NOT exist on the mirror at adopt time (`catalogues` is
-  // empty in setup mode — sync starts only after the reboot — and `printers` is NEVER synced), so a
-  // verbatim insert raises 23503 → an opaque `server.internal` 500 and rolls back: the Critical C2b
-  // bug. Set them here via the owner (superuser bypasses RLS) so the primary models a real venue; the
-  // mirror below asserts adoptVenue NULLED both. A `cloud_poll` printer needs only `poll_id`
-  // (`printers_transport_fields_ck`), so it is the cheapest valid printer row.
+  // (`locations.catalogue_id`, catalogue.ts's `assignCatalogue`) and a receipt printer to its
+  // till (`tills.receipt_printer_id`, print-api.ts). Both are NULLABLE out-of-scope FK columns
+  // the mirror bundle carries VERBATIM, whose targets do NOT exist on the mirror at adopt time
+  // (`catalogues` is empty in setup mode — sync starts only after the reboot — and `printers` is
+  // NEVER synced), so a verbatim insert raises 23503 → an opaque `server.internal` 500 and rolls
+  // back: the Critical C2b bug. Set them here via the owner (fixture setup) so the primary models
+  // a real venue; the mirror below asserts adoptVenue NULLED both. A `cloud_poll` printer needs
+  // only `poll_id` (`printers_transport_fields_ck`), so it is the cheapest valid printer row.
   const primaryCatalogueId = (
     await primary.admin.execute<{ id: string }>(
       sql`select id from catalogues where tenant_id = ${designated.tenantId} order by name limit 1`,

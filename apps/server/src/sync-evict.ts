@@ -6,7 +6,7 @@ type Env = Record<string, string | undefined>;
 /**
  * The EXPLICIT, operator-run dead-subscriber eviction (spec §3.3/§3.4). A human runs this locally
  * against the node that holds the log — NEVER automatic, never peer-facing — after independently
- * confirming the subscriber is gone. Connects as the sync_retention member
+ * confirming the subscriber is gone. Connects as an app_user member
  * (WAITRON_SYNC_RETENTION_DATABASE_URL) and DELETEs the subscriber's cursor rows so the next
  * retention sweep advances the log past it.
  */

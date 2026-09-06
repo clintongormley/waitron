@@ -78,18 +78,18 @@ const suite = usePgliteDb({
       sql`select tax_id from tenants where id = ${tenantId}`,
     );
     venueTaxId = tenant.rows[0]!.tax_id;
-    // A location → till the session cookie references: `loginWithPin` inserts a `sessions` row with a
-    // FK to `tills`, so the till `cfg.tillId` names must exist. Seeded as the PGlite superuser (RLS
-    // bypassed) — pure setup, as `@waitron/db`'s own seed helpers document.
-    // invoice_locales is `es-ES` (full-tag, fiscal). The products are authored under the BARE `es`
-    // key; `priceOrderLines` re-keys their descriptions to the location's `es-ES` before the
-    // working-order-line insert `POST /api/working-orders` fires `check_locales`, which
-    // demands a line's `descriptions` keys equal the location's locales EXACTLY.
+    // A location → till the session cookie references: `loginWithPin` inserts a `sessions` row
+    // with a FK to `tills`, so the till `cfg.tillId` names must exist. Seeded as the PGlite
+    // superuser — pure setup, as `@waitron/db`'s own seed helpers document. invoice_locales is
+    // `es-ES` (full-tag, fiscal). The products are authored under the BARE `es` key;
+    // `priceOrderLines` re-keys their descriptions to the location's `es-ES` before the
+    // working-order-line insert `POST /api/working-orders` fires `check_locales`, which demands a
+    // line's `descriptions` keys equal the location's locales EXACTLY.
     const loc = await db.execute<{ id: string }>(sql`
       insert into locations (tenant_id, name, invoice_locales, operation_description)
       values (${tenantId}, 'Counter', array['es-ES'], 'Retail') returning id`);
     // KDS-1: a default kitchen station so the place route's fire (placeOrder → fireLines) has a
-    // fallback. Seeded as the PGlite superuser here, as the surrounding venue rows are (RLS bypassed).
+    // fallback. Seeded as the PGlite superuser here, as the surrounding venue rows are.
     await seedKitchenStation(db, { tenantId, locationId: brandLocationId(loc.rows[0]!.id) });
     const till = await db.execute<{ id: string }>(sql`
       insert into tills (tenant_id, location_id, name)
@@ -297,8 +297,11 @@ async function enrolTillDeviceCookie(
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
 
-/** Seed a `device_profiles` row for the seeded tenant on the app role (RLS-scoped), returning its id —
- * the reusable bundle a device resolves its canvas + capabilities through (device-profile §5, Task 9). */
+/**
+ * Seed a `device_profiles` row for the seeded tenant on the app role, returning its id — the
+ * reusable bundle a device resolves its canvas + capabilities through (device-profile §5, Task
+ * 9).
+ */
 async function seedDeviceProfile(
   db: Database,
   name: string,
@@ -355,7 +358,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     expect(del.status).toBe(200);
     expect(await del.json()).toEqual({ ok: true });
 
-    // DELETE actually stamped ended_at on the row the cookie named (read as superuser, RLS bypassed).
+    // DELETE actually stamped ended_at on the row the cookie named (read as superuser).
     const sessionId = /waitron_till_session=([^;]+)/.exec(cookie)![1];
     const rows = await suite.db.execute<{ ended: boolean }>(
       sql`select ended_at is not null as ended from sessions where id = ${sessionId}`,
@@ -915,10 +918,11 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
   });
 
   it("GET /api/till echoes the venue's ACTIVE kitchen courses in display order (KDS-2 §5b)", async () => {
-    // Seed two courses out of display order, plus a deactivated one, to prove the boot read returns the
-    // ACTIVE ones sorted by `display_order` (the coursing sequence the tab picker offers) and drops the
-    // retired one. Direct inserts as the PGlite superuser (RLS bypassed — pure setup, like the bump_mode
-    // seed above); cleaned up in `finally` so the shared-location default `[]` case stays order-independent.
+    // Seed two courses out of display order, plus a deactivated one, to prove the boot read
+    // returns the ACTIVE ones sorted by `display_order` (the coursing sequence the tab picker
+    // offers) and drops the retired one. Direct inserts as the PGlite superuser (pure setup, like
+    // the bump_mode seed above); cleaned up in `finally` so the shared-location default `[]` case
+    // stays order-independent.
     await suite.db.execute(
       sql`insert into kitchen_courses (tenant_id, location_id, name, display_order, active) values
         (${cfg.tenantId}, ${cfg.locationId}, 'Postres', 2, true),
@@ -945,12 +949,12 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
   });
 
   it("GET /api/till returns the AUTHORED receipt (tenant_receipts), not the default, and no `layout` field", async () => {
-    // Seed the till's tenant (as the PGlite superuser, RLS bypassed — pure setup, like the other seeds
-    // here) with an authored RECEIPT in `tenant_receipts`. `GET /api/till` must return it via
-    // `getReceipt`, proving the read hits its own store rather than a constant. The `layout` field is
-    // GONE from the payload as of SP-B4 (the counter renders from `canvas` now), so the test also pins
-    // its absence. Cleaned up in `finally` so the shared-tenant default case above stays
-    // order-independent (CLAUDE.md §4).
+    // Seed the till's tenant (as the PGlite superuser — pure setup, like the other seeds here)
+    // with an authored RECEIPT in `tenant_receipts`. `GET /api/till` must return it via
+    // `getReceipt`, proving the read hits its own store rather than a constant. The `layout`
+    // field is GONE from the payload as of SP-B4 (the counter renders from `canvas` now), so the
+    // test also pins its absence. Cleaned up in `finally` so the shared-tenant default case above
+    // stays order-independent (CLAUDE.md §4).
     const authoredReceipt: ReceiptConfig = { footerMessage: "Hasta pronto" };
     await suite.db.execute(sql`
       insert into tenant_receipts (tenant_id, receipt)
@@ -1221,10 +1225,10 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
-    // The guard runs BEFORE the body is even read, matching every other session-guarded route. The
-    // capture/decline/empty-basket happy paths are proven end-to-end over real Postgres in
-    // `till-api.pg.test.ts` (PGlite runs as a superuser and cannot exercise the deployment role's
-    // chained write or the provider's own FORCE RLS, CLAUDE.md §4).
+    // The guard runs BEFORE the body is even read, matching every other session-guarded route.
+    // The capture/decline/empty-basket happy paths are proven end-to-end over real Postgres in
+    // `till-api.pg.test.ts` (PGlite runs as a superuser and cannot check the grants used by the
+    // deployment role and provider, CLAUDE.md §4).
     const res = await app.request("/api/pay", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -1362,7 +1366,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     expect(Number.isInteger(body.orderNumber)).toBe(true);
     expect(body.orderNumber).toBeGreaterThanOrEqual(1);
 
-    // The order really persisted OPEN on the seeded till (read as the PGlite superuser, RLS bypassed).
+    // The order really persisted OPEN on the seeded till (read as the PGlite superuser).
     const rows = await suite.db.execute<{ status: string; till_id: string }>(
       sql`select status, till_id from working_orders where id = ${id}`,
     );
@@ -1572,8 +1576,8 @@ describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
     // `prepay` files nothing at placing (Task 8's dispatch) — just the bare transition result.
     expect(await placed.json()).toEqual({ id, status: "placed" });
 
-    // The order really transitioned AND a ticket item was fired at `queued` — placing fires the lines to
-    // the kitchen (KDS-1, `placeOrder` → `fireLines`). Read as the PGlite superuser (RLS bypassed), a
+    // The order really transitioned AND a ticket item was fired at `queued` — placing fires the
+    // lines to the kitchen (KDS-1, `placeOrder` → `fireLines`). Read as the PGlite superuser, a
     // plain state witness; the single line routes to the seeded default station "Cocina".
     const order = await suite.db.execute<{ status: string }>(
       sql`select status from working_orders where id = ${id}`,
@@ -1653,7 +1657,7 @@ describe("/api/working-orders/:id/prep (Mode-P send-to-prep, KDS-1 ticket model)
       error: { code: "working_order.not_settled", params: { workingOrderId: id } },
     });
 
-    // Refused BEFORE any write — no ticket item was fired for the order (read as superuser, RLS bypassed).
+    // Refused BEFORE any write — no ticket item was fired for the order (read as superuser).
     const fired = await suite.db.execute(
       sql`select 1 from ticket_items where working_order_id = ${id}`,
     );
@@ -1677,12 +1681,13 @@ describe("/api/working-orders/:id/prep (Mode-P send-to-prep, KDS-1 ticket model)
   });
 });
 
-// KDS-1 station-display operate routes: GET /api/stations, GET /api/stations/:id/queue,
-// POST /api/ticket-items/:id/advance, POST /api/orders/:id/stations/:sid/advance. Hermetic (PGlite): the
-// station list, the per-station queue read, the per-line + whole-ticket bumps and the malformed-id
-// screens are plain logic a single backend proves; RLS/node isolation of `ticket_items` is
-// real-Postgres's job (`working-order.pg.test.ts`). `placeOrder`'s OWN fire seeds ticket items with no
-// fiscal write under this suite's `prepay` cfg (only `invoice_first`/Mode T dispatch a fiscal doc).
+// KDS-1 station-display operate routes: GET /api/stations, GET /api/stations/:id/queue, POST
+// /api/ticket-items/:id/advance, POST /api/orders/:id/stations/:sid/advance. Hermetic (PGlite):
+// the station list, the per-station queue read, the per-line + whole-ticket bumps and the
+// malformed-id screens are plain logic a single backend proves; `working-order.pg.test.ts` also
+// covers node filtering of `ticket_items` (`working-order.pg.test.ts`). `placeOrder`'s OWN fire
+// seeds ticket items with no fiscal write under this suite's `prepay` cfg (only
+// `invoice_first`/Mode T dispatch a fiscal doc).
 describe("KDS-1 station-display operate routes", () => {
   beforeEach(enrolSaleTillDevice);
   /** The seeded default station "Cocina", read back through `GET /api/stations` (the picker's own read). */
@@ -2002,8 +2007,8 @@ describe("/api/working-orders/:id/cancel", () => {
 // FP-1 Task 6 — the live-floor till surface: GET /api/zones (list-only), the mark/unmark-served
 // route, and the zoneId + pendingToServe fields Task 4 added to the /api/tables/state read. All
 // SESSION-GUARDED, all wrapped in `run`. served_at is a PRE-FISCAL operational field (design H2):
-// nothing here touches a fiscal path. A zone is SEEDED directly as the PGlite superuser (RLS bypassed
-// — pure setup, exactly as the location/till/node seeds in `setup` above; zone CRUD is the management
+// nothing here touches a fiscal path. A zone is SEEDED directly as the PGlite superuser (pure
+// setup, exactly as the location/till/node seeds in `setup` above; zone CRUD is the management
 // API's, Task 5), then read back / assigned through the app-role routes under test.
 describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, Task 6)", () => {
   it("lists zones, marks a line served (2→1) and unmarks it (1→2), surfacing zoneId + pendingToServe in the state read", async () => {
@@ -2213,15 +2218,16 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
 
 describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(till.configure) gate (FP-2, Task 4)", () => {
   // PGlite, like the rest of this suite. The novel thing under test is the FIRST on-till
-  // `authorize(till.configure)` hop: the route resolves the SESSION operator's OWN role and refuses a
-  // write the role cannot make (no supervisor override this slice — manager-on-till only). That gate is
-  // `authorize` reading `persons.role` for the open session and asking `roleHasPermission` — a query
-  // plus a JS lookup whose 204-vs-403 outcome is IDENTICAL on PGlite and real Postgres, because it
-  // turns on the person's role VALUE, not on any privilege / RLS-as-deployment-role / concurrency
-  // behaviour (CLAUDE.md §4's real-PG triggers). The write itself (`setTablePlacement`'s UPDATE on
-  // dining_tables under FORCE RLS as app_user) is proven over REAL Postgres by the management-api
-  // placement sibling, which wraps the SAME verb (management-api.test.ts). So the lighter target is the
-  // right one here and the heavier one adds nothing to THIS gate proof — the choice §4 asks to state.
+  // `authorize(till.configure)` hop: the route resolves the SESSION operator's OWN role and
+  // refuses a write the role cannot make (no supervisor override this slice — manager-on-till
+  // only). That gate is `authorize` reading `persons.role` for the open session and asking
+  // `roleHasPermission` — a query plus a JS lookup whose 204-vs-403 outcome is IDENTICAL on
+  // PGlite and real Postgres, because it turns on the person's role VALUE, not on any privilege /
+  // concurrency behaviour (CLAUDE.md §4's real-PG triggers). The write itself
+  // (`setTablePlacement`'s UPDATE on dining_tables as app_user) is proven over REAL Postgres by
+  // the management-api placement sibling, which wraps the SAME verb (management-api.test.ts). So
+  // the lighter target is the right one here and the heavier one adds nothing to THIS gate proof
+  // — the choice §4 asks to state.
 
   // A live zone every placement body points at, and the two operators the gate distinguishes: a MANAGER
   // (role `manager`, which holds `till.configure`) and a STAFF operator (Ana, role `staff`, which does
@@ -2282,8 +2288,10 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(till.
     return ((await res.json()) as { id: string }).id;
   }
 
-  /** Read a table's four placement columns (plus zone_id) back as the PGlite superuser (RLS bypassed —
-   *  a pure assertion read, not a path under test). */
+  /**
+   * Read a table's four placement columns (plus zone_id) back as the PGlite superuser (a pure
+   * assertion read, not a path under test).
+   */
   async function placementOf(tableId: string) {
     const rows = await suite.db.execute<{
       pos_x: number | null;

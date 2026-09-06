@@ -17,9 +17,9 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { assembleMirrorBundle } from "./mirror-bundle.js";
 
 // Real Postgres, not PGlite: assembleMirrorBundle reads the venue's parent rows as `app_user`
-// (PGlite connects as a superuser holding every privilege, so it could not prove app_user actually
-// holds SELECT on all five parent tables — the whole point here) and mints the token as a
-// `sync_retention` member (`sync_pruner`), a non-superuser INSERT on sync_peers. CLAUDE.md §4.
+// (PGlite connects as a superuser holding every privilege, so it could not prove app_user
+// actually holds SELECT on all five parent tables — the whole point here) and mints the token as
+// an `app_user` member (`sync_pruner`), a non-superuser INSERT on sync_peers. CLAUDE.md §4.
 const LOCALE = "es-ES";
 
 // The box vault key for `establishNodeIdentity` / `readNodeIdentityKey` — a fixed test ring, exactly
@@ -48,8 +48,8 @@ function nextNif(): string {
 
 let stateDir: string;
 let caPem: string;
-let appDb: Database; // app_login → app_user: reads the venue rows under RLS
-let retentionDb: Database; // sync_pruner → sync_retention: mints the peer token
+let appDb: Database; // app_login → app_user: reads the venue rows in this one-tenant database
+let retentionDb: Database; // sync_pruner → app_user: mints the peer token
 
 /** Provision a fresh venue (as the owner), stamp its database `preproduction`, and return the five
  * designated ids in AdoptResult shape (seriesId = the standard series, first of applyVenue's seriesIds). */
@@ -115,8 +115,9 @@ beforeAll(async () => {
   }).caCertPem;
   await writeFile(join(stateDir, "tls", "ca.crt"), caPem);
 
-  // The deployment stamp is a whole-DB fact, so one stamp on the shared template serves every venue this
-  // suite provisions. app_login → app_user for the RLS reads; sync_pruner → sync_retention for enrolPeer.
+  // The deployment stamp is a whole-DB fact, so one stamp on the shared template serves every
+  // venue this suite provisions. app_login → app_user for the parent-row reads; sync_pruner →
+  // app_user for enrolPeer.
   await stampDeployment(suite.admin, "preproduction");
   appDb = await suite.pg.connectAs("app_login", "app_pw");
   retentionDb = await suite.pg.connectAs("sync_pruner", "pp");

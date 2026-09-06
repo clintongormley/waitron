@@ -19,11 +19,11 @@ type Env = Record<string, string | undefined>;
  * tenant, gated ONLY by physical shell access plus the box's `DATABASE_URL` — nothing at the
  * application layer.
  *
- * The ungated reset lives HERE, not in `@waitron/identity`, on purpose: exposing a reusable ungated
- * reset from the identity package would be a permission-bypass anyone could import. This command
- * writes `persons` directly (the same columns `setPassword`/`resetPin` set) under `withTenant`, so
- * the write is still scoped by RLS to the box's tenant — the reset is ungated by PERMISSION, never
- * by TENANT.
+ * The ungated reset lives HERE, not in `@waitron/identity`, on purpose: exposing a reusable
+ * ungated reset from the identity package would be a permission-bypass anyone could import. This
+ * command writes `persons` directly (the same columns `setPassword`/`resetPin` set) under
+ * `withTenant`, so the by-id write assumes one tenant per database — the reset bypasses the
+ * application permission gate.
  *
  * Secrets come from the environment, NEVER argv — an argv element leaks into the process table
  * (`ps`), the same reason `waitron-recovery`/`register-till` read theirs from env. The new password
@@ -106,7 +106,7 @@ export async function runBreakGlassReset(deps: {
   const db = await deps.connect(databaseUrl);
   try {
     return await withTenant(db, tenantId, async (tx) => {
-      // RLS scopes this select to the box's tenant, so "the admin(s)" already means "of this tenant".
+      // The unfiltered tenant scope assumes one tenant per database: these are the box's admins.
       const admins = await tx
         .select({ id: persons.id })
         .from(persons)
@@ -145,8 +145,8 @@ export async function runBreakGlassReset(deps: {
         .returning({ id: persons.id });
 
       if (updated.length !== 1) {
-        // Under RLS + a matched admin id this is exactly 1; anything else means the row vanished
-        // between the select and the update (a concurrent delete) — report rather than pretend.
+        // With a matched admin id this is exactly 1; anything else means the row vanished between
+        // the select and the update (a concurrent delete) — report rather than pretend.
         deps.out(`break-glass: expected to reset one admin, affected ${String(updated.length)}`);
         return 1;
       }

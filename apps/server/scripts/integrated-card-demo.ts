@@ -6,45 +6,45 @@
 // tsx-run, a real `VerifactuBackend`) and on `till-sale-integrated.pg.test.ts`'s `integratedDeps`
 // helper (the exact provider-construction shape this script mirrors), it:
 //
-//   1. connects to a FRESH postgres (via `DATABASE_URL`) and applies the core, identity, fiscal and
-//      payments migrations itself — so it runs against a blank `postgres:18-alpine` with nothing
-//      pre-seeded (a card sale touches `payments`, which a cash-only demo never needs);
-//   2. stands up a real chained venue + registered SIF with `applyVenue` (@waitron/provisioning),
-//      configured `cardProvider: "stripe_terminal"` (the per-node config `loadTillConfig` would
-//      resolve from `WAITRON_TILL_CARD_PROVIDER`/`WAITRON_TILL_STRIPE_READER_ID` at real boot);
-//   3. seeds one `each`-priced product;
-//   4. wraps `FakeStripe` in a thin narrating client so the ACTUAL reader calls `collect` makes
-//      (`createPaymentIntent`, `processPaymentIntent`, `readerOutcome`) print to stdout as they
-//      happen — the "P2 (collect)" narration is not scripted commentary, it is the real call
-//      sequence `provider.ts:100-186` drives;
-//   5. rings a walk-up basket through `payWorkingOrderIntegrated` to a CAPTURE, printing the
-//      resulting `TillSaleResult` ticket (invoice number, total, AEAT QR) and reading back the
-//      linked `payments` row (provider `stripe`, state `captured`, external ref `pi_…`) as the
-//      connection owner — bypassing RLS, the same read shape `till-demo.ts`'s card-tender section
-//      uses — so a human can see the captured-payment ledger an integrated card pay adds;
-//   6. rings a SECOND walk-up basket with `FakeStripe.declineNext()`: the reader declines, and the
-//      script shows the fiscal invariant CLAUDE.md §5 names — "nothing may block a sale on anything
-//      but the sale itself" — by reading back that the order is left OPEN (not settled, not voided)
-//      and NO sale/registro was filed, then retrying the SAME order id by CASH (the till's own
-//      switch-tender path, `payWorkingOrder`) to show the order is still sellable.
+// 1. connects to a FRESH postgres (via `DATABASE_URL`) and applies the core, identity, fiscal and
+// payments migrations itself — so it runs against a blank `postgres:18-alpine` with nothing
+// pre-seeded (a card sale touches `payments`, which a cash-only demo never needs); 2. stands up a
+// real chained venue + registered SIF with `applyVenue` (@waitron/provisioning), configured
+// `cardProvider: "stripe_terminal"` (the per-node config `loadTillConfig` would resolve from
+// `WAITRON_TILL_CARD_PROVIDER`/`WAITRON_TILL_STRIPE_READER_ID` at real boot); 3. seeds one
+// `each`-priced product; 4. wraps `FakeStripe` in a thin narrating client so the ACTUAL reader
+// calls `collect` makes (`createPaymentIntent`, `processPaymentIntent`, `readerOutcome`) print to
+// stdout as they happen — the "P2 (collect)" narration is not scripted commentary, it is the real
+// call sequence `provider.ts:100-186` drives; 5. rings a walk-up basket through
+// `payWorkingOrderIntegrated` to a CAPTURE, printing the resulting `TillSaleResult` ticket
+// (invoice number, total, AEAT QR) and reading back the linked `payments` row (provider `stripe`,
+// state `captured`, external ref `pi_…`) as the connection owner — the same read shape
+// `till-demo.ts`'s card-tender section uses — so a human can see the captured-payment ledger an
+// integrated card pay adds; 6. rings a SECOND walk-up basket with `FakeStripe.declineNext()`: the
+// reader declines, and the script shows the fiscal invariant CLAUDE.md §5 names — "nothing may
+// block a sale on anything but the sale itself" — by reading back that the order is left OPEN
+// (not settled, not voided) and NO sale/registro was filed, then retrying the SAME order id by
+// CASH (the till's own switch-tender path, `payWorkingOrder`) to show the order is still
+// sellable.
 //
 // Like `till-demo.ts` (and unlike `daily-close-demo.ts`'s in-memory PGlite) this uses a real
 // PostgreSQL, because the whole point is to file a genuine huella-chained, append-only
-// `registros_facturacion` row AS THE APP ROLE UNDER RLS — which PGlite's superuser-only connection
-// cannot prove (CLAUDE.md §4). `applyVenue` runs as the connection owner (this superuser owns the
-// tables it just migrated). `payWorkingOrderIntegrated`'s own P1/P3 phases drop to `app_user` via
-// `withTenant` + `asAppUser` internally, the same as the deployed host (`till-sale.ts:644-645` for
-// P1, inside the function itself; `821-822` for P3, inside `finalizeCapture`, which it calls). The
-// PROVIDER's own writes do not, here: `collect`'s T1/T2 (`insertAttempting`/`captureAttempting`/
-// `failAttempting`) go through `StripeTerminalProvider`'s private `inTenant`, which calls only
-// `withTenant(this.opts.db, …)` — never `asAppUser` (`provider.ts:97-98`). `this.opts.db` is the
-// plain connection-owner `db` this script passes into the provider's constructor below, so in THIS
-// demo those particular writes run as the connection owner, not as `app_user`. This demo therefore
-// proves the fiscal record and `payWorkingOrderIntegrated`'s own writes under the real app role, but
-// does NOT exercise the provider's writes under it — `stripe.test.ts` in @waitron/payments-stripe
-// (a non-superuser probe role that is a member of `app_user`) is what proves those.
-// `resolveClient` is supplied but never reached: `recordSale` never contacts AEAT (that is `drain`'s
-// job), so the stub below throws if it is ever called.
+// `registros_facturacion` row AS THE APP ROLE — which PGlite's superuser-only connection cannot
+// prove (CLAUDE.md §4). `applyVenue` runs as the connection owner (this superuser owns the tables
+// it just migrated). `payWorkingOrderIntegrated`'s own P1/P3 phases drop to `app_user` via
+// `withTenant` + `asAppUser` internally, the same as the deployed host (`till-sale.ts:644-645`
+// for P1, inside the function itself; `821-822` for P3, inside `finalizeCapture`, which it
+// calls). The PROVIDER's own writes do not, here: `collect`'s T1/T2
+// (`insertAttempting`/`captureAttempting`/ `failAttempting`) go through
+// `StripeTerminalProvider`'s private `inTenant`, which calls only `withTenant(this.opts.db, …)` —
+// never `asAppUser` (`provider.ts:97-98`). `this.opts.db` is the plain connection-owner `db` this
+// script passes into the provider's constructor below, so in THIS demo those particular writes
+// run as the connection owner, not as `app_user`. This demo therefore proves the fiscal record
+// and `payWorkingOrderIntegrated`'s own writes under the real app role, but does NOT exercise the
+// provider's writes under it — `stripe.test.ts` in @waitron/payments-stripe (a non-superuser
+// probe role that is a member of `app_user`) is what proves those. `resolveClient` is supplied
+// but never reached: `recordSale` never contacts AEAT (that is `drain`'s job), so the stub below
+// throws if it is ever called.
 //
 // Run it against a throwaway database (NEVER a real one — it creates a tenant and chains real fiscal
 // records, and a pre-production stamp on a production chain is unrecoverable, see CLAUDE.md §5):

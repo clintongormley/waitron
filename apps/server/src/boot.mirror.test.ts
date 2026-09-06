@@ -120,18 +120,21 @@ let noConfigDatabaseUrl: string;
 let noConfigSyncDatabaseUrl: string;
 let primaryDatabaseUrl: string;
 let primarySyncDatabaseUrl: string;
-// The `sync_retention` (sync_pruner) URL for the primary — the connection the retention sweep opens
-// and the C2b mirror-bundle endpoint reuses to mint peer tokens. Set on the primary control boot so
-// that endpoint mounts there (the mirror never opens one, so it never mounts — the primary-only proof).
+// The retention (sync_pruner, an app_user member) URL for the primary — the connection the
+// retention sweep opens and the C2b mirror-bundle endpoint reuses to mint peer tokens. Set on the
+// primary control boot so that endpoint mounts there (the mirror never opens one, so it never
+// mounts — the primary-only proof).
 let primaryRetentionDatabaseUrl: string;
 // A peer enrolled on the PRIMARY clone (enrolPeer runs as the superuser admin — setup bypasses
 // grants). The control's /sync-api/hello probe presents this token, which the source resolves against
 // `sync_peers` through the sync_applier pool.
 let primaryPeerToken: string;
 
-/** Seed the FK identity (tenant, location, node, till, series) with the WAITRON_TILL_*_ID on one
- * clone, as the container superuser (RLS bypassed). None of these tables is sync-enrolled, so this
- * captures no sync_log rows. Mirrors sync-e2e.test.ts's `seedParents`. */
+/**
+ * Seed the FK identity (tenant, location, node, till, series) with the WAITRON_TILL_*_ID on one
+ * clone, as the container superuser. None of these tables is sync-enrolled, so this captures no
+ * sync_log rows. Mirrors sync-e2e.test.ts's `seedParents`.
+ */
 async function seedIdentity(admin: Database): Promise<void> {
   await admin.execute(sql`insert into tenants (id, country, tax_id, legal_name)
     values (${TILL_ENV.WAITRON_TILL_TENANT_ID}, 'ES', '90222222J', 'Mirror SL') on conflict do nothing`);
@@ -274,10 +277,10 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       expect(source.status).toBe(404);
 
       // The C2b mirror-bundle endpoint is PRIMARY-only (a mirror emits no bundle), so it is never
-      // mounted here. A POST is caught by the read-only gate FIRST (node.read_only 403), which is the
-      // observable guarantee that a mirror never serves a bundle — the primary control below reaches its
-      // OWN auth screen (401) on the same request, the primary-only A/B (the mount itself is gated on the
-      // mirror having no `sync_retention` connection, which it never opens).
+      // mounted here. A POST is caught by the read-only gate FIRST (node.read_only 403), which is
+      // the observable guarantee that a mirror never serves a bundle — the primary control below
+      // reaches its OWN auth screen (401) on the same request, the primary-only A/B (the mount
+      // itself is gated on the mirror having no retention connection, which it never opens).
       const bundle = await fetch(`${base}/management-api/mirror-bundle`, {
         method: "POST",
         body: "{}",
@@ -447,9 +450,10 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_SYNC_PEERS: SYNC_PEERS,
       WAITRON_SYNC_DATABASE_URL: primarySyncDatabaseUrl,
-      // The retention sweep's own sync_retention connection — the one the C2b mirror-bundle endpoint
-      // reuses to mint peer tokens. Set here so that endpoint mounts on this primary (the mirror never
-      // opens one, so it never mounts there — the primary-only proof, alongside the sync source above).
+      // The retention sweep's own retention connection — the one the C2b mirror-bundle endpoint
+      // reuses to mint peer tokens. Set here so that endpoint mounts on this primary (the mirror
+      // never opens one, so it never mounts there — the primary-only proof, alongside the sync
+      // source above).
       WAITRON_SYNC_RETENTION_DATABASE_URL: primaryRetentionDatabaseUrl,
       // No mirror connection config: a primary is not `isMirror`, so boot never reads `mirror_config`
       // / the vault token, and its peers come from WAITRON_SYNC_PEERS above (loadSyncConfig).
@@ -471,10 +475,11 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
         moduleVersions: expect.objectContaining({ core: expect.any(Number) }),
       });
 
-      // The C2b mirror-bundle endpoint IS mounted on this primary (it holds a sync_retention connection):
-      // a body-less POST is screened as password.invalid (401) BEFORE any DB work — proof the route
-      // registered. On the mirror boot above the same request is a 403 (read-only gate), never a 401:
-      // the mirror never serves this route, the primary does (the primary-only A/B, CLAUDE.md §1).
+      // The C2b mirror-bundle endpoint IS mounted on this primary (it holds a retention
+      // connection): a body-less POST is screened as password.invalid (401) BEFORE any DB work —
+      // proof the route registered. On the mirror boot above the same request is a 403 (read-only
+      // gate), never a 401: the mirror never serves this route, the primary does (the
+      // primary-only A/B, CLAUDE.md §1).
       const bundle = await fetch(`${base}/management-api/mirror-bundle`, { method: "POST" });
       expect(bundle.status).toBe(401);
       expect((await bundle.json()).error.code).toBe("password.invalid");

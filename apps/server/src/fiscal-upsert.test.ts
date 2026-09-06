@@ -53,7 +53,7 @@ const target = useTemplateDb({ template: "manifest" });
 // so its (subscriber, origin, ordered) cursor is fresh and the tests never interfere.
 const SUBSCRIBER = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
-let targetApplier: Database; // sync_applier: app_user (apply) + sync_tailer (cursor)
+let targetApplier: Database; // sync_applier: app_user grants for apply and cursor writes
 let sourceReader: Database; // the mounted source's serve pool (sync_applier)
 let sourceWriter: Database; // app_login: the app writer whose writes the capture triggers see
 let sourcePeerToken: string;
@@ -68,9 +68,11 @@ async function stampEnv(db: Database, environment: "production" | "preproduction
     on conflict (id) do update set environment = excluded.environment`);
 }
 
-/** A source serve mounted for `tenantId`: `/sync-api/log` reads sync_log inside `withTenant(tenantId)`
- * under FORCE RLS (sync-api.ts), so the served source MUST be mounted for the captured rows' tenant or
- * it streams nothing. Each test uses its own tenant, so the source is mounted per-pull with it. */
+/**
+ * Mount the source for this test's tenant configuration. The source reads sync_log through
+ * withTenant, which adds no tenant filter; the suite has a separate source database and selects
+ * captured rows by origin when pulling.
+ */
 function sourceHttp(tenantId: string): HttpClient {
   const app = new Hono();
   mountSyncApi(
@@ -111,9 +113,11 @@ async function seedBothSides(): Promise<FiscalIds> {
   return ids;
 }
 
-/** Run one write on the SOURCE as the app writer so the fiscal capture trigger fires and the row lands
- * in sync_log under origin = `originNodeId` (the pull's ?originId=). Both `app.tenant_id` (RLS) and
- * `app.node_id` (capture origin) are bound transaction-locally by `withTenant`. */
+/**
+ * Run one write on the SOURCE as the app writer so the fiscal capture trigger fires and the row
+ * lands in sync_log under origin = `originNodeId` (the pull's ?originId=). `app.node_id` (capture
+ * origin) is bound transaction-locally by `withTenant`.
+ */
 async function captureWrite(
   tenantId: string,
   originNodeId: string,
@@ -131,7 +135,7 @@ async function rewindCursor(originId: string): Promise<void> {
   );
 }
 
-/** Read one scalar off the MIRROR (superuser, RLS-bypassing) — the observed post-apply state. */
+/** Read one scalar off the MIRROR (superuser) — the observed post-apply state. */
 async function mirror<T>(query: Parameters<Database["execute"]>[0]): Promise<T | undefined> {
   const r = await target.admin.execute<{ v: T }>(query);
   return r.rows[0]?.v;

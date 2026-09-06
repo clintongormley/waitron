@@ -25,10 +25,10 @@ import { insertFiscalRegistro, seedFiscalParents } from "./testing/fiscal-fixtur
 // that does not decide placement (packages/fiscal-verifactu is exempt too).
 //
 // The deployment role app_login — a non-superuser LOGIN member of app_user, so the REVOKE ALL
-// actually applies to it — is created once in src/testing/global-setup.ts and shared across the gate
-// suites; reached below with `postgres.pg.connectAs("app_login", "app_pw")`. The privileged reader is
-// `postgres.admin` (the clone's superuser), used only for setup and to read sync_log back (the app
-// role holds no SELECT on it).
+// actually applies to it — is created once in src/testing/global-setup.ts and shared across the
+// gate suites; reached below with `postgres.pg.connectAs("app_login", "app_pw")`. The
+// verification reader is `postgres.admin` (the clone's superuser), used for setup and to read
+// sync_log back. app_user also holds SELECT on sync_log in the sync baseline.
 const postgres = useTemplateDb({ template: "manifest" });
 
 // The FK-closure seeding and the registro INSERT are the shared apply-lane fixtures

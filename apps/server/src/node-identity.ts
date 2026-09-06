@@ -15,14 +15,15 @@ export const NODE_KEY_PURPOSE = "membership.node_key";
  * mirror runs as the primary's nodeId and never signs, so it seals no key and inherits the primary's
  * anchor through the node row adoptVenue replicates.
  *
- * The seal and the stamp are ONE logical change — the private key and its matching public key must
- * land together or not at all — so they share a single `withTenant` (CLAUDE.md §3: `withTenant` IS
- * that transaction; nothing non-DB sits between them to force a split). The shared transaction runs
- * OWNER-role because the `nodes` stamp needs it: app_user holds SELECT only on `nodes`
- * (`0017_nodes_rls.sql`), so it cannot UPDATE `public_key`. The seal alone could run as app_user
- * (which DOES hold DML on `tenant_credentials`, `0001_credentials_rls.sql`), but it rides the same
- * owner transaction here. Both tables are FORCE-RLS, scoped by the one tenant GUC. Runs AFTER
- * provisionVenue mints the tenant — the vault row is FK-restricted to it.
+ * The seal and the stamp are ONE logical change — the private key and its matching public key
+ * must land together or not at all — so they share a single `withTenant` (CLAUDE.md §3:
+ * `withTenant` IS that transaction; nothing non-DB sits between them to force a split). The
+ * shared transaction runs OWNER-role because the `nodes` stamp needs it: app_user holds SELECT
+ * only on `nodes` (`0017_nodes_rls.sql`), so it cannot UPDATE `public_key`. The seal alone could
+ * run as app_user (which DOES hold DML on `tenant_credentials`, `0001_credentials_rls.sql`), but
+ * it rides the same owner transaction here. The writes carry explicit tenant ids in this
+ * one-tenant database. Runs AFTER provisionVenue mints the tenant — the vault row is
+ * FK-restricted to it.
  */
 export interface EstablishIdentityDeps {
   ownerDb: Database;

@@ -94,7 +94,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    // No integrated card terminal for these working-order RLS suites.
+    // No integrated card terminal for these working-order PostgreSQL suites.
     cardProvider: "none",
     tipsEnabled: false,
     orderFlow: "prepay",
@@ -186,9 +186,12 @@ async function seedTable(cfg: TillConfig, label: string): Promise<string> {
   });
 }
 
-/** How many OPEN working orders exist for the tenant — owner read (bypasses RLS). With the per-table
- *  FOR UPDATE lock, a race yields exactly ONE (the loser refuses BEFORE creating its order); without the
- *  lock, both create one → 2, and the table's single tab_id points at only one, orphaning the other. */
+/**
+ * How many OPEN working orders exist for the tenant — owner read. With the per-table FOR UPDATE
+ * lock, a race yields exactly ONE (the loser refuses BEFORE creating its order); without the
+ * lock, both create one → 2, and the table's single tab_id points at only one, orphaning the
+ * other.
+ */
 async function openOrderCount(cfg: TillConfig): Promise<number> {
   const { rows } = await suite.admin.execute<{ n: string }>(
     sql`select count(*)::text as n from working_orders where tenant_id = ${cfg.tenantId} and status = 'open'`,
@@ -242,7 +245,7 @@ async function orderState(id: string): Promise<{ status: string; settledAtSet: b
   return { status: rows[0]!.status, settledAtSet: rows[0]!.settled };
 }
 
-/** How many `sales` rows reference this working order — read as the owner (bypasses RLS). */
+/** How many `sales` rows reference this working order — read as the owner. */
 async function saleCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.admin.execute<{ count: string }>(sql`
     select count(*)::text as count from sales where working_order_id = ${workingOrderId}
@@ -429,9 +432,11 @@ function fixedClock(instant: Date): TrustedClock {
   };
 }
 
-/** Tenant A's NIF — its `tenants.tax_id` (for a Spanish tenant, tax_id IS the NIF). This is the issuer
- *  identifier (`IDEmisorFactura`) `recordSale` files under, and the field the two filings must SHARE for
- *  their huellas to match. Owner read (bypasses RLS). */
+/**
+ * Tenant A's NIF — its `tenants.tax_id` (for a Spanish tenant, tax_id IS the NIF). This is the
+ * issuer identifier (`IDEmisorFactura`) `recordSale` files under, and the field the two filings
+ * must SHARE for their huellas to match. Owner read.
+ */
 async function nifOf(cfg: TillConfig): Promise<string> {
   const { rows } = await suite.admin.execute<{ tax_id: string }>(
     sql`select tax_id from tenants where id = ${cfg.tenantId}`,
@@ -479,7 +484,7 @@ async function secondVenueSharingNif(nif: string): Promise<SeededVenue> {
   return venue;
 }
 
-/** The filed huella for a working order's sale — owner read (bypasses RLS). */
+/** The filed huella for a working order's sale — owner read. */
 async function filedHuella(workingOrderId: string): Promise<string> {
   const { rows } = await suite.admin.execute<{ huella: string }>(sql`
     select r.huella from registros_facturacion r
@@ -525,11 +530,12 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
       tender: { method: "cash", amount: "5.00" },
     });
 
-    // Non-vacuity control (mirrors the `entorno is not part of the huella` precedent's read-back): the
-    // two orders GENUINELY differ in table-ness — the TAB order is pointed at by a `dining_tables` row,
-    // the WALK-UP order by none. Owner reads (bypass RLS; the uuids are globally unique, so the
-    // cross-tenant count is exact). Without this, a regression where `openTab` stopped setting `tab_id`
-    // would leave both filings table-less and make the equality below vacuously true.
+    // Non-vacuity control (mirrors the `entorno is not part of the huella` precedent's
+    // read-back): the two orders GENUINELY differ in table-ness — the TAB order is pointed at by
+    // a `dining_tables` row, the WALK-UP order by none. Owner reads (the uuids are globally
+    // unique, so the cross-tenant count is exact). Without this, a regression where `openTab`
+    // stopped setting `tab_id` would leave both filings table-less and make the equality below
+    // vacuously true.
     const tabPointers = await suite.admin.execute<{ n: string }>(
       sql`select count(*)::text as n from dining_tables where tab_id = ${tabId}`,
     );
@@ -645,8 +651,8 @@ describe("H2 (column): the huella is independent of delivery_table_id", () => {
       tender: { method: "cash", amount: "5.00" },
     });
 
-    // Non-vacuity control: the two orders GENUINELY differ in the one column under test — A carries the
-    // real table, B carries NULL. Owner reads (bypass RLS; the uuids are globally unique).
+    // Non-vacuity control: the two orders GENUINELY differ in the one column under test — A
+    // carries the real table, B carries NULL. Owner reads (the uuids are globally unique).
     expect(await deliveryTableOf(deliveredId)).toBe(tableA);
     expect(await deliveryTableOf(walkUpId)).toBe(null);
 

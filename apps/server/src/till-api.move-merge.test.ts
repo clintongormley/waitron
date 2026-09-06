@@ -24,12 +24,13 @@ import { createTable } from "./tables.js";
 import { openTab } from "./working-order.js";
 import "./errors.js";
 
-// PGlite, not real Postgres: the move/join/merge verbs are table-service LOGIC (re-point `dining_tables`
-// rows, move lines, abandon a tab) whose privilege/RLS/concurrency behaviour is proven over real
-// Postgres in `working-order.pg.test.ts`; here we prove only the HTTP surface — the session guard, the
-// malformed-`:id` screen, and the verb's status mapping — which fires at the boundary before/around a
-// single query, so a superuser PGlite backend is adequate (CLAUDE.md §4). Sessions/persons live in
-// identity, so the schema is CORE_MIGRATIONS + IDENTITY_MIGRATIONS. Harness ported from `till-api.test.ts`.
+// PGlite, not real Postgres: the move/join/merge verbs are table-service LOGIC (re-point
+// `dining_tables` rows, move lines, abandon a tab) whose privilege/concurrency behaviour is
+// proven over real Postgres in `working-order.pg.test.ts`; here we prove only the HTTP surface —
+// the session guard, the malformed-`:id` screen, and the verb's status mapping — which fires at
+// the boundary before/around a single query, so a superuser PGlite backend is adequate (CLAUDE.md
+// §4). Sessions/persons live in identity, so the schema is CORE_MIGRATIONS + IDENTITY_MIGRATIONS.
+// Harness ported from `till-api.test.ts`.
 let cfg: TillConfig;
 let ana: { id: string };
 
@@ -38,9 +39,9 @@ const suite = usePgliteDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     const tenantId = await seedTenant(db);
-    // A location → till the session cookie references: `loginWithPin` inserts a `sessions` row with a
-    // FK to `tills`, so the till `cfg.tillId` names must exist. Seeded as the PGlite superuser (RLS
-    // bypassed) — pure setup, as `@waitron/db`'s own seed helpers document.
+    // A location → till the session cookie references: `loginWithPin` inserts a `sessions` row
+    // with a FK to `tills`, so the till `cfg.tillId` names must exist. Seeded as the PGlite
+    // superuser — pure setup, as `@waitron/db`'s own seed helpers document.
     const loc = await db.execute<{ id: string }>(sql`
       insert into locations (tenant_id, name, invoice_locales, operation_description)
       values (${tenantId}, 'Counter', array['es-ES'], 'Retail') returning id`);

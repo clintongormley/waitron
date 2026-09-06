@@ -26,11 +26,13 @@ export interface RetireDeps {
   readonly tenantId: string;
   /** THIS (departing) node — the node that becomes `evicted`, and the document's `signerNodeId`. */
   readonly nodeId: string;
-  /** The disposal/drain-progress reader (the same drain the box-status `disposal` surface reports),
-   *  or `undefined` when the held document names no carrier. `undefined` on a fenced node means
-   *  "fenced, no carrier" → refuse `node.retire_no_carrier`. The caller (boot/Task 3) wraps
-   *  `readDrainProgress` on the sync_tailer pool under `withTenant`, exactly as box-status's
-   *  `readDisposal` does; retire never touches that pool itself. */
+  /**
+   * The disposal/drain-progress reader (the same drain the box-status `disposal` surface
+   * reports), or `undefined` when the held document names no carrier. `undefined` on a fenced
+   * node means "fenced, no carrier" → refuse `node.retire_no_carrier`. The caller (boot/Task 3)
+   * wraps `readDrainProgress` on the sync pool under `withTenant`, exactly as box-status's
+   * `readDisposal` does; retire never touches that pool itself.
+   */
   readonly readDrainProgress: (() => Promise<DrainProgress>) | undefined;
   /** The carrier node id the injected `readDrainProgress` reader keys its cursor lookup on — captured at
    *  BOOT (`servingPrimaryNodeId` of the held doc at boot). retireSelf re-derives the CURRENT carrier

@@ -107,8 +107,10 @@ let primarySyncDatabaseUrl: string;
 let primaryRetentionDatabaseUrl: string;
 let primaryPeerToken: string;
 
-/** Seed the FK identity (tenant, location, node, till, series) with the WAITRON_TILL_*_ID on one clone,
- * as the container superuser (RLS bypassed) — mirrors boot.mirror.test.ts's `seedIdentity`. */
+/**
+ * Seed the FK identity (tenant, location, node, till, series) with the WAITRON_TILL_*_ID on one
+ * clone, as the container superuser — mirrors boot.mirror.test.ts's `seedIdentity`.
+ */
 async function seedIdentity(admin: Database): Promise<void> {
   await admin.execute(sql`insert into tenants (id, country, tax_id, legal_name)
     values (${TILL_ENV.WAITRON_TILL_TENANT_ID}, 'ES', '90333333P', 'Secondary SL') on conflict do nothing`);
@@ -244,10 +246,11 @@ function hasEventPrefixed(lines: readonly string[], prefix: string): boolean {
   });
 }
 
-// The four singleton duties' config, present in FULL on both boots so the ONLY thing that decides whether
-// they run is `singleton_role`. The relay + backup DB are unreachable (port 1) on purpose: the real
-// call-through workers back off / the backup RLS probe fails fast — this suite asserts the WIRING (started
-// or not), never a live connection. Each boot fills in its own DATABASE/SYNC/RETENTION urls.
+// The four singleton duties' config, present in FULL on both boots so the ONLY thing that decides
+// whether they run is `singleton_role`. The relay + backup DB are unreachable (port 1) on
+// purpose: the real call-through workers back off / the backup read-privilege probe fails fast —
+// this suite asserts the WIRING (started or not), never a live connection. Each boot fills in its
+// own DATABASE/SYNC/RETENTION urls.
 function dutyEnv(port: number) {
   return {
     ...KEY_ENV,
@@ -292,10 +295,11 @@ describe("singleton-duty boot (real Postgres, deployment.singleton_role gating)"
       // 2. Retention sweep — not started (the primary control starts it once).
       expect(runRetentionSweep).not.toHaveBeenCalled();
 
-      // 3. Backup — the gate is skipped ENTIRELY, so NEITHER the RLS probe failure
-      //    (backup.disabled_probe_failed) NOR the disabled-info line (backup.disabled) is logged. The
-      //    primary control below emits a backup.* line for the identical env, so this absence is the gate
-      //    rather than a missing config. Asserted after loop.sleeping arrived, so the gate has been decided.
+      // 3. Backup — the gate is skipped ENTIRELY, so NEITHER the read-privilege probe failure
+      // (backup.disabled_probe_failed) NOR the disabled-info line (backup.disabled) is logged.
+      // The primary control below emits a backup.* line for the identical env, so this absence is
+      // the gate rather than a missing config. Asserted after loop.sleeping arrived, so the gate
+      // has been decided.
       expect(hasEventPrefixed(lines, "backup.")).toBe(false);
 
       // 4. Tunnel client — not dialed (the primary control dials it once).
@@ -337,9 +341,10 @@ describe("singleton-duty boot (real Postgres, deployment.singleton_role gating)"
       // 2. Retention sweep — started once.
       expect(runRetentionSweep).toHaveBeenCalledTimes(1);
 
-      // 3. Backup — the gate RAN: with the port-1 backup DB the RLS probe fails, so a `backup.*` line
-      //    (backup.disabled_probe_failed) is emitted. This is the positive twin of the secondary's absence
-      //    assertion — the gate is entered on the singleton primary, skipped on the secondary.
+      // 3. Backup — the gate RAN: with the port-1 backup DB the read-privilege probe fails, so a
+      // `backup.*` line (backup.disabled_probe_failed) is emitted. This is the positive twin of
+      // the secondary's absence assertion — the gate is entered on the singleton primary, skipped
+      // on the secondary.
       expect(hasEventPrefixed(lines, "backup.")).toBe(true);
 
       // 4. Tunnel client — dialed once.

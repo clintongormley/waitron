@@ -28,17 +28,17 @@ import type { Logger } from "./logger.js";
 
 /**
  * Everything the dashboard's recipe-authoring routes need: `db` + this venue's own `cfg.tenantId`
- * scope every `withTenant` below, so RLS confines each read/write to this server's one tenant.
+ * are passed to every `withTenant` below. The database holds this server's one tenant.
  * `cfg.nodeId` is this node's origin id, threaded into every write's `withTenant` exactly as
- * `CatalogueApiDeps` does. The `ingredients`/`recipe_lines` tables themselves carry no sync-capture
- * trigger, but a recipe write UPDATEs `products` — `setProductRecipe` → `recomputeProductDerivations`,
- * which drives BOTH `applyRecipeDerivation` (allergens) and `applyDietDerivation` (diet origins), two
- * separate `products` UPDATEs — and a PATCH's allergen change fans out the same recompute over every
- * product that uses the ingredient — and `products` IS sync-enrolled (`products_capture`,
- * packages/sync/drizzle/0000_sync_outbox.sql:196). Without `nodeId`, that capture would record the
- * all-zero sentinel instead of this node (guarded by `sync-origin.test.ts`). No card provider,
- * clock or media store either — these routes touch only the ingredient + recipe + product tables via
- * the headless `@waitron/recipes` ops.
+ * `CatalogueApiDeps` does. The `ingredients`/`recipe_lines` tables themselves carry no
+ * sync-capture trigger, but a recipe write UPDATEs `products` — `setProductRecipe` →
+ * `recomputeProductDerivations`, which drives BOTH `applyRecipeDerivation` (allergens) and
+ * `applyDietDerivation` (diet origins), two separate `products` UPDATEs — and a PATCH's allergen
+ * change fans out the same recompute over every product that uses the ingredient — and `products`
+ * IS sync-enrolled (`products_capture`, packages/sync/drizzle/0000_sync_outbox.sql:196). Without
+ * `nodeId`, that capture would record the all-zero sentinel instead of this node (guarded by
+ * `sync-origin.test.ts`). No card provider, clock or media store either — these routes touch only
+ * the ingredient + recipe + product tables via the headless `@waitron/recipes` ops.
  */
 export interface RecipeApiDeps {
   db: Database;
@@ -79,12 +79,13 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 const run = createErrorBoundary(STATUS, "recipe.failed");
 
 /**
- * Mounts the dashboard's gated recipe-authoring group on an existing Hono app — `mountPurchasingApi`'s
- * sibling, attached to the SAME app (the `mountCatalogueApi`/`mountPurchasingApi` convention). Every
- * route wraps its handler in `run`, calls `requireManagementSession(c)` (→ 401 before any DB work) and
- * then, inside `withTenant` + `asAppUser`, `authorizeManager(...)` (→ 403) before the headless
- * `@waitron/recipes` op, so RLS scopes each read/write to this server's one tenant and the
- * `recipe.manage` gate runs on every route through one constant.
+ * Mounts the dashboard's gated recipe-authoring group on an existing Hono app —
+ * `mountPurchasingApi`'s sibling, attached to the SAME app (the
+ * `mountCatalogueApi`/`mountPurchasingApi` convention). Every route wraps its handler in `run`,
+ * calls `requireManagementSession(c)` (→ 401 before any DB work) and then, inside `withTenant` +
+ * `asAppUser`, `authorizeManager(...)` (→ 403) before the headless `@waitron/recipes` op, in the
+ * database holding this server's one tenant. The `recipe.manage` gate runs on every route through
+ * one constant.
  */
 export function mountRecipeApi(app: Hono, deps: RecipeApiDeps, log: Logger): void {
   // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries

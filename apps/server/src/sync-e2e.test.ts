@@ -9,16 +9,17 @@ import type { Logger } from "./logger.js";
 import { mountSyncApi } from "./sync-api.js";
 import { ALL_SYNC_ENROLMENTS } from "./modules.js";
 
-// Two-node end-to-end (design §5, §7). TWO manifest-migrated databases in the shared container, each
-// a `useTemplateDb` clone of the `manifest` template — `source` and `target` — are the minimum that
-// proves genuine CROSS-DB apply: two independent sync_log/sync_cursor states. Calling `useTemplateDb`
-// twice is how the harness gives a suite two managed databases; each clone is created and dropped by
-// its own hooks. The roles (app_user/sync_tailer members) are cluster-global (created once by the
-// package globalSetup), so one set serves both databases. The HTTP wire is a real Hono `app.request`
-// (a real Request/Response carrying the exact NDJSON bytes) — a bound socket is deployment #9's TLS
-// concern; byte-identity is a property of the bytes, not the socket. Both sides act as the
-// non-superuser sync_reader/sync_applier, holding only their grants (PGlite would be a false pass —
-// every connection is a superuser holding all of them, CLAUDE.md §4).
+// Two-node end-to-end (design §5, §7). TWO manifest-migrated databases in the shared container,
+// each a `useTemplateDb` clone of the `manifest` template — `source` and `target` — are the
+// minimum that proves genuine CROSS-DB apply: two independent sync_log/sync_cursor states.
+// Calling `useTemplateDb` twice is how the harness gives a suite two managed databases; each
+// clone is created and dropped by its own hooks. The roles (app_user members) are cluster-global
+// (created once by the package globalSetup), so one set serves both databases. The HTTP wire is a
+// real Hono `app.request` (a real Request/Response carrying the exact NDJSON bytes) — a bound
+// socket is deployment #9's TLS concern; byte-identity is a property of the bytes, not the
+// socket. Both sides act as the non-superuser sync_reader/sync_applier, holding only their grants
+// (PGlite would be a false pass — every connection is a superuser holding all of them, CLAUDE.md
+// §4).
 const log: Logger = () => {};
 
 // Sync node ids (the origin markers + cursor keys), distinct from the nodes-table FK below.
@@ -46,11 +47,12 @@ let targetAdmin: Database;
 let targetApplier: Database;
 let sourceReader: Database;
 let sourceWriter: Database;
-// The Bearer token a subscriber presents to the source. It must be one an `enrolPeer` minted on the
-// SOURCE (spec §9): the mounted source authenticates every /hello + /log request against source's
-// `sync_peers` through `sourceReader` (a sync_tailer + app_user member — the production source serve
-// pool, boot.ts:1053; app_user is needed for the /hello node_membership read). The peer's own subscriber_id is
-// irrelevant to /hello + /log — they need only a valid peer — so one enrolment serves every pull below.
+// The Bearer token a subscriber presents to the source. It must be one an `enrolPeer` minted on
+// the SOURCE (spec §9): the mounted source authenticates every /hello + /log request against
+// source's `sync_peers` through `sourceReader` (a app_user member — the production source serve
+// pool, boot.ts:1053; app_user is needed for the /hello node_membership read). The peer's own
+// subscriber_id is irrelevant to /hello + /log — they need only a valid peer — so one enrolment
+// serves every pull below.
 let sourcePeerToken: string;
 
 /** Seed the FK parents (tenant, location, till, node, series) with the fixed ids on one database.

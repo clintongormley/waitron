@@ -20,11 +20,11 @@ const membershipKeyPair = generateNodeKeyPair();
 const membershipDoc = (term: number) => signedMembershipDoc(term, { keyPair: membershipKeyPair });
 
 // A clone of the full-manifest template (`sync` last) for the peer lookups + /log read as a
-// non-superuser sync_tailer member; the pre-DB 401 cases are hermetic and never touch the DB.
-// `app_login` and `sync_reader` (a sync_tailer member) are created cluster-wide by the package
-// globalSetup, in place of this suite's former per-file `setup` role creation. Peers are enrolled as
-// `postgres.admin` (setup bypasses grants), then authenticated through a `sync_reader` pool — the
-// real deployment shape (`sync_tailer` holds SELECT + UPDATE(last_seen_at) on sync_peers).
+// non-superuser app_user member; the pre-DB 401 cases are hermetic and never touch the DB.
+// `app_login` and `sync_reader` (an app_user member) are created cluster-wide by the package
+// globalSetup, in place of this suite's former per-file `setup` role creation. Peers are enrolled
+// as `postgres.admin` (setup bypasses grants), then authenticated through a `sync_reader` pool —
+// the real deployment shape (`app_user` holds SELECT + UPDATE(last_seen_at) on sync_peers).
 const postgres = useTemplateDb({ template: "manifest" });
 
 // A db whose every method throws: `requirePeer` must answer 401 BEFORE any DB work for a missing/blank
@@ -100,10 +100,9 @@ describe("mountSyncApi peer auth + handshake", () => {
   });
 
   it("/sync-api/hello returns this node's id and environment behind a valid peer token", async () => {
-    // /hello now also reads the held membership document, so it runs on `sync_applier` — a member of
-    // both `app_user` (SELECT on node_membership) and `sync_tailer` (the sync_peers lookup) — the
-    // production `syncDb` shape; `sync_reader` (sync_tailer only) would 500 on the node_membership
-    // read. With nothing adopted, `membership` is null (the seeded case is the sibling test below).
+    // /hello reads the held membership document through sync_applier, an app_user member with
+    // SELECT on node_membership and sync_peers. With nothing adopted, membership is null; the
+    // seeded case is the sibling test below.
     const pool = await postgres.pg.connectAs("sync_applier", "ap");
     try {
       const peer = await enrolPeer(postgres.admin, { subscriberId: "helloPeer", name: "hello" });
@@ -142,16 +141,11 @@ describe("mountSyncApi peer auth + handshake", () => {
   });
 
   it("/sync-api/hello serves the held membership document (seeded, not null)", async () => {
-    // The handshake now rides the held membership document (design §5): a puller re-runs its accept
-    // fence against `helloBody.membership`. Mount on `sync_applier` — a member of BOTH `app_user`
-    // (the SELECT on node_membership readNodeMembership needs) and `sync_tailer` (the sync_peers
-    // lookup requirePeer needs) — the production `syncDb` shape. `sync_reader` (sync_tailer only, as
-    // the sibling /hello test uses) lacks the node_membership grant, so it is deliberately NOT reused
-    // here (CLAUDE.md §3 — never widen a grant to make a test pass).
+    // The handshake carries the held membership document (design §5), which the puller uses for
+    // its accept check. Mount on sync_applier, an app_user member with SELECT on node_membership
+    // and sync_peers. The sibling test
     //
-    // The unset → null case is already asserted by the sibling "returns this node's id and
-    // environment" test above (its `toEqual` includes `membership: null`), so this test starts from a
-    // seeded document rather than re-proving that round-trip.
+    // already asserts membership: null, so this case starts from a seeded document.
     const pool = await postgres.pg.connectAs("sync_applier", "ap");
     try {
       const peer = await enrolPeer(postgres.admin, { subscriberId: "memPeer", name: "mem" });
@@ -197,11 +191,12 @@ describe("mountSyncApi peer auth + handshake", () => {
     );
     const catalogueId = cat.rows[0]!.id;
     // A genuine FAST-lane row to prove lane routing. The fast lane is exactly {payments,
-    // payment_refunds} (registry.ts:153, pinned by registry.test.ts:164); `payment_policy` — which the
-    // task brief mislabelled "fast" — is an ORDERED-lane table (registry.ts:162), so it would prove
-    // nothing here. `payments` points at a working_order (payments_working_order_fk), so seed the
-    // tenant→location→till→working_order chain as admin (RLS bypassed, pure setup, as seedWorkingOrder
-    // does); the FK is satisfied cross-transaction by a committed working_orders row.
+    // payment_refunds} (registry.ts:153, pinned by registry.test.ts:164); `payment_policy` —
+    // which the task brief mislabelled "fast" — is an ORDERED-lane table (registry.ts:162), so it
+    // would prove nothing here. `payments` points at a working_order (payments_working_order_fk),
+    // so seed the tenant→location→till→working_order chain as admin (pure setup, as
+    // seedWorkingOrder does); the FK is satisfied cross-transaction by a committed working_orders
+    // row.
     const loc = await postgres.admin.execute<{ id: string }>(
       sql`insert into locations (tenant_id, name, invoice_locales, operation_description)
           values (${tenantId}, 'Counter', array['es'], 'Retail') returning id`,
@@ -442,7 +437,7 @@ describe("POST /sync-api/cursor — subscribers report their cursor to the sourc
     const x = await enrolPeer(postgres.admin, { subscriberId: "peerX", name: "X" });
     await enrolPeer(postgres.admin, { subscriberId: "peerY", name: "Y" });
 
-    const pool = await postgres.pg.connectAs("sync_reader", "rp"); // a sync_tailer member
+    const pool = await postgres.pg.connectAs("sync_reader", "rp"); // an app_user member
     try {
       const app = new Hono();
       mountSyncApi(

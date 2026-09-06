@@ -14,10 +14,9 @@ import { ALL_MODULES } from "./modules.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 
 // PGlite, not real Postgres: `establishReservedStandbyIdentity` seals a credential, inserts the
-// standby's own node (public_key + endorsement), and persists a reserved SIF + series, all under one
-// `withTenant`. PGlite's only role is superuser, which bypasses RLS — so this proves the compose +
-// idempotency ROUND-TRIP, not the RLS enforcement (the role/path enforcement is proven for `nodes` in
-// packages/db and for the vault in the credentials real-Postgres suites). CLAUDE.md §4.
+// standby's own node (public_key + endorsement), and persists a reserved SIF + series, all under
+// one `withTenant`. PGlite exercises this round-trip and its behavioural assertions on a
+// superuser connection; it does not check grants. CLAUDE.md §4.
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",

@@ -47,8 +47,8 @@ const target = useTemplateDb({ template: "manifest" });
 // node id, so its (subscriber, origin, ordered) cursor is fresh and the tests never interfere.
 const SUBSCRIBER = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
-let targetApplier: Database; // sync_applier: app_user (apply INSERT) + sync_tailer (cursor)
-let sourceReader: Database; // the mounted source's serve pool (sync_applier: app_user + sync_tailer)
+let targetApplier: Database; // sync_applier: app_user grants for apply and cursor writes
+let sourceReader: Database; // the mounted source's serve pool (sync_applier: app_user)
 let sourceWriter: Database; // app_login: the app writer whose insert the capture trigger sees
 let sourcePeerToken: string;
 
@@ -58,10 +58,11 @@ async function stampEnv(db: Database, environment: "production" | "preproduction
     on conflict (id) do update set environment = excluded.environment`);
 }
 
-/** The HTTP seam: a real Hono app.request against a source mounting the SAME assembled enrolment set.
- * `tenantId` is the tenant the source serves under — `/sync-api/log` reads sync_log inside
- * `withTenant(db, tenantId)` (sync-api.ts:150), so under FORCE RLS only rows of THIS tenant are
- * streamed. Each test uses its own tenant, so the mounted source is built per-pull with it. */
+/**
+ * The HTTP seam: a real Hono app.request against a source mounting the same assembled enrolment
+ * set. Each test builds its source for its tenant configuration; withTenant adds no tenant
+ * filter. The suite has a separate source database and the pull selects captured rows by origin.
+ */
 function sourceHttp(environment: "production" | "preproduction", tenantId: string): HttpClient {
   const app = new Hono();
   mountSyncApi(

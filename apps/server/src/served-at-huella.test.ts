@@ -164,11 +164,12 @@ interface Shop {
  * This mirrors verify.test.ts's entorno test, which likewise uses a fresh tenant per record while
  * pinning IDEmisorFactura to one constant (there via `altaFor`'s hardcoded TEST_NIF).
  *
- * `applyVenue` registers the node's SIF under the tenant's own tax_id; re-registering under `emisorNif`
- * (registerSif revokes the old identity, mints a fresh installation number, and resets the chain to
- * empty) is what makes both shops file under one obligado NIF while each starts a first record. The
- * NumeroInstalacion differs between the two shops (a per-NIF counter) but is not hashed. Run as the
- * owner under the tenant GUC — exactly how applyVenue itself runs registerSif (no asAppUser).
+ * `applyVenue` registers the node's SIF under the tenant's own tax_id; re-registering under
+ * `emisorNif` (registerSif revokes the old identity, mints a fresh installation number, and
+ * resets the chain to empty) is what makes both shops file under one obligado NIF while each
+ * starts a first record. The NumeroInstalacion differs between the two shops (a per-NIF counter)
+ * but is not hashed. Run as the owner inside withTenant — exactly how applyVenue itself runs
+ * registerSif (no asAppUser).
  */
 async function seedShop(emisorNif: string): Promise<Shop> {
   const venue = await applyVenue(planVenue(venueRequest(nextNif()), ALL_MODULES), {

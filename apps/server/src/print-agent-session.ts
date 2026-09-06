@@ -26,13 +26,13 @@ export interface PrintAgentSessionDeps {
  * token string to `@waitron/printing`'s `authenticateAgent` CORE, which owns the token split, the
  * scrypt `verifySecret`, the `active = true` revocation filter and the `last_seen_at` sighting write.
  *
- * A missing or malformed Authorization header short-circuits to `agent.unauthorized` (→ 401) BEFORE
- * any DB work — the empty-secret fail-closed the sync guard also takes — so a blank Bearer never
- * reaches `authenticateAgent`. Every other failure (an unknown selector, a REVOKED agent, a secret
- * that does not verify) folds into the SAME `agent.unauthorized` inside the core, so a revoked agent
- * fails INSTANTLY (its row is simply not found) with no oracle. The token verification and the
- * sighting write run under `withTenant` + `asAppUser`, so RLS scopes them to this tenant exactly as
- * production does.
+ * A missing or malformed Authorization header short-circuits to `agent.unauthorized` (→ 401)
+ * BEFORE any DB work — the empty-secret fail-closed the sync guard also takes — so a blank Bearer
+ * never reaches `authenticateAgent`. Every other failure (an unknown selector, a REVOKED agent, a
+ * secret that does not verify) folds into the SAME `agent.unauthorized` inside the core, so a
+ * revoked agent fails INSTANTLY (its row is simply not found) with no oracle. The token
+ * verification and the sighting write run under `withTenant` + `asAppUser`, and
+ * `authenticateAgent` explicitly filters the token lookup by tenant id.
  */
 export async function requireAgent(
   deps: PrintAgentSessionDeps,

@@ -70,9 +70,10 @@ async function makeTable(cfg: BookingConfig, active = true): Promise<string> {
 }
 
 /**
- * Insert an ACTIVE dining table in a SECOND location of the SAME tenant, and return its id. RLS scopes
- * only by tenant, so this cross-LOCATION table is visible to the app role — the exact shape the
- * location-scope guard must refuse (a booking in location A must not be assigned a table in location B).
+ * Insert an ACTIVE dining table in a SECOND location of the SAME tenant, and return its id. This
+ * cross-LOCATION table exists in the same one-tenant database — the exact shape the
+ * location-scope guard must refuse (a booking in location A must not be assigned a table in
+ * location B).
  */
 async function makeTableInOtherLocation(cfg: BookingConfig): Promise<string> {
   const loc = await db.execute<{ id: string }>(sql`

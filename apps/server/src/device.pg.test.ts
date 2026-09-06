@@ -85,9 +85,11 @@ async function pairingCodeCount(cfg: TillConfig): Promise<number> {
   return rows[0]!.n;
 }
 
-/** Seed a device profile for the tenant (owner SQL, RLS bypassed for setup) — a real
- * `(tenant_id, id)` the device's composite `device_profile` FK can point at. `canvas_id` is left NULL
- * (the profile falls back to the form-factor default canvas), so no `canvases` row is needed. */
+/**
+ * Seed a device profile for the tenant (owner SQL for setup) — a real `(tenant_id, id)` the
+ * device's composite `device_profile` FK can point at. `canvas_id` is left NULL (the profile
+ * falls back to the form-factor default canvas), so no `canvases` row is needed.
+ */
 async function seedDeviceProfile(cfg: TillConfig): Promise<string> {
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
     insert into device_profiles (tenant_id, name)
@@ -107,8 +109,10 @@ async function seedPrinter(cfg: TillConfig): Promise<string> {
   return rows[0]!.id;
 }
 
-/** The enrolled device row's binding columns, read as the superuser (RLS bypassed) — the load-bearing
- * check for the round-trip is that enrolDevice STAMPED every binding the code carried onto the device. */
+/**
+ * The enrolled device row's binding columns, read as the superuser — the load-bearing check for
+ * the round-trip is that enrolDevice STAMPED every binding the code carried onto the device.
+ */
 async function deviceBindings(deviceId: string): Promise<{
   till_id: string | null;
   device_profile_id: string | null;

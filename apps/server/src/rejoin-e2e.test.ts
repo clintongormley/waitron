@@ -92,9 +92,10 @@ function heldDoc(): SignedMembershipDocument {
   } as unknown as SignedMembershipDocument;
 }
 
-// Seeds exactly the FK closure `registros_facturacion` needs plus the row itself, as plain unscoped
-// statements (the container superuser bypasses RLS; FKs still enforced) — pg-restore.test.ts's
-// `seedFiscalRegistro`, parametrised by `huella` so baseline and diverged rows are distinguishable.
+// Seeds exactly the FK closure `registros_facturacion` needs plus the row itself, as plain
+// unscoped statements (the container superuser; FKs still enforced) — pg-restore.test.ts's
+// `seedFiscalRegistro`, parametrised by `huella` so baseline and diverged rows are
+// distinguishable.
 async function seedFiscalRegistro(admin: Database, huella: string): Promise<void> {
   await admin.execute(sql`
     insert into tenants (id, country, tax_id, legal_name)

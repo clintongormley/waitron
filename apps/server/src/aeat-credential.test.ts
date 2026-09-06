@@ -22,11 +22,10 @@ import { sealAeatCredential, type AeatCert } from "./aeat-credential.js";
 // refused by the SP-1b fiscal gate (that gate is exercised in provision.test.ts).
 const ALL_ENABLED = parseModuleConfig({}, ALL_MODULES);
 
-// Real Postgres, not PGlite: `tenant_credentials` is FORCE-RLS, so `putCredential` must run under
-// `withTenant`, and the seal FKs to a `tenants` row `provisionVenue` mints under the OWNER
-// connection — neither of which PGlite (every connection a superuser) faithfully represents
-// (CLAUDE.md §4). The shared-container clone's default connection is the container superuser, which
-// OWNS the manifest tables and so is the owner connection `provisionVenue`/`applyVenue` documents.
+// This suite retains the real-Postgres manifest fixture for the seal flow. provisionVenue creates
+// the tenant FK target on the clone's superuser/table-owner connection, then putCredential stores
+// the seal. These behavioural cases do not establish a non-superuser privilege boundary; target
+// selection is deferred to Task 9 (§4).
 
 // Each provisioned venue needs its own NIF (`tenants_country_tax_id_key` is unique); a fresh clone
 // per test still draws from one generator, the same nextNif shape `provision.test.ts` uses.
@@ -115,7 +114,7 @@ function ownerDb(): Database {
   return db;
 }
 
-/** Provision a fresh venue and return its tenant id — the FK/RLS target the seal needs. */
+/** Provision a fresh venue and return its tenant id — the FK target the seal needs. */
 async function provisionTenant(target: Database): Promise<string> {
   const result = await provisionVenue(
     { ownerDb: target, moduleConfig: ALL_ENABLED },

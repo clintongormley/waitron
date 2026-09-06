@@ -58,9 +58,11 @@ interface SeededPayment {
   webhookSecret: string;
 }
 
-/** Seeds a tenant with an open working order, one `initiated` stripe payment (external_ref =
+/**
+ * Seeds a tenant with an open working order, one `initiated` stripe payment (external_ref =
  * sessionId), and a `payments.stripe` credential carrying `webhookSecret`. Run as the PGlite
- * superuser — RLS is bypassed, so this is pure setup. */
+ * superuser for fixture setup.
+ */
 async function seedInitiated(
   db: Database,
   opts: { webhookSecret: string; secretKey?: string; amount?: string; sessionId?: string },

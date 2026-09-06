@@ -1301,16 +1301,16 @@ export async function startServer(env: Record<string, string | undefined>): Prom
 
   // The active-active sync transport. A PRIMARY enables it iff WAITRON_SYNC_PEERS is set
   // (`loadSyncConfig` → undefined otherwise). A MIRROR always pulls (`loadMirrorSyncConfig` never
-  // returns undefined — an absent WAITRON_SYNC_DATABASE_URL is a loud server.config_missing), and its
-  // pull PEER (the relay + the per-peer token) comes from the DATABASE + the vault below, NOT from env
-  // (C2b, spec §7) — so a mirror needs no WAITRON_SYNC_PEERS. Either way the block opens its OWN pool
-  // (a sync_tailer + app_user member — the app pool cannot read sync_log), the primary mounts the
+  // returns undefined — an absent WAITRON_SYNC_DATABASE_URL is a loud server.config_missing), and
+  // its pull PEER (the relay + the per-peer token) comes from the DATABASE + the vault below, NOT
+  // from env (C2b, spec §7) — so a mirror needs no WAITRON_SYNC_PEERS. Either way the block opens
+  // its OWN pool (an app_user member with SELECT on sync_log), the primary mounts the
   // peer-authenticated source group on the SAME app (each caller's Bearer token resolves to its
   // enrolled sync_peers identity), and both start the background pull worker. The sync NODE ID is
-  // till.nodeId (one source of truth; no second WAITRON_SYNC_NODE_ID), and minTickMs/maxTickMs double
-  // as the worker's idle interval and backoff ceiling. A primary that sets no sync env leaves
-  // syncConfig undefined, so every existing boot is unchanged (boot.test.ts sets none). Torn down in
-  // close() below.
+  // till.nodeId (one source of truth; no second WAITRON_SYNC_NODE_ID), and minTickMs/maxTickMs
+  // double as the worker's idle interval and backoff ceiling. A primary that sets no sync env
+  // leaves syncConfig undefined, so every existing boot is unchanged (boot.test.ts sets none).
+  // Torn down in close() below.
   const syncConfig = isMirror ? loadMirrorSyncConfig(env) : loadSyncConfig(env);
   const syncController = new AbortController();
   let syncDb: Database | undefined;
@@ -1484,21 +1484,21 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // instead, the same `codeOf`-classified shape `loop.ts` and `error-boundary.ts` already use.
     syncWorker.catch((err) => log("error", "sync.worker_rejected", { errorCode: codeOf(err) }));
 
-    // The scheduled retention sweep (spec §3.2) — this is what finally SCHEDULES the previously-unwired
-    // pruneSyncLog. Opt-in: only when a `sync_retention`-member URL is configured. It opens its OWN
-    // pool (that dedicated whole-log, cross-tenant role — NOT the app/sync_tailer pools, which cannot
-    // DELETE sync_log) and starts runRetentionSweep under the SAME syncController the pull worker uses,
-    // so close()'s single `syncController.abort()` stops the sweep too. Each tick prunes the log to the
-    // min across every subscriber's cursor and alarms a stalled one; it NEVER evicts and NEVER
-    // alive-filters the prune (an inherited owner decision — a human decides eviction, spec §3.4). Torn
-    // down in close() below. `.catch` logs a settle-by-rejection the same way the pull worker's does —
-    // runRetentionSweep swallows its own per-tick faults, so in practice this only ever fires under a
-    // mocked worker in the test, but an unhandled rejection in the pre-close() window would be silent
-    // otherwise.
-    // Retention is a SINGLETON duty: only the singleton primary prunes the shared `sync_log`. A mirror
-    // holds no `sync_log` (it applies, never captures) and a sell-only local secondary must not run a
-    // SECOND pruner against the primary's log — so both skip the sweep AND the `sync.retention_unconfigured`
-    // warn (C2a design §8). Gates on `isSingletonPrimary`, not `!isMirror`.
+    // The scheduled retention sweep (spec §3.2) — this is what finally SCHEDULES the
+    // previously-unwired pruneSyncLog. Opt-in: only when a retention URL is configured. It opens
+    // its OWN pool using app_user grants, including DELETE on sync_log, and starts
+    // runRetentionSweep under the SAME syncController the pull worker uses, so close()'s single
+    // `syncController.abort()` stops the sweep too. Each tick prunes the log to the min across
+    // every subscriber's cursor and alarms a stalled one; it NEVER evicts and NEVER alive-filters
+    // the prune (an inherited owner decision — a human decides eviction, spec §3.4). Torn down in
+    // close() below. `.catch` logs a settle-by-rejection the same way the pull worker's does —
+    // runRetentionSweep swallows its own per-tick faults, so in practice this only ever fires
+    // under a mocked worker in the test, but an unhandled rejection in the pre-close() window
+    // would be silent otherwise. Retention is a SINGLETON duty: only the singleton primary prunes
+    // the shared `sync_log`. A mirror holds no `sync_log` (it applies, never captures) and a
+    // sell-only local secondary must not run a SECOND pruner against the primary's log — so both
+    // skip the sweep AND the `sync.retention_unconfigured` warn (C2a design §8). Gates on
+    // `isSingletonPrimary`, not `!isMirror`.
     if (isSingletonPrimary && syncConfig.retentionDatabaseUrl !== undefined) {
       retentionDb = await createPostgresDb(syncConfig.retentionDatabaseUrl);
       retentionWorker = runRetentionSweep({
@@ -1543,29 +1543,30 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // mid-dump. `runBackupSweep` re-creates it (recursively) each tick, so a wiped dir self-heals.
   const backupStagingDir = join(config.stateDir, "backup-staging");
   let backupWorker: Promise<void> | undefined;
-  // The privileged pool the sweep's `buildManifest` reads the drizzle journal off. Assigned ONLY on the
-  // probe's success path (the probe pool is reused), so it is `undefined` whenever backup is off/fenced;
-  // closed in `closePools` below, AFTER `stopWork` has aborted + awaited `backupWorker`, so no tick can
-  // touch it mid-close.
+  // The backup read pool the sweep's `buildManifest` reads the drizzle journal off. Assigned ONLY
+  // on the probe's success path (the probe pool is reused), so it is `undefined` whenever backup
+  // is off/fenced; closed in `closePools` below, AFTER `stopWork` has aborted + awaited
+  // `backupWorker`, so no tick can touch it mid-close.
   let backupDb: Database | undefined;
   if (isSingletonPrimary && backupConfig !== undefined) {
     let probeDb: Database | undefined;
     try {
       probeDb = await createPostgresDb(backupConfig.databaseUrl);
       await assertBackupCanReadFiscal(probeDb);
-      // The probe just validated this exact privileged connection; hand it to the worker as `backupDb`
-      // (rather than opening a SECOND pool to the same role) and null `probeDb` so the `finally` no
-      // longer closes it — ownership has passed to `backupDb`, closed in `closePools`.
+      // The probe just validated this exact backup read connection; hand it to the worker as
+      // `backupDb` (rather than opening a SECOND pool to the same role) and null `probeDb` so the
+      // `finally` no longer closes it — ownership has passed to `backupDb`, closed in
+      // `closePools`.
       backupDb = probeDb;
       probeDb = undefined;
       backupWorker = runBackupSweep({
         // The full fan-out: the same encrypted archive is `put` to EVERY configured destination each
         // tick (`WAITRON_BACKUP_DIR`'s "primary" entry plus any in `WAITRON_BACKUP_DESTINATIONS`).
         backends: backupBackends,
-        // The privileged pool for the manifest's schema-version reads (NOT the app pool — app_user has
-        // no SELECT on the `__drizzle_migrations_*` journal), plus the composition the archive captures:
-        // every module's non-DB state + schema versions, this box's environment, the media resolver, and
-        // the state dir the recovery secrets are read from.
+        // The backup read pool for the manifest's schema-version reads (NOT the app pool —
+        // app_user has no SELECT on the `__drizzle_migrations_*` journal), plus the composition
+        // the archive captures: every module's non-DB state + schema versions, this box's
+        // environment, the media resolver, and the state dir the recovery secrets are read from.
         db: backupDb,
         modules: ALL_MODULES,
         environment: config.environment,
@@ -1616,14 +1617,14 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // rely on this same convention or enforce it (enrol the carrier under its nodeId, or key on the node id).
   const carrierNodeId = heldMembership === null ? undefined : servingPrimaryNodeId(heldMembership);
   // The fenced node's own drain-progress reader, computed ONCE and shared by both consumers: the
-  // box-status `disposal` surface (which wraps it with `carrierNodeId` for the wire shape) and the
-  // retire/evict endpoint (`mountBoxRetireApi`, which gates the self-eviction on its `drained`). Present
-  // only on a FENCED node whose held document names a carrier — reads the own-origin tail vs the
-  // carrier's reported cursor on the SAME sync_tailer pool under `withTenant` the lag reader uses;
-  // absent (undefined) otherwise, which box-status reports as `disposal.applicable:false` and retire
-  // refuses as `node.retire_no_carrier`. Factored to one reader so the fragile carrier-keying coupling
-  // documented above has a single copy — a future change to how the drain read is scoped cannot desync
-  // the two consumers.
+  // box-status `disposal` surface (which wraps it with `carrierNodeId` for the wire shape) and
+  // the retire/evict endpoint (`mountBoxRetireApi`, which gates the self-eviction on its
+  // `drained`). Present only on a FENCED node whose held document names a carrier — reads the
+  // own-origin tail vs the carrier's reported cursor on the SAME sync pool under `withTenant` the
+  // lag reader uses; absent (undefined) otherwise, which box-status reports as
+  // `disposal.applicable:false` and retire refuses as `node.retire_no_carrier`. Factored to one
+  // reader so the fragile carrier-keying coupling documented above has a single copy — a future
+  // change to how the drain read is scoped cannot desync the two consumers.
   //
   // Two distinct staleness couplings, and only one is fail-safe:
   //  - Subscriber-id keying (documented above): if the carrier were enrolled under a non-nodeId
@@ -1760,17 +1761,19 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     log("info", "tunnel.disabled", {});
   }
 
-  // The C2b operator flow's PRIMARY endpoint: POST /management-api/mirror-bundle mints a MirrorBundle a
-  // cloud mirror adopts (design §4). PRIMARY-only, and only when the retention sweep opened its
-  // `sync_retention` connection — the handler mints the peer token as that role via `enrolPeer`, so the
-  // endpoint exists exactly when the connection it needs does (a mirror never opens one, and a primary
-  // that configured no retention role cannot mint). `relayUrl` is this primary's own relay coordinates
-  // (`loadTunnelConfig`, undefined when no tunnel is configured — the route then refuses `mirror.no_relay`
-  // before minting); `boxHostname` is the same box leaf SAN the discovery-api and cert-minting use;
-  // `designated` is `config.till` (the five WAITRON_TILL_*_ID). Mounted before the SPA catch-alls below.
-  // Kept consistent with retention's gate (`isSingletonPrimary`): `retentionDb` is now only opened on the
-  // singleton primary, so the `!== undefined` already implies it, but gating explicitly on
-  // `isSingletonPrimary` keeps this primary-only endpoint reading the same axis as the sweep it depends on.
+  // The C2b operator flow's PRIMARY endpoint: POST /management-api/mirror-bundle mints a
+  // MirrorBundle a cloud mirror adopts (design §4). PRIMARY-only, and only when the retention
+  // sweep opened its retention connection — the handler mints the peer token using app_user's
+  // INSERT grant via `enrolPeer`, so the endpoint exists exactly when the connection it needs
+  // does (a mirror never opens one, and a primary with no retention connection does not mount
+  // this endpoint). `relayUrl` is this primary's own relay coordinates (`loadTunnelConfig`,
+  // undefined when no tunnel is configured — the route then refuses `mirror.no_relay` before
+  // minting); `boxHostname` is the same box leaf SAN the discovery-api and cert-minting use;
+  // `designated` is `config.till` (the five WAITRON_TILL_*_ID). Mounted before the SPA catch-alls
+  // below. Kept consistent with retention's gate (`isSingletonPrimary`): `retentionDb` is now
+  // only opened on the singleton primary, so the `!== undefined` already implies it, but gating
+  // explicitly on `isSingletonPrimary` keeps this primary-only endpoint reading the same axis as
+  // the sweep it depends on.
   if (isSingletonPrimary && retentionDb !== undefined) {
     mountMirrorBundleApi(
       app,
@@ -1985,20 +1988,21 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         // back off every error), and holds no connection pool of its own — nothing to add to
         // closePools.
         if (tunnelWorker !== undefined) await tunnelWorker.catch(() => {});
-        // The scheduled backup sweep worker, torn down the identical way: backupController.abort() above
-        // already signalled it, so this only awaits its settle, swallowing a settle-by-rejection so it
-        // can never skip the guaranteed pool teardown below. runBackupSweep swallows its own per-tick
-        // faults (a wedged pg_dump, a full disk) so it never rejects in production. Awaiting it HERE
-        // before `closePools` is what lets `closePools` close its privileged manifest pool (`backupDb`)
-        // safely — no tick is left mid-flight reading the journal off it.
+        // The scheduled backup sweep worker, torn down the identical way:
+        // backupController.abort() above already signalled it, so this only awaits its settle,
+        // swallowing a settle-by-rejection so it can never skip the guaranteed pool teardown
+        // below. runBackupSweep swallows its own per-tick faults (a wedged pg_dump, a full disk)
+        // so it never rejects in production. Awaiting it HERE before `closePools` is what lets
+        // `closePools` close its backup manifest read pool (`backupDb`) safely — no tick is left
+        // mid-flight reading the journal off it.
         if (backupWorker !== undefined) await backupWorker.catch(() => {});
       },
       closePools: async () => {
         await db.close();
         if (syncDb !== undefined) await syncDb.close();
         if (retentionDb !== undefined) await retentionDb.close();
-        // The backup sweep's privileged manifest pool. `stopWork` above already aborted + awaited
-        // `backupWorker`, so no tick can be reading the journal off it as it closes.
+        // The backup sweep's backup manifest read pool. `stopWork` above already aborted +
+        // awaited `backupWorker`, so no tick can be reading the journal off it as it closes.
         if (backupDb !== undefined) await backupDb.close();
       },
     },

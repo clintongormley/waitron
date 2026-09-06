@@ -50,7 +50,7 @@ const SUBSCRIBER = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 type Env = "production" | "preproduction";
 
-let targetApplier: Database; // sync_applier: app_user (apply INSERT) + sync_tailer (cursor)
+let targetApplier: Database; // sync_applier: app_user grants for apply and cursor writes
 let sourceReader: Database; // the mounted source's serve pool
 let sourceWriter: Database; // app_login: the app writer whose insert the capture trigger sees
 let sourcePeerToken: string;
@@ -61,9 +61,12 @@ async function stampEnv(db: Database, environment: Env): Promise<void> {
     on conflict (id) do update set environment = excluded.environment`);
 }
 
-/** The HTTP seam: a real Hono app.request against a source mounting the SAME assembled enrolment set,
- * advertising `environment` and `moduleVersions` on /hello. `tenantId` scopes the source's /log read
- * (sync-api.ts reads sync_log inside withTenant under FORCE RLS), so each test serves its own tenant. */
+/**
+ * The HTTP seam: a real Hono app.request against a source mounting the same assembled enrolment
+ * set and advertising environment and moduleVersions on /hello. Each test uses its own tenant
+ * configuration in the suite's source database; withTenant adds no tenant filter to the /log
+ * read.
+ */
 function sourceHttp(
   environment: Env,
   tenantId: string,

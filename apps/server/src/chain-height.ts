@@ -10,9 +10,8 @@ import type { Transaction } from "@waitron/db";
 export type ChainHeight = { height: number; lastAt: string | null };
 
 /**
- * Read this node's chain head under the AMBIENT tenant. The caller supplies a `tx` already inside
- * `withTenant` + `asAppUser`, so `cadenas`'s RLS/FORCE-RLS scopes the read to this tenant; the
- * `node_id` predicate narrows it to this SIF's chain.
+ * Read this node's chain head. The caller supplies a `tx` inside `withTenant` + `asAppUser`. The
+ * read assumes one tenant per database and filters by `node_id` for this SIF's chain.
  */
 export async function readChainHeight(tx: Transaction, nodeId: string): Promise<ChainHeight> {
   // Drizzle's node-postgres `.execute()` returns `actualizado_en` as a STRING, not a `Date`. Probed

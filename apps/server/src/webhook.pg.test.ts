@@ -127,9 +127,9 @@ describe("the webhook resolves and settles as the non-superuser deployment role"
 
     const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      // The seam, exercised as app_user: without the SECURITY DEFINER function (or its grant) this
-      // returns null under RLS with no `app.tenant_id` set. Under PGlite a superuser would see the
-      // row regardless, proving nothing.
+      // Exercise the tenant-resolution function as app_user against both seeded payment
+      // references. This checks the callable seam and its returned tenant ids through a
+      // non-superuser connection.
       expect(await resolvePaymentTenant(probe, "stripe", seeded.sessionId)).toBe(
         String(seeded.tenantId),
       );

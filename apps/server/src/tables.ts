@@ -133,8 +133,10 @@ export async function createTable(
   }
 }
 
-/** The venue's ACTIVE tables, by `label`. RLS confines the read to the tenant; the location filter
- *  narrows to this till's venue. */
+/**
+ * The venue's ACTIVE tables, by `label`. The database holds one tenant; the location filter
+ * narrows to this till's venue.
+ */
 export async function listTables(tx: Transaction, cfg: TillConfig): Promise<DiningTable[]> {
   return tx
     .select({
@@ -155,16 +157,16 @@ export async function listTables(tx: Transaction, cfg: TillConfig): Promise<Dini
 }
 
 /**
- * Edit a table's `label`/`zoneId`/`capacity` (any subset). An absent id (or another tenant's, RLS-hidden)
- * throws `table.not_found`; a label collision throws `table.label_taken`; a `zoneId` naming no
- * `floor_zones` row (or another tenant's) throws `zone.not_found` (the composite `dining_tables_zone_fk`,
- * `isZoneFkViolation`). Reactivate is `updateTable`-shaped and kept trivial — this task deactivates via
- * {@link deactivateTable}.
+ * Edit a table's `label`/`zoneId`/`capacity` (any subset). An absent id throws `table.not_found`;
+ * a label collision throws `table.label_taken`; a `zoneId` naming no `floor_zones` row (or
+ * another tenant's) throws `zone.not_found` (the composite `dining_tables_zone_fk`,
+ * `isZoneFkViolation`). Reactivate is `updateTable`-shaped and kept trivial — this task
+ * deactivates via {@link deactivateTable}.
  */
 export async function updateTable(
   tx: Transaction,
-  // Kept for a uniform `(tx, cfg, …)` verb surface; this by-id update relies on RLS for the tenant
-  // scope, so the config is unused here (repo idiom for an interface-mandated unused param).
+  // Kept for a uniform `(tx, cfg, …)` verb surface; this by-id update assumes one tenant per
+  // database, so the config is unused here (repo idiom for an interface-mandated unused param).
   _cfg: TillConfig,
   id: string,
   input: { label?: string; zoneId?: string; capacity?: number },
@@ -217,23 +219,22 @@ export async function deactivateTable(
 
 /**
  * Place a table on the FP-2 spatial floor plan (design §placement): write its zone + canvas
- * coordinates + shape + rotation. Runs on the CALLER's transaction under its tenant/app_user scope.
- * LOCATION-scoped to `cfg.locationId` (like the sibling read {@link listTables}): RLS confines every
- * read/write to the tenant, but a tenant can hold several venues, so both the table and the zone must
+ * coordinates + shape + rotation. Runs on the CALLER's transaction under its tenant/app_user
+ * scope. LOCATION-scoped to `cfg.locationId` (like the sibling read {@link listTables}): the
+ * database holds one tenant, which can hold several venues, so both the table and the zone must
  * belong to THIS venue — a caller supplying another location's table or zone UUID is refused, not
- * allowed to reach across venues. Validates IN ORDER, each with its own precise code:
- *  1. the table is ACTIVE and in this LOCATION (an absent, deactivated, foreign/RLS-hidden, or
- *     cross-location row → `table.not_found`, the same "must be active" shape {@link setTableStatus}
- *     enforces);
- *  2. the `zoneId` is a LIVE zone of this LOCATION — present, `active`, and `location_id =
- *     cfg.locationId` (else `zone.not_found`; an inactive/absent/foreign/cross-location zone folds into
- *     the one code, matching the spec's "a live zone"). The `dining_tables_zone_fk`
- *     {@link createTable}/{@link updateTable} lean on is (tenant, zone) only — it can see neither
- *     `active` nor the location — so this is an explicit read rather than a caught FK violation;
- *  3. `posX`/`posY` integer in `0..1000`, `shape` in the `floor_table_shape` enum, `rotation` integer
- *     in `0..359` — each failure is `placement.invalid` naming THAT field, never the value.
- * Steps 1–2 are ONE round trip (two scalar subqueries, NULL when no row matches), the shape
- * {@link setTableStatus} uses. Only then does it UPDATE the four placement columns plus `zone_id`,
+ * allowed to reach across venues. Validates IN ORDER, each with its own precise code: 1. the
+ * table is ACTIVE and in this LOCATION (an absent, deactivated, or cross-location row →
+ * `table.not_found`, the same "must be active" shape {@link setTableStatus} enforces); 2. the
+ * `zoneId` is a LIVE zone of this LOCATION — present, `active`, and `location_id =
+ * cfg.locationId` (else `zone.not_found`; an inactive/absent/foreign/cross-location zone folds
+ * into the one code, matching the spec's "a live zone"). The `dining_tables_zone_fk` {@link
+ * createTable}/{@link updateTable} lean on is (tenant, zone) only — it can see neither `active`
+ * nor the location — so this is an explicit read rather than a caught FK violation; 3.
+ * `posX`/`posY` integer in `0..1000`, `shape` in the `floor_table_shape` enum, `rotation` integer
+ * in `0..359` — each failure is `placement.invalid` naming THAT field, never the value. Steps 1–2
+ * are ONE round trip (two scalar subqueries, NULL when no row matches), the shape {@link
+ * setTableStatus} uses. Only then does it UPDATE the four placement columns plus `zone_id`,
  * itself re-scoped to (id, location) so a zero-row UPDATE (the table is not this venue's) is
  * `table.not_found` rather than a silent no-op.
  */
@@ -243,10 +244,10 @@ export async function setTablePlacement(
   tableId: string,
   p: { zoneId: string; posX: number; posY: number; shape: FloorTableShape; rotation: number },
 ): Promise<void> {
-  // One round trip: the table's `active` flag and the target zone's `active` flag, each NULL when no
-  // row matches (RLS confines both reads to this tenant; the `location_id` predicate narrows each to
-  // THIS venue). NULL-or-false distinguishes missing from inactive but both map to the one code here —
-  // a placement needs a live table AND a live zone, both in this location.
+  // One round trip: the table's `active` flag and the target zone's `active` flag, each NULL when
+  // no row matches (the database holds one tenant; the `location_id` predicate narrows each to
+  // THIS venue). NULL-or-false distinguishes missing from inactive but both map to the one code
+  // here — a placement needs a live table AND a live zone, both in this location.
   const { rows } = await tx.execute<{
     table_active: boolean | null;
     zone_active: boolean | null;
@@ -284,11 +285,10 @@ export async function setTablePlacement(
  * Remove a table from the floor plan: NULL the four placement columns (`pos_x`/`pos_y`/`shape`/
  * `rotation`). `zone_id` is left AS-IS — it is an FP-1 assignment, not one of the four placement
  * columns, and a table may belong to a zone without being spatially placed. LOCATION-scoped to
- * `cfg.locationId` (like {@link setTablePlacement} and the sibling read {@link listTables}): an absent
- * id, another tenant's (RLS-hidden), or another VENUE's (same tenant, different `location_id`) matches
- * no row and throws `table.not_found`, the by-id shape {@link updateTable}/{@link deactivateTable} use.
- * No `active` check — like those two, `clearPlacement` operates on the row regardless of its `active`
- * flag.
+ * `cfg.locationId` (like {@link setTablePlacement} and the sibling read {@link listTables}): an
+ * absent id or another VENUE's (same tenant, different `location_id`) matches no row and throws
+ * `table.not_found`, the by-id shape {@link updateTable}/{@link deactivateTable} use. No `active`
+ * check — like those two, `clearPlacement` operates on the row regardless of its `active` flag.
  */
 export async function clearPlacement(
   tx: Transaction,
@@ -346,8 +346,10 @@ export async function createZone(
   }
 }
 
-/** The venue's ACTIVE zones, by `display_order`. RLS confines the read to the tenant; the location
- *  filter narrows to this till's venue. */
+/**
+ * The venue's ACTIVE zones, by `display_order`. The database holds one tenant; the location
+ * filter narrows to this till's venue.
+ */
 export async function listZones(tx: Transaction, cfg: TillConfig): Promise<FloorZone[]> {
   return tx
     .select({
@@ -362,15 +364,15 @@ export async function listZones(tx: Transaction, cfg: TillConfig): Promise<Floor
 }
 
 /**
- * Edit a zone's `name`/`displayOrder`/`active` (any subset). An absent id (or another tenant's,
- * RLS-hidden) throws `zone.not_found`; a name collision throws `zone.name_taken`. Reactivate is
- * `updateZone({ active: true })` — the same `update`-shaped surface {@link updateTable} uses, so this
- * task deactivates via {@link deactivateZone} and never hard-deletes.
+ * Edit a zone's `name`/`displayOrder`/`active` (any subset). An absent id throws
+ * `zone.not_found`; a name collision throws `zone.name_taken`. Reactivate is `updateZone({
+ * active: true })` — the same `update`-shaped surface {@link updateTable} uses, so this task
+ * deactivates via {@link deactivateZone} and never hard-deletes.
  */
 export async function updateZone(
   tx: Transaction,
-  // Kept for a uniform `(tx, cfg, …)` verb surface; this by-id update relies on RLS for the tenant
-  // scope, so the config is unused here (repo idiom for an interface-mandated unused param).
+  // Kept for a uniform `(tx, cfg, …)` verb surface; this by-id update assumes one tenant per
+  // database, so the config is unused here (repo idiom for an interface-mandated unused param).
   _cfg: TillConfig,
   id: string,
   patch: { name?: string; displayOrder?: number; active?: boolean },
@@ -497,13 +499,13 @@ export interface ServiceStatusOption {
 
 /**
  * The tenant's ACTIVE service statuses as pickable options for the till's Estado picker (FP-1) —
- * `{ id, label, color }` only, ordered by `display_order` then `label`. Deactivated statuses are EXCLUDED
- * (`active = true`): a status the operator cannot apply (`setTableStatus` rejects `status.inactive`) must
- * not be offered. SESSION-gated at the route — NOT `requireConfigure`, unlike the manager-only
- * {@link listStatuses}: an operator holds a till session, not a management one, so it takes no
- * `managementSessionId`. Takes NO `cfg`: the statuses table is tenant-wide with no location column, so
- * RLS (`asAppUser` under `withTenant`) is the whole scope — there is nothing to narrow by, unlike
- * {@link listZones}'s location filter.
+ * `{ id, label, color }` only, ordered by `display_order` then `label`. Deactivated statuses are
+ * EXCLUDED (`active = true`): a status the operator cannot apply (`setTableStatus` rejects
+ * `status.inactive`) must not be offered. SESSION-gated at the route — NOT `requireConfigure`,
+ * unlike the manager-only {@link listStatuses}: an operator holds a till session, not a
+ * management one, so it takes no `managementSessionId`. Takes NO `cfg`: the statuses table is
+ * tenant-wide with no location column, so the unfiltered tenant scope assumes one tenant per
+ * database, unlike {@link listZones}'s location filter.
  */
 export async function listServiceStatuses(tx: Transaction): Promise<ServiceStatusOption[]> {
   return tx
@@ -518,9 +520,10 @@ export async function listServiceStatuses(tx: Transaction): Promise<ServiceStatu
 }
 
 /**
- * The tenant's WHOLE status set — active AND inactive, ordered by `display_order` then `label` — so the
- * editor can reactivate a deactivated one. Manager/admin only (`till.configure`), gated here rather than
- * at the route so the verb is safe from any caller. RLS confines the read to the tenant.
+ * The tenant's WHOLE status set — active AND inactive, ordered by `display_order` then `label` —
+ * so the editor can reactivate a deactivated one. Manager/admin only (`till.configure`), gated
+ * here rather than at the route so the verb is safe from any caller. The unfiltered read assumes
+ * one tenant per database.
  */
 export async function listStatuses(
   tx: Transaction,
@@ -542,9 +545,9 @@ export async function listStatuses(
 
 /**
  * Edit a status's `label`/`color`/`displayOrder`/`active` (any subset). Manager/admin only
- * (`till.configure`). An absent id (or another tenant's, RLS-hidden) throws `status.not_found`; a label
- * collision throws `status.label_taken`; a malformed color throws `management.request_invalid`.
- * Reactivation is `updateStatus({ active: true })`.
+ * (`till.configure`). An absent id throws `status.not_found`; a label collision throws
+ * `status.label_taken`; a malformed color throws `management.request_invalid`. Reactivation is
+ * `updateStatus({ active: true })`.
  */
 export async function updateStatus(
   tx: Transaction,
@@ -603,17 +606,18 @@ export async function deactivateStatus(
 
 /**
  * Set (or clear, with `null`) a table's single manual status (design §3b) — an OPERATIONAL verb a
- * logged-in operator uses the way they ring a sale, so it is gated by the operator SESSION at the route
- * (`requireSession`, Task 8), NOT by `till.configure`. Validates the table is active (an absent,
- * deactivated, or foreign/RLS-hidden table → `table.not_found`, design §3b) and, when `statusId` is
- * non-null, that the status is real (`status.not_found`) and `active` (`status.inactive`). Runs on the
- * CALLER's transaction under its tenant/app_user scope. The status is occupancy-INDEPENDENT: a `free`
- * table may carry one, so this never consults the tab state.
+ * logged-in operator uses the way they ring a sale, so it is gated by the operator SESSION at the
+ * route (`requireSession`, Task 8), NOT by `till.configure`. Validates the table is active (an
+ * absent or deactivated table → `table.not_found`, design §3b) and, when `statusId` is non-null,
+ * that the status is real (`status.not_found`) and `active` (`status.inactive`). Runs on the
+ * CALLER's transaction under its tenant/app_user scope. The status is occupancy-INDEPENDENT: a
+ * `free` table may carry one, so this never consults the tab state.
  */
 export async function setTableStatus(
   tx: Transaction,
-  // Unused here for the same reason as `updateTable`/`deactivateTable` — this by-id verb relies on RLS
-  // for the tenant scope, so the config is kept only for the uniform `(tx, cfg, …)` verb surface.
+  // Unused here for the same reason as `updateTable`/`deactivateTable` — this by-id verb assumes
+  // one tenant per database, so the config is kept only for the uniform `(tx, cfg, …)` verb
+  // surface.
   _cfg: TillConfig,
   tableId: string,
   statusId: string | null,
