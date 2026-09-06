@@ -778,6 +778,13 @@
       "when": 1788580602894,
       "tag": "0110_drop_device_canvas_id",
       "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "7",
+      "when": 1788687984021,
+      "tag": "0111_series_retired_at",
+      "breakpoints": true
     }
   ]
 }

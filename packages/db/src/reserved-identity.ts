@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Endorsement } from "@waitron/membership";
 import { AppError, tenantId as brandTenantId } from "@waitron/shared";
 import type { Database, Transaction } from "./client.js";
@@ -76,40 +76,106 @@ export function readNodeEndorsement(
 }
 
 /**
- * The id of a node's standard-purpose invoice series, read under `withTenant` (invoice_series is
- * FORCE-RLS; rides app_user's SELECT, like `readNodeEndorsement`). R3b's mirror→primary promote reads
- * the cloud's OWN reserved standard series here and points `config.till.seriesId` at it, so the promoted
- * cloud numbers under its disjoint `<primaryCode>-<numeroInstalacion>` series, never the primary's.
- * Throws `series.no_standard_for_node` rather than returning null — every caller needs one.
- *
- * Caps the read at TWO rows (`limit(2)` — 0 / 1 / >1 is all it needs to distinguish, so no full scan in
- * the corrupt case) and fails LOUD on a second row rather than picking one silently: nothing enforces one
- * standard series per node — the natural key is `(tenant_id, node_id, code)`, NOT `(…, purpose)`
- * (`schema/series.ts`) — so two standard series would make the promoted cloud's `NumSerieFactura`
- * non-deterministic, a fiscal hazard. Unreachable today (R2's `insertReservedSeriesTx` mints exactly one
- * standard series per node), so this is a can't-happen data-integrity invariant, the same shape and
- * `v8 ignore` as `writeReservedSif`'s "insert returned no row" guard.
+ * The id of a node's LIVE standard-purpose invoice series, inside the caller's tenant transaction.
+ * Reads only `retired_at IS NULL` rows — a retired series is history, never the one to number from.
+ * Caps the read at TWO rows and fails LOUD on a second live standard series rather than picking one
+ * silently: nothing enforces one standard series per node (the natural key is `(tenant_id, node_id,
+ * code)`, not purpose), and two would make the invoice number non-deterministic. Reachable only by a
+ * corrupt write; a plain `Error`, not a code, because it is a programming-level invariant.
  */
+export async function readStandardSeriesIdTx(
+  tx: Transaction,
+  tenantId: string,
+  nodeId: string,
+): Promise<string> {
+  const rows = await tx
+    .select({ id: invoiceSeries.id })
+    .from(invoiceSeries)
+    .where(
+      and(
+        eq(invoiceSeries.nodeId, nodeId),
+        eq(invoiceSeries.purpose, "standard"),
+        isNull(invoiceSeries.retiredAt),
+      ),
+    )
+    .limit(2);
+  const [row, extra] = rows;
+  if (row === undefined) {
+    throw new AppError("series.no_standard_for_node", { tenantId, nodeId });
+  }
+  if (extra !== undefined) {
+    throw new Error(`invoice_series: node ${nodeId} has more than one standard series`);
+  }
+  return row.id;
+}
+
+/** {@link readStandardSeriesIdTx} under its own `withTenant` (app_user SELECT suffices). */
 export function readStandardSeriesId(
   db: Database,
   tenantId: string,
   nodeId: string,
 ): Promise<string> {
-  return withTenant(db, brandTenantId(tenantId), async (tx) => {
-    const rows = await tx
-      .select({ id: invoiceSeries.id })
-      .from(invoiceSeries)
-      .where(and(eq(invoiceSeries.nodeId, nodeId), eq(invoiceSeries.purpose, "standard")))
-      .limit(2);
-    const [row, extra] = rows;
-    if (row === undefined) {
-      throw new AppError("series.no_standard_for_node", { tenantId, nodeId });
-    }
-    /* v8 ignore start */
-    if (extra !== undefined) {
-      throw new Error(`invoice_series: node ${nodeId} has more than one standard series`);
-    }
-    /* v8 ignore stop */
-    return row.id;
-  });
+  return withTenant(db, brandTenantId(tenantId), (tx) =>
+    readStandardSeriesIdTx(tx, tenantId, nodeId),
+  );
+}
+
+/**
+ * Retire every LIVE series of a node (`retired_at = now()`), returning how many were retired.
+ * Owner-role only: `app_user`'s UPDATE on this table is column-scoped to `next_number`
+ * (`0003_invoice_series.sql`), and no runtime path retires a series — a restore does, on its
+ * privileged connection, before opening the node's replacement series.
+ */
+export async function retireNodeSeriesTx(
+  tx: Transaction,
+  tenantId: string,
+  nodeId: string,
+): Promise<number> {
+  const rows = await tx
+    .update(invoiceSeries)
+    .set({ retiredAt: sql`now()` })
+    .where(
+      and(
+        eq(invoiceSeries.tenantId, tenantId),
+        eq(invoiceSeries.nodeId, nodeId),
+        isNull(invoiceSeries.retiredAt),
+      ),
+    )
+    .returning({ id: invoiceSeries.id });
+  return rows.length;
+}
+
+/**
+ * Open fresh series for a node at `next_number = 1`. Refuses — `series.code_collision` — a code the
+ * node already holds, live or retired: the natural key covers both, and a constraint violation would
+ * surface as a raw driver error rather than a code an operator can act on. A no-op on an empty list.
+ */
+export async function insertNodeSeriesTx(
+  tx: Transaction,
+  tenantId: string,
+  nodeId: string,
+  series: readonly { code: string; purpose: string }[],
+): Promise<void> {
+  if (series.length === 0) return;
+  const [held] = await tx
+    .select({ code: invoiceSeries.code })
+    .from(invoiceSeries)
+    .where(
+      and(
+        eq(invoiceSeries.tenantId, tenantId),
+        eq(invoiceSeries.nodeId, nodeId),
+        inArray(
+          invoiceSeries.code,
+          series.map((s) => s.code),
+        ),
+      ),
+    )
+    .limit(1);
+  if (held !== undefined) {
+    throw new AppError("series.code_collision", { code: held.code });
+  }
+  await insertReservedSeriesTx(
+    tx,
+    series.map((s) => ({ tenantId, nodeId, code: s.code, purpose: s.purpose })),
+  );
 }

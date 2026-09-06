@@ -102,6 +102,9 @@ export {
   insertReservedSeriesTx,
   readNodeEndorsement,
   readStandardSeriesId,
+  readStandardSeriesIdTx,
+  retireNodeSeriesTx,
+  insertNodeSeriesTx,
   type ReservedNodeInput,
   type ReservedSeriesInput,
 } from "./reserved-identity.js";
