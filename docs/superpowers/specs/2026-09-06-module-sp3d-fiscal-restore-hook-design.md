@@ -340,6 +340,15 @@ objects. So RLS does not apply to this transaction and this spec claims nothing 
 path; `withTenant` is used because it is the house's one write-transaction primitive and because
 its `{ nodeId }` is what stamps the origin. `contadores_instalacion` has no RLS by design.
 
+<a id="restore-role-correction-2026-09-06"></a>
+
+> **2026-09-06 correction (whole-branch run-it review):** A LOGIN role owning the restored
+> objects, with `rolsuper = f` and `rolbypassrls = f`, restored an older dump, applied 0111,
+> ran the hook and retired two series. That owner role shape is sufficient; neither superuser
+> nor BYPASSRLS is required. The shipped e2e uses the container admin without establishing a
+> requirement for that role. The reviewed paragraph above overstates the role requirement and
+> does not describe the RLS policy path for an owner without BYPASSRLS.
+
 **The one non-atomic step, and what it costs.** The commit is the point-of-no-return (runbook §7:
 for a cold restore the PONR is minting the fresh SIF). If the secrets write then fails (disk full,
 permissions), the DB holds a fresh SIF and the box holds no `trading.env`: it cannot boot into
@@ -349,6 +358,11 @@ that window can trade under the old identity. `writeFileAtomic` does not fsync (
 power cut after a successful write but before the page reaches disk could leave the box with the
 artifact's *unrewritten* `trading.env` — a retired series id — which `sale.series_retired` (§7)
 refuses loudly at the first sale. Boot-time resolution (§3.4, §12) would self-heal it.
+
+> **2026-09-06 qualification:** The redo mints a larger number only if the §3.5 clock floor has
+> advanced beyond the previous restore's number, or the dump retains a higher counter. Two restores
+> of the same artifact within one wall-clock second minted the same number in the run-it review.
+> An older dump lacks the first restore's history; a same-second or lagging clock cannot protect it.
 
 **Re-runs.** `pg_restore` into a non-empty target errors per object and exits non-zero
 (`pg-restore.ts` passes no `--exit-on-error`, so it does not refuse up front; the rejection is what
@@ -505,6 +519,7 @@ core-only harness and does not apply here):
 - A real-Postgres leg (`restore.rls.test.ts`, `useTemplateDb({ template: "manifest" })`) runs the
   happy path once on real PostgreSQL — the `greatest(...)` upsert, the partial unique index, the
   head reset — as the superuser-class role the production restore is.
+  See the [2026-09-06 role correction](#restore-role-correction-2026-09-06); that role is not required.
 
 **`apps/server`** (`restore.test.ts`, unit; fake modules, `openDb` and `migrate` seams):
 
@@ -552,6 +567,7 @@ fixture: `W1`, the counter row seeded, a `trading.env` entry in the artifact):
   leaves the SIF, series and `trading.env` untouched.
 - The e2e connects as the shared container's superuser — the class the production restore role is
   (§5). It proves the privileged path; it does not, and this spec does not, claim an RLS receipt.
+  See the [2026-09-06 role correction](#restore-role-correction-2026-09-06) for the sufficient owner role shape.
 
 **`packages/core`**: `sale.series_retired` from each of the three write paths, by deleting the
 predicate. **`packages/db`**: `readStandardSeriesId` ignores a retired standard series; loud on
@@ -578,6 +594,11 @@ unchanged).
 - **Installation numbers are never reused.** The restored counter is at least the backup's value;
   the floor (§3.5) puts every restore-minted number above anything a previous restore of an older
   artifact can have minted; `registro_sif_instalacion_uq` backstops the rows the dump holds.
+
+  > **2026-09-06 qualification:** Subject to §3.5: a same-second or lagging clock can reuse a
+  > number minted by a previous restore whose history is absent from the dump. The run-it review
+  > reproduced reuse by restoring the same artifact twice within one wall-clock second.
+
 - **Disjoint series.** `<base>-<n>` with the fresh installation number: distinct from every code the
   node used (the base rule strips only *our* suffixes; `series.code_collision` refuses the rest) and
   from every reserved standby's `<base>-<m>`, `m < floor ≤ n`. AEAT's `3000` is a backstop only when

@@ -147,8 +147,9 @@ export async function retireNodeSeriesTx(
 
 /**
  * Open fresh series for a node at `next_number = 1`. Refuses — `series.code_collision` — a code the
- * node already holds, live or retired: the natural key covers both, and a constraint violation would
- * surface as a raw driver error rather than a code an operator can act on. A no-op on an empty list.
+ * node already holds, live or retired, or a duplicate within the batch. The existing-row check
+ * covers the sequential restore path; concurrent callers can still hit the unique key.
+ * A no-op on an empty list.
  */
 export async function insertNodeSeriesTx(
   tx: Transaction,

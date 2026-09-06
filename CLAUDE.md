@@ -153,7 +153,11 @@ Traps, each of which cost a round trip:
 - **The four browser packages run vitest in real headless Chromium.** Never run two browser-mode
   gates at once, and never background `pnpm -r test:coverage` beside running subagents — two 65 GB
   RAM spikes and a force-quit on 2026-08-30. Lean on the scoped hook and CI; a whole-workspace local
-  run, if genuinely needed, runs alone with `--workspace-concurrency=2`.
+  run, if genuinely needed, runs alone with `--workspace-concurrency=1`. Chromium cannot launch
+  inside Codex's macOS sandbox
+  (`bootstrap_check_in org.chromium.Chromium.MachPortRendezvousServer: Permission denied (1100)`,
+  measured 2026-09-06), so a run that reaches a browser package is driven from the host, never
+  from a Codex seat.
 
 Bypassing the hook with `--no-verify` is for emergencies; the failure still has to be fixed because
 CI runs the same checks. A hook failure the PR does not reproduce is a check CI has deferred to the

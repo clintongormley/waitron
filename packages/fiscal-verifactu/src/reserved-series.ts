@@ -14,8 +14,9 @@ export const MAX_BASE_CODE_LENGTH = NUM_SERIE_MAX - (1 + MAX_INT_DIGITS) - (1 + 
 
 /**
  * Suffix each base with the installation number, preserving purpose. Given a fresh installation
- * number, codes derived for different installations are disjoint. The write path's
- * `series.code_collision` refusal is the backstop for collisions with other configured codes.
+ * number, codes derived for different installations are disjoint. On the restore path only,
+ * `series.code_collision` refuses same-node reopening and duplicate codes within a batch. A
+ * hand-configured cross-node collision is caught only by AEAT's duplicate-number rejection (3000).
  */
 export function deriveReservedSeriesCodes(
   bases: readonly { code: string; purpose: string }[],
