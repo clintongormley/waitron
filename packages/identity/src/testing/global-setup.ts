@@ -19,8 +19,8 @@ import { IDENTITY_MIGRATIONS } from "../migrations.js";
  * to this package.
  *
  * `identity_rls_probe` is the only cluster role any suite here creates: a non-superuser LOGIN
- * inheriting `app_user`'s grants, shared by persons.test.ts, persons.email.test.ts and
- * staff.pg.test.ts. It is created ONCE here, idempotently, because roles are CLUSTER-global — a
+ * inheriting `app_user`'s grants, shared by persons.email.test.ts and staff.pg.test.ts — its only
+ * two consumers. It is created ONCE here, idempotently, because roles are CLUSTER-global — a
  * shared container is one cluster, and every suite clones its own DATABASE from a template but
  * shares that cluster's roles. A per-file `CREATE ROLE` could not do it: `probeRoleStatement` emits
  * a bare `create role …`, so a second file naming the same role would fail `role … already exists`,
