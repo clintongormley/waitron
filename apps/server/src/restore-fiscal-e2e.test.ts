@@ -123,6 +123,8 @@ function internalUrl(adminUrl: string, db: string): string {
 let adminUri: string;
 let containerId: string | undefined;
 let migrationsRoot: string;
+/** {@link migrationsRoot} plus one extra core migration — see the OLDER-artifact note in `beforeAll`. */
+let olderMigrationsRoot: string;
 let scratchRoot: string;
 let artifactPath: string;
 let olderArtifactPath: string;
@@ -166,7 +168,8 @@ async function restoreDepsFor(
     databaseUrl: targetUrl,
     ...dirs,
     stagingDir: join(dirs.stateDir, "restore-staging"),
-    migrationsRoot,
+    // The OLDER artifact is one migration behind ITS root, not behind the shipped one.
+    migrationsRoot: artifact === olderArtifactPath ? olderMigrationsRoot : migrationsRoot,
     modules: ALL_MODULES,
     environment: "preproduction",
     runRestore: containerPgRestore(containerId!),
@@ -200,6 +203,36 @@ beforeAll(async () => {
     });
   }
 
+  // The OLDER artifact needs a database one core migration behind the code it is restored with.
+  // Rewinding the journal table cannot express that any more: core ships a two-file baseline, so
+  // "one behind" would re-run `0001_db_baseline_sql` against a database that already holds its
+  // functions — `42723, function ... already exists`. Instead the older restore gets its OWN root:
+  // the shipped sets plus one extra core step that re-adds the column its dump lacks. The dump is
+  // then genuinely one migration behind that root, and only the extra step replays.
+  olderMigrationsRoot = join(scratchRoot, "migrations-older");
+  await cp(migrationsRoot, olderMigrationsRoot, { recursive: true });
+  const coreSet = ALL_MODULES.find((m) => m.name === "core")!.migrations;
+  const extraTag = "9999_readd_retired_at";
+  const olderCoreDir = join(olderMigrationsRoot, coreSet.name);
+  await writeFile(
+    join(olderCoreDir, `${extraTag}.sql`),
+    `ALTER TABLE "invoice_series" ADD COLUMN "retired_at" timestamp with time zone;`,
+  );
+  const journalPath = join(olderCoreDir, "meta", "_journal.json");
+  const journal = JSON.parse(await readFile(journalPath, "utf8")) as {
+    entries: { idx: number; version: string; when: number; tag: string; breakpoints: boolean }[];
+  };
+  journal.entries.push({
+    idx: journal.entries.length,
+    version: "7",
+    // Drizzle replays an entry only when its `when` is later than the newest applied row's
+    // created_at, and every shipped `when` was stamped at `db:generate` time — in the past.
+    when: Date.now(),
+    tag: extraTag,
+    breakpoints: true,
+  });
+  await writeFile(journalPath, JSON.stringify(journal));
+
   baselinePg = await cloneTemplate(adminUri, pickTemplate(handle, "manifest"), nextCloneName());
   olderBaselinePg = await cloneTemplate(
     adminUri,
@@ -219,11 +252,10 @@ beforeAll(async () => {
         sql`select secuencia, ultima_huella from cadenas`,
       );
       expect(head.rows).toEqual([{ secuencia: 1, ultima_huella: HUELLA }]);
+      // The journal table is left alone: this database is at the head of the SHIPPED chain and one
+      // behind `olderMigrationsRoot`, which is what the artifact's manifest then records.
       if (older) {
         await baselineAdmin.execute(sql`alter table invoice_series drop column retired_at`);
-        await baselineAdmin.execute(
-          sql`delete from __drizzle_migrations_db where id = (select max(id) from __drizzle_migrations_db)`,
-        );
       }
       const manifest = await buildManifest({
         db: baselineAdmin,
@@ -233,7 +265,8 @@ beforeAll(async () => {
       });
       const core = ALL_MODULES.find((m) => m.name === "core")!;
       expect(manifest.modules.core).toBe(
-        expectedSchemaVersion(core.migrations, migrationsRoot) - (older ? 1 : 0),
+        expectedSchemaVersion(core.migrations, older ? olderMigrationsRoot : migrationsRoot) -
+          (older ? 1 : 0),
       );
 
       const baselineName = new URL(pg.uri).pathname.replace(/^\//, "");
@@ -377,7 +410,10 @@ describe("fiscal restore (real Postgres, end to end)", () => {
     try {
       expect(await schemaVersionsByModule(db, ALL_MODULES)).toEqual(
         Object.fromEntries(
-          ALL_MODULES.map((m) => [m.name, expectedSchemaVersion(m.migrations, migrationsRoot)]),
+          ALL_MODULES.map((m) => [
+            m.name,
+            expectedSchemaVersion(m.migrations, olderMigrationsRoot),
+          ]),
         ),
       );
       const series = await db.execute<{ n: number }>(
