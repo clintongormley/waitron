@@ -24,7 +24,7 @@
 // only polls the connection and provisions. Never against a production database — it creates a
 // tenant and chains real fiscal records under `preproduction`.
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import pg from "pg";
@@ -32,7 +32,11 @@ import { createPostgresDb, type Database } from "@waitron/db";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyVenue, planVenue } from "@waitron/provisioning";
+import { parseModuleConfig } from "@waitron/module";
 import { ALL_MODULES } from "../src/modules.js";
+import { venueModuleConfig } from "../src/provision.js";
+import { writeModuleConfig } from "../src/module-config.js";
+import { resolveConfigDir } from "../src/config.js";
 import { DEV_PAIRING_CODE } from "../src/dev-pairing.js";
 import { parseEnvFile } from "../src/env-file.js";
 import { seedDemoRestaurant } from "./demo-seed/seed.js";
@@ -45,6 +49,11 @@ export { parseEnvFile };
 
 /** The container superuser + default database every demo uses — one place so the scripts agree. */
 export const DEV_DATABASE_URL = "postgres://postgres:pg@localhost:5432/postgres";
+
+/** The dev venue's fiscal territory. Named once so the venue plan and the fiscal-slot `modules.json`
+ * `devSetup` writes select the SAME regime (ES-common → Veri*Factu); the boot then resolves the slot
+ * to exactly that member rather than refusing `module.fiscal_slot_ambiguous` under the default-on set. */
+export const DEV_VENUE_TERRITORY = "ES-common";
 
 /** The one demo PIN. Every login — the provisioned admin and every seeded staff member (seedStaff's
  * `DEMO_PIN`) — shares it, so the demo hands out a single number. */
@@ -139,6 +148,10 @@ export interface DevSetupOptions {
   databaseUrl: string;
   /** Where to read/write the `.env`. */
   envPath: string;
+  /** The box's state directory — where the fiscal-slot `modules.json` is written so the next `pnpm dev`
+   * boot reads a slot that resolves. Must be the SAME dir the server resolves at boot
+   * (`WAITRON_STATE_DIR` or `DEFAULT_STATE_ROOT`); `main` resolves it that way. */
+  stateDir: string;
   log?: (line: string) => void;
 }
 
@@ -276,7 +289,7 @@ async function provisionVenue(
         legalName: "Waitron Dev SL",
         location: {
           name: "Sala principal",
-          fiscalTerritory: "ES-common",
+          fiscalTerritory: DEV_VENUE_TERRITORY,
           invoiceLocales: [SEED_INVOICE_LOCALE[seedLocale]],
           operationDescription: "Venta en establecimiento",
           addressLine1: "Calle Mayor 1",
@@ -333,8 +346,28 @@ async function provisionVenue(
  * The only sanctioned "start over" is `pnpm dev:reset`, which wipes the Docker volume (throwaway
  * preproduction data); this function never deletes data itself.
  */
+/**
+ * Persist the fiscal-slot `modules.json` into the box's state dir so the next `pnpm dev` boot resolves
+ * the slot to exactly one member. `ALL_MODULES` now carries TWO fiscal-slot members, so the default-on
+ * set (an absent file) enables both and boot refuses `module.fiscal_slot_ambiguous`. Same mechanism the
+ * boot wizard binding and the `waitron-provision` CLI use: `venueModuleConfig` selects the module the
+ * venue's territory (ES-common → `verifactu`) names and disables every other slot member. Written on
+ * BOTH the reuse and fresh paths (idempotent), so a dev DB provisioned before this fix gets the file the
+ * next time `dev:setup` runs. `mkdirSync` first — `writeFileAtomic` does not create the parent dir, and
+ * a trading dev boot never materialises the state dir itself.
+ */
+async function writeFiscalModulesJson(
+  stateDir: string,
+  log: (line: string) => void,
+): Promise<void> {
+  const config = venueModuleConfig(parseModuleConfig({}, ALL_MODULES), DEV_VENUE_TERRITORY);
+  mkdirSync(stateDir, { recursive: true });
+  const path = await writeModuleConfig(stateDir, config);
+  log(`dev-setup: wrote ${path} (fiscal slot → verifactu; fiscal-none disabled)`);
+}
+
 export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
-  const { databaseUrl, envPath, log = () => {} } = opts;
+  const { databaseUrl, envPath, stateDir, log = () => {} } = opts;
 
   await waitForPostgres(databaseUrl, log);
 
@@ -348,6 +381,9 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
   // Reuse: the `.env` names a venue the database still holds.
   if (existing !== undefined && isCompleteDevEnv(existing) && hasExpected) {
     log("dev-setup: reusing the already-provisioned venue (no new fiscal chain)");
+    // Still (re)write the fiscal-slot modules.json: a dev DB provisioned before this file wrote one has
+    // no modules.json, and without it the reused venue's next boot would refuse fiscal_slot_ambiguous.
+    await writeFiscalModulesJson(stateDir, log);
     return { reused: true, env: existing };
   }
 
@@ -389,6 +425,9 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
   });
   writeFileSync(envPath, renderEnvFile(env));
   log(`dev-setup: wrote ${envPath}`);
+  // Resolve the fiscal slot for the trading dev boot (ES-common → verifactu, fiscal-none disabled), so
+  // `pnpm dev` does not refuse module.fiscal_slot_ambiguous under the default-on two-member set.
+  await writeFiscalModulesJson(stateDir, log);
   return { reused: false, env };
 }
 
@@ -400,9 +439,16 @@ async function main(): Promise<void> {
       ? process.env.DATABASE_URL
       : DEV_DATABASE_URL;
 
+  // Resolve the state dir EXACTLY as boot does (`WAITRON_STATE_DIR` else `DEFAULT_STATE_ROOT`), so the
+  // fiscal-slot modules.json lands where `pnpm dev` will read it. `DEFAULT_STATE_ROOT` is imported
+  // dynamically so importing this module in tests does not pull the whole `boot.ts` graph.
+  const { DEFAULT_STATE_ROOT } = await import("../src/boot.js");
+  const stateDir = resolveConfigDir(process.env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
+
   const result = await devSetup({
     databaseUrl,
     envPath,
+    stateDir,
     log: (line) => void console.log(line),
   });
 

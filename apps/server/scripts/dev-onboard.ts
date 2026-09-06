@@ -57,11 +57,12 @@ export function renderSetupEnvFile(env: SetupEnv): string {
 }
 
 /**
- * The options a setup-mode bootstrap takes — structurally identical to `dev-setup`'s
- * `DevSetupOptions` (databaseUrl + envPath + optional log), so it is an ALIAS rather than a second
- * declaration the two could silently drift apart on.
+ * The options a setup-mode bootstrap takes — `dev-setup`'s `DevSetupOptions` MINUS `stateDir`, so the
+ * shared fields (databaseUrl + envPath + optional log) cannot silently drift while the field only the
+ * provisioning path needs is dropped. A setup-mode box provisions no venue and never resolves the fiscal
+ * slot (boot's `config.till === undefined` branch), so it writes no `modules.json` and needs no state dir.
  */
-export type DevOnboardOptions = DevSetupOptions;
+export type DevOnboardOptions = Omit<DevSetupOptions, "stateDir">;
 
 export interface DevOnboardResult {
   env: SetupEnv;
