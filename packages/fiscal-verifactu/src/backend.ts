@@ -10,12 +10,10 @@ import { AppError, decimal, sumDecimals } from "@waitron/shared";
 import type { NodeId, SaleId, TenantId, TillId } from "@waitron/shared";
 import type {
   Counterparty,
-  DrainResult,
   FiscalBackend,
   FiscalRecordRef,
   IntegrityReport,
   NodeRegistration,
-  ReconcileResult,
   SaleForFiscalRecord,
   TrustedClock,
   VatBreakdownLine,
@@ -35,8 +33,6 @@ import type {
   VerifactuClient,
 } from "@waitron/verifactu";
 import { appendToChain } from "./chain.js";
-import { DEFAULT_SKIP_RETRY_MS, drain as runDrain } from "./drain.js";
-import { reconcile as runReconcile } from "./reconcile.js";
 import { currentSif } from "./registro-sif.js";
 import type { SifRegistration } from "./registro-sif.js";
 import { fromRegistroRow } from "./registro-row.js";
@@ -95,15 +91,11 @@ export interface VerifactuBackendOptions {
    * parameter at all, so it cannot participate in a caller's transaction. */
   db: Database;
   /**
-   * The AEAT transport, per tenant. mTLS/endpoint live inside the caller-supplied fetch this wraps
-   * (`createClient({ endpoint, fetch })`); tests wire it over the fake AEAT's fetch
-   * (`@waitron/verifactu`'s `createFakeAeat().client()`), which needs no certificate and so returns
-   * the same client for every tenant.
-   *
-   * A function of `tenantId` because `drain` sweeps every tenant with due work and a certificate
-   * identifies one presenter — see `DrainDeps.resolveClient`. Used by `drain` and `reconcile`, not
-   * by `recordSale`/`recordVoid`/`registerNode`/`checkIntegrity`/`pendingCount` — none of those
-   * ever contact AEAT (spec §4: nothing here may block a sale on connectivity).
+   * The AEAT transport, per tenant. Accepted so the composition root's construction shape is stable,
+   * but NOT consumed by this class: nothing on the sale path contacts AEAT (spec §4). The submission
+   * pass and the reconciliation sweep are the standalone `drain`/`reconcile` functions
+   * (`./drain.ts`/`./reconcile.ts`), reached through the `FISCAL_SLOT` seats, each taking its own
+   * `DrainDeps`/`ReconcileDeps` resolver — see `DrainDeps.resolveClient`.
    */
   resolveClient: (tenantId: TenantId) => Promise<VerifactuClient>;
   /** Which QR validation host to build `verificationUrl`-shaped URLs against. Defaults to
@@ -129,11 +121,9 @@ export interface VerifactuBackendOptions {
    * doc comment for why these are configuration rather than hardcoded constants. */
   systemInfo?: Partial<SystemInfoDefaults>;
   /**
-   * Overrides `DEFAULT_SKIP_RETRY_MS` for this backend's `drain`. OPTIONAL, unlike
-   * `DrainDeps.skipRetryMs` which is required: this option has construction sites scattered across
-   * this package's own test suites, none of which care about a cadence knob, and making it
-   * required would edit every one of them to say the same thing. The strictness stays where it is
-   * cheap — `DrainDeps` itself.
+   * Accepted for construction-shape stability but NOT consumed by this class: the skip-retry cadence
+   * belongs to the standalone `drain` (`DrainDeps.skipRetryMs`, required there), which the
+   * `FISCAL_SLOT.drain` seat calls directly. This class no longer runs `drain`.
    */
   skipRetryMs?: number;
 }
@@ -189,34 +179,16 @@ export class VerifactuBackend implements FiscalBackend {
 
   private readonly db: Database;
   private readonly clock: TrustedClock;
-  private readonly resolveClient: (tenantId: TenantId) => Promise<VerifactuClient>;
   private readonly environment: Environment;
   private readonly deploymentEnvironment: Entorno;
   private readonly systemInfo: SystemInfoDefaults;
-  private readonly skipRetryMs: number;
 
   constructor(options: VerifactuBackendOptions) {
     this.db = options.db;
     this.clock = options.clock;
-    // Wrapped, not stored as the bare `options.resolveClient` reference: `drain()` hands this
-    // field to `runDrain`, which invokes it as `deps.resolveClient(tenantId)` (receiver = the
-    // fresh `DrainDeps` literal), while `reconcile()` calls `this.resolveClient(tenantId)`
-    // directly (receiver = this instance) — two different receivers for what would otherwise be
-    // the same function reference, so a host supplying an unbound class method would behave
-    // differently depending on which of `drain`/`reconcile` reached it. The arrow wrapper is
-    // itself receiver-agnostic (arrow functions ignore whatever they were called through) and
-    // always calls the ORIGINAL `options.resolveClient(tenantId)` with `options` as its own fixed,
-    // closed-over receiver — so both call sites end up invoking it identically, regardless of how
-    // each one happens to read this field.
-    this.resolveClient = (tenantId) => options.resolveClient(tenantId);
     this.environment = options.environment ?? "production";
     this.deploymentEnvironment = options.deploymentEnvironment;
     this.systemInfo = { ...DEFAULT_SYSTEM_INFO, ...options.systemInfo };
-    // Defaulted HERE, like every sibling option above, rather than at the `runDrain` call site
-    // below: a `number | undefined` field would let a future SECOND call site forget the `??` and
-    // silently pass `undefined` into `DrainDeps.skipRetryMs: number`, which the fold arithmetic
-    // then turns into `Invalid Date` rather than a compile error.
-    this.skipRetryMs = options.skipRetryMs ?? DEFAULT_SKIP_RETRY_MS;
   }
 
   /**
@@ -810,62 +782,6 @@ export class VerifactuBackend implements FiscalBackend {
       `);
       return Number(rows.rows[0]!.count);
     });
-  }
-
-  /**
-   * Delegates to `./drain.ts`'s own `drain`, resolving nothing itself: enumerates every tenant
-   * with due work, resolves each one's own AEAT transport via `this.resolveClient`, and — per
-   * tenant, in its own contained try/catch — claims ≤1000-row due batches (FOR UPDATE SKIP
-   * LOCKED), submits them, persists the CSV + `aceptado`/`aceptado_con_errores`/`rechazado` +
-   * incidents, and applies flow control and retry backoff. A tenant whose transport cannot be
-   * built, or whose sweep throws, is recorded in `DrainResult.skipped` rather than aborting every
-   * OTHER tenant's legally-timed submission — see `drain.ts`'s own `DrainDeps.resolveClient` and
-   * `drain`'s own doc comments for the full behaviour and its reasoning.
-   *
-   * Passes `this.deploymentEnvironment` through as `DrainDeps.environment` — Task 6's guard
-   * (`./drain.ts`'s `claimBatch`) refuses any claimed row whose own `entorno` disagrees, or is
-   * unrecorded, rather than ever submitting it.
-   */
-  async drain(now: Date): Promise<DrainResult> {
-    return runDrain(
-      {
-        db: this.db,
-        resolveClient: this.resolveClient,
-        skipRetryMs: this.skipRetryMs,
-        environment: this.deploymentEnvironment,
-      },
-      now,
-    );
-  }
-
-  /**
-   * The consulta-driven reconciliation sweep (plan 3b): pages AEAT's period response, keys it by
-   * the `RefExterna` the drainer submitted (= our registro id), and classifies every disagreement
-   * into `lostAck`/`noTrace`/`drift`, raising an incident for each `noTrace`/`drift`. Delegates to
-   * `./reconcile.ts`, which owns the T1/T2 split that keeps the consulta network call out of any
-   * transaction. Like `pendingCount`, it takes `tenantId` and no `tx` — it runs outside any sale
-   * transaction and establishes its own `withTenant` scopes.
-   *
-   * Passes `this.resolveClient` straight through rather than resolving here: `./reconcile.ts` calls
-   * it itself, lazily, only after confirming the period holds at least one record — for the same
-   * "a secret in memory for no reason" reason `drain` already resolves lazily
-   * (`DrainDeps.resolveClient`'s own doc comment). A tenant with nothing recorded for the requested
-   * period needs no certificate and makes no network call at all (`reconcile`'s own doc comment on
-   * the zero-row early return); resolving here, before that check, would have turned that clean
-   * no-op into a hard failure for any tenant whose credential happens to be missing or unusable —
-   * exactly the regression a prior version of this comment defended on the wrong grounds (it argued
-   * only that eager resolution here would not be "unnecessary" work, never that it could turn a
-   * legitimate no-op into a failure).
-   */
-  async reconcile(
-    tenantId: TenantId,
-    period: { year: string; month: string },
-  ): Promise<ReconcileResult> {
-    return runReconcile(
-      { db: this.db, resolveClient: this.resolveClient, clock: this.clock },
-      tenantId,
-      period,
-    );
   }
 
   /**

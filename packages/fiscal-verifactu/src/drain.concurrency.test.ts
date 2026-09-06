@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
-import { VerifactuBackend } from "./backend.js";
+import { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
 
@@ -51,21 +51,21 @@ describe("drain — claim concurrency (real Postgres)", () => {
     const dbA = await suite.pg.connect();
     const dbB = await suite.pg.connect();
     try {
-      const a = new VerifactuBackend({
-        deploymentEnvironment: "production",
-        clock: seeded.clock,
+      const depsA = {
         db: dbA,
         resolveClient: staticResolver(aeat.client()),
-      });
-      const b = new VerifactuBackend({
-        deploymentEnvironment: "production",
-        clock: seeded.clock,
+        skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+        environment: "production" as const,
+      };
+      const depsB = {
         db: dbB,
         resolveClient: staticResolver(aeat.client()),
-      });
+        skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+        environment: "production" as const,
+      };
       const now = new Date("2026-07-21T00:01:00Z");
 
-      const [ra, rb] = await Promise.all([a.drain(now), b.drain(now)]);
+      const [ra, rb] = await Promise.all([drain(depsA, now), drain(depsB, now)]);
 
       // The submitted count detects duplicate claims. Without `FOR UPDATE ... SKIP LOCKED` in `claimBatch`, a plain
       // `SELECT` (no row locking at all) lets two concurrent transactions each see the SAME
@@ -107,12 +107,6 @@ describe("drain — claim concurrency (real Postgres)", () => {
   it("pendingCount reflects drained rows under the app_user role, not just the suite.admin connection", async () => {
     const seeded = await seedPendingEnvios(suite.admin, { count: 3 });
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: suite.admin,
-      resolveClient: staticResolver(aeat.client()),
-    });
 
     const pendingAsApp = () =>
       withTenant(suite.admin, seeded.tenantId, async (tx) => {
@@ -128,7 +122,15 @@ describe("drain — claim concurrency (real Postgres)", () => {
 
     expect(await pendingAsApp()).toBe(3);
 
-    const result = await backend.drain(new Date("2026-07-21T00:01:00Z"));
+    const result = await drain(
+      {
+        db: suite.admin,
+        resolveClient: staticResolver(aeat.client()),
+        skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+        environment: "production",
+      },
+      new Date("2026-07-21T00:01:00Z"),
+    );
     expect(result.recordsAccepted).toBe(3);
 
     expect(await pendingAsApp()).toBe(0);
@@ -160,13 +162,15 @@ describe("drain — enumeration as app_user (real Postgres)", () => {
     // The LOGIN fixture inherits app_user grants for every query, including enumeration.
     const appUserDb = await suite.pg.connectAs(DRAIN_PROBE_ROLE, DRAIN_PROBE_PASSWORD);
     try {
-      const backend = new VerifactuBackend({
-        deploymentEnvironment: "production",
-        clock: t1.clock,
-        db: appUserDb,
-        resolveClient: staticResolver(aeat.client()),
-      });
-      const result = await backend.drain(now);
+      const result = await drain(
+        {
+          db: appUserDb,
+          resolveClient: staticResolver(aeat.client()),
+          skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+          environment: "production",
+        },
+        now,
+      );
 
       // Every seeded record must reach the fake transport.
       expect(result.recordsAccepted).toBe(total);

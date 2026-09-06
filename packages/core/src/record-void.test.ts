@@ -194,8 +194,6 @@ function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>)
     recordSubstitution: (tx, sale, substitution) => fake.recordSubstitution(tx, sale, substitution),
     checkIntegrity: (tx, tenant, node) => fake.checkIntegrity(tx, tenant, node),
     pendingCount: (tenant, node) => fake.pendingCount(tenant, node),
-    drain: (now) => fake.drain(now),
-    reconcile: (tenant, period) => fake.reconcile(tenant, period),
     ...overrides,
   };
 }
@@ -458,12 +456,6 @@ describe("recordVoid — error propagation", () => {
       // either, mirroring fake-backend.ts's identical `_reason` convention.
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       pendingCount: (_tenant, _node) => {
-        throw new Error("not used by this test");
-      },
-      drain: () => {
-        throw new Error("not used by this test");
-      },
-      reconcile: () => {
         throw new Error("not used by this test");
       },
     };
