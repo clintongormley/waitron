@@ -68,3 +68,10 @@ of any spec touching CLAUDE.md §5, and fix-loop round five; Opus keeps the exec
 per-task reviewer and the convention reviewer, so every stage has one reader that is not the code's
 author. Copilot's automatic review was switched off. Rule text: `~/.claude/CLAUDE.md`, `CLAUDE.md`
 §6, `/finish-branch` step 2. Still pending: dispatching `/simplify`'s lenses through Codex.
+
+**Superseded 2026-09-06 (evening).** The seats above lasted a day. The transcripts showed Fable's
+spend was the execution-driver seat (brainstorm sessions that carried on into subagent-driven
+development, 250–650 turns each), not the seats this probe measured, and the owner separated the two
+families: Opus 4.8 drives, Opus 5 takes the dispatched seats, Fable is opt-in for the brainstorm and
+two short reads, and Codex keeps only the run-it reviewer. Current rule: `~/.claude/CLAUDE.md`,
+`CLAUDE.md` §6, and the backlog's design-review row. The results table above stands as data.

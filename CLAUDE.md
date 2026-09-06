@@ -150,10 +150,13 @@ Traps, each of which cost a round trip:
   PR's own CI scopes off the PR diff and is the trustworthy signal.
 - **The pre-push log file can be days stale** (`/tmp/waitron-root-test-run.log` once named a test the
   branch had deleted). Reproduce; do not read it.
-- **The four browser packages run vitest in real headless Chromium.** Never run two browser-mode
-  gates at once, and never background `pnpm -r test:coverage` beside running subagents — two 65 GB
-  RAM spikes and a force-quit on 2026-08-30. Lean on the scoped hook and CI; a whole-workspace local
-  run, if genuinely needed, runs alone with `--workspace-concurrency=1`. Chromium cannot launch
+- **The four browser packages run vitest in real headless Chromium.** Browser-mode gates may run
+  concurrently; what is not allowed is adding one beside OTHER SESSIONS' browser runs or beside a
+  backgrounded whole-workspace `pnpm -r test:coverage` — check what else is testing on the machine
+  first. The receipt is two 65 GB RAM spikes and a force-quit on 2026-08-30, with several sessions
+  testing at once; one session running its own package gates in parallel was never the problem
+  (owner decision 2026-09-06, retiring "one gate at a time"). A whole-workspace local run, if
+  genuinely needed, runs alone with `--workspace-concurrency=1`. Chromium cannot launch
   inside Codex's macOS sandbox
   (`bootstrap_check_in org.chromium.Chromium.MachPortRendezvousServer: Permission denied (1100)`,
   measured 2026-09-06), so a run that reaches a browser package is driven from the host, never
@@ -396,19 +399,22 @@ _Reference_.
 - **An untracked file in the main checkout can block the post-merge `git pull --ff-only`.** Diff
   before deleting; the scratch copy was 113 lines behind what landed.
 
-**Model selection (owner decision 2026-09-06, after the seat experiment):** the rule lives in the
-global `~/.claude/CLAUDE.md` so every repo shares it — Fable 5.1 for the sessions the owner talks in
-(brainstorm, spec, plan), for a fresh-context review of any spec touching §5, and for fix-loop
-round five; Opus 5.1 for execution sessions, the per-task reviewer and `/finish-branch`'s
-convention reviewer; Codex (`gpt-6-astra`) for the plan-vs-spec review, the implementer, fix rounds
-one to four and the run-it reviewer, dispatched through `~/workspace/tools/codex-seat.sh`. Codex
-reads `AGENTS.md` (a symlink to this file) and `.codex/config.toml`, which names the model, raises
-the doc-size cap above this file's size, and opens the sandbox's network (the Docker socket and DNS
-are closed by default; measured 2026-09-05). Copilot's automatic review is off (its rule was removed
-from the main ruleset 2026-09-06). What is waitron-specific is the yardstick: the till-reroute
-slices against the previous five PRs on fix rounds before land, false claims found at whole-branch
-review, and Codex tasks that needed a Claude fix round. The seat-by-seat probe that informed this is
-`docs/superpowers/specs/2026-09-05-model-seats-experiment.md`.
+**Model selection (owner decision 2026-09-06, revised the same evening for cost):** the rule lives in
+the global `~/.claude/CLAUDE.md` so every repo shares it. In short: Claude and Codex are separated.
+Opus 4.8 is the default and drives everything the owner reads (spec, plan, execution driver);
+Fable 5.1 is opt-in for the brainstorm plus two short dispatched reads (a spec touching §5, fix
+round five) and never drives execution — a hook denies it; dispatched seats run on Opus 5; Codex
+(`gpt-6-astra`) holds exactly one seat, `/finish-branch`'s run-it reviewer, dispatched through
+`~/workspace/tools/codex-seat.sh review-run`, which is the second model family on the diff now that
+Copilot's automatic review is off (its rule was removed from the main ruleset 2026-09-06). Codex
+reads `AGENTS.md` (a symlink to this file — one copy of the house rules, and its reviewer needs
+§1–§5 as much as any reader) and `.codex/config.toml`, which names the model, raises the doc-size
+cap above this file's size, and opens the sandbox's network (the Docker socket and DNS are closed by
+default; measured 2026-09-05). What is waitron-specific is the yardstick: each slice against the
+previous five PRs on fix rounds before land, false claims found at whole-branch review, and Codex
+tasks that needed a Claude fix round (the last is zero by construction from here on; the SP-3c and
+SP-3d rows in `docs/backlog.md` hold the two data points taken under the earlier rules). The
+seat-by-seat probe that informed this is `docs/superpowers/specs/2026-09-05-model-seats-experiment.md`.
 
 **Before a PR**, run the §2 gate yourself rather than relying on the hook, then `/finish-branch`.
 Both the hook and CI narrow to changed packages; the unfiltered `main` merge is the only run that

@@ -139,10 +139,19 @@ workflow); on #242 it made two right wording calls and two false positives (it c
 the diff). Switched off 2026-09-06 (the `copilot_code_review` rule removed from the main ruleset; #243 landed
 with zero reviews, the proof). Seats settled the same day (#243): Astra takes plan-vs-spec review and run-it review; Fable keeps brainstorm/spec/plan,
 a new fiscal-spec review, and fix round five; Opus the driver and the two non-author reviewers.
-**Open:** rewire `/finish-branch` step 1 so `/simplify`'s four lenses dispatch through
-`codex-seat.sh implement` instead of Opus. A three-way run-it reviewer probe on planted defects (Fable / Opus / Astra) found no
-Fable-only catch — `docs/superpowers/specs/2026-09-05-model-seats-experiment.md`; moving the run-it
-seat to Astra is an open owner decision. **Owner decisions recorded (they supersede older spec text where they
+A three-way run-it reviewer probe on planted defects (Fable / Opus / Astra) found no
+Fable-only catch — `docs/superpowers/specs/2026-09-05-model-seats-experiment.md`. **Revised again
+2026-09-06 evening (owner decision, after Fable burnt a week's budget in a day):** the transcripts
+showed the spend was six Fable sessions that began as brainstorms and kept going into execution
+(250–650 turns each, three quarters of Fable's tokens), not the judgment seats. Claude and Codex are
+now separated: Opus 4.8 is the default and drives everything the owner reads; Fable is opt-in for
+the brainstorm and two short reads, and a hook denies subagent dispatches from a Fable session;
+dispatched seats run on Opus 5; Codex keeps exactly one seat, `/finish-branch`'s run-it reviewer.
+The four shared Claude/Codex skill wrappers and the profile machinery were removed, `/finish-branch`
+runs simplify's lenses and both reviewers as one parallel wave with a scoped re-read after the apply
+pass, the driver restarts from the SDD ledger instead of compacting, and "one browser-mode gate at
+a time" was retired (CLAUDE.md §2). The simplify-through-Codex item is closed by the separation.
+Rule text: `~/.claude/CLAUDE.md`, CLAUDE.md §6. **Owner decisions recorded (they supersede older spec text where they
 conflict):**
 
 - **No database will ever hold two tenants** (a throwaway preproduction demo aside). The
