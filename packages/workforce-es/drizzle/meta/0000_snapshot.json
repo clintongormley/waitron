@@ -1,5 +1,5 @@
 {
-  "id": "142d002b-96d5-4086-a3ca-07f3666e7a49",
+  "id": "630bb9e3-2ec9-41b7-b99f-9cf9b880d77a",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -213,7 +213,7 @@
           "value": "\"convenio_config\".\"working_days_per_week\" between 1 and 7"
         }
       },
-      "isRLSEnabled": true
+      "isRLSEnabled": false
     }
   },
   "enums": {

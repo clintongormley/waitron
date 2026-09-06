@@ -19,8 +19,7 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
-    /** No `convenio_config` row for this (tenant, location) — never configured, or hidden by RLS
-     * (identical from the caller's side). The overtime rule and guardrails a work-time summary needs
+    /** No `convenio_config` row for this (tenant, location) — not configured. The overtime rule and guardrails a work-time summary needs
      * cannot be resolved without one. */
     "convenio.not_found": { tenantId: string; locationId: string };
   }

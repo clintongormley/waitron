@@ -25,7 +25,6 @@ CREATE TABLE "convenio_config" (
 	CONSTRAINT "convenio_config_working_days_ck" CHECK ("convenio_config"."working_days_per_week" between 1 and 7)
 );
 --> statement-breakpoint
-ALTER TABLE "convenio_config" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "convenio_config" ADD CONSTRAINT "convenio_config_tenant_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "convenio_config" ADD CONSTRAINT "convenio_config_location_fk" FOREIGN KEY ("location_id") REFERENCES "public"."locations"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "convenio_config_tenant_id_idx" ON "convenio_config" USING btree ("tenant_id");
