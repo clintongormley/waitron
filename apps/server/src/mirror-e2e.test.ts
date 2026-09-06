@@ -3,7 +3,7 @@ import { createServer as createHttpsServer, type Server as HttpsServer } from "n
 import { createServer } from "node:net";
 import type { AddressInfo } from "node:net";
 import { cp, mkdtemp, rm } from "node:fs/promises";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -94,10 +94,18 @@ const TENANT = TILL_ENV.WAITRON_TILL_TENANT_ID;
 // the deployment stamp and the source's advertised environment. A tight tick so both the pull worker's
 // retry and the health pass loop turn over quickly during the bounded waits below.
 const MEDIA_ROOT = mkdtempSync(join(tmpdir(), "waitron-mirror-e2e-media-"));
+// A `modules.json` resolving the two-member fiscal slot to Veri*Factu (disabling `fiscal-none`), so the
+// mirror boot does not refuse `module.fiscal_slot_ambiguous` under the default-on both-enabled set.
+const STATE_ROOT = mkdtempSync(join(tmpdir(), "waitron-mirror-e2e-state-"));
+writeFileSync(
+  join(STATE_ROOT, "modules.json"),
+  JSON.stringify({ modules: { "fiscal-none": false } }),
+);
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
   WAITRON_MEDIA_DIR: MEDIA_ROOT,
+  WAITRON_STATE_DIR: STATE_ROOT,
   WAITRON_ENV: "preproduction",
   WAITRON_MIN_TICK_MS: "200",
   WAITRON_SYNC_FAST_TICK_MS: "200",
@@ -381,6 +389,7 @@ afterAll(async () => {
   }
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
   rmSync(MEDIA_ROOT, { recursive: true, force: true });
+  rmSync(STATE_ROOT, { recursive: true, force: true });
 });
 
 describe("mirror-mode headline e2e — pull through the tunnel, apply, serve read-only", () => {

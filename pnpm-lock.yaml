@@ -370,6 +370,9 @@ importers:
       '@waitron/db':
         specifier: workspace:*
         version: link:../db
+      '@waitron/fiscal-none':
+        specifier: workspace:*
+        version: link:../fiscal-none
       '@waitron/fiscal-verifactu':
         specifier: workspace:*
         version: link:../fiscal-verifactu

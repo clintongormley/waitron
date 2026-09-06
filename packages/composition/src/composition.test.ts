@@ -53,9 +53,25 @@ describe("ALL_MODULES provisioning and fiscal seats", () => {
     expect(fiscal?.provisioning).toBe(FISCAL_PROVISIONING);
     expect(fiscal?.fiscal).toBe(FISCAL_SLOT);
   });
-  it("exactly one module fills the fiscal slot", () => {
+  it("the two modules that fill the fiscal slot, in order", () => {
     expect(ALL_MODULES.filter((m) => m.fiscal !== undefined).map((m) => m.name)).toEqual([
       "fiscal-verifactu",
+      "fiscal-none",
     ]);
+  });
+});
+
+describe("ALL_MODULES fiscal-none member", () => {
+  it('fills the fiscal slot with the no-regime contribution (`id === "none"`)', () => {
+    const none = ALL_MODULES.find((m) => m.name === "fiscal-none");
+    expect(none?.fiscal?.id).toBe("none");
+    expect(none?.tier).toBe("provision-only");
+  });
+  it("declares no provisioning, vocabulary or sync — it owns nothing beyond the slot", () => {
+    const none = ALL_MODULES.find((m) => m.name === "fiscal-none");
+    expect(none?.provisioning).toBeUndefined();
+    expect(none?.vocabulary).toBeUndefined();
+    expect(none?.sync).toBeUndefined();
+    expect(none?.backup).toBeUndefined();
   });
 });

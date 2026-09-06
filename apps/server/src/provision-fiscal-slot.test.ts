@@ -84,7 +84,7 @@ describe("provisionVenue fiscal-slot resolution (synthetic two-member slot)", ()
     // Both members enabled (the default sparse map) → two candidates fill the slot → ambiguous.
     const moduleConfig = parseModuleConfig({}, ALL_MODULES);
     const err = await provisionVenue(
-      { ownerDb: untouchableDb, moduleConfig },
+      { ownerDb: untouchableDb, moduleConfig, stateDir: "/unused" },
       { environment: "preproduction", venue: venueRequest() as never },
     ).catch((e: unknown) => e);
     expect(isAppError(err)).toBe(true);
@@ -97,7 +97,7 @@ describe("provisionVenue fiscal-slot resolution (synthetic two-member slot)", ()
     // (not fiscal_slot_*) is the proof the slot check let exactly-one through.
     const moduleConfig = parseModuleConfig({ modules: { "fiscal-none": false } }, ALL_MODULES);
     const err = await provisionVenue(
-      { ownerDb: untouchableDb, moduleConfig },
+      { ownerDb: untouchableDb, moduleConfig, stateDir: "/unused" },
       { environment: "preproduction", venue: venueRequest() as never },
     ).catch((e: unknown) => e);
     // planVenue is pure (no DB) and validates first; either it accepts and the DB Proxy throws, or it
@@ -112,7 +112,7 @@ describe("provisionVenue fiscal-slot resolution (synthetic two-member slot)", ()
     // is never touched. This is the gate the fiscal slot does NOT subsume.
     const moduleConfig = parseModuleConfig({ modules: { "legacy-provision": false } }, ALL_MODULES);
     const err = await provisionVenue(
-      { ownerDb: untouchableDb, moduleConfig },
+      { ownerDb: untouchableDb, moduleConfig, stateDir: "/unused" },
       { environment: "preproduction", venue: venueRequest() as never },
     ).catch((e: unknown) => e);
     expect(isAppError(err)).toBe(true);

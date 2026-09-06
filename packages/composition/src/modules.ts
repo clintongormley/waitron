@@ -1,4 +1,5 @@
 import { CORE_ENROLMENT } from "@waitron/db";
+import { FISCAL_NONE_SLOT } from "@waitron/fiscal-none";
 import {
   FISCAL_ENROLMENT,
   FISCAL_PROVISIONING,
@@ -27,7 +28,9 @@ import { WORKFORCE_ES_VOCABULARY } from "@waitron/workforce-es";
  * `CREATE TRIGGER … ON <table>` and the `sync_capture()` SPI call — which the root
  * `module-graph-honesty` guard cross-checks against the migrations. Populated seats today: `sync` on
  * every enrolling module (SP-2a/3a), `vocabulary` on the Spanish-by-design modules (SP-3b),
- * `backup.nonDbState` on `core`, and `provisioning`, `fiscal` + `backup.restore` on `fiscal`. The
+ * `backup.nonDbState` on `core`, and `provisioning`, `fiscal` + `backup.restore` on `fiscal-verifactu`.
+ * Two modules fill the `fiscal` slot — `fiscal-verifactu` and the no-regime `fiscal-none` — so exactly
+ * one is enabled per deployment (`fiscalSlot`); provisioning selects it from the venue's territory. The
  * remaining seats stay declared on the contract and empty until their slices land.
  */
 export const ALL_MODULES: readonly WaitronModule[] = [
@@ -132,5 +135,21 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     provisioning: FISCAL_PROVISIONING,
     fiscal: FISCAL_SLOT,
     backup: { restore: FISCAL_RESTORE },
+  },
+  {
+    // The no-regime fiscal-slot member, LAST (after `fiscal-verifactu`). It owns no tables (an empty
+    // migration set), enrols nothing and contributes only `fiscal` — the sale path records nothing and
+    // `drain` has no authority to reach. Listed last with a core-only dep so Kahn emits it last and
+    // `orderedMigrationSets(ALL_MODULES)` still equals `manifestSets()` (composition.test.ts pins it).
+    name: "fiscal-none",
+    version: "0.0.0",
+    tier: "provision-only",
+    requires: { core: "*" },
+    migrations: {
+      name: "fiscal-none",
+      table: "__drizzle_migrations_fiscal_none",
+      from: "../fiscal-none/drizzle",
+    },
+    fiscal: FISCAL_NONE_SLOT,
   },
 ];

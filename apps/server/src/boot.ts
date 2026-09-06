@@ -89,7 +89,7 @@ import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { mountMedia } from "./media-api.js";
 import { assertBuiltApp, mountSpa } from "./spa-api.js";
 import { mountSetup } from "./setup-api.js";
-import { provisionVenue } from "./provision.js";
+import { provisionVenue, venueModuleConfig } from "./provision.js";
 import { adoptFromPrimary } from "./adopt.js";
 import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -738,8 +738,20 @@ export async function startServer(env: Record<string, string | undefined>): Prom
           app,
           {
             environment: config.environment,
+            // Resolve the fiscal slot from the REQUEST's territory (authoritative, §4): the box's
+            // `moduleConfig` base is default-on, which with two fiscal-slot members would be ambiguous;
+            // `venueModuleConfig` forces exactly the territory's fiscal module on before provisionVenue's
+            // gate/slot check runs and before it persists the set to `<stateDir>/modules.json`.
             provision: (req) =>
-              provisionVenue({ ownerDb, moduleConfig, database: ownerDatabaseName }, req),
+              provisionVenue(
+                {
+                  ownerDb,
+                  moduleConfig: venueModuleConfig(moduleConfig, req.venue.location.fiscalTerritory),
+                  database: ownerDatabaseName,
+                  stateDir: config.stateDir,
+                },
+                req,
+              ),
             adopt: (req) => {
               // Ruling 1 (fail loud at adopt, not at reboot): an adopted mirror MUST end up with
               // WAITRON_SYNC_DATABASE_URL in `trading.env`, because the next (mirror) boot's

@@ -6,6 +6,7 @@ import {
   deriveTenantId,
   planVenue,
   readTenantIdentities,
+  resolveFiscalModules,
   type VenueRequest,
   type VenueResult,
 } from "@waitron/provisioning";
@@ -14,10 +15,28 @@ import {
   disabledProvisionOnly,
   enabledModules,
   fiscalSlot,
+  selectFiscalModule,
   type ModuleConfig,
 } from "@waitron/module";
 import { ALL_MODULES } from "./modules.js";
+import { writeModuleConfig } from "./module-config.js";
 import "./errors.js";
+
+/**
+ * The ModuleConfig a venue provisions and boots under: the operator `base` with the fiscal slot forced
+ * onto the module the venue's TERRITORY selects (the territory is authoritative for the slot — §4 of
+ * the fiscal-none design). `resolveFiscalModules(territory).filing` returns a contribution `id`;
+ * `selectFiscalModule` enables the descriptor carrying it and disables every other slot member, so the
+ * config `provisionVenue` receives already resolves to exactly one fiscal module. Throws
+ * `fiscal.regime_not_implemented` for an unimplemented territory — the same code `planVenue` raises,
+ * only earlier (both before any mint). The composition roots (boot's provision binding, the CLI) call
+ * this; `provisionVenue` itself never re-derives, so its slot check still refuses a caller that hands
+ * it an unresolved config (the synthetic two-member tests).
+ */
+export function venueModuleConfig(base: ModuleConfig, fiscalTerritory: string): ModuleConfig {
+  const filing = resolveFiscalModules(fiscalTerritory).filing;
+  return selectFiscalModule(ALL_MODULES, filing, base);
+}
 
 export interface ProvisionRequest {
   /** The demo/live fork: which environment this box is being stamped for. */
@@ -30,15 +49,21 @@ export interface ProvisionDeps {
   /** The OWNER connection to the target database (`config.migrationsDatabaseUrl`) — the admin that
    * owns the tables, which `applyVenue` needs and which `stampDeployment` writes the singleton with. */
   ownerDb: Database;
-  /** The desired module set (from `<stateDir>/modules.json`). Two duties: a `provision-only` module
-   * disabled here refuses provisioning (spec §4) — never mint an unrecoverable chain for a module
-   * that is off — and the enabled set is what `planVenue`/`applyVenue` draw the per-node seeds from,
-   * so a disabled module's seed cannot run. */
+  /** The desired module set — the fiscal slot ALREADY resolved to exactly one member by the caller's
+   * `venueModuleConfig` (the territory is authoritative, §4). Three duties: a non-fiscal `provision-only`
+   * module disabled here refuses provisioning (spec §5) — never mint an unrecoverable chain for a module
+   * that is off — the enabled set is what `planVenue`/`applyVenue` draw the per-node seeds from, so a
+   * disabled module's seed cannot run, and it is what `provisionVenue` persists to `<stateDir>/modules.json`
+   * so the trading boot reads a set whose fiscal slot resolves. */
   readonly moduleConfig: ModuleConfig;
   /** The name of the target database `ownerDb` writes — echoed by `provisioning.foreign_tenant`
    * when a foreign tenant is refused (operator-typed configuration, never a secret). Boot derives
    * it from `config.migrationsDatabaseUrl`. */
   readonly database: string;
+  /** The box's state directory. `provisionVenue` writes the resolved `moduleConfig` to
+   * `<stateDir>/modules.json` after `applyVenue` commits, so the next (trading) boot's fiscal slot
+   * resolves rather than failing `module.fiscal_slot_ambiguous` under the default-on both-enabled set. */
+  readonly stateDir: string;
 }
 
 /**
@@ -52,8 +77,10 @@ export interface ProvisionDeps {
  * enabled module (`module.fiscal_slot_empty` / `module.fiscal_slot_ambiguous`).
  * Callers must serialize provisioning: the existence checks and applyVenue use separate transactions.
  * The setup route supplies a process-local latch; these checks reject sequential retries.
- * applyVenue commits the tenant, venue rows and enabled module seeds together. The caller
- * persists configuration and seals credentials after this function returns.
+ * applyVenue commits the tenant, venue rows and enabled module seeds together. After the mint commits,
+ * `provisionVenue` writes the resolved `moduleConfig` to `<stateDir>/modules.json` so the trading boot's
+ * fiscal slot resolves. The caller persists the remaining configuration and seals credentials after
+ * this function returns.
  */
 export async function provisionVenue(
   deps: ProvisionDeps,
@@ -107,5 +134,12 @@ export async function provisionVenue(
   await stampDeployment(deps.ownerDb, req.environment);
 
   // 4. Mint the venue and every enabled module's seed under one transaction.
-  return applyVenue(plan, { db: deps.ownerDb, modules });
+  const result = await applyVenue(plan, { db: deps.ownerDb, modules });
+
+  // 5. Persist the resolved module set so the trading boot reads a fiscal slot that resolves to exactly
+  // one member (§4). Written AFTER applyVenue commits — a failed mint leaves no modules.json behind — and
+  // before the caller restarts the box into trading mode. Absent this, the default-on set enables BOTH
+  // fiscal modules and boot fails `module.fiscal_slot_ambiguous`.
+  await writeModuleConfig(deps.stateDir, deps.moduleConfig);
+  return result;
 }

@@ -39,5 +39,10 @@
     "name": "fiscal-verifactu",
     "table": "__drizzle_migrations_fiscal",
     "from": "../fiscal-verifactu/drizzle"
+  },
+  {
+    "name": "fiscal-none",
+    "table": "__drizzle_migrations_fiscal_none",
+    "from": "../fiscal-none/drizzle"
   }
 ]

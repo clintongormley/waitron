@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FiscalBackend, FiscalContribution } from "@waitron/fiscal";
-import { fiscalSlot } from "./fiscal-slot.js";
+import { fiscalSlot, selectFiscalModule } from "./fiscal-slot.js";
+import { enabledModules, parseModuleConfig } from "./config.js";
 import { fakeModule } from "./testing/fake-module.js";
 
 const contribution = (id: string): FiscalContribution => ({
@@ -44,6 +45,37 @@ describe("fiscalSlot", () => {
         code: "module.fiscal_slot_mismatch",
         params: { stamped: "b", enabled: "a" },
       }),
+    );
+  });
+});
+
+describe("selectFiscalModule", () => {
+  const MODULES = [CORE, A, B];
+  const empty = parseModuleConfig({}, MODULES);
+
+  it("enables the matching slot member and disables every other one", () => {
+    const config = selectFiscalModule(MODULES, "a", empty);
+    expect(config.overrides.get("a")).toBe(true);
+    expect(config.overrides.get("b")).toBe(false);
+    // The resolved slot is exactly the selected member — no ambiguity for the boot-time check.
+    expect(fiscalSlot(enabledModules(MODULES, config), null)).toBe(A.fiscal);
+  });
+
+  it("overrides an operator base that had disabled the selected member (territory is authoritative)", () => {
+    const base = parseModuleConfig({ modules: { a: false, b: true, core: true } }, MODULES);
+    const config = selectFiscalModule(MODULES, "a", base);
+    expect(config.overrides.get("a")).toBe(true);
+    expect(config.overrides.get("b")).toBe(false);
+    // A non-fiscal override in the base is carried through untouched.
+    expect(config.overrides.get("core")).toBe(true);
+  });
+
+  it("leaves the slot empty for a filing id no member declares — fiscalSlot then refuses it", () => {
+    const config = selectFiscalModule(MODULES, "no-such-regime", empty);
+    expect(config.overrides.get("a")).toBe(false);
+    expect(config.overrides.get("b")).toBe(false);
+    expect(() => fiscalSlot(enabledModules(MODULES, config), null)).toThrow(
+      expect.objectContaining({ code: "module.fiscal_slot_empty" }),
     );
   });
 });

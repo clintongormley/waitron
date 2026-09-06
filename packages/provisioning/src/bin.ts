@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 import { once } from "node:events";
 import { existsSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { ALL_MODULES } from "@waitron/composition";
 import { createPostgresDb, readDeploymentEnvironment } from "@waitron/db";
+import { serializeModuleConfig, type ModuleConfig } from "@waitron/module";
 import { isAppError } from "@waitron/shared";
 import { formatAppError, runCli } from "./cli.js";
 import { applyInstance } from "./instance-apply.js";
@@ -63,6 +66,12 @@ async function main(): Promise<number> {
       apply: applyInstance,
       applyVenue,
       modules: ALL_MODULES,
+      // Persist the resolved fiscal-slot `modules.json` when this box's state dir is known, so a boot
+      // against the provisioned database reads a slot that resolves (design §4). Wired only when
+      // `WAITRON_STATE_DIR` is set (the same env var `apps/server` reads): provisioning a REMOTE
+      // database leaves it unset and no local file is written. `0600` + the `{ modules: … }` envelope
+      // match `apps/server/src/module-config.ts`'s `writeModuleConfig`.
+      writeModuleConfig: writeModuleConfigTo(process.env.WAITRON_STATE_DIR),
       readEnvironment: readDeploymentEnvironment,
       readTenants: readTenantIdentities,
     });
@@ -87,6 +96,23 @@ async function main(): Promise<number> {
     process.stderr.write(`unexpected failure (${name})\n`);
     return 1;
   }
+}
+
+/**
+ * The `writeModuleConfig` CLI dep, or `undefined` when no state dir is configured. When `stateDir` is
+ * set, the returned writer serializes the resolved `ModuleConfig` into `<stateDir>/modules.json` in the
+ * `{ modules: … }` envelope `apps/server`'s `readModuleConfig` parses, mode `0600` to match the state
+ * dir's other secrets. Not atomic (a one-shot CLI, not a live server), so kept out of the shared
+ * `writeFileAtomic`. Excluded from coverage with the rest of `bin.ts` (the injected `cli.ts` is tested).
+ */
+function writeModuleConfigTo(
+  stateDir: string | undefined,
+): ((config: ModuleConfig) => Promise<void>) | undefined {
+  if (stateDir === undefined || stateDir === "") return undefined;
+  return async (config: ModuleConfig) => {
+    const body = JSON.stringify({ modules: serializeModuleConfig(config) }, null, 2) + "\n";
+    await writeFile(join(stateDir, "modules.json"), body, { mode: 0o600 });
+  };
 }
 
 /** Discards everything written to it. Used as readline's OUTPUT for the echo-off case. */

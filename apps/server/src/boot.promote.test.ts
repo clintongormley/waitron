@@ -1,7 +1,7 @@
 import { createServer } from "node:net";
 import type { AddressInfo } from "node:net";
 import { cp, mkdtemp, rm } from "node:fs/promises";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -73,6 +73,13 @@ const TILL_ENV = {
 // A media dir under this suite's own temp root so boot's `mkdirSync(mediaDir)` never writes into
 // `apps/server/src`. Created synchronously so `KEY_ENV` can reference it; torn down in `afterAll`.
 const MEDIA_ROOT = mkdtempSync(join(tmpdir(), "waitron-promote-media-"));
+// A `modules.json` that resolves the two-member fiscal slot to Veri*Factu (disabling the no-regime
+// `fiscal-none`), the shape a real ES provision persists. Every trading/mirror boot here reaches
+// `makeFiscalBackend`, which would refuse `module.fiscal_slot_ambiguous` under the default-on both-enabled
+// set. Folded into `KEY_ENV`'s state dir; a boot with its own state dir writes the same file into it.
+const FISCAL_NONE_OFF = JSON.stringify({ modules: { "fiscal-none": false } });
+const STATE_ROOT = mkdtempSync(join(tmpdir(), "waitron-promote-state-"));
+writeFileSync(join(STATE_ROOT, "modules.json"), FISCAL_NONE_OFF);
 // Boot config every production host carries: the credentials key `loadKeyRing` requires (a secondary
 // is still a trading boot, so the ring is loaded before the fiscal pass is gated), plus the passkey RP
 // id + origin `loadConfig` demands in production. `WAITRON_ENV: "production"` so it agrees with the
@@ -82,6 +89,7 @@ const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
   WAITRON_MEDIA_DIR: MEDIA_ROOT,
+  WAITRON_STATE_DIR: STATE_ROOT,
   WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com",
   WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com",
   WAITRON_ENV: "production",
@@ -165,6 +173,7 @@ beforeAll(async () => {
 afterAll(async () => {
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
   rmSync(MEDIA_ROOT, { recursive: true, force: true });
+  rmSync(STATE_ROOT, { recursive: true, force: true });
 });
 
 /** An OS-assigned free port, released before use (boot.test.ts's helper — WAITRON_HTTP_PORT rejects
@@ -475,6 +484,9 @@ describe("promote (real Postgres): mirror → primary, in-process, restart-into-
     const port = await freePort();
     // A per-test state dir so the corrected `trading.env` lands somewhere isolated we can read back.
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-mirror-state-"));
+    // The mirror boot reaches the fiscal slot too — resolve it to Veri*Factu so it does not refuse
+    // `module.fiscal_slot_ambiguous` under the default-on two-member set.
+    writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
 
     const server = await startServer({
       ...KEY_ENV,

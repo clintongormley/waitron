@@ -15,8 +15,12 @@ export interface FiscalModules {
 /**
  * Free-text territory → module set, data-driven (a registry, not a fixed enum) so a territory's
  * rules can change without a schema change (spec D3, Open Question 1: config-registry now, a
- * time-effective table later). Only `"ES-common"` is populated (spec D4); every other territory
- * resolves to no implemented set and is REFUSED — the input half of D4's defence-in-depth.
+ * time-effective table later). Two territories are populated: `"ES-common"` (Veri*Factu + IVA, spec
+ * D4) and `"GB-vat"` (the no-regime filing module `none`, which records nothing). Every OTHER
+ * territory resolves to no implemented set and is REFUSED — the input half of D4's defence-in-depth.
+ * `resolveFiscalModules(...).filing` names a fiscal contribution `id` the composition root maps to a
+ * descriptor (`ALL_MODULES.find((m) => m.fiscal?.id === filing)`); `scripts/module-seams.test.ts`
+ * pins that every populated `filing` names an enabled slot member.
  *
  * This registry lives in @waitron/provisioning, not @waitron/fiscal, on purpose: the literals
  * "verifactu" and "iva" trip @waitron/fiscal's no-regime-vocabulary guard and the english-only
@@ -29,6 +33,11 @@ const REGISTRY: Record<string, FiscalModules> = {
   // so freezing stops a future caller mutating this shared process-global config. No consumer
   // mutates it today, so this is guard-only — no behaviour change.
   "ES-common": Object.freeze({ filing: "verifactu", tax: "iva" }),
+  // A no-regime territory: `filing: "none"` selects the `fiscal-none` slot member (records nothing).
+  // `tax: "none"` is a placeholder — `nodes.tax_module` is stamped but has no consumer today (traced) —
+  // not a UK VAT decision. The string is country-prefixed (`venue-plan.ts` requires `fiscalTerritory`
+  // start with `<country>-`), so a UK venue is `country: "GB"`, `fiscalTerritory: "GB-vat"`.
+  "GB-vat": Object.freeze({ filing: "none", tax: "none" }),
 };
 
 /** The territories the registry resolves — exported so a guard can enumerate the real set. */

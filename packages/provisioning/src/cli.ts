@@ -7,7 +7,14 @@ import {
   type DeploymentEnvironment,
 } from "@waitron/db";
 import { assertPasswordLength, assertPinLength, hashPassword, hashPin } from "@waitron/identity";
-import type { WaitronModule } from "@waitron/module";
+import {
+  enabledModules,
+  parseModuleConfig,
+  selectFiscalModule,
+  type ModuleConfig,
+  type WaitronModule,
+} from "@waitron/module";
+import { resolveFiscalModules } from "./fiscal-modules.js";
 import { assertIdentifier } from "./identifiers.js";
 import { applyInstance, withDatabase, type TargetConnection } from "./instance-apply.js";
 import { describeAction, planInstance, type InstanceAction } from "./instance-plan.js";
@@ -52,9 +59,15 @@ export interface CliDeps {
    * they are NOT injected: the tests run the real ones and the summary is rendered from a real plan
    * rather than a fixture that could drift from it, exactly as `planInstance` is treated. */
   applyVenue: typeof applyVenue;
-  /** The composition list (`@waitron/composition`'s `ALL_MODULES`), injected like `applyVenue`: the
-   * CLI has no `modules.json`, so `venue` seeds every module in it. */
+  /** The composition list (`@waitron/composition`'s `ALL_MODULES`), injected like `applyVenue`. `venue`
+   * resolves the fiscal slot from the territory (`selectFiscalModule`) and threads only the ENABLED set
+   * into `planVenue`/`applyVenue`, so a no-regime (`GB-…`) venue never emits Veri*Factu's SIF seed. */
   modules: readonly WaitronModule[];
+  /** Persists the resolved fiscal-slot `modules.json` after a successful venue apply, so a box booting
+   * against this database reads a slot that resolves (design §4). OPTIONAL and injected (`bin.ts` wires
+   * it to write `<WAITRON_STATE_DIR>/modules.json` when that env var is set): absent, `venue` still
+   * selects the fiscal module for the plan/apply but writes no file. */
+  writeModuleConfig?: (config: ModuleConfig) => Promise<void>;
   /** Reads a target database's deployment stamp. Injected so the "unstamped is refused" path is
    * reachable without a container; the real one (`@waitron/db`) needs the target connection. */
   readEnvironment: typeof readDeploymentEnvironment;
@@ -458,10 +471,23 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
         passwordHash: hashPassword(adminPassword),
       },
     };
+    // Resolve the fiscal slot from the territory (authoritative, design §4): enable the module whose
+    // contribution id is `resolveFiscalModules(territory).filing`, disable every other slot member. The
+    // CLI has no operator `modules.json`, so the base is empty. `resolveFiscalModules` throws
+    // `fiscal.regime_not_implemented` for an unimplemented territory — the same code `planVenue` raises
+    // below (and before any admin connection). `modules` is the ENABLED subset, so a no-regime (`GB-…`)
+    // venue drops `fiscal-verifactu` and its SIF seed is never planned.
+    const fiscalConfig = selectFiscalModule(
+      deps.modules,
+      resolveFiscalModules(request.location.fiscalTerritory).filing,
+      parseModuleConfig({}, deps.modules),
+    );
+    const modules = enabledModules(deps.modules, fiscalConfig);
+
     // Pure, and the last thing that can refuse the request without touching a database: an
     // unimplemented territory (`fiscal.regime_not_implemented`), a bad locale count, equal series
     // codes. Kept BEFORE `resolveAdminUri` on purpose — see this function's header.
-    const actions = planVenue(request, deps.modules);
+    const actions = planVenue(request, modules);
 
     const adminUri = await resolveAdminUri(deps);
 
@@ -518,7 +544,10 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       }
 
       try {
-        const result = await deps.applyVenue(actions, { db: target, modules: deps.modules });
+        const result = await deps.applyVenue(actions, { db: target, modules });
+        // Persist the resolved fiscal slot so a box booting against this database reads a set that
+        // resolves (design §4). After the apply commits; a no-op when the writer is not wired.
+        if (deps.writeModuleConfig !== undefined) await deps.writeModuleConfig(fiscalConfig);
         deps.io.stdout("");
         deps.io.stdout(`tenant:   ${result.tenantId}`);
         deps.io.stdout(`node:     ${result.nodeId}`);

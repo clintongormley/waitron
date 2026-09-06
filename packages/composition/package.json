@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@waitron/db": "workspace:*",
+    "@waitron/fiscal-none": "workspace:*",
     "@waitron/fiscal-verifactu": "workspace:*",
     "@waitron/identity": "workspace:*",
     "@waitron/module": "workspace:*",

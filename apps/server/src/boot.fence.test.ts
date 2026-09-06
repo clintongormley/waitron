@@ -1,7 +1,7 @@
 import { createServer } from "node:net";
 import type { AddressInfo } from "node:net";
 import { cp, mkdtemp, rm } from "node:fs/promises";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -58,10 +58,18 @@ const TILL_ENV = {
 // A media dir under this suite's own temp root so boot's `mkdirSync(mediaDir)` never writes into
 // `apps/server/src`. Created synchronously so `KEY_ENV` can reference it; torn down in `afterAll`.
 const MEDIA_ROOT = mkdtempSync(join(tmpdir(), "waitron-fence-media-"));
+// A `modules.json` resolving the two-member fiscal slot to Veri*Factu (disabling `fiscal-none`), so a
+// trading boot does not refuse `module.fiscal_slot_ambiguous` under the default-on both-enabled set.
+const STATE_ROOT = mkdtempSync(join(tmpdir(), "waitron-fence-state-"));
+writeFileSync(
+  join(STATE_ROOT, "modules.json"),
+  JSON.stringify({ modules: { "fiscal-none": false } }),
+);
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
   WAITRON_MEDIA_DIR: MEDIA_ROOT,
+  WAITRON_STATE_DIR: STATE_ROOT,
   WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com",
   WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com",
   WAITRON_ENV: "production",
@@ -296,6 +304,7 @@ afterAll(async () => {
   if (peerSourceReader !== undefined) await peerSourceReader.close();
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
   rmSync(MEDIA_ROOT, { recursive: true, force: true });
+  rmSync(STATE_ROOT, { recursive: true, force: true });
 });
 
 /** The WAITRON_SYNC_PEERS JSON pointing the booted primary at the live gossip peer (Case C/D). */

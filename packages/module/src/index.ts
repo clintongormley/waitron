@@ -20,7 +20,7 @@ export type {
   StandbyProvisioning,
   StandbyReservation,
 } from "./provisioning.js";
-export { fiscalSlot } from "./fiscal-slot.js";
+export { fiscalSlot, selectFiscalModule } from "./fiscal-slot.js";
 export type { RestoreHook, RestoreOutcome } from "./restore.js";
 export type { Reconciliation } from "./reconcile.js";
 export { reconcile } from "./reconcile.js";
