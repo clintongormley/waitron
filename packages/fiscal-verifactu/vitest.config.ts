@@ -3,11 +3,8 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 export default defineConfig({
   test: {
     globals: true,
-    // globalSetup boots ONE shared Postgres container and migrates the `manifest` template every
-    // real-PG suite clones (~26ms) instead of each file booting and migrating its own (~1.5s). See
-    // src/testing/global-setup.ts. Because it precedes every worker, a Docker-absent run now fails
-    // the whole package — the PGlite-only inmutabilidad.test.ts included (that file's header explains
-    // the broadening).
+    // Shared globalSetup requires Docker for the real-Postgres privilege and concurrency suites.
+    // It runs before every worker, so Docker absence also fails PGlite-only test selections.
     globalSetup: ["./src/testing/global-setup.ts"],
     // PGlite boots a WASM PostgreSQL and then applies the whole manifest, and the concurrency /
     // e2e suites clone the shared container's migrated template (globalSetup, above). Each per-suite

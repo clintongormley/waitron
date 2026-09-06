@@ -938,7 +938,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
 
     const noSaleYet = await withTenant(suite.admin, modeCfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      return tx.select({ id: sales.id }).from(sales).where(eq(sales.tenantId, cfg.tenantId));
+      return tx.select({ id: sales.id }).from(sales).where(eq(sales.tenantId, modeCfg.tenantId));
     });
     expect(noSaleYet).toEqual([]); // Mode T: nothing filed at placing
 
@@ -1294,6 +1294,8 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
 
 // A handheld can file node-keyed cash and manual-card sales. Integrated payment, reprint,
 // drawer and prep mutation routes remain fenced even with a valid device cookie and operator session.
+// Real PostgreSQL exercises device lookup and fiscal writes as app_user; PGlite's default
+// superuser cannot establish that the deployment role holds the required grants.
 describe("handheld firewall (a handheld may settle a cash or manual-card sale, but not integrated pay, reprint, open the drawer, place, collect, or cancel)", () => {
   /** Enrol a REAL handheld device in `cfg`'s tenant (no station — `kindRequiresStation("handheld")` is
    * false, Task 2), returning the `waitron_device=<id>.<token>` cookie pair a handheld carries. The

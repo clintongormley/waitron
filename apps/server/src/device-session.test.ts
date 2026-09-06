@@ -32,7 +32,8 @@ import {
 import type { DeviceBinding } from "./device-session.js";
 import "./errors.js";
 
-// Exercise device validation and revocation through the deployment role on PostgreSQL.
+// Real PostgreSQL checks requireDevice reads and last_seen_at writes under app_user privileges;
+// a check left on PGlite's default superuser would pass without those grants.
 // Cookie-only checks share the same file fixture.
 const LOCALE = "es-ES";
 const suite = useTemplateDb({ template: "manifest" });
@@ -45,7 +46,8 @@ function asApp<T>(db: Database, cfg: TillConfig, fn: (tx: Transaction) => Promis
 }
 
 /**
- * Seed a fresh venue and create its station through the app role.
+ * Each database-backed test seeds its own venue, keeping device state order-independent
+ * across the shared clone; stations are created through the app role.
  */
 async function setupStation(): Promise<{ cfg: TillConfig; stationId: string }> {
   const admin = suite.admin;

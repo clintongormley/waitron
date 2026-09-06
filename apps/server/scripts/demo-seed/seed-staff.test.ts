@@ -1,6 +1,6 @@
-import { tenantId as brandTenantId } from "@waitron/shared";
 // Exercise the staff seed on PostgreSQL through app_user, including the permitted persons writes.
 
+import { tenantId as brandTenantId } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { asAppUser, withTenant } from "@waitron/db";
