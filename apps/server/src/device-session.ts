@@ -40,30 +40,49 @@ export const DEV_DEVICE_HEADER = "x-waitron-dev-device";
 const DEVICE_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
 
 /**
+ * The `Domain` a device cookie is scoped to (till-reroute design §3.5): the tenant domain when the
+ * request host is it or a subdomain of it — so the same httpOnly credential rides to every one of the
+ * venue's servers (`box.<tenant>…`, `cloud.<tenant>…`) — and host-only otherwise (`waitron.local`,
+ * loopback dev). The comparison strips the port and ignores case; the leading-dot check is what stops
+ * `notdeli.waitron.app` from matching `deli.waitron.app`.
+ */
+export function cookieDomainFor(
+  host: string | undefined,
+  tenantDomain: string | undefined,
+): string | undefined {
+  if (host === undefined || tenantDomain === undefined) return undefined;
+  const bare = host.replace(/:\d+$/, "").toLowerCase();
+  return bare === tenantDomain || bare.endsWith("." + tenantDomain) ? tenantDomain : undefined;
+}
+
+/**
  * Writes the device credential into the cookie. The value is the `${deviceId}.${token}` pair the enrol
  * route mints (§3c) — a SELECTOR (the row id) plus a VALIDATOR (the scrypt-checked token). Attributes
  * mirror the session cookies: `httpOnly` so no browser script can read the bearer token, `sameSite:
  * "Strict"` so it never rides a cross-site request, `path: "/"` so it covers the whole till app.
  * `secure` is caller-supplied — TRUE on a production HTTPS host, FALSE on loopback dev where there is
  * no TLS to attach it to. The `maxAge` is the ONE deviation from `setManagementCookie`/`setSessionCookie`
- * (long-lived — see `DEVICE_COOKIE_MAX_AGE_SECONDS`).
+ * (long-lived — see `DEVICE_COOKIE_MAX_AGE_SECONDS`). `domain` is the tenant scope from
+ * {@link cookieDomainFor} — present ⇒ `Domain=<it>`, absent ⇒ host-only (§3.5).
  */
-export function setDeviceCookie(c: Context, value: string, secure: boolean): void {
+export function setDeviceCookie(c: Context, value: string, secure: boolean, domain?: string): void {
   setCookie(c, DEVICE_COOKIE, value, {
     httpOnly: true,
     secure,
     sameSite: "Strict",
     path: "/",
     maxAge: DEVICE_COOKIE_MAX_AGE_SECONDS,
+    ...(domain === undefined ? {} : { domain }),
   });
 }
 
 /**
- * Clears the device cookie (un-enrol / revoke on this browser). `path` must match the one
- * `setDeviceCookie` wrote with, or the browser keeps the original alongside the expiry the delete emits.
+ * Clears the device cookie (un-enrol / revoke on this browser). `path` — and `domain`, when the set
+ * cookie carried one (till-reroute §3.5) — must match what `setDeviceCookie` wrote with, or the
+ * browser keeps the original alongside the expiry the delete emits.
  */
-export function clearDeviceCookie(c: Context): void {
-  deleteCookie(c, DEVICE_COOKIE, { path: "/" });
+export function clearDeviceCookie(c: Context, domain?: string): void {
+  deleteCookie(c, DEVICE_COOKIE, { path: "/", ...(domain === undefined ? {} : { domain }) });
 }
 
 /** The raw device credential carried by the request's cookie, or `null` when the cookie is absent. The

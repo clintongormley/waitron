@@ -316,16 +316,19 @@ function mountDevApp(cfg: TillConfig, devMode: boolean): Hono {
   return app;
 }
 
-/** JSON request helper. `cookie: null` sends none; omitted sends none too (each caller is explicit). */
+/** JSON request helper. `cookie: null` sends none; omitted sends none too (each caller is explicit).
+ *  `host` overrides the request `Host` header — the enrol/reset Domain-scoping tests drive
+ *  `cookieDomainFor(c.req.header("host"), …)` through it. */
 async function send(
   app: Hono,
   method: "GET" | "POST",
   path: string,
-  opts: { body?: unknown; cookie?: string | null } = {},
+  opts: { body?: unknown; cookie?: string | null; host?: string } = {},
 ): Promise<Response> {
   const headers: Record<string, string> = {};
   if (opts.body !== undefined) headers["content-type"] = "application/json";
   if (opts.cookie !== undefined && opts.cookie !== null) headers["cookie"] = opts.cookie;
+  if (opts.host !== undefined) headers["host"] = opts.host;
   return app.request(path, {
     method,
     headers,
@@ -392,6 +395,42 @@ function enrolHandheld(
 }
 
 describe("Device API over real Postgres", () => {
+  // The enrolment cookie's `Domain` is scoped to the tenant domain when the request host is under it
+  // (till-reroute §3.5), so the httpOnly credential rides to every one of the venue's servers
+  // (`box.<tenant>…`, `cloud.<tenant>…`) after a promotion. A host outside the tenant domain
+  // (`waitron.local`, loopback dev) stays host-only — no `Domain` attribute.
+  it("enrol scopes the cookie Domain to the tenant host, host-only otherwise", async () => {
+    const venue = await setupVenue();
+    const app = new Hono();
+    mountDeviceApi(
+      app,
+      { db: suite.admin, cfg: venue.cfg, secureCookies: false, tenantDomain: "deli.waitron.app" },
+      noopLog,
+    );
+    const mintCode = async (): Promise<string> => {
+      const codeRes = await send(app, "POST", "/management-api/device-codes", {
+        cookie: venue.managerCookie,
+        body: { kind: "kds_station", stationId: venue.defaultStationId, label: "Pantalla" },
+      });
+      expect(codeRes.status).toBe(201);
+      return ((await codeRes.json()) as { code: string }).code;
+    };
+
+    const scoped = await send(app, "POST", "/api/device/enrol", {
+      body: { code: await mintCode() },
+      host: "box.deli.waitron.app",
+    });
+    expect(scoped.status).toBe(200);
+    expect(scoped.headers.get("set-cookie") ?? "").toMatch(/Domain=deli\.waitron\.app/i);
+
+    const hostOnly = await send(app, "POST", "/api/device/enrol", {
+      body: { code: await mintCode() },
+      host: "waitron.local",
+    });
+    expect(hostOnly.status).toBe(200);
+    expect(hostOnly.headers.get("set-cookie") ?? "").not.toMatch(/Domain=/i);
+  });
+
   it("enrol → authenticated station read → bump own item → foreign 403 → revoke stops the cookie", async () => {
     const venue = await setupVenue();
     const app = mountApp(venue.cfg);

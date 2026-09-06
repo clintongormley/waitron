@@ -147,6 +147,17 @@ export interface ServerConfig {
    */
   advertisedOrigin: string;
   /**
+   * The registrable domain the device cookie's `Domain` is scoped to when the request host is under it
+   * (till-reroute design §3.5) — so the same httpOnly credential rides to every one of the venue's
+   * servers (`box.<tenant>…`, `cloud.<tenant>…`) after a promotion, instead of being pinned host-only to
+   * the box the till first enrolled against. From `WAITRON_TENANT_DOMAIN`; unset OR empty → undefined
+   * (host-only cookies, the loopback-dev default), lower-cased for the case-insensitive host comparison
+   * `cookieDomainFor` (device-session.ts) makes. A value carrying `/`, `:` or whitespace is not a bare
+   * domain and is refused (`server.config_invalid`, `reason: "not_a_domain"`) rather than reaching a
+   * Set-Cookie `Domain` malformed. Threaded into `DeviceApiDeps.tenantDomain`.
+   */
+  tenantDomain?: string;
+  /**
    * The built `till` SPA directory this box serves at the origin root "/", or `undefined` to not
    * serve it (dev leaves it unset and uses the Vite dev server). When set, `boot.ts` mounts it as the
    * root catch-all — LAST, after every API route — so it never shadows `/api`, `/management-api`,
@@ -305,6 +316,23 @@ function bareOrigin(value: string, variable: string): string {
     throw new AppError("server.config_invalid", { variable, reason: "not_an_origin" });
   }
   return value;
+}
+
+/** `WAITRON_TENANT_DOMAIN` as the cookie `Domain` (till-reroute §3.5): unset OR empty → undefined
+ * (host-only cookies), a set value lower-cased for the case-insensitive host comparison. A cookie
+ * `Domain` is a bare registrable domain — a value carrying `/`, `:` or whitespace is a URL, a
+ * host:port, or a typo, refused loudly at boot (`server.config_invalid`, `reason: "not_a_domain"`)
+ * rather than handed to a Set-Cookie malformed. */
+function loadTenantDomain(env: Env): string | undefined {
+  const raw = env.WAITRON_TENANT_DOMAIN;
+  if (isUnset(raw)) return undefined;
+  if (/[/:\s]/.test(raw)) {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_TENANT_DOMAIN",
+      reason: "not_a_domain",
+    });
+  }
+  return raw.toLowerCase();
 }
 
 export interface SyncPeer {
@@ -765,6 +793,11 @@ export function loadConfig(
     advertisedOrigin: isUnset(env.WAITRON_ADVERTISED_ORIGIN)
       ? managementOrigin
       : bareOrigin(env.WAITRON_ADVERTISED_ORIGIN, "WAITRON_ADVERTISED_ORIGIN"),
+    // The registrable domain the device cookie's `Domain` is scoped to (till-reroute §3.5). Unset OR
+    // empty → undefined (host-only cookies); a set value is lower-cased and refused loudly if it is
+    // not a bare domain. Present-but-undefined when absent, the shape `settlementLagMs`/`tillAppDir`
+    // above take.
+    tenantDomain: loadTenantDomain(env),
     // The built front-end dirs the box serves same-origin (slice 1a). Absent OR empty → undefined
     // (the same `isUnset` rule `settlementLagMs` above and every other optional here follow): dev
     // leaves them unset and uses the Vite dev servers, so `boot.ts` mounts nothing. Stored verbatim
