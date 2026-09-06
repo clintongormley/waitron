@@ -51,6 +51,8 @@ import { createLogger, type Logger } from "./logger.js";
 import { createRotatingFileSink, createLogReader, tee } from "./log-file.js";
 import { createVerbosityController } from "./verbosity.js";
 import { requestIdMiddleware } from "./request-id.js";
+import { createOriginAllowlist } from "./allowed-origins.js";
+import { corsForVenue } from "./cors.js";
 import { mountDiagnosticsApi } from "./diagnostics-api.js";
 import {
   createHealthState,
@@ -1056,6 +1058,17 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // After migrations deliberately: a boot that fails earlier never creates a stray media directory.
   // Trading-only — a setup box serves no media.
   mkdirSync(config.mediaDir, { recursive: true });
+
+  // CORS for the venue's own origins on `/api/*` (till-reroute §3.4), registered before the API mounts
+  // so it wraps them and after `requestIdMiddleware` so the request id is stamped first. Trading-only:
+  // the allow-list reads the held membership document off `db`, which a setup box has not provisioned.
+  const allowOrigin = createOriginAllowlist({
+    advertisedOrigin: config.advertisedOrigin,
+    readMembership: () => readNodeMembership(db),
+    devMode: config.devMode,
+    now: () => Date.now(),
+  });
+  app.use("/api/*", corsForVenue(allowOrigin));
 
   // One Hono app: `/health` plus the Mode 3 inbound webhook, which "attaches to this app rather than
   // creating a second one" (health.ts's own note). `makeStripe` is `defaultMakeStripe`, the same SDK
