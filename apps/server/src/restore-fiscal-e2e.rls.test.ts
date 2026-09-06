@@ -294,7 +294,7 @@ afterAll(async () => {
         "ON_ERROR_STOP=1",
         "-c",
         `drop database ${name} with (force)`,
-      ]);
+      ]).catch(() => {});
     }
   }
   if (baselinePg !== undefined) await baselinePg.stop().catch(() => {});
@@ -391,12 +391,15 @@ describe("fiscal restore (real Postgres, end to end)", () => {
     // Control: with the migrate step stubbed out the hook reads a column the older dump lacks.
     const control = await makeFreshTarget();
     const controlDirs = await arrangeDirs();
+    // DrizzleQueryError exposes PostgreSQL's missing retired_at column error through cause.
     await expect(
       restoreFromArtifact({
         ...(await restoreDepsFor(control, controlDirs, olderArtifactPath)),
         migrate: async () => {},
       }),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({
+      cause: { code: "42703", message: expect.stringContaining("retired_at") },
+    });
     await expect(stat(join(controlDirs.stateDir, "trading.env"))).rejects.toMatchObject({
       code: "ENOENT",
     });
