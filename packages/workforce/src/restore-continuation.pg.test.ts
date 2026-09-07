@@ -10,10 +10,10 @@ import { seedLocation, seedPerson } from "../test/fixtures.js";
 
 /**
  * Real PostgreSQL via the shared container (same template as chain.concurrency.test.ts). Real PG,
- * not PGlite, because the load-bearing assertion is that `time_entries_chain_position_uq` REFUSES a
- * forked row as the deployment enforces it — the unique index fires under the app's own grants, not
- * a PGlite superuser bypass. The continuation half needs no contention, but it rides the same clone
- * so both halves see one enforced schema.
+ * not because PGlite could not enforce this — a UNIQUE index is enforced by every role and PGlite
+ * enforces `time_entries_chain_position_uq` too — but because spec §6 lists this proof under real
+ * Postgres and the `.pg.test.ts` name follows that; riding the same clone as the concurrency suite
+ * keeps this proof beside its siblings on one enforced schema.
  *
  * What this file documents (spec §2 decision 3, §5.1): `packages/workforce` declares NO
  * `backup.restore` hook. A cold-restored box keeps its `node_id` and the backup's chain head
