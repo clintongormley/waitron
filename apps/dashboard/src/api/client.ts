@@ -2151,18 +2151,26 @@ export class DashboardApi {
    * `locale` (`null` when they have never chosen one) and the geography-derived `venueLocale` fallback —
    * the same value `GET /management-api/locales` echoes as `venueDefault`. The shell resolves the two via
    * `resolveActiveLocale(locale, venueLocale)` on boot/login to pick the operator-UI language.
+   *
+   * Module gating (SP2 Task 4): the response also carries the signed-in person's effective
+   * `permissions` (a hint set) and the enabled `modules`; the shell shows a module's nav/screen only
+   * when the module is enabled AND its permission is in this set.
    */
   getMe(): Promise<{
     personId: string;
     role: PersonRole;
     locale: string | null;
     venueLocale: string;
+    permissions: string[];
+    modules: string[];
   }> {
     return this.#request<{
       personId: string;
       role: PersonRole;
       locale: string | null;
       venueLocale: string;
+      permissions: string[];
+      modules: string[];
     }>("/management-api/session/me", "GET");
   }
 

@@ -1396,7 +1396,15 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // `nodeId` is THIS node's origin id (the same `till.nodeId` `mountManagementApi`/`mountCatalogueApi`
     // receive) — `PUT /management-api/session/me/locale` writes `persons.locale` (a sync-enrolled table),
     // so its capture must stamp a real origin rather than the all-zero uuid.
-    { db, cfg: { tenantId: till.tenantId, nodeId: till.nodeId }, venueLocale },
+    // `modules` is the enabled-module set (`setsToMigrate`, boot.ts above) by name — surfaced by
+    // `GET /session/me` so the dashboard activates and shows only enabled modules. Includes `core`
+    // harmlessly (the browser registry only matches UI-bearing ids).
+    {
+      db,
+      cfg: { tenantId: till.tenantId, nodeId: till.nodeId },
+      venueLocale,
+      modules: setsToMigrate.map((m) => m.name),
+    },
     log,
   );
   // The PUBLIC read half of the product-image feature on the SAME app — the `mountWebhook` /

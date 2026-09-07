@@ -304,6 +304,12 @@ export class DashboardApp extends LitElement {
    * `#renderScreen` and `#permittedScreen` consult before the core switch. */
   #activeScreens = new Map<string, DashboardScreenHandle>();
 
+  /** The signed-in person's EFFECTIVE permission set from the WHOAMI probe (`me.permissions`). The two
+   * module gates read it: `#nav` shows a module's item only when this set holds its `requiresPermission`,
+   * and `#permittedScreen` admits a module id only when it does too. A client-side HINT for the UI —
+   * every module route is still gated server-side. Empty until a probe/login resolves. */
+  #sessionPermissions: string[] = [];
+
   /** Whether the off-canvas nav drawer is open (Task 12). Only meaningful on narrow screens, where the
    * sidebar slides in over the main column; at desktop width the sidebar is always in-flow and the
    * hamburger + scrim are hidden, so this flag is inert there. The hamburger toggles it, and selecting
@@ -437,13 +443,16 @@ export class DashboardApp extends LitElement {
     role: PersonRole;
     locale: string | null;
     venueLocale: string;
+    permissions: string[];
+    modules: string[];
   }): void {
     this.myPersonId = me.personId;
     this.sessionRole = me.role;
-    // Activate the bundled modules before resolving the permitted screen, so a URL naming a module's
-    // own screen (e.g. `bookings`) is recognised. Task 3 activates EVERY bundled module (no gate);
-    // Task 4 replaces the argument with the session's `me.modules`.
-    this.#activate(DASHBOARD_MODULES.map((c) => c.module));
+    this.#sessionPermissions = me.permissions;
+    // Activate ONLY the enabled modules (`me.modules`) before resolving the permitted screen, so a URL
+    // naming an enabled module's own screen (e.g. `bookings`) is recognised while a disabled one is not.
+    // The per-permission gate is applied on top, in `#nav` and `#permittedScreen`.
+    this.#activate(me.modules);
     this.screen = this.#permittedScreen(this.#url.read("dashboard"));
     this.#venueLocale = me.venueLocale;
     if (!this.isConnected) return;
@@ -455,9 +464,9 @@ export class DashboardApp extends LitElement {
    * Activate the bundled module contributions whose `module` is in `enabled` — ONCE per session. For
    * each: register its localised strings into the shared catalogue, remember it, and mount its screen
    * handle (built with this app's request). A contribution naming a nav group id the app does not know
-   * is a wiring error, so it THROWS rather than silently dropping the screen. Task 3 passes every
-   * bundled module (bookings shows unguarded, as before); Task 4 passes the session's `me.modules` and
-   * adds the permission filter.
+   * is a wiring error, so it THROWS rather than silently dropping the screen. `enabled` is the session's
+   * `me.modules`; the per-permission gate is layered on top in `#nav`/`#permittedScreen`, so a module can
+   * be active here yet hidden there.
    */
   #activate(enabled: readonly string[]): void {
     if (this.#activeContributions.length) return; // once per session
@@ -633,7 +642,9 @@ export class DashboardApp extends LitElement {
   }
 
   /** A URL selects a destination only within the authenticated person's visible navigation — the core
-   * nav items, or an ACTIVE module's screen id (Task 4 adds the module permission gate). */
+   * nav items (gated by role), or an ACTIVE module's screen id whose `requiresPermission` the session
+   * holds. A module that is enabled (active) but whose permission the person lacks is denied here, just
+   * as it is hidden from the nav — the two gates agree. */
   #permittedScreen(requested: string | null): CoreScreen | (string & {}) {
     if (this.sessionRole === "staff") return "my-schedule";
     const item = NAV_GROUPS.flatMap((group) => group.items).find(
@@ -644,7 +655,11 @@ export class DashboardApp extends LitElement {
       (!item.requiresManager || this.sessionRole === "manager" || this.sessionRole === "admin")
     )
       return item.screen;
-    if (requested !== null && this.#activeScreens.has(requested)) return requested;
+    if (requested !== null && this.#activeScreens.has(requested)) {
+      const contribution = this.#activeContributions.find((c) => c.screen.id === requested);
+      if (contribution && this.#sessionPermissions.includes(contribution.screen.requiresPermission))
+        return requested;
+    }
     return "overview";
   }
 
@@ -702,7 +717,11 @@ export class DashboardApp extends LitElement {
                   >`,
               )}
             ${this.#activeContributions
-              .filter((c) => c.screen.group === group.id)
+              .filter(
+                (c) =>
+                  c.screen.group === group.id &&
+                  this.#sessionPermissions.includes(c.screen.requiresPermission),
+              )
               .sort((a, b) => (a.screen.order ?? 0) - (b.screen.order ?? 0))
               .map(
                 (c) =>
