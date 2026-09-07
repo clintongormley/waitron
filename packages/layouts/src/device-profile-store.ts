@@ -9,7 +9,7 @@ import type { Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { and, asc, eq, sql } from "drizzle-orm";
-import type { CapabilityFlag } from "./canvas.js";
+import type { CapabilityFlag, FormFactor } from "./canvas.js";
 import { validateCapabilities } from "./device-profile.js";
 
 /**
@@ -42,6 +42,7 @@ import { validateCapabilities } from "./device-profile.js";
 export type DeviceProfileRow = {
   id: string;
   name: string;
+  formFactor: FormFactor;
   canvasId: string | null;
   capabilities: CapabilityFlag[];
 };
@@ -50,6 +51,7 @@ export type DeviceProfileRow = {
 const PROFILE_COLUMNS = {
   id: deviceProfiles.id,
   name: deviceProfiles.name,
+  formFactor: deviceProfiles.formFactor,
   canvasId: deviceProfiles.canvasId,
   capabilities: deviceProfiles.capabilities,
 } as const;
@@ -58,12 +60,14 @@ const PROFILE_COLUMNS = {
 function toRow(row: {
   id: string;
   name: string;
+  formFactor: FormFactor;
   canvasId: string | null;
   capabilities: unknown;
 }): DeviceProfileRow {
   return {
     id: row.id,
     name: row.name,
+    formFactor: row.formFactor,
     canvasId: row.canvasId,
     capabilities: row.capabilities as CapabilityFlag[],
   };
@@ -72,14 +76,12 @@ function toRow(row: {
 const FOREIGN_KEY_VIOLATION = "23503";
 const RESTRICT_VIOLATION = "23001";
 
-/** The composite FKs a device (or a pending pairing code) holds on a profile, both ON DELETE RESTRICT
- * (Task 5's `devices_device_profile_fk`, and `device_pairing_codes_device_profile_fk`). A delete that
- * trips EITHER is a "still in use" conflict; matched on the constraint NAME (a `Set` membership test,
- * one branch for both) so an unrelated RESTRICT can never be mislabelled `device_profile.in_use`. */
-const PROFILE_REFERENCING_CONSTRAINTS = new Set([
-  "devices_device_profile_fk",
-  "device_pairing_codes_device_profile_fk",
-]);
+/** The composite FK a device holds on a profile, ON DELETE RESTRICT (Task 5's
+ * `devices_device_profile_fk`). A delete that trips it is a "still in use" conflict; matched on the
+ * constraint NAME so an unrelated RESTRICT can never be mislabelled `device_profile.in_use`. `devices`
+ * is the ONLY referencing FK now — migration 0003 dropped `device_pairing_codes.device_profile_id`, so
+ * a pairing code can no longer reference a profile. */
+const DEVICE_PROFILE_FK = "devices_device_profile_fk";
 
 /**
  * Translate the driver errors the profile write/delete paths care about into their domain codes, and
@@ -93,10 +95,10 @@ const PROFILE_REFERENCING_CONSTRAINTS = new Set([
  *     tenant, SQLSTATE 23503) → `device_profile.invalid` {reason: "bad_canvas_ref"}. Matched on the
  *     constraint name so the `tenant_id → tenants` FK (server-controlled, never client input) can
  *     never be mislabelled. The name is the only 23503 a client value can trip here;
- *   - a `devices_device_profile_fk` / `device_pairing_codes_device_profile_fk` violation (a delete of a
- *     profile a live device or pending pairing code still references, ON DELETE RESTRICT, SQLSTATE
- *     23001) → `device_profile.in_use` — a clean 409 rather than a raw 500. Matched on the constraint
- *     NAME so an unrelated RESTRICT is re-thrown untouched.
+ *   - a `devices_device_profile_fk` violation (a delete of a profile a live device still references, ON
+ *     DELETE RESTRICT, SQLSTATE 23001) → `device_profile.in_use` — a clean 409 rather than a raw 500.
+ *     Matched on the constraint NAME so an unrelated RESTRICT is re-thrown untouched. (A pairing code
+ *     no longer references a profile — migration 0003 dropped its `device_profile_id`.)
  * The 23503/23001 detection uses `@waitron/db`'s `pgErrorConstraint` (a cause-chain walk), the same
  * mechanism `@waitron/printing`'s `printers.ts` uses, not a top-level `.code` read. Exported for the
  * crafted-error unit test (`device-profile-store.test.ts`), NOT from the package barrel — the same
@@ -113,7 +115,7 @@ export function translateWriteError(err: unknown): never {
     throw new AppError("device_profile.invalid", { reason: "bad_canvas_ref" });
   }
   const restrictConstraint = pgErrorConstraint(err, RESTRICT_VIOLATION);
-  if (restrictConstraint !== undefined && PROFILE_REFERENCING_CONSTRAINTS.has(restrictConstraint)) {
+  if (restrictConstraint === DEVICE_PROFILE_FK) {
     throw new AppError("device_profile.in_use", {});
   }
   throw err;
@@ -154,6 +156,7 @@ export async function createDeviceProfile(
     managementSessionId: string;
     tenantId: string;
     name: string;
+    formFactor: FormFactor;
     canvasId: string | null | undefined;
     capabilities: unknown;
   },
@@ -169,6 +172,7 @@ export async function createDeviceProfile(
       .values({
         tenantId: input.tenantId,
         name: input.name,
+        formFactor: input.formFactor,
         canvasId: input.canvasId ?? null,
         capabilities,
       })
@@ -194,6 +198,7 @@ export async function updateDeviceProfile(
     tenantId: string;
     id: string;
     name: string;
+    formFactor: FormFactor;
     canvasId: string | null | undefined;
     capabilities: unknown;
   },
@@ -209,6 +214,7 @@ export async function updateDeviceProfile(
       .update(deviceProfiles)
       .set({
         name: input.name,
+        formFactor: input.formFactor,
         canvasId: input.canvasId ?? null,
         capabilities,
         updatedAt: sql`now()`,

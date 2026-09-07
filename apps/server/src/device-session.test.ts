@@ -17,7 +17,7 @@ import {
 import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
 import { enrolDevice, generatePairingCode } from "./device.js";
-import type { CapabilityFlag } from "@waitron/layouts";
+import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
 import {
   DEV_DEVICE_HEADER,
   DEVICE_COOKIE,
@@ -86,13 +86,17 @@ async function enrolDeviceFixture(): Promise<{
   deviceId: string;
   token: string;
   stationId: string;
+  deviceProfileId: string;
 }> {
   const { cfg, stationId } = await setupStation();
-  const { code } = await asApp(suite.admin, cfg, (tx) =>
-    generatePairingCode(tx, cfg, { kind: "kds_station", stationId, label: "Pantalla" }),
-  );
-  const dev = await asApp(suite.admin, cfg, (tx) => enrolDevice(tx, cfg, { code }));
-  return { cfg, deviceId: dev.deviceId, token: dev.token, stationId };
+  // A device is DEFINED by its profile now (Task 7): a `kds` profile with NO capabilities — the
+  // station-bound kitchen screen the old station-only mint produced, its capability set empty.
+  const deviceProfileId = await seedDeviceProfile(cfg, "Pantalla profile", "kds", []);
+  const dev = await asApp(suite.admin, cfg, async (tx) => {
+    const { code } = await generatePairingCode(tx, cfg);
+    return enrolDevice(tx, cfg, { code, name: "Pantalla", profileId: deviceProfileId, stationId });
+  });
+  return { cfg, deviceId: dev.deviceId, token: dev.token, stationId, deviceProfileId };
 }
 
 /** The canvas/till/hardware bindings a device enrolled with NONE assigned surfaces — every binding is
@@ -101,11 +105,12 @@ async function enrolDeviceFixture(): Promise<{
  * SP-A.2 fields are pinned alongside the pre-existing `deviceId`/`kind`/`stationId`. */
 const NO_BINDINGS = {
   tillId: null,
-  deviceProfileId: null,
   receiptPrinterId: null,
   hasCashDrawer: false,
   cardProvider: "none",
   cardReaderId: null,
+  // `enrolDeviceFixture`'s kds profile declares no capabilities, so the binding carries `[]`.
+  capabilities: [],
 } as const;
 
 /**
@@ -114,12 +119,13 @@ const NO_BINDINGS = {
 async function seedDeviceProfile(
   cfg: TillConfig,
   name: string,
+  formFactor: FormFactor,
   capabilities: CapabilityFlag[],
   canvasId: string | null = null,
 ): Promise<string> {
   const prof = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (tenant_id, name, canvas_id, capabilities)
-    values (${cfg.tenantId}, ${name}, ${canvasId}::uuid, ${JSON.stringify(capabilities)}::jsonb)
+    insert into device_profiles (tenant_id, name, form_factor, canvas_id, capabilities)
+    values (${cfg.tenantId}, ${name}, ${formFactor}, ${canvasId}::uuid, ${JSON.stringify(capabilities)}::jsonb)
     returning id`);
   return prof.rows[0]!.id;
 }
@@ -133,6 +139,7 @@ async function enrolTillDeviceFixture(): Promise<{
   deviceId: string;
   token: string;
   deviceProfileId: string;
+  tillId: string;
 }> {
   const { cfg } = await setupStation();
   const prof = await suite.admin.execute<{ id: string }>(sql`
@@ -143,29 +150,33 @@ async function enrolTillDeviceFixture(): Promise<{
   // The device profile carries the capabilities the firewall now reads (Task 9): both fenced flags, the
   // values `DEFAULT_PROFILE_CAPABILITIES.till` seeds. Its canvas reference is the front-counter canvas —
   // the device binds that canvas SOLELY through this profile (the direct device→canvas link was dropped
-  // in the Task 10 cutover).
+  // in the Task 10 cutover). A `till` profile AUTO-CREATES the register the device rings against (Task 7).
   const deviceProfileId = await seedDeviceProfile(
     cfg,
     "Counter",
+    "till",
     ["integrated-card-payment", "open-cash-drawer"],
     canvasId,
   );
-  const { code } = await asApp(suite.admin, cfg, (tx) =>
-    // A `till` is sale-capable, so it REQUIRES a till_id (SP-A.2 §16.4) — the seeded till. It also
-    // carries the device profile and the hardware trio (cash drawer + reader).
-    generatePairingCode(tx, cfg, {
-      kind: "till",
-      stationId: null,
-      tillId: cfg.tillId,
-      deviceProfileId,
-      hasCashDrawer: true,
-      cardProvider: "stripe_terminal",
-      cardReaderId: "reader_ABC",
-      label: "Counter till",
-    }),
-  );
-  const dev = await asApp(suite.admin, cfg, (tx) => enrolDevice(tx, cfg, { code }));
-  return { cfg, deviceId: dev.deviceId, token: dev.token, deviceProfileId };
+  const dev = await asApp(suite.admin, cfg, async (tx) => {
+    const { code } = await generatePairingCode(tx, cfg);
+    return enrolDevice(tx, cfg, { code, name: "Counter till", profileId: deviceProfileId });
+  });
+  // The hardware trio (cash drawer + reader) is bound LATER via the dashboard — `enrolDevice` leaves
+  // those columns at their defaults — so set them here as the dashboard would, so the binding read below
+  // surfaces them. Read back the auto-created register the till device rings against.
+  const { rows } = await suite.admin.execute<{ till_id: string }>(sql`
+    update devices
+       set has_cash_drawer = true, card_provider = 'stripe_terminal', card_reader_id = 'reader_ABC'
+     where id = ${dev.deviceId}
+     returning till_id`);
+  return {
+    cfg,
+    deviceId: dev.deviceId,
+    token: dev.token,
+    deviceProfileId,
+    tillId: rows[0]!.till_id,
+  };
 }
 
 /**
@@ -226,7 +237,7 @@ async function probe(cfg: TillConfig, cookieValue: string | null): Promise<Probe
   return { ok: false, code: isAppError(thrown) ? thrown.code : String(thrown) };
 }
 
-/** Enrol a REAL handheld device — no station (`kindRequiresStation("handheld")` is false, Task 2) — so
+/** Enrol a REAL handheld device — no station (a handheld form factor binds none, Task 2) — so
  * `tryReadDevice` resolves its cookie to a `handheld` binding. Same enrol path as `enrolDeviceFixture`,
  * with the order-only kind. */
 async function enrolHandheldFixture(): Promise<{
@@ -235,16 +246,23 @@ async function enrolHandheldFixture(): Promise<{
   token: string;
 }> {
   const { cfg } = await setupStation();
-  const { code } = await asApp(suite.admin, cfg, (tx) =>
-    // A handheld is sale-capable, so it REQUIRES a till_id (SP-A.2 §16.4) — the seeded till.
-    generatePairingCode(tx, cfg, {
-      kind: "handheld",
-      stationId: null,
-      tillId: cfg.tillId,
-      label: "Waiter phone",
-    }),
+  // A handheld is defined by a `phone-portrait`/`tablet-landscape` profile and, being sale-capable,
+  // binds an EXISTING register at enrol — the venue's own till (SP-A.2 §16.4).
+  const deviceProfileId = await seedDeviceProfile(
+    cfg,
+    "Waiter phone profile",
+    "phone-portrait",
+    [],
   );
-  const dev = await asApp(suite.admin, cfg, (tx) => enrolDevice(tx, cfg, { code }));
+  const dev = await asApp(suite.admin, cfg, async (tx) => {
+    const { code } = await generatePairingCode(tx, cfg);
+    return enrolDevice(tx, cfg, {
+      code,
+      name: "Waiter phone",
+      profileId: deviceProfileId,
+      registerId: cfg.tillId,
+    });
+  });
   return { cfg, deviceId: dev.deviceId, token: dev.token };
 }
 
@@ -292,20 +310,17 @@ async function enrolHandheldWithCanvasFixture(): Promise<{
     returning id`);
   const canvasId = prof.rows[0]!.id;
   // The profile declares NO capabilities — the render/firewall source of truth after the Task 9 cutover.
-  const deviceProfileId = await seedDeviceProfile(cfg, "Waiter", [], canvasId);
-  const { code } = await asApp(suite.admin, cfg, (tx) =>
-    // A handheld is sale-capable, so it REQUIRES a till_id (SP-A.2 §16.4) — the seeded till. It carries
-    // a profile that references the phone-portrait canvas and whose `capabilities: []` grant neither
-    // fenced flag (the canvas binds through the profile since the Task 10 cutover).
-    generatePairingCode(tx, cfg, {
-      kind: "handheld",
-      stationId: null,
-      tillId: cfg.tillId,
-      deviceProfileId,
-      label: "Waiter phone",
-    }),
-  );
-  const dev = await asApp(suite.admin, cfg, (tx) => enrolDevice(tx, cfg, { code }));
+  // A handheld (`phone-portrait`) binds an EXISTING register at enrol — the venue's own till (§16.4).
+  const deviceProfileId = await seedDeviceProfile(cfg, "Waiter", "phone-portrait", [], canvasId);
+  const dev = await asApp(suite.admin, cfg, async (tx) => {
+    const { code } = await generatePairingCode(tx, cfg);
+    return enrolDevice(tx, cfg, {
+      code,
+      name: "Waiter phone",
+      profileId: deviceProfileId,
+      registerId: cfg.tillId,
+    });
+  });
   return { cfg, deviceId: dev.deviceId, token: dev.token };
 }
 
@@ -455,35 +470,46 @@ describe("device cookie helpers", () => {
 
 describe("requireDevice (real Postgres)", () => {
   it("authenticates a valid cookie and touches last_seen_at", async () => {
-    const { cfg, deviceId, token, stationId } = await enrolDeviceFixture();
+    const { cfg, deviceId, token, stationId, deviceProfileId } = await enrolDeviceFixture();
     expect(await lastSeenAt(deviceId)).toBeNull(); // never seen yet
 
     const result = await probe(cfg, `${deviceId}.${token}`);
     expect(result).toEqual({
       ok: true,
-      binding: { deviceId, kind: "kds_station", stationId, ...NO_BINDINGS },
+      binding: {
+        deviceId,
+        formFactor: "kds",
+        label: "Pantalla",
+        stationId,
+        deviceProfileId,
+        ...NO_BINDINGS,
+      },
     });
 
     expect(await lastSeenAt(deviceId)).not.toBeNull(); // the guard recorded the sighting
   });
 
   it("carries the device's assigned profile + till + hardware bindings back on the binding (SP-A.2 §16, device-profile §5)", async () => {
-    const { cfg, deviceId, token, deviceProfileId } = await enrolTillDeviceFixture();
+    const { cfg, deviceId, token, deviceProfileId, tillId } = await enrolTillDeviceFixture();
     // A `till` device with a NON-NULL profile, till and hardware binding surfaces every column
     // verbatim — the fields the boot reads (`/api/device/me`, `/api/till`) later echo. The canvas is no
-    // longer a device field; it resolves THROUGH the profile at `/api/till` (Task 10 cutover).
+    // longer a device field; it resolves THROUGH the profile at `/api/till` (Task 10 cutover). The till
+    // is the register the `till` profile auto-created at enrol (Task 7).
     expect(await probe(cfg, `${deviceId}.${token}`)).toEqual({
       ok: true,
       binding: {
         deviceId,
-        kind: "till",
+        formFactor: "till",
+        label: "Counter till",
         stationId: null,
-        tillId: cfg.tillId,
+        tillId,
         deviceProfileId,
         receiptPrinterId: null,
         hasCashDrawer: true,
         cardProvider: "stripe_terminal",
         cardReaderId: "reader_ABC",
+        // The `till` profile declares both fenced flags — carried on the binding by the profile join.
+        capabilities: ["integrated-card-payment", "open-cash-drawer"],
       },
     });
   });
@@ -530,12 +556,14 @@ describe("requireDevice (real Postgres)", () => {
 
 describe("tryReadDevice and assertNotHandheld (real Postgres)", () => {
   it("tryReadDevice returns the binding for a valid cookie and null at every miss", async () => {
-    const { cfg, deviceId, token, stationId } = await enrolDeviceFixture();
+    const { cfg, deviceId, token, stationId, deviceProfileId } = await enrolDeviceFixture();
     // Success resolves to the same binding `requireDevice` returns.
     expect(await probeTry(cfg, `${deviceId}.${token}`)).toEqual({
       deviceId,
-      kind: "kds_station",
+      formFactor: "kds",
+      label: "Pantalla",
       stationId,
+      deviceProfileId,
       ...NO_BINDINGS,
     });
     // Every point where `requireDevice` throws `device.unauthorized`, the core returns `null`: no dot,
@@ -578,7 +606,7 @@ describe("tryReadDevice and assertNotHandheld (real Postgres)", () => {
 describe("assertDeviceCapability (real Postgres)", () => {
   it("refuses a device whose assigned PROFILE LACKS the capability, naming the action", async () => {
     // The handheld's profile carries `capabilities: []` — it lacks BOTH fenced flags. Prove-by-
-    // deletion: drop the `!profile.capabilities.includes(...)` check in `assertDeviceCapability` and
+    // deletion: drop the `!resolved.capabilities.includes(...)` check in `assertDeviceCapability` and
     // these pass.
     const { cfg, deviceId, token } = await enrolHandheldWithCanvasFixture();
     expect(
@@ -600,10 +628,11 @@ describe("assertDeviceCapability (real Postgres)", () => {
     ).toEqual({ ok: true });
   });
 
-  it("refuses a device with NO assigned device profile (deviceProfileId null) — fail-closed", async () => {
-    // A kds_station enrolled with no profile assigned declares no capabilities at all → refused before
-    // any profile read. Prove-by-deletion: drop the `deviceProfileId === null` guard and this throws
-    // elsewhere instead of the clean 403.
+  it("refuses a device whose assigned profile declares NO capabilities — fail-closed", async () => {
+    // A device is DEFINED by its profile now (Task 7: `device_profile_id` is NOT NULL), so the
+    // fail-closed case is a profile that declares an EMPTY capability set — `enrolDeviceFixture`'s kds
+    // profile has `capabilities: []`, so a device bound to it is refused every fenced action. Prove-by
+    // deletion: drop the `!resolved.capabilities.includes(capability)` guard and this returns ok.
     const { cfg, deviceId, token } = await enrolDeviceFixture();
     expect(
       await probeCapability(cfg, `${deviceId}.${token}`, "integrated-card-payment", "pay"),
@@ -662,21 +691,19 @@ async function enrolDevDevices(): Promise<{
   deviceBId: string;
 }> {
   const { cfg, stationId } = await setupStation();
-  // Device A — a `till` device (needs a till_id), whose cookie stands in for the current identity.
-  const { code: codeA } = await asApp(suite.admin, cfg, (tx) =>
-    generatePairingCode(tx, cfg, {
-      kind: "till",
-      stationId: null,
-      tillId: cfg.tillId,
-      label: "Till A",
-    }),
-  );
-  const devA = await asApp(suite.admin, cfg, (tx) => enrolDevice(tx, cfg, { code: codeA }));
-  // Device B — a `kds_station` (needs a station), the override target.
-  const { code: codeB } = await asApp(suite.admin, cfg, (tx) =>
-    generatePairingCode(tx, cfg, { kind: "kds_station", stationId, label: "KDS B" }),
-  );
-  const devB = await asApp(suite.admin, cfg, (tx) => enrolDevice(tx, cfg, { code: codeB }));
+  // Device A — a `till` device (its profile auto-creates a register), whose cookie stands in for the
+  // current identity.
+  const tillProfileId = await seedDeviceProfile(cfg, "Till A profile", "till", []);
+  const devA = await asApp(suite.admin, cfg, async (tx) => {
+    const { code } = await generatePairingCode(tx, cfg);
+    return enrolDevice(tx, cfg, { code, name: "Till A", profileId: tillProfileId });
+  });
+  // Device B — a `kds` device bound to a station, the override target.
+  const kdsProfileId = await seedDeviceProfile(cfg, "KDS B profile", "kds", []);
+  const devB = await asApp(suite.admin, cfg, async (tx) => {
+    const { code } = await generatePairingCode(tx, cfg);
+    return enrolDevice(tx, cfg, { code, name: "KDS B", profileId: kdsProfileId, stationId });
+  });
   return {
     cfg,
     deviceAId: devA.deviceId,
@@ -702,7 +729,9 @@ describe("dev-override header (real Postgres)", () => {
       { cookie: `${DEVICE_COOKIE}=${deviceACookie}`, [DEV_DEVICE_HEADER]: deviceBId },
     );
     expect(binding?.deviceId).toBe(deviceBId);
-    expect(binding?.kind).toBe("kds_station");
+    // Device B is a kds_station; its binding now carries the profile's form factor (a device is
+    // defined by its profile), from which the kind is derived.
+    expect(binding?.formFactor).toBe("kds");
   });
 
   it("an unknown/malformed override id is a miss, with NO cookie fallback", async () => {
@@ -723,5 +752,55 @@ describe("dev-override header (real Postgres)", () => {
       { cookie: `${DEVICE_COOKIE}=${deviceACookie}` },
     );
     expect(binding?.deviceId).toBe(deviceAId);
+  });
+});
+
+describe("tryReadDevice is tenant-scoped (real Postgres)", () => {
+  // CLAUDE.md §3 / the till-reroute-S3 incident: since RLS was dropped (#255) `withTenant` no longer
+  // isolates SELECTs, so a by-id device read must carry its OWN `tenant_id` predicate —
+  // one-tenant-per-db is NOT the query's isolation boundary. Seeded DIRECTLY (not through the enrol
+  // path, which Tasks 6-7 still owe), so these two cases are self-contained. The dev-override path
+  // carries no token, so without the predicate it would resolve ANY tenant's device by UUID.
+  async function seedKdsDeviceUnderNewTenant(): Promise<{ tenantId: string; deviceId: string }> {
+    const admin = suite.admin;
+    const tenantId = await seedTenant(admin);
+    const loc = await admin.execute<{ id: string }>(sql`
+      insert into locations (tenant_id, name, invoice_locales, operation_description)
+      values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+    const locationId = loc.rows[0]!.id;
+    const st = await admin.execute<{ id: string }>(sql`
+      insert into kitchen_stations (tenant_id, location_id, name, is_default)
+      values (${tenantId}, ${locationId}, 'Cocina', true) returning id`);
+    // A kds profile → the binding rule requires a station and no register.
+    const prof = await admin.execute<{ id: string }>(sql`
+      insert into device_profiles (tenant_id, name, form_factor)
+      values (${tenantId}, 'Pantalla', 'kds') returning id`);
+    const dev = await admin.execute<{ id: string }>(sql`
+      insert into devices (tenant_id, location_id, device_profile_id, station_id, label, token_hash, active)
+      values (${tenantId}, ${locationId}, ${prof.rows[0]!.id}, ${st.rows[0]!.id}, 'Pantalla Cocina',
+              'scrypt$00$00', true) returning id`);
+    return { tenantId, deviceId: dev.rows[0]!.id };
+  }
+
+  it("does NOT resolve a device that belongs to ANOTHER tenant (dev-override, no token)", async () => {
+    const other = await seedKdsDeviceUnderNewTenant();
+    // A DIFFERENT tenant the request is scoped to — it owns no device.
+    const scoped = await seedTenant(suite.admin);
+    const binding = await readWithHeaders(
+      { db: suite.admin, cfg: { tenantId: scoped }, devMode: true },
+      { [DEV_DEVICE_HEADER]: other.deviceId },
+    );
+    // Without `eq(devices.tenantId, cfg.tenantId)` this resolves the foreign device by its UUID.
+    expect(binding).toBeNull();
+  });
+
+  it("DOES resolve a device scoped to its OWN tenant", async () => {
+    const { tenantId, deviceId } = await seedKdsDeviceUnderNewTenant();
+    const binding = await readWithHeaders(
+      { db: suite.admin, cfg: { tenantId }, devMode: true },
+      { [DEV_DEVICE_HEADER]: deviceId },
+    );
+    expect(binding?.deviceId).toBe(deviceId);
+    expect(binding?.formFactor).toBe("kds");
   });
 });

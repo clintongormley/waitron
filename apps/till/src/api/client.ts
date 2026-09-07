@@ -690,32 +690,58 @@ export interface StationQueueGroup {
 }
 
 /**
- * `POST /api/device/enrol` success (device-identity-1 §5a/§3b) — the four NON-SECRET fields the server
- * echoes after redeeming a pairing code: the new device's id, its `kind`, the `stationId` it is bound to
- * (fixed by enrolment), and the operator-chosen `label`. The trusted device TOKEN is deliberately ABSENT —
- * it leaves the server ONLY in the httpOnly `Set-Cookie` header, never a JSON body (`device-api.ts`) — so
- * the client never sees it. The enrol view shows these to confirm which station the display bound to. A
- * LOCAL mirror of the server's enrol response, NOT imported — the same bundle-decoupling rationale as
- * every other type in this file.
+ * `POST /api/device/enrol/verify` success (device-enrolment §2.2) — the catalogue the enrol screen's
+ * SECOND step binds against, returned when a live enrolment key verifies (WITHOUT consuming it). Holding
+ * a live key is the authorisation to read this. `profiles` are the venue's device profiles (each carrying
+ * the `formFactor` that decides which binding picker step 2 shows); `stations` and `registers` are the
+ * pickers' option-sources. A LOCAL mirror of the server's verify response (`apps/server/src/device.ts`),
+ * NOT imported — the same bundle-decoupling rationale as every other type in this file. `formFactor` is a
+ * plain `string` (not the `FormFactor` union): the screen resolves it through `kindOfFormFactor`, which
+ * treats an unknown value as "no special picker".
  */
-export interface DeviceEnrolment {
+export interface EnrolCatalogue {
+  profiles: { id: string; name: string; formFactor: string }[];
+  stations: { id: string; name: string }[];
+  registers: { id: string; name: string }[];
+}
+
+/**
+ * `POST /api/device/enrol` body (device-enrolment §2.2) — the describe-this-device step's submission: the
+ * verified `code`, the operator-chosen `name`, the chosen `profileId`, and EXACTLY ONE binding driven by
+ * the profile's form factor — `stationId` for a `kds` profile, `registerId` for a phone/tablet handheld,
+ * NEITHER for a counter `till` (the server creates its register). The client omits the binding the profile
+ * does not use (never sends `""`); the server re-validates the pairing authoritatively.
+ */
+export interface DeviceEnrolInput {
+  code: string;
+  name: string;
+  profileId: string;
+  stationId?: string;
+  registerId?: string;
+}
+
+/**
+ * `POST /api/device/enrol` success (device-enrolment §2.2) — the three NON-SECRET fields the server echoes
+ * after consuming the key and inserting the device: the new device's id, its operator-chosen `name`, and
+ * its resolved `formFactor`. The trusted device TOKEN is ABSENT — it leaves the server ONLY in the httpOnly
+ * `Set-Cookie` header, never a JSON body. A LOCAL mirror of the server's enrol response, NOT imported.
+ */
+export interface DeviceEnrolResult {
   deviceId: string;
-  kind: string;
-  // `null` for a station-less kind (a `handheld`); a `kds_station` enrolment carries its station id.
-  // The server's POST /api/device/enrol returns `null` here for a handheld; both callers ignore the
-  // resolved value (they re-boot off the device cookie), so this widening is documentation-accuracy.
-  stationId: string | null;
-  label: string;
+  name: string;
+  formFactor: string;
 }
 
 /**
  * `GET /api/device/me` success (device-identity §3b, handheld-tableside Task 4) — the enrolled device's
- * own NON-SECRET identity: its `deviceId`, its `kind` (`kds_station` for a kitchen display, `handheld`
- * for a waiter's phone), and the `stationId` it is bound to (`null` for a kind that binds to no station,
- * such as a handheld). Read once on boot ({@link TillApp}'s device probe) to decide which shell the till
- * boots into. A LOCAL mirror of the server's response, NOT imported — the bundle-decoupling rule. `kind`
- * is a plain `string` (not a union): the client only branches on the values it knows and treats any other
- * as "not a special device", so a server that adds a new kind never breaks an older client.
+ * own NON-SECRET identity: its `deviceId`, its `formFactor` (`kds` for a kitchen display, `till` for a
+ * counter till, `phone-portrait`/`tablet-landscape` for a waiter handheld), its `name` (the human
+ * label shown on the login screen), and the `stationId` it is bound to (`null` for a form factor that
+ * binds no station). Read once on boot ({@link TillApp}'s device probe) to decide which shell the till
+ * boots into (via {@link kindOfFormFactor}). A LOCAL mirror of the server's response, NOT imported —
+ * the bundle-decoupling rule. `formFactor` is a plain `string` (not a union): the client only branches
+ * on the values it knows (treating any other as "not a special device"), so a server that adds a form
+ * factor never breaks an older client.
  *
  * SP-A.2 §16 added the device's assigned TILL + static HARDWARE bindings to the response. They
  * are mirrored here as OPTIONAL — so an older payload without them is still valid, exactly the
@@ -725,7 +751,8 @@ export interface DeviceEnrolment {
  */
 export interface DeviceIdentity {
   deviceId: string;
-  kind: string;
+  formFactor: string;
+  name: string;
   stationId: string | null;
   /** The `tills` row a sale-capable device rings against (§16.4); `null` for a `kds_station`. */
   tillId?: string | null;
@@ -751,16 +778,15 @@ export interface DeviceStation {
 }
 
 /**
- * The SP-C dev per-tab device chooser's payloads (dev-only routes, honoured server-side ONLY in
- * devMode). {@link DevDeviceList} is what `GET /api/dev/devices` returns — this venue's enrolled
- * `devices` plus the option-sources the mint form binds against (`tills`, `stations`);
- * {@link DevMintRequest}/{@link DevMintResult} are the mint-and-adopt round trip. All LOCAL mirrors
- * of the server's dev-route shapes, deliberately NOT imported — the same bundle-decoupling rationale
- * as every other type in this file (see the file header). `kind` stays a plain `string` (not a
+ * The SP-C dev per-tab device chooser's list (the dev-only `GET /api/dev/devices` route, honoured
+ * server-side ONLY in devMode). {@link DevDeviceList} is what that route returns — this venue's ACTIVE
+ * enrolled devices, each labelled and carrying its derived `kind` (the server maps the profile's form
+ * factor through `kindOfFormFactor`) plus its `tillId`/`stationId` bindings. A LOCAL mirror of the
+ * server's dev-route shape (`apps/server/src/device-api.ts`), deliberately NOT imported — the same
+ * bundle-decoupling rationale as every other type in this file. `kind` stays a plain `string` (not a
  * union): the chooser only surfaces the values the server sends, so a new device kind never breaks it.
- * (The dev mint binds a device PROFILE — the canvas + capabilities binding since the Task 10 cutover —
- * where it used to bind a canvas; `deviceProfiles` is the profile option-source and {@link DevMintRequest}
- * carries the chosen `deviceProfileId`.)
+ * The mint-and-adopt round trip and the option-source lists it used to carry are GONE — dev enrolment
+ * now runs the real enrol flow with the `DEMO` key, so the chooser only reads and labels the list.
  */
 export interface DevDevice {
   id: string;
@@ -770,43 +796,8 @@ export interface DevDevice {
   stationId: string | null;
   active: boolean;
 }
-export interface DevTill {
-  id: string;
-  name: string;
-  locationId: string;
-}
-export interface DevStation {
-  id: string;
-  name: string;
-  displayOrder: number;
-  isDefault: boolean;
-  active: boolean;
-}
-/** A mint option-source: one of the tenant's device profiles, `id` (bound) + `name` (shown). The
- * profile's canvas ref + capability set stay server-side — a dev picker needs only the label. */
-export interface DevDeviceProfile {
-  id: string;
-  name: string;
-}
 export interface DevDeviceList {
   devices: DevDevice[];
-  tills: DevTill[];
-  stations: DevStation[];
-  deviceProfiles: DevDeviceProfile[];
-}
-export interface DevMintRequest {
-  kind: string;
-  label: string;
-  tillId?: string;
-  stationId?: string;
-  /** The device profile to stamp on the minted device; omitted when "no profile" is chosen. */
-  deviceProfileId?: string;
-}
-export interface DevMintResult {
-  deviceId: string;
-  kind: string;
-  stationId: string | null;
-  label: string;
 }
 
 /**
@@ -1430,22 +1421,32 @@ export class TillApi {
     });
   }
 
-  // --- Device mode (device-identity-1 §5a): the enrolled KDS station display. These three verbs need
-  // NO operator session — the httpOnly device cookie rides `credentials: "include"` (set by
-  // `enrolDevice`'s Set-Cookie) exactly like the session cookie, so `#request`'s path is unchanged. ---
+  // --- Device mode (device-identity-1 §5a): the enrolled KDS station display + the enrol front door.
+  // These verbs need NO operator session — the httpOnly device cookie rides `credentials: "include"`
+  // (set by `enrol`'s Set-Cookie) exactly like the session cookie, so `#request`'s path is unchanged. ---
 
   /**
-   * Enrol this browser as a trusted device by redeeming a pairing code (device-identity-1 §5a/§3b) →
-   * `POST /api/device/enrol` with `{ code }`. UNAUTHENTICATED (no prior session), the till's `POST
-   * /api/session` counterpart: the server redeems the single-use code (or, in dev mode only, the fixed
-   * reusable dev code — `dev-pairing.ts`), mints the device token, and
-   * returns it ONLY in the httpOnly device cookie (never the body) — so this resolves the four
-   * NON-SECRET {@link DeviceEnrolment} fields the enrol view confirms. The `code` is sent VERBATIM: the
-   * server normalises it, the client does not. A random/consumed code rejects
-   * `{ code: "device.pairing_invalid" }`, one past its TTL `{ code: "device.pairing_expired" }`.
+   * Verify an enrolment key WITHOUT consuming it (device-enrolment §2.2) → `POST /api/device/enrol/verify`
+   * with `{ code }`. UNAUTHENTICATED (no session, no device cookie yet), behind the enrol limiter. On a
+   * live key the server returns the {@link EnrolCatalogue} the enrol screen's second step needs; a
+   * missing/expired key rejects `{ code: "device.pairing_invalid" }` / `{ code: "device.pairing_expired" }`.
+   * In devMode the fixed reusable `DEMO` key verifies too. The key is sent VERBATIM — the server normalises.
    */
-  enrolDevice(code: string): Promise<DeviceEnrolment> {
-    return this.#request<DeviceEnrolment>("/api/device/enrol", "POST", { code });
+  enrolVerify(code: string): Promise<EnrolCatalogue> {
+    return this.#request<EnrolCatalogue>("/api/device/enrol/verify", "POST", { code });
+  }
+
+  /**
+   * Enrol this browser as a trusted device (device-enrolment §2.2) → `POST /api/device/enrol` with the
+   * verified key plus the device description. UNAUTHENTICATED, behind the enrol limiter. The server
+   * CONSUMES the key, resolves the profile's form factor, binds the chosen station (kds) or register
+   * (handheld — a counter till has its register auto-created), inserts the device, and returns the token
+   * ONLY in the httpOnly device cookie (never the body) — so this resolves the three NON-SECRET
+   * {@link DeviceEnrolResult} fields the confirmation view shows. In devMode the `DEMO` key runs the real
+   * insert. A consumed/expired key or an invalid binding rejects with its domain `{ code }`.
+   */
+  enrol(input: DeviceEnrolInput): Promise<DeviceEnrolResult> {
+    return this.#request<DeviceEnrolResult>("/api/device/enrol", "POST", input);
   }
 
   /**
@@ -1461,8 +1462,8 @@ export class TillApi {
   /**
    * This enrolled device's OWN identity (device-identity §3b, handheld-tableside Task 4) →
    * `GET /api/device/me`. The device cookie names the device server-side, so there is no id to pass. The
-   * boot probe reads {@link DeviceIdentity.kind} to pick the till's shell (a `handheld` phone shell, a
-   * `kds_station` display, or a normal operator till). A missing/rejected/revoked cookie rejects
+   * boot probe reads {@link DeviceIdentity.formFactor} (via `kindOfFormFactor`) to pick the till's
+   * shell (a handheld phone shell, a `kds` display, or a normal operator till). A missing/rejected/revoked cookie rejects
    * `{ code: "device.unauthorized" }` (401) — the signal that this browser is not an enrolled device.
    */
   getDeviceIdentity(): Promise<DeviceIdentity> {
@@ -1481,17 +1482,9 @@ export class TillApi {
     await this.#request<void>(`/api/device/ticket-items/${itemId}/advance`, "POST", { to });
   }
 
-  /** SP-C dev chooser: list this venue's enrolled devices + binding option-sources (dev-only route). */
+  /** SP-C dev chooser: list this venue's ACTIVE enrolled devices (dev-only route, 404 outside devMode). */
   getDevDevices(): Promise<DevDeviceList> {
     return this.#request<DevDeviceList>("/api/dev/devices", "GET");
-  }
-  /** SP-C dev chooser: mint-and-adopt a new device (dev-only route). */
-  mintDevDevice(req: DevMintRequest): Promise<DevMintResult> {
-    return this.#request<DevMintResult>("/api/dev/devices", "POST", req);
-  }
-  /** SP-C: drop this browser's device cookie identity. */
-  resetDevice(): Promise<void> {
-    return this.#request<void>("/api/device/reset", "POST");
   }
 
   /**
@@ -1894,8 +1887,12 @@ export class TillApi {
           };
     const res = await fetchImpl(this.#baseUrl + path, init);
     if (!res.ok) {
-      const envelope = (await res.json()) as { error?: { code?: string } };
-      throw { code: envelope.error?.code ?? "server.internal" };
+      const envelope = (await res.json()) as {
+        error?: { code?: string; params?: Record<string, unknown> };
+      };
+      // Spread the error's `params` alongside its `code` so a caller can act on structured detail — the
+      // lock screen's `pin.throttled` countdown reads `retryAfterSeconds` off the thrown object.
+      throw { code: envelope.error?.code ?? "server.internal", ...envelope.error?.params };
     }
     const text = await res.text();
     return (text === "" ? undefined : JSON.parse(text)) as T;

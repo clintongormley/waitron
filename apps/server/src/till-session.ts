@@ -30,6 +30,28 @@ export function isUuid(value: string): boolean {
 }
 
 /**
+ * Canonicalise a UUID to the lowercase-hyphenated form Postgres stores, or `null` when the value is
+ * not a UUID in any spelling Postgres accepts. Postgres canonicalises UUIDs on CAST — an uppercase,
+ * a dash-free 32-hex, or a brace-wrapped spelling all resolve to the SAME row — so any code that KEYS
+ * on a UUID string, rather than casting it to the `uuid` column, must canonicalise first or the same
+ * id in two spellings becomes two distinct keys. The wrong-PIN throttle is exactly that case
+ * (`pin-throttle.ts`, keyed per `(deviceId, personId)`): keyed on the raw body value, a brute-forcer
+ * cycles spellings of one personId to get a fresh back-off bucket each time and evades the window (§5).
+ * Strips optional wrapping braces and every hyphen, lowercases, and rebuilds the 8-4-4-4-12 form; a
+ * value that is not exactly 32 hex digits after stripping is not a UUID and returns `null`.
+ */
+export function canonicaliseUuid(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const hex = value
+    .trim()
+    .replace(/^\{(.*)\}$/, "$1")
+    .replace(/-/g, "")
+    .toLowerCase();
+  if (!/^[0-9a-f]{32}$/.test(hex)) return null;
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+/**
  * Writes the session id into the shift cookie. `httpOnly` so no browser script can read it (the id is
  * a bearer credential); `sameSite: "Strict"` so it never rides a cross-site request; `path: "/"` so
  * it covers the whole till app. `secure` is caller-supplied — TRUE on a production HTTPS host, FALSE

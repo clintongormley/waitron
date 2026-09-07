@@ -427,7 +427,7 @@ describe("applyVenue", () => {
           ensure,
           {
             kind: "seed-device-profiles",
-            profiles: [{ name: "Counter", capabilities: [] }],
+            profiles: [{ name: "Counter", formFactor: "till", capabilities: [] }],
           } as VenueAction,
         ],
         message: "applyVenue: seed-device-profiles before seed-admin",

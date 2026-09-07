@@ -307,11 +307,14 @@ async function saleCount(cfg: TillConfig): Promise<number> {
   });
 }
 
-/** Log in as `operatorId` (PIN "5555") through the HTTP surface and return the session cookie. */
-async function login(app: Hono, operatorId: string): Promise<string> {
+/** Log in as `operatorId` (PIN "5555") through the HTTP surface and return the session cookie. The
+ *  login is DEVICE-GATED (§5/§6) — the throttle keys off the device and the shift records its register
+ *  — so it carries an enrolled `till` device cookie exactly as a sale does. */
+async function login(app: Hono, cfg: TillConfig, operatorId: string): Promise<string> {
+  const deviceCookie = await enrolTillCookie(cfg);
   const res = await app.request("/api/session", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", cookie: deviceCookie },
     body: JSON.stringify({ personId: operatorId, pin: "5555" }),
   });
   expect(res.status).toBe(200);
@@ -321,19 +324,22 @@ async function login(app: Hono, operatorId: string): Promise<string> {
 /** Enrol a REAL `till`-kind device bound to the venue's own till (`cfg.tillId`) and return the
  *  `waitron_device=<id>.<token>` cookie. SP-A.2 cutover: `POST /api/sales` resolves its till from the
  *  enrolled device, and the device's till IS the venue till, so the filed record is unchanged. */
+let tillDeviceCounter = 0;
 async function enrolTillCookie(cfg: TillConfig): Promise<string> {
-  const { code } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
-    return generatePairingCode(tx, cfg, {
-      kind: "till",
-      stationId: null,
-      tillId: cfg.tillId,
-      label: "Counter till",
-    });
-  });
+  // A device-gated login (§5/§6) plus a sale both enrol a till device in the SAME tenant, so the
+  // profile name AND the device name (which the auto-created register is named after) must be unique
+  // per call — both carry a tenant-scoped unique index.
+  tillDeviceCounter += 1;
+  const n = tillDeviceCounter;
   const dev = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-    return enrolDevice(tx, cfg, { code });
+    // A `till` device is defined by a `till`-form-factor profile (Task 7); `enrolDevice` auto-creates
+    // the register it rings against, so the resolved sale till is this device's own.
+    const { rows } = await tx.execute<{ id: string }>(sql`
+      insert into device_profiles (tenant_id, name, form_factor)
+      values (${cfg.tenantId}, ${`Counter till profile ${n}`}, 'till') returning id`);
+    const { code } = await generatePairingCode(tx, cfg);
+    return enrolDevice(tx, cfg, { code, name: `Counter till ${n}`, profileId: rows[0]!.id });
   });
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
@@ -386,7 +392,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, operatorId);
+    const cookie = await login(app, cfg, operatorId);
 
     const workingOrderId = await ringSale(app, cfg, cookie, each.id);
     // The filed sale exists, but mode 'never' enqueued no auto job.
@@ -423,7 +429,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, operatorId);
+    const cookie = await login(app, cfg, operatorId);
     const workingOrderId = await ringSale(app, cfg, cookie, each.id);
 
     for (let i = 0; i < 2; i++) {
@@ -445,7 +451,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, operatorId);
+    const cookie = await login(app, cfg, operatorId);
 
     const res = await app.request(`/api/sales/${randomUUID()}/reprint`, {
       method: "POST",
@@ -462,7 +468,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, operatorId);
+    const cookie = await login(app, cfg, operatorId);
     const workingOrderId = await ringSale(app, cfg, cookie, each.id);
 
     const res = await app.request(`/api/sales/${workingOrderId}/reprint`, {
@@ -478,7 +484,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     const { cfg, operatorId } = await setupVenue();
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, operatorId);
+    const cookie = await login(app, cfg, operatorId);
 
     const res = await app.request("/api/sales/not-a-uuid/reprint", {
       method: "POST",
@@ -509,7 +515,7 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, operatorId);
+    const cookie = await login(app, cfg, operatorId);
 
     const res = await app.request("/api/drawer/open", { method: "POST", headers: { cookie } });
     expect(res.status).toBe(200);
@@ -544,7 +550,7 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
     await setDrawerPolicy(cfg, "open");
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, operatorId);
+    const cookie = await login(app, cfg, operatorId);
 
     const res = await app.request("/api/drawer/open", { method: "POST", headers: { cookie } });
     expect(res.status).toBe(400);
@@ -584,7 +590,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, supervisorId);
+    const cookie = await login(app, cfg, supervisorId);
 
     const res = await app.request("/api/drawer/open", { method: "POST", headers: { cookie } });
     expect(res.status).toBe(200); // the operator's OWN role satisfies the gate — no override needed
@@ -607,7 +613,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, operatorId); // logged in as STAFF (lacks cash.drawer)
+    const cookie = await login(app, cfg, operatorId); // logged in as STAFF (lacks cash.drawer)
 
     const res = await app.request(
       "/api/drawer/open",
@@ -639,7 +645,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, operatorId);
+    const cookie = await login(app, cfg, operatorId);
 
     const res = await app.request("/api/drawer/open", { method: "POST", headers: { cookie } });
     expect(res.status).toBe(403);
@@ -657,7 +663,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
     // the gate runs first (spec §3 order), so an unpermitted operator is refused regardless.
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, operatorId);
+    const cookie = await login(app, cfg, operatorId);
 
     const res = await app.request("/api/drawer/open", { method: "POST", headers: { cookie } });
     expect(res.status).toBe(403);
@@ -672,7 +678,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, operatorId);
+    const cookie = await login(app, cfg, operatorId);
 
     const res = await app.request(
       "/api/drawer/open",
@@ -694,7 +700,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, operatorId);
+    const cookie = await login(app, cfg, operatorId);
 
     // The override names ANOTHER staff person? There is only one staff here — use the operator's own
     // id as the override: a valid credential (correct PIN) whose role (staff) lacks cash.drawer.
@@ -717,7 +723,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, operatorId);
+    const cookie = await login(app, cfg, operatorId);
 
     const res = await app.request(
       "/api/drawer/open",
@@ -738,7 +744,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, operatorId);
+    const cookie = await login(app, cfg, operatorId);
 
     // A malformed body: a well-formed supervisor id but a NUMERIC pin. `override.pin` must be a string;
     // a non-string is refused pin.invalid (401) before it can reach verifyPin as a non-string.
@@ -760,7 +766,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, operatorId);
+    const cookie = await login(app, cfg, operatorId);
 
     const res = await app.request(
       "/api/drawer/open",
@@ -779,7 +785,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, operatorId);
+    const cookie = await login(app, cfg, operatorId);
 
     // An empty JSON object body — parsed cleanly, no override → the gate refuses. (Proves the optional
     // body is handled without a throw: a malformed/empty body must not become a 500.)
@@ -802,7 +808,7 @@ describe("GET /api/drawer/authorizers (eligible cash.drawer supervisors over HTT
     const { cfg, operatorId, supervisorId } = await setupVenue();
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, operatorId);
+    const cookie = await login(app, cfg, operatorId);
 
     const res = await app.request("/api/drawer/authorizers", {
       method: "GET",

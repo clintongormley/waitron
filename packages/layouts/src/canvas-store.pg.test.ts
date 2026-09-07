@@ -185,8 +185,8 @@ describe("layout canvas store on real Postgres, as the app role", () => {
     );
     // Seed a device profile that binds the canvas, as the owner — setup, not the thing under test.
     await suite.admin.execute(sql`
-      insert into device_profiles (tenant_id, name, canvas_id)
-      values (${tenantId}, 'Binding profile', ${id})`);
+      insert into device_profiles (tenant_id, name, form_factor, canvas_id)
+      values (${tenantId}, 'Binding profile', 'till', ${id})`);
     const code = await codeOf(() =>
       asApp(tenantId, (tx) => deleteCanvas(tx, { managementSessionId: session, tenantId, id })),
     );

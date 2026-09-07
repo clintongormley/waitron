@@ -67,13 +67,18 @@ describe("planVenue", () => {
 
   it("resolves the starter profiles' names from the venue's primary invoice locale (es → Spanish)", () => {
     const action = planVenue(request(), MODULES).find((a) => a.kind === "seed-device-profiles");
-    // es-ES venue → the Spanish names, each carrying its form-factor default capabilities.
+    // es-ES venue → the Spanish names, each carrying its form factor and form-factor default
+    // capabilities.
     expect(action).toEqual({
       kind: "seed-device-profiles",
       profiles: [
-        { name: "Mostrador", capabilities: ["integrated-card-payment", "open-cash-drawer"] },
-        { name: "Cocina", capabilities: ["act-as-kds"] },
-        { name: "Móvil", capabilities: [] },
+        {
+          name: "Mostrador",
+          formFactor: "till",
+          capabilities: ["integrated-card-payment", "open-cash-drawer"],
+        },
+        { name: "Cocina", formFactor: "kds", capabilities: ["act-as-kds"] },
+        { name: "Móvil", formFactor: "phone-portrait", capabilities: [] },
       ],
     });
   });

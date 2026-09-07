@@ -38,8 +38,8 @@ describe("device_profiles composite canvas FK (tenant_id, canvas_id) → canvase
     // composite FK device_profiles_canvas_fk is violated.
     const e = await captureError(() =>
       admin.execute(
-        sql`insert into device_profiles (tenant_id, name, canvas_id)
-            values (${TENANT_A}, 'Cross-tenant canvas', ${CANVAS_B})`,
+        sql`insert into device_profiles (tenant_id, name, form_factor, canvas_id)
+            values (${TENANT_A}, 'Cross-tenant canvas', 'till', ${CANVAS_B})`,
       ),
     );
     expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation
@@ -47,8 +47,8 @@ describe("device_profiles composite canvas FK (tenant_id, canvas_id) → canvase
 
   it("accepts a same-tenant canvas_id; a NULL canvas_id is unconstrained (MATCH SIMPLE)", async () => {
     const bound = await admin.execute<{ id: string }>(
-      sql`insert into device_profiles (tenant_id, name, canvas_id)
-          values (${TENANT_A}, 'Bound profile', ${CANVAS_A}) returning id`,
+      sql`insert into device_profiles (tenant_id, name, form_factor, canvas_id)
+          values (${TENANT_A}, 'Bound profile', 'till', ${CANVAS_A}) returning id`,
     );
     expect(bound.rows).toHaveLength(1);
 
@@ -56,8 +56,8 @@ describe("device_profiles composite canvas FK (tenant_id, canvas_id) → canvase
     // default applies ('[]').
     const [row] = (
       await admin.execute<{ canvas_id: string | null; capabilities: unknown }>(
-        sql`insert into device_profiles (tenant_id, name)
-            values (${TENANT_A}, 'Unbound profile')
+        sql`insert into device_profiles (tenant_id, name, form_factor)
+            values (${TENANT_A}, 'Unbound profile', 'till')
             returning canvas_id, capabilities`,
       )
     ).rows;
@@ -72,8 +72,8 @@ describe("device_profiles composite canvas FK (tenant_id, canvas_id) → canvase
       insert into canvases (id, tenant_id, name, definition)
       values (${canvasC}, ${TENANT_A}, 'Canvas C', '{}'::jsonb)`);
     await admin.execute(sql`
-      insert into device_profiles (tenant_id, name, canvas_id)
-      values (${TENANT_A}, 'Restrict profile', ${canvasC})`);
+      insert into device_profiles (tenant_id, name, form_factor, canvas_id)
+      values (${TENANT_A}, 'Restrict profile', 'till', ${canvasC})`);
     const e = await captureError(() =>
       admin.execute(sql`delete from canvases where id = ${canvasC}`),
     );

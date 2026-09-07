@@ -160,20 +160,16 @@ let cookie: string;
 // order behaves exactly as pre-cutover). One enrolment for the file — this suite never deletes devices.
 let tillDeviceCookie: string;
 
-/** Enrol a REAL `till` device bound to `cfg.tillId` and return its `waitron_device=…` cookie. */
+/** Enrol a REAL `till` device (Task 7: defined by a `till`-form-factor profile, and `enrolDevice`
+ *  auto-creates the register it rings against) and return its `waitron_device=…` cookie. */
 async function enrolTillDeviceCookie(db: Database): Promise<string> {
-  const { code } = await withTenant(db, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
-    return generatePairingCode(tx, cfg, {
-      kind: "till",
-      stationId: null,
-      tillId: cfg.tillId,
-      label: "Counter till",
-    });
-  });
   const dev = await withTenant(db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-    return enrolDevice(tx, cfg, { code });
+    const { rows } = await tx.execute<{ id: string }>(sql`
+      insert into device_profiles (tenant_id, name, form_factor)
+      values (${cfg.tenantId}, 'Counter till profile', 'till') returning id`);
+    const { code } = await generatePairingCode(tx, cfg);
+    return enrolDevice(tx, cfg, { code, name: "Counter till", profileId: rows[0]!.id });
   });
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }

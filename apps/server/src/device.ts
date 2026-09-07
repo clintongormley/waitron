@@ -5,21 +5,24 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import {
-  deviceKind,
   devicePairingCodes,
   devices,
   isUniqueViolation,
   pgErrorConstraint,
+  tills,
+  uniqueViolationConstraint,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import type { FormFactor } from "@waitron/layouts";
+import { getDeviceProfile, kindOfFormFactor, listDeviceProfiles } from "@waitron/layouts";
+import type { DeviceKind, FormFactor } from "@waitron/layouts";
 import { hashSecret } from "@waitron/identity";
+import { listStations, requireLiveStation } from "./kitchen.js";
 import type { TillConfig } from "./till-config.js";
-import { requireLiveStation } from "./kitchen.js";
 
-// device-identity-1 §3a/§3b — the CRYPTO CORE of station enrolment. Two pure verbs on the caller's
-// transaction (the route layer, Task 5, wraps each in withTenant/asAppUser and owns the HTTP status
-// mapping): an admin MINTS a single-use pairing code bound to a station, and a screen REDEEMS it to
+// device-identity-1 §3a/§3b — the CRYPTO CORE of device enrolment. Two pure verbs on the caller's
+// transaction (the route layer wraps each in withTenant/asAppUser and owns the HTTP status mapping):
+// an admin MINTS a single-use, BARE bearer pairing code — it carries no device description — and a
+// screen REDEEMS it, describing ITSELF at enrol time (its profile, and its station or register), to
 // become a trusted `devices` row that authenticates thereafter with a scrypt-hashed token cookie.
 //
 // Two-tier secret handling (§2c), and every hash/compare is REUSED, never home-rolled:
@@ -31,15 +34,16 @@ import { requireLiveStation } from "./kitchen.js";
 // The plaintext code and token each leave this module EXACTLY ONCE (the return values, for the operator
 // to read / the route to set the cookie); neither is ever logged or persisted in the clear.
 
-/** The kind of device an enrolment produces. Derived from the `device_kind` pgEnum so it stays in
- * lockstep with the schema. Two kinds are wired end-to-end (mint, enrol, session, firewall): a
- * `kds_station` (an always-on kitchen screen, station-bound) and a `handheld` (a roving, station-less
- * waiter phone that takes/fires tableside orders and settles sales at the table for cash or a MANUAL
- * card tender — the datáfono leg, no integrated reader. A handheld stays fenced from the INTEGRATED card
- * reader (`/api/pay`) and the other fiscal/cash routes — reprint, drawer-open, place, collect, cancel;
- * the authoritative fenced/allowed surface is the till-api firewall, `assertNotHandheld` in
- * device-session.ts and the FENCED/ALLOWED table atop till-api.ts). */
-export type DeviceKind = (typeof deviceKind.enumValues)[number];
+/** The kind of device an enrolment produces — re-exported from `@waitron/layouts`, which owns the
+ * type now that the `device_kind` pgEnum is gone (a device's kind is DERIVED from its profile's form
+ * factor via {@link kindOfFormFactor}). Three kinds are wired end-to-end (mint, enrol, session,
+ * firewall): a `kds_station` (an always-on kitchen screen, station-bound), a `handheld` (a roving,
+ * station-less waiter phone that takes/fires tableside orders and settles sales at the table for cash
+ * or a MANUAL card tender — the datáfono leg, no integrated reader — fenced from the INTEGRATED card
+ * reader (`/api/pay`) and the other fiscal/cash routes: reprint, drawer-open, place, collect, cancel),
+ * and a `till`. The authoritative fenced/allowed surface is the till-api firewall, `assertNotHandheld`
+ * in device-session.ts and the FENCED/ALLOWED table atop till-api.ts. */
+export type { DeviceKind };
 
 /**
  * How long a minted pairing code stays redeemable — spec §2c, the WebAuthn `CHALLENGE_TTL_MS` analogue
@@ -103,252 +107,262 @@ export function normalizePairingCode(input: string): string {
   return input.toUpperCase().replace(/[\s-]/g, "").replace(/[IL]/g, "1").replace(/O/g, "0");
 }
 
-/** Whether a device kind binds a kitchen station. ONLY a `kds_station` (an always-on screen tied to
- * one station) does; a `handheld` (a roving, location-wide waiter device, spec §D2) and a `till` (a
- * first-class till device that rings sales under its node's SIF, SP-A.2 §16) both carry none. This is
- * the code-side twin of the DB CHECK, rewritten in SP-A.2 to `(device_kind = 'kds_station') =
- * (station_id IS NOT NULL)` so it names only `kds_station` and admits every other kind with a NULL
- * station: a kind added here that requires a station must extend that CHECK too. */
-export function kindRequiresStation(kind: DeviceKind): boolean {
-  return kind === "kds_station";
-}
-
-/** Whether a device kind is SALE-CAPABLE and so REQUIRES a `till_id` — the fiscal register-snapshot a
- * later task stamps at sale time (SP-A.2 §16.4). A `till` (a first-class till) and a `handheld` (a
- * roving waiter device that settles cash / manual-card sales at the table) both ring sales under their
- * node's SIF and must name a till; a `kds_station` rings no sale and must name NONE. The code-side twin
- * of the per-kind gate `generatePairingCode` enforces as `device.till_required`. Complement of
- * {@link kindRequiresStation} today — the two station-less kinds are exactly the sale-capable ones —
- * but kept a SEPARATE predicate because a future kind need not preserve that coincidence. */
-export function kindRequiresTill(kind: DeviceKind): boolean {
-  return kind === "till" || kind === "handheld";
-}
-
-/**
- * Derive a layout FORM FACTOR from a device KIND for the canvas fallback (SP-B1). A device row
- * carries only `kind` (`packages/db/src/schema/devices.ts`), never a form factor, so the mapping is
- * fixed here beside the other "what a device kind implies" predicates. `handheld` → `phone-portrait`:
- * the codebase treats a handheld as a phone (the phone shell in `till-app`, and `device-session.ts`'s
- * own doc pairs a handheld with the phone-portrait default). `tablet-landscape` is not reachable via
- * device kind today.
- */
-export function deviceFormFactor(kind: DeviceKind): FormFactor {
-  switch (kind) {
-    case "till":
-      return "till";
-    case "kds_station":
-      return "kds";
-    case "handheld":
-      return "phone-portrait";
-  }
-}
-
 /** The pg SQLSTATE for a foreign-key violation, as `@waitron/printing`'s `printers.ts` and
  * `tables.ts`'s `isZoneFkViolation` name it. */
 const FOREIGN_KEY_VIOLATION = "23503";
 
 /**
- * The device-binding composite FKs and the input FIELD each guards — a 23503 on one means a supplied
- * binding id names no row of THIS tenant. The `device_pairing_codes_*` entries fire at mint time
- * (migration 0095); the `devices_device_profile_fk` twin on the `devices` table itself fires when an
- * already-enrolled device is REASSIGNED to a profile that no row of this tenant matches — the composite
- * `(tenant_id, device_profile_id)` makes that check both tenant-isolated and atomic with the UPDATE (no
- * read-then-write race), so `assign-device-profile` translates it here rather than pre-checking. (The
- * direct device→canvas binding was dropped in 0110; a device now binds a canvas only through its
- * profile, whose own `device_profiles_canvas_fk` is translated in the device-profile store.)
+ * A device composite binding FK and the input FIELD it guards. A 23503 on one of these means a device
+ * write (enrol, `assign-device-profile`, or the hardware PATCH) named a binding that no row of this
+ * tenant matches — the composite makes each check tenant-isolated and atomic with the write (no
+ * read-then-write race), so the routes translate it here rather than pre-checking:
+ *  - `devices_device_profile_fk (tenant_id, device_profile_id)` — a reassign to an unknown/foreign
+ *    profile (`deviceProfileId`);
+ *  - `devices_receipt_printer_fk (tenant_id, receipt_printer_id)` — a hardware PATCH naming an
+ *    unknown/foreign printer (`receiptPrinterId`).
+ * The pairing code carries no bindings, so its former mint-time composite FKs are gone with the
+ * columns (Task 4).
  */
-const BINDING_FK_FIELD: Record<string, "tillId" | "receiptPrinterId" | "deviceProfileId"> = {
-  device_pairing_codes_till_fk: "tillId",
-  device_pairing_codes_receipt_printer_fk: "receiptPrinterId",
-  // The device-profile composite FKs (device-profile design 2026-09-05 §5.1): one on
-  // `device_pairing_codes` (mint) and its twin on `devices` (a REASSIGN to a profile that names no row
-  // of this tenant, via the assign-device-profile route). Both name the `deviceProfileId` input field.
-  device_pairing_codes_device_profile_fk: "deviceProfileId",
+const BINDING_FK_FIELD: Record<string, "deviceProfileId" | "receiptPrinterId"> = {
   devices_device_profile_fk: "deviceProfileId",
+  devices_receipt_printer_fk: "receiptPrinterId",
 };
 
 /**
- * If `error` (or anything it wraps) is a 23503 on one of the device-binding composite FKs, the input
- * FIELD that FK guards; otherwise `undefined`. Reuses `@waitron/db`'s `pgErrorConstraint` to walk the
- * cause chain and read the offending constraint name — Drizzle wraps every failed query in a
- * `DrizzleQueryError` whose own `.code` is undefined, so the real SQLSTATE and `.constraint` name live
- * on `.cause` (node-postgres), one level deeper still under PGlite — then maps that name through
- * {@link BINDING_FK_FIELD}. It keys on the CONSTRAINT NAME, not merely the 23503 code, so a 23503 on a
- * DIFFERENT constraint (the tenant/location direct FKs) — or one whose driver reported no constraint
- * name — returns `undefined` and is rethrown raw rather than mislabelled `device.binding_invalid`. The
- * `isZoneFkViolation` idiom (`tables.ts`). Exported for the crafted-error unit tests, NOT from a
- * package barrel (this is an application, not a library).
+ * If `error` (or anything it wraps) is a 23503 on one of the device binding composite FKs, the input
+ * FIELD it guards (`deviceProfileId`/`receiptPrinterId`); otherwise `undefined`. Reuses `@waitron/db`'s
+ * `pgErrorConstraint` to walk the cause chain and read the offending constraint name — Drizzle wraps
+ * every failed query in a `DrizzleQueryError` whose own `.code` is undefined, so the real SQLSTATE and
+ * `.constraint` name live on `.cause` (node-postgres), one level deeper still under PGlite — then maps
+ * that name through {@link BINDING_FK_FIELD}. It keys on the CONSTRAINT NAME, not merely the 23503
+ * code, so a 23503 on a DIFFERENT constraint (the tenant/location direct FKs) — or one whose driver
+ * reported no constraint name — returns `undefined` and is rethrown raw rather than mislabelled
+ * `device.binding_invalid`. The `isZoneFkViolation` idiom (`tables.ts`). Exported for the crafted-error
+ * unit tests, NOT from a package barrel (this is an application, not a library).
  */
-export function bindingFkField(
-  error: unknown,
-): "tillId" | "receiptPrinterId" | "deviceProfileId" | undefined {
+export function bindingFkField(error: unknown): "deviceProfileId" | "receiptPrinterId" | undefined {
   const constraint = pgErrorConstraint(error, FOREIGN_KEY_VIOLATION);
   return constraint === undefined ? undefined : BINDING_FK_FIELD[constraint];
 }
 
 /**
- * Mint a single-use pairing code (device-identity-1 §3a), station-optional per kind. For a
- * station-binding kind ({@link kindRequiresStation}) the station must be a LIVE station of THIS venue —
- * `requireLiveStation` (kitchen.ts, `station.not_found` otherwise) is REUSED verbatim so a code can
- * never be minted against a retired, foreign-venue or non-existent station, and a null one is rejected
- * up front as `device.station_required` (a validation failure, no uuid to echo — distinct from the
- * `station.not_found` a SUPPLIED-but-invalid station raises); that check runs BEFORE any write. A non-binding kind (a handheld) stores
- * `station_id = NULL` and never calls `requireLiveStation`.
+ * Mint a single-use pairing code (device-identity-1 §3a). The code is a BARE bearer token: it carries
+ * no device description (kind, station, till, profile, hardware) — the device describes itself when it
+ * redeems the code and enrols (Task 7; the mint-time binding columns were dropped in Task 4). Stores
+ * only the code's SHA-256 (never the plaintext), scoped to this tenant + venue, and returns the
+ * plaintext code ONCE for the operator to read into the pairing screen.
  *
- * A SALE-CAPABLE kind ({@link kindRequiresTill}: `till`/`handheld`) additionally REQUIRES a `till_id`
- * and a `kds_station` forbids one — `device.till_required` either way, also BEFORE any write (SP-A.2
- * §16.4). The optional profile/till/hardware bindings are stamped on the code (and thence the device);
- * a non-null `till_id`/`device_profile_id`/`receipt_printer_id` naming no row of this tenant trips its
- * composite FK (0095/0109), translated from 23503 to `device.binding_invalid` naming the field. Stores the
- * code's SHA-256 (never the plaintext) plus the kind/station/label/bindings to stamp on the enrolled
- * device, and returns the plaintext code ONCE for the operator to read into the pairing screen.
+ * `codeSource` is an injectable code generator defaulting to the real high-entropy one — the ONLY knob,
+ * mirroring the enrol rate-limiter's injectable `now` (enrol-rate-limit.ts). It exists so a test can
+ * FORCE a digest collision deterministically (the ~2^-40 duplicate is unreachable by chance); production
+ * always uses the default.
  */
 export async function generatePairingCode(
   tx: Transaction,
   cfg: TillConfig,
-  input: {
-    kind: DeviceKind;
-    stationId: string | null;
-    label: string;
-    // The device BINDINGS to stamp on the enrolled device (SP-A.2 §16). All optional: an existing caller
-    // (a kds_station / handheld mint) omits them, so they default here. `tillId` — the `tills` row a
-    // sale-capable device rings against (§16.4), gated per-kind below. The hardware trio
-    // (`receiptPrinterId` / `hasCashDrawer` / `cardProvider` / `cardReaderId`) — the static hardware
-    // binding (§16.3); credentials stay in the vault, never here.
-    tillId?: string | null;
-    // The reusable device profile to stamp on the enrolled device (device-profile design 2026-09-05
-    // §5.1) — the device's SOLE canvas + capabilities binding (the direct device→canvas link was
-    // dropped in Task 10). Optional (defaults null); a non-null id naming no `device_profiles` row of
-    // this tenant trips the composite FK → `device.binding_invalid`.
-    deviceProfileId?: string | null;
-    receiptPrinterId?: string | null;
-    hasCashDrawer?: boolean;
-    cardProvider?: string;
-    cardReaderId?: string | null;
-  },
-  // Injectable code source, defaulting to the real high-entropy generator — the ONLY knob, mirroring the
-  // enrol rate-limiter's injectable `now` (enrol-rate-limit.ts). It exists so a test can FORCE a digest
-  // collision deterministically (the ~2^-40 duplicate is unreachable by chance); production always uses
-  // the default.
   codeSource: () => string = () => encodePairingCode(randomBytes(PAIRING_CODE_BYTES)),
 ): Promise<{ code: string }> {
-  // A station-binding kind must NAME a station and it must be LIVE. A null station is a VALIDATION
-  // failure — `device.station_required` (nothing was looked up, so there is no uuid to echo) — distinct
-  // from `station.not_found`, which `requireLiveStation` raises for an unknown/foreign/retired station
-  // that WAS supplied (echoing that uuid). Both run before any write. A non-binding kind (handheld)
-  // carries no station and skips the check, so `stationId` is forced NULL for the insert — the Task-1
-  // CHECK (`handheld ⇒ station_id IS NULL`) would reject a non-null one anyway.
-  const requiresStation = kindRequiresStation(input.kind);
-  let stationId: string | null = null;
-  if (requiresStation) {
-    if (input.stationId === null) throw new AppError("device.station_required", {});
-    await requireLiveStation(tx, cfg, input.stationId);
-    stationId = input.stationId;
-  }
-  // A SALE-CAPABLE kind ({@link kindRequiresTill}: `till`/`handheld`) MUST carry a `till_id` — the
-  // fiscal register-snapshot a later task stamps at sale time (SP-A.2 §16.4) — and a `kds_station`
-  // (rings no sale) must carry NONE. Both directions are `device.till_required` (a validation failure
-  // naming the problem, no value to echo — the `device.station_required` shape), checked BEFORE any
-  // write. There is NO DB CHECK backing this (unlike the station rule), so this app-side gate is the
-  // ONLY thing enforcing it — hence proven by deletion in the suite.
-  const tillId = input.tillId ?? null;
-  if (kindRequiresTill(input.kind) && tillId === null) {
-    throw new AppError("device.till_required", {});
-  }
-  if (!kindRequiresTill(input.kind) && tillId !== null) {
-    throw new AppError("device.till_required", {});
-  }
   const code = codeSource();
   try {
     await tx.insert(devicePairingCodes).values({
       tenantId: cfg.tenantId,
-      // The venue requireLiveStation just confirmed the station belongs to (or the venue the handheld
-      // roves) — the scope stamped onto the enrolled device, so it is fixed here rather than re-derived
-      // at redemption.
+      // The venue the enrolling device belongs to — the scope stamped on the code, fixed here rather
+      // than re-derived at redemption.
       locationId: cfg.locationId,
       codeSha256: createHash("sha256").update(code).digest("hex"),
-      deviceKind: input.kind,
-      stationId,
-      // The bindings to stamp on the enrolled device (SP-A.2 §16). Each optional input defaults here so
-      // an existing kds_station/handheld mint that omits them is unchanged (`has_cash_drawer` false,
-      // `card_provider` 'none' — the column defaults, applied explicitly so the code row is deterministic
-      // rather than relying on the DB default). A NULL till/profile/printer trips no composite FK (MATCH
-      // SIMPLE); a non-null one that names no row of this tenant raises 23503, translated below.
-      tillId,
-      deviceProfileId: input.deviceProfileId ?? null,
-      receiptPrinterId: input.receiptPrinterId ?? null,
-      hasCashDrawer: input.hasCashDrawer ?? false,
-      cardProvider: input.cardProvider ?? "none",
-      cardReaderId: input.cardReaderId ?? null,
-      label: input.label,
     });
   } catch (error) {
     // A 23505 here is a digest collision on `device_pairing_codes_lookup_idx` — the UNIQUE index on
-    // (tenant_id, code_sha256) added for single-use safety (385b6248), so the redeeming DELETE …
-    // RETURNING can never consume a duplicate. The code is ~40-bit, so this needs the SHA-256 of a fresh
-    // random code to collide with an outstanding code's digest: astronomically rare (~2^-40 per mint ×
-    // outstanding codes) but real, and the raw constraint error would otherwise surface as an opaque
-    // `server.internal` 500. Map it to a clean, retryable domain code (the manager re-mints). The
-    // table's other two uniques — the `id` PK and `device_pairing_codes_tenant_id_key` (tenant_id, id) —
-    // both key on a fresh `defaultRandom()` uuid, a 2^-122 collision that is not realistically reachable,
-    // so a 23505 on THIS insert is the digest one; `isUniqueViolation` alone identifies it without a
-    // constraint-name check, exactly as passkey.ts's register insert reasons about its own fresh-uuid PK.
-    // The tx is aborted after the constraint violation, so the catch does NO further DB work — it just
-    // throws, and the caller's withTenant rolls back (nothing was written).
+    // (tenant_id, code_sha256) that keeps the redeeming DELETE … RETURNING single-use. The code is
+    // ~40-bit, so this needs the SHA-256 of a fresh random code to collide with an outstanding code's
+    // digest: astronomically rare (~2^-40 per mint × outstanding codes) but real, and the raw constraint
+    // error would otherwise surface as an opaque `server.internal` 500. Map it to a clean, retryable
+    // domain code (the manager re-mints). The table's other two uniques — the `id` PK and
+    // `device_pairing_codes_tenant_id_key` (tenant_id, id) — both key on a fresh `defaultRandom()` uuid,
+    // a 2^-122 collision that is not realistically reachable, so a 23505 on THIS insert is the digest
+    // one; `isUniqueViolation` alone identifies it without a constraint-name check, exactly as
+    // passkey.ts's register insert reasons about its own fresh-uuid PK. The tx is aborted after the
+    // violation, so the catch does NO further DB work — it throws, and the caller's withTenant rolls back
+    // (nothing was written).
     if (isUniqueViolation(error)) {
       throw new AppError("device.pairing_code_unavailable", {});
-    }
-    // A 23503 on a device-binding composite FK (migration 0095/0109) means a supplied till/printer/profile
-    // id names no row of THIS tenant — translated to `device.binding_invalid` naming the FIELD (never the
-    // offending id), the `isZoneFkViolation` idiom (tables.ts). `bindingFkField` reads the CONSTRAINT
-    // NAME, so a NULL binding (which trips no FK — MATCH SIMPLE) never reaches this and a 23503 on any
-    // OTHER constraint returns undefined and is rethrown raw below rather than mislabelled. Anything that
-    // is neither a unique nor a binding-FK violation is a genuine failure and is rethrown unchanged.
-    const field = bindingFkField(error);
-    if (field !== undefined) {
-      throw new AppError("device.binding_invalid", { field });
     }
     throw error;
   }
   return { code };
 }
 
+/** The UNIQUE index that makes a duplicate register name at one venue unrepresentable
+ * (`tills_tenant_location_name_key`, migration 0006). {@link createRegister} keys its 23505
+ * translation on this name so an unrelated unique violation is rethrown raw, not mislabelled. */
+const TILL_NAME_UNIQUE = "tills_tenant_location_name_key";
+
 /**
- * Redeem a pairing code and enrol the device (device-identity-1 §3b). Mirrors the WebAuthn
- * `consumeChallenge` semantic (passkey.ts:108-121) EXACTLY:
+ * Auto-create the cash register a `till`-form-factor device rings against, named after the device, and
+ * return its id. Runs on the caller's transaction (never its own), so the enclosing enrolment's throw —
+ * including this function's own — discards the register with the device (no orphan till, CLAUDE.md §3).
+ * A name already used at this venue trips {@link TILL_NAME_UNIQUE} (23505) → `device.register_name_taken`
+ * (the operator renames the device rather than ending up with two indistinguishable registers); the
+ * unique index is the whole guard (`tills` is a `state` table), keyed by CONSTRAINT NAME so an unrelated
+ * unique violation is rethrown raw — the `translateWriteError` idiom (device-profile-store.ts).
+ */
+async function createRegister(
+  tx: Transaction,
+  cfg: TillConfig,
+  locationId: string,
+  name: string,
+): Promise<string> {
+  try {
+    const [till] = await tx
+      .insert(tills)
+      .values({ tenantId: cfg.tenantId, locationId, name })
+      .returning({ id: tills.id });
+    return till!.id;
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      const constraint = uniqueViolationConstraint(error);
+      // PGlite may report no constraint name; the only unique this narrow insert can trip is the
+      // venue-scoped name index, so a nameless 23505 here is that one (the `translateWriteError` fallback).
+      if (constraint === undefined || constraint === TILL_NAME_UNIQUE) {
+        throw new AppError("device.register_name_taken", {});
+      }
+    }
+    throw error;
+  }
+}
+
+/**
+ * Assert `registerId` names a `tills` row of THIS tenant at THIS venue and return it. A by-id read that
+ * carries its OWN `tenant_id` predicate — one-tenant-per-db is NOT the query's isolation boundary
+ * (CLAUDE.md §3) — plus the `location_id` scope, so a register that is absent, another tenant's, or
+ * another venue's is rejected here rather than trusted or left to the `devices` composite FK (which
+ * sees neither location). No such row → `device.binding_invalid` naming the `tillId` FIELD (never the
+ * id), the code the domain already uses for "named a binding id that matches no row of this tenant".
+ */
+async function requireLiveRegister(
+  tx: Transaction,
+  cfg: TillConfig,
+  locationId: string,
+  registerId: string,
+): Promise<string> {
+  const [till] = await tx
+    .select({ id: tills.id })
+    .from(tills)
+    .where(
+      and(
+        eq(tills.tenantId, cfg.tenantId),
+        eq(tills.locationId, locationId),
+        eq(tills.id, registerId),
+      ),
+    );
+  if (till === undefined) throw new AppError("device.binding_invalid", { field: "tillId" });
+  return till.id;
+}
+
+/**
+ * The choices a device picks between when it enrols (device-identity-1 §3b) — what the pairing screen
+ * shows after a code verifies. All scoped to the venue: the tenant's device PROFILES (the form factor
+ * decides the rest of the flow), the venue's live kitchen STATIONS (a kds device binds one), and its
+ * REGISTERS/tills (a handheld binds one). The `till` form factor mints its own register at enrol, so
+ * the register list is for the handheld leg only.
+ */
+export interface EnrolCatalogue {
+  profiles: { id: string; name: string; formFactor: FormFactor }[];
+  stations: { id: string; name: string }[];
+  registers: { id: string; name: string }[];
+}
+
+/**
+ * Read the enrol catalogue for this venue — the profiles/stations/registers a verifying device chooses
+ * from. Shared by {@link verifyPairingCode} (after a code verifies) and the enrol route's dev-code
+ * branch (which returns the catalogue without a real code row). Every read is tenant-scoped; stations
+ * and registers narrow to `cfg.locationId` (the venue), the same scope `enrolDevice` binds against.
+ */
+export async function readEnrolCatalogue(
+  tx: Transaction,
+  cfg: TillConfig,
+): Promise<EnrolCatalogue> {
+  const profiles = await listDeviceProfiles(tx, cfg.tenantId);
+  const stations = await listStations(tx, cfg);
+  const registers = await tx
+    .select({ id: tills.id, name: tills.name })
+    .from(tills)
+    .where(and(eq(tills.tenantId, cfg.tenantId), eq(tills.locationId, cfg.locationId)))
+    .orderBy(tills.name);
+  return {
+    profiles: profiles.map((p) => ({ id: p.id, name: p.name, formFactor: p.formFactor })),
+    stations: stations.map((s) => ({ id: s.id, name: s.name })),
+    registers,
+  };
+}
+
+/**
+ * Verify a pairing code WITHOUT consuming it (device-identity-1 §3b, the verify-then-enrol first step),
+ * and return the venue's enrol catalogue. A plain SELECT on `(tenant_id, code_sha256)` — NOT the
+ * consuming DELETE `enrolDevice` runs — so a device can read the catalogue, let the operator choose, and
+ * then enrol with the SAME code (the second `enrolDevice` call is what burns it). No row (unknown /
+ * mistyped / already-consumed) → `device.pairing_invalid`; `now - created_at > PAIRING_TTL_MS` →
+ * `device.pairing_expired`, the SAME two faults `enrolDevice`'s DELETE raises. The rate-limit is the
+ * ROUTE's job (before this runs), the enrol convention.
+ */
+export async function verifyPairingCode(
+  tx: Transaction,
+  cfg: TillConfig,
+  code: string,
+): Promise<EnrolCatalogue> {
+  const codeSha256 = createHash("sha256").update(normalizePairingCode(code)).digest("hex");
+  const [row] = await tx
+    .select({ createdAt: devicePairingCodes.createdAt })
+    .from(devicePairingCodes)
+    .where(
+      and(
+        eq(devicePairingCodes.tenantId, cfg.tenantId),
+        eq(devicePairingCodes.codeSha256, codeSha256),
+      ),
+    );
+  if (row === undefined) throw new AppError("device.pairing_invalid", {});
+  if (Date.now() - Date.parse(row.createdAt) > PAIRING_TTL_MS) {
+    throw new AppError("device.pairing_expired", {});
+  }
+  return readEnrolCatalogue(tx, cfg);
+}
+
+/**
+ * Redeem a pairing code and enrol the device (device-identity-1 §3b). The code is a BARE bearer token;
+ * the DEVICE describes itself here — its profile, and its station (kds) or register (everything else) —
+ * so this verb resolves the profile, derives the binding from the profile's form factor, and for a
+ * `till` form factor AUTO-CREATES the register it rings against. Everything below runs in the caller's
+ * ONE transaction (CLAUDE.md §3), so any throw rolls back the consume-DELETE, the register insert and
+ * the device insert together.
  *
- *  1. A locking `DELETE FROM device_pairing_codes WHERE tenant_id AND code_sha256 = sha256(code)
- *     RETURNING` — Drizzle-parameterised, never string-concatenated. The DELETE row-locks the code, so
- *     two devices racing on the SAME code serialise: the second blocks, then — once the first commits —
- *     matches ZERO rows. No row (unknown, mistyped, or already-consumed, all folded) → `device.pairing_invalid`.
- *  2. `now - created_at > PAIRING_TTL_MS` → `device.pairing_expired`. The throw rolls the caller's
- *     transaction back, UNDOING the consume-DELETE, so an expired code lapses by its TTL rather than
- *     being burned by the too-late attempt (the WebAuthn semantic). No catch/commit around this — the
- *     route's withTenant transaction rolls it back.
- *  3. Mint a long-lived token (`randomBytes(32).toString("base64url")`) and INSERT the `devices` row with
- *     its scrypt hash (`hashSecret`, @waitron/identity) — the plaintext lives ONLY in the returned value
- *     the route puts in the cookie, never at rest.
- *
- * Returns the enrolled device's id + the kind/station/label AND the profile/till/hardware bindings it
- * was minted with (SP-A.2 §16, all copied verbatim onto the `devices` row) + the raw token.
+ *  1. A locking `DELETE FROM device_pairing_codes … RETURNING` (Drizzle-parameterised) consumes the
+ *     code. It row-locks, so two devices racing the SAME code serialise: the second matches ZERO rows.
+ *     No row (unknown / mistyped / already-consumed) → `device.pairing_invalid`; `now - created_at >
+ *     PAIRING_TTL_MS` → `device.pairing_expired` (the throw rolls the DELETE back, so the code lapses by
+ *     its TTL rather than being burned by the too-late attempt — the WebAuthn `consumeChallenge` semantic).
+ *  2. Resolve the CLIENT-named device profile of THIS tenant ({@link getDeviceProfile}); absent (unknown
+ *     or just-deleted) → `device_profile.not_found` (a 404 the operator recovers by re-picking).
+ *  3. Bind per the profile's FORM FACTOR — the code-side twin of `device_binding_rule_insert / _update` (migration
+ *     0004), the DB backstop: `kds` requires a live station ({@link requireLiveStation}:
+ *     `device.station_required` if none supplied, `station.not_found` if unknown/foreign/retired) and no
+ *     register; `till` mints its OWN register ({@link createRegister}, `device.register_name_taken` on a
+ *     name already used at the venue); every other form factor requires a live register of this venue
+ *     ({@link requireLiveRegister}: `device.register_required` if none supplied).
+ *  4. Mint a long-lived token (`randomBytes(32)`) and INSERT the `devices` row with its scrypt hash
+ *     (`hashSecret`) — the hardware columns left at their defaults (bound later via the dashboard). The
+ *     plaintext token lives ONLY in the returned value the route puts in the cookie, never at rest.
  */
 export async function enrolDevice(
   tx: Transaction,
   cfg: TillConfig,
-  input: { code: string },
-): Promise<{
-  deviceId: string;
-  kind: DeviceKind;
-  stationId: string | null;
-  label: string;
-  token: string;
-  tillId: string | null;
-  deviceProfileId: string | null;
-  receiptPrinterId: string | null;
-  hasCashDrawer: boolean;
-  cardProvider: string;
-  cardReaderId: string | null;
-}> {
+  input: {
+    code: string;
+    name: string;
+    profileId: string;
+    stationId?: string | null;
+    registerId?: string | null;
+  },
+): Promise<{ deviceId: string; name: string; formFactor: FormFactor; token: string }> {
   // Fold the typed code to its canonical form BEFORE hashing, so a lowercase / O-for-0 / I-for-1 /
   // space-or-hyphen-grouped transcription still redeems the row stored under the canonical SHA-256
   // (see {@link normalizePairingCode} for why this is injective and not a security regression).
@@ -366,22 +380,41 @@ export async function enrolDevice(
     )
     .returning({
       createdAt: devicePairingCodes.createdAt,
-      kind: devicePairingCodes.deviceKind,
-      stationId: devicePairingCodes.stationId,
-      label: devicePairingCodes.label,
+      // The venue the code was minted for — the device (and, for a `till`, its auto-created register)
+      // lives here; the caller's cfg is trusted for the tenant, the consumed code for the venue.
       locationId: devicePairingCodes.locationId,
-      // The profile/till/hardware bindings to copy verbatim onto the enrolled `devices` row (SP-A.2
-      // §16) — fixed at mint time, so read back here rather than re-derived.
-      tillId: devicePairingCodes.tillId,
-      deviceProfileId: devicePairingCodes.deviceProfileId,
-      receiptPrinterId: devicePairingCodes.receiptPrinterId,
-      hasCashDrawer: devicePairingCodes.hasCashDrawer,
-      cardProvider: devicePairingCodes.cardProvider,
-      cardReaderId: devicePairingCodes.cardReaderId,
     });
   if (row === undefined) throw new AppError("device.pairing_invalid", {});
   if (Date.now() - Date.parse(row.createdAt) > PAIRING_TTL_MS) {
     throw new AppError("device.pairing_expired", {});
+  }
+
+  const profile = await getDeviceProfile(tx, cfg.tenantId, input.profileId);
+  // `profileId` is a CLIENT choice (the operator picks it from the verify catalogue), so a well-formed
+  // id that names no profile of this tenant — unknown, or one deleted between verify and enrol — is a
+  // CLIENT-recoverable 404, NOT a server fault: reuse `device_profile.not_found` (the device-profile
+  // store's own "that profile isn't here" code, empty params) so the enrol screen can tell the operator
+  // to re-pick, rather than the opaque 500 a `device.profile_missing` would have paged as.
+  if (profile === undefined) throw new AppError("device_profile.not_found", {});
+
+  // The station/register binding this device carries, derived from its profile's form factor — the
+  // one column NON-NULL for a kds device is `station_id`, for every other form factor `till_id`, and
+  // `device_binding_rule_insert / _update` (migration 0004) is the DB backstop that refuses any other shape.
+  let stationId: string | null = null;
+  let tillId: string | null = null;
+  switch (kindOfFormFactor(profile.formFactor)) {
+    case "kds_station":
+      if (input.stationId == null) throw new AppError("device.station_required", {});
+      await requireLiveStation(tx, cfg, input.stationId);
+      stationId = input.stationId;
+      break;
+    case "till":
+      tillId = await createRegister(tx, cfg, row.locationId, input.name);
+      break;
+    case "handheld":
+      if (input.registerId == null) throw new AppError("device.register_required", {});
+      tillId = await requireLiveRegister(tx, cfg, row.locationId, input.registerId);
+      break;
   }
 
   const token = randomBytes(32).toString("base64url");
@@ -390,33 +423,13 @@ export async function enrolDevice(
     .values({
       tenantId: cfg.tenantId,
       locationId: row.locationId,
-      deviceKind: row.kind,
-      stationId: row.stationId,
-      label: row.label,
-      // Copy the code's bindings onto the device verbatim (SP-A.2 §16). The composite FKs already held
-      // at the code INSERT, so re-stamping the same (tenant, id) pairs here cannot trip them; the
-      // `till`/`profile`/`printer` composite FKs on `devices` (0095/0109) are the durable integrity backstop.
-      tillId: row.tillId,
-      deviceProfileId: row.deviceProfileId,
-      receiptPrinterId: row.receiptPrinterId,
-      hasCashDrawer: row.hasCashDrawer,
-      cardProvider: row.cardProvider,
-      cardReaderId: row.cardReaderId,
+      stationId,
+      tillId,
+      deviceProfileId: input.profileId,
+      label: input.name,
       tokenHash: hashSecret(token),
       active: true,
     })
     .returning({ id: devices.id });
-  return {
-    deviceId: device!.id,
-    kind: row.kind,
-    stationId: row.stationId,
-    label: row.label,
-    token,
-    tillId: row.tillId,
-    deviceProfileId: row.deviceProfileId,
-    receiptPrinterId: row.receiptPrinterId,
-    hasCashDrawer: row.hasCashDrawer,
-    cardProvider: row.cardProvider,
-    cardReaderId: row.cardReaderId,
-  };
+  return { deviceId: device!.id, name: input.name, formFactor: profile.formFactor, token };
 }

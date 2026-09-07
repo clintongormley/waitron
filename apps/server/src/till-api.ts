@@ -1,11 +1,12 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq } from "drizzle-orm";
-import { AppError, SUPPORTED_LOCALES } from "@waitron/shared";
+import { AppError, isAppError, SUPPORTED_LOCALES } from "@waitron/shared";
 import { asAppUser, locations, readNodeMembership, tenants, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
   authorize,
+  createPinThrottle,
   endSession,
   listActivePersonsWithPermission,
   listActiveStaff,
@@ -13,6 +14,7 @@ import {
   roleHasPermission,
   setPersonLocale,
 } from "@waitron/identity";
+import type { PinThrottle } from "@waitron/identity";
 import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalogue";
 import { getReceipt, getCanvas, getCanvasForFormFactor, getDeviceProfile } from "@waitron/layouts";
 import type { CanvasDef, CapabilityFlag } from "@waitron/layouts";
@@ -81,6 +83,7 @@ import type { LineExtras, TicketState } from "./working-order.js";
 import { listCourses, listStations } from "./kitchen.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
 import {
+  canonicaliseUuid,
   clearSessionCookie,
   isUuid,
   readSessionId,
@@ -90,10 +93,10 @@ import {
 import {
   assertDeviceCapability,
   assertNotHandheld,
+  requireDevice,
   requireSaleTillId,
   tryReadDevice,
 } from "./device-session.js";
-import { deviceFormFactor } from "./device.js";
 import { requireUuidParam } from "./request-screens.js";
 // Side-effect only: loads errors.ts's augmentation for the host codes this file THROWS — the
 // `working_order.*` / `order_prep.*` it constructs via `requireUuidId` — under the "every file that
@@ -142,6 +145,13 @@ export interface TillApiDeps {
    * as `venueDefault`. DISTINCT from the fiscal `cfg.locale`/`cfg.invoiceLocales`, which are unchanged.
    */
   venueLocale: string;
+  /**
+   * The per-(device, person) wrong-PIN back-off the login route consults (§5). OPTIONAL and injected
+   * only by tests (over a controllable clock, CLAUDE.md §4); production omits it and `mountTillApi`
+   * builds the default `createPinThrottle()` ONCE per mount so its in-memory state persists across
+   * requests — the same singleton idiom as `device-api.ts`'s `enrolRateLimiter`.
+   */
+  pinThrottle?: PinThrottle;
 }
 
 /**
@@ -169,6 +179,11 @@ export interface TillApiDeps {
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "pin.invalid": 401,
+  // The wrong-PIN back-off (§5, `pin-throttle.ts`): inside the escalating wait window the login route
+  // refuses BEFORE the credential check, carrying `retryAfterSeconds` in the payload. 429 (too many
+  // requests) — the same status `device.pairing_rate_limited` takes on the enrol surface — not 401,
+  // so the till can tell "wait N seconds" apart from "wrong PIN" and render the countdown (§3.4).
+  "pin.throttled": 429,
   "person.not_found": 401,
   "person.suspended": 403,
   // The handheld firewall (spec §5; owner reversal 2026-08-30): a handheld device tried a fiscal/cash
@@ -507,23 +522,69 @@ function mountCourseVerb(
  *     and `recordSale` are reached ONLY by `placeOrder`/`cancelPlacedOrder`/`collectOrder`).
  */
 export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
+  // The per-(device, person) wrong-PIN back-off (§5). Built ONCE here so its in-memory Map persists
+  // across requests for the life of the mounted API — in production `mountTillApi` runs once at boot,
+  // so "per-mount" is "per-process", the same singleton idiom `device-api.ts` uses for its enrol
+  // limiter. A test injects its own over a controllable clock; production omits it and gets the default
+  // policy (3 free failures, then 2/4/8/16/32/60s).
+  const pinThrottle = deps.pinThrottle ?? createPinThrottle();
+
   // The deployment holds one tenant per database. Log in: verify the operator's PIN and set the
   // httpOnly session cookie. The login runs as the app role under the till's tenant —
   // `withTenant` + `asAppUser`, exactly as the sale path does — in this database; a wrong PIN,
   // unknown or suspended person surfaces as the identity credential codes `STATUS` maps to
   // 401/403.
+  //
+  // DEVICE-GATED (§5/§6). The login resolves the calling device up front and fails closed without one
+  // (`device.unauthorized`), the same gate the sale routes apply (`requireSaleTillId`): the throttle
+  // keys off the authenticated device, so it cannot be evaded by dropping the cookie, and the shift
+  // records the DEVICE's own register rather than the box's env `cfg.tillId`. A kds display carries no
+  // roster login and never reaches here.
   app.post("/api/session", (c) =>
     run(c, log, async () => {
-      const { personId, pin } = await c.req.json<{ personId: string; pin: string }>();
-      const session = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        return loginWithPin(tx, {
-          tenantId: deps.cfg.tenantId,
-          tillId: deps.cfg.tillId,
-          personId,
-          pin,
+      const { personId: rawPersonId, pin } = await c.req.json<{ personId: string; pin: string }>();
+      // Canonicalise the personId BEFORE it keys the throttle. Postgres canonicalises UUIDs on cast, so
+      // `loginWithPin` resolves the SAME person from an uppercase/dash-free spelling — but the throttle
+      // keys on the STRING, so each spelling would be a distinct back-off bucket a brute-forcer cycles
+      // to evade the window (§5). One canonical value feeds BOTH the throttle and the login. A value
+      // that is no UUID in any spelling Postgres accepts names no person — refused `person.not_found`
+      // (401), the same code+status a well-formed-but-unknown id gets and the shape `parseDrawerOverride`
+      // gives a non-uuid personId — never reaching `persons.id` as a `22P02` → opaque 500.
+      const personId = canonicaliseUuid(rawPersonId);
+      if (personId === null)
+        throw new AppError("person.not_found", { personId: String(rawPersonId) });
+      const device = await requireDevice(deps, c);
+      // Every sale-capable device carries a non-null `till_id` by the §1.3 form-factor trigger; a
+      // till-less device (a kds display) should never reach a roster login, so guard the NOT NULL
+      // `sessions.till_id` defensively with the mint-time twin `device.till_required`.
+      if (device.tillId === null) throw new AppError("device.till_required", {});
+      const deviceTillId = device.tillId;
+      // Wrong-PIN back-off (§5) BEFORE the credential check: inside the wait window this throws
+      // `pin.throttled { retryAfterSeconds }` (→ 429) and `loginWithPin` never runs.
+      pinThrottle.check(device.deviceId, personId);
+      let session;
+      try {
+        session = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+          await asAppUser(tx);
+          return loginWithPin(tx, {
+            tenantId: deps.cfg.tenantId,
+            // §6: the DEVICE's own register, not the box's env `cfg.tillId`.
+            tillId: deviceTillId,
+            personId,
+            pin,
+          });
         });
-      });
+      } catch (err) {
+        // A wrong PIN escalates the back-off (past the 3 free, it opens/extends the window); every
+        // other identity fault (unknown/suspended person) rethrows untouched. `pin.invalid` is
+        // unchanged — codes are never renamed (§3).
+        if (isAppError(err) && err.code === "pin.invalid") {
+          pinThrottle.recordFailure(device.deviceId, personId);
+        }
+        throw err;
+      }
+      // A clean login resets the streak, so the next wrong PIN starts from the free attempts again.
+      pinThrottle.clear(device.deviceId, personId);
       setSessionCookie(c, session.id, deps.secureCookies);
       // Surface the derived CAPABILITY the till needs — whether this operator may configure the till
       // (FP-2's on-till "Editar plano") — computed server-side from the session's role via the identity
@@ -702,8 +763,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           // still yields a valid form-factor default should that invariant ever be relaxed, and covers a
           // profile whose `canvasId` is NULL (a "default canvas + these capabilities" profile, §5.2).
           canvas =
-            assigned ??
-            (await getCanvasForFormFactor(tx, deps.cfg.tenantId, deviceFormFactor(device.kind)));
+            assigned ?? (await getCanvasForFormFactor(tx, deps.cfg.tenantId, device.formFactor));
         } else {
           canvas = await getCanvasForFormFactor(tx, deps.cfg.tenantId, "till");
         }

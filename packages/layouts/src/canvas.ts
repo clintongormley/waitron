@@ -10,6 +10,28 @@ export const FORM_FACTORS = ["till", "phone-portrait", "tablet-landscape", "kds"
 export type FormFactor = (typeof FORM_FACTORS)[number];
 
 /**
+ * The device kinds a form factor collapses to (design §9). Re-homed here from the `device_kind`
+ * pgEnum in @waitron/db so it survives that enum's deletion; the values still match the enum's
+ * (`kds_station`/`handheld`/`till`) so nothing downstream re-maps.
+ */
+export type DeviceKind = "kds_station" | "handheld" | "till";
+
+/**
+ * The device kind a form factor implies — phone and tablet are both `handheld`. The `satisfies
+ * Record<FormFactor, DeviceKind>` map is the exhaustiveness proof: a new form factor fails to compile
+ * until it gets a row here.
+ */
+export function kindOfFormFactor(ff: FormFactor): DeviceKind {
+  const kinds = {
+    till: "till",
+    "phone-portrait": "handheld",
+    "tablet-landscape": "handheld",
+    kds: "kds_station",
+  } satisfies Record<FormFactor, DeviceKind>;
+  return kinds[ff];
+}
+
+/**
  * The card catalogue — the single source of truth for placeable card kinds. "Big" cards fill a tab
  * (floor-plan, kds-board, expo, table-order, table-layout-editor); "small" cards share a grid. Adding
  * a card is a one-line change here + a contract in card-contract.ts.

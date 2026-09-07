@@ -37,6 +37,7 @@ import {
   type PersonRoleValue,
 } from "@waitron/identity";
 import {
+  FORM_FACTORS,
   createCanvas,
   createDeviceProfile,
   deleteCanvas,
@@ -91,7 +92,7 @@ import {
 import type { TillConfig } from "./till-config.js";
 import { createErrorBoundary } from "./error-boundary.js";
 import { readJsonBody } from "./read-json-body.js";
-import { requireBodyUuid } from "./request-screens.js";
+import { requireBodyUuid, requireEnum } from "./request-screens.js";
 import {
   clearManagementCookie,
   readManagementSessionId,
@@ -282,10 +283,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // The `?? 400` default already covers the 400, but it is listed explicitly as the house style requires.
   "device_profile.not_found": 404,
   "device_profile.name_taken": 409,
-  // A DELETE of a profile a device — or a pending pairing code — still references (the composite FKs
-  // `devices_device_profile_fk` / `device_pairing_codes_device_profile_fk`, ON DELETE RESTRICT) → 409,
-  // translated from the driver's 23001 by `device-profile-store.ts`. The house conflict convention (the
-  // same 409 a `*.name_taken` collision has), not the `?? 400` default. Mirrors `canvas.in_use`.
+  // A DELETE of a profile a device still references (the composite FK `devices_device_profile_fk`, ON
+  // DELETE RESTRICT) → 409, translated from the driver's 23001 by `device-profile-store.ts`. The house
+  // conflict convention (the same 409 a `*.name_taken` collision has), not the `?? 400` default.
+  // Mirrors `canvas.in_use`.
   "device_profile.in_use": 409,
   "device_profile.invalid": 400,
 };
@@ -1129,6 +1130,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<{
         name?: unknown;
+        formFactor?: unknown;
         canvasId?: unknown;
         capabilities?: unknown;
       }>(c);
@@ -1152,12 +1154,17 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         body.canvasId === undefined || body.canvasId === null
           ? null
           : requireBodyUuid(body.canvasId, "canvasId");
+      // The device's FORM FACTOR (the picker that sends it is Task 15) — screened against the closed
+      // `FORM_FACTORS` set (`management.request_invalid` naming the field on a bad/absent value), so the
+      // `device_form_factor` enum column never sees a value it cannot hold.
+      const formFactor = requireEnum(body.formFactor, "formFactor", FORM_FACTORS);
       const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         return createDeviceProfile(tx, {
           managementSessionId: sessionId,
           tenantId: deps.cfg.tenantId,
           name,
+          formFactor,
           canvasId,
           capabilities,
         });
@@ -1177,6 +1184,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const id = requireDeviceProfileId(c.req.param("id"));
       const body = await readJsonBody<{
         name?: unknown;
+        formFactor?: unknown;
         canvasId?: unknown;
         capabilities?: unknown;
       }>(c);
@@ -1196,6 +1204,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         body.canvasId === undefined || body.canvasId === null
           ? null
           : requireBodyUuid(body.canvasId, "canvasId");
+      // The device's FORM FACTOR — screened against the closed `FORM_FACTORS` set, the same as POST.
+      const formFactor = requireEnum(body.formFactor, "formFactor", FORM_FACTORS);
       const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         return updateDeviceProfile(tx, {
@@ -1203,6 +1213,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           tenantId: deps.cfg.tenantId,
           id,
           name,
+          formFactor,
           canvasId,
           capabilities,
         });

@@ -6,7 +6,13 @@ import { CORE_MIGRATIONS, asAppUser, withTenant, writeNodeMembership } from "@wa
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, endSession, hashPin, loginWithPin } from "@waitron/identity";
+import {
+  IDENTITY_MIGRATIONS,
+  createPinThrottle,
+  endSession,
+  hashPin,
+  loginWithPin,
+} from "@waitron/identity";
 import { DEFAULT_CANVASES, DEFAULT_RECEIPT } from "@waitron/layouts";
 import type { ReceiptConfig } from "@waitron/layouts";
 import {
@@ -30,7 +36,7 @@ import type { TenantId } from "@waitron/shared";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi, run } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
-import { deviceFormFactor, enrolDevice, generatePairingCode } from "./device.js";
+import { enrolDevice, generatePairingCode } from "./device.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE, requireSession } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
@@ -276,23 +282,21 @@ async function closeSession(db: Database, id: string): Promise<void> {
  * is sale-capable, so it always carries the seeded `till_id` (SP-A.2 §16.4). After the Task 9/10 cutover,
  * `GET /api/till` resolves the canvas + capabilities THROUGH the device profile — the profile is the
  * SOLE canvas binding (the direct device→canvas link was dropped in Task 10). */
+let tillDeviceCounter = 0;
 async function enrolTillDeviceCookie(
   db: Database,
   deviceProfileId: string | null = null,
 ): Promise<string> {
-  const { code } = await withTenant(db, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
-    return generatePairingCode(tx, cfg, {
-      kind: "till",
-      stationId: null,
-      tillId: cfg.tillId,
-      deviceProfileId,
-      label: "Counter till",
-    });
-  });
+  tillDeviceCounter += 1;
+  // A `till` device is DEFINED by a `till`-form-factor profile (Task 7): the code is a bare bearer
+  // token and the device describes itself at enrol. `enrolDevice` AUTO-CREATES the register a till
+  // rings against (named after the device), so each call gets a unique device name.
+  const profileId =
+    deviceProfileId ?? (await seedDeviceProfile(db, `Till profile ${tillDeviceCounter}`, [], null));
   const dev = await withTenant(db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-    return enrolDevice(tx, cfg, { code });
+    const { code } = await generatePairingCode(tx, cfg);
+    return enrolDevice(tx, cfg, { code, name: `Counter till ${tillDeviceCounter}`, profileId });
   });
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
@@ -311,29 +315,24 @@ async function seedDeviceProfile(
   const { rows } = await withTenant(db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
     return tx.execute<{ id: string }>(sql`
-      insert into device_profiles (tenant_id, name, canvas_id, capabilities)
-      values (${cfg.tenantId}, ${name}, ${canvasId}::uuid, ${JSON.stringify(capabilities)}::jsonb)
+      insert into device_profiles (tenant_id, name, form_factor, canvas_id, capabilities)
+      values (${cfg.tenantId}, ${name}, 'till', ${canvasId}::uuid, ${JSON.stringify(capabilities)}::jsonb)
       returning id`);
   });
   return rows[0]!.id;
 }
-
-describe("deviceFormFactor", () => {
-  it("maps each device kind to a form factor", () => {
-    expect(deviceFormFactor("till")).toBe("till");
-    expect(deviceFormFactor("kds_station")).toBe("kds");
-    expect(deviceFormFactor("handheld")).toBe("phone-portrait");
-  });
-});
 
 describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
   it("POST opens a session and sets an httpOnly SameSite=Strict cookie; DELETE ends it", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
+    // The login is DEVICE-GATED (§5/§6): the request carries an enrolled device cookie exactly as a
+    // sale does, or it is refused `device.unauthorized` (proven by the dedicated test below).
+    const deviceCookie = await enrolTillDeviceCookie(suite.db);
     const res = await app.request("/api/session", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", cookie: deviceCookie },
       body: JSON.stringify({ personId: ana.id, pin: "5555" }),
     });
     expect(res.status).toBe(200);
@@ -378,9 +377,10 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       values (${cfg.tenantId}, 'Marta', ${hashPin("9999")}, 'manager') returning id`);
     const managerId = mgr.rows[0]!.id;
 
+    const deviceCookie = await enrolTillDeviceCookie(suite.db);
     const res = await app.request("/api/session", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", cookie: deviceCookie },
       body: JSON.stringify({ personId: managerId, pin: "9999" }),
     });
     expect(res.status).toBe(200);
@@ -408,9 +408,10 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       values (${cfg.tenantId}, 'Beatriz', ${hashPin("7777")}, 'staff', 'en-GB') returning id`);
     const personId = row.rows[0]!.id;
 
+    const deviceCookie = await enrolTillDeviceCookie(suite.db);
     const res = await app.request("/api/session", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", cookie: deviceCookie },
       body: JSON.stringify({ personId, pin: "7777" }),
     });
     expect(res.status).toBe(200);
@@ -424,13 +425,32 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
+    // A single wrong PIN on an enrolled device: below the free-attempt threshold, so it is a plain
+    // `pin.invalid` (401), not yet a throttle.
+    const deviceCookie = await enrolTillDeviceCookie(suite.db);
     const res = await app.request("/api/session", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", cookie: deviceCookie },
       body: JSON.stringify({ personId: ana.id, pin: "0000" }),
     });
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "pin.invalid" } });
+  });
+
+  it("POST with no enrolled device is refused device.unauthorized (login is device-gated, §5/§6)", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+
+    // No `waitron_device` cookie: the throttle keys off the device and the shift records the device's
+    // register, so a device-less login is refused up front — the same fail-closed gate the sale routes
+    // apply. Dropping the gate (a mutant that skips `requireDevice`) makes this a 200.
+    const res = await app.request("/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ personId: ana.id, pin: "5555" }),
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "device.unauthorized" } });
   });
 
   it("DELETE with no session cookie is an idempotent 200 no-op", async () => {
@@ -482,6 +502,193 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     const cleared = del.headers.get("set-cookie")!;
     expect(cleared).toMatch(/waitron_till_session=;/);
     expect(cleared).toMatch(/Max-Age=0/);
+  });
+});
+
+describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)", () => {
+  /** Count the `sessions` rows for a person on the app role — the differential proof that a throttled
+   *  attempt never reached `loginWithPin` (a login would have inserted a row). */
+  async function sessionCount(personId: string): Promise<number> {
+    const { rows } = await suite.db.execute<{ n: number }>(
+      sql`select count(*)::int as n from sessions where person_id = ${personId}`,
+    );
+    return rows[0]!.n;
+  }
+
+  /** Parse the `deviceId` selector out of a `waitron_device=<id>.<token>` cookie header value. */
+  function deviceIdOf(cookie: string): string {
+    return /waitron_device=([^.]+)\./.exec(cookie)![1]!;
+  }
+
+  it("stamps the DEVICE's own register on the session, not deps.cfg.tillId (§6)", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+
+    // The till device auto-creates its OWN register at enrol (register B), distinct from the box's env
+    // register A (`cfg.tillId`). The shift must name B.
+    const deviceCookie = await enrolTillDeviceCookie(suite.db);
+    const deviceRow = await suite.db.execute<{ till_id: string }>(
+      sql`select till_id from devices where id = ${deviceIdOf(deviceCookie)}`,
+    );
+    const deviceTillId = deviceRow.rows[0]!.till_id;
+    expect(deviceTillId).not.toBe(cfg.tillId); // B ≠ A — a real divergence to detect
+
+    const res = await app.request("/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: deviceCookie },
+      body: JSON.stringify({ personId: ana.id, pin: "5555" }),
+    });
+    expect(res.status).toBe(200);
+    const sessionId = /waitron_till_session=([^;]+)/.exec(res.headers.get("set-cookie")!)![1]!;
+    const sess = await suite.db.execute<{ till_id: string }>(
+      sql`select till_id from sessions where id = ${sessionId}`,
+    );
+    // The session records the DEVICE's register (B), never the env `cfg.tillId` (A). A mutant that kept
+    // `tillId: deps.cfg.tillId` fails here.
+    expect(sess.rows[0]!.till_id).toBe(deviceTillId);
+    expect(sess.rows[0]!.till_id).not.toBe(cfg.tillId);
+
+    await suite.db.execute(sql`delete from sessions where id = ${sessionId}`);
+  });
+
+  it("throttles a (device, person) after the free failures: a further attempt is 429 pin.throttled and loginWithPin never runs", async () => {
+    // A fixed injected clock (CLAUDE.md §4): the window opens at `now` and blocks a later `check` at the
+    // same `now`, deterministically, with no real sleep.
+    const now = 1_000_000;
+    const app = new Hono();
+    mountTillApi(
+      app,
+      { ...deps(suite.db), pinThrottle: createPinThrottle({ now: () => now }) },
+      collect([]),
+    );
+    const deviceCookie = await enrolTillDeviceCookie(suite.db);
+    const headers = { "content-type": "application/json", cookie: deviceCookie };
+    const post = (pin: string) =>
+      app.request("/api/session", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ personId: ana.id, pin }),
+      });
+
+    // Four wrong PINs: three are free, the 4th failure opens the first (2s) wait window. Each still
+    // answers a plain 401 `pin.invalid` (the throttle `check` runs BEFORE the failure it records).
+    for (let i = 0; i < 4; i++) {
+      const bad = await post("0000");
+      expect(bad.status).toBe(401);
+      expect(await bad.json()).toMatchObject({ error: { code: "pin.invalid" } });
+    }
+
+    // The next attempt is now inside the window. Using Ana's CORRECT PIN proves `loginWithPin` was NOT
+    // reached: were it, a session would open (200). Instead it is 429 `pin.throttled` carrying
+    // `retryAfterSeconds`, with NO session cookie and NO new session row.
+    const before = await sessionCount(ana.id);
+    const throttled = await post("5555");
+    expect(throttled.status).toBe(429);
+    expect(await throttled.json()).toMatchObject({
+      error: { code: "pin.throttled", params: { retryAfterSeconds: 2 } },
+    });
+    expect(throttled.headers.get("set-cookie")).toBeNull();
+    expect(await sessionCount(ana.id)).toBe(before);
+  });
+
+  it("keys the throttle on the CANONICAL personId, so an alternate UUID spelling shares the bucket (§5)", async () => {
+    // Postgres canonicalises UUIDs on cast, so an uppercase / dash-free spelling of Ana's id logs in as
+    // the SAME person. The throttle must therefore key on the canonical value, or a brute-forcer cycles
+    // spellings to get a fresh back-off bucket per spelling and evades the window. Fixed injected clock
+    // (CLAUDE.md §4): the window opens and blocks a later `check` at the same `now`, deterministically.
+    const now = 5_000_000;
+    const app = new Hono();
+    mountTillApi(
+      app,
+      { ...deps(suite.db), pinThrottle: createPinThrottle({ now: () => now }) },
+      collect([]),
+    );
+    const deviceCookie = await enrolTillDeviceCookie(suite.db);
+    const headers = { "content-type": "application/json", cookie: deviceCookie };
+    const post = (personId: string, pin: string) =>
+      app.request("/api/session", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ personId, pin }),
+      });
+
+    // Four wrong PINs on the LOWERCASE (canonical) id open the wait window on this (device, person).
+    for (let i = 0; i < 4; i++) expect((await post(ana.id, "0000")).status).toBe(401);
+
+    // A DIFFERENT spelling of the SAME id — uppercase — with Ana's CORRECT PIN must ALSO be throttled
+    // (429), NOT reach `loginWithPin` (a 200 would prove it did) nor land in a fresh bucket (a 401
+    // `pin.invalid`). Keyed on the raw string, uppercase is a distinct bucket and this is a 200 — the
+    // bypass the canonicalisation closes.
+    const upper = await post(ana.id.toUpperCase(), "5555");
+    expect(upper.status).toBe(429);
+    expect(await upper.json()).toMatchObject({ error: { code: "pin.throttled" } });
+
+    // And a dash-free spelling (which Postgres also canonicalises to the same uuid) shares the bucket.
+    const dashless = await post(ana.id.replace(/-/g, ""), "5555");
+    expect(dashless.status).toBe(429);
+    expect(await dashless.json()).toMatchObject({ error: { code: "pin.throttled" } });
+  });
+
+  it("a successful login clears the throttle, so the streak restarts (§5)", async () => {
+    const now = 2_000_000;
+    const app = new Hono();
+    mountTillApi(
+      app,
+      { ...deps(suite.db), pinThrottle: createPinThrottle({ now: () => now }) },
+      collect([]),
+    );
+    const deviceCookie = await enrolTillDeviceCookie(suite.db);
+    const headers = { "content-type": "application/json", cookie: deviceCookie };
+    const post = (pin: string) =>
+      app.request("/api/session", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ personId: ana.id, pin }),
+      });
+
+    // Three wrong PINs (still free), then a correct PIN succeeds and CLEARS the streak.
+    for (let i = 0; i < 3; i++) expect((await post("0000")).status).toBe(401);
+    expect((await post("5555")).status).toBe(200);
+
+    // After the clear, two more wrong PINs are BOTH plain 401 `pin.invalid`. Had the streak NOT reset,
+    // the three pre-success failures plus the first post-success failure would open the window and this
+    // SECOND post-success attempt would be 429 — so both being 401 is the decisive proof `clear` ran.
+    expect((await post("0000")).status).toBe(401);
+    const p2 = await post("0000");
+    expect(p2.status).toBe(401);
+    expect(await p2.json()).toMatchObject({ error: { code: "pin.invalid" } });
+
+    await suite.db.execute(sql`delete from sessions where person_id = ${ana.id}`);
+  });
+
+  it("throttles per (device, person): a second person on the same device is unaffected (§5)", async () => {
+    const now = 3_000_000;
+    const app = new Hono();
+    mountTillApi(
+      app,
+      { ...deps(suite.db), pinThrottle: createPinThrottle({ now: () => now }) },
+      collect([]),
+    );
+    const deviceCookie = await enrolTillDeviceCookie(suite.db);
+    const headers = { "content-type": "application/json", cookie: deviceCookie };
+    const post = (personId: string, pin: string) =>
+      app.request("/api/session", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ personId, pin }),
+      });
+
+    // Fully throttle (device, Ana).
+    for (let i = 0; i < 4; i++) expect((await post(ana.id, "0000")).status).toBe(401);
+    expect((await post(ana.id, "5555")).status).toBe(429); // Ana is locked out on this device
+
+    // Abel — a DIFFERENT person on the SAME device — is independent: his correct PIN logs in (200). A
+    // mutant that keyed the throttle on the device alone (ignoring the person) would 429 him here.
+    const abelOk = await post(abel.id, "1111");
+    expect(abelOk.status).toBe(200);
+    expect(await abelOk.json()).toMatchObject({ personId: abel.id });
+
+    await suite.db.execute(sql`delete from sessions where person_id = ${abel.id}`);
   });
 });
 

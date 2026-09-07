@@ -14,7 +14,12 @@ import type { StringKey } from "../i18n/strings.js";
 // editor already keeps this mirror in card-contracts.ts, so this screen reuses it rather than
 // declaring a second copy; a profile's `capabilities` (opaque `string[]` on the wire) is rendered
 // defensively against it.
-import { CAPABILITY_FLAGS, type CapabilityFlag } from "./canvas-editor/card-contracts.js";
+import {
+  CAPABILITY_FLAGS,
+  FORM_FACTORS,
+  type CapabilityFlag,
+  type FormFactor,
+} from "./canvas-editor/card-contracts.js";
 import { toggleMembership } from "../array-utils.js";
 import type { Canvas, DeviceProfile, DashboardApi } from "../api/client.js";
 
@@ -151,6 +156,9 @@ export class DeviceProfilesScreen extends LitElement {
   @state() private draftName = "";
   @state() private draftCanvasId: string | null = null;
   @state() private draftCapabilities: CapabilityFlag[] = [];
+  // The form factor the profile targets. A fresh draft defaults to `till` (the cash register), the
+  // first `FORM_FACTORS` entry; editing seeds it from the loaded profile.
+  @state() private draftFormFactor: FormFactor = FORM_FACTORS[0];
 
   /** True while a `#save` write is in flight, so Save disables itself and no second write races. */
   @state() private saving = false;
@@ -219,6 +227,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.draftName = "";
     this.draftCanvasId = null;
     this.draftCapabilities = [];
+    this.draftFormFactor = FORM_FACTORS[0];
     this.errorKey = null;
     this.mode = "editor";
   }
@@ -238,6 +247,7 @@ export class DeviceProfilesScreen extends LitElement {
       this.draftCapabilities = CAPABILITY_FLAGS.filter((flag) =>
         profile.capabilities.includes(flag),
       );
+      this.draftFormFactor = profile.formFactor;
       this.mode = "editor";
     } catch (error) {
       this.errorKey = codeOf(error);
@@ -255,6 +265,13 @@ export class DeviceProfilesScreen extends LitElement {
     event.stopPropagation();
     const value = (event.target as HTMLSelectElement).value;
     this.draftCanvasId = value === "" ? null : value;
+  }
+
+  /** The form-factor `<select>`'s change handler. The option values ARE the `FORM_FACTORS` tokens, so
+   * the value is a `FormFactor` (the server re-validates on save regardless). */
+  #onFormFactor(event: Event): void {
+    event.stopPropagation();
+    this.draftFormFactor = (event.target as HTMLSelectElement).value as FormFactor;
   }
 
   /** Toggle a capability flag, rebuilt in the declared flag order (deterministic, not click order). */
@@ -275,6 +292,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.draftName = "";
     this.draftCanvasId = null;
     this.draftCapabilities = [];
+    this.draftFormFactor = FORM_FACTORS[0];
     this.errorKey = null;
   }
 
@@ -295,16 +313,19 @@ export class DeviceProfilesScreen extends LitElement {
     const id = this.editingId;
     const canvasId = this.draftCanvasId;
     const capabilities = [...this.draftCapabilities];
+    const formFactor = this.draftFormFactor;
     this.saving = true;
     try {
       await this.#mutate(async () => {
-        if (id !== null) await this.api.updateDeviceProfile(id, name, canvasId, capabilities);
-        else await this.api.createDeviceProfile(name, canvasId, capabilities);
+        if (id !== null)
+          await this.api.updateDeviceProfile(id, name, canvasId, capabilities, formFactor);
+        else await this.api.createDeviceProfile(name, canvasId, capabilities, formFactor);
         this.mode = "list";
         this.editingId = null;
         this.draftName = "";
         this.draftCanvasId = null;
         this.draftCapabilities = [];
+        this.draftFormFactor = FORM_FACTORS[0];
       });
     } finally {
       this.saving = false;
@@ -318,7 +339,12 @@ export class DeviceProfilesScreen extends LitElement {
   #duplicate(profile: DeviceProfile): void {
     const name = `${profile.name}${t("device_profiles.copy_suffix")}`;
     void this.#mutate(() =>
-      this.api.createDeviceProfile(name, profile.canvasId, profile.capabilities),
+      this.api.createDeviceProfile(
+        name,
+        profile.canvasId,
+        profile.capabilities,
+        profile.formFactor,
+      ),
     );
   }
 
@@ -455,6 +481,21 @@ export class DeviceProfilesScreen extends LitElement {
             @change=${(e: Event) => this.#onCanvas(e)}
           >
             ${this.#renderCanvasOptions()}
+          </select>
+        </label>
+        <label class="field"
+          >${t("device_profiles.form_factor")}
+          <select
+            data-test="profile-form-factor"
+            .value=${this.draftFormFactor}
+            @change=${(e: Event) => this.#onFormFactor(e)}
+          >
+            ${FORM_FACTORS.map(
+              (ff) =>
+                html`<option value=${ff} ?selected=${ff === this.draftFormFactor}>
+                  ${t(`device_profiles.form_factor.${ff}` as StringKey)}
+                </option>`,
+            )}
           </select>
         </label>
         <div class="field" data-test="capabilities">

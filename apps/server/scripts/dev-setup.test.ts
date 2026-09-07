@@ -200,9 +200,11 @@ describe("devSetup against real Postgres", () => {
     return rows[0]!.n;
   }
 
-  it("provisions a fresh database, writing a .env and exactly one tills row", async () => {
+  it("provisions a fresh database, writing a .env and two tills rows", async () => {
     expect(first.reused).toBe(false);
-    expect(await tillsCount()).toBe(1);
+    // Two registers: provisioning's "Caja 1" plus the "Mostrador" register the seeded till DEVICE
+    // auto-creates when it enrols (seedDemoDevices). The handheld shares "Mostrador" and adds none.
+    expect(await tillsCount()).toBe(2);
 
     // The five fiscal ids are real uuids and the file on disk matches the returned env.
     const written = parseEnvFile(readFileSync(envPath, "utf8"));
@@ -278,8 +280,9 @@ describe("devSetup against real Postgres", () => {
     });
 
     expect(second.reused).toBe(true);
-    // The fiscal assertion: no second till (no second SIF, no second chain).
-    expect(await tillsCount()).toBe(1);
+    // The fiscal assertion: no re-provision, so the two registers from the first run stand unchanged
+    // (no second SIF, no second chain).
+    expect(await tillsCount()).toBe(2);
     // Same identity handed back, read from the untouched `.env`.
     expect(second.env.WAITRON_TILL_TENANT_ID).toBe(first.env.WAITRON_TILL_TENANT_ID);
     expect(second.env.WAITRON_TILL_TILL_ID).toBe(first.env.WAITRON_TILL_TILL_ID);
@@ -324,7 +327,44 @@ describe("devSetup against real Postgres", () => {
       devSetup({ databaseUrl: suite.pg.uri, envPath, stateDir: envDir, log: () => {} }),
     ).rejects.toThrow(/already holds a venue/i);
     // The fiscal assertion: still exactly one till, no second chain.
-    expect(await tillsCount()).toBe(1);
+    // The fiscal assertion: still the two registers from the first run, no second chain.
+    expect(await tillsCount()).toBe(2);
+  });
+
+  it("enrols a till, handheld and kitchen display via the real enrol path", async () => {
+    // Each device came through `generatePairingCode` → `enrolDevice` (seedDemoDevices), NOT a direct
+    // insert, so this pins the bindings that path produces: the till auto-created its own "Mostrador"
+    // register, the handheld rings into that SAME register (no third till), and the kds is bound to
+    // the provisioned "Cocina" station. toEqual, not toMatchObject (CLAUDE.md §4).
+    const { rows } = await suite.admin.execute<{
+      label: string;
+      form_factor: string;
+      register_name: string | null;
+      station_name: string | null;
+    }>(
+      sql`select d.label, dp.form_factor, t.name as register_name, ks.name as station_name
+          from devices d
+          join device_profiles dp on dp.id = d.device_profile_id
+          left join tills t on t.id = d.till_id
+          left join kitchen_stations ks on ks.id = d.station_id
+          where d.tenant_id = ${first.env.WAITRON_TILL_TENANT_ID}
+          order by d.label`,
+    );
+    expect(rows).toEqual([
+      {
+        label: "Camarero 1",
+        form_factor: "phone-portrait",
+        register_name: "Mostrador",
+        station_name: null,
+      },
+      { label: "Mostrador", form_factor: "till", register_name: "Mostrador", station_name: null },
+      {
+        label: "Pantalla Cocina",
+        form_factor: "kds",
+        register_name: null,
+        station_name: "Cocina",
+      },
+    ]);
   });
 });
 

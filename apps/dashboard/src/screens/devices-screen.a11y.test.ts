@@ -2,21 +2,15 @@ import { afterEach, describe, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./devices-screen.js";
 import type { DevicesScreen } from "./devices-screen.js";
-import type {
-  DashboardApi,
-  DeviceProfile,
-  DeviceRow,
-  Printer,
-  Station,
-  Till,
-} from "../api/client.js";
+import type { DashboardApi, DeviceProfile, DeviceRow, Printer, Station } from "../api/client.js";
 
 /**
- * The Devices screen scanned by axe in both themes, in two states: the default list + generate form, and
- * after a code has been generated (the shown-once code panel). Mounted by ASSIGNING the `api` STUB as a
+ * The Devices screen scanned by axe in both themes, in three states: the default list + generate button
+ * (each active row carrying its hardware editor), a row's hardware editor with the Stripe Terminal
+ * reader field revealed, and the shown-once code panel. Mounted by ASSIGNING the `api` STUB as a
  * property (never bare markup), exactly as the sibling screen a11y suites do: `connectedCallback` fires
- * `void this.#load()` → `listDevices()` + `listStations()`, so the stub must resolve both or a stray
- * rejection pollutes the run (a rejection is a finding).
+ * `void this.#load()` → the list verbs, so the stub must resolve them all or a stray rejection pollutes
+ * the run (a rejection is a finding).
  */
 const stations: Station[] = [
   {
@@ -64,14 +58,15 @@ const devices: DeviceRow[] = [
   },
 ];
 
-const tills: Till[] = [
-  { id: "t1", label: "Caja 1", locationId: "loc1", receiptPrinterId: null },
-  { id: "t2", label: "Caja 2", locationId: "loc1", receiptPrinterId: null },
-];
-
 const deviceProfiles: DeviceProfile[] = [
-  { id: "dp1", name: "Counter till", canvasId: "p1", capabilities: [] },
-  { id: "dp2", name: "Waiter handheld", canvasId: "p2", capabilities: [] },
+  { id: "dp1", name: "Counter till", canvasId: "p1", capabilities: [], formFactor: "till" },
+  {
+    id: "dp2",
+    name: "Waiter handheld",
+    canvasId: "p2",
+    capabilities: [],
+    formFactor: "phone-portrait",
+  },
 ];
 
 const printers: Printer[] = [
@@ -93,11 +88,18 @@ function stubApi(): DashboardApi {
   return {
     listDevices: vi.fn().mockResolvedValue(devices),
     listStations: vi.fn().mockResolvedValue(stations),
-    listTills: vi.fn().mockResolvedValue(tills),
     listDeviceProfiles: vi.fn().mockResolvedValue(deviceProfiles),
     listPrinters: vi.fn().mockResolvedValue(printers),
     createDeviceCode: vi.fn().mockResolvedValue({ code: "ABCD2345" }),
     revokeDevice: vi.fn().mockResolvedValue(undefined),
+    reassignDeviceProfile: vi.fn().mockResolvedValue(undefined),
+    patchDeviceHardware: vi.fn().mockResolvedValue({
+      id: "d1",
+      receiptPrinterId: null,
+      hasCashDrawer: false,
+      cardProvider: "stripe_terminal",
+      cardReaderId: null,
+    }),
   } as unknown as DashboardApi;
 }
 
@@ -110,7 +112,7 @@ async function flush(el: DevicesScreen): Promise<void> {
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (theme) => {
-  it("renders the list and generate form accessibly", async () => {
+  it("renders the list, per-row hardware editors and generate button accessibly", async () => {
     const { el, host } = await mountWidget<DevicesScreen>(
       "dashboard-devices-screen",
       { api: stubApi() },
@@ -120,37 +122,18 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
     await expectNoA11yViolations(host);
   });
 
-  it("renders the handheld kind (station picker hidden) accessibly", async () => {
+  it("renders a row's hardware editor with the Stripe Terminal reader field accessibly", async () => {
     const { el, host } = await mountWidget<DevicesScreen>(
       "dashboard-devices-screen",
       { api: stubApi() },
       theme,
     );
     await flush(el);
-    // Switch the kind picker to a handheld — the station <select> is removed from the form.
-    const kind = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=kind-select]")!;
-    kind.value = "handheld";
-    kind.dispatchEvent(new Event("change"));
-    await el.updateComplete;
-    await expectNoA11yViolations(host);
-  });
-
-  it("renders the till kind (till + hardware pickers) accessibly", async () => {
-    const { el, host } = await mountWidget<DevicesScreen>(
-      "dashboard-devices-screen",
-      { api: stubApi() },
-      theme,
-    );
-    await flush(el);
-    // Switch the kind picker to a till — the till picker + the hardware pickers (receipt printer,
-    // cash-drawer switch, card provider) render, and with the Stripe Terminal provider the card-reader
-    // field joins them, so the whole till-form state is in the a11y tree.
-    const kind = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=kind-select]")!;
-    kind.value = "till";
-    kind.dispatchEvent(new Event("change"));
-    await el.updateComplete;
+    // Switch the active row's card-provider to a Stripe Terminal reader — the card-reader-id field
+    // joins the receipt-printer / cash-drawer / card-provider controls, so the whole hardware editor
+    // state is in the a11y tree.
     const provider = el.shadowRoot!.querySelector<HTMLSelectElement>(
-      "[data-test=card-provider-select]",
+      "[data-test=hw-card-provider-d1]",
     )!;
     provider.value = "stripe_terminal";
     provider.dispatchEvent(new Event("change"));
@@ -165,16 +148,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       theme,
     );
     await flush(el);
-    // Type a label and generate a code so the shown-once panel is in the a11y tree (the station picker
-    // defaults to the first station).
-    el.shadowRoot!.querySelector("[data-test=code-label]")!.dispatchEvent(
-      new CustomEvent("wt-change", {
-        detail: { value: "Nueva pantalla" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await el.updateComplete;
+    // Generate a code (a single button — no body) so the shown-once panel is in the a11y tree.
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=generate]")!.click();
     await flush(el);
     await expectNoA11yViolations(host);

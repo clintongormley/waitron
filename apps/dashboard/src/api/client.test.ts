@@ -1749,17 +1749,14 @@ describe("DashboardApi — devices (device-identity-1)", () => {
     });
   });
 
-  it("createDeviceCode POSTs { kind, stationId, label } and returns the one-time code (201)", async () => {
+  it("createDeviceCode POSTs with NO body and returns the one-time enrolment key (201)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ code: "ABCD2345" }, true, 201));
     const api = new DashboardApi("", fetchImpl);
-    expect(
-      await api.createDeviceCode({ kind: "kds_station", stationId: "s1", label: "Pantalla" }),
-    ).toEqual({ code: "ABCD2345" });
+    // The code is a bare token now — the device describes itself at enrolment, so the mint carries no body.
+    expect(await api.createDeviceCode()).toEqual({ code: "ABCD2345" });
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/device-codes", {
       method: "POST",
       credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ kind: "kds_station", stationId: "s1", label: "Pantalla" }),
     });
   });
 
@@ -1773,14 +1770,12 @@ describe("DashboardApi — devices (device-identity-1)", () => {
     });
   });
 
-  it("createDeviceCode rejects with { code } on a non-2xx (station not found)", async () => {
+  it("createDeviceCode rejects with { code } on a non-2xx", async () => {
     const fetchImpl = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ error: { code: "station.not_found" } }, false, 404));
+      .mockResolvedValue(jsonResponse({ error: { code: "server.internal" } }, false, 500));
     const api = new DashboardApi("", fetchImpl);
-    await expect(
-      api.createDeviceCode({ kind: "kds_station", stationId: "nope", label: "X" }),
-    ).rejects.toMatchObject({ code: "station.not_found" });
+    await expect(api.createDeviceCode()).rejects.toMatchObject({ code: "server.internal" });
   });
 
   it("revokeDevice rejects with { code } on a non-2xx (device not found)", async () => {
@@ -1789,6 +1784,58 @@ describe("DashboardApi — devices (device-identity-1)", () => {
       .mockResolvedValue(jsonResponse({ error: { code: "device.not_found" } }, false, 404));
     const api = new DashboardApi("", fetchImpl);
     await expect(api.revokeDevice("nope")).rejects.toMatchObject({ code: "device.not_found" });
+  });
+
+  it("createDeviceProfile POSTs the profile body including its form factor (201)", async () => {
+    const stored = {
+      id: "p9",
+      name: "Counter",
+      canvasId: "c1",
+      capabilities: ["open-cash-drawer"],
+      formFactor: "till",
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(stored, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.createDeviceProfile("Counter", "c1", ["open-cash-drawer"], "till")).toEqual(
+      stored,
+    );
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/device-profiles", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "Counter",
+        canvasId: "c1",
+        capabilities: ["open-cash-drawer"],
+        formFactor: "till",
+      }),
+    });
+  });
+
+  it("updateDeviceProfile PUTs the profile body including its form factor (200)", async () => {
+    const stored = {
+      id: "p1",
+      name: "Kitchen",
+      canvasId: null,
+      capabilities: ["act-as-kds"],
+      formFactor: "kds",
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(stored));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.updateDeviceProfile("p1", "Kitchen", null, ["act-as-kds"], "kds")).toEqual(
+      stored,
+    );
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/device-profiles/p1", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "Kitchen",
+        canvasId: null,
+        capabilities: ["act-as-kds"],
+        formFactor: "kds",
+      }),
+    });
   });
 
   it("reassignDeviceProfile POSTs { deviceProfileId } to the device's assign-device-profile route (204)", async () => {
@@ -1801,6 +1848,41 @@ describe("DashboardApi — devices (device-identity-1)", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ deviceProfileId: "dp1" }),
     });
+  });
+
+  it("patchDeviceHardware PATCHes the hardware body and returns the updated device (200)", async () => {
+    const updated = {
+      id: "d1",
+      receiptPrinterId: "pr1",
+      hasCashDrawer: true,
+      cardProvider: "stripe_terminal",
+      cardReaderId: "reader-9",
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(updated));
+    const api = new DashboardApi("", fetchImpl);
+    const body = {
+      receiptPrinterId: "pr1",
+      hasCashDrawer: true,
+      cardProvider: "stripe_terminal",
+      cardReaderId: "reader-9",
+    };
+    expect(await api.patchDeviceHardware("d1", body)).toEqual(updated);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/devices/d1/hardware", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  });
+
+  it("patchDeviceHardware rejects with { code } on a non-2xx (binding invalid)", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "device.binding_invalid" } }, false, 400));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.patchDeviceHardware("d1", { receiptPrinterId: "nope" })).rejects.toMatchObject(
+      { code: "device.binding_invalid" },
+    );
   });
 
   it("reassignDeviceProfile sends { deviceProfileId: null } to clear the assignment", async () => {

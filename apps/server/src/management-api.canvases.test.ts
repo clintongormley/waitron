@@ -250,8 +250,8 @@ describe("Management API — layout-canvas CRUD (Task 11)", () => {
     const { id } = (await created.json()) as { id: string };
 
     await suite.admin.execute(sql`
-      insert into device_profiles (tenant_id, name, canvas_id)
-      values (${tenantId}, ${uniqueName("Binding profile")}, ${id})`);
+      insert into device_profiles (tenant_id, name, form_factor, canvas_id)
+      values (${tenantId}, ${uniqueName("Binding profile")}, 'till', ${id})`);
 
     const res = await app.request(`/management-api/canvases/${id}`, {
       method: "DELETE",

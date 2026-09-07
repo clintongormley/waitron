@@ -1,5 +1,10 @@
 import { AppError } from "@waitron/shared";
-import { DEFAULT_DEVICE_PROFILES, defaultProfileName, type CapabilityFlag } from "@waitron/layouts";
+import {
+  DEFAULT_DEVICE_PROFILES,
+  defaultProfileName,
+  type CapabilityFlag,
+  type FormFactor,
+} from "@waitron/layouts";
 import type { WaitronModule } from "@waitron/module";
 import { resolveFiscalModules } from "./fiscal-modules.js";
 import { deriveTenantId } from "./tenant-id.js";
@@ -64,7 +69,7 @@ export type VenueAction =
       // Names are already resolved to the venue's primary invoice locale here in the pure planner;
       // capabilities are the form-factor defaults from DEFAULT_DEVICE_PROFILES.
       kind: "seed-device-profiles";
-      profiles: { name: string; capabilities: CapabilityFlag[] }[];
+      profiles: { name: string; formFactor: FormFactor; capabilities: CapabilityFlag[] }[];
     }
   | { kind: "create-till"; name: string }
   | { kind: "create-node"; name: string; filingModule: string; taxModule: string }
@@ -152,6 +157,7 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
       kind: "seed-device-profiles",
       profiles: DEFAULT_DEVICE_PROFILES.map((profile) => ({
         name: defaultProfileName(profile, locales[0]!),
+        formFactor: profile.formFactor,
         capabilities: profile.capabilities,
       })),
     },

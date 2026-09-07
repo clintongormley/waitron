@@ -107,6 +107,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
           managementSessionId: managerSession,
           tenantId: managerTenant,
           name: "Front counter",
+          formFactor: "till",
           canvasId: null,
           capabilities: ["open-cash-drawer", "integrated-card-payment", "open-cash-drawer"],
         }),
@@ -115,6 +116,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
       expect(created).toEqual({
         id: created.id,
         name: "Front counter",
+        formFactor: "till",
         canvasId: null,
         capabilities: ["open-cash-drawer", "integrated-card-payment"],
       });
@@ -127,6 +129,33 @@ describe("device-profile store on real Postgres, as the app role", () => {
     }
   });
 
+  it("carries the device form factor through create → get → list", async () => {
+    const tenantId = await seedTenant(suite.admin);
+    const session = await seedSession(tenantId, "manager");
+    const created = await asApp(tenantId, (tx) =>
+      createDeviceProfile(tx, {
+        managementSessionId: session,
+        tenantId,
+        name: "Kitchen display",
+        canvasId: null,
+        capabilities: ["act-as-kds"],
+        formFactor: "kds",
+      }),
+    );
+    expect(created).toEqual({
+      id: created.id,
+      name: "Kitchen display",
+      canvasId: null,
+      capabilities: ["act-as-kds"],
+      formFactor: "kds",
+    });
+    expect(await asApp(tenantId, (tx) => getDeviceProfile(tx, tenantId, created.id))).toEqual(
+      created,
+    );
+    const listed = await asApp(tenantId, (tx) => listDeviceProfiles(tx, tenantId));
+    expect(listed).toEqual([created]);
+  });
+
   it("stores and returns a canvas reference that satisfies the composite FK", async () => {
     const tenantId = await seedTenant(suite.admin);
     const session = await seedSession(tenantId, "manager");
@@ -136,11 +165,18 @@ describe("device-profile store on real Postgres, as the app role", () => {
         managementSessionId: session,
         tenantId,
         name: "Bound",
+        formFactor: "till",
         canvasId,
         capabilities: [],
       }),
     );
-    expect(created).toEqual({ id: created.id, name: "Bound", canvasId, capabilities: [] });
+    expect(created).toEqual({
+      id: created.id,
+      name: "Bound",
+      formFactor: "till",
+      canvasId,
+      capabilities: [],
+    });
   });
 
   it("lists a tenant's device profiles by name", async () => {
@@ -151,6 +187,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
         managementSessionId: session,
         tenantId,
         name: "P1",
+        formFactor: "till",
         canvasId: null,
         capabilities: [],
       }),
@@ -160,6 +197,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
         managementSessionId: session,
         tenantId,
         name: "P2",
+        formFactor: "till",
         canvasId: null,
         capabilities: ["act-as-kds"],
       }),
@@ -185,6 +223,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
         managementSessionId: session,
         tenantId,
         name: "Original",
+        formFactor: "till",
         canvasId: null,
         capabilities: [],
       }),
@@ -195,6 +234,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
         tenantId,
         id: created.id,
         name: "Renamed",
+        formFactor: "till",
         canvasId,
         capabilities: ["integrated-card-payment"],
       }),
@@ -202,6 +242,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
     expect(updated).toEqual({
       id: created.id,
       name: "Renamed",
+      formFactor: "till",
       canvasId,
       capabilities: ["integrated-card-payment"],
     });
@@ -219,6 +260,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
         managementSessionId: session,
         tenantId,
         name: "Doomed",
+        formFactor: "till",
         canvasId: null,
         capabilities: [],
       }),
@@ -246,17 +288,23 @@ describe("device-profile store on real Postgres, as the app role", () => {
         managementSessionId: session,
         tenantId,
         name: "Referenced",
+        formFactor: "till",
         canvasId: null,
         capabilities: [],
       }),
     );
-    // Seed a location + a device that binds the profile, as the owner — setup, not the thing under test.
+    // Seed a location + a register + a device that binds the profile, as the owner — setup, not the
+    // thing under test. A device is defined by its profile's form factor (no device_kind column); the
+    // `till` profile means the binding rule (0004_device_binding_rule) requires a register, not a station.
     const location = await suite.admin.execute<{ id: string }>(sql`
       insert into locations (tenant_id, name, invoice_locales, operation_description)
       values (${tenantId}, 'Loc', array['es'], 'Hostelería') returning id`);
+    const till = await suite.admin.execute<{ id: string }>(sql`
+      insert into tills (tenant_id, location_id, name)
+      values (${tenantId}, ${location.rows[0]!.id}, 'Register 1') returning id`);
     await suite.admin.execute(sql`
-      insert into devices (tenant_id, location_id, device_kind, label, token_hash, device_profile_id)
-      values (${tenantId}, ${location.rows[0]!.id}, 'till', 'Bound device', 'scrypt$00$00', ${created.id})`);
+      insert into devices (tenant_id, location_id, till_id, label, token_hash, device_profile_id)
+      values (${tenantId}, ${location.rows[0]!.id}, ${till.rows[0]!.id}, 'Bound device', 'scrypt$00$00', ${created.id})`);
     const error = await errorOf(() =>
       asApp(tenantId, (tx) =>
         deleteDeviceProfile(tx, { managementSessionId: session, tenantId, id: created.id }),
@@ -281,6 +329,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
           tenantId,
           id: "00000000-0000-4000-8000-000000000000",
           name: "Ghost",
+          formFactor: "till",
           canvasId: null,
           capabilities: [],
         }),
@@ -316,6 +365,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
           managementSessionId: staffSession,
           tenantId: staffTenant,
           name: "Nope",
+          formFactor: "till",
           canvasId: null,
           capabilities: [],
         }),
@@ -336,6 +386,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
           managementSessionId: session,
           tenantId,
           name: "Bad caps",
+          formFactor: "till",
           canvasId: null,
           capabilities: ["not-a-flag"],
         }),
@@ -363,6 +414,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
           managementSessionId: sessionB,
           tenantId: tenantB,
           name: "Stolen canvas",
+          formFactor: "till",
           canvasId: foreignCanvas, // belongs to tenantA
           capabilities: [],
         }),
@@ -382,6 +434,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
         managementSessionId: session,
         tenantId,
         name: "Twin",
+        formFactor: "till",
         canvasId: null,
         capabilities: [],
       }),
@@ -392,6 +445,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
           managementSessionId: session,
           tenantId,
           name: "Twin",
+          formFactor: "till",
           canvasId: null,
           capabilities: [],
         }),
@@ -409,6 +463,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
         managementSessionId: session,
         tenantId,
         name: "Keep",
+        formFactor: "till",
         canvasId: null,
         capabilities: [],
       }),
@@ -418,6 +473,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
         managementSessionId: session,
         tenantId,
         name: "Move",
+        formFactor: "till",
         canvasId: null,
         capabilities: [],
       }),
@@ -429,6 +485,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
           tenantId,
           id: second.id,
           name: "Keep", // collides with the first profile's name
+          formFactor: "till",
           canvasId: null,
           capabilities: [],
         }),

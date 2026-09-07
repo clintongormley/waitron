@@ -5,8 +5,8 @@ import { asAppUser, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import type { FormFactor } from "@waitron/layouts";
 import {
-  AppError,
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
@@ -15,28 +15,29 @@ import {
 import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
 import { enrolDevice, generatePairingCode } from "./device.js";
-import type { DeviceKind } from "./device.js";
 import "./errors.js";
 
-// Real Postgres, not PGlite — MANDATORY for THIS suite (CLAUDE.md §4). The single-use guarantee is a
-// CONCURRENCY property: two devices racing to redeem ONE pairing code must yield exactly one enrolment,
-// enforced by the locking `DELETE … RETURNING` that row-locks the code (the consumeChallenge shape,
-// packages/identity passkey.ts). PGlite serialises every query onto ONE backend, so the two redeems can
-// never truly overlap there and the race is a FALSE pass, not a weak one. Each racer below opens its own
-// backend via `suite.pg.connect()` (distinct `pg_backend_pid()`, asserted), and the shared-container
-// globalSetup throws rather than skips when Docker is absent, so a vanished suite fails loudly.
+// Real Postgres, not PGlite — MANDATORY for THIS suite (CLAUDE.md §4). Two properties here are
+// FALSE-PASSES on PGlite: (1) the single-use guarantee is a CONCURRENCY property — two devices racing
+// to redeem ONE code must yield exactly one enrolment, enforced by the locking `DELETE … RETURNING`
+// that row-locks the code; PGlite serialises every query onto ONE backend, so the two redeems can never
+// truly overlap there. (2) the `till`-form-factor auto-create is a NEW write on `tills` by `app_user` —
+// PGlite connects as a superuser and never enforces grants, so a missing `INSERT ON tills` grant would
+// pass there; here every verb runs through `asApp` (the `app_user` role), so the real grant is exercised.
+// Each racer opens its own backend via `suite.pg.connect()` (distinct `pg_backend_pid()`, asserted), and
+// the shared-container globalSetup throws rather than skips when Docker is absent.
 const LOCALE = "es-ES";
 const suite = useTemplateDb({ template: "manifest" });
 
-interface SeededStation {
+interface SeededVenue {
   cfg: TillConfig;
   stationId: string;
 }
 
-/** A fresh tenant + venue + one station, seeded on the superuser admin connection (pure setup, for
- * setup) with the station created through the app role. Each test gets its OWN tenant so device counts
- * are order-independent across the shared clone (CLAUDE.md §4). */
-async function setupStation(): Promise<SeededStation> {
+/** A fresh tenant + venue + one station + one seeded `tills` row ('Caja 1'), on the superuser admin
+ * connection (pure setup), with the station created through the app role. Each test gets its OWN tenant
+ * so device/till counts are order-independent across the shared clone (CLAUDE.md §4). */
+async function setupVenue(): Promise<SeededVenue> {
   const admin = suite.admin;
   const tenantId = await seedTenant(admin);
   const loc = await admin.execute<{ id: string }>(sql`
@@ -71,6 +72,16 @@ function asApp<T>(db: Database, cfg: TillConfig, fn: (tx: Transaction) => Promis
   });
 }
 
+/** Seed a device profile of the given form factor (owner SQL for setup). `name` is unique per tenant
+ * (`device_profiles_tenant_name_key`), so a test seeding two profiles passes two distinct names. */
+async function seedProfile(cfg: TillConfig, formFactor: FormFactor, name: string): Promise<string> {
+  const { rows } = await suite.admin.execute<{ id: string }>(sql`
+    insert into device_profiles (tenant_id, name, form_factor)
+    values (${cfg.tenantId}, ${name}, ${formFactor})
+    returning id`);
+  return rows[0]!.id;
+}
+
 async function deviceCount(cfg: TillConfig): Promise<number> {
   const { rows } = await suite.admin.execute<{ n: number }>(
     sql`select count(*)::int as n from devices where tenant_id = ${cfg.tenantId}`,
@@ -78,68 +89,36 @@ async function deviceCount(cfg: TillConfig): Promise<number> {
   return rows[0]!.n;
 }
 
-async function pairingCodeCount(cfg: TillConfig): Promise<number> {
+async function tillCount(cfg: TillConfig): Promise<number> {
   const { rows } = await suite.admin.execute<{ n: number }>(
-    sql`select count(*)::int as n from device_pairing_codes where tenant_id = ${cfg.tenantId}`,
+    sql`select count(*)::int as n from tills where tenant_id = ${cfg.tenantId}`,
   );
   return rows[0]!.n;
 }
 
-/**
- * Seed a device profile for the tenant (owner SQL for setup) — a real `(tenant_id, id)` the
- * device's composite `device_profile` FK can point at. `canvas_id` is left NULL (the profile
- * falls back to the form-factor default canvas), so no `canvases` row is needed.
- */
-async function seedDeviceProfile(cfg: TillConfig): Promise<string> {
-  const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (tenant_id, name)
-    values (${cfg.tenantId}, 'Perfil A')
-    returning id`);
-  return rows[0]!.id;
-}
-
-/** Seed a `cloud_poll` printer for the tenant (owner SQL) — the transport that needs only a poll id,
- * so no `print_agents` row has to be seeded to satisfy `printers_transport_fields_ck`. A real
- * `(tenant_id, id)` the device's composite `receipt_printer` FK can point at. */
-async function seedPrinter(cfg: TillConfig): Promise<string> {
-  const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into printers (tenant_id, location_id, name, transport, poll_id)
-    values (${cfg.tenantId}, ${cfg.locationId}, 'Recibos', 'cloud_poll', 'poll-abc')
-    returning id`);
-  return rows[0]!.id;
-}
-
-/**
- * The enrolled device row's binding columns, read as the superuser — the load-bearing check for
- * the round-trip is that enrolDevice STAMPED every binding the code carried onto the device.
- */
-async function deviceBindings(deviceId: string): Promise<{
+/** The enrolled device's binding columns and label, read as the superuser — the load-bearing check
+ * that `enrolDevice` stamped the station/register the branch resolved. */
+async function deviceRow(deviceId: string): Promise<{
+  station_id: string | null;
   till_id: string | null;
-  device_profile_id: string | null;
-  receipt_printer_id: string | null;
-  has_cash_drawer: boolean;
-  card_provider: string;
-  card_reader_id: string | null;
+  device_profile_id: string;
+  label: string;
 }> {
   const { rows } = await suite.admin.execute<{
+    station_id: string | null;
     till_id: string | null;
-    device_profile_id: string | null;
-    receipt_printer_id: string | null;
-    has_cash_drawer: boolean;
-    card_provider: string;
-    card_reader_id: string | null;
+    device_profile_id: string;
+    label: string;
   }>(sql`
-    select till_id, device_profile_id, receipt_printer_id, has_cash_drawer, card_provider, card_reader_id
-    from devices where id = ${deviceId}`);
+    select station_id, till_id, device_profile_id, label from devices where id = ${deviceId}`);
   return rows[0]!;
 }
 
 describe("device enrolment single-use race (real Postgres)", () => {
   it("two concurrent enrolments of ONE code create exactly one device; the loser is device.pairing_invalid", async () => {
-    const { cfg, stationId } = await setupStation();
-    const { code } = await asApp(suite.admin, cfg, (tx) =>
-      generatePairingCode(tx, cfg, { kind: "kds_station", stationId, label: "Pantalla" }),
-    );
+    const { cfg, stationId } = await setupVenue();
+    const profileId = await seedProfile(cfg, "kds", "Perfil KDS");
+    const { code } = await asApp(suite.admin, cfg, (tx) => generatePairingCode(tx, cfg));
 
     // TWO distinct backends racing to redeem ONE code. Load-bearing: distinct backend PROCESSES — on
     // PGlite these collapse onto one and the race never happens (a false pass).
@@ -156,8 +135,12 @@ describe("device enrolment single-use race (real Postgres)", () => {
       // Both race past the locking DELETE … RETURNING. One row-locks the code, deletes it and enrols;
       // the other blocks, then — once the winner commits — matches zero rows and throws pairing_invalid.
       const results = await Promise.allSettled([
-        asApp(connA, cfg, (tx) => enrolDevice(tx, cfg, { code })),
-        asApp(connB, cfg, (tx) => enrolDevice(tx, cfg, { code })),
+        asApp(connA, cfg, (tx) =>
+          enrolDevice(tx, cfg, { code, name: "Pantalla A", profileId, stationId }),
+        ),
+        asApp(connB, cfg, (tx) =>
+          enrolDevice(tx, cfg, { code, name: "Pantalla B", profileId, stationId }),
+        ),
       ]);
 
       const fulfilled = results.filter((r) => r.status === "fulfilled");
@@ -177,196 +160,163 @@ describe("device enrolment single-use race (real Postgres)", () => {
 
 describe("device pairing-code digest collision (real Postgres)", () => {
   it("maps a colliding-digest mint to device.pairing_code_unavailable, not a raw 23505", async () => {
-    // The ~2^-40 digest collision is unreachable by chance, so the `codeSource` seam FORCES it: two mints
-    // asked for the SAME code hash to the same code_sha256, and the second trips
-    // `device_pairing_codes_lookup_idx` — the UNIQUE index on (tenant_id, code_sha256) that 385b6248
-    // added for single-use safety — with 23505. `generatePairingCode` must translate that into the clean,
-    // retryable domain code rather than letting the raw driver error reach `run` as an opaque
-    // `server.internal` 500. Real Postgres (not PGlite) so the 23505 arrives through the PRODUCTION
-    // node-postgres driver shape `isUniqueViolation` walks, beside the DB-level duplicate proof in
-    // packages/db devices.test.ts.
-    const { cfg, stationId } = await setupStation();
+    // The ~2^-40 digest collision is unreachable by chance, so the `codeSource` seam FORCES it: two
+    // mints asked for the SAME code hash to the same code_sha256, and the second trips
+    // `device_pairing_codes_lookup_idx` (the UNIQUE index on (tenant_id, code_sha256)) with 23505.
+    // `generatePairingCode` must translate that into the clean, retryable domain code rather than
+    // letting the raw driver error reach `run` as an opaque `server.internal` 500. Real Postgres so the
+    // 23505 arrives through the PRODUCTION node-postgres driver shape `isUniqueViolation` walks.
+    const { cfg } = await setupVenue();
     const forced = "COLLIDE7"; // any canonical Crockford-shaped code; returned by codeSource BOTH times
-    const first = await asApp(suite.admin, cfg, (tx) =>
-      generatePairingCode(
-        tx,
-        cfg,
-        { kind: "kds_station", stationId, label: "Pantalla" },
-        () => forced,
-      ),
-    );
+    const first = await asApp(suite.admin, cfg, (tx) => generatePairingCode(tx, cfg, () => forced));
     expect(first.code).toBe(forced);
 
     await expect(
-      asApp(suite.admin, cfg, (tx) =>
-        generatePairingCode(
-          tx,
-          cfg,
-          { kind: "kds_station", stationId, label: "Pantalla" },
-          () => forced,
-        ),
-      ),
+      asApp(suite.admin, cfg, (tx) => generatePairingCode(tx, cfg, () => forced)),
     ).rejects.toMatchObject({ code: "device.pairing_code_unavailable" });
-
-    // The collision rolled the second mint's tx back — exactly ONE code row survives for this tenant,
-    // and no partial second row landed.
-    expect(await pairingCodeCount(cfg)).toBe(1);
-  });
-
-  it("rethrows a NON-unique INSERT failure raw, not as device.pairing_code_unavailable", async () => {
-    // The false branch of the new catch — the negative control the `isUniqueViolation` siblings each
-    // carry (kitchen.ts / tables.ts). An INVALID `device_kind` enum value fails the INSERT with 22P02
-    // (invalid enum), NOT the 23505 unique; requireLiveStation passes (the station is valid), so the
-    // failure reaches the catch, where `isUniqueViolation` is false and `generatePairingCode` rethrows
-    // the raw driver error rather than mistranslating it as `device.pairing_code_unavailable`. (No
-    // privilege/concurrency dimension of its own — proven here beside the positive case against the
-    // production driver.)
-    const { cfg, stationId } = await setupStation();
-    const err = await asApp(suite.admin, cfg, (tx) =>
-      generatePairingCode(tx, cfg, { kind: "not_a_kind" as DeviceKind, stationId, label: "x" }),
-    ).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(Error); // rejected (a resolved {code} would fail this)
-    expect(err).not.toBeInstanceOf(AppError); // a raw driver error, not a domain translation
   });
 });
 
-describe("device binding fields: device profile / till / hardware (real Postgres)", () => {
-  it("mints a till code carrying profile+till+hardware, and enrolment stamps every binding on the device", async () => {
-    // The full round-trip (SP-A.2 §16, device-profile §5): a manager mints a `till` code carrying the
-    // assigned device profile, the tills row it rings against and the static hardware binding; the screen
-    // redeems it and the enrolled `devices` row carries ALL of them. Real Postgres so the composite FKs
-    // (0095/0109) validate against real (tenant_id, id) rows and the `name[]`/`text[]`-free binding columns
-    // round-trip through the production driver, beside the digest-collision proof above. (The direct
-    // device→canvas binding was dropped in the Task 10 cutover — a device binds a canvas via its profile.)
-    const { cfg } = await setupStation();
-    const profileId = await seedDeviceProfile(cfg);
-    const printerId = await seedPrinter(cfg);
-    const dev = await asApp(suite.admin, cfg, async (tx) => {
-      const { code } = await generatePairingCode(tx, cfg, {
-        kind: "till",
-        stationId: null,
-        tillId: cfg.tillId,
-        deviceProfileId: profileId,
-        receiptPrinterId: printerId,
-        hasCashDrawer: true,
-        cardProvider: "sumup",
-        cardReaderId: "reader-xyz",
-        label: "Caja 1",
-      });
-      return enrolDevice(tx, cfg, { code });
-    });
-    // enrolDevice RETURNS the bindings it minted with…
-    expect(dev).toMatchObject({
-      kind: "till",
-      stationId: null,
-      tillId: cfg.tillId,
-      deviceProfileId: profileId,
-      receiptPrinterId: printerId,
-      hasCashDrawer: true,
-      cardProvider: "sumup",
-      cardReaderId: "reader-xyz",
-    });
-    // …and STAMPED them onto the `devices` row (the load-bearing check — the register-snapshot the
-    // cutover depends on). Deleting any binding copy from enrolDevice's `devices` INSERT leaves that
-    // column NULL/default here and fails this — the stamping's deletion receipt.
-    expect(await deviceBindings(dev.deviceId)).toMatchObject({
-      till_id: cfg.tillId,
-      device_profile_id: profileId,
-      receipt_printer_id: printerId,
-      has_cash_drawer: true,
-      card_provider: "sumup",
-      card_reader_id: "reader-xyz",
-    });
+describe("enrolDevice binds the device by its profile's form factor (real Postgres)", () => {
+  it("a till profile auto-creates exactly ONE register named after the device and binds it (station NULL)", async () => {
+    // The `till` branch (spec §2.2): the device describes itself as a till, so enrolDevice MINTS the
+    // cash register it rings against, names it after the device, and binds it. Proven by DELETION:
+    // removing the `insert(tills)` leaves till_id NULL, which the binding-rule trigger (0004) then
+    // rejects — but the load-bearing assertion here is that exactly ONE new till exists, named the
+    // device's name, and the device points at it with a NULL station.
+    const { cfg } = await setupVenue();
+    const profileId = await seedProfile(cfg, "till", "Perfil Caja");
+    const before = await tillCount(cfg);
+    const { code } = await asApp(suite.admin, cfg, (tx) => generatePairingCode(tx, cfg));
+
+    const dev = await asApp(suite.admin, cfg, (tx) =>
+      enrolDevice(tx, cfg, { code, name: "Caja Nueva", profileId }),
+    );
+    expect(dev).toMatchObject({ name: "Caja Nueva", formFactor: "till" });
+
+    // Exactly ONE new till, named after the device.
+    expect(await tillCount(cfg)).toBe(before + 1);
+    const { rows: created } = await suite.admin.execute<{ id: string }>(
+      sql`select id from tills where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId} and name = 'Caja Nueva'`,
+    );
+    expect(created).toHaveLength(1);
+    // …and the device is bound to THAT register, with no station.
+    const row = await deviceRow(dev.deviceId);
+    expect(row.till_id).toBe(created[0]!.id);
+    expect(row.station_id).toBeNull();
+    expect(row.device_profile_id).toBe(profileId);
+    expect(row.label).toBe("Caja Nueva");
   });
 
-  it("refuses a sale-capable (till / handheld) code minted with NO till_id — device.till_required", async () => {
-    // The sale-capable-kind gate (SP-A.2 §16.4): a `till`/`handheld` rings sales under its node's SIF and
-    // MUST name the tills row it files against. THE GUARD, proven by deletion: removing the
-    // `kindRequiresTill(kind) && tillId === null` throw from generatePairingCode lets both mints INSERT a
-    // sale-capable code with a NULL till (no DB CHECK backs it), so this reject never fires.
-    const { cfg } = await setupStation();
-    for (const kind of ["till", "handheld"] as const) {
-      await expect(
-        asApp(suite.admin, cfg, (tx) =>
-          generatePairingCode(tx, cfg, { kind, stationId: null, label: "x" }),
-        ),
-      ).rejects.toMatchObject({ code: "device.till_required" });
-    }
+  it("a handheld profile binds an EXISTING register named by registerId and creates no new till", async () => {
+    // The else branch (phone-portrait / tablet-landscape): a handheld rings against an already-created
+    // register, so enrolDevice binds the named `registerId` and mints NO till.
+    const { cfg } = await setupVenue();
+    const profileId = await seedProfile(cfg, "phone-portrait", "Perfil Móvil");
+    const before = await tillCount(cfg);
+    const { code } = await asApp(suite.admin, cfg, (tx) => generatePairingCode(tx, cfg));
+
+    const dev = await asApp(suite.admin, cfg, (tx) =>
+      enrolDevice(tx, cfg, { code, name: "Camarero 1", profileId, registerId: cfg.tillId }),
+    );
+    expect(dev).toMatchObject({ name: "Camarero 1", formFactor: "phone-portrait" });
+    expect(await tillCount(cfg)).toBe(before); // no register minted
+
+    const row = await deviceRow(dev.deviceId);
+    expect(row.till_id).toBe(cfg.tillId);
+    expect(row.station_id).toBeNull();
   });
 
-  it("refuses a kds_station code minted WITH a till_id — device.till_required", async () => {
-    // The other direction of the gate: a `kds_station` rings no sale, so a till_id is forbidden. THE
-    // GUARD, proven by deletion: removing the `!kindRequiresTill(kind) && tillId !== null` throw lets
-    // this mint through (the station-only CHECK does not police till_id), so this reject never fires.
-    const { cfg, stationId } = await setupStation();
+  it("a kds profile binds the named station (till NULL)", async () => {
+    const { cfg, stationId } = await setupVenue();
+    const profileId = await seedProfile(cfg, "kds", "Perfil KDS");
+    const { code } = await asApp(suite.admin, cfg, (tx) => generatePairingCode(tx, cfg));
+
+    const dev = await asApp(suite.admin, cfg, (tx) =>
+      enrolDevice(tx, cfg, { code, name: "Pantalla Cocina", profileId, stationId }),
+    );
+    expect(dev).toMatchObject({ name: "Pantalla Cocina", formFactor: "kds" });
+
+    const row = await deviceRow(dev.deviceId);
+    expect(row.station_id).toBe(stationId);
+    expect(row.till_id).toBeNull();
+  });
+
+  it("a kds profile with NO station is device.station_required", async () => {
+    const { cfg } = await setupVenue();
+    const profileId = await seedProfile(cfg, "kds", "Perfil KDS");
+    const { code } = await asApp(suite.admin, cfg, (tx) => generatePairingCode(tx, cfg));
+    await expect(
+      asApp(suite.admin, cfg, (tx) => enrolDevice(tx, cfg, { code, name: "Pantalla", profileId })),
+    ).rejects.toMatchObject({ code: "device.station_required" });
+  });
+
+  it("a handheld profile with NO register is device.register_required", async () => {
+    const { cfg } = await setupVenue();
+    const profileId = await seedProfile(cfg, "phone-portrait", "Perfil Móvil");
+    const { code } = await asApp(suite.admin, cfg, (tx) => generatePairingCode(tx, cfg));
+    await expect(
+      asApp(suite.admin, cfg, (tx) => enrolDevice(tx, cfg, { code, name: "Camarero", profileId })),
+    ).rejects.toMatchObject({ code: "device.register_required" });
+  });
+
+  it("a handheld profile naming a register of another venue is device.binding_invalid (field tillId)", async () => {
+    // The explicit by-id read carries its own tenant AND location predicate (CLAUDE.md §3): a register
+    // that is not this venue's is rejected here, not trusted. A foreign-venue till (another location of
+    // the SAME tenant) trips it.
+    const { cfg } = await setupVenue();
+    const other = await suite.admin.execute<{ id: string }>(sql`
+      insert into locations (tenant_id, name, invoice_locales, operation_description)
+      values (${cfg.tenantId}, 'Terraza', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+    const foreignTill = await suite.admin.execute<{ id: string }>(sql`
+      insert into tills (tenant_id, location_id, name) values (${cfg.tenantId}, ${other.rows[0]!.id}, 'Caja 1') returning id`);
+    const profileId = await seedProfile(cfg, "phone-portrait", "Perfil Móvil");
+    const { code } = await asApp(suite.admin, cfg, (tx) => generatePairingCode(tx, cfg));
     await expect(
       asApp(suite.admin, cfg, (tx) =>
-        generatePairingCode(tx, cfg, {
-          kind: "kds_station",
-          stationId,
-          tillId: cfg.tillId,
-          label: "x",
-        }),
-      ),
-    ).rejects.toMatchObject({ code: "device.till_required" });
-  });
-
-  it("translates a 23503 on each device-binding FK to device.binding_invalid naming the field", async () => {
-    // A well-formed binding id that names no row of THIS tenant trips its composite FK with 23503,
-    // translated by CONSTRAINT NAME to `device.binding_invalid` naming the FIELD (never the id). Only ONE
-    // bad binding per mint so the field is deterministic; the others are valid or null. THE GUARD, proven
-    // by deletion: dropping the 23503 branch in generatePairingCode's catch lets each raw driver error
-    // reach the caller as a NON-AppError (an opaque 500 in the route), so these rejects never fire.
-    const { cfg } = await setupStation();
-    const profileId = await seedDeviceProfile(cfg);
-    const printerId = await seedPrinter(cfg);
-    const missing = randomUUID();
-
-    // A nonexistent till_id passes the till gate (non-null on a sale-capable kind) and trips
-    // device_pairing_codes_till_fk.
-    await expect(
-      asApp(suite.admin, cfg, (tx) =>
-        generatePairingCode(tx, cfg, {
-          kind: "till",
-          stationId: null,
-          tillId: missing,
-          label: "x",
+        enrolDevice(tx, cfg, {
+          code,
+          name: "Camarero",
+          profileId,
+          registerId: foreignTill.rows[0]!.id,
         }),
       ),
     ).rejects.toMatchObject({ code: "device.binding_invalid", params: { field: "tillId" } });
+  });
 
-    // A nonexistent device_profile_id (valid till + printer, so only THIS FK fires).
+  it("a till profile whose name collides at the venue is device.register_name_taken", async () => {
+    // setupVenue already seeded a 'Caja 1' at cfg.locationId, so a till device named 'Caja 1' collides on
+    // `tills_tenant_location_name_key` (migration 0006). Proven by DELETION: dropping the index (or the
+    // 23505 translation) lets a SECOND 'Caja 1' insert succeed and this reject never fires.
+    const { cfg } = await setupVenue();
+    const profileId = await seedProfile(cfg, "till", "Perfil Caja");
+    const before = await tillCount(cfg);
+    const { code } = await asApp(suite.admin, cfg, (tx) => generatePairingCode(tx, cfg));
     await expect(
-      asApp(suite.admin, cfg, (tx) =>
-        generatePairingCode(tx, cfg, {
-          kind: "till",
-          stationId: null,
-          tillId: cfg.tillId,
-          deviceProfileId: missing,
-          receiptPrinterId: printerId,
-          label: "x",
-        }),
-      ),
-    ).rejects.toMatchObject({
-      code: "device.binding_invalid",
-      params: { field: "deviceProfileId" },
-    });
+      asApp(suite.admin, cfg, (tx) => enrolDevice(tx, cfg, { code, name: "Caja 1", profileId })),
+    ).rejects.toMatchObject({ code: "device.register_name_taken" });
+    expect(await tillCount(cfg)).toBe(before); // the colliding register did not land
+  });
 
-    // A nonexistent receipt_printer_id (valid till + profile, so only THIS FK fires).
+  it("is ONE transaction: a failure after the register insert leaves no orphan till", async () => {
+    // enrolDevice writes the consumed code, the auto-created register and the device on the CALLER's
+    // transaction (CLAUDE.md §3), never its own. A throw anywhere in that transaction — here forced right
+    // after enrolDevice returns, standing in for a failing device insert — must discard the register.
+    // Proven by DELETION: if createRegister opened its own connection/transaction, the register would
+    // persist and the tills count would be +1 here.
+    const { cfg } = await setupVenue();
+    const profileId = await seedProfile(cfg, "till", "Perfil Caja");
+    const before = await tillCount(cfg);
+    const { code } = await asApp(suite.admin, cfg, (tx) => generatePairingCode(tx, cfg));
+
     await expect(
-      asApp(suite.admin, cfg, (tx) =>
-        generatePairingCode(tx, cfg, {
-          kind: "till",
-          stationId: null,
-          tillId: cfg.tillId,
-          deviceProfileId: profileId,
-          receiptPrinterId: missing,
-          label: "x",
-        }),
-      ),
-    ).rejects.toMatchObject({
-      code: "device.binding_invalid",
-      params: { field: "receiptPrinterId" },
-    });
+      asApp(suite.admin, cfg, async (tx) => {
+        await enrolDevice(tx, cfg, { code, name: "Caja Efímera", profileId });
+        throw new Error("boom after register insert");
+      }),
+    ).rejects.toThrow("boom after register insert");
+
+    expect(await tillCount(cfg)).toBe(before); // the register rolled back with the transaction
+    expect(await deviceCount(cfg)).toBe(0); // and so did the device
   });
 });

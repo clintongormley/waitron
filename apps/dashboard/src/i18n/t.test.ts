@@ -44,6 +44,19 @@ it("notifies subscribers on setLocale and stops after unsubscribe", () => {
   expect(calls).toBe(1);
 });
 
+it("uses the cash-register wording for the register-meaning strings", () => {
+  // The register/device wording split (device-enrolment): the cash-register meaning reads "Cash
+  // register", never "Till". The device-KIND label (devices.kind_till) is a separate, device-meaning
+  // string and is deliberately not swept here.
+  expect(en["devices.till"]).toBe("Cash register");
+  expect(en["sales.till"]).toBe("Cash register");
+  expect(en["sales.tender_title"]).toBe("Tender by cash register");
+  expect(en["printers.no_tills"]).toBe("No cash registers yet");
+  expect(en["printers.receipt_printer_title"]).toBe("Receipt printer per cash register");
+  // The profile picker's "till" form factor is the cash register (the owner's chosen word).
+  expect(en["device_profiles.form_factor.till"]).toBe("Cash register");
+});
+
 it("registers en-GB as a first-class catalogue entry", () => {
   // Check the catalogue map directly: this fails if "en-GB": en is absent. A t()
   // comparison cannot — en-GB's catalogue value IS the en base, identical to the

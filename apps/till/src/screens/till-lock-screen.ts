@@ -8,6 +8,10 @@ import "../widgets/language-chooser.js";
 import type { StaffMember, TillApi } from "../api/client.js";
 import type { ServerStatus } from "../api/server-router.js";
 
+/** The localStorage key holding the last operator who logged in on a given device. Keyed by deviceId so
+ * two enrolled browsers on one venue remember independently; read on connect to default "Login as". */
+const lastOperatorKey = (deviceId: string): string => `waitron.lastOperator.${deviceId}`;
+
 /**
  * The `logged-in` event payload: the server-confirmed `personId`, the operator's `displayName`, and
  * the server-computed `canConfigureTill` capability. The name rides along because the screen already
@@ -34,7 +38,8 @@ export interface LoggedInDetail {
  * are spelled out — a wrong PIN and a suspended account; every other code (a stale roster entry's
  * `person.not_found`, a `server.internal`) collapses to the generic `login.error`. This is the one
  * place that decides what the screen says, and it deliberately NEVER surfaces the raw code: a domain
- * code is an internal contract, not UI copy.
+ * code is an internal contract, not UI copy. `pin.throttled` is handled out of band (a countdown, not
+ * a banner) and never reaches here.
  */
 function loginErrorKey(code: string): StringKey {
   if (code === "pin.invalid") return "pin.invalid";
@@ -43,20 +48,22 @@ function loginErrorKey(code: string): StringKey {
 }
 
 /**
- * The staff-picker + PIN login screen the counter shows before a shift can sell. Two modes, chosen
- * by whether a person is `selected`:
+ * The staff-picker + PIN login screen the counter shows before a shift can sell. Its heading is the
+ * device's own name; two modes are chosen by whether a person is `selected`:
  *
  *  - LIST — the roster from `api.listStaff()`, one `<wt-button>` per person. It renders a loading
  *    state until the fetch settles, an empty-roster message when nobody is returned, and a
  *    load-failed message if the fetch rejects.
- *  - PIN — a `till-numeric-pad` (the shared numeric surface, reused from Task 15) for the selected
- *    person, with a back control to correct a wrong name and a Log in control that calls
- *    `api.login(personId, pin)`.
+ *  - PIN — a `till-numeric-pad` (the shared numeric surface) for the selected person, with a Cancel
+ *    control to correct a wrong name and a Log in control that calls `api.login(personId, pin)`.
  *
- * On a successful login it emits a composed `logged-in` CustomEvent carrying the server-confirmed
- * `personId`; the parent (`till-app`, Task 19) swaps this screen for the counter. On a rejected
- * `{ code }` it shows the LOCALISED message for that code (never the raw code — see
- * {@link loginErrorKey}) and clears the PIN so the operator can retry the same person.
+ * The screen defaults "Login as" to the last operator who logged in on THIS device (localStorage,
+ * keyed by {@link deviceId}), landing straight in PIN mode for them when they are still on the roster.
+ * On a successful login it writes that memory and emits a composed `logged-in` CustomEvent carrying the
+ * server-confirmed `personId`; the parent (`till-app`) swaps this screen for the counter. On a rejected
+ * `{ code }` it shows the LOCALISED message for that code (never the raw code — see {@link loginErrorKey})
+ * and clears the PIN so the operator can retry — except `pin.throttled`, which greys the pad and counts
+ * a back-off down (Task 10's wrong-PIN throttle).
  *
  * The `till-numeric-pad` runs in `mode="pin"` (digit-append, no `.` key), so the pad's entered string
  * is captured raw as the PIN and leading zeros survive — a PIN like `"0000"` or `"0123"` round-trips.
@@ -68,6 +75,12 @@ export class TillLockScreen extends LitElement {
     css`
       :host {
         display: block;
+      }
+
+      /* Cap the login form and centre it — a wide till never stretches the roster or pad edge to edge. */
+      .screen {
+        max-width: 24rem;
+        margin-inline: auto;
       }
 
       .heading {
@@ -114,7 +127,22 @@ export class TillLockScreen extends LitElement {
         letter-spacing: var(--wt-space-2);
       }
 
+      /* The pad while a throttle back-off runs: greyed and non-interactive (the inert attribute also
+         blocks focus and pointer), so the operator waits out the countdown, not a dead submit. */
+      .pad-wrap[inert] {
+        opacity: 0.5;
+      }
+
       .error {
+        margin: 0 0 var(--wt-space-3);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-danger);
+        color: var(--wt-color-on-danger);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .throttle {
         margin: 0 0 var(--wt-space-3);
         padding: var(--wt-space-2) var(--wt-space-3);
         border-radius: var(--wt-radius-md);
@@ -132,43 +160,24 @@ export class TillLockScreen extends LitElement {
       .actions wt-button {
         flex: 1;
       }
-
-      /* The kitchen-display set-up affordance (device-identity-1 §5a) — set off below the roster by a
-         divider so it never competes with an operator picking their name. Secondary weight, full width. */
-      .device-setup {
-        margin-top: var(--wt-space-4);
-        padding-top: var(--wt-space-3);
-        border-top: 1px solid var(--wt-color-border);
-      }
-
-      .setup-device,
-      .setup-handheld,
-      .setup-till {
-        width: 100%;
-      }
-
-      /* Space the handheld + till twins off the affordance above each so the full-width secondary
-         buttons read as a stack of choices, not one control. */
-      .setup-handheld,
-      .setup-till {
-        margin-top: var(--wt-space-2);
-      }
     `,
   ];
 
   /** The HTTP face of the till. Set before the element connects (its lifecycle fetches the roster). */
   @property({ attribute: false }) api!: TillApi;
 
-  /**
-   * Whether THIS browser is already an enrolled device — a waiter's handheld, a KDS, or a till
-   * (`till-app` passes `this.handheldMode || this.deviceMode || this.tillEnrolled`, `till-app.ts:1894`).
-   * An enrolled handheld returns to this lock screen on every logout and cold boot, so the device-setup
-   * affordances are gated on this being `false` (device-identity §C2): showing "Set up as kitchen
-   * display" to an already-enrolled phone would let a waiter re-enrol it as a `kds_station` — silently
-   * replacing its device cookie and escaping the phone shell. A FRESH browser (`false`, the default)
-   * still shows all three (device / handheld / till) so a first-time enrolment works.
-   */
-  @property({ type: Boolean }) deviceEnrolled = false;
+  /** The enrolled device's own name (from `GET /api/device/me`), shown as the screen's heading. Absent
+   * on a browser with no device identity (pre-Task-13), where the heading falls back to a mode label. */
+  @property() deviceName?: string;
+
+  /** The enrolled device's id, the key for the remembered-operator default. Absent → no default, no
+   * write (a browser with no device identity has nowhere venue-stable to remember an operator). */
+  @property() deviceId?: string;
+
+  /** Dev only (device-enrolment §3.2): whether THIS TAB has adopted a dev device — the app sets it from
+   * the tab's `sessionStorage` id. When true the screen offers a "Switch device" affordance that emits
+   * `switch-device` (the app clears the tab device and returns to the chooser). Off in production. */
+  @property({ type: Boolean }) devMode = false;
 
   /**
    * The venue's known servers and each one's probed state (till-reroute §4.4), from `ServerRouter.statuses()`.
@@ -201,13 +210,26 @@ export class TillLockScreen extends LitElement {
   @state() private pin = "";
   /** The string key of the message to show, or `undefined` for none. Shared by both modes. */
   @state() private errorKey?: StringKey;
+  /** Seconds left on a `pin.throttled` back-off; `0` means not throttled. While positive the pad is
+   * greyed and submit disabled. Driven down each second by {@link #throttleTimer}. */
+  @state() private throttleRemaining = 0;
+
+  /** The countdown interval, live only while {@link throttleRemaining} is positive. Cleared on reaching
+   * zero, on Cancel, on a fresh submit, and on disconnect — so no timer outlives the screen. */
+  #throttleTimer?: ReturnType<typeof setInterval>;
 
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#loadStaff();
   }
 
-  /** Fetch the roster once on connect. A rejection becomes the load-failed state rather than an
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#clearThrottle();
+  }
+
+  /** Fetch the roster once on connect, then default "Login as" to the last operator remembered on this
+   * device when they are still present. A rejection becomes the load-failed state rather than an
    * unhandled promise. State written after a mid-fetch disconnect is harmless — Lit simply does not
    * paint a detached element — so no `isConnected` guard is needed here. */
   async #loadStaff(): Promise<void> {
@@ -216,7 +238,26 @@ export class TillLockScreen extends LitElement {
     } catch {
       this.staff = [];
       this.errorKey = "login.load_failed";
+      return;
     }
+    this.#preselectRemembered();
+  }
+
+  /** Preselect the operator remembered on this device (→ straight to PIN mode) when the stored id is
+   * still on the roster. Keyed by {@link deviceId}; guarded by the roster membership check so a since-
+   * removed person never lands the screen in PIN mode for someone it cannot show. The read is wrapped
+   * because localStorage throws in a private window — a failure just means no default. */
+  #preselectRemembered(): void {
+    if (this.deviceId === undefined || this.staff === undefined) return;
+    let remembered: string | null = null;
+    try {
+      remembered = localStorage.getItem(lastOperatorKey(this.deviceId));
+    } catch {
+      return; // no storage → no default
+    }
+    if (remembered === null) return;
+    const person = this.staff.find((s) => s.personId === remembered);
+    if (person !== undefined) this.#select(person);
   }
 
   /** Enter PIN mode for `person`, starting from a blank PIN and no error. */
@@ -226,11 +267,13 @@ export class TillLockScreen extends LitElement {
     this.errorKey = undefined;
   }
 
-  /** Return to the roster, discarding any half-entered PIN and error. */
-  #back(): void {
+  /** Cancel: return to the roster, discarding any half-entered PIN, error, and throttle back-off. */
+  #cancel(): void {
     this.selected = undefined;
     this.pin = "";
     this.errorKey = undefined;
+    this.#clearThrottle();
+    this.throttleRemaining = 0;
   }
 
   /** Capture the pad's new value as the PIN and clear any stale error as the operator retypes. */
@@ -241,20 +284,22 @@ export class TillLockScreen extends LitElement {
   }
 
   /**
-   * Attempt the login. Guarded so an empty PIN can never call the API, even if Log in is force-clicked
-   * past its disabled state. On success — and only if the screen is still connected, so a torn-down
-   * screen never announces a login — it emits `logged-in` with the server-confirmed personId. On a
-   * rejected `{ code }` it shows the localised message and clears the PIN for a retry.
+   * Attempt the login. Guarded so an empty PIN — and a throttled screen — can never call the API, even
+   * if Log in is force-clicked past its disabled state. On success — and only if the screen is still
+   * connected, so a torn-down screen never announces a login — it remembers the operator on this device
+   * and emits `logged-in` with the server-confirmed personId. On a rejected `{ code }` it either starts
+   * the `pin.throttled` back-off or shows the localised message and clears the PIN for a retry.
    */
   async #submit(): Promise<void> {
     const person = this.selected;
-    if (person === undefined || this.pin === "") return;
+    if (person === undefined || this.pin === "" || this.throttleRemaining > 0) return;
     try {
       const { personId, canConfigureTill, locale } = await this.api.login(
         person.personId,
         this.pin,
       );
       if (!this.isConnected) return;
+      this.#remember(personId);
       this.dispatchEvent(
         new CustomEvent<LoggedInDetail>("logged-in", {
           detail: { personId, displayName: person.displayName, canConfigureTill, locale },
@@ -264,58 +309,80 @@ export class TillLockScreen extends LitElement {
       );
     } catch (error) {
       const code = (error as { code?: string }).code ?? "server.internal";
+      if (code === "pin.throttled") {
+        this.#startThrottle((error as { retryAfterSeconds?: number }).retryAfterSeconds);
+        return;
+      }
       this.errorKey = loginErrorKey(code);
       this.pin = "";
     }
   }
 
-  override render() {
-    return html`
-      ${this.selected ? this.#renderPin(this.selected) : this.#renderList()}
-      <till-language-chooser
-        .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
-      ></till-language-chooser>
-    `;
+  /** Remember this operator on this device so the next unlock defaults to them. No deviceId → nowhere
+   * venue-stable to write; a private-window throw is swallowed (the memory is a convenience, not state
+   * the login depends on). */
+  #remember(personId: string): void {
+    if (this.deviceId === undefined) return;
+    try {
+      localStorage.setItem(lastOperatorKey(this.deviceId), personId);
+    } catch {
+      // no storage → the default is simply not remembered
+    }
   }
 
-  #renderList() {
+  /** Begin (or restart) the throttle back-off: seconds from the server's `retryAfterSeconds` (min 1 for
+   * a missing/absurd value), a per-second tick down, and re-enable at zero. The PIN is kept so entry
+   * resumes with what was typed. */
+  #startThrottle(retryAfterSeconds: number | undefined): void {
+    this.#clearThrottle();
+    const seconds =
+      typeof retryAfterSeconds === "number" && retryAfterSeconds > 0
+        ? Math.ceil(retryAfterSeconds)
+        : 1;
+    this.throttleRemaining = seconds;
+    this.errorKey = undefined;
+    this.#throttleTimer = setInterval(() => {
+      this.throttleRemaining = this.throttleRemaining - 1;
+      if (this.throttleRemaining <= 0) {
+        this.throttleRemaining = 0;
+        this.#clearThrottle();
+      }
+    }, 1000);
+  }
+
+  /** Stop the countdown interval if one is running. Does not touch {@link throttleRemaining}, so a caller
+   * that wants entry live again resets it too (the tick does; disconnect need not). */
+  #clearThrottle(): void {
+    if (this.#throttleTimer !== undefined) {
+      clearInterval(this.#throttleTimer);
+      this.#throttleTimer = undefined;
+    }
+  }
+
+  /** Dev only: drop this tab's adopted device and return to the chooser. The app owns the clear + re-boot;
+   * the screen only announces the intent. */
+  #switchDevice(): void {
+    this.dispatchEvent(new CustomEvent("switch-device", { bubbles: true, composed: true }));
+  }
+
+  override render() {
     return html`
-      <h1 class="heading">${t("login.pick_operator")}</h1>
-      ${this.#renderRoster()}
-      <div class="device-setup">
-        <!-- Device-setup affordances (device-identity §5a / handheld Task 8), shown only to a FRESH
-             browser. An already-enrolled device (deviceEnrolled) hides all three (device / handheld /
-             till) — see §C2: a waiter must not be able to re-enrol an in-service handheld as a KDS
-             (swapping its device cookie) or escape the phone shell to the station screen. -->
+      <div class="screen">
+        ${this.selected ? this.#renderPin(this.selected) : this.#renderList()}
+        <till-language-chooser
+          .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
+        ></till-language-chooser>
         ${
-          this.deviceEnrolled
-            ? nothing
-            : html`
-                <wt-button
-                  class="setup-device"
-                  data-setup-device
-                  variant="secondary"
-                  @click=${() => this.#setupDevice()}
-                >
-                  ${t("device.setup")}
-                </wt-button>
-                <wt-button
-                  class="setup-handheld"
-                  data-setup-handheld
-                  variant="secondary"
-                  @click=${() => this.#setupHandheld()}
-                >
-                  ${t("device.setup_handheld")}
-                </wt-button>
-                <wt-button
-                  class="setup-till"
-                  data-setup-till
-                  variant="secondary"
-                  @click=${() => this.#setupTill()}
-                >
-                  ${t("device.setup_till")}
-                </wt-button>
-              `
+          this.devMode
+            ? html`<wt-button
+                class="switch-device"
+                data-switch-device
+                variant="secondary"
+                @click=${() => this.#switchDevice()}
+              >
+                ${t("device.switch")}
+              </wt-button>`
+            : nothing
         }
       </div>
       ${this.#renderServers()}
@@ -360,27 +427,14 @@ export class TillLockScreen extends LitElement {
     `;
   }
 
-  /** Route a FRESH display into device mode (device-identity-1 §5a): emit a composed, bubbling
-   * `setup-device` the app turns into the device-mode station screen (which shows the enrol view). Kept
-   * off the PIN view (roster mode only), so an operator logging in never sees it. */
-  #setupDevice(): void {
-    this.dispatchEvent(new CustomEvent("setup-device", { bubbles: true, composed: true }));
+  /** The heading: the device's own name, or a mode-appropriate fallback for a browser with no device
+   * identity (pre-Task-13). */
+  #renderHeading(fallback: StringKey) {
+    return html`<h1 class="heading">${this.deviceName ?? t(fallback)}</h1>`;
   }
 
-  /** Route a FRESH phone into the handheld enrol view (handheld-tableside Task 8) — the twin of
-   * {@link #setupDevice}: emit a composed, bubbling `setup-handheld` the app turns into the handheld
-   * enrol screen. Kept in roster mode beside "set up as kitchen display", off the PIN view, so an
-   * operator logging in never sees it. */
-  #setupHandheld(): void {
-    this.dispatchEvent(new CustomEvent("setup-handheld", { bubbles: true, composed: true }));
-  }
-
-  /** Route a FRESH counter into the till enrol view (SP-A.2 device unification) — the sale-capable twin
-   * of {@link #setupHandheld}: emit a composed, bubbling `setup-till` the app turns into the till enrol
-   * screen. Kept in roster mode beside the kitchen-display + waiter-handheld affordances, off the PIN
-   * view, so an operator logging in never sees it. */
-  #setupTill(): void {
-    this.dispatchEvent(new CustomEvent("setup-till", { bubbles: true, composed: true }));
+  #renderList() {
+    return html` ${this.#renderHeading("login.pick_operator")} ${this.#renderRoster()} `;
   }
 
   #renderRoster() {
@@ -410,24 +464,35 @@ export class TillLockScreen extends LitElement {
   }
 
   #renderPin(person: StaffMember) {
+    const throttled = this.throttleRemaining > 0;
     return html`
-      <h1 class="heading">${t("login.enter_pin")}</h1>
+      ${this.#renderHeading("login.enter_pin")}
       <p class="operator">${person.displayName}</p>
       <div class="pin-display" aria-hidden="true">${"●".repeat(this.pin.length)}</div>
-      ${this.errorKey ? html`<p class="error" role="alert">${t(this.errorKey)}</p>` : nothing}
-      <till-numeric-pad
-        mode="pin"
-        .value=${this.pin}
-        @wt-change=${(event: Event) => this.#onPadChange(event)}
-      ></till-numeric-pad>
+      ${
+        throttled
+          ? html`<p class="throttle" role="alert">
+              ${t("login.throttled").replace("{n}", String(this.throttleRemaining))}
+            </p>`
+          : this.errorKey
+            ? html`<p class="error" role="alert">${t(this.errorKey)}</p>`
+            : nothing
+      }
+      <div class="pad-wrap" ?inert=${throttled}>
+        <till-numeric-pad
+          mode="pin"
+          .value=${this.pin}
+          @wt-change=${(event: Event) => this.#onPadChange(event)}
+        ></till-numeric-pad>
+      </div>
       <div class="actions">
-        <wt-button class="back" variant="secondary" @click=${() => this.#back()}>
-          ${t("action.back")}
+        <wt-button class="cancel" variant="secondary" @click=${() => this.#cancel()}>
+          ${t("action.cancel")}
         </wt-button>
         <wt-button
           class="submit"
           variant="primary"
-          ?disabled=${this.pin === ""}
+          ?disabled=${this.pin === "" || throttled}
           @click=${() => void this.#submit()}
         >
           ${t("action.login")}

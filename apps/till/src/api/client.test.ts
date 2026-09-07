@@ -124,6 +124,24 @@ describe("TillApi", () => {
     });
   });
 
+  it("surfaces the error body's params alongside the code (pin.throttled retryAfterSeconds)", async () => {
+    // Task 10 throttle: the 429 body carries `params.retryAfterSeconds`; the client spreads params onto
+    // the thrown object so the lock screen's countdown can read it. Dropping the spread makes this fail.
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ error: { code: "pin.throttled", params: { retryAfterSeconds: 5 } } }),
+          { status: 429 },
+        ),
+      );
+
+    await expect(new TillApi("", fetchStub).login("p", "0000")).rejects.toMatchObject({
+      code: "pin.throttled",
+      retryAfterSeconds: 5,
+    });
+  });
+
   it("falls back to server.internal when the error body carries no code", async () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({}, 500));
 
@@ -1633,22 +1651,56 @@ describe("TillApi", () => {
     ).rejects.toMatchObject({ code: "placement.invalid" });
   });
 
-  // --- Device mode (device-identity-1 §5a): the enrolled KDS station display's three verbs. The
+  // --- Device mode (device-identity-1 §5a): the enrolled KDS station display + the enrol front door. The
   // httpOnly device cookie rides `credentials: "include"` exactly like the operator session, so these
   // never send a token themselves. ---
 
-  it("enrolDevice POSTs { code } to /api/device/enrol and returns the 4 non-secret fields", async () => {
-    // The server echoes { deviceId, kind, stationId, label }; the token leaves ONLY in the Set-Cookie
-    // header, never the body (device-api.ts), so the client shape carries no token.
-    const enrolment = {
-      deviceId: "dev-1",
-      kind: "kds_station",
-      stationId: "st-1",
-      label: "Pase cocina",
+  it("enrolVerify POSTs { code } to /api/device/enrol/verify and returns the catalogue", async () => {
+    // Verifying a key does NOT consume it; the server returns the profiles + station/register
+    // option-sources the enrol screen's describe step binds against.
+    const cat = {
+      profiles: [{ id: "pr1", name: "Front counter", formFactor: "till" }],
+      stations: [{ id: "st1", name: "Pass" }],
+      registers: [{ id: "rg1", name: "Caja 1" }],
     };
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(enrolment));
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(cat));
 
-    const r = await new TillApi("", fetchStub).enrolDevice("ABCD-1234");
+    const r = await new TillApi("", fetchStub).enrolVerify("DEMO");
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/device/enrol/verify",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: "DEMO" }),
+      }),
+    );
+    expect(r).toEqual(cat);
+  });
+
+  it("enrolVerify surfaces { code } for an expired key", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "device.pairing_expired" } }), {
+        status: 400,
+      }),
+    );
+
+    await expect(new TillApi("", fetchStub).enrolVerify("STALE")).rejects.toMatchObject({
+      code: "device.pairing_expired",
+    });
+  });
+
+  it("enrol POSTs the describe body to /api/device/enrol and returns { deviceId, name, formFactor }", async () => {
+    const result = { deviceId: "dev-9", name: "Pass", formFactor: "kds" };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(result));
+
+    const r = await new TillApi("", fetchStub).enrol({
+      code: "DEMO",
+      name: "Pass",
+      profileId: "pr-kds",
+      stationId: "st1",
+    });
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/device/enrol",
@@ -1656,23 +1708,10 @@ describe("TillApi", () => {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        // The code is sent verbatim — the server normalises it, the client does not.
-        body: JSON.stringify({ code: "ABCD-1234" }),
+        body: JSON.stringify({ code: "DEMO", name: "Pass", profileId: "pr-kds", stationId: "st1" }),
       }),
     );
-    expect(r).toEqual(enrolment);
-  });
-
-  it("enrolDevice surfaces { code } for an invalid pairing code", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ error: { code: "device.pairing_invalid" } }), {
-        status: 400,
-      }),
-    );
-
-    await expect(new TillApi("", fetchStub).enrolDevice("nope")).rejects.toMatchObject({
-      code: "device.pairing_invalid",
-    });
+    expect(r).toEqual(result);
   });
 
   it("getDeviceStation GETs /api/device/station and returns the bound station + its queue", async () => {
@@ -1723,7 +1762,12 @@ describe("TillApi", () => {
   });
 
   it("getDeviceIdentity GETs /api/device/me and returns the device's non-secret identity", async () => {
-    const identity = { deviceId: "dev-1", kind: "handheld", stationId: null };
+    const identity = {
+      deviceId: "dev-1",
+      formFactor: "phone-portrait",
+      name: "Camarero 1",
+      stationId: null,
+    };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(identity));
 
     const r = await new TillApi("", fetchStub).getDeviceIdentity();

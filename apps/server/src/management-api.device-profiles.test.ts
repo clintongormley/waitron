@@ -128,7 +128,13 @@ async function login(app: Hono, email: string): Promise<string> {
 
 const JSON_HEADERS = { "content-type": "application/json" };
 
-type ProfileRow = { id: string; name: string; canvasId: string | null; capabilities: string[] };
+type ProfileRow = {
+  id: string;
+  name: string;
+  formFactor: string;
+  canvasId: string | null;
+  capabilities: string[];
+};
 
 /** Seed a canvas through the management canvas route so a profile can bind to a REAL `canvasId`. */
 async function seedCanvas(app: Hono, cookie: string, name: string): Promise<string> {
@@ -160,6 +166,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       headers: { ...JSON_HEADERS, cookie: managerCookie },
       body: JSON.stringify({
         name,
+        formFactor: "till",
         canvasId: null,
         capabilities: ["integrated-card-payment", "open-cash-drawer"],
       }),
@@ -170,6 +177,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     expect(row).toEqual({
       id: row.id,
       name,
+      formFactor: "till",
       canvasId: null,
       capabilities: ["integrated-card-payment", "open-cash-drawer"],
     });
@@ -183,6 +191,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     expect(await got.json()).toEqual({
       id,
       name,
+      formFactor: "till",
       canvasId: null,
       capabilities: ["integrated-card-payment", "open-cash-drawer"],
     });
@@ -200,12 +209,18 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const updated = await app.request(`/management-api/device-profiles/${id}`, {
       method: "PUT",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ name: renamed, canvasId: null, capabilities: ["act-as-kds"] }),
+      body: JSON.stringify({
+        name: renamed,
+        formFactor: "kds",
+        canvasId: null,
+        capabilities: ["act-as-kds"],
+      }),
     });
     expect(updated.status).toBe(200);
     expect(await updated.json()).toEqual({
       id,
       name: renamed,
+      formFactor: "kds",
       canvasId: null,
       capabilities: ["act-as-kds"],
     });
@@ -232,7 +247,12 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const created = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ name: uniqueName("Bound"), canvasId, capabilities: [] }),
+      body: JSON.stringify({
+        name: uniqueName("Bound"),
+        formFactor: "till",
+        canvasId,
+        capabilities: [],
+      }),
     });
     expect(created.status).toBe(201);
     const { id } = (await created.json()) as ProfileRow;
@@ -269,7 +289,12 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const res = await app.request(`/management-api/device-profiles/${randomUUID()}`, {
       method: "PUT",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ name: uniqueName("Ghost"), canvasId: null, capabilities: [] }),
+      body: JSON.stringify({
+        name: uniqueName("Ghost"),
+        formFactor: "till",
+        canvasId: null,
+        capabilities: [],
+      }),
     });
     expect(res.status).toBe(404);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
@@ -296,6 +321,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       headers: { ...JSON_HEADERS, cookie: managerCookie },
       body: JSON.stringify({
         name: uniqueName("BadRef"),
+        formFactor: "till",
         canvasId: randomUUID(),
         capabilities: [],
       }),
@@ -313,7 +339,12 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const res = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ name: uniqueName("BadCap"), canvasId: null, capabilities: ["fly"] }),
+      body: JSON.stringify({
+        name: uniqueName("BadCap"),
+        formFactor: "till",
+        canvasId: null,
+        capabilities: ["fly"],
+      }),
     });
     expect(res.status).toBe(400);
     expect(
@@ -331,7 +362,12 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const created = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ name: uniqueName("Referenced"), canvasId: null, capabilities: [] }),
+      body: JSON.stringify({
+        name: uniqueName("Referenced"),
+        formFactor: "till",
+        canvasId: null,
+        capabilities: [],
+      }),
     });
     expect(created.status).toBe(201);
     const { id } = (await created.json()) as ProfileRow;
@@ -339,9 +375,14 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const location = await suite.admin.execute<{ id: string }>(
       sql`select id from locations where tenant_id = ${tenantId} limit 1`,
     );
+    // The profile is a `till` form factor, so `device_binding_rule_insert / _update` requires the device to carry a
+    // till_id (and no station) — bind the venue's provisioned till (fixture setup).
+    const till = await suite.admin.execute<{ id: string }>(
+      sql`select id from tills where tenant_id = ${tenantId} limit 1`,
+    );
     await suite.admin.execute(sql`
-      insert into devices (tenant_id, location_id, device_kind, label, token_hash, device_profile_id)
-      values (${tenantId}, ${location.rows[0]!.id}, 'till', ${uniqueName("Bound device")}, 'scrypt$00$00', ${id})`);
+      insert into devices (tenant_id, location_id, till_id, label, token_hash, device_profile_id)
+      values (${tenantId}, ${location.rows[0]!.id}, ${till.rows[0]!.id}, ${uniqueName("Bound device")}, 'scrypt$00$00', ${id})`);
 
     const res = await app.request(`/management-api/device-profiles/${id}`, {
       method: "DELETE",
@@ -364,13 +405,13 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const first = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ name, canvasId: null, capabilities: [] }),
+      body: JSON.stringify({ name, formFactor: "till", canvasId: null, capabilities: [] }),
     });
     expect(first.status).toBe(201);
     const second = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ name, canvasId: null, capabilities: [] }),
+      body: JSON.stringify({ name, formFactor: "till", canvasId: null, capabilities: [] }),
     });
     expect(second.status).toBe(409);
     expect((await second.json()) as { error: { code: string } }).toMatchObject({
@@ -446,6 +487,27 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     ).toMatchObject({
       error: { code: "management.request_invalid", params: { field: "canvasId" } },
     });
+
+    // A missing OR out-of-set formFactor → the closed-set screen (`requireEnum` over FORM_FACTORS),
+    // naming the field — so the `device_form_factor` enum column never sees a value it cannot hold.
+    for (const formFactor of [undefined, "watch"]) {
+      const res = await app.request("/management-api/device-profiles", {
+        method: "POST",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify({
+          name: uniqueName("BadFF"),
+          ...(formFactor === undefined ? {} : { formFactor }),
+          canvasId: null,
+          capabilities: [],
+        }),
+      });
+      expect(res.status).toBe(400);
+      expect(
+        (await res.json()) as { error: { code: string; params: { field: string } } },
+      ).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "formFactor" } },
+      });
+    }
   });
 
   it("PUT with a malformed body → 400 management.request_invalid naming the field", async () => {
@@ -454,7 +516,12 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const created = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ name: uniqueName("Editable"), canvasId: null, capabilities: [] }),
+      body: JSON.stringify({
+        name: uniqueName("Editable"),
+        formFactor: "till",
+        canvasId: null,
+        capabilities: [],
+      }),
     });
     const { id } = (await created.json()) as ProfileRow;
 
@@ -515,7 +582,12 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const created = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ name: uniqueName("Target"), canvasId: null, capabilities: [] }),
+      body: JSON.stringify({
+        name: uniqueName("Target"),
+        formFactor: "till",
+        canvasId: null,
+        capabilities: [],
+      }),
     });
     const { id } = (await created.json()) as ProfileRow;
 
@@ -525,12 +597,22 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       app.request("/management-api/device-profiles", {
         method: "POST",
         headers: { ...JSON_HEADERS, cookie: staffCookie },
-        body: JSON.stringify({ name: uniqueName("Nope"), canvasId: null, capabilities: [] }),
+        body: JSON.stringify({
+          name: uniqueName("Nope"),
+          formFactor: "till",
+          canvasId: null,
+          capabilities: [],
+        }),
       }),
       app.request(`/management-api/device-profiles/${id}`, {
         method: "PUT",
         headers: { ...JSON_HEADERS, cookie: staffCookie },
-        body: JSON.stringify({ name: uniqueName("Nope"), canvasId: null, capabilities: [] }),
+        body: JSON.stringify({
+          name: uniqueName("Nope"),
+          formFactor: "till",
+          canvasId: null,
+          capabilities: [],
+        }),
       }),
       app.request(`/management-api/device-profiles/${id}`, {
         method: "DELETE",

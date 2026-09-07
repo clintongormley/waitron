@@ -15,6 +15,41 @@
       "when": 1788709345224,
       "tag": "0001_db_baseline_sql",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788769912531,
+      "tag": "0002_device_profile_form_factor",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788771238830,
+      "tag": "0003_drop_device_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788771251214,
+      "tag": "0004_device_binding_rule_sql",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788772418605,
+      "tag": "0005_device_profile_form_factor_locked_sql",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788775712562,
+      "tag": "0006_tills_name_unique_sql",
+      "breakpoints": true
     }
   ]
 }

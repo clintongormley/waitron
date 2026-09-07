@@ -3,16 +3,15 @@ import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { AppError, tillId } from "@waitron/shared";
 import type { TillId } from "@waitron/shared";
-import { asAppUser, devices, withTenant } from "@waitron/db";
+import { asAppUser, deviceProfiles, devices, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { getDeviceProfile } from "@waitron/layouts";
-import type { CapabilityFlag } from "@waitron/layouts";
+import { kindOfFormFactor } from "@waitron/layouts";
+import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
 import { verifySecret } from "@waitron/identity";
 // Side-effect only: keeps this host's `device.unauthorized` code (errors.ts) reachable from the file
 // that throws it — the reachability convention `till-session.ts` follows for its host `session.required`
 // code (a bare import, no value used here). See the note atop `errors.ts`.
 import "./errors.js";
-import type { DeviceKind } from "./device.js";
 import { isUuid } from "./till-session.js";
 
 /**
@@ -101,8 +100,10 @@ export function readDeviceCookie(c: Context): string | null {
   return getCookie(c, DEVICE_COOKIE) ?? null;
 }
 
-/** The identity a `requireDevice` call resolves the cookie to: which device it is, what KIND it is, and
- * the single station it is bound to (NULL only for a future non-station kind). The device-authenticated
+/** The identity a `requireDevice` call resolves the cookie to: which device it is, its `formFactor`
+ * (read from the device's profile — the kind is DERIVED from it via `kindOfFormFactor`, there is no
+ * longer a kind column), its human `label` (surfaced as the device NAME on `/api/device/me`), and the
+ * single station it is bound to (NULL for a non-station form factor). The device-authenticated
  * KDS routes (Task 5) scope every read/bump to this `stationId` — a device cannot name another's.
  *
  * SP-A.2 §16 widened this with the device's assigned TILL + static HARDWARE bindings, all read
@@ -113,7 +114,13 @@ export function readDeviceCookie(c: Context): string | null {
  * secrets stay in the vault, never on this row. */
 export interface DeviceBinding {
   deviceId: string;
-  kind: DeviceKind;
+  // The device's FORM FACTOR, read from its profile (a device is DEFINED by its profile now). The
+  // device KIND is derived from it on demand via `kindOfFormFactor` (e.g. `assertNotHandheld`); there
+  // is no kind column any more.
+  formFactor: FormFactor;
+  // The device's human label ("Pantalla Cocina"), surfaced as the device NAME by `/api/device/me` so
+  // the till's login screen can show which box this is.
+  label: string;
   stationId: string | null;
   tillId: string | null;
   // The assigned DEVICE PROFILE (device-profile design 2026-09-05 §5): the reusable bundle a device
@@ -126,7 +133,33 @@ export interface DeviceBinding {
   hasCashDrawer: boolean;
   cardProvider: string;
   cardReaderId: string | null;
+  // The device PROFILE's declared capability set (device-profile §5.3), carried here off the SAME
+  // (tenant_id, device_profile_id) join that resolves `formFactor` — so the capability firewall
+  // (`assertDeviceCapability`) reads it straight off the binding rather than opening a second
+  // transaction to re-read the profile. `[]` for a profile that declares none.
+  capabilities: CapabilityFlag[];
 }
+
+// The device→profile join and the binding projection, defined once and reused by both `tryReadDevice`
+// selects (and the device-api list read): `devices ⨝ device_profiles ON (tenant_id, device_profile_id)`.
+// The join always matches — `device_profile_id` is NOT NULL with a RESTRICT composite FK — so the
+// binding always carries the profile's `formFactor` and `capabilities`.
+const deviceProfileJoin = and(
+  eq(deviceProfiles.tenantId, devices.tenantId),
+  eq(deviceProfiles.id, devices.deviceProfileId),
+);
+const deviceBindingColumns = {
+  formFactor: deviceProfiles.formFactor,
+  label: devices.label,
+  stationId: devices.stationId,
+  tillId: devices.tillId,
+  deviceProfileId: devices.deviceProfileId,
+  receiptPrinterId: devices.receiptPrinterId,
+  hasCashDrawer: devices.hasCashDrawer,
+  cardProvider: devices.cardProvider,
+  cardReaderId: devices.cardReaderId,
+  capabilities: deviceProfiles.capabilities,
+};
 
 /**
  * Maps a selected device row's non-secret binding columns onto a {@link DeviceBinding}. Shared by the
@@ -135,10 +168,16 @@ export interface DeviceBinding {
  * caller has already fetched an `active` row (and, on the cookie path, verified the token). The param
  * is typed to the binding's own fields, so a `tokenHash` on the passed row is never copied through.
  */
-function toDeviceBinding(deviceId: string, row: Omit<DeviceBinding, "deviceId">): DeviceBinding {
+function toDeviceBinding(
+  deviceId: string,
+  // `capabilities` arrives as `unknown` — the column is PLAIN jsonb (device-profiles.ts keeps it
+  // un-`$type`d on purpose), so it is cast here, the one place the raw row becomes a binding.
+  row: Omit<DeviceBinding, "deviceId" | "capabilities"> & { capabilities: unknown },
+): DeviceBinding {
   return {
     deviceId,
-    kind: row.kind,
+    formFactor: row.formFactor,
+    label: row.label,
     stationId: row.stationId,
     tillId: row.tillId,
     deviceProfileId: row.deviceProfileId,
@@ -146,6 +185,7 @@ function toDeviceBinding(deviceId: string, row: Omit<DeviceBinding, "deviceId">)
     hasCashDrawer: row.hasCashDrawer,
     cardProvider: row.cardProvider,
     cardReaderId: row.cardReaderId,
+    capabilities: row.capabilities as CapabilityFlag[],
   };
 }
 
@@ -193,18 +233,23 @@ export async function tryReadDevice(
       return withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         const [row] = await tx
-          .select({
-            kind: devices.deviceKind,
-            stationId: devices.stationId,
-            tillId: devices.tillId,
-            deviceProfileId: devices.deviceProfileId,
-            receiptPrinterId: devices.receiptPrinterId,
-            hasCashDrawer: devices.hasCashDrawer,
-            cardProvider: devices.cardProvider,
-            cardReaderId: devices.cardReaderId,
-          })
+          // The form factor AND capabilities come from the device's profile (a device is DEFINED by its
+          // profile) — the shared (tenant_id, device_profile_id) inner join, which always matches since
+          // device_profile_id is NOT NULL and its FK is RESTRICT.
+          .select(deviceBindingColumns)
           .from(devices)
-          .where(and(eq(devices.id, override), eq(devices.active, true)));
+          .innerJoin(deviceProfiles, deviceProfileJoin)
+          // Scope to THIS tenant explicitly: since RLS was dropped (#255) `withTenant` no longer
+          // isolates SELECTs, so a by-id read must carry its own tenant predicate — one-tenant-per-db
+          // is NOT the query's isolation boundary (CLAUDE.md §3; till-reroute-S3). Critical on this
+          // dev-override path, which has NO token to verify a foreign device UUID.
+          .where(
+            and(
+              eq(devices.tenantId, deps.cfg.tenantId),
+              eq(devices.id, override),
+              eq(devices.active, true),
+            ),
+          );
         if (row === undefined) return null;
         return toDeviceBinding(override, row);
       });
@@ -229,23 +274,25 @@ export async function tryReadDevice(
   return withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
     await asAppUser(tx);
     const [row] = await tx
-      .select({
-        tokenHash: devices.tokenHash,
-        kind: devices.deviceKind,
-        stationId: devices.stationId,
-        // The profile/till/hardware bindings (SP-A.2 §16) surfaced on the binding — read here so the
-        // boot reads echo them without a second query. All non-secret config, never credentials.
-        tillId: devices.tillId,
-        deviceProfileId: devices.deviceProfileId,
-        receiptPrinterId: devices.receiptPrinterId,
-        hasCashDrawer: devices.hasCashDrawer,
-        cardProvider: devices.cardProvider,
-        cardReaderId: devices.cardReaderId,
-      })
+      // `tokenHash` (verified below) plus the shared binding projection: the profile's formFactor +
+      // capabilities and the till/hardware bindings (SP-A.2 §16), read here so the boot reads echo them
+      // without a second query. All non-secret config, never credentials — `tokenHash` is dropped by
+      // `toDeviceBinding`, which only copies the binding fields.
+      .select({ tokenHash: devices.tokenHash, ...deviceBindingColumns })
       .from(devices)
+      .innerJoin(deviceProfiles, deviceProfileJoin)
       // `active = true` is the revocation filter: a revoked device is simply not found. Parameterised
-      // by Drizzle — `id` and the boolean both bind as `$n`, never string-concatenated.
-      .where(and(eq(devices.id, deviceId), eq(devices.active, true)));
+      // by Drizzle — `id` and the boolean both bind as `$n`, never string-concatenated. The tenant
+      // predicate is explicit: since RLS was dropped (#255) `withTenant` no longer isolates SELECTs, so
+      // a by-id read carries its own `tenant_id` scope — one-tenant-per-db is NOT the query's isolation
+      // boundary (CLAUDE.md §3; till-reroute-S3). Defence-in-depth here (the token is still verified).
+      .where(
+        and(
+          eq(devices.tenantId, deps.cfg.tenantId),
+          eq(devices.id, deviceId),
+          eq(devices.active, true),
+        ),
+      );
     if (row === undefined) return null;
     // Constant-time scrypt check (REUSED, never home-rolled): the token is never compared with `===`.
     if (!verifySecret(token, row.tokenHash)) return null;
@@ -357,7 +404,11 @@ export async function assertNotHandheld(
   device?: DeviceBinding | null,
 ): Promise<void> {
   const resolved = device === undefined ? await tryReadDevice(deps, c) : device;
-  if (resolved?.kind === "handheld") throw new AppError("device.forbidden_action", { action });
+  // The device's kind is DERIVED from its profile's form factor (there is no kind column): a phone- or
+  // tablet-form-factor device is a `handheld`. An absent cookie (`null`) passes, as before.
+  if (resolved !== null && kindOfFormFactor(resolved.formFactor) === "handheld") {
+    throw new AppError("device.forbidden_action", { action });
+  }
 }
 
 /**
@@ -377,28 +428,22 @@ export async function assertNotHandheld(
  *    authenticates by operator SESSION and carries no `waitron_device`. It PASSES, exactly as
  *    `assertNotHandheld`'s absent-cookie branch does: "nothing blocks a sale" on a cookie-less
  *    till.
- * 2. A device with NO assigned device profile (`deviceProfileId === null`) declares no
- *    capabilities at all — refused. (This is the path the old handheld, which carries no profile,
- *    now falls down.)
- * 3. Resolve the assigned DEVICE PROFILE via `getDeviceProfile` under the SAME `withTenant` +
- *    `asAppUser` scope `tryReadDevice` uses, and `getDeviceProfile` explicitly filters by tenant
- *    id. A bound-but-missing profile is unreachable (the `(tenant_id, device_profile_id)` FK is
- *    RESTRICT — see `devices.ts`); treated defensively as no-capability.
- * 4. Whether the profile's declared `capabilities` include the required flag decides pass vs
- *    refuse.
+ * 2. Otherwise the device's capability set — carried on the binding by `tryReadDevice`'s profile
+ *    join (every device has a profile: `device_profile_id` is NOT NULL) — decides pass vs refuse:
+ *    a set omitting the required flag is refused, fail-closed. A capability-less profile (the old
+ *    handheld's shape) is therefore still refused pay + drawer.
  *
  * Capabilities relocated OFF the canvas onto the device profile (device-profile design 2026-09-05
  * §5.3, Task 9): a canvas is the display, capabilities are facts about the box. A handheld
- * carrying a capability-less profile (or no profile at all) is therefore still refused pay +
- * drawer — the handheld-firewall behaviour is PRESERVED, now enforced by the profile's capability
- * set.
+ * carrying a capability-less profile is therefore still refused pay + drawer — the handheld-firewall
+ * behaviour is PRESERVED, now enforced by the profile's capability set.
  *
- * `device` is an OPTIONAL pre-resolved binding (see {@link requireSaleTillId}): `/api/pay` reads
- * the binding ONCE and threads it here and to `requireSaleTillId`, so the device read + scrypt
- * run once per request (the profile `getDeviceProfile` read below is a separate query and always
- * runs). `null` means "resolved, no device" (passes, branch 1); OMITTING it preserves the
- * original behaviour — this reads the binding itself, which is why the other capability call-site
- * (`/api/drawer/open`) need not change.
+ * The capability set rides the binding itself ({@link DeviceBinding.capabilities}), resolved by
+ * `tryReadDevice`'s profile join, so this reads it straight off `resolved` — no second transaction.
+ * `device` is an OPTIONAL pre-resolved binding (see {@link requireSaleTillId}): `/api/pay` reads the
+ * binding ONCE and threads it here and to `requireSaleTillId`, so the read + scrypt run once per
+ * request; `null` means "resolved, no device" (passes, branch 1); OMITTING it preserves the original
+ * behaviour — this reads the binding itself, which is why `/api/drawer/open` need not change.
  */
 export async function assertDeviceCapability(
   deps: { db: Database; cfg: { tenantId: string }; devMode?: boolean },
@@ -410,26 +455,10 @@ export async function assertDeviceCapability(
   const resolved = device === undefined ? await tryReadDevice(deps, c) : device;
   // (1) Absent cookie ⇒ the env-till / legacy caller — pass, matching `assertNotHandheld`.
   if (resolved === null) return;
-  // (2) No assigned device profile ⇒ no declared capabilities ⇒ refuse (fail-closed).
-  if (resolved.deviceProfileId === null) {
-    throw new AppError("device.forbidden_action", { action });
-  }
-  const deviceProfileId = resolved.deviceProfileId;
-  // (3) Resolve the profile in the SAME tx shape `tryReadDevice` uses (the `app_user` role).
-  const profile = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
-    return getDeviceProfile(tx, deps.cfg.tenantId, deviceProfileId);
-  });
-  // Defensive only: the `(tenant_id, device_profile_id)` composite FK on `devices` is RESTRICT
-  // (schema/devices.ts), so a bound profile always resolves — this branch is unreachable in practice,
-  // hence the v8-ignore rather than a contrived test that would have to defeat the FK.
-  /* v8 ignore start */
-  if (profile === undefined) {
-    throw new AppError("device.forbidden_action", { action });
-  }
-  /* v8 ignore stop */
-  // (4) The profile's declared capability set is the source of truth.
-  if (!profile.capabilities.includes(capability)) {
+  // (2) The profile's declared capability set — carried on the binding, so no second read. A profile
+  // declaring no capabilities (or none matching this action) is refused, fail-closed. The device always
+  // carries a profile (`device_profile_id` is NOT NULL), so there is no no-profile branch.
+  if (!resolved.capabilities.includes(capability)) {
     throw new AppError("device.forbidden_action", { action });
   }
 }

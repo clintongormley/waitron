@@ -61,6 +61,9 @@ export const en = {
   "login.no_staff": "No staff available",
   "login.load_failed": "Could not load staff, try again",
   "login.error": "Could not log in, try again",
+  // Task 10 wrong-PIN throttle: shown counting down while a (device, person) back-off runs. `{n}` is
+  // the whole seconds remaining, substituted at the call site (`t()` does not interpolate).
+  "login.throttled": "Try again in {n}s",
   // Supervisor-override dialog (cash-drawer-authorization §5) — the reusable "authorize this action"
   // modal a non-permitted operator gets under a gated policy: pick an eligible supervisor, then enter
   // their PIN. `override.error` is the generic in-dialog failure (a wrong PIN surfaces the shared
@@ -164,6 +167,28 @@ export const en = {
   "device.kds_enrol_hint": "Enter the pairing code shown on the dashboard",
   "device.kds_enrol_submit": "Set up",
   "device.enrol_failed": "That pairing code was not accepted. Ask a manager for a new one.",
+  // Device enrolment (device-enrolment §3.3) — the two-step front-door screen a FRESH browser shows:
+  // step 1 verifies an enrolment key, step 2 describes the device (name + profile, then a station or
+  // cash-register picker driven by the profile's form factor). `device.enrol_key_*` are step 1;
+  // `device.describe_*` are step 2. A refused key reuses the shared generic `device.enrol_failed`.
+  // `device.type.*` are the human labels for a device's kind (never the raw `kds_station`/`till` token),
+  // shown in the dev chooser's device rows — mapped from the kind via `i18n/device-label.ts`.
+  "device.enrol_key_title": "Set up this device",
+  "device.enrol_key_hint": "Enter the enrolment key shown on the dashboard",
+  "device.enrol_key_label": "Enrolment key",
+  "device.enrol_continue": "Continue",
+  "device.describe_title": "Describe this device",
+  "device.describe_name": "Name",
+  "device.describe_profile": "Profile",
+  "device.describe_station": "Station",
+  "device.describe_register": "Cash register",
+  "device.describe_submit": "Set up device",
+  "device.type.till": "Counter till",
+  "device.type.handheld": "Handheld",
+  "device.type.kds": "Kitchen display",
+  // The login screen's dev-only "Switch device" affordance (device-enrolment §3.2) — shown only when this
+  // tab has adopted a dev device; it clears the tab's device and returns to the chooser.
+  "device.switch": "Switch device",
   // Expo / pass display (KDS-3) — the expediter's cross-station board: a card per open order, its items
   // grouped by course. `expo.open` is the counter's nav control (mirrors `station.open`); `expo.title`
   // names the screen. The three per-course levers name the state they ADVANCE the course to: `expo.fire`
@@ -471,6 +496,7 @@ export const es: Record<StringKey, string> = {
   "login.no_staff": "No hay personal disponible",
   "login.load_failed": "No se pudo cargar el personal, inténtalo de nuevo",
   "login.error": "No se pudo iniciar sesión, inténtalo de nuevo",
+  "login.throttled": "Inténtalo de nuevo en {n}s",
   "override.title": "Autorización de un responsable",
   "override.pick_supervisor": "Elige a un responsable",
   "override.enter_pin": "Introduce el PIN del responsable",
@@ -521,6 +547,20 @@ export const es: Record<StringKey, string> = {
   "device.kds_enrol_submit": "Configurar",
   "device.enrol_failed":
     "No se aceptó ese código de emparejamiento. Pide uno nuevo a un responsable.",
+  "device.enrol_key_title": "Configurar este dispositivo",
+  "device.enrol_key_hint": "Introduce la clave de alta que aparece en el panel",
+  "device.enrol_key_label": "Clave de alta",
+  "device.enrol_continue": "Continuar",
+  "device.describe_title": "Describe este dispositivo",
+  "device.describe_name": "Nombre",
+  "device.describe_profile": "Perfil",
+  "device.describe_station": "Estación",
+  "device.describe_register": "Caja registradora",
+  "device.describe_submit": "Configurar dispositivo",
+  "device.type.till": "Caja de mostrador",
+  "device.type.handheld": "Terminal de camarero",
+  "device.type.kds": "Pantalla de cocina",
+  "device.switch": "Cambiar de dispositivo",
   "expo.open": "Pase",
   "expo.title": "Pase",
   "expo.back": "Volver al mostrador",

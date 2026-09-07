@@ -6,9 +6,10 @@ export { MAX_RECEIPT_FIELD_LENGTH, validateReceiptConfig } from "./validate.js";
 export { MAX_TAB_TITLE_LENGTH, validateCanvas } from "./validate-canvas.js";
 
 // Layout-canvas data model (SP-A.1).
-export { FORM_FACTORS, CARD_TYPES, CAPABILITY_FLAGS } from "./canvas.js";
+export { FORM_FACTORS, CARD_TYPES, CAPABILITY_FLAGS, kindOfFormFactor } from "./canvas.js";
 export type {
   FormFactor,
+  DeviceKind,
   CardType,
   CapabilityFlag,
   CardInstance,

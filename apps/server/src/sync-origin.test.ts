@@ -1,6 +1,7 @@
 import { tmpdir } from "node:os";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -35,6 +36,8 @@ import { mountManagementApi } from "./management-api.js";
 import { mountTillApi } from "./till-api.js";
 import { mountMeApi } from "./me-api.js";
 import type { TillConfig } from "./till-config.js";
+import { enrolDevice, generatePairingCode } from "./device.js";
+import { DEVICE_COOKIE } from "./device-session.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
 
 // Real Postgres, not PGlite: capture runs as the non-superuser app role, whose INSERT on sync_log a
@@ -307,12 +310,46 @@ function mountTill(venue: Venue, nodeId: string): Hono {
   return app;
 }
 
+/** Enrol a REAL `till` device for the venue (auto-creating its register) and return the
+ * `waitron_device=<id>.<token>` cookie a booting device carries — the login route is DEVICE-GATED
+ * (§5/§6), so `tillLogin` must present one. The mint→redeem runs on the app role under the tenant (the
+ * production enrol path), so the scrypt hash verifies and `tryReadDevice` resolves a genuine binding. */
+async function enrolTillCookie(venue: Venue): Promise<string> {
+  const cfg: TillConfig = {
+    tenantId: brandTenantId(venue.tenantId),
+    tillId: brandTillId(venue.tillId),
+    nodeId: brandNodeId(NODE_C),
+    seriesId: brandSeriesId(venue.seriesId),
+    locationId: brandLocationId(venue.locationId),
+    locale: LOCALE,
+    invoiceLocales: [LOCALE],
+    cardProvider: "none",
+    tipsEnabled: false,
+    orderFlow: "prepay",
+  };
+  const profile = await suite.admin.execute<{ id: string }>(sql`
+    insert into device_profiles (tenant_id, name, form_factor)
+    values (${venue.tenantId}, ${`Till ${randomUUID()}`}, 'till') returning id`);
+  const dev = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const { code } = await generatePairingCode(tx, cfg);
+    return enrolDevice(tx, cfg, {
+      code,
+      name: `Till ${randomUUID()}`,
+      profileId: profile.rows[0]!.id,
+    });
+  });
+  return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
+}
+
 /** Log the seeded manager (PIN "1234") in through the till's `POST /api/session` and return the
- * session cookie the operator-scoped locale route reads. */
-async function tillLogin(app: Hono, personId: string): Promise<string> {
+ * session cookie the operator-scoped locale route reads. Carries an enrolled device cookie (the login
+ * is device-gated, §5/§6). */
+async function tillLogin(app: Hono, venue: Venue, personId: string): Promise<string> {
+  const deviceCookie = await enrolTillCookie(venue);
   const res = await app.request("/api/session", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", cookie: deviceCookie },
     body: JSON.stringify({ personId, pin: "1234" }),
   });
   expect(res.status).toBe(200);
@@ -515,7 +552,7 @@ describe("sync origin attribution through the real API call sites (fix B)", () =
     // drop the 4th arg and app.node_id is unset → all-zero → this expect fails.
     const venue = await setupVenue();
     const app = mountTill(venue, NODE_C);
-    const cookie = await tillLogin(app, venue.managerId);
+    const cookie = await tillLogin(app, venue, venue.managerId);
     const res = await app.request("/api/session/locale", {
       method: "PUT",
       headers: { "content-type": "application/json", cookie },
@@ -528,7 +565,7 @@ describe("sync origin attribution through the real API call sites (fix B)", () =
     // id captures the all-zero origin — so the captured origin tracks cfg.nodeId, not a constant.
     const zeroVenue = await setupVenue();
     const zeroApp = mountTill(zeroVenue, ZERO);
-    const zeroCookie = await tillLogin(zeroApp, zeroVenue.managerId);
+    const zeroCookie = await tillLogin(zeroApp, zeroVenue, zeroVenue.managerId);
     const zeroRes = await zeroApp.request("/api/session/locale", {
       method: "PUT",
       headers: { "content-type": "application/json", cookie: zeroCookie },

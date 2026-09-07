@@ -57,20 +57,19 @@ describe("translateWriteError", () => {
     expect(isAppError(thrown) && thrown.params).toEqual({ reason: "bad_canvas_ref" });
   });
 
-  // Both ON DELETE RESTRICT FKs a device/pairing-code holds on a profile → device_profile.in_use.
-  it.each(["devices_device_profile_fk", "device_pairing_codes_device_profile_fk"])(
-    "translates a 23001 on %s to device_profile.in_use",
-    (constraint) => {
-      let thrown: unknown;
-      try {
-        translateWriteError({ cause: { code: "23001", constraint } });
-      } catch (e) {
-        thrown = e;
-      }
-      expect(isAppError(thrown) && thrown.code).toBe("device_profile.in_use");
-      expect(isAppError(thrown) && thrown.params).toEqual({});
-    },
-  );
+  // The ON DELETE RESTRICT FK a device holds on a profile → device_profile.in_use. (The pairing-code
+  // FK is gone — migration 0003 dropped `device_pairing_codes.device_profile_id` — so the DB can no
+  // longer emit `device_pairing_codes_device_profile_fk`, and a test on that input asserts nothing.)
+  it("translates a 23001 on devices_device_profile_fk to device_profile.in_use", () => {
+    let thrown: unknown;
+    try {
+      translateWriteError({ cause: { code: "23001", constraint: "devices_device_profile_fk" } });
+    } catch (e) {
+      thrown = e;
+    }
+    expect(isAppError(thrown) && thrown.code).toBe("device_profile.in_use");
+    expect(isAppError(thrown) && thrown.params).toEqual({});
+  });
 
   // A 23001 on an unrelated constraint must NOT be mislabelled in_use — re-thrown untouched.
   it("re-throws a 23001 whose constraint is not a profile-referencing FK", () => {
