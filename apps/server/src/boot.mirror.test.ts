@@ -300,15 +300,11 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       expect(deviceStation.status).toBe(404);
 
       // Till/KDS reads, unlike device/print above, ARE mounted on a mirror (`mountTillApi` is not
-      // wrapped in boot.ts's `!isMirror` mount guard) and are node-scoped by `cfg.nodeId` — which on a
-      // mirror is the mirror's OWN reserved id (R3a), not the primary's, whose id replicated
-      // `working_orders` rows still carry. That mismatch would return an empty list rather than erroring,
-      // so the guard against it is upstream: a till session needs `POST /api/session` (login), which the
-      // read-only gate already 403s above, so `requireSession` 401s here BEFORE the node-scoped filter in
-      // `listHeldOrders` ever runs (till-api.ts's comment on this route cluster spells out the same
-      // reasoning). This pins that today's safety is session-shaped, not routing-shaped — if a later
-      // slice (till-side reroute, R3b+) makes a till session reachable on a mirror, this assertion's
-      // premise breaks and the reads must be rerouted to the displayed-data node first.
+      // wrapped in boot.ts's `!isMirror` mount guard). The 401 below holds because a mirror refuses a
+      // till session at the door: `POST /api/session` (till PIN login) is a write, the read-only gate
+      // 403s every non-GET on a mirror, and `requireSession` — which every route calls FIRST — 401s
+      // before `listHeldOrders` ever runs. Reads are venue-wide since till-reroute §3.6, so no
+      // node-scope premise remains: a promoted node reads the venue's tabs whatever `node_id` they carry.
       const heldOrders = await fetch(`${base}/api/working-orders`);
       expect(heldOrders.status).toBe(401);
       expect(await heldOrders.json()).toEqual({ error: { code: "session.required", params: {} } });

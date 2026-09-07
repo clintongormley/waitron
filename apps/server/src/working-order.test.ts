@@ -420,7 +420,11 @@ async function setStatus(id: string, status: "settled" | "abandoned"): Promise<v
 // `setStatus` needs the tenant of the venue it is acting on; each test assigns this before using it.
 let testTenant: string;
 
-/** Insert an open order on another node at the same location to test by-id node filtering. */
+/**
+ * Insert an open order on ANOTHER node at the same location. The row exists to prove reads are
+ * venue-wide (till-reroute §3.6): a promoted node inherits the venue's open tabs even though they are
+ * tagged with the dead node's id (swap spec §4.3). `node_id` is the foreign node's on purpose.
+ */
 async function seedForeignNodeOrder(cfg: TillConfig): Promise<string> {
   const id = randomUUID();
   const otherNode = await seedNode(db, cfg.tenantId, cfg.locationId);
@@ -493,19 +497,14 @@ describe("listHeldOrders", () => {
     expect(held.map((o) => o.id)).toEqual([openId]);
   });
 
-  it("excludes an open order on ANOTHER node of the same tenant — node scope", async () => {
+  it("lists an open order from ANOTHER node of the same tenant — reads are venue-wide under warm standby (till-reroute §3.6)", async () => {
     const { cfg, cafeId } = await setupVenue();
     const mine = randomUUID();
     await parkOrder({ db }, cfg, { id: mine, lines: [{ productId: cafeId, quantity: "1" }] });
-
-    // Only the node predicate excludes this same-tenant order from the list.
-    const otherNode = await seedNode(db, cfg.tenantId, cfg.locationId);
-    await db.execute(sql`
-      insert into working_orders (tenant_id, till_id, node_id, order_number, status)
-      values (${cfg.tenantId}, ${cfg.tillId}, ${otherNode}, 1, 'open')`);
-
-    const held = await listHeldOrders({ db }, cfg);
-    expect(held.map((o) => o.id)).toEqual([mine]);
+    const foreign = await seedForeignNodeOrder(cfg);
+    const listed = (await listHeldOrders({ db }, cfg)).map((o) => o.id);
+    expect(listed).toContain(mine);
+    expect(listed).toContain(foreign);
   });
 });
 
@@ -558,15 +557,14 @@ describe("getHeldOrder", () => {
     });
   });
 
-  it("throws working_order.not_found for an open order on ANOTHER node of the same tenant — node scope", async () => {
+  it("retrieves an open order from ANOTHER node of the same tenant — reads are venue-wide (till-reroute §3.6)", async () => {
     const { cfg } = await setupVenue();
     const foreign = await seedForeignNodeOrder(cfg);
 
-    // The node predicate must exclude the other node's order from this by-id lookup.
-    await expect(getHeldOrder({ db }, cfg, foreign)).rejects.toMatchObject({
-      code: "working_order.not_found",
-      params: { workingOrderId: foreign },
-    });
+    // The by-id lookup reaches the foreign-node order like the node's own — a promoted node inherits it.
+    const order = await getHeldOrder({ db }, cfg, foreign);
+    expect(order.id).toBe(foreign);
+    expect(order.lines).toEqual([]);
   });
 });
 
@@ -701,18 +699,18 @@ describe("updateHeldOrder", () => {
     });
   });
 
-  it("throws working_order.not_open for an open order on ANOTHER node of the same tenant — node scope", async () => {
+  it("edits an open order from ANOTHER node of the same tenant — reads are venue-wide (till-reroute §3.6)", async () => {
     const { cfg, cafeId } = await setupVenue();
     const foreign = await seedForeignNodeOrder(cfg);
 
-    // Without the node filter the foreign order is found open and its lines are rewritten — a cross-node
-    // misattribution. The node filter fails it closed BEFORE any line is touched (prove by deletion, §4).
+    // The foreign-node order is edited like the node's own: the whole-basket replacement lands.
     await expect(
       updateHeldOrder({ db }, cfg, foreign, { lines: [{ productId: cafeId, quantity: "1" }] }),
-    ).rejects.toMatchObject({
-      code: "working_order.not_open",
-      params: { workingOrderId: foreign },
-    });
+    ).resolves.toBeUndefined();
+    const after = await getHeldOrder({ db }, cfg, foreign);
+    expect(after.lines).toHaveLength(1);
+    expect(after.lines[0]!.productId).toBe(cafeId);
+    expect(Number(after.lines[0]!.quantity)).toBe(1);
   });
 });
 
@@ -763,16 +761,14 @@ describe("abandonHeldOrder", () => {
     });
   });
 
-  it("throws working_order.not_open for an open order on ANOTHER node of the same tenant — node scope", async () => {
+  it("abandons an open order from ANOTHER node of the same tenant — reads are venue-wide (till-reroute §3.6)", async () => {
     const { cfg } = await setupVenue();
     const foreign = await seedForeignNodeOrder(cfg);
 
-    // Without the node filter the conditional UPDATE matches the foreign open order and abandons it — a
-    // cross-node discard. The node filter makes it match no row and fail closed (prove by deletion, §4).
-    await expect(abandonHeldOrder({ db }, cfg, foreign)).rejects.toMatchObject({
-      code: "working_order.not_open",
-      params: { workingOrderId: foreign },
-    });
+    // The conditional UPDATE reaches the foreign-node open order and abandons it like the node's own.
+    await expect(abandonHeldOrder({ db }, cfg, foreign)).resolves.toBeUndefined();
+    const [wo] = await db.select().from(workingOrders).where(eq(workingOrders.id, foreign));
+    expect(wo).toMatchObject({ status: "abandoned", settledAt: null });
   });
 });
 

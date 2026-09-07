@@ -337,13 +337,12 @@ declare module "@waitron/shared" {
      */
     "session.required": Record<string, never>;
     /**
-     * No OPEN working order with this id that the caller may retrieve HERE. The id names none, or
-     * it names one already `settled`/`abandoned`, or it is a same-tenant order parked on ANOTHER
-     * node (the by-id lookups are node-scoped, like the held list) — all report THIS one code. To
-     * a till that only wants to rebuild a parked basket they are the same fact ("nothing to
-     * retrieve here"), and a distinct "it exists but is closed" code would confirm a closed or
-     * foreign order exists — the same fail-closed reasoning `node.not_found` and
-     * `sale.series_not_found` use.
+     * No OPEN working order with this id in the venue. The id names none, or it names one already
+     * `settled`/`abandoned` — both report THIS one code (the read is venue-wide since till-reroute
+     * §3.6, so a same-tenant order on another node IS reachable and is no longer a not_found reason).
+     * To a till that only wants to rebuild a parked basket they are the same fact ("nothing to
+     * retrieve"), and a distinct "it exists but is closed" code would confirm a closed order exists —
+     * the same fail-closed reasoning `node.not_found` and `sale.series_not_found` use.
      *
      * `workingOrderId` is echoed because it is a caller-supplied uuid the till already holds, not a
      * secret — an id that matches nothing is unactionable if withheld (the rule `tenant.not_found`'s
@@ -359,12 +358,12 @@ declare module "@waitron/shared" {
      */
     "working_order.not_found": { workingOrderId: string };
     /**
-     * A working order this caller tried to MODIFY is not `open` HERE — it names one already
-     * `settled`/`abandoned`, or it names none this node may reach (an absent id or an order
-     * parked on ANOTHER node — the by-id lookups are node-scoped). All of those report THIS one
-     * code: to a till trying to edit or abandon a draft the distinction between "closed" and
-     * "never existed" is the same fact ("there is no open draft here to change"), and a distinct
-     * "it exists but is closed" code would confirm a closed or foreign order exists — the same
+     * A working order this caller tried to MODIFY is not `open` — it names one already
+     * `settled`/`abandoned`, or it names none (an absent id; the read is venue-wide since
+     * till-reroute §3.6, so an order on another node IS reachable and editable). All of those report
+     * THIS one code: to a till trying to edit or abandon a draft the distinction between "closed" and
+     * "never existed" is the same fact ("there is no open draft to change"), and a distinct
+     * "it exists but is closed" code would confirm a closed order exists — the same
      * fail-closed reasoning `working_order.not_found` uses for the RETRIEVE side. Mapped to HTTP
      * 409 in Task 8, the mutation counterpart to `not_found`'s 404: the id may be perfectly
      * valid, but the order's state forbids the edit.

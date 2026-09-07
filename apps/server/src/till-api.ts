@@ -950,32 +950,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // The deployment holds one tenant per database. The cross-till held list for this node: every
-  // OPEN working order any register on the node can retrieve. SESSION-GUARDED — the operator must
-  // be logged in to see parked orders. `listHeldOrders` is filtered by `deps.cfg.nodeId` in this
-  // database; the browser names nothing.
+  // The deployment holds one tenant per database. The venue-wide held list: every OPEN working order
+  // any register in the venue can retrieve, whatever `node_id` it carries (venue-wide, till-reroute §3.6
+  // — a promoted node inherits the dead node's open tabs). SESSION-GUARDED — the operator must be
+  // logged in to see parked orders; the browser names nothing.
   //
-  // LATENT MIRROR TRAP (whole-branch review, membership promotion R3a): this and every other till/KDS
-  // read below that filters by `deps.cfg.nodeId` (`getHeldOrder`; `listStationQueue`/`listExpoQueue` in
-  // working-order.ts) is scoped to the SERVER'S OWN node id. Since R3a a mirror runs under its OWN
-  // reserved id, distinct from the primary it replicates from — but `working_orders`/`ticket_items` are
-  // sync-enrolled, so a replicated row on a mirror still carries the PRIMARY's `node_id`. Filtering by
-  // the mirror's own id would therefore return EMPTY on a mirror, not the primary's data (unlike
-  // `report-api.ts`, which was fixed to resolve `dataNodeId` = the origin on a mirror — see its comment
-  // near `mirror-e2e.test.ts:39`). These reads were NOT given the same fix, deliberately:
-  // `deps.cfg.nodeId` also stamps WRITE origin on this surface (sale/park/fire — `cfg.nodeId` at
-  // record-sale.ts:79-82 and elsewhere in this file), so blanket-swapping it for the origin would corrupt
-  // that. The routing fix belongs to the till-side reroute slice (R3b+).
-  //
-  // It is safe TODAY only because no till session can exist on a mirror to REACH this filter:
-  // `POST /api/session` (till PIN login) is a write, and the read-only gate (`read-only-gate.ts`) 403s
-  // every non-GET on a mirror with no path exceptions, so `requireSession` — which every route below
-  // calls FIRST — always 401s (`session.required`) before `listHeldOrders`/`getHeldOrder` ever run. The
-  // ambient viewer (`mirror-session.ts`) only auto-authenticates the MANAGEMENT session, never a till
-  // one. `boot.mirror.test.ts` pins this reachability with a guard test; if a later slice makes a
-  // till session reachable on a mirror (the till-side reroute itself, or an ambient till viewer), THAT
-  // slice must route these reads through the displayed-data node — the way `report-api` does — before
-  // whatever makes the session reachable ships.
+  // Venue-wide reads need no per-node routing on a mirror (the old node-scope trap is gone), and a
+  // mirror never reaches this read anyway: a till session requires `POST /api/session` (a write), which
+  // the read-only gate (`read-only-gate.ts`) 403s on a mirror, so `requireSession` — which every route
+  // below calls FIRST — 401s before the read runs. `boot.mirror.test.ts` pins that reachability.
   app.get("/api/working-orders", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -984,10 +967,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Retrieve one parked order to rebuild its basket. SESSION-GUARDED. An id naming no OPEN order
-  // THIS node may reach (an absent, settled/abandoned, or a same-tenant order on ANOTHER node,
-  // the by-id lookups being node-scoped) surfaces `working_order.not_found`, which `STATUS` maps
-  // to 404. Returns `{ id, orderNumber, label, lines }` — the pricing INPUTS only, never a stored
+  // Retrieve one parked order to rebuild its basket. SESSION-GUARDED. An id naming no OPEN order in
+  // the venue (an absent or settled/abandoned one; the read is venue-wide, till-reroute §3.6, so a
+  // same-tenant order on another node IS reachable) surfaces `working_order.not_found`, which `STATUS`
+  // maps to 404. Returns `{ id, orderNumber, label, lines }` — the pricing INPUTS only, never a stored
   // price, so the till re-prices on retrieve. The id is `isUuid`-screened before the query: a
   // malformed one passed straight into `eq(workingOrders.id, id)` would `22P02` → an opaque 500
   // (the 7b follow-up), so it is refused as `working_order.not_found` — the SAME 404 an absent
@@ -1002,8 +985,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   // Edit a parked order — the whole new basket plus an optional new label, a full REPLACEMENT.
-  // SESSION-GUARDED. Only an `open` order on THIS node may change; a non-open, unknown, or foreign-node
-  // id surfaces `working_order.not_open` → 409. `updateHeldOrder` re-prices authoritatively (the request carries
+  // SESSION-GUARDED. Any `open` order in the venue may change (venue-wide, till-reroute §3.6); a
+  // non-open or unknown id surfaces `working_order.not_open` → 409. `updateHeldOrder` re-prices authoritatively (the request carries
   // no price) and returns nothing, so this answers 200 with an empty body. The id is `isUuid`-screened
   // before the query, refused as `working_order.not_open` → 409 — the SAME code a non-open/absent id
   // gets — rather than the `22P02`-driven opaque 500 the raw value would raise (the 7b follow-up).
@@ -1116,8 +1099,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   // The deployment holds one tenant per database. One station's kitchen queue (KDS-1, design
-  // §3c/§3f) — this node's ticket items AT `:id`, grouped by order, oldest first.
-  // SESSION-GUARDED. `listStationQueue` is filtered by `deps.cfg.nodeId` in this database. The
+  // §3c/§3f) — the venue's ticket items AT `:id`, grouped by order, oldest first.
+  // SESSION-GUARDED. `listStationQueue` is venue-wide (till-reroute §3.6 — not node-scoped). The
   // `:id` is `isUuid`-screened first: an unknown station id already yields an empty queue (it
   // names no items), so a MALFORMED one — which likewise names no live station — is refused
   // `station.not_found` (404) rather than reaching the `station_id` uuid column and raising
@@ -1199,12 +1182,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // shape, session gate and id screens are `mountCourseVerb`'s.
   mountCourseVerb(app, deps, log, "fire", fireCourse);
 
-  // The deployment holds one tenant per database. The expo (pass) queue (KDS-3 §3d) — this node's
+  // The deployment holds one tenant per database. The expo (pass) queue (KDS-3 §3d) — the venue's
   // live orders, aggregated into courses ACROSS stations, for the expediter's display.
-  // SESSION-GUARDED (kitchen/pass staff log in with a PIN, §0). `listExpoQueue` is filtered by
-  // `deps.cfg.nodeId` in this database — the SAME LIST-ONLY, session-gated shape the station
+  // SESSION-GUARDED (kitchen/pass staff log in with a PIN, §0). `listExpoQueue` is venue-wide
+  // (till-reroute §3.6 — not node-scoped) — the SAME LIST-ONLY, session-gated shape the station
   // queue (`GET /api/stations/:id/queue`) and the station list (`GET /api/stations`) use, minus a
-  // path param: the pass is the whole node's, so there is nothing to screen. Returns the
+  // path param: the pass is the whole venue's, so there is nothing to screen. Returns the
   // `ExpoOrder[]` aggregation (orders oldest-first, courses by display_order, each item carrying
   // its station name + fired/away roll-ups); the display re-reads it after each bump/dispatch.
   // READ-ONLY, no fiscal touch.
