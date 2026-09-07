@@ -359,7 +359,11 @@ async function tillLogin(app: Hono, venue: Venue, personId: string): Promise<str
 /** Mounts the "me" (staff self-service) API for one tenant under a given producing node id. */
 function mountMe(tenantId: string, nodeId: string): Hono {
   const app = new Hono();
-  mountMeApi(app, { db: suite.admin, cfg: { tenantId, nodeId }, venueLocale: LOCALE }, noopLog);
+  mountMeApi(
+    app,
+    { db: suite.admin, cfg: { tenantId, nodeId }, venueLocale: LOCALE, modules: [] },
+    noopLog,
+  );
   return app;
 }
 

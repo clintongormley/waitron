@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { codeMessage } from "../i18n/codes.js";
-import { bookingStatusName } from "../i18n/domain.js";
-import { today } from "../date-utils.js";
-import type { Booking, DashboardApi, DashboardTable } from "../api/client.js";
-import type { BookingForm } from "../widgets/booking-form.js";
+import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { codeMessage } from "@waitron/dashboard-kit";
+import { bookingStatusName } from "./strings.js";
+import { today } from "./date-utils.js";
+import type { Booking, BookingApi, DashboardTable } from "./client.js";
+import type { BookingForm } from "./booking-form.js";
 import { BookingsScreen } from "./bookings-screen.js";
 
 const TABLES: DashboardTable[] = [
@@ -37,7 +37,7 @@ const BOOKINGS: Booking[] = [
   booking({ id: "bk-early", bookingTime: "13:30:00", contactName: "Pérez", tableId: "t-2" }),
 ];
 
-function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
+function stubApi(overrides: Partial<BookingApi> = {}): BookingApi {
   return {
     listTables: vi.fn().mockResolvedValue(TABLES),
     listBookings: vi.fn().mockResolvedValue(BOOKINGS),
@@ -48,7 +48,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     markNoShow: vi.fn().mockResolvedValue(undefined),
     completeBooking: vi.fn().mockResolvedValue(undefined),
     ...overrides,
-  } as unknown as DashboardApi;
+  } as unknown as BookingApi;
 }
 
 async function flush(el: BookingsScreen): Promise<void> {

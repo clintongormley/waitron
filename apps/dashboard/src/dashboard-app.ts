@@ -9,6 +9,19 @@ import "@waitron/ui/src/components/wt-button.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { diag } from "./diagnostics.js";
 import type { StringKey } from "./i18n/strings.js";
+// The module-UI seam: modules are mounted generically from the browser-safe registry, never named here.
+// `tKit` is the kit's UNTYPED resolver (the app's own `t` is narrowed to its StringKey union, which a
+// module's own label keys are not in); it resolves against the same shared catalogue `registerCatalogue`
+// fills.
+import {
+  registerCatalogue,
+  t as tKit,
+  type DashboardContribution,
+  type DashboardRequest,
+  type DashboardScreenHandle,
+  type NavGroupId,
+} from "@waitron/dashboard-kit";
+import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { LocaleChangeController } from "./state/locale-controller.js";
 // Side-effect imports register the screen elements this shell swaps between; it names them only as
 // tags below, so the wiring — not the screens — is what lives here.
@@ -23,7 +36,6 @@ import "./screens/location-menus-screen.js";
 import "./screens/receipt-screen.js";
 import "./screens/service-status-screen.js";
 import "./screens/floor-screen.js";
-import "./screens/bookings-screen.js";
 import "./screens/kitchen-screen.js";
 import "./screens/roster-screen.js";
 import "./screens/approvals-screen.js";
@@ -48,7 +60,7 @@ import type { DashboardApi, PersonRole } from "./api/client.js";
  * path or fall back to overview; staff sessions show only my-schedule. Logged-in faces share logout
  * and language controls, with navigation available to non-staff sessions.
  */
-type Screen =
+type CoreScreen =
   | "login"
   | "my-schedule"
   | "overview"
@@ -59,7 +71,6 @@ type Screen =
   | "receipt"
   | "statuses"
   | "floor"
-  | "bookings"
   | "kitchen"
   | "roster"
   | "approvals"
@@ -72,6 +83,12 @@ type Screen =
   | "device-profiles"
   | "diagnostics";
 
+/** A destination the shell can show: a core face, or an active module's own screen id. The `& {}` keeps
+ * the `CoreScreen` literal autocomplete while still admitting any module id string — the one spelling
+ * used everywhere a screen id is passed, rather than the weaker `CoreScreen | string` (which collapses
+ * to `string`, dropping the literal hints). */
+type ScreenId = CoreScreen | (string & {});
+
 /** The viewport width at/below which the sidebar becomes the off-canvas drawer (Task 12). Kept as a
  * single source so the JS `matchMedia` query and the CSS `@media` block below cannot drift — a media
  * query cannot read a `--custom-property`, so the breakpoint is a literal in both places, and `48rem`
@@ -80,9 +97,10 @@ const DRAWER_BREAKPOINT = "(max-width: 48rem)";
 
 /** One nav entry: the face it switches to, the i18n key for its label, and whether it is manager-gated
  * (`requiresManager` hides it from a `supervisor` session — `#nav()` filters on it before mapping). */
-type NavItem = { screen: Screen; labelKey: StringKey; requiresManager?: boolean };
-/** One sidebar group: an optional header label (the pinned first group has none) and its items. */
-type NavGroup = { headerKey?: StringKey; items: NavItem[] };
+type NavItem = { screen: ScreenId; labelKey: StringKey; requiresManager?: boolean };
+/** One sidebar group: a stable `id` (a module contribution names one as its `screen.group`), an optional
+ * header label (the pinned first group has none) and its items. */
+type NavGroup = { id: NavGroupId; headerKey?: StringKey; items: NavItem[] };
 
 /**
  * The grouped, DATA-DRIVEN sidebar. `#nav()` renders this in a loop, so the manager faces are
@@ -92,12 +110,14 @@ type NavGroup = { headerKey?: StringKey; items: NavItem[] };
  */
 const NAV_GROUPS: NavGroup[] = [
   {
+    id: "reports",
     items: [
       { screen: "overview", labelKey: "nav.overview" },
       { screen: "sales", labelKey: "nav.sales" },
     ],
   },
   {
+    id: "menu",
     headerKey: "nav.group.menu",
     items: [
       { screen: "catalogue", labelKey: "nav.catalogue" },
@@ -106,15 +126,16 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    id: "service",
     headerKey: "nav.group.service",
     items: [
       { screen: "floor", labelKey: "nav.floor" },
-      { screen: "bookings", labelKey: "nav.bookings" },
       { screen: "statuses", labelKey: "nav.statuses" },
       { screen: "kitchen", labelKey: "nav.kitchen" },
     ],
   },
   {
+    id: "team",
     headerKey: "nav.group.team",
     items: [
       { screen: "staff", labelKey: "nav.staff" },
@@ -124,10 +145,12 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    id: "purchasing",
     headerKey: "nav.group.purchasing",
     items: [{ screen: "purchases", labelKey: "nav.purchases" }],
   },
   {
+    id: "configuration",
     headerKey: "nav.group.configuration",
     items: [
       { screen: "receipt", labelKey: "nav.receipt" },
@@ -270,9 +293,35 @@ export class DashboardApp extends LitElement {
    * attribute string. */
   @property({ attribute: false }) api!: DashboardApi;
 
+  /** The request primitive a mounted module screen is wired to (a module's contribution builds its own
+   * typed client on it). `main.ts` injects one built from the SAME instrumented fetch as `api`; a test
+   * injects a stub. Assigned as a property (`attribute: false`) — it cannot travel through an attribute. */
+  @property({ attribute: false }) request!: DashboardRequest;
+
   /** Which screen is showing. Defaults to `login`, so a cold load never flashes a logged-in face
-   * before the probe confirms a session (see the class doc). */
-  @state() private screen: Screen = "login";
+   * before the probe confirms a session (see the class doc). A CoreScreen literal or an active module's
+   * screen id (`string`); the `& {}` keeps the literal autocomplete while admitting any module id. */
+  @state() private screen: ScreenId = "login";
+
+  /** Each active module's mounted screen, keyed by its screen id: the contribution (its nav placement +
+   * permission) alongside the handle (its rendered screen). This is the ENABLED set — `me.modules` gates
+   * it, the per-permission gate is layered on in `#navGroups`. The generic mount path `#renderScreen`
+   * and the route gate `#permittedScreen` consult it before the core switch. Rebuilt on every
+   * {@link #activate}, so a re-probe/re-login reconciles a module the server has since disabled. */
+  #activeScreens = new Map<
+    string,
+    { contribution: DashboardContribution; handle: DashboardScreenHandle }
+  >();
+  /** The active-and-PERMITTED module contributions grouped by nav-group id, each group pre-sorted by
+   * `order`. Built once per {@link #activate} so `#nav` does a single `Map.get` per group rather than
+   * filtering the whole active set and sorting it on every render, for every group. */
+  #navGroups = new Map<NavGroupId, DashboardContribution[]>();
+
+  /** The signed-in person's EFFECTIVE permission set from the WHOAMI probe (`me.permissions`). The two
+   * module gates read it: `#nav` shows a module's item only when this set holds its `requiresPermission`,
+   * and `#permittedScreen` admits a module id only when it does too. A client-side HINT for the UI —
+   * every module route is still gated server-side. Empty until a probe/login resolves. */
+  #sessionPermissions: string[] = [];
 
   /** Whether the off-canvas nav drawer is open (Task 12). Only meaningful on narrow screens, where the
    * sidebar slides in over the main column; at desktop width the sidebar is always in-flow and the
@@ -407,14 +456,57 @@ export class DashboardApp extends LitElement {
     role: PersonRole;
     locale: string | null;
     venueLocale: string;
+    permissions: string[];
+    modules: string[];
   }): void {
     this.myPersonId = me.personId;
     this.sessionRole = me.role;
+    this.#sessionPermissions = me.permissions;
+    // Activate ONLY the enabled modules (`me.modules`) before resolving the permitted screen, so a URL
+    // naming an enabled module's own screen id is recognised while a disabled module's is not.
+    // The per-permission gate is applied on top, in `#nav` and `#permittedScreen`.
+    this.#activate(me.modules);
     this.screen = this.#permittedScreen(this.#url.read("dashboard"));
     this.#venueLocale = me.venueLocale;
     if (!this.isConnected) return;
     this.#writeScreenUrl(this.screen, true);
     setLocale(resolveActiveLocale(me.locale, me.venueLocale));
+  }
+
+  /**
+   * (Re)build the active module set from `enabled` (the session's `me.modules`). RECONCILES rather than
+   * activating once-ever: `#applyMe` calls this on every probe/login, so a module disabled server-side
+   * since the last session stops showing — the maps are cleared and rebuilt from scratch each time
+   * (`registerCatalogue` is idempotent, so re-registering an already-known catalogue is harmless). For
+   * each enabled module: register its strings, mount its screen handle (built with this app's request),
+   * and — when the session HOLDS its `requiresPermission` — file it into its nav group. A contribution
+   * naming a nav group id the app does not know is a wiring error, so it THROWS rather than silently
+   * dropping the screen. The per-permission gate lives here (in `#navGroups`) and in `#permittedScreen`,
+   * so a module can be active (enabled) yet absent from the nav.
+   */
+  #activate(enabled: readonly string[]): void {
+    const knownGroups = new Set<NavGroupId>(NAV_GROUPS.map((g) => g.id));
+    this.#activeScreens.clear();
+    this.#navGroups.clear();
+    for (const c of DASHBOARD_MODULES) {
+      if (!enabled.includes(c.module)) continue;
+      if (!knownGroups.has(c.screen.group))
+        throw new Error(
+          `dashboard module "${c.module}" names unknown nav group "${c.screen.group}"`,
+        );
+      registerCatalogue(c.strings);
+      this.#activeScreens.set(c.screen.id, {
+        contribution: c,
+        handle: c.create({ request: this.request }),
+      });
+      if (this.#sessionPermissions.includes(c.screen.requiresPermission)) {
+        const group = this.#navGroups.get(c.screen.group) ?? [];
+        group.push(c);
+        this.#navGroups.set(c.screen.group, group);
+      }
+    }
+    for (const list of this.#navGroups.values())
+      list.sort((a, b) => (a.screen.order ?? 0) - (b.screen.order ?? 0));
   }
 
   /**
@@ -568,15 +660,18 @@ export class DashboardApp extends LitElement {
   /** Switch to a nav face AND close the drawer (Task 12). One handler for every nav item so navigating
    * on a narrow screen dismisses the off-canvas drawer in the same tap; on desktop the `drawerOpen`
    * flip is inert (the drawer is never shown there). Keeps the `screen` set the nav has always done. */
-  #selectScreen(screen: Screen): void {
+  #selectScreen(screen: ScreenId): void {
     diag.record("info", "nav", { screen });
     this.screen = this.#permittedScreen(screen);
     this.#writeScreenUrl(this.screen);
     this.drawerOpen = false;
   }
 
-  /** A URL selects a destination only within the authenticated person's visible navigation. */
-  #permittedScreen(requested: string | null): Screen {
+  /** A URL selects a destination only within the authenticated person's visible navigation — the core
+   * nav items (gated by role), or an ACTIVE module's screen id whose `requiresPermission` the session
+   * holds. A module that is enabled (active) but whose permission the person lacks is denied here, just
+   * as it is hidden from the nav — the two gates agree. */
+  #permittedScreen(requested: string | null): ScreenId {
     if (this.sessionRole === "staff") return "my-schedule";
     const item = NAV_GROUPS.flatMap((group) => group.items).find(
       (entry) => entry.screen === requested,
@@ -586,12 +681,20 @@ export class DashboardApp extends LitElement {
       (!item.requiresManager || this.sessionRole === "manager" || this.sessionRole === "admin")
     )
       return item.screen;
+    if (requested !== null) {
+      const active = this.#activeScreens.get(requested);
+      if (
+        active &&
+        this.#sessionPermissions.includes(active.contribution.screen.requiresPermission)
+      )
+        return requested;
+    }
     return "overview";
   }
 
   readonly #url = new UrlStateController(this, () => this.#onHistory(), dashboardPath);
 
-  #writeScreenUrl(screen: Screen, replace = false): void {
+  #writeScreenUrl(screen: ScreenId, replace = false): void {
     this.#url.write({ dashboard: screen }, replace);
   }
 
@@ -611,10 +714,11 @@ export class DashboardApp extends LitElement {
     if (e.key === "Escape" && this.drawerOpen) this.drawerOpen = false;
   }
 
-  /** The manager nav — the nineteen-face switcher, shown only for a NON-staff session (a `staff` person
-   * has just the self-service view, so no nav). Rendered data-driven from {@link NAV_GROUPS}: the
-   * pinned first group (overview + sales, the two reporting faces) leads with no header, then the
-   * Menu / Service / Team / Purchasing / Configuration groups, each headed by an `<h2 class="nav-group">`.
+  /** The manager nav, shown only for a NON-staff session (a `staff` person has just the self-service
+   * view, so no nav). Rendered data-driven from {@link NAV_GROUPS}: the pinned first group (overview +
+   * sales, the two reporting faces) leads with no header, then the Menu / Service / Team / Purchasing /
+   * Configuration groups, each headed by an `<h2 class="nav-group">`. Each active MODULE contribution
+   * appends its own item into the group whose `id` matches its `screen.group`, sorted by `order`.
    * The ACTIVE face is `variant="primary"` + `aria-current="page"`; the rest are `variant="secondary"`.
    * Every item keeps its stable `data-test="nav-<screen>"` id. */
   #nav(): TemplateResult {
@@ -641,6 +745,17 @@ export class DashboardApp extends LitElement {
                     >${t(item.labelKey)}</wt-button
                   >`,
               )}
+            ${(this.#navGroups.get(group.id) ?? []).map(
+              (c) =>
+                html`<wt-button
+                  class="nav-item"
+                  variant=${this.screen === c.screen.id ? "primary" : "secondary"}
+                  aria-current=${this.screen === c.screen.id ? "page" : nothing}
+                  data-test="nav-${c.screen.id}"
+                  @click=${() => this.#selectScreen(c.screen.id)}
+                  >${tKit(c.screen.navLabelKey)}</wt-button
+                >`,
+            )}
           `,
         )}
       </nav>
@@ -654,6 +769,9 @@ export class DashboardApp extends LitElement {
    * that branch covered rather than leaving an unreachable exhaustive `default`.
    */
   #renderScreen(): TemplateResult {
+    // An active module owns its own screen — paint it before the core switch.
+    const mod = this.#activeScreens.get(this.screen);
+    if (mod) return mod.handle.render();
     switch (this.screen) {
       case "my-schedule":
         return html`<dashboard-my-schedule-screen
@@ -678,8 +796,6 @@ export class DashboardApp extends LitElement {
         ></dashboard-service-status-screen>`;
       case "floor":
         return html`<dashboard-floor-screen .api=${this.api}></dashboard-floor-screen>`;
-      case "bookings":
-        return html`<dashboard-bookings-screen .api=${this.api}></dashboard-bookings-screen>`;
       case "kitchen":
         return html`<dashboard-kitchen-screen .api=${this.api}></dashboard-kitchen-screen>`;
       case "roster":

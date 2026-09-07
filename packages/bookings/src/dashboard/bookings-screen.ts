@@ -4,15 +4,14 @@ import { baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { t } from "../i18n/t.js";
-import { codeMessage, codeOf } from "../i18n/codes.js";
-import { bookingStatusName } from "../i18n/domain.js";
-import { today } from "../date-utils.js";
+import { t, bookingStatusName } from "./strings.js";
+import { codeMessage, codeOf } from "@waitron/dashboard-kit";
+import { today } from "./date-utils.js";
 // Value import (not `import type`): pull in the widget module for its `@customElement` side effect, so
 // `<dashboard-booking-form>` is registered before this screen renders it (the purchases-screen pattern).
-import "../widgets/booking-form.js";
-import type { UpdateBookingDetail } from "../widgets/booking-form.js";
-import type { Booking, BookingInput, DashboardApi, DashboardTable } from "../api/client.js";
+import "./booking-form.js";
+import type { UpdateBookingDetail } from "./booking-form.js";
+import type { Booking, BookingInput, BookingApi, DashboardTable } from "./client.js";
 
 /**
  * The management dashboard's BOOKINGS SCREEN (Bookings-1 §6): a per-day list of staff-entered table
@@ -118,7 +117,7 @@ export class BookingsScreen extends LitElement {
   ];
 
   /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
-  @property({ attribute: false }) api!: DashboardApi;
+  @property({ attribute: false }) api!: BookingApi;
 
   @state() private bookings: Booking[] = [];
   @state() private tables: DashboardTable[] = [];

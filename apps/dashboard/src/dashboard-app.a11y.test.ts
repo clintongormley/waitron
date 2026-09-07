@@ -44,7 +44,14 @@ const people: PersonSummary[] = [
 
 function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
   return {
-    getMe: vi.fn().mockResolvedValue({ personId: "p1", role: "manager" }),
+    getMe: vi.fn().mockResolvedValue({
+      personId: "p1",
+      role: "manager",
+      locale: null,
+      venueLocale: "es-ES",
+      permissions: [],
+      modules: [],
+    }),
     listStaff: vi.fn().mockResolvedValue(people),
     getStaffRoster: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ada" }]),
     login: vi.fn().mockResolvedValue({ personId: "p1" }),
@@ -132,7 +139,16 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
   it("the staff self-service screen renders accessibly with a single, well-ordered heading", async () => {
     // A resolved probe for a STAFF-role person lands on the self-service my-schedule screen (its own
     // <h1> "Mi horario" is the sole heading; the staff chrome carries only a logout button, no nav).
-    const api = stubApi({ getMe: vi.fn().mockResolvedValue({ personId: "p2", role: "staff" }) });
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        personId: "p2",
+        role: "staff",
+        locale: null,
+        venueLocale: "es-ES",
+        permissions: [],
+        modules: [],
+      }),
+    });
     const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
     await flush(el);
     const screen = el.shadowRoot!.querySelector("dashboard-my-schedule-screen");
@@ -148,7 +164,16 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
   it("the business overview screen renders accessibly with a single, well-ordered heading", async () => {
     // A resolved probe for a non-staff role lands on the business `overview` screen (Task 9's landing;
     // its own <h1> "Hoy de un vistazo" is the sole heading, alongside the nav + logout chrome).
-    const api = stubApi({ getMe: vi.fn().mockResolvedValue({ personId: "p1", role: "manager" }) });
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        personId: "p1",
+        role: "manager",
+        locale: null,
+        venueLocale: "es-ES",
+        permissions: [],
+        modules: [],
+      }),
+    });
     const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
     await flush(el);
     const screen = el.shadowRoot!.querySelector("dashboard-overview-screen");

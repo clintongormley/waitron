@@ -20,7 +20,12 @@ export {
   finishPasskeyAuthentication,
   finishPasskeyRegistration,
 } from "./passkey.js";
-export { PERMISSIONS, registerModulePermissions, roleHasPermission } from "./permissions.js";
+export {
+  PERMISSIONS,
+  permissionsForRole,
+  registerModulePermissions,
+  roleHasPermission,
+} from "./permissions.js";
 export type { Permission, PersonRoleValue } from "./permissions.js";
 export { persons, personStatus, personRole } from "./schema/persons.js";
 export { sessions } from "./schema/sessions.js";

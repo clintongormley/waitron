@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   PERMISSIONS,
   type Permission,
+  permissionsForRole,
   registerModulePermissions,
   roleHasPermission,
 } from "./permissions.js";
@@ -192,5 +193,22 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("manager", "mirror.create")).toBe(false);
     expect(roleHasPermission("supervisor", "mirror.create")).toBe(false);
     expect(roleHasPermission("staff", "mirror.create")).toBe(false);
+  });
+});
+
+describe("permissionsForRole", () => {
+  it("spans core + module permissions on the ladder", () => {
+    // The effective permission set the WHOAMI probe hands the dashboard so it can gate a module's
+    // nav/screen client-side. It folds the static catalog AND the module-registered permissions through
+    // the SAME roleHasPermission ladder, so a module's floor (`booking.manage` at manager) reaches its
+    // role and every role above, and never below. Register booking.manage here as the real boot does
+    // (idempotent under the module-level registry), then pin the ladder: staff holds nothing, supervisor
+    // holds report.view but not the manager-floor booking.manage, and manager/admin hold booking.manage.
+    registerModulePermissions([{ permission: "booking.manage", grantedFrom: "manager" }]);
+    expect(permissionsForRole("staff")).toEqual([]);
+    expect(permissionsForRole("supervisor")).toContain("report.view");
+    expect(permissionsForRole("supervisor")).not.toContain("booking.manage");
+    expect(permissionsForRole("manager")).toContain("booking.manage");
+    expect(permissionsForRole("admin")).toContain("booking.manage");
   });
 });

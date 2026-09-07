@@ -38,6 +38,11 @@ export const GENERIC_PACKAGES = [
   "fiscal-none",
   "provisioning",
   "ui",
+  // Generic browser infrastructure, same as `ui`: the dashboard module-UI kit (i18n + code-message
+  // registries + request helper) and the app-side module registry. Neither names a regime, so both
+  // are English-only; user-facing translation VALUES (a `{ en, es }` copy entry) are not vocabulary.
+  "dashboard-kit",
+  "dashboard-modules",
 ] as const;
 
 /**

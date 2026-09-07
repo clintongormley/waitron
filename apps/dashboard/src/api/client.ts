@@ -20,6 +20,7 @@
  * dependency, exactly the precedent `apps/till/src/api/client.ts` sets for the same type.
  */
 import type { TimingBand } from "@waitron/shared";
+import { createRequest, type DashboardRequest, type FetchLike } from "@waitron/dashboard-kit";
 
 /** A person's role in the management model — the four levels the slice-1b staff API assigns. */
 export type PersonRole = "staff" | "supervisor" | "manager" | "admin";
@@ -890,66 +891,6 @@ export interface PurchaseInvoicePatch {
   lines?: PurchaseInvoiceLineInput[];
 }
 
-// ── Bookings (staff-entered table reservations, Bookings-1) ───────────────────────────────────────
-// LOCAL copies of the server's booking JSON shapes (the `@waitron/bookings` `routes.ts` routes wrapping
-// its `bookings.ts` verbs), deliberately NOT imported from `apps/server`/`@waitron/db` (the #70 rule every shape above
-// follows). These are the CONTRACT the Bookings screen builds on; the server shapes stay the source of
-// truth, and a mismatch surfaces as a runtime shape error a view test catches, not a compile break.
-
-/** A reservation's lifecycle state — the `booking_status` pgEnum. */
-export type BookingStatus = "booked" | "seated" | "completed" | "no_show" | "cancelled";
-
-/**
- * One reservation as `GET /management-api/bookings` returns it — a faithful mirror of the server's
- * `Booking` row. `bookingDate` is a `YYYY-MM-DD` civil date and `bookingTime` an `HH:MM:SS` wall-clock
- * time (BOTH plain local values, NOT a UTC instant — the #52 lesson, design §2b); the screen shows the
- * time as `HH:MM`. `tableId`/`tabId` are the optional TS-1 links (`tabId` set on seat); `createdAt` is
- * an ISO instant.
- */
-export interface Booking {
-  id: string;
-  bookingDate: string;
-  bookingTime: string;
-  partySize: number;
-  contactName: string;
-  contactPhone: string | null;
-  notes: string | null;
-  tableId: string | null;
-  tabId: string | null;
-  status: BookingStatus;
-  createdBy: string;
-  createdAt: string;
-}
-
-/**
- * The `POST /management-api/bookings` body — the new reservation's fields. `bookingDate`/`bookingTime`
- * are the plain local `YYYY-MM-DD` + `HH:MM` the form composes (NEVER a `${day}T${time}Z` instant —
- * design §2b, the anti-#52 rule). `createdBy` is set SERVER-SIDE from the session and is deliberately
- * absent here. `contactPhone`/`notes`/`tableId` are optional and may be `null`.
- */
-export interface BookingInput {
-  bookingDate: string;
-  bookingTime: string;
-  partySize: number;
-  contactName: string;
-  contactPhone?: string | null;
-  notes?: string | null;
-  tableId?: string | null;
-}
-
-/** The `PATCH /management-api/bookings/:id` body — the editable business fields of a `booked`
- * reservation. A field left absent is untouched; `contactPhone`/`notes`/`tableId` accept `null` to
- * clear them. Status moves only through the lifecycle verbs, so it is not here. */
-export interface BookingPatch {
-  bookingDate?: string;
-  bookingTime?: string;
-  partySize?: number;
-  contactName?: string;
-  contactPhone?: string | null;
-  notes?: string | null;
-  tableId?: string | null;
-}
-
 // ── Printing types (print agents + printers + jobs) ───────────────────────────────────────────────
 // LOCAL copies of the server's printing JSON shapes (the `print-api.ts` routes wrapping
 // `@waitron/printing`'s ops), deliberately NOT imported from `@waitron/printing`/`@waitron/db` — a
@@ -1203,12 +1144,10 @@ export type DiagnosticsLine = {
  * is the standing default, with no pending revert). */
 export type Verbosity = { level: "debug" | "info"; revertsAt: string | null };
 
-/** The subset of `fetch` this client uses; the global satisfies it, and a test injects a stub. */
-type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
-
 export class DashboardApi {
-  readonly #baseUrl: string;
-  readonly #fetchImpl: FetchLike;
+  /** The one request primitive every method funnels through (see @waitron/dashboard-kit's
+   * createRequest for the credentials/JSON/FormData/empty-body/`{ code }` rules). */
+  readonly #request: DashboardRequest;
   #localesPromise?: Promise<{
     locales: Array<{ code: string; label: string }>;
     venueDefault: string;
@@ -1220,8 +1159,7 @@ export class DashboardApi {
    * @param fetchImpl the `fetch` to use (default the global; a test injects a stub).
    */
   constructor(baseUrl = "", fetchImpl: FetchLike = fetch) {
-    this.#baseUrl = baseUrl;
-    this.#fetchImpl = fetchImpl;
+    this.#request = createRequest({ baseUrl, fetchImpl });
   }
 
   /** `GET /management-api/staff-roster` — the staff self-service colleague picker in
@@ -2213,18 +2151,26 @@ export class DashboardApi {
    * `locale` (`null` when they have never chosen one) and the geography-derived `venueLocale` fallback —
    * the same value `GET /management-api/locales` echoes as `venueDefault`. The shell resolves the two via
    * `resolveActiveLocale(locale, venueLocale)` on boot/login to pick the operator-UI language.
+   *
+   * Module gating (SP2 Task 4): the response also carries the signed-in person's effective
+   * `permissions` (a hint set) and the enabled `modules`; the shell shows a module's nav/screen only
+   * when the module is enabled AND its permission is in this set.
    */
   getMe(): Promise<{
     personId: string;
     role: PersonRole;
     locale: string | null;
     venueLocale: string;
+    permissions: string[];
+    modules: string[];
   }> {
     return this.#request<{
       personId: string;
       role: PersonRole;
       locale: string | null;
       venueLocale: string;
+      permissions: string[];
+      modules: string[];
     }>("/management-api/session/me", "GET");
   }
 
@@ -2322,48 +2268,6 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/purchase-invoices/${id}`, "DELETE");
   }
 
-  // ── Bookings (staff-entered table reservations, Bookings-1) ───────────────────────────────────────
-
-  /** `GET /management-api/bookings?date=YYYY-MM-DD` — the location's reservations for that wall-clock
-   * day, ordered by time (all statuses; the screen filters/labels them). */
-  listBookings(date: string): Promise<Booking[]> {
-    return this.#request<Booking[]>(`/management-api/bookings?date=${date}`, "GET");
-  }
-
-  /** `POST /management-api/bookings` — create a `booked` reservation from its plain local date+time and
-   * contact fields (NO `createdBy` — the server sets it from the session); returns the new id (201). */
-  createBooking(input: BookingInput): Promise<{ id: string }> {
-    return this.#request<{ id: string }>("/management-api/bookings", "POST", input);
-  }
-
-  /** `PATCH /management-api/bookings/:id` — edit a `booked` reservation's business fields. Answers an
-   * empty 204. */
-  updateBooking(id: string, patch: BookingPatch): Promise<void> {
-    return this.#request<void>(`/management-api/bookings/${id}`, "PATCH", patch);
-  }
-
-  /** `POST /management-api/bookings/:id/seat` — open a TS-1 tab on the table (the passed `tableId`, else
-   * the booking's own) and link it; returns the new `{ tabId }`. Passing no table sends an empty body so
-   * the server reuses the booking's assigned table. */
-  seatBooking(id: string, req: { tableId?: string } = {}): Promise<{ tabId: string }> {
-    return this.#request<{ tabId: string }>(`/management-api/bookings/${id}/seat`, "POST", req);
-  }
-
-  /** `POST /management-api/bookings/:id/cancel` — `booked|seated → cancelled`. Answers an empty 204. */
-  cancelBooking(id: string): Promise<void> {
-    return this.#request<void>(`/management-api/bookings/${id}/cancel`, "POST");
-  }
-
-  /** `POST /management-api/bookings/:id/no-show` — `booked → no_show`. Answers an empty 204. */
-  markNoShow(id: string): Promise<void> {
-    return this.#request<void>(`/management-api/bookings/${id}/no-show`, "POST");
-  }
-
-  /** `POST /management-api/bookings/:id/complete` — `seated → completed`. Answers an empty 204. */
-  completeBooking(id: string): Promise<void> {
-    return this.#request<void>(`/management-api/bookings/${id}/complete`, "POST");
-  }
-
   // ── Reporting (sales & takings) ─────────────────────────────────────────────────────────────────
 
   /** `GET /management-api/reports/overview` — this node's sales/takings overview for TODAY (the venue
@@ -2422,46 +2326,5 @@ export class DashboardApi {
       level,
       ttlMinutes,
     });
-  }
-
-  /**
-   * The one request path every method funnels through. `credentials: "include"` on every call (the
-   * session cookie). A JSON `body` is JSON-encoded under a `content-type: application/json` header; a
-   * `FormData` body (the image upload) is passed through AS-IS with NO `content-type`, so the browser
-   * sets `multipart/form-data` and its boundary itself (a manual header would drop the boundary and
-   * corrupt the upload); a GET/DELETE with no body carries neither header nor body. A non-2xx becomes a
-   * rejected `{ code }` read from the server's `{ error: { code } }` envelope — falling back to
-   * `server.internal` when the body names none — so callers branch on a stable domain code, never on an
-   * HTTP status or a raw message.
-   *
-   * `fetchImpl` is read into a local before the call so it is invoked as a free function, not as a
-   * method of `this` (which would rebind a native `fetch`).
-   *
-   * A 2xx with an EMPTY body resolves to `undefined` rather than being JSON-parsed: the mutation
-   * routes (`logout`, `updatePerson`, `resetPin`, `setPassword`) answer empty 204s (`c.body(null,
-   * 204)` in `apps/server/src/management-api.ts`), on which `res.json()` would throw a `SyntaxError`.
-   * Those callers type `T` as `void`; every JSON route sends a body, so the non-empty branch parses
-   * exactly as before. The branch keys off the empty body (`res.text() === ""`), not the status.
-   */
-  async #request<T>(path: string, method: string, body?: unknown): Promise<T> {
-    const fetchImpl = this.#fetchImpl;
-    const init: RequestInit =
-      body === undefined
-        ? { method, credentials: "include" }
-        : body instanceof FormData
-          ? { method, credentials: "include", body }
-          : {
-              method,
-              credentials: "include",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify(body),
-            };
-    const res = await fetchImpl(this.#baseUrl + path, init);
-    if (!res.ok) {
-      const envelope = (await res.json()) as { error?: { code?: string } };
-      throw { code: envelope.error?.code ?? "server.internal" };
-    }
-    const text = await res.text();
-    return (text === "" ? undefined : JSON.parse(text)) as T;
   }
 }

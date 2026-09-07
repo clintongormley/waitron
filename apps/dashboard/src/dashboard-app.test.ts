@@ -1,5 +1,7 @@
 import { page } from "@vitest/browser/context";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { html } from "lit";
+import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { DashboardApp } from "./dashboard-app.js";
 import { diag } from "./diagnostics.js";
@@ -47,7 +49,13 @@ function stubDrawerMatchMedia(): { set: (narrow: boolean) => void; restore: () =
   };
 }
 import { currentLocale, setLocale, t } from "./i18n/t.js";
+import type { DashboardRequest } from "@waitron/dashboard-kit";
 import type { DashboardApi, PersonSummary } from "./api/client.js";
+
+/** A stub of the module request primitive: every module screen reads through it on connect. Resolves an
+ * empty array for the reads the bundled bookings screen makes (listTables + the day's bookings), so
+ * mounting it in the generic-mount test leaves no stray rejection. */
+const stubRequest: DashboardRequest = async () => [] as never;
 
 const people: PersonSummary[] = [
   {
@@ -76,9 +84,17 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     // Per-user-language-preference (Task 10): getMe now carries the person's stored `locale` + the
     // `venueLocale` fallback (default: no preference at a Spanish venue → the UI stays es-ES); the boot
     // seed reads `getLocales` (venueDefault es-ES) and the logged-in persist path writes `putLocale`.
-    getMe: vi
-      .fn()
-      .mockResolvedValue({ personId: "p1", role: "manager", locale: null, venueLocale: "es-ES" }),
+    // Module gating (Task 4): the default probe is a manager HOLDING `booking.manage` with `bookings`
+    // enabled — reproducing the prior always-on bookings module for the Task-3 nav/screen tests. A test
+    // that gates on the module supplies its own `permissions`/`modules`.
+    getMe: vi.fn().mockResolvedValue({
+      personId: "p1",
+      role: "manager",
+      locale: null,
+      venueLocale: "es-ES",
+      permissions: ["booking.manage"],
+      modules: ["bookings"],
+    }),
     getLocales: vi.fn().mockResolvedValue({
       locales: [
         { code: "es-ES", label: "Español" },
@@ -125,10 +141,10 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     // The purchases screen the nav mounts loads this on connect; resolve it so navigating to it leaves
     // no stray rejection.
     listPurchaseInvoices: vi.fn().mockResolvedValue([]),
-    // The bookings screen the nav mounts loads both on connect (listTables for the form picker + seat
-    // prompt, then the day's bookings); resolve them so navigating to it leaves no stray rejection.
+    // The floor-plan screen the nav mounts loads this on connect; resolve it so navigating to it leaves
+    // no stray rejection. (The bookings screen is a MODULE now — it loads through the injected `.request`,
+    // not this api — so its reads are stubbed by `stubRequest`, not here.)
     listTables: vi.fn().mockResolvedValue([]),
-    listBookings: vi.fn().mockResolvedValue([]),
     // The devices screen the nav mounts loads this on connect (listStations is already stubbed above);
     // resolve it so navigating to it leaves no stray rejection.
     listDevices: vi.fn().mockResolvedValue([]),
@@ -236,9 +252,14 @@ const sidebarNav = (el: DashboardApp) => el.shadowRoot!.querySelector("nav[aria-
 const navItem = (el: DashboardApp, screen: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test="nav-${screen}"]`);
 
-/** The nineteen manager faces the grouped sidebar switches between (for a manager/admin session —
- * `diagnostics` is manager-gated), every one keeping its `data-test` id. Order is the sidebar's render
- * order (pinned overview+sales, then Menu / Service / Team / Purchasing / Configuration). */
+/** The faces the grouped sidebar switches between for a manager/admin session (`diagnostics` is
+ * manager-gated), every one keeping its `data-test` id — used to assert each item is present and to
+ * pin the count. Eighteen are CORE faces; `bookings` is the bookings MODULE face, always enabled by
+ * this suite's default stub (`modules: ["bookings"]` + `booking.manage`), so it is folded into the
+ * fixture. A module face renders AFTER its group's core items, so `bookings` sorts to the END of the
+ * Service group (after kitchen), which this order mirrors — pinned overview+sales, then Menu /
+ * Service (+ the bookings module face) / Team / Purchasing / Configuration. The membership test below
+ * asserts presence and count, not order. */
 const NAV_SCREENS = [
   "overview",
   "sales",
@@ -246,9 +267,9 @@ const NAV_SCREENS = [
   "location-menus",
   "recipe",
   "floor",
-  "bookings",
   "statuses",
   "kitchen",
+  "bookings",
   "staff",
   "roster",
   "approvals",
@@ -350,7 +371,14 @@ describe("dashboard-app", () => {
       getMe: vi
         .fn()
         .mockRejectedValueOnce({ code: "management_session.required" })
-        .mockResolvedValue({ personId: "p1", role: "manager" }),
+        .mockResolvedValue({
+          personId: "p1",
+          role: "manager",
+          locale: null,
+          venueLocale: "es-ES",
+          permissions: [],
+          modules: [],
+        }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
@@ -380,7 +408,16 @@ describe("dashboard-app", () => {
     // getMe and lands on the self-service view, not the manager screens. Proven by deletion: dropping
     // the `role === "staff" ? "my-schedule" : "overview"` branch in #applyMe lands them on `overview`
     // instead — the non-staff default screen.
-    const api = stubApi({ getMe: vi.fn().mockResolvedValue({ personId: "p9", role: "staff" }) });
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        personId: "p9",
+        role: "staff",
+        locale: null,
+        venueLocale: "es-ES",
+        permissions: [],
+        modules: [],
+      }),
+    });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
     expect(mySchedule(el)).toBeTruthy();
@@ -390,7 +427,16 @@ describe("dashboard-app", () => {
   });
 
   it("a staff session shows NO manager nav (its only face is self-service)", async () => {
-    const api = stubApi({ getMe: vi.fn().mockResolvedValue({ personId: "p9", role: "staff" }) });
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        personId: "p9",
+        role: "staff",
+        locale: null,
+        venueLocale: "es-ES",
+        permissions: [],
+        modules: [],
+      }),
+    });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
     // No nav faces…
@@ -402,7 +448,16 @@ describe("dashboard-app", () => {
   });
 
   it("threads the logged-in person's id to the my-schedule screen", async () => {
-    const api = stubApi({ getMe: vi.fn().mockResolvedValue({ personId: "p9", role: "staff" }) });
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        personId: "p9",
+        role: "staff",
+        locale: null,
+        venueLocale: "es-ES",
+        permissions: [],
+        modules: [],
+      }),
+    });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
     expect((mySchedule(el) as unknown as { myPersonId: string }).myPersonId).toBe("p9");
@@ -413,7 +468,14 @@ describe("dashboard-app", () => {
       getMe: vi
         .fn()
         .mockRejectedValueOnce({ code: "management_session.required" })
-        .mockResolvedValue({ personId: "p9", role: "staff" }),
+        .mockResolvedValue({
+          personId: "p9",
+          role: "staff",
+          locale: null,
+          venueLocale: "es-ES",
+          permissions: [],
+          modules: [],
+        }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
@@ -444,7 +506,14 @@ describe("dashboard-app", () => {
       getMe: vi
         .fn()
         .mockRejectedValueOnce({ code: "management_session.required" })
-        .mockResolvedValue({ personId: "p1", role: "manager" }),
+        .mockResolvedValue({
+          personId: "p1",
+          role: "manager",
+          locale: null,
+          venueLocale: "es-ES",
+          permissions: [],
+          modules: [],
+        }),
     });
     const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
@@ -729,6 +798,180 @@ describe("dashboard-app", () => {
     expect(NAV_SCREENS).toHaveLength(19);
   });
 
+  // The module-UI seam (SP2 Task 3): a BUNDLED module's screen and nav are mounted GENERICALLY from the
+  // registry, not hand-wired. `bookings` is now a module contribution (its screen + widget live in
+  // @waitron/bookings/dashboard, reached only via @waitron/dashboard-modules); here it is active with no
+  // gate, so a non-staff session shows its nav item and routing to it renders <dashboard-bookings-screen>
+  // through the generic path. Proof-by-deletion: dropping the `#activeScreens.get(this.screen)` lookup in
+  // #renderScreen (or the module-items append in #nav) makes the respective assertion below go red.
+  it("renders a bundled module's screen and nav via the generic path", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+      request: stubRequest,
+    });
+    await flush(el);
+    // The module's nav item shows (in its declared `service` group), by its stable data-test id…
+    expect(navItem(el, "bookings")).toBeTruthy();
+    // …and routing to it mounts the module's own screen element through the generic mount path.
+    navItem(el, "bookings")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-bookings-screen")).not.toBeNull();
+  });
+
+  // The two runtime gates (SP2 Task 4): a module's nav/screen shows only when the module is ENABLED
+  // (`me.modules`) AND the signed-in person HOLDS its permission (`me.permissions` ⊇ requiresPermission).
+  // Both directions are proven: enabled-but-not-permitted and permitted-but-not-enabled each HIDE it,
+  // and only enabled+permitted shows it and routes to it.
+  it("hides a module's nav AND denies its screen when the permission is absent (enabled but not permitted)", async () => {
+    // bookings is ENABLED (`modules: ["bookings"]`) but the manager does NOT hold `booking.manage`, so
+    // the nav item is filtered out and a URL naming the module falls back to overview. Drive the URL
+    // restore path to prove `#permittedScreen` denies the module id, not just the nav filter.
+    const url = new URL(location.href);
+    url.pathname = "/manage/bookings";
+    history.replaceState(null, "", url);
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi.fn().mockResolvedValue({
+          personId: "p1",
+          role: "manager",
+          locale: null,
+          venueLocale: "es-ES",
+          permissions: [],
+          modules: ["bookings"],
+        }),
+      }),
+      request: stubRequest,
+    });
+    await flush(el);
+    expect(navItem(el, "bookings")).toBeNull();
+    // The requested `bookings` URL is denied and falls back to the overview landing.
+    expect(el.shadowRoot!.querySelector("dashboard-bookings-screen")).toBeNull();
+    expect(overview(el)).toBeTruthy();
+  });
+
+  it("hides a module entirely when it is not in the enabled set (permitted but not enabled)", async () => {
+    // The manager HOLDS `booking.manage`, but bookings is NOT enabled (`modules: []`), so the module is
+    // never activated: its nav item is absent and its screen never mounts.
+    const url = new URL(location.href);
+    url.pathname = "/manage/bookings";
+    history.replaceState(null, "", url);
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi.fn().mockResolvedValue({
+          personId: "p1",
+          role: "manager",
+          locale: null,
+          venueLocale: "es-ES",
+          permissions: ["booking.manage"],
+          modules: [],
+        }),
+      }),
+      request: stubRequest,
+    });
+    await flush(el);
+    expect(navItem(el, "bookings")).toBeNull();
+    expect(el.shadowRoot!.querySelector("dashboard-bookings-screen")).toBeNull();
+    expect(overview(el)).toBeTruthy();
+  });
+
+  it("shows a module's nav and routes to its screen when enabled AND permitted", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi.fn().mockResolvedValue({
+          personId: "p1",
+          role: "manager",
+          locale: null,
+          venueLocale: "es-ES",
+          permissions: ["booking.manage"],
+          modules: ["bookings"],
+        }),
+      }),
+      request: stubRequest,
+    });
+    await flush(el);
+    expect(navItem(el, "bookings")).not.toBeNull();
+    navItem(el, "bookings")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-bookings-screen")).not.toBeNull();
+  });
+
+  // Module activation RECONCILES per session, it is not once-ever: a second /me (a re-probe or re-login)
+  // whose `modules` set no longer enables a module must stop showing it, even though a tab stayed open.
+  // A run-it probe falsified the once-ever early-return — `modules: []` on a second session still
+  // permitted bookings. Proof-by-deletion: restoring the `if (this.#activeScreens.size) return` guard to
+  // #activate makes the post-re-login assertions go red (the module lingers).
+  it("reconciles the active module set on a re-login — a now-disabled module stops showing", async () => {
+    const session1 = {
+      personId: "p1",
+      role: "manager",
+      locale: null,
+      venueLocale: "es-ES",
+      permissions: ["booking.manage"],
+      modules: ["bookings"],
+    };
+    // Second session: SAME person and permission, but bookings is no longer enabled server-side.
+    const session2 = { ...session1, modules: [] as string[] };
+    const getMe = vi.fn().mockResolvedValueOnce(session1).mockResolvedValue(session2);
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ getMe }),
+      request: stubRequest,
+    });
+    await flush(el);
+    // First session: bookings enabled + permitted → its nav shows and it routes.
+    expect(navItem(el, "bookings")).not.toBeNull();
+    navItem(el, "bookings")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-bookings-screen")).not.toBeNull();
+
+    // Re-login on the SAME element: logout drops to login, the login screen's `logged-in` re-probes,
+    // and the second /me disables bookings. The active set must be rebuilt from it, not left once-ever.
+    logoutBtn(el)!.click();
+    await flush(el);
+    emitLoggedIn(login(el)!);
+    await flush(el);
+
+    expect(navItem(el, "bookings")).toBeNull();
+    expect(el.shadowRoot!.querySelector("dashboard-bookings-screen")).toBeNull();
+    expect(overview(el)).toBeTruthy();
+  });
+
+  // A contribution naming a nav group the app does not know is a WIRING ERROR — #activate THROWS rather
+  // than silently skipping the screen. The throw fires in #applyMe, inside #probeSession's total catch,
+  // so it surfaces as the app dropping the otherwise-valid MANAGER session to login (nothing mounts).
+  // That distinguishes throw from a silent `continue`: a silent skip would let the manager through to
+  // overview. Driven by monkey-patching the shared registry array for this one mount (restored in a
+  // finally), so the guard is exercised without a second fixture module.
+  it("refuses to mount when a contribution names an unknown nav group (throws in #activate)", async () => {
+    const bad = {
+      module: "bookings",
+      screen: {
+        id: "bookings",
+        navLabelKey: "nav.bookings",
+        group: "nowhere",
+        requiresPermission: "x",
+      },
+      strings: { en: {}, es: {} },
+      create: () => ({ render: () => html`` }),
+    };
+    const list = DASHBOARD_MODULES as unknown as unknown[];
+    const original = [...list];
+    list.length = 0;
+    list.push(bad);
+    try {
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+        request: stubRequest,
+      });
+      await flush(el);
+      // A silent skip would have landed this manager on overview; the throw dropped it to login.
+      expect(login(el)).toBeTruthy();
+      expect(overview(el)).toBeNull();
+    } finally {
+      list.length = 0;
+      list.push(...original);
+    }
+  });
+
   // The diagnostics nav is manager-gated (`requiresManager: true`, Task 15): a `supervisor` session
   // must NOT see it, while a `manager` (and `admin`) session does. Proof-by-deletion: dropping the
   // `.filter((item) => !item.requiresManager || …)` from `#nav()` renders it for the supervisor too,
@@ -740,6 +983,8 @@ describe("dashboard-app", () => {
         role: "supervisor",
         locale: null,
         venueLocale: "es-ES",
+        permissions: [],
+        modules: [],
       }),
       listStaff: vi.fn().mockResolvedValue([]),
     });
@@ -910,14 +1155,32 @@ describe("dashboard-app", () => {
   });
 
   it("a staff session gets no hamburger toggle (its only face is self-service, so no drawer)", async () => {
-    const api = stubApi({ getMe: vi.fn().mockResolvedValue({ personId: "p9", role: "staff" }) });
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        personId: "p9",
+        role: "staff",
+        locale: null,
+        venueLocale: "es-ES",
+        permissions: [],
+        modules: [],
+      }),
+    });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=nav-toggle]")).toBeNull();
   });
 
   it("a staff session still gets no nav (no navigation landmark)", async () => {
-    const api = stubApi({ getMe: vi.fn().mockResolvedValue({ personId: "p9", role: "staff" }) });
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        personId: "p9",
+        role: "staff",
+        locale: null,
+        venueLocale: "es-ES",
+        permissions: [],
+        modules: [],
+      }),
+    });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
     expect(sidebarNav(el)).toBeNull();
@@ -976,7 +1239,14 @@ describe("dashboard-app", () => {
 /** The resolved shape `getLocales` answers with (used by the controllable-promise disconnect tests). */
 type LocalesResponse = { locales: { code: string; label: string }[]; venueDefault: string };
 /** The resolved shape the widened `getMe` answers with. */
-type MeResponse = { personId: string; role: string; locale: string | null; venueLocale: string };
+type MeResponse = {
+  personId: string;
+  role: string;
+  locale: string | null;
+  venueLocale: string;
+  permissions: string[];
+  modules: string[];
+};
 
 describe("dashboard-app — per-user locale (Task 10)", () => {
   it("seeds the login screen to the venue default when there is no session (deep child via keyed)", async () => {
@@ -1015,6 +1285,8 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
         role: "staff",
         locale: "en-GB",
         venueLocale: "es-ES",
+        permissions: [],
+        modules: [],
       }),
       getLocales,
     });
@@ -1031,9 +1303,14 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
   it("falls back to the venue default when the person has no stored locale", async () => {
     // resolveActiveLocale(null, "es-ES") === "es-ES": a person with no preference gets the venue UI.
     const api = stubApi({
-      getMe: vi
-        .fn()
-        .mockResolvedValue({ personId: "p1", role: "manager", locale: null, venueLocale: "es-ES" }),
+      getMe: vi.fn().mockResolvedValue({
+        personId: "p1",
+        role: "manager",
+        locale: null,
+        venueLocale: "es-ES",
+        permissions: [],
+        modules: [],
+      }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
@@ -1053,6 +1330,8 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
           role: "manager",
           locale: "en-GB",
           venueLocale: "es-ES",
+          permissions: [],
+          modules: [],
         }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
@@ -1125,6 +1404,8 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
         role: "manager",
         locale: "en-GB",
         venueLocale: "es-ES",
+        permissions: [],
+        modules: [],
       }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
@@ -1170,7 +1451,14 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     });
     expect(currentLocale()).toBe("es-ES"); // getMe pending → nothing applied or seeded yet
     host.remove(); // torn down before the probe resolves
-    resolveMe({ personId: "p1", role: "manager", locale: "en-GB", venueLocale: "es-ES" });
+    resolveMe({
+      personId: "p1",
+      role: "manager",
+      locale: "en-GB",
+      venueLocale: "es-ES",
+      permissions: [],
+      modules: [],
+    });
     await flush(el);
     expect(currentLocale()).toBe("es-ES"); // #applyMe's setLocale to en-GB was skipped on the detached app
   });
@@ -1208,6 +1496,8 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
         role: "manager",
         locale: "en-GB",
         venueLocale: "es-ES",
+        permissions: [],
+        modules: [],
       }),
       logout,
     });
@@ -1278,9 +1568,14 @@ describe("dashboard URL navigation", () => {
     history.replaceState(null, "", url);
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
-        getMe: vi
-          .fn()
-          .mockResolvedValue({ personId: "p1", role, locale: null, venueLocale: "es-ES" }),
+        getMe: vi.fn().mockResolvedValue({
+          personId: "p1",
+          role,
+          locale: null,
+          venueLocale: "es-ES",
+          permissions: [],
+          modules: [],
+        }),
       }),
     });
     await flush(el);
@@ -1301,6 +1596,8 @@ describe("dashboard URL navigation", () => {
       role: "manager",
       locale: null,
       venueLocale: "es-ES",
+      permissions: [],
+      modules: [],
     });
     login(el)!.dispatchEvent(new CustomEvent("logged-in", { bubbles: true, composed: true }));
     await flush(el);

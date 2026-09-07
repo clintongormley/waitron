@@ -167,6 +167,19 @@ export function registerModulePermissions(
   }
 }
 
+/**
+ * The effective permission ids `role` holds — the static catalog plus every module-registered
+ * permission, filtered through the SAME `roleHasPermission` ladder. The WHOAMI probe hands this set to
+ * the dashboard so it can gate a module's nav/screen client-side; it is a hint for the UI, never a
+ * substitute for the server-side `authorizeManager` gate each route still enforces. Depends on the
+ * module registry, so it reflects only permissions already folded in by `registerModulePermissions`
+ * (done once at boot before any request).
+ */
+export function permissionsForRole(role: PersonRoleValue): string[] {
+  const ids = [...PERMISSIONS, ...MODULE_PERMISSIONS.keys()];
+  return ids.filter((p) => roleHasPermission(role, p));
+}
+
 /** True if `role` may perform an action requiring `permission`. `permission` widens past the closed
  * core union so a module's own permission string is accepted (the boundary authorizeManager also
  * widens to); a core permission resolves against the static map, a module permission against the

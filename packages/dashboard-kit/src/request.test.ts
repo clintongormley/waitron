@@ -1,0 +1,93 @@
+import { afterEach, expect, it, vi } from "vitest";
+import { createRequest, type FetchLike } from "./request.js";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+it("prefixes baseUrl, sends credentials, and resolves the parsed JSON body of a 200", async () => {
+  const fetchImpl = vi.fn<FetchLike>().mockResolvedValue(jsonResponse({ ok: true }));
+  const request = createRequest({ baseUrl: "https://api.test", fetchImpl });
+
+  const out = await request<{ ok: boolean }>("/thing", "GET");
+
+  expect(out).toEqual({ ok: true });
+  expect(fetchImpl).toHaveBeenCalledWith("https://api.test/thing", {
+    method: "GET",
+    credentials: "include",
+  });
+});
+
+it("resolves undefined for a 2xx with an empty body (the 204 mutation routes)", async () => {
+  // The empty-body branch keys off `res.text() === ""`, NOT the status (see createRequest's header);
+  // the WHATWG Response constructor forbids a body on a 204, so a 200 with an empty body exercises
+  // exactly that branch. The 204 routes (logout/updatePerson/…) hit it in the browser identically.
+  const fetchImpl = vi.fn<FetchLike>().mockResolvedValue(new Response("", { status: 200 }));
+  const request = createRequest({ fetchImpl });
+
+  const out = await request<void>("/logout", "DELETE");
+
+  expect(out).toBeUndefined();
+});
+
+it("sends a JSON body under a content-type: application/json header", async () => {
+  const fetchImpl = vi.fn<FetchLike>().mockResolvedValue(jsonResponse({ id: "1" }));
+  const request = createRequest({ fetchImpl });
+
+  await request("/thing", "POST", { name: "x" });
+
+  expect(fetchImpl).toHaveBeenCalledWith("/thing", {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "x" }),
+  });
+});
+
+it("passes a FormData body through with NO content-type header", async () => {
+  const fetchImpl = vi.fn<FetchLike>().mockResolvedValue(jsonResponse({ id: "1" }));
+  const request = createRequest({ fetchImpl });
+  const form = new FormData();
+  form.append("file", "data");
+
+  await request("/upload", "POST", form);
+
+  expect(fetchImpl).toHaveBeenCalledWith("/upload", {
+    method: "POST",
+    credentials: "include",
+    body: form,
+  });
+});
+
+it("rejects with { code } read from the server's { error: { code } } envelope on a non-2xx", async () => {
+  const fetchImpl = vi
+    .fn<FetchLike>()
+    .mockResolvedValue(jsonResponse({ error: { code: "password.invalid" } }, 401));
+  const request = createRequest({ fetchImpl });
+
+  await expect(request("/session", "POST", {})).rejects.toEqual({ code: "password.invalid" });
+});
+
+it("rejects with server.internal when a non-2xx envelope names no code", async () => {
+  const fetchImpl = vi.fn<FetchLike>().mockResolvedValue(jsonResponse({}, 500));
+  const request = createRequest({ fetchImpl });
+
+  await expect(request("/thing", "GET")).rejects.toEqual({ code: "server.internal" });
+});
+
+it("defaults baseUrl to '' and fetchImpl to the global fetch", async () => {
+  const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({ ok: true }));
+  const request = createRequest();
+
+  const out = await request<{ ok: boolean }>("/thing", "GET");
+
+  expect(out).toEqual({ ok: true });
+  expect(spy).toHaveBeenCalledWith("/thing", { method: "GET", credentials: "include" });
+});

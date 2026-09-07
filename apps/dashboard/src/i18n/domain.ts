@@ -1,4 +1,4 @@
-import { currentLocale, pickLocale } from "./t.js";
+import { currentLocale, resolveNameTable, type NameTable } from "@waitron/dashboard-kit";
 import type { AllergenDeclaration } from "../api/client.js";
 
 // Localised DISPLAY NAMES for the enum tokens the server hands the dashboard — roles, statuses,
@@ -14,20 +14,9 @@ import type { AllergenDeclaration } from "../api/client.js";
 // English is the source of truth and `apps/*` is exempt from the english-only guard, so the Spanish
 // below is user-facing translation, not schema vocabulary.
 
-type NameTable = Record<string, { en: string; es: string }>;
-
-/**
- * Shared resolver for every table below. Resolution mirrors `apps/till/src/i18n/allergen-names.ts`:
- * the region subtag is stripped ("es-ES" → "es"), then the language's name if present, else the
- * English name, else — for a token that isn't in the table at all — the raw value, so an unknown
- * token renders as itself rather than as an empty string or a throw.
- */
-function resolve(table: NameTable, value: string, locale: string): string {
-  // Own-key check, not truthiness: a token colliding with an Object.prototype member (`toString`,
-  // `constructor`, …) would resolve the inherited method and return undefined instead of the raw
-  // token, so an unknown token must be gated on Object.hasOwn before the pickLocale lookup.
-  return Object.hasOwn(table, value) ? pickLocale(table[value], locale) : value;
-}
+// The token → display-name resolver is the kit's `resolveNameTable` (region-strip, English-degrade,
+// raw-token fallback, Object.hasOwn own-key guard); the module's own `strings.ts` shares it. The tables
+// below are its data.
 
 const ROLE_NAMES: NameTable = {
   staff: { en: "Staff", es: "Empleado" },
@@ -149,17 +138,6 @@ const PURCHASE_VAT_KIND_NAMES: NameTable = {
   capital: { en: "Capital goods", es: "Bien de inversión" },
 };
 
-// The five booking lifecycle statuses (the `booking_status` pgEnum, Bookings-1), shown on the Bookings
-// day-list. English is the source of truth; the Spanish is user-facing translation. Feminine agreement
-// — "reserva" is feminine. Raw string-keyed LOCAL copy, same bundle-decoupling reason as the tables above.
-const BOOKING_STATUS_NAMES: NameTable = {
-  booked: { en: "Booked", es: "Reservada" },
-  seated: { en: "Seated", es: "Sentada" },
-  completed: { en: "Completed", es: "Completada" },
-  no_show: { en: "No-show", es: "No presentada" },
-  cancelled: { en: "Cancelled", es: "Cancelada" },
-};
-
 // The three printer transports (@waitron/printing PrintTransport / the `print_transport` pgEnum), shown
 // on the Impresoras screen. Raw string-keyed LOCAL copy, same bundle-decoupling reason as the tables
 // above. "USB" / "TCP" stay as-is in both columns (they are the wire/protocol names).
@@ -198,67 +176,67 @@ const DRAWER_OPEN_POLICY_NAMES: NameTable = {
 
 /** A person's management role (staff / supervisor / manager / admin) → its display name. */
 export function roleName(value: string, locale: string = currentLocale()): string {
-  return resolve(ROLE_NAMES, value, locale);
+  return resolveNameTable(ROLE_NAMES, value, locale);
 }
 
 /** A printer transport (usb / network_tcp / cloud_poll) → its display name (raw-value fallback). */
 export function transportName(value: string, locale: string = currentLocale()): string {
-  return resolve(PRINT_TRANSPORT_NAMES, value, locale);
+  return resolveNameTable(PRINT_TRANSPORT_NAMES, value, locale);
 }
 
 /** A print-job status (queued / printing / done / failed) → its display name (raw-value fallback). */
 export function jobStatusName(value: string, locale: string = currentLocale()): string {
-  return resolve(PRINT_JOB_STATUS_NAMES, value, locale);
+  return resolveNameTable(PRINT_JOB_STATUS_NAMES, value, locale);
 }
 
 /** A receipt print mode (auto / on_request / never) → its display name (raw-value fallback). */
 export function printModeName(value: string, locale: string = currentLocale()): string {
-  return resolve(PRINT_MODE_NAMES, value, locale);
+  return resolveNameTable(PRINT_MODE_NAMES, value, locale);
 }
 
 /** A cash-drawer-open policy (gated / open) → its display name (raw-value fallback). */
 export function drawerPolicyName(value: string, locale: string = currentLocale()): string {
-  return resolve(DRAWER_OPEN_POLICY_NAMES, value, locale);
+  return resolveNameTable(DRAWER_OPEN_POLICY_NAMES, value, locale);
 }
 
 /** An advisory roster-breach kind → its display name (raw-value fallback for an unmapped kind). */
 export function breachKindName(kind: string, locale: string = currentLocale()): string {
-  return resolve(BREACH_KIND_NAMES, kind, locale);
+  return resolveNameTable(BREACH_KIND_NAMES, kind, locale);
 }
 
 /** An absence kind (holiday / sick_leave / leave / unpaid) → its display name (raw-value fallback). */
 export function absenceKindName(kind: string, locale: string = currentLocale()): string {
-  return resolve(ABSENCE_KIND_NAMES, kind, locale);
+  return resolveNameTable(ABSENCE_KIND_NAMES, kind, locale);
 }
 
 /** An absence status (requested / approved / rejected) → its display name (raw-value fallback). */
 export function absenceStatusName(status: string, locale: string = currentLocale()): string {
-  return resolve(ABSENCE_STATUS_NAMES, status, locale);
+  return resolveNameTable(ABSENCE_STATUS_NAMES, status, locale);
 }
 
 /** A shift-swap status (requested / accepted / approved / rejected) → its display name (raw fallback). */
 export function swapStatusName(status: string, locale: string = currentLocale()): string {
-  return resolve(SWAP_STATUS_NAMES, status, locale);
+  return resolveNameTable(SWAP_STATUS_NAMES, status, locale);
 }
 
 /** A swap direction (offered_to_me / requested_by_me) → its display name (raw-value fallback). */
 export function swapDirectionName(direction: string, locale: string = currentLocale()): string {
-  return resolve(SWAP_DIRECTION_NAMES, direction, locale);
+  return resolveNameTable(SWAP_DIRECTION_NAMES, direction, locale);
 }
 
 /** A person's account status (active / suspended) → its display name. */
 export function statusName(value: string, locale: string = currentLocale()): string {
-  return resolve(STATUS_NAMES, value, locale);
+  return resolveNameTable(STATUS_NAMES, value, locale);
 }
 
 /** A product's VAT class (general / reduced / super_reduced / zero) → its display name. */
 export function vatClassName(value: string, locale: string = currentLocale()): string {
-  return resolve(VAT_CLASS_NAMES, value, locale);
+  return resolveNameTable(VAT_CLASS_NAMES, value, locale);
 }
 
 /** A product's sale unit (each / weight) → its display name. */
 export function unitName(value: string, locale: string = currentLocale()): string {
-  return resolve(UNIT_NAMES, value, locale);
+  return resolveNameTable(UNIT_NAMES, value, locale);
 }
 
 /** The three allergen-declaration states a pill renders, keyed off the §7 / §1 invariant. */
@@ -280,12 +258,12 @@ export function allergenState(allergens: AllergenDeclaration): AllergenState {
 
 /** An allergen-declaration state (pending / none / declared) → its display name. */
 export function allergenStateName(value: string, locale: string = currentLocale()): string {
-  return resolve(ALLERGEN_STATE_NAMES, value, locale);
+  return resolveNameTable(ALLERGEN_STATE_NAMES, value, locale);
 }
 
 /** An EU allergen code → its display name. */
 export function allergenName(code: string, locale: string = currentLocale()): string {
-  return resolve(ALLERGEN_NAMES, code, locale);
+  return resolveNameTable(ALLERGEN_NAMES, code, locale);
 }
 
 /**
@@ -300,16 +278,10 @@ export const ALLERGEN_CODES: readonly string[] = Object.keys(ALLERGEN_NAMES);
 /** A purchase-invoice VAT regime (general / equivalence_surcharge) → its display name (raw-value
  * fallback for an unmapped regime). */
 export function regimeName(value: string, locale: string = currentLocale()): string {
-  return resolve(PURCHASE_REGIME_NAMES, value, locale);
+  return resolveNameTable(PURCHASE_REGIME_NAMES, value, locale);
 }
 
 /** A purchase-invoice VAT kind (ordinary / capital) → its display name (raw-value fallback). */
 export function vatKindName(value: string, locale: string = currentLocale()): string {
-  return resolve(PURCHASE_VAT_KIND_NAMES, value, locale);
-}
-
-/** A booking status (booked / seated / completed / no_show / cancelled) → its display name (raw-value
- * fallback for an unmapped status). */
-export function bookingStatusName(value: string, locale: string = currentLocale()): string {
-  return resolve(BOOKING_STATUS_NAMES, value, locale);
+  return resolveNameTable(PURCHASE_VAT_KIND_NAMES, value, locale);
 }

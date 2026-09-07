@@ -207,6 +207,9 @@ unfiltered `main` run, not a wrong hook.
   old shape: the generic venue runner, the node runner, the standby reservation and establishment,
   and the till's backend construction imported the Spanish regime directly, and `fiscal-none` could
   not land. Design: `docs/superpowers/specs/2026-09-05-module-sp3c-gated-provisioning-design.md`.
+  On the browser side `@waitron/dashboard-modules` is the composition list's twin — the one place that
+  names every UI-bearing module (guarded by `module-seams` + `dashboard-browser-purity`), so
+  `apps/dashboard` mounts modules without naming one, exactly as generic provisioning does not.
 - **`@waitron/db`'s `exports` map is enumerated, not a wildcard** — `.`, `./testing/postgres.js`,
   `./testing/seed.js`, `./testing/lifecycle.js`, `./testing/shared-container.js`. A wildcard would
   publish the whole harness and give `asAppUser` a second import path. Consequence: `apps/server`

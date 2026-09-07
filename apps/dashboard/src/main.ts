@@ -1,6 +1,7 @@
 import { html, render } from "lit";
 import { applyTokens } from "@waitron/ui";
 import { createInstrumentedFetch, installErrorCapture } from "@waitron/diagnostics";
+import { createRequest } from "@waitron/dashboard-kit";
 import { DashboardApi } from "./api/client.js";
 import { diag } from "./diagnostics.js";
 import "./dashboard-app.js";
@@ -18,9 +19,13 @@ applyTokens(document.documentElement);
 installErrorCapture(window, diag);
 
 const app = document.querySelector<HTMLElement>("#app")!;
+// Build the api and the module-request primitive from the SAME instrumented fetch, so a module screen's
+// round trips land in the one per-session diagnostics trail exactly as the app client's do.
+const instrumentedFetch = createInstrumentedFetch(fetch, diag);
 render(
   html`<dashboard-app
-    .api=${new DashboardApi("", createInstrumentedFetch(fetch, diag))}
+    .api=${new DashboardApi("", instrumentedFetch)}
+    .request=${createRequest({ fetchImpl: instrumentedFetch })}
   ></dashboard-app>`,
   app,
 );

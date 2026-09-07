@@ -1,4 +1,4 @@
-import { currentLocale, pickLocale } from "./t.js";
+import { codeMessage, codeOf, registerCodeMessages } from "@waitron/dashboard-kit";
 
 // Localised copy for the raw error/status CODES the server and client emit.
 //
@@ -207,8 +207,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That table no longer exists",
     es: "Esa mesa ya no existe",
   },
-  // A tab is already open on the target table (TS-1's one-open-tab-per-table guard) — surfaced when a
-  // booking is seated onto a table that is already busy (Bookings-1 §3b).
+  // A tab is already open on the target table (TS-1's one-open-tab-per-table guard).
   "tab.already_open": {
     en: "That table already has an open tab",
     es: "Esa mesa ya tiene una cuenta abierta",
@@ -410,72 +409,16 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Check the amounts: rates 0–100, no negatives",
     es: "Revisa los importes: tipos 0–100, sin negativos",
   },
-  // Bookings (staff-entered table reservations, Bookings-1). The server codes the booking routes reject
-  // with; `table.not_found` and `tab.already_open` (both above) cover an assigned table that no longer
-  // takes a party and a table already busy at seat time. The last two here are the form's own
-  // client-side validation messages (mirroring the op's checks for UX).
-  "booking.not_found": {
-    en: "That booking could not be found",
-    es: "No se ha encontrado esa reserva",
-  },
-  "booking.invalid": {
-    en: "The party size must be 1 or more",
-    es: "El número de comensales debe ser 1 o más",
-  },
-  "booking.invalid_transition": {
-    en: "That booking can't move to that state now",
-    es: "Esa reserva no puede pasar a ese estado ahora",
-  },
-  "booking.table_required": {
-    en: "Choose a table to seat this booking",
-    es: "Elige una mesa para sentar esta reserva",
-  },
-  "booking.fields_required": {
-    en: "Fill in the date, time, party size and name",
-    es: "Rellena la fecha, la hora, los comensales y el nombre",
-  },
-  "booking.party_invalid": {
-    en: "Party size must be a whole number of 1 or more",
-    es: "Los comensales deben ser un número entero de 1 o más",
-  },
   "server.internal": {
     en: "Something went wrong, try again",
     es: "Algo salió mal, inténtalo de nuevo",
   },
 };
 
-// The message shown for any code not in CODE_MESSAGES. Deliberately the SAME entry as
-// `server.internal`: an unmapped code and an internal error are the same thing to the operator —
-// something failed and retrying is the next move — and neither ever exposes the underlying code.
-// Referencing the entry (rather than re-typing its strings) keeps the two in step by construction.
-const GENERIC = CODE_MESSAGES["server.internal"];
+// The resolver (codeMessage/codeOf, the GENERIC degrade and the Object.hasOwn guard) now lives in
+// @waitron/dashboard-kit, shared with any module UI. This module still OWNS the dashboard's code copy:
+// it registers CODE_MESSAGES at load and re-exports the kit's resolver, so the app's importers and the
+// "never show a raw code" guarantee are unchanged.
+registerCodeMessages(CODE_MESSAGES);
 
-/**
- * Extract the wire error CODE from a rejected value.
- *
- * The dashboard's API client rejects with a bare `{ code }` (see api/client.ts); this pulls that code
- * out, falling back to `fallback` (default `server.internal`) when the rejection carries none — the
- * companion to `codeMessage`, which turns the code into localised copy. The body is byte-identical to
- * the `(error as { code?: string }).code ?? …` expression the screens used to hand-copy, so hoisting it
- * here cannot change what any call site computes.
- */
-export function codeOf(error: unknown, fallback = "server.internal"): string {
-  return (error as { code?: string }).code ?? fallback;
-}
-
-/**
- * Resolve an error/status `code` to localised copy for `locale` (default: the active locale).
- *
- * `locale` may be a full BCP-47 tag ("es-ES"): the region subtag is stripped before the lookup, so
- * "es-ES" resolves to the "es" copy. An unknown code degrades to the GENERIC message and an unknown
- * language degrades to the English copy — so the return is always a readable sentence and NEVER the
- * raw code.
- */
-export function codeMessage(code: string, locale: string = currentLocale()): string {
-  // Own-key check, not `?? GENERIC`: a code colliding with an Object.prototype member (`toString`,
-  // `constructor`, `valueOf`, `hasOwnProperty`) resolves the inherited method — truthy, so `??` would
-  // skip GENERIC and pickLocale would return undefined (an empty banner). Object.hasOwn keeps the
-  // "only ever a sentence, never the raw code and never undefined" guarantee true for every string.
-  const entry = Object.hasOwn(CODE_MESSAGES, code) ? CODE_MESSAGES[code] : GENERIC;
-  return pickLocale(entry, locale);
-}
+export { codeMessage, codeOf };

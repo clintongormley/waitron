@@ -1094,6 +1094,27 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # @waitron/bookings runs in THIS bin (LIGHT_A_PACKAGES) and, since bookings SP2, ships a
+      # browser-safe `./dashboard` sub-path whose Lit tests run in real headless Chromium (a second
+      # Vitest project alongside its Node/Postgres suites — see packages/bookings/vitest.config.ts). Its
+      # `test:coverage` therefore needs Playwright's Chromium, which a plain light shard does not carry.
+      # Install it exactly as test-ui does (version-detect → cache → `install chromium`, no `--with-deps`
+      # — the ubuntu-latest image ships Chromium's shared libs; see the test-ui step for the receipt).
+      # bookings is the only browser package in either light bin, so only this shard needs it. The step
+      # runs whenever light-a has work, not only when bookings is in scope — the cache makes a
+      # bookings-absent run a near-instant binary check.
+      - name: Resolve installed Playwright version
+        id: playwright-version
+        run: echo "version=$(pnpm --filter @waitron/bookings exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - run: pnpm --filter @waitron/bookings exec playwright install chromium
+
       - name: Run the light-a shard
         env:
           SCOPE: ${{ needs.changes.outputs.scope }}
@@ -1118,6 +1139,7 @@ jobs:
           set -- "$@" --filter "!@waitron/server"
           set -- "$@" --filter "!@waitron/fiscal-verifactu"
           # LIGHT_B_PACKAGES — the other bin, subtracted so what remains is bin A.
+          set -- "$@" --filter "!@waitron/dashboard-kit"
           set -- "$@" --filter "!@waitron/payments-stripe"
           set -- "$@" --filter "!@waitron/identity"
           set -- "$@" --filter "!@waitron/workforce"
@@ -1201,6 +1223,7 @@ jobs:
           set -- "$@" --filter "!@waitron/fiscal"
           set -- "$@" --filter "!@waitron/shared"
           set -- "$@" --filter "!@waitron/server-kit"
+          set -- "$@" --filter "!@waitron/dashboard-modules"
 
           pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage

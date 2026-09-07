@@ -4,9 +4,9 @@ import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { t } from "../i18n/t.js";
-import { codeMessage } from "../i18n/codes.js";
-import type { Booking, BookingInput, BookingPatch, DashboardTable } from "../api/client.js";
+import { t } from "./strings.js";
+import { codeMessage } from "@waitron/dashboard-kit";
+import type { Booking, BookingInput, BookingPatch, DashboardTable } from "./client.js";
 
 /** The `update-booking` event detail: the booking id + a patch of its edited fields. */
 export interface UpdateBookingDetail {

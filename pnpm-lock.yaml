@@ -50,6 +50,12 @@ importers:
       '@simplewebauthn/browser':
         specifier: ^13.0.0
         version: 13.3.0
+      '@waitron/dashboard-kit':
+        specifier: workspace:*
+        version: link:../../packages/dashboard-kit
+      '@waitron/dashboard-modules':
+        specifier: workspace:*
+        version: link:../../packages/dashboard-modules
       '@waitron/diagnostics':
         specifier: workspace:*
         version: link:../../packages/diagnostics
@@ -336,6 +342,9 @@ importers:
 
   packages/bookings:
     dependencies:
+      '@waitron/dashboard-kit':
+        specifier: workspace:*
+        version: link:../dashboard-kit
       '@waitron/db':
         specifier: workspace:*
         version: link:../db
@@ -354,12 +363,18 @@ importers:
       '@waitron/sync-enrolment':
         specifier: workspace:*
         version: link:../sync-enrolment
+      '@waitron/ui':
+        specifier: workspace:*
+        version: link:../ui
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@electric-sql/pglite@0.5.4)(@types/pg@8.20.0)(pg@8.22.0)
       hono:
         specifier: ^4.6.0
         version: 4.12.32
+      lit:
+        specifier: ^3.2.0
+        version: 3.3.3
     devDependencies:
       '@electric-sql/pglite':
         specifier: ^0.5.4
@@ -367,6 +382,9 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
+      '@vitest/browser':
+        specifier: ^3.0.0
+        version: 3.2.7(playwright@1.61.1)(vite@6.4.3(@types/node@24.13.3)(tsx@4.23.1)(yaml@2.9.0))(vitest@3.2.7)
       '@vitest/coverage-v8':
         specifier: ^3.0.0
         version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
@@ -376,6 +394,9 @@ importers:
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10
+      playwright:
+        specifier: ^1.49.0
+        version: 1.61.1
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
@@ -542,6 +563,53 @@ importers:
       fast-check:
         specifier: ^4.9.0
         version: 4.9.0
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.7(@types/node@24.13.3)(@vitest/browser@3.2.7)(tsx@4.23.1)(yaml@2.9.0)
+
+  packages/dashboard-kit:
+    dependencies:
+      '@waitron/shared':
+        specifier: workspace:*
+        version: link:../shared
+      lit:
+        specifier: ^3.2.0
+        version: 3.3.3
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
+      '@vitest/coverage-v8':
+        specifier: ^3.0.0
+        version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.7(@types/node@24.13.3)(@vitest/browser@3.2.7)(tsx@4.23.1)(yaml@2.9.0)
+
+  packages/dashboard-modules:
+    dependencies:
+      '@waitron/bookings':
+        specifier: workspace:*
+        version: link:../bookings
+      '@waitron/dashboard-kit':
+        specifier: workspace:*
+        version: link:../dashboard-kit
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
+      '@vitest/coverage-v8':
+        specifier: ^3.0.0
+        version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
+      '@waitron/composition':
+        specifier: workspace:*
+        version: link:../composition
       typescript:
         specifier: ^5.7.0
         version: 5.9.3

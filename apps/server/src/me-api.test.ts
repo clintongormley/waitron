@@ -4,7 +4,12 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
+import {
+  IDENTITY_MIGRATIONS,
+  hashPin,
+  registerModulePermissions,
+  startManagementSession,
+} from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import { SUPPORTED_LOCALES } from "@waitron/shared";
 import type { Logger } from "./logger.js";
@@ -71,11 +76,25 @@ const VENUE_LOCALE = "en-GB";
 // proof for this route lives in `sync-origin.test.ts` (real Postgres, manifest template).
 const NODE_ID = "11111111-1111-4111-8111-111111111111";
 
+// The enabled-module set the whoami echoes as `modules`, mirroring boot's `setsToMigrate.map(m => m.name)`
+// — which INCLUDES the always-on `core` (harmlessly: the browser registry only matches UI-bearing ids).
+const MODULES = ["core", "bookings"];
+
+// Register the bookings module permission exactly as the composition root does at boot, so
+// `permissionsForRole` folds `booking.manage` into manager + admin. Without it the module's permission is
+// not in the effective set and the manager whoami below could not carry it.
+registerModulePermissions([{ permission: "booking.manage", grantedFrom: "manager" }]);
+
 function mountApp(): Hono {
   const app = new Hono();
   mountMeApi(
     app,
-    { db: suite.db, cfg: { tenantId, nodeId: NODE_ID }, venueLocale: VENUE_LOCALE },
+    {
+      db: suite.db,
+      cfg: { tenantId, nodeId: NODE_ID },
+      venueLocale: VENUE_LOCALE,
+      modules: MODULES,
+    },
     noopLog,
   );
   return app;
@@ -135,25 +154,31 @@ async function insertAbsence(personId: string, startsOn: string, endsOn: string)
 }
 
 describe("mountMeApi — whoami", () => {
-  it("GET /management-api/session/me returns { personId, role, locale, venueLocale } for a staff session (role-blind)", async () => {
+  it("GET /management-api/session/me returns { personId, role, locale, venueLocale, permissions, modules } for a staff session (role-blind)", async () => {
     const res = await send(mountApp(), "GET", "/management-api/session/me", {
       cookie: await cookieFor(me),
     });
     expect(res.status).toBe(200);
     // `me` carries NO locale preference, so `locale` is null; `venueLocale` is the injected boot
-    // default (VENUE_LOCALE), the language the dashboard falls back to when no preference is set.
+    // default (VENUE_LOCALE), the language the dashboard falls back to when no preference is set. A
+    // staff person holds NO permission (empty effective set), and `modules` echoes the injected
+    // enabled set verbatim (the dashboard gates a module's nav/screen on both).
     expect(
       (await res.json()) as {
         personId: string;
         role: string;
         locale: string | null;
         venueLocale: string;
+        permissions: string[];
+        modules: string[];
       },
     ).toEqual({
       personId: me,
       role: "staff",
       locale: null,
       venueLocale: VENUE_LOCALE,
+      permissions: [],
+      modules: MODULES,
     });
   });
 
@@ -172,24 +197,39 @@ describe("mountMeApi — whoami", () => {
         role: string;
         locale: string | null;
         venueLocale: string;
+        permissions: string[];
+        modules: string[];
       },
     ).toEqual({
       personId: localed,
       role: "staff",
       locale: "es-ES",
       venueLocale: VENUE_LOCALE,
+      permissions: [],
+      modules: MODULES,
     });
   });
 
-  it("returns the person's real role for a manager session — NEVER runs authorizeManager", async () => {
+  it("returns the person's real role, effective permission set and enabled modules for a manager session — NEVER runs authorizeManager", async () => {
     // The whoami route is role-blind: it resolves the session and echoes the role, so a manager
     // session answers `manager` and a staff session `staff`, the same route serving both. If the route
-    // gated on `authorizeManager` (person.manage), the staff case above would 403 instead of 200.
+    // gated on `authorizeManager` (person.manage), the staff case above would 403 instead of 200. The
+    // manager's effective `permissions` carry the registered module permission `booking.manage` (folded
+    // in at grantedFrom:"manager") but NOT the admin-only `mirror.create`, and `modules` echoes the
+    // enabled set — the two the dashboard gates a module's nav/screen on.
     const res = await send(mountApp(), "GET", "/management-api/session/me", {
       cookie: await cookieFor(manager),
     });
     expect(res.status).toBe(200);
-    expect((await res.json()) as { role: string }).toMatchObject({ role: "manager" });
+    const body = (await res.json()) as {
+      role: string;
+      permissions: string[];
+      modules: string[];
+    };
+    expect(body.role).toBe("manager");
+    expect(body.permissions).toContain("booking.manage");
+    expect(body.permissions).not.toContain("mirror.create");
+    expect(body.modules).toEqual(MODULES);
   });
 
   it("401s (management_session.required) when no session cookie is sent", async () => {

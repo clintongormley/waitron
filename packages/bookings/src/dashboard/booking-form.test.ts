@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { codeMessage } from "../i18n/codes.js";
+import { codeMessage } from "@waitron/dashboard-kit";
 import { BookingForm } from "./booking-form.js";
-import type { Booking, BookingInput, DashboardTable } from "../api/client.js";
+import type { Booking, BookingInput, DashboardTable } from "./client.js";
 
 afterEach(cleanupWidgets);
 

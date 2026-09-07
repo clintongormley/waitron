@@ -108,6 +108,7 @@ function mountApp(tenantId: string): Hono {
       db: suite.admin,
       cfg: { tenantId, nodeId: "11111111-1111-4111-8111-111111111111" },
       venueLocale: "es-ES",
+      modules: [],
     },
     noopLog,
   );
@@ -201,12 +202,17 @@ describe("Me API over real Postgres (the identity property: the session's person
         role: string;
         locale: string | null;
         venueLocale: string;
+        permissions: string[];
+        modules: string[];
       },
     ).toEqual({
       personId: p,
       role: "staff",
       locale: null,
       venueLocale: "es-ES",
+      // A staff person holds no permission; this fixture injects no enabled modules.
+      permissions: [],
+      modules: [],
     });
 
     const res = await send(

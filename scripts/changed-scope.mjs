@@ -291,9 +291,11 @@ export const LIGHT_A_PACKAGES = [
   "@waitron/fiscal",
   "@waitron/shared",
   "@waitron/server-kit",
+  "@waitron/dashboard-modules",
 ];
 
 export const LIGHT_B_PACKAGES = [
+  "@waitron/dashboard-kit",
   "@waitron/payments-stripe",
   "@waitron/identity",
   "@waitron/workforce",

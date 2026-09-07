@@ -10,7 +10,7 @@ import {
   requestSwap,
   absenceKind,
 } from "@waitron/workforce";
-import { resolveManagementSession, setPersonLocale } from "@waitron/identity";
+import { permissionsForRole, resolveManagementSession, setPersonLocale } from "@waitron/identity";
 import { SUPPORTED_LOCALES } from "@waitron/shared";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
@@ -49,6 +49,13 @@ export interface MeApiDeps {
    * before a signed-in person's own preference is known.
    */
   venueLocale: string;
+  /**
+   * The ENABLED module names on this node — boot's `setsToMigrate.map(m => m.name)`, which includes the
+   * always-on `core` (harmlessly: the dashboard's browser registry only matches UI-bearing ids).
+   * Surfaced by `GET /session/me` as `modules` so the dashboard shows a module's nav/screen only when
+   * the module is enabled AND the signed-in person holds its permission — the two runtime gates.
+   */
+  modules: string[];
 }
 
 /**
@@ -139,7 +146,18 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const { personId, role, locale } = await asStaff((tx) =>
         resolveManagementSession(tx, sessionId),
       );
-      return c.json({ personId, role, locale, venueLocale: deps.venueLocale });
+      // `permissions` is the signed-in person's EFFECTIVE set (core catalog + registered module
+      // permissions, folded through identity's ladder) and `modules` the enabled-module names — a
+      // client-side HINT the dashboard gates a module's nav/screen on, NEVER a substitute for the
+      // server-side gate each route still enforces.
+      return c.json({
+        personId,
+        role,
+        locale,
+        venueLocale: deps.venueLocale,
+        permissions: permissionsForRole(role),
+        modules: deps.modules,
+      });
     }),
   );
 
