@@ -85,4 +85,15 @@ describe("setup-done-screen", () => {
     q(el, "[data-test=reload]")!.click();
     expect(reload).toHaveBeenCalledOnce();
   });
+
+  // The break-glass secret double-authorizes: promotion, and unlocking the standby's dormant
+  // fiscal certificate. An operator who only reads "promote" would not realize a promoted-but-
+  // uncertified node keeps selling but cannot file until the cert is installed by hand.
+  it("warns that the break-glass secret also unlocks the fiscal certificate", async () => {
+    const el = await mountDone(() => new Promise(() => {}), { breakGlassSecret: "abc123" });
+    expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("abc123");
+    expect(q(el, "[data-test=break-glass-warning]")?.textContent).toContain(
+      "unlocks your fiscal certificate",
+    );
+  });
 });
