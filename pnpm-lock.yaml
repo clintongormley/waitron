@@ -1317,6 +1317,9 @@ importers:
       '@waitron/migrations':
         specifier: workspace:*
         version: link:../migrations
+      '@waitron/provisioning':
+        specifier: workspace:*
+        version: link:../provisioning
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
