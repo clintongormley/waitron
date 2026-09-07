@@ -405,6 +405,18 @@ screens, `apps/server/src/modules.ts` (the maps derived from that list), and the
    through the `FiscalBackend` seam — a better pluggability proof than TicketBAI). Put the two agreed
    rules (new domains land as modules; no new core table without a stated reason) into CLAUDE.md §3
    in this PR.
+   - **Follow-on (gated on this): English-only generic guard.** Owner principle (2026-09-07): Spanish
+     only in Spain-specific modules (verifactu, workforce-es, reporting=modelo-303); core/generic code
+     must be English — identifiers, strings AND comments. The guard today doesn't scan `provisioning`
+     at all (the guard-free zone `obligado` slipped through on #258, reverted #260) and strips
+     comments. Design + decisions (reporting→Spanish-specific, workforce→English, migrations→English,
+     `huella`→"fiscal fingerprint", relocate `fiscal-modules.ts`→`@waitron/composition`):
+     `docs/superpowers/specs/2026-09-07-english-only-generic-english-design.md`. **DELAYED until
+     `fiscal-none` completes** (owner 2026-09-07): most of the ~428 core/db Spanish is fiscal code
+     that `fiscal-none` makes regime-agnostic / relocates to the verifactu module, so rewording it
+     now is wasted — re-measure against post-`fiscal-none` `main` first. Two pieces are independent and
+     could go anytime: add `tunnel`+`payments-stripe` to the scan (already clean); relocate
+     `fiscal-modules.ts` so provisioning production is scannable.
 3. **Bookings as the first UI-bearing module** (own package, own tables, own dashboard screen):
    proves cards, permissions and i18n arriving with a module — fiscal never exercises them.
 4. **Control plane brainstorm — NEW (owner-added 2026-09-05).** With one tenant per database and a
