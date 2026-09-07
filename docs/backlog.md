@@ -68,8 +68,8 @@ below). Two structures are known to be out of date and must not be built on:
    afternoon) → prototype (a day) → A3 starts immediately; it is the long pole for everyone.
    **2026-09-05:** the split LANDED (#239), the prototype has reported (item 2), item 4's spec is
    approved, and item 3's spec — one chain that also deletes the outbox (owner: "all at once") — is
-   drafted; its step 1 LANDED (#255), lifting the no-new-table rule, step 2 LANDED (#271), and steps 3–5 await
-   owner review.
+   drafted; its step 1 LANDED (#255), lifting the no-new-table rule, step 2 LANDED (#271), step 3 in PR
+   (2026-09-07); steps 4–5 pending owner review.
 2. **The module framework's UI seats** (cards, permissions, i18n arriving with a module) are
    unproven until Track C's `fiscal-none` + bookings-as-a-module land. New product domains wait for
    them and land as modules; polishing existing screens does not.

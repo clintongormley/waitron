@@ -148,7 +148,7 @@ on a preproduction publisher fails with "publication does not exist"), and the a
 > **2026-09-07 — measured, correcting the sentence above.** `CREATE SUBSCRIPTION … WITH
 > (connect=true)` naming a publication absent on the target database does not fail synchronously:
 > PostgreSQL 16+'s `check_publications` step WARNs and creates the subscription anyway (S2,
-> `subscriptions.test.ts`). The name-carried isolation is real, but it manifests as NO ROWS ever
+> `packages/sync/src/replication-subscribe.pg.test.ts`). The name-carried isolation is real, but it manifests as NO ROWS ever
 > copying, not a `CREATE SUBSCRIPTION` error. The hard refusal is the second reason above — the
 > adoption code's `deployment.environment` check — which is step 4 (the live path); S2 built only the
 > name-carried half.
