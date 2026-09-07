@@ -580,7 +580,8 @@ screens, `apps/server/src/modules.ts` (the maps derived from that list), and the
      - **Follow-ons SP2 unblocks (deferred):** migrate the other ~22 core dashboard screens onto the seat
        incrementally; migrate core screens off the coarse `requiresManager` role gate onto permission ids now
        that `getMe` carries the permission set. CI: bookings' browser vitest runs in the shared `test-light-a`
-       shard (Chromium in a light bin) — confirm on the PR run; a dedicated dual-mode shard is the fallback.
+       shard (Chromium in a light bin) — CONFIRMED green on #273 (`test-light-a` 3m1s); the dedicated dual-mode
+       shard stays the fallback only if that bin later hangs.
 4. **Control plane brainstorm — NEW (owner-added 2026-09-05).** With one tenant per database and a
    dedicated cloud instance per tenant, the only multi-tenant service Waitron will run is a small
    control plane: accounts (a customer of ours, a concept the schema does not have — a tenant is a
