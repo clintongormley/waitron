@@ -249,11 +249,12 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    guards + two-node fixture; (3) provisioning of publications/subscriptions + the WireGuard key;
    (4) promotion/return on `pg_replication_slots` + the outbox deleted [owner]; (5) status, alarms,
    the standby-first migration check, the link on the box image (with Track B item 2). The
-   working-time chain's per-node rekey sits between 2 and 4 — **BUILT, in PR** (branch
-   `feat/workforce-chain-per-node-rekey`): `workforce_chains`/`time_entries` rekeyed to
-   (`tenant`, `node`, `location`), a cold-restored box continues its chain (no reset, no hook), and a
-   fork surfaces as the `multiple_unique_conflicts` drain stall the swap already handles — so the
-   S3/S4 prerequisite is discharged (swap design §4.4).
+   working-time chain's per-node rekey sits between 2 and 4 — **LANDED #268 (2026-09-07):**
+   `workforce_chains`/`time_entries` rekeyed to (`tenant`, `node`, `location`), a hashed
+   per-chain-monotonic `recorded_at` replaced the non-replicating `ingest_seq`, cross-node correction
+   precedence is `(recorded_at, node_id, sequence_no)`, a cold-restored box continues its chain (no
+   reset, no hook), and a fork surfaces as the `multiple_unique_conflicts` drain stall the swap
+   already handles — so the S3/S4 prerequisite is discharged (swap design §4.4).
 
    **Step 1 LANDED (#255).** Per-module baselines, FORCE RLS and the seven helper roles gone,
    the `*.rls.test.ts` suites replaced by per-module grant suites and `privileges.test.ts`, and
