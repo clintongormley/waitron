@@ -1,6 +1,7 @@
 // Booking operations run on the caller's transaction. Creation and day lists use the
 // configured location; table assignments also check that location. Route handlers
-// own authorization. By-id lifecycle operations address the supplied reservation id.
+// own authorization. Every read and write scopes cfg.tenantId — the id is a globally-unique
+// UUID and withTenant no longer isolates SELECTs (#255), so it is never the isolation boundary.
 import "./errors.js";
 import { and, asc, eq, inArray, type InferSelectModel } from "drizzle-orm";
 import { diningTables, type Transaction } from "@waitron/db";
@@ -121,20 +122,30 @@ export async function listBookings(
   return tx
     .select()
     .from(bookings)
-    .where(and(eq(bookings.locationId, cfg.locationId), eq(bookings.bookingDate, date)))
+    .where(
+      and(
+        eq(bookings.tenantId, cfg.tenantId),
+        eq(bookings.locationId, cfg.locationId),
+        eq(bookings.bookingDate, date),
+      ),
+    )
     .orderBy(asc(bookings.bookingTime), asc(bookings.id));
 }
 
 /**
- * Read one reservation by id, returning undefined when absent. Lifecycle verbs
- * translate absence into booking.not_found.
+ * Read one reservation by id WITHIN the caller's tenant, returning undefined when absent. The id is a
+ * globally-unique UUID and `withTenant` no longer isolates SELECTs (#255), so the read scopes tenantId
+ * itself (CLAUDE.md §3). Lifecycle verbs translate absence into booking.not_found.
  */
 export async function getBooking(
   tx: Transaction,
-  _cfg: BookingConfig,
+  cfg: BookingConfig,
   id: string,
 ): Promise<Booking | undefined> {
-  const [row] = await tx.select().from(bookings).where(eq(bookings.id, id));
+  const [row] = await tx
+    .select()
+    .from(bookings)
+    .where(and(eq(bookings.id, id), eq(bookings.tenantId, cfg.tenantId)));
   return row;
 }
 
@@ -167,7 +178,9 @@ export async function updateBooking(
       notes: patch.notes,
       tableId: patch.tableId,
     })
-    .where(and(eq(bookings.id, id), eq(bookings.status, "booked")))
+    .where(
+      and(eq(bookings.id, id), eq(bookings.tenantId, cfg.tenantId), eq(bookings.status, "booked")),
+    )
     .returning({ id: bookings.id });
   if (updated.length === 0) {
     throw new AppError("booking.not_found", { bookingId: id });
@@ -180,6 +193,7 @@ export async function updateBooking(
  */
 async function advanceStatus(
   tx: Transaction,
+  cfg: BookingConfig,
   id: string,
   from: readonly ("booked" | "seated" | "completed" | "no_show" | "cancelled")[],
   to: "seated" | "completed" | "no_show" | "cancelled",
@@ -187,12 +201,17 @@ async function advanceStatus(
   const updated = await tx
     .update(bookings)
     .set({ status: to })
-    .where(and(eq(bookings.id, id), inArray(bookings.status, from)))
+    .where(
+      and(eq(bookings.id, id), eq(bookings.tenantId, cfg.tenantId), inArray(bookings.status, from)),
+    )
     .returning({ id: bookings.id });
   if (updated.length > 0) {
     return;
   }
-  const [row] = await tx.select({ id: bookings.id }).from(bookings).where(eq(bookings.id, id));
+  const [row] = await tx
+    .select({ id: bookings.id })
+    .from(bookings)
+    .where(and(eq(bookings.id, id), eq(bookings.tenantId, cfg.tenantId)));
   if (row === undefined) {
     throw new AppError("booking.not_found", { bookingId: id });
   }
@@ -202,24 +221,24 @@ async function advanceStatus(
 /** `booked | seated → cancelled` (design §3a). A no-show/completed/already-cancelled row is refused. */
 export async function cancelBooking(
   tx: Transaction,
-  _cfg: BookingConfig,
+  cfg: BookingConfig,
   id: string,
 ): Promise<void> {
-  await advanceStatus(tx, id, ["booked", "seated"], "cancelled");
+  await advanceStatus(tx, cfg, id, ["booked", "seated"], "cancelled");
 }
 
 /** `booked → no_show` (design §3a) — the party never arrived. Any other state is refused. */
-export async function markNoShow(tx: Transaction, _cfg: BookingConfig, id: string): Promise<void> {
-  await advanceStatus(tx, id, ["booked"], "no_show");
+export async function markNoShow(tx: Transaction, cfg: BookingConfig, id: string): Promise<void> {
+  await advanceStatus(tx, cfg, id, ["booked"], "no_show");
 }
 
 /** `seated → completed` (design §3a) — the seated party has left. Only a seated row may complete. */
 export async function completeBooking(
   tx: Transaction,
-  _cfg: BookingConfig,
+  cfg: BookingConfig,
   id: string,
 ): Promise<void> {
-  await advanceStatus(tx, id, ["seated"], "completed");
+  await advanceStatus(tx, cfg, id, ["seated"], "completed");
 }
 
 /**
@@ -269,7 +288,9 @@ export async function seatBooking(
   const seated = await tx
     .update(bookings)
     .set({ tableId, tabId, status: "seated" })
-    .where(and(eq(bookings.id, id), eq(bookings.status, "booked")))
+    .where(
+      and(eq(bookings.id, id), eq(bookings.tenantId, cfg.tenantId), eq(bookings.status, "booked")),
+    )
     .returning({ id: bookings.id });
   if (seated.length === 0) {
     throw new AppError("booking.invalid_transition", { bookingId: id });

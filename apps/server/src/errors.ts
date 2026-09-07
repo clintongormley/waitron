@@ -459,9 +459,8 @@ declare module "@waitron/shared" {
      */
     "order_prep.invalid_transition": { workingOrderId: string };
     /**
-    // `table.not_found` moved to @waitron/db's errors.ts — dining_tables is a core table and the
-    // code now has a cross-package thrower (@waitron/bookings' requireActiveTable), which cannot
-    // import this app. Codes are never renamed, only relocated with (or ahead of) their throwers.
+    // `table.not_found` is declared in @waitron/db's errors.ts (dining_tables is a core table with a
+    // cross-package thrower). Codes are never renamed, only relocated.
     /**
      * A dining table label already exists in this venue — the `(tenant_id, location_id, label)` unique
      * (`dining_tables_location_label_key`) rejected the insert/update. `label` is the operator-supplied
@@ -527,8 +526,8 @@ declare module "@waitron/shared" {
      * new tab).
      */
     "tab.already_open": { tableId: string };
-    // The four `booking.*` codes moved to @waitron/bookings/src/errors.ts when bookings became a
-    // module (SP1). Codes are never renamed, only relocated with their thrower.
+    // The four `booking.*` codes are declared in @waitron/bookings/src/errors.ts. Codes are never
+    // renamed, only relocated with their thrower.
     /**
      * The deployment holds one tenant per database. A tab verb found the working order it was
      * asked to modify is not an OPEN tab — it is not `open` (already settled/abandoned), no
@@ -869,9 +868,9 @@ declare module "@waitron/shared" {
      * `STATUS` note), so the mapping would hold either way. Never renamed once shipped.
      */
     "placement.invalid": { field: string };
-    // `management.request_invalid` moved to `@waitron/server-kit` (`src/errors.ts`) with the
-    // request-shape screens that throw it (bookings SP1 t1). The code string is unchanged — codes are
-    // never renamed once shipped — and reaches this program through those screens' package barrel.
+    // `management.request_invalid` is declared in `@waitron/server-kit` (`src/errors.ts`) with the
+    // request-shape screens that throw it, and reaches this program through their package barrel.
+    // Codes are never renamed once shipped.
     /**
      * A request to a device-authenticated route (a KDS station display, device-identity-1 §3c) carried
      * no usable device identity — the `waitron_device` cookie was absent, malformed (no `.` separator,

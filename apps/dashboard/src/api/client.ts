@@ -891,8 +891,8 @@ export interface PurchaseInvoicePatch {
 }
 
 // ── Bookings (staff-entered table reservations, Bookings-1) ───────────────────────────────────────
-// LOCAL copies of the server's booking JSON shapes (the `booking-api.ts` routes wrapping `bookings.ts`'s
-// verbs), deliberately NOT imported from `apps/server`/`@waitron/db` (the #70 rule every shape above
+// LOCAL copies of the server's booking JSON shapes (the `@waitron/bookings` `routes.ts` routes wrapping
+// its `bookings.ts` verbs), deliberately NOT imported from `apps/server`/`@waitron/db` (the #70 rule every shape above
 // follows). These are the CONTRACT the Bookings screen builds on; the server shapes stay the source of
 // truth, and a mismatch surfaces as a runtime shape error a view test catches, not a compile break.
 

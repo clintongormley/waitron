@@ -15,7 +15,7 @@ export default defineConfig({
     hookTimeout: 180_000,
     // Keep singleFork (CLAUDE.md §4): @vitest/coverage-v8 under-merges BRANCH coverage across fork
     // workers, and a package this size has few enough branches that a handful of mis-merged ones
-    // sink the ratio under the 95% gate. Same finding as the other small data-layer packages.
+    // sink the ratio under the branch gate. Same finding as the other small data-layer packages.
     poolOptions: { forks: { singleFork: true } },
     coverage: {
       provider: "v8",
@@ -28,9 +28,10 @@ export default defineConfig({
         // Re-export barrel: no imperative code, on which v8 reports phantom uncovered branches.
         "src/index.ts",
       ],
-      // The six-package high bar: @waitron/bookings is a data-layer module with its own migration
-      // set (CLAUDE.md §2; scripts/coverage-thresholds.test.ts pins it in HIGH_BAR_PACKAGES).
-      thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
+      // The floor bar: bookings is a domain module, like @waitron/workforce and the other domain
+      // modules — not one of the owner's six high-bar packages (CLAUDE.md §2). Pinned by
+      // scripts/coverage-thresholds.test.ts.
+      thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
     },
   },
 });

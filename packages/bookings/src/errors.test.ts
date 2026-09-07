@@ -3,7 +3,7 @@
 // fail-first signal for these registration tests is `tsc --noEmit`, NOT the runtime run — AppError does
 // no runtime validation of the code, so `new AppError("booking.not_found", {})` would run green even
 // with the code undeclared. The verbs are the real throwers; the HTTP statuses live in routes.ts's
-// STATUS map. Relocated verbatim from apps/server/src/errors.test.ts when the codes became the module's.
+// STATUS map.
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import "./errors.js";

@@ -7,8 +7,7 @@ import "@waitron/shared";
  * @waitron/bookings' contribution to the shared error registry, added by declaration merging (see
  * the design note atop packages/shared/src/errors.ts). The four `booking.*` codes name the DOMAIN
  * CONCEPT (a restaurant reservation), never the throwing package (CLAUDE.md §3), and are NEVER
- * renamed once shipped — relocated here from apps/server/src/errors.ts when bookings became a module,
- * payloads unchanged.
+ * renamed once shipped.
  *
  * Reachability: every file that throws one of these imports "./errors.js" (the verbs in
  * bookings.ts), and this file is reachable from the barrel — scripts/errors-reachable.test.ts

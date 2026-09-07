@@ -17,8 +17,7 @@ declare module "@waitron/shared" {
      * exactly the kind of secret a caller can mis-send). `management.*` names the DOMAIN CONCEPT (a
      * request to the management surface), not the throwing package; it is a deliberately distinct
      * namespace from `@waitron/identity`'s `management_session.*` (the session LIFECYCLE), which names
-     * a separate concern. Moved here from `apps/server/src/errors.ts` with the screens that throw it
-     * (bookings SP1 t1); the code string stands unchanged, as codes are never renamed once shipped.
+     * a separate concern. Codes are never renamed once shipped.
      */
     "management.request_invalid": { field: string };
 

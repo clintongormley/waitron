@@ -48,15 +48,10 @@ export interface ModuleRoutes {
 /**
  * The four person roles, lowest-to-highest on identity's ladder. Written here rather than imported
  * from `@waitron/identity` because the module CONTRACT package must not depend on a domain module
- * (identity depends on this contract, never the reverse). This union mirrors identity's
- * `PersonRoleValue`; the two are kept honest ASYMMETRICALLY, not by a single guard:
- *   - a MODULE naming a role identity does not know (this union wider) fails boot's
- *     `registerModulePermissions(ALL_MODULE_PERMISSIONS)` call — the extra literal is not assignable
- *     to the `PersonRoleValue` parameter;
- *   - an identity-side role ADDITION (PersonRoleValue wider) is forced into identity's own
- *     `ROLE_PERMISSIONS` `Record` and its `ROLE_LADDER` exhaustiveness tie (permissions.ts). It is
- *     NOT caught at the boot call — a narrower `ModuleRole` stays assignable to a wider parameter —
- *     which is why identity carries its own guards rather than relying on this call site.
+ * (identity depends on this contract, never the reverse). This union must stay byte-identical to
+ * identity's `PersonRoleValue`; `@waitron/composition`'s `role-parity.ts` — the one package that
+ * imports both — asserts mutual assignability at compile time, so a divergence in EITHER direction is
+ * a type error.
  */
 export type ModuleRole = "staff" | "supervisor" | "manager" | "admin";
 
@@ -68,10 +63,11 @@ export type ModuleRole = "staff" | "supervisor" | "manager" | "admin";
 export type ModulePermission = { readonly permission: string; readonly grantedFrom: ModuleRole };
 
 /**
- * A module's contribution to the floor read-model (SP1 bookings, reserved-on-floor): given the tables
- * being listed and the venue clock, the extra per-table annotation the module owns. Core's
- * `listTablesWithState` calls every ENABLED module's annotator and merges the result onto its rows, so
- * the reserved-badge query (timezone read + grace window + the bookings scan) leaves core.
+ * A module supplies each table's next reservation time for core's floor read-model: given the tables
+ * being listed and the venue clock, the `reservedTime` per table. Core's `listTablesWithState` calls
+ * every ENABLED module's annotator and merges the result onto its rows, so the reserved-badge query
+ * (timezone read + grace window + the bookings scan) leaves core. Today the payload is one field and
+ * bookings is the one producer; a genuinely different annotation waits for a second producer to exist.
  *
  * The returned Map carries one entry PER input `tableId` (`reservedTime` null when the table has no
  * imminent reservation), so the merge is a plain per-row lookup. `reservedTime` is the venue-local

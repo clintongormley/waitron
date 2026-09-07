@@ -25,7 +25,7 @@ import "./errors.js";
 
 // PGlite, not real Postgres: these verbs are plain CRUD + a conditional-UPDATE state machine over one
 // table — no privilege or concurrency behaviour that needs a genuine non-superuser backend (the CAS
-// race is proven against real Postgres in `bookings-cas.test.ts`, the routes in `booking-api.test.ts`). Every read/write still runs
+// race is proven against real Postgres in `bookings-cas.test.ts`, the routes in `routes.test.ts`). Every read/write still runs
 // through `withTenant` + `asAppUser`, so the tenant scope and the `party_size > 0` CHECK are exercised
 // exactly as production does, not bypassed. `TESTCONTAINERS_RYUK_DISABLED` is irrelevant here — no
 // container is started. Fixtures apply the whole manifest (BOOKINGS_TEST_MIGRATIONS): bookings'

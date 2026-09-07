@@ -270,10 +270,10 @@ describe("Bookings API over real Postgres (routes, gates and request screens)", 
     // GUARD-BY-DELETION (authorizeManager), run 2026-08-30 against postgres:18 via Testcontainers
     // (TESTCONTAINERS_RYUK_DISABLED=true): removed the
     //   `await authorizeManager(tx, { managementSessionId: sessionId, permission: BOOKING_WRITE });`
-    // call from `booking-api.ts`'s `gated` helper. This test then FAILED — every staff request that
+    // call from `routes.ts`'s `gated` helper. This test then FAILED — every staff request that
     // expected 403 instead reached its op (POST → 201, GET → 200, the by-id routes → 404/409/204), so
     // the `toBe(403)` assertions flipped green→red. Restored the line and the test passed again;
-    // `git diff booking-api.ts` is clean afterwards.
+    // `git diff routes.ts` is clean afterwards.
     const { ctx, managerCookie, staffCookie } = await setupVenue();
     const app = mountApp(ctx);
     // A real booking the manager owns, so the staff by-id calls target an id that DOES exist — the

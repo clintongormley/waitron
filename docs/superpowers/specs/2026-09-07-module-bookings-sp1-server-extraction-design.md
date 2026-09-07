@@ -73,9 +73,9 @@ out of `@waitron/identity`'s central catalog; a `floorAnnotations` seat that car
 
 `@waitron/bookings` is scaffolded from `@waitron/fiscal-none` (same `package.json` shape, `type:
 module`, `main: ./src/index.ts`, the `db:generate` / `db:generate:custom` scripts, `drizzle.config.ts`,
-`tsconfig.json`, `vitest.config.ts`). It is a data-layer package with its own migration set, so it
-takes the **six-package coverage bar (98/98/98/95)**, and `scripts/coverage-thresholds.test.ts`'s
-hardcoded list gains it with the reason in the commit (CLAUDE.md §2).
+`tsconfig.json`, `vitest.config.ts`). It is a domain module, like `@waitron/workforce`, so it takes
+the **floor coverage bar (90/90/85/85)** rather than the owner's six-package high bar; it is NOT added
+to `scripts/coverage-thresholds.test.ts`'s `HIGH_BAR_PACKAGES` list (CLAUDE.md §2).
 
 ### 3.1 Schema
 
@@ -324,8 +324,8 @@ Every root guard must pass with **no allowlist growth**:
   from `migrations.from` and never scanned — bookings is NOT an owner package).
 - **`scripts/errors-reachable.test.ts`.** Every new `src/errors.ts` (bookings, server-kit if it ships
   one, identity's addition) is reachable from its barrel.
-- **`scripts/coverage-thresholds.test.ts`.** Its hardcoded list gains `bookings` at the six-package
-  bar, with the reason in the commit.
+- **`scripts/coverage-thresholds.test.ts`.** Bookings is a domain module at the floor bar (like
+  `@waitron/workforce`), so it stays OUT of the hardcoded `HIGH_BAR_PACKAGES` list.
 - **`inmutabilidad`'s trigger scan (`packages/fiscal-verifactu`).** Bookings is a `state` table with NO
   immutability/anti-truncate trigger — expected, and the scan asserting the fiscal set is unchanged is
   the receipt that §5's invariants are untouched.

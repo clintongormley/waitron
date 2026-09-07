@@ -4081,10 +4081,10 @@ export async function listTablesWithState(
     };
   });
 
-  // Reserved-on-floor (§4) and any future per-table module annotation: fold each ENABLED module's
-  // annotator onto the rows. Bookings' `BOOKINGS_FLOOR_ANNOTATIONS` owns the timezone read, grace window
-  // and the bookings scan; a `reservedTime` (venue-local `HH:MM`, already normalised) overwrites the row's
-  // `null`. `loc` is this read's location (already tenant-scoped by the caller); the annotator re-scopes
+  // Reserved-on-floor (§4): fold each ENABLED module's annotator onto the rows to fill `nextReservation`.
+  // Today bookings' `BOOKINGS_FLOOR_ANNOTATIONS` is the one producer — it owns the timezone read, grace
+  // window and the bookings scan; a `reservedTime` (venue-local `HH:MM`, already normalised) overwrites the
+  // row's `null`. `loc` is this read's location (already tenant-scoped by the caller); the annotator re-scopes
   // its own query to (tenant, location) — a by-id read never trusts the UUID alone (CLAUDE.md §3).
   if (annotators.length > 0) {
     const tableIds = states.map((s) => s.id);
