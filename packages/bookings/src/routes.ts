@@ -8,7 +8,7 @@ import "./errors.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
 import { asAppUser, withTenant, type Transaction } from "@waitron/db";
-import { authorizeManager, type Permission } from "@waitron/identity";
+import { authorizeManager } from "@waitron/identity";
 import type { ModuleRouteContext, ModuleRoutes } from "@waitron/module";
 import type { Logger } from "@waitron/server-kit";
 import {
@@ -23,6 +23,7 @@ import {
   type CreateBookingInput,
   type UpdateBookingPatch,
 } from "./bookings.js";
+import { BOOKINGS_PERMISSIONS } from "./permissions.js";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
@@ -36,11 +37,12 @@ import {
 } from "@waitron/server-kit";
 
 /**
- * The ONE permission that gates every booking route — one named constant referenced at every route
- * rather than an inline literal, so a future re-mapping is a one-line swap here. `booking.manage` maps
- * to `manager` + `admin` (the dashboard's audience), the same shape `purchase.manage` takes.
+ * The ONE permission that gates every booking route, taken from the module's declared permissions
+ * seat (`permissions.ts`) so the route gate and the ladder registration can never name different
+ * strings. `booking.manage` folds to `manager` + `admin` at boot (grantedFrom: "manager"), the same
+ * shape `purchase.manage` takes.
  */
-const BOOKING_WRITE: Permission = "booking.manage";
+const [{ permission: BOOKING_WRITE }] = BOOKINGS_PERMISSIONS;
 
 /**
  * Every AppError CODE these routes answer, and the HTTP status it maps to — the booking parallel of

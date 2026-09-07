@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { PERMISSIONS, type Permission, roleHasPermission } from "./permissions.js";
+import {
+  PERMISSIONS,
+  type Permission,
+  registerModulePermissions,
+  roleHasPermission,
+} from "./permissions.js";
 
 describe("roleHasPermission", () => {
   it("gives staff no privileged permission", () => {
@@ -130,17 +135,31 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("admin", "report.view")).toBe(true);
     expect(roleHasPermission("staff", "report.view")).toBe(false);
   });
-  it("grants booking.manage to manager and admin only (staff-reservations bookings-1)", () => {
-    // A domain-named reservation permission (booking CRUD + lifecycle from the management dashboard,
-    // @waitron/bookings), granted to exactly the roles that hold the other manager write gates — manager
-    // and admin — and NEVER to staff or supervisor. No front-of-house role exists; if floor staff should
-    // take bookings, granting it lower is a later decision and a new pattern (spec §7). Mirrors
-    // purchase.manage: manager + admin, never staff/supervisor.
-    expect(PERMISSIONS).toContain("booking.manage");
+  it("folds a module permission into grantedFrom and every role ABOVE it (booking.manage)", () => {
+    // booking.manage LEFT identity's central catalog in SP1 t4: it is no longer a static Permission and
+    // NO role holds it until a module registers it — the deletion proof (authorizeManager's only gate is
+    // roleHasPermission, manager-login.ts). Registering it at grantedFrom:"manager" folds it into
+    // manager + admin (every role at or above manager on the ladder) and NEVER into supervisor/staff —
+    // the same audience purchase.manage takes, now stated by the module's floor rather than a catalog
+    // edit. Assert-false-then-register-then-assert-true in one test so it is order-independent under the
+    // module-level registry.
+    expect(PERMISSIONS as readonly string[]).not.toContain("booking.manage");
+    expect(roleHasPermission("manager", "booking.manage")).toBe(false);
+    registerModulePermissions([{ permission: "booking.manage", grantedFrom: "manager" }]);
     expect(roleHasPermission("manager", "booking.manage")).toBe(true);
     expect(roleHasPermission("admin", "booking.manage")).toBe(true);
-    expect(roleHasPermission("staff", "booking.manage")).toBe(false);
     expect(roleHasPermission("supervisor", "booking.manage")).toBe(false);
+    expect(roleHasPermission("staff", "booking.manage")).toBe(false);
+  });
+  it("folds a supervisor-floor module permission into supervisor, manager and admin, not staff", () => {
+    // A synthetic permission proving the LADDER is real, not a manager-only shortcut: grantedFrom
+    // "supervisor" reaches supervisor, manager (above it) and admin (top), and never staff (below it).
+    // Uses a string absent from the catalog so no static grant can mask the registry path.
+    registerModulePermissions([{ permission: "synthetic.floor", grantedFrom: "supervisor" }]);
+    expect(roleHasPermission("supervisor", "synthetic.floor")).toBe(true);
+    expect(roleHasPermission("manager", "synthetic.floor")).toBe(true);
+    expect(roleHasPermission("admin", "synthetic.floor")).toBe(true);
+    expect(roleHasPermission("staff", "synthetic.floor")).toBe(false);
   });
   it("grants diagnostics.view to manager and admin only (logging & diagnostics foundation)", () => {
     // A domain-named diagnostics permission (view recent logs + toggle diagnostic verbosity from the

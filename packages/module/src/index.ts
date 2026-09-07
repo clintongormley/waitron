@@ -5,6 +5,8 @@ export type {
   ModuleBackupContribution,
   ModuleRoutes,
   ModuleRouteContext,
+  ModuleRole,
+  ModulePermission,
   CoreServices,
 } from "./module.js";
 export { orderedMigrationSets, packageDirOf } from "./module.js";

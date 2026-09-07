@@ -4,13 +4,21 @@ import { describe, expect, it } from "vitest";
 import { asAppUser, withTenant, type Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { hashPin, startManagementSession } from "@waitron/identity";
+import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import type { ModuleRouteContext } from "@waitron/module";
 import { fakeCore } from "./testing/fake-core.js";
 import type { BookingConfig } from "./bookings.js";
+import { BOOKINGS_PERMISSIONS } from "./permissions.js";
 import { BOOKINGS_ROUTES } from "./routes.js";
+
+// booking.manage is no longer in identity's static catalog (SP1 t4): a `manager` holds it only once
+// the module's permissions seat is folded into the ladder. Boot does this via
+// registerModulePermissions(ALL_MODULE_PERMISSIONS); here we register the module's OWN seat so the
+// manager happy-paths below authorize. Omitting this line flips every manager route to 403
+// authorization.not_permitted — the deletion proof for the descriptor's permissions seat.
+registerModulePermissions(BOOKINGS_PERMISSIONS);
 
 // Real Postgres, not PGlite: every DB touch below goes through `BOOKINGS_ROUTES`' `gated` helper
 // (withTenant + asAppUser + authorizeManager), so the booking routes run as the non-superuser

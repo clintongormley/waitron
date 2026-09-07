@@ -15,6 +15,7 @@ import {
   type MirrorConnection,
 } from "@waitron/db";
 import { credentialTenants, loadKeyRing } from "@waitron/credentials";
+import { registerModulePermissions } from "@waitron/identity";
 import { runDue } from "@waitron/scheduler";
 import {
   StripeOnDeviceProvider,
@@ -26,7 +27,12 @@ import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules, fiscalSlot, orderedMigrationSets, reconcile } from "@waitron/module";
 import type { ModuleRouteContext } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { ALL_MODULES, ALL_SYNC_ENROLMENTS, MODULE_BY_TABLE } from "./modules.js";
+import {
+  ALL_MODULES,
+  ALL_MODULE_PERMISSIONS,
+  ALL_SYNC_ENROLMENTS,
+  MODULE_BY_TABLE,
+} from "./modules.js";
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
 import { parseEnvFile } from "./env-file.js";
 import {
@@ -464,6 +470,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // built below (the logger writes to `<stateDir>/logs` by default). A boot with invalid config still
   // escapes here (§8) before any logger, pool or listener exists.
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_MEDIA_ROOT, DEFAULT_STATE_ROOT);
+  // Fold every module's permission seat into identity's role ladder ONCE, before any surface that
+  // gates on a management session is mounted below (in either mode). Pure and dependency-free (no DB,
+  // no config), so it runs at the very top of boot; `registerModulePermissions` overwrites on a
+  // repeat, so a re-boot in the same process (test harnesses) is harmless. After this, identity's
+  // catalog resolves module permissions like booking.manage that it no longer names itself.
+  registerModulePermissions(ALL_MODULE_PERMISSIONS);
   // The verbosity controller the diagnostics API raises and the logger reads at each call: request
   // logging (`http.request`, a `debug` line) is dropped by the default `info` threshold until an
   // operator raises it for a bounded window, then auto-reverts in memory (never across a restart).

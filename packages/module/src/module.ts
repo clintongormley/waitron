@@ -45,6 +45,23 @@ export interface ModuleRoutes {
   mount(app: Hono, ctx: ModuleRouteContext, log: Logger): void;
 }
 
+/**
+ * The four person roles, lowest-to-highest on identity's ladder. Written here rather than imported
+ * from `@waitron/identity` because the module CONTRACT package must not depend on a domain module
+ * (identity depends on this contract, never the reverse). identity's `registerModulePermissions`
+ * indexes its OWN role map by `grantedFrom`, so this union and identity's `PersonRoleValue` cannot
+ * silently diverge: boot's registration call assigns a `ModulePermission[]` into that parameter and
+ * fails to compile if the two drift.
+ */
+export type ModuleRole = "staff" | "supervisor" | "manager" | "admin";
+
+/**
+ * A permission a module contributes to identity's role ladder, and the LOWEST role that holds it.
+ * identity folds it into `grantedFrom` and every role ABOVE it on the ladder; the module states only
+ * the floor, never an explicit role list — the ladder stays identity's (spec §4.2).
+ */
+export type ModulePermission = { readonly permission: string; readonly grantedFrom: ModuleRole };
+
 /** A reference to non-DB state a module owns, resolved to a path by the composition root. */
 export type NonDbSource = { readonly kind: "content-addressed-dir"; readonly source: string };
 
@@ -92,7 +109,11 @@ export interface WaitronModule {
    * by the root english-only suite, which unions every declaration with the guard's base list and
    * asserts the two are disjoint; no runtime consumer. Omit the seat rather than declare `[]`. */
   readonly vocabulary?: readonly string[];
-  readonly permissions?: readonly string[];
+  /** SP1 (bookings): the permissions this module contributes to identity's role ladder — each a
+   * permission string with the lowest role that holds it. The composition root assembles every
+   * module's seat and boot folds them in once (`registerModulePermissions`) before any route auth, so
+   * identity's central catalog names no module permission (spec §4.2). */
+  readonly permissions?: readonly ModulePermission[];
   readonly duties?: unknown; // cronjobs
   readonly theme?: unknown;
   /** What this module seeds per node at provisioning, and how it takes part in standing up a
