@@ -1,6 +1,8 @@
 // The PRIMARY side of the C2b cloud-mirror operator flow (design §10). `assembleMirrorBundle`
 // reads a venue's parent rows + the box's connection details and mints ONE per-peer sync token,
-// returning a `MirrorBundle` the endpoint serves and the mirror consumes via `adoptVenue`.
+// returning a `MirrorBundle` the endpoint serves and the mirror consumes via `adoptVenue`. Swap S2
+// additively carries an optional `wireguardPublicKey` alongside the token (spec §2.3); nothing
+// consumes it yet.
 //
 // The deployment holds one tenant per database. The tenant row is selected by id; locations,
 // nodes, tills and invoice series are read without tenant predicates. `app_user` holds SELECT on
@@ -72,6 +74,12 @@ export interface MirrorBundle {
    * its own ALL_MODULES and writes its own modules.json from it (SP-1d adopt bootstrap).
    */
   moduleOverrides: Record<string, boolean>;
+  /**
+   * The box's WireGuard public key, swap S2 (spec §2.3: "the token goes, the key comes"). Additive
+   * and optional — the live path still authenticates via `syncToken`, removed at step 4 — with no
+   * consumer until S7 wires the tunnel and Track B item 2 proves it.
+   */
+  wireguardPublicKey?: string;
 }
 
 /**
@@ -95,6 +103,8 @@ export interface AssembleDeps {
   boxHostname: string;
   designated: AdoptResult;
   standby: { nodeId: string; publicKey: string };
+  /** The box's WireGuard public key (swap S2); the box image supplies it in S7, absent in dev/fixture. */
+  wireguardPublicKey?: string;
 }
 
 /**
@@ -191,5 +201,6 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
     syncToken: token,
     reservedIdentity: { ...reserved, endorsement },
     moduleOverrides: serializeModuleConfig(moduleConfig),
+    wireguardPublicKey: deps.wireguardPublicKey,
   };
 }
