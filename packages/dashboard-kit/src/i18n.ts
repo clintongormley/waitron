@@ -68,3 +68,17 @@ export function pickLocale(entry: { en: string; es: string }, l: string = locale
   const lang = l.replace(/-.*$/, "");
   return (entry as Record<string, string>)[lang] ?? entry.en;
 }
+
+/** A `token → { en, es }` display-name table (roles, statuses, allergen codes, booking states, …). */
+export type NameTable = Record<string, { en: string; es: string }>;
+
+/**
+ * Resolve an enum/domain TOKEN to its localised display name via a {@link NameTable}: an own-key check
+ * then {@link pickLocale}'s region-strip + English-degrade; an unknown token renders as ITSELF. The
+ * own-key check is `Object.hasOwn`, NOT truthiness — a token colliding with an Object.prototype member
+ * (`toString`, `constructor`) would otherwise resolve the inherited member instead of the raw token.
+ * The ONE home for this helper; the app's domain-name resolver and each module's own share it.
+ */
+export function resolveNameTable(table: NameTable, value: string, l: string = locale): string {
+  return Object.hasOwn(table, value) ? pickLocale(table[value]!, l) : value;
+}

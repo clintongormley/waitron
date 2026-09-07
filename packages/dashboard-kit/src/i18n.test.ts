@@ -1,12 +1,14 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   currentLocale,
   makeT,
   pickLocale,
   registerCatalogue,
+  resolveNameTable,
   setLocale,
   subscribeLocale,
   t,
+  type NameTable,
 } from "./i18n.js";
 
 beforeEach(() => {
@@ -47,6 +49,28 @@ it("pickLocale strips the region, then degrades to English", () => {
   expect(pickLocale(entry)).toBe("Es"); // default es-ES -> es
   expect(pickLocale(entry, "en-GB")).toBe("En"); // en-GB -> en
   expect(pickLocale(entry, "fr")).toBe("En"); // unknown language -> English base
+});
+
+describe("resolveNameTable", () => {
+  const table: NameTable = { booked: { en: "Booked", es: "Reservada" } };
+
+  it("resolves a known token, region-stripped, then degrades to English", () => {
+    expect(resolveNameTable(table, "booked")).toBe("Reservada"); // default es-ES -> es
+    expect(resolveNameTable(table, "booked", "en-GB")).toBe("Booked"); // en-GB -> en
+    expect(resolveNameTable(table, "booked", "fr")).toBe("Booked"); // unknown language -> English base
+  });
+
+  it("renders an unknown token as itself, never undefined", () => {
+    expect(resolveNameTable(table, "not_a_token")).toBe("not_a_token");
+  });
+
+  it("renders a prototype-chain token as itself, not the inherited member", () => {
+    // Own-key check, not truthiness: `toString`/`constructor` are on Object.prototype, so a `??`-style
+    // lookup would resolve the inherited member. Object.hasOwn keeps the raw-token fallback true here.
+    for (const token of ["toString", "constructor", "hasOwnProperty", "valueOf"]) {
+      expect(resolveNameTable(table, token)).toBe(token);
+    }
+  });
 });
 
 it("notifies subscribers on setLocale and stops after unsubscribe", () => {

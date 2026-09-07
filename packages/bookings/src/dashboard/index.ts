@@ -1,13 +1,11 @@
 import { html } from "lit";
-import { registerCodeMessages, type DashboardContribution } from "@waitron/dashboard-kit";
+import type { DashboardContribution } from "@waitron/dashboard-kit";
 import { BookingApi } from "./client.js";
-import { BOOKINGS_STRINGS, BOOKINGS_CODE_MESSAGES } from "./strings.js";
+import { BOOKINGS_STRINGS } from "./strings.js";
 import "./bookings-screen.js"; // side-effect: defines <dashboard-bookings-screen>
 
-// Register the booking error copy at load. strings.ts also registers it (so importing the module's `t`
-// alone resolves the codes), but the app mounts a contribution by its declared surface, so this keeps
-// the registration on the contribution's own entry point too — idempotent.
-registerCodeMessages(BOOKINGS_CODE_MESSAGES);
+// Importing `./strings.js` above runs its module-load registerCatalogue + registerCodeMessages, so the
+// booking strings and error copy are registered by the time this contribution is mounted.
 
 /** The bookings module's dashboard contribution: the Bookings screen, its nav placement + permission,
  * its strings, and a factory that wires the module context's request to a {@link BookingApi}. */

@@ -1,9 +1,10 @@
 import {
   currentLocale,
   makeT,
-  pickLocale,
   registerCatalogue,
   registerCodeMessages,
+  resolveNameTable,
+  type NameTable,
 } from "@waitron/dashboard-kit";
 
 // The bookings sub-path's OWN i18n surface: the screen/form UI strings, the lifecycle status names,
@@ -105,15 +106,6 @@ registerCodeMessages(BOOKINGS_CODE_MESSAGES);
  * key is a compile error. Resolution (region-strip, English-degrade) is the kit's. */
 export const t = makeT<keyof typeof en>();
 
-type NameTable = Record<string, { en: string; es: string }>;
-
-/** Shared resolver: an own-key check (not truthiness — a token colliding with an Object.prototype
- * member would resolve the inherited member) then the kit's region-strip + English-degrade; an unknown
- * token renders as itself. */
-function resolve(table: NameTable, value: string, locale: string): string {
-  return Object.hasOwn(table, value) ? pickLocale(table[value], locale) : value;
-}
-
 // The five booking lifecycle statuses (the `booking_status` pgEnum), shown on the day-list. English is
 // the source of truth; the Spanish agrees feminine ("reserva").
 const BOOKING_STATUS_NAMES: NameTable = {
@@ -126,5 +118,5 @@ const BOOKING_STATUS_NAMES: NameTable = {
 
 /** The localised display name for a booking status token. */
 export function bookingStatusName(value: string, locale: string = currentLocale()): string {
-  return resolve(BOOKING_STATUS_NAMES, value, locale);
+  return resolveNameTable(BOOKING_STATUS_NAMES, value, locale);
 }
