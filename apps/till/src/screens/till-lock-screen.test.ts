@@ -425,6 +425,16 @@ describe("till-lock-screen", () => {
     expect(again).toHaveBeenCalledTimes(1);
   });
 
+  it("renders nothing when no servers are known (the default — a till with no router)", async () => {
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi(),
+      serverStatuses: [],
+      serverWaiting: false,
+    });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-server-status]")).toBeNull();
+  });
+
   it("renders nothing when only the page's own server is known and it is primary", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
       api: stubApi(),

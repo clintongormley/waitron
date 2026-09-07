@@ -324,7 +324,11 @@ export class TillLockScreen extends LitElement {
    */
   #renderServers() {
     const known = this.serverStatuses;
-    if (known.length <= 1 && !this.serverWaiting && known[0]?.state === "primary") return nothing;
+    // No line for a till with no known servers (no router), nor for the healthy single-server till whose
+    // only server is its own page origin and it is primary. Every other shape (a second server, an
+    // unreachable box, a waiting promotion) shows the line.
+    if (known.length === 0) return nothing;
+    if (known.length === 1 && !this.serverWaiting && known[0]?.state === "primary") return nothing;
     const row = (s: ServerStatus) => `${s.label}: ${t(`server.${s.state}` as StringKey)}`;
     return html`
       <p class="servers status" role="status" data-server-status>

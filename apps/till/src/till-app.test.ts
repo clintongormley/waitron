@@ -5682,4 +5682,29 @@ describe("till-app follows a server move (till-reroute §4.3)", () => {
     await flush(el);
     expect(setServers).toHaveBeenCalledWith(servers);
   });
+
+  it("shows the waiting-for-promotion banner in the shell while the router waits (§4.4)", async () => {
+    // On the shell surface (an operator mid-shift) the lock-screen's own status line is not visible, so
+    // `till-app` surfaces `server.waiting_promotion` in its own `role="status"` banner while the router
+    // reports no server is accepting sales. Two-sided: absent before a probe leaves the router waiting,
+    // present after.
+    const router = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(), // every server is down → a round finds no primary → waiting
+      storage: memoryStorage(),
+    });
+    const api = stubApi();
+    const { el } = await mountWidget<TillApp>("till-app", { api, router });
+    await toCounter(el); // in the shell (logged in on the counter)
+    const banner = () => el.shadowRoot!.querySelector<HTMLElement>(".banner[role='status']");
+    // Not waiting yet (no probe has run) → no banner.
+    expect(router.waiting).toBe(false);
+    expect(banner()).toBeNull();
+    // A probe round with every server unreachable leaves the router waiting for a promotion; the
+    // `state-changed` it dispatches repaints the app, which now shows the banner.
+    await router.probeNow();
+    await flush(el);
+    expect(router.waiting).toBe(true);
+    expect(banner()!.textContent).toContain(t("server.waiting_promotion"));
+  });
 });
