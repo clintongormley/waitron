@@ -504,15 +504,27 @@ screens, `apps/server/src/modules.ts` (the maps derived from that list), and the
 3. **Bookings as the first UI-bearing module** (own package, own tables, own dashboard screen):
    proves cards, permissions and i18n arriving with a module — fiscal never exercises them.
    **Decomposed SP1 → SP2** (owner 2026-09-07, full end-to-end module):
-   - **SP1 — server + data extraction (BUILT, in PR on `feat/module-bookings-sp1`).** `@waitron/bookings`: the tables
+   - **SP1 — server + data extraction (LANDED #270, 2026-09-07).** `@waitron/bookings`: the tables
      leave the core migration set into their own set (a clean leaf — nothing in core references them);
-     verbs + routes move in behind a typed `routes` seat `boot.ts` mounts generically; a `permissions`
+     verbs + 7 routes move in behind a typed `routes` seat `boot.ts` mounts generically; a `permissions`
      seat carries `booking.manage` out of `@waitron/identity` (identity keeps the role ladder); a
      `floorAnnotations` seat carries the "Reserved HH:MM" concern out of core's `listTablesWithState`;
      enrolled into sync as `state` (first genuinely-toggleable module — unblocks the deferred
-     enabled-set-aware pull, `boot.ts:556`); the four request helpers lift to a new `@waitron/server-kit`.
-     Dashboard UNTOUCHED (same URLs). Spec:
+     enabled-set-aware pull, `boot.ts:556`); the request + cookie helpers lift to a new `@waitron/server-kit`.
+     Dashboard UNTOUCHED (same URLs). Bookings is a domain module → FLOOR coverage bar (like workforce),
+     NOT the six-package high bar. Spec:
      [module-bookings-sp1-server-extraction](superpowers/specs/2026-09-07-module-bookings-sp1-server-extraction-design.md).
+     - **Security fix that rode along (found by the run-it seat, RUNNING a two-tenant probe):** the booking
+       verbs (`getBooking`/`advanceStatus`/`updateBooking`/`seatBooking`/`listBookings`) + `openTab` read/wrote
+       by id alone — a pre-existing cross-tenant leak (tenant B could read A's contact + cancel A's booking).
+       All now scope `cfg.tenantId` (§3, the till-reroute S3 class); real-PG regression tests added.
+     - **Deferred follow-ons (none on the sale path):** `createOpenOrder`'s `deliveryTableId` existence check
+       still reads `dining_tables` by id alone — SAME §3 read-leak class (fail-closed-on-WRITE via composite FK
+       does not close the read leak); scope it next. Floor perf (pre-existing, moved verbatim): `floor.ts`
+       constructs two `Intl.DateTimeFormat` per poll + a per-poll `locations.time_zone` read — memoize per
+       timezone. `CoreServices` is one shared interface every module receives whole — when a 2nd core verb is
+       needed (SP2+), prefer per-module narrow required-services interfaces. `floorAnnotations` is honestly
+       single-purpose (`{reservedTime}`) today — genuinely generalize only when a 2nd annotator appears.
    - **SP2 — dashboard module-UI seat (own spec, later).** The GENERAL, reusable mechanism (owner: general
      now) by which a module contributes a dashboard screen + i18n bundle + nav + permission gate into the
      browser bundle without importing the server package, migrating the existing screens onto it; proven by
