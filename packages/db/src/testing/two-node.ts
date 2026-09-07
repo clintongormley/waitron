@@ -71,7 +71,7 @@ export interface TwoNodeClusterOptions {
   startNode?(network: StartedNetwork, alias: string): Promise<StartedReplNode>;
 }
 
-const LOGICAL_REPLICATION_COMMAND = [
+export const LOGICAL_REPLICATION_COMMAND = [
   "postgres",
   "-c",
   "wal_level=logical",
