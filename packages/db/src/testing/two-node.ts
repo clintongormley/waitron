@@ -19,10 +19,13 @@ import { POSTGRES_IMAGE } from "./postgres.js";
  * subscription's CONNECTION string reaches a peer through the network, never through the
  * host-published `uri`, which only this process can use.
  *
- * Cleanup: `stop()` closes both nodes' clients, stops both containers, then stops the network. With
- * Ryuk disabled locally (CLAUDE.md §4) an interrupted run leaks the network — but the containers
- * carry `com.waitron.reapable`, so `pnpm reap` removes them, and an orphaned empty network is
- * harmless (it holds nothing and is cheap to prune).
+ * Cleanup, both paths. Setup acquires the network, then each node, then migrates each; a failure at
+ * ANY of those steps (a container that will not start, `migrate()` throwing) stops whatever has
+ * already come up — best-effort, in reverse order, network last — before re-throwing the original
+ * error, so a half-built cluster never leaks. `stop()` runs the same teardown. With Ryuk disabled
+ * locally (CLAUDE.md §4) an interrupted run leaks the network — but the containers carry
+ * `com.waitron.reapable`, so `pnpm reap` removes them, and an orphaned empty network is harmless (it
+ * holds nothing and is cheap to prune).
  */
 export interface ReplNode {
   /** Reaches this node from the HOST (published port). Used by this process's own pg clients. */
@@ -41,6 +44,18 @@ export interface TwoNodeCluster {
   stop(): Promise<void>;
 }
 
+/** A started Docker network. The real Testcontainers handle or, at the `startNetwork` seam, a test
+ * fake — the fixture only calls `stop()`; the real handle also carries the identity a node needs to
+ * join it via `.withNetwork()`. */
+export type StartedNetwork = Awaited<ReturnType<Network["start"]>>;
+
+/** A started node and the closer that releases it (its pg client, then its container). Returned by
+ * the `startNode` seam so a test can inject fakes and drive the failure-cleanup path without Docker. */
+export interface StartedReplNode {
+  node: ReplNode;
+  stop(): Promise<void>;
+}
+
 export interface TwoNodeClusterOptions {
   /** Applies every migration set each node needs, core first. */
   migrate(uri: string): Promise<void>;
@@ -50,6 +65,10 @@ export interface TwoNodeClusterOptions {
    * (as the harness does), so a Docker-absent run reaches this only defensively.
    */
   dockerRequired?: boolean;
+  /** Seam — starts the shared Docker network. Defaults to a real Testcontainers network. */
+  startNetwork?(): Promise<StartedNetwork>;
+  /** Seam — starts one node on the network. Defaults to a real container + connected client. */
+  startNode?(network: StartedNetwork, alias: string): Promise<StartedReplNode>;
 }
 
 const LOGICAL_REPLICATION_COMMAND = [
@@ -60,14 +79,7 @@ const LOGICAL_REPLICATION_COMMAND = [
   "track_commit_timestamp=on",
 ];
 
-async function startNode(
-  network: Awaited<ReturnType<Network["start"]>>,
-  alias: string,
-): Promise<{
-  node: ReplNode;
-  container: Awaited<ReturnType<PostgreSqlContainer["start"]>>;
-  client: pg.Client;
-}> {
+async function startRealNode(network: StartedNetwork, alias: string): Promise<StartedReplNode> {
   const container = await new PostgreSqlContainer(POSTGRES_IMAGE)
     // Same reaper marker as startPostgresContainer: an interrupted Ryuk-off run leaves this container
     // for `pnpm reap`, which removes ONLY containers carrying this label.
@@ -87,16 +99,27 @@ async function startNode(
     },
     query: async <T>(sql: string) => (await client.query(sql)).rows as T[],
   };
-  return { node, container, client };
+  return {
+    node,
+    stop: async () => {
+      // Best-effort on the client: a client already closed (or a socket already dead) must not strand
+      // the container.stop() that follows, the same reason postgres.ts's helpers swallow their closes.
+      await client.end().catch(() => {});
+      await container.stop();
+    },
+  };
 }
 
 export async function startTwoNodeCluster(options: TwoNodeClusterOptions): Promise<TwoNodeCluster> {
+  const startNetwork = options.startNetwork ?? (() => new Network().start());
+  const startNode = options.startNode ?? startRealNode;
+
   /* v8 ignore start -- Docker-absent branch: unreachable in any Docker-present run, which is every
      CI runner and dev machine this package requires (harness.ts `dockerAvailable` documents the same
-     reasoning). Callers gate the suite on `dockerAvailable()`, so this is purely defensive; the
-     whole `if` — condition, branch and both message arms — is ignored, since none of it runs when
-     Docker is present. */
-  if (!dockerAvailable()) {
+     reasoning). It is gated to the REAL primitives — a test injecting the seams drives cleanup
+     without a daemon — and callers gate the suite on `dockerAvailable()`, so this is purely
+     defensive; the whole `if` is ignored, since none of it runs when Docker is present. */
+  if (options.startNetwork === undefined && options.startNode === undefined && !dockerAvailable()) {
     throw new Error(
       options.dockerRequired
         ? "The two-node logical-replication fixture requires a running Docker daemon to start two " +
@@ -106,24 +129,30 @@ export async function startTwoNodeCluster(options: TwoNodeClusterOptions): Promi
   }
   /* v8 ignore stop */
 
-  const network = await new Network().start();
-  const a = await startNode(network, "node-a");
-  const b = await startNode(network, "node-b");
-  await options.migrate(a.node.uri);
-  await options.migrate(b.node.uri);
-
-  return {
-    nodeA: a.node,
-    nodeB: b.node,
-    stop: async () => {
-      // Best-effort, isolated teardown in the sensible order (clients, then containers, then the
-      // network): one step rejecting — a client already closed, a Docker hiccup — must never strand
-      // the later stops and leak them (the same reason postgres.ts's helpers swallow their close
-      // failures). `allSettled` runs every step and never rejects, so it adds no error-handling
-      // branch of its own to cover; the network is last, so it has nothing left to strand.
-      await Promise.allSettled([a.client.end(), b.client.end()]);
-      await Promise.allSettled([a.container.stop(), b.container.stop()]);
-      await network.stop();
-    },
+  // Every resource that has come up, in acquisition order; teardown reverses it (nodes before the
+  // network) and swallows each failure so one wedged stop can never strand the rest. `Promise<unknown>`
+  // because a network's `stop()` resolves to a `StoppedNetwork`, not void (TypeScript's void-return
+  // relaxation covers `() => T`, never `Promise<T>` against `Promise<void>` — see postgres.ts).
+  const started: Array<{ stop(): Promise<unknown> }> = [];
+  const teardown = async () => {
+    for (const resource of [...started].reverse()) {
+      await resource.stop().catch(() => {});
+    }
   };
+
+  try {
+    const network = await startNetwork();
+    started.push(network);
+    const a = await startNode(network, "node-a");
+    started.push(a);
+    const b = await startNode(network, "node-b");
+    started.push(b);
+    await options.migrate(a.node.uri);
+    await options.migrate(b.node.uri);
+    return { nodeA: a.node, nodeB: b.node, stop: teardown };
+  } catch (error) {
+    // Setup failed after some resources came up — stop exactly those, then surface the real cause.
+    await teardown();
+    throw error;
+  }
 }
