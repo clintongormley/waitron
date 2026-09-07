@@ -68,8 +68,8 @@ below). Two structures are known to be out of date and must not be built on:
    afternoon) → prototype (a day) → A3 starts immediately; it is the long pole for everyone.
    **2026-09-05:** the split LANDED (#239), the prototype has reported (item 2), item 4's spec is
    approved, and item 3's spec — one chain that also deletes the outbox (owner: "all at once") — is
-   drafted; its step 1 LANDED (#255), lifting the no-new-table rule, step 2 LANDED (#271), step 3 in PR
-   (2026-09-07); steps 4–5 pending owner review.
+   drafted; its step 1 LANDED (#255), lifting the no-new-table rule, step 2 LANDED (#271), step 3 LANDED
+   (#274, 2026-09-07); steps 4–5 pending owner review.
 2. **The module framework's UI seats** (cards, permissions, i18n arriving with a module) are
    unproven until Track C's `fiscal-none` + bookings-as-a-module land. New product domains wait for
    them and land as modules; polishing existing screens does not.
@@ -238,7 +238,7 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    superuser provisioning step for the `REPLICATION` role. **Cross-track (Track C):** module SP-2b's schema-version gate (LANDED #230) rests on
    "deliberate rejection of native logical replication"; item 4's spec retires it (its §5).
 3. **Drop FORCE RLS + the multi-role set, squash the migrations, delete the outbox — STEP 1
-   LANDED #255 (2026-09-06), STEP 2 LANDED #271 (2026-09-07), STEP 3 in PR (2026-09-07); steps
+   LANDED #255 (2026-09-06), STEP 2 LANDED #271 (2026-09-07), STEP 3 LANDED #274 (2026-09-07); steps
    4–5 pending owner review:**
    [drop-rls-squash-and-outbox-deletion-design](superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md).
    Owner decisions: all at once (item 4's swap slices are steps 2–5 of this chain, since nothing is
@@ -257,6 +257,26 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    precedence is `(recorded_at, node_id, sequence_no)`, a cold-restored box continues its chain (no
    reset, no hook), and a fork surfaces as the `multiple_unique_conflicts` drain stall the swap
    already handles — so the S3/S4 prerequisite is discharged (swap design §4.4).
+
+   **Step 3 LANDED #274 (2026-09-07) — swap S2, provisioning (capability + fixture only):** the native
+   logical-replication provisioning capability, none of it on the live path yet. `@waitron/sync` gained
+   `publications.ts`/`subscriptions.ts` (runtime-decoupled builders + creation; the conninfo carries the
+   `waitron_repl` password, so a create failure throws only `sync.subscription_failed { sqlState }`);
+   `@waitron/provisioning` gained `REPLICATION_ROLE` + `replicationBootstrapStatements` (the superuser
+   bootstrap SQL, run against the TARGET database) and `assertReplicationReady`/`provisioning.replication_not_ready`
+   (bootstrap-and-verify — the app provisioner stays superuser-free and verifies, incl. a per-database
+   `pg_default_acl` check that catches a bootstrap misapplied to the wrong database); `sqlStateOf` +
+   `quoteLiteral` homed in `@waitron/shared`; an additive `wireguardPublicKey` mirror-bundle field.
+   Proven on the two-node fixture: owner-created publications, a real A→B `state`-row copy, name-carried
+   environment isolation (`CREATE SUBSCRIPTION` WARNs not throws — measured, spec §2.4 corrected), and
+   §13.3 (`ALTER DEFAULT PRIVILEGES` covers a later table) by deletion. **Owed to step 4** (not S2): the
+   live adopt/promote/return flip, the fiscal-fidelity suites (byte-identity, `ENABLE ALWAYS` refusal,
+   WAL-overflow, column-stall), the §11 every-table copy matrix, and — flagged — the **ownership gap**:
+   `waitron-provision instance` may not leave `waitron_migrator` owning every table (`instance-apply.ts:172`
+   migrates as the admin), which native replication requires; step 4 must fix it (migrate as migrator, or
+   `REASSIGN OWNED`). Deferred Minors (none on any path): a test-helper node-shape consolidation, a
+   `createPublications` sequential-await (an illusory gain on one node-postgres connection), and an
+   `array[…]` `sql.raw` in a pg test. Plan: `superpowers/plans/2026-09-07-outbox-swap-s2-provisioning.md`.
 
    **Step 2 LANDED #271 (2026-09-07):** the classification contract — `classify()`
    (`@waitron/sync-enrolment`) adds `ledger`/`state`/`local` per-module `<MODULE>_CLASSIFICATION`
