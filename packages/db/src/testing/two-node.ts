@@ -77,6 +77,13 @@ const LOGICAL_REPLICATION_COMMAND = [
   "wal_level=logical",
   "-c",
   "track_commit_timestamp=on",
+  // The bounded slot the readiness check (spec §6) requires AT BOOT, so an S2 node that provisions on
+  // this cluster passes readiness without racing a `pg_reload_conf`. The S1 smoke test asserts only
+  // `wal_level`, so it stays green. Set the same way as the two above (a `-c` arg, not `ALTER SYSTEM`)
+  // for symmetry; unlike them `max_slot_wal_keep_size` is reloadable, so this is a convenience, not a
+  // requirement.
+  "-c",
+  "max_slot_wal_keep_size=4GB",
 ];
 
 async function startRealNode(network: StartedNetwork, alias: string): Promise<StartedReplNode> {

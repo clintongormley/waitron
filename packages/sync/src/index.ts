@@ -75,6 +75,33 @@ export type { EnrolPeerInput, PeerSummary } from "./peers.js";
 
 export { SYNC_CLASSIFICATION } from "./classification.js";
 
+// Native logical replication (swap S2): build and create a node's two publications from the derived
+// table lists. Utility DDL, created by the non-superuser table OWNER; not wired into the live adopt
+// path until step 4.
+export { createPublications, createPublicationStatement, publicationName } from "./publications.js";
+export type { PublicationClass } from "./publications.js";
+
+// Native logical replication (swap S2): subscription verbs — create (origin=none, per-direction
+// enable/copy_data, spec §2.2), enable/disable, narrow (SET PUBLICATION, the drain window §4.2),
+// SKIP (§6), drop; pure statement builders beside each. The conninfo carries the waitron_repl
+// password; a create failure throws only a SQLSTATE. Not wired into the live adopt path until step 4.
+export {
+  buildConninfo,
+  createSubscription,
+  createSubscriptionStatement,
+  disableSubscription,
+  disableSubscriptionStatement,
+  dropSubscription,
+  dropSubscriptionStatement,
+  enableSubscription,
+  enableSubscriptionStatement,
+  setSubscriptionPublications,
+  setSubscriptionPublicationsStatement,
+  skipSubscription,
+  skipSubscriptionStatement,
+} from "./subscriptions.js";
+export type { ReplicationConnection } from "./subscriptions.js";
+
 // Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable from
 // this package's own public barrel, per the reachability rule in packages/shared/src/errors.ts.
 // See errors.reachability.test.ts.

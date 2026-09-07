@@ -28,30 +28,13 @@ export function quoteIdent(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
-/**
- * The standard SQL string-literal quoting rule, for the one literal this package emits: the
- * password in `CREATE ROLE … PASSWORD '…'`. `CREATE ROLE` is a utility statement and takes no bind
- * parameters, so the value has to be built into the text and there is no parameterised alternative
- * to reach for.
- *
- * **For every password this tool generates it changes nothing** — base64url's alphabet is
- * `[A-Za-z0-9_-]`, so there is no quote and no backslash, and the output is byte-identical to the
- * naive `'${value}'` this replaced. It exists because `applyInstance` and `InstanceAction` are
- * EXPORTED (`index.ts`) and `InstanceAction.password` is typed `string`, so the safety was a
- * property of one caller rather than of the code — and this package's own
- * `instance-apply.pg.test.ts` already passes a hand-written password through that path today. A
- * comment asserting a guarantee the type does not enforce is this repository's dominant defect
- * class; escaping makes it structural instead.
- *
- * `''` doubles the quote. The `E` prefix is for a backslash: under `standard_conforming_strings =
- * on` (the default since 9.1) a backslash in a plain literal is already itself, but the setting is
- * per-session and can be off, and `E'…'` then makes the doubling explicit for both. This is what
- * `PQescapeLiteral` and `pg`'s own `Client.escapeLiteral` do, for the same reason.
- */
-export function quoteLiteral(value: string): string {
-  const escaped = value.replaceAll("'", "''").replaceAll("\\", "\\\\");
-  return value.includes("\\") ? `E'${escaped}'` : `'${escaped}'`;
-}
+// The standard SQL string-literal quoting rule — moved to @waitron/shared (also needed by
+// @waitron/sync's CREATE SUBSCRIPTION conninfo); see its header for the escaping argument. The one
+// literal this package emits is the `CREATE ROLE … PASSWORD '…'` password: `applyInstance` and
+// `InstanceAction` are EXPORTED (`index.ts`) and `InstanceAction.password` is typed `string`, so
+// escaping makes the safety structural rather than a property of one caller — this repo's dominant
+// defect class. For a generated base64url password (`[A-Za-z0-9_-]`) it escapes nothing.
+export { quoteLiteral } from "@waitron/shared";
 
 /**
  * A generated role password. Never operator-supplied — base64url's alphabet is `[A-Za-z0-9_-]`,

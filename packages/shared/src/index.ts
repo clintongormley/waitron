@@ -74,3 +74,5 @@ export type { SupportedLocale } from "./locales.js";
 export { BAND_RANK, classifyBand, worstBand } from "./timing.js";
 export type { StationThresholds, TimingBand } from "./timing.js";
 export { perDishOptionQuantity } from "./quantity.js";
+export { sqlStateOf } from "./sql-state.js";
+export { quoteLiteral } from "./sql-literal.js";

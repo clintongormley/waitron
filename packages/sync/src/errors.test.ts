@@ -73,4 +73,14 @@ describe("the sync error codes carry their declared params", () => {
       count: 3,
     });
   });
+
+  it("constructs sync.subscription_failed with a SQLSTATE, and with null when there is none", () => {
+    // sqlState ONLY — never the statement, which embeds the conninfo password (errors.ts header).
+    const withState = new AppError("sync.subscription_failed", { sqlState: "22023" });
+    expect(withState.code).toBe("sync.subscription_failed");
+    expect(withState.params).toEqual({ sqlState: "22023" });
+
+    const withoutState = new AppError("sync.subscription_failed", { sqlState: null });
+    expect(withoutState.params).toEqual({ sqlState: null });
+  });
 });

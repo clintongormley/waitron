@@ -167,6 +167,16 @@ waits for the owner's signature.
 3. **Provisioning** — swap spec S2. The superuser step, publications and subscriptions on adopt, the
    WireGuard key in the bundle, environment refusal, the three instance settings. Proven against the
    fixture; proven on real machines by Track B item 2.
+
+   > **2026-09-07 — step 3 built.** Capability + fixture only, swap spec S2: publications and
+   > subscription verbs in `@waitron/sync`; the superuser bootstrap emitter
+   > (`replicationBootstrapStatements`, run against the TARGET database) and readiness check
+   > (`assertReplicationReady`, incl. a per-database `pg_default_acl` grant check) in
+   > `@waitron/provisioning`; the WireGuard-key bundle field; `sqlStateOf` consolidated into
+   > `@waitron/shared`. Live adopt/promote/return and the fiscal-fidelity suites stay step 4.
+   > **Ownership gap flagged, not resolved:** `waitron-provision instance` leaves the bootstrap admin,
+   > not `waitron_migrator`, owning the baseline tables — step 4 must close this before publications
+   > can be created against a live instance (swap spec §13). In PR (Track A item 3 step 3).
 4. **Promotion and return on Postgres's numbers, and the outbox deleted** — swap spec S4 + S5 in one
    PR, because `rejoin`, `retire`, `box-status` and the R3 promotion read the outbox until they read
    `pg_replication_slots`. Deletes: the `packages/sync` source files of the swap spec §7, the four

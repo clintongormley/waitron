@@ -237,6 +237,17 @@ unfiltered `main` run, not a wrong hook.
   `scripts/append-only-enable-always.test.ts` (every `reject_mutation` trigger is `ENABLE ALWAYS`);
   `packages/fiscal-verifactu`'s `inmutabilidad` suite still scans the triggers themselves. Run them
   after adding any table anywhere.
+- **The two publications a node holds are created by the table OWNER, and the replication role is a
+  bootstrap the app provisioner only verifies.** `waitron_migrator` creates `waitron_<env>_ledger` /
+  `_state` from the module classification (`@waitron/sync`). A SUPERUSER/box-image bootstrap holds
+  the rest, each on its own role SHAPE: `waitron_repl` is a `LOGIN REPLICATION` role; the migrator
+  (`waitron_migrator`) is granted `pg_create_subscription`; and `wal_level=logical` /
+  `track_commit_timestamp=on` are restart-required CLUSTER settings held by no role (the box image's
+  `postgresql.conf`). The app performs none of it — `assertReplicationReady`
+  (`provisioning.replication_not_ready`) verifies it instead. A subscription's connection string
+  carries the `waitron_repl` password, so its statement is never logged and a failure throws only a
+  SQLSTATE (`sync.subscription_failed`), like `CREATE ROLE`; `sqlStateOf` lives in `@waitron/shared`.
+  Pointer: `docs/superpowers/specs/2026-09-05-outbox-to-native-replication-swap-design.md` §2.2/§3.
 - **A module/migration dependency graph has TWO kinds of cross-set edge**: FK `REFERENCES` and
   `CREATE [CONSTRAINT] TRIGGER … ON <table>`. `sync` enrols other modules' tables by installing capture
   triggers on them, so it depends on `identity` and `payments` with no FK between them; SP-1c's first

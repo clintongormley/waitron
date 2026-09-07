@@ -55,5 +55,11 @@ declare module "@waitron/shared" {
      * writes were rejected this pull; `count` is how many were rejected (a count, never row content —
      * the file header's "NO PARAM CARRIES ROW CONTENT" rule; the bytes live only in the ops table). */
     "sync.config_conflict_rejected": { originId: string; count: number };
+    /** `CREATE SUBSCRIPTION` failed. `sqlState` ONLY — never the statement or its `cause`: the
+     * statement embeds the CONNECTION conninfo, which carries the `waitron_repl` password, and both
+     * Drizzle's wrapper and Postgres's own message quote it back verbatim (the discipline
+     * `provisioning.role_creation_failed` keeps for `CREATE ROLE`). Five `[0-9A-Z]` cannot be the
+     * password. */
+    "sync.subscription_failed": { sqlState: string | null };
   }
 }

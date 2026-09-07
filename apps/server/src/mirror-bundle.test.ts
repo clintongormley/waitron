@@ -241,6 +241,33 @@ describe("assembleMirrorBundle (primary side, real Postgres)", () => {
     expect(bundle.moduleOverrides).toEqual({});
   });
 
+  it("carries a WireGuard public key when one is provided, and omits it otherwise (swap S2)", async () => {
+    const baseDeps = {
+      appDb,
+      retentionDb,
+      ring: RING,
+      stateDir,
+      relayUrl: "https://relay.test:9000/",
+      boxHostname: "waitron.local",
+    };
+
+    const withKey = await assembleMirrorBundle({
+      ...baseDeps,
+      designated: await setupVenue(),
+      standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
+      wireguardPublicKey: "PUBKEY==",
+    });
+    expect(withKey.wireguardPublicKey).toBe("PUBKEY==");
+    expect(withKey.syncToken).not.toBe(""); // the token still travels until step 4
+
+    const withoutKey = await assembleMirrorBundle({
+      ...baseDeps,
+      designated: await setupVenue(),
+      standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
+    });
+    expect(withoutKey.wireguardPublicKey).toBeUndefined();
+  });
+
   it("throws mirror.not_provisioned when the database carries no deployment stamp", async () => {
     // The never-stamped clone: readDeploymentEnvironment returns null (the deployment table is empty), so
     // there is nothing to mirror and the assembly refuses rather than shipping a bundle with no
