@@ -68,7 +68,7 @@ below). Two structures are known to be out of date and must not be built on:
    afternoon) → prototype (a day) → A3 starts immediately; it is the long pole for everyone.
    **2026-09-05:** the split LANDED (#239), the prototype has reported (item 2), item 4's spec is
    approved, and item 3's spec — one chain that also deletes the outbox (owner: "all at once") — is
-   drafted; its step 1 LANDED (#255), lifting the no-new-table rule, and steps 2–5 await
+   drafted; its step 1 LANDED (#255), lifting the no-new-table rule, step 2 LANDED (#271), and steps 3–5 await
    owner review.
 2. **The module framework's UI seats** (cards, permissions, i18n arriving with a module) are
    unproven until Track C's `fiscal-none` + bookings-as-a-module land. New product domains wait for
@@ -238,7 +238,7 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    superuser provisioning step for the `REPLICATION` role. **Cross-track (Track C):** module SP-2b's schema-version gate (LANDED #230) rests on
    "deliberate rejection of native logical replication"; item 4's spec retires it (its §5).
 3. **Drop FORCE RLS + the multi-role set, squash the migrations, delete the outbox — STEP 1
-   LANDED #255 (2026-09-06); steps 2–5 pending owner review:**
+   LANDED #255 (2026-09-06), STEP 2 LANDED #271 (2026-09-07); steps 3–5 pending owner review:**
    [drop-rls-squash-and-outbox-deletion-design](superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md).
    Owner decisions: all at once (item 4's swap slices are steps 2–5 of this chain, since nothing is
    deployed); ONE owner signature, on step 4 (where fiscal rows first flow natively and `ENABLE
@@ -257,7 +257,7 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    reset, no hook), and a fork surfaces as the `multiple_unique_conflicts` drain stall the swap
    already handles — so the S3/S4 prerequisite is discharged (swap design §4.4).
 
-   **Step 2 built (swap S1) — in PR #TBD (2026-09-07):** the classification contract — `classify()`
+   **Step 2 LANDED #271 (2026-09-07):** the classification contract — `classify()`
    (`@waitron/sync-enrolment`) adds `ledger`/`state`/`local` per-module `<MODULE>_CLASSIFICATION`
    lists ALONGSIDE enrol's modes/lanes (enrol + outbox still run; deleted in step 4); every table
    classified; the two root guards `scripts/classification-complete.test.ts` (classified exactly
@@ -267,6 +267,8 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    swap §2.1: `canvases`→`state` (successor to the dropped `layout_profiles`); the four `sync_*`
    outbox tables classified `local` (they still exist in S1 and the completeness guard needs an
    entry — deleted with the outbox in step 4). Exports only; nothing consumed at runtime yet.
+   Rebased onto #270 (bookings extracted to `@waitron/bookings`): the `bookings` classification moved
+   core→its module (still `state`), and the completeness guard validated the result.
 
    **Step 1 LANDED (#255).** Per-module baselines, FORCE RLS and the seven helper roles gone,
    the `*.rls.test.ts` suites replaced by per-module grant suites and `privileges.test.ts`, and
