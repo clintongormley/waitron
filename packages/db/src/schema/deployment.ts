@@ -29,6 +29,11 @@ export const deployment = pgTable(
     // 'primary' so an existing single-node deployment stays a singleton-holder. Read at runtime so a
     // later promotion needs no restart.
     singletonRole: text("singleton_role").notNull().default("primary"),
+    // A scrypt verifier of the offline break-glass secret, set at promotion time by the owner.
+    // Nullable: a node minted before this column, and the primary (which is never promoted), both
+    // hold `null`. Never the secret itself — only a verifier — and, like `mode`/`singleton_role`,
+    // added by a hand-written ALTER (this table is not in the drizzle schema barrel; see the header).
+    breakGlassVerifier: text("break_glass_verifier"),
     stampedAt: timestamp("stamped_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
