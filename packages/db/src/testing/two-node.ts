@@ -116,10 +116,13 @@ export async function startTwoNodeCluster(options: TwoNodeClusterOptions): Promi
     nodeA: a.node,
     nodeB: b.node,
     stop: async () => {
-      await a.client.end();
-      await b.client.end();
-      await a.container.stop();
-      await b.container.stop();
+      // Best-effort, isolated teardown in the sensible order (clients, then containers, then the
+      // network): one step rejecting — a client already closed, a Docker hiccup — must never strand
+      // the later stops and leak them (the same reason postgres.ts's helpers swallow their close
+      // failures). `allSettled` runs every step and never rejects, so it adds no error-handling
+      // branch of its own to cover; the network is last, so it has nothing left to strand.
+      await Promise.allSettled([a.client.end(), b.client.end()]);
+      await Promise.allSettled([a.container.stop(), b.container.stop()]);
       await network.stop();
     },
   };
