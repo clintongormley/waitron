@@ -931,7 +931,8 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   let axes = initialAxes;
   if (fenced && axes.singletonRole === "primary") {
     // Demote the singleton axis on the OWNER pool (app_user holds no UPDATE on deployment) — the same
-    // dev-correct migrationsDatabaseUrl owner-write R3b promote uses (withOwnerDb). Idempotent: a
+    // table-owner adminDatabaseUrl owner-write R3b promote uses (withOwnerDb), so it shares the
+    // fail-closed admin→migrations→app fallback. Idempotent: a
     // second fenced boot already reads 'secondary' and skips. mode stays 'primary' — the (primary,
     // secondary) pair is valid (deployment_role_valid_ck); the read-only gate below, not the mode,
     // enforces the fence. This stops the submitter/reconciler/config-writer via their existing
@@ -940,7 +941,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // close-on-throw discipline in this region: startServer never returns on the throw path, so nothing
     // else would call `db.close()`. The inner try/finally closes the short-lived owner pool regardless.
     try {
-      const ownerDb = await createPostgresDb(config.migrationsDatabaseUrl);
+      const ownerDb = await createPostgresDb(config.adminDatabaseUrl);
       try {
         await setSingletonRole(ownerDb, "secondary");
       } finally {
@@ -1998,16 +1999,16 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // `startListening` has bound the socket — so no boot-failure path can leak the UDP :5353 socket (an
   // earlier throw never started it). Both modes advertise; stopped in makeStartedServer's close() below.
   const mdns = startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: listBoxIpv4, log });
-  // Both in-process promotes open a short-lived owner pool from the migrations URL (the same open/close
-  // pattern the boot-time `stampProbe` above uses) rather than holding one open — a trading box keeps only
-  // the app pool — and hand the promote the same `PromoteDeps`. This factors that shell so each branch
-  // supplies only its promote call + any post-processing. If `WAITRON_MIGRATIONS_DATABASE_URL` is unset
-  // this URL defaults to the app URL, so the write hits `app_user` (no UPDATE on `deployment`) and throws
-  // 42501 — fails CLOSED, never a silent no-op. (Plan "Known limitations" #2: the REAL runtime admin
-  // connection is deferred with instance provisioning, boot.ts:529; this URL is the superuser in dev/CI
-  // where the promote is exercised.)
+  // Both in-process promotes open a short-lived owner pool from the table-OWNER admin connection (the
+  // same open/close pattern the boot-time `stampProbe` above uses) rather than holding one open — a
+  // trading box keeps only the app pool — and hand the promote the same `PromoteDeps`. This factors
+  // that shell so each branch supplies only its promote call + any post-processing.
+  // `config.adminDatabaseUrl` is `WAITRON_ADMIN_DATABASE_URL` when set, else the migrations URL, else
+  // the app URL: so a role-split appliance that misconfigures it opens the LEAST-privileged connection
+  // and the owner write hits a role with no UPDATE on `deployment`, throwing 42501 — fails CLOSED,
+  // never a silent no-op. In dev/CI the URL is the superuser, where the promote is exercised.
   const withOwnerDb = async <T>(run: (deps: PromoteDeps) => Promise<T>): Promise<T> => {
-    const ownerDb = await createPostgresDb(config.migrationsDatabaseUrl);
+    const ownerDb = await createPostgresDb(config.adminDatabaseUrl);
     try {
       return await run({
         appDb: db,
