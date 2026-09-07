@@ -652,6 +652,42 @@ describe("counter delivery (deliveryTableId on a walk-up sale)", () => {
     );
     expect(Number(rows[0]!.n)).toBe(0);
   });
+
+  it("a deliveryTableId naming ANOTHER TENANT's table is refused table.not_found (till-reroute S3 §3)", async () => {
+    // Tenant A rings a counter delivery naming tenant B's REAL table id. The existence pre-check must
+    // scope to A's own tenant: before the fix it read `dining_tables` by id alone, so B's table PASSED
+    // it and the path ran on to the insert, failing only at the composite FK (23503 → an opaque
+    // server.internal 500) — and the pre-check itself confirmed B's table exists (the §3 read leak).
+    // Scoped, the pre-check misses, so A gets the same clean table.not_found as a non-existent id.
+    // The sibling `openTab` path is already scoped (its own cross-tenant test above); this closes the
+    // counter-delivery path. Two tenants share ONE database here, so PGlite would be a false pass
+    // (CLAUDE.md §4) — this suite is real Postgres.
+    const { cfg: cfgA, cafe: cafeA } = await setupVenue();
+    const { cfg: cfgB } = await setupVenue();
+    const tableB = await seedTable(cfgB, "B-only");
+    const deps = { db: suite.admin, backend, clock };
+    const orderId = randomUUID();
+
+    await expect(
+      recordTillSale(deps, cfgA, {
+        workingOrderId: orderId,
+        lines: [{ productId: cafeA.id, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+        deliveryTableId: tableB,
+      }),
+    ).rejects.toMatchObject({ code: "table.not_found", params: { tableId: tableB } });
+
+    // Nothing filed and no order created for A; B's table is untouched (still exactly one row).
+    expect(await saleCount(orderId)).toBe(0);
+    const { rows } = await suite.admin.execute<{ n: string }>(
+      sql`select count(*)::text as n from working_orders where id = ${orderId}`,
+    );
+    expect(Number(rows[0]!.n)).toBe(0);
+    const stillThere = await suite.admin.execute<{ n: string }>(
+      sql`select count(*)::text as n from dining_tables where id = ${tableB}`,
+    );
+    expect(Number(stillThere.rows[0]!.n)).toBe(1);
+  });
 });
 
 describe("H2 (column): the huella is independent of delivery_table_id", () => {

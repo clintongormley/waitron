@@ -661,14 +661,17 @@ export async function createOpenOrder(
   placement: { deliveryTableId?: string | null } = {},
 ): Promise<{ orderNumber: number; priced: PricedBasket }> {
   // Check the delivery table exists before insertion so an unknown id produces
-  // table.not_found rather than a raw foreign-key failure. This check permits an
-  // inactive table and does not take a row lock.
+  // table.not_found rather than a raw foreign-key failure. Scoped to the tenant (not by id alone):
+  // one-tenant-per-database is not the query's isolation boundary since RLS was dropped (#255,
+  // CLAUDE.md §3), so a globally-unique id belonging to ANOTHER tenant must read as absent here —
+  // otherwise it slips past this pre-check and fails only at the composite FK as a raw 23503, and the
+  // pre-check itself leaks that the id exists. This permits an inactive table and takes no row lock.
   const deliveryTableId = placement.deliveryTableId ?? null;
   if (deliveryTableId !== null) {
     const [table] = await tx
       .select({ id: diningTables.id })
       .from(diningTables)
-      .where(eq(diningTables.id, deliveryTableId));
+      .where(and(eq(diningTables.id, deliveryTableId), eq(diningTables.tenantId, cfg.tenantId)));
     if (table === undefined) {
       throw new AppError("table.not_found", { tableId: deliveryTableId });
     }

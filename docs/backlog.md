@@ -594,8 +594,17 @@ screens, `apps/server/src/modules.ts` (the maps derived from that list), and the
        by id alone — a pre-existing cross-tenant leak (tenant B could read A's contact + cancel A's booking).
        All now scope `cfg.tenantId` (§3, the till-reroute S3 class); real-PG regression tests added.
      - **Deferred follow-ons (none on the sale path):** `createOpenOrder`'s `deliveryTableId` existence check
-       still reads `dining_tables` by id alone — SAME §3 read-leak class (fail-closed-on-WRITE via composite FK
-       does not close the read leak); scope it next. Floor perf (pre-existing, moved verbatim): `floor.ts`
+       read `dining_tables` by id alone — SAME §3 read-leak class (fail-closed-on-WRITE via composite FK does
+       not close the read leak). **FIXED 2026-09-08** (branch `fix/open-order-delivery-table-tenant-scope`):
+       the pre-check now scopes `eq(diningTables.tenantId, cfg.tenantId)`, so another tenant's real table id
+       reads as absent (clean `table.not_found`, not a raw 23503); real-PG two-tenant regression in
+       `tabs.pg.test.ts`. **NEW lead found while there (code-traced, NOT yet run):** `lockOpenTabRow`
+       (`working-order.ts`) reads `working_orders` by id with no tenant predicate, and the tab verbs
+       (`sendLines`/`addTabRound`/`recallLines`/`voidTabLine`/`moveTab`… ~8 `lockOpenTab` callers) call it
+       straight through — the same §3 by-id class as the fixed `getHeldOrder` leak, but in the tab family; it
+       takes no `cfg`, so the fix threads `cfg.tenantId` into `lockOpenTabRow`/`lockOpenTab` + a cross-tenant
+       test per verb. Verify-by-two-tenant-probe FIRST (reading is not verification). Its own branch. Floor
+       perf (pre-existing, moved verbatim): `floor.ts`
        constructs two `Intl.DateTimeFormat` per poll + a per-poll `locations.time_zone` read — memoize per
        timezone. `CoreServices` is one shared interface every module receives whole — when a 2nd core verb is
        needed (SP2+), prefer per-module narrow required-services interfaces. `floorAnnotations` is honestly
