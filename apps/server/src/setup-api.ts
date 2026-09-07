@@ -44,8 +44,10 @@ export interface SetupDeps {
    * credential never touches a browser→primary hop), adopts the venue into this box's own database,
    * seals the sync token, and persists `trading.env` — returning the adopted `tenantId`. OPTIONAL for
    * the same reason `provision` is: a `POST /setup-api/adopt` that arrives before it is wired is
-   * answered `503 setup.not_ready`. */
-  adopt?: (req: AdoptRequest) => Promise<{ tenantId: string }>;
+   * answered `503 setup.not_ready`. Returns the adopted `tenantId` plus the freshly minted
+   * `breakGlassSecret` — the offline promote fallback, surfaced ONCE in the connect response below and
+   * never logged (the mirror-bundle sync-token discipline). */
+  adopt?: (req: AdoptRequest) => Promise<{ tenantId: string; breakGlassSecret: string }>;
   /** The owner DB connection and vault key ring, injected by boot (which already holds both). Used to
    * seal the fiscal regime's provision-time secret through the fiscal contribution's
    * `provisioningSecret.seal` seat — so BOOT imports no regime package. Needed only when the resolved
@@ -498,9 +500,16 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           totp: cred.totp === undefined ? undefined : asString(cred.totp, "credential.totp"),
         };
 
-        const { tenantId } = await adopt({ primaryUrl, credential });
+        const { tenantId, breakGlassSecret } = await adopt({ primaryUrl, credential });
 
-        const response = c.json({ adopted: true, tenantId, restarting: true }, 200);
+        // Surface the break-glass secret ONCE, here, in the connect response — the operator's only
+        // chance to record the offline promote fallback. It is NEVER logged (mirroring the sync-token
+        // discipline): no `log(...)` call on this success path carries it, and it is not put in the
+        // `setup.adopt_failed` error branch either.
+        const response = c.json(
+          { adopted: true, tenantId, breakGlassSecret, restarting: true },
+          200,
+        );
         // Flush the 200 FIRST, then restart on the next tick so the wizard sees success before the box
         // goes down (`setTimeout`, not `queueMicrotask`, so the response promise resolves before it) —
         // the same persist-then-restart transition provision uses.

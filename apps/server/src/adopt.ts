@@ -4,6 +4,7 @@ import type { KeyRing } from "@waitron/credentials";
 import { enabledModules, parseModuleOverrides, type ModuleConfig } from "@waitron/module";
 import { ALL_MODULES } from "./modules.js";
 import { sealMirrorToken } from "./mirror-token.js";
+import { mintBreakGlassSecret } from "./break-glass.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 import type { TradingConfig } from "./trading-config.js";
@@ -105,7 +106,7 @@ export interface AdoptDeps {
 export async function adoptFromPrimary(
   deps: AdoptDeps,
   req: AdoptRequest,
-): Promise<{ tenantId: string }> {
+): Promise<{ tenantId: string; breakGlassSecret: string }> {
   // Mint the standby's own identity in memory BEFORE the fetch (design §6 R2): its public half + nodeId
   // are sent to the primary, which reserves the standby's fiscal identity and endorses its key, returning
   // both in `bundle.reservedIdentity`. The private half stays local until it is sealed below. This
@@ -202,5 +203,12 @@ export async function adoptFromPrimary(
     environment: bundle.environment,
   });
 
-  return { tenantId: designated.tenantId };
+  // Mint the offline break-glass secret AFTER the mirror is stamped and its parent rows + deployment
+  // singleton exist (mint UPDATEs that row via the owner pool, which alone holds it). This is the ONLY
+  // promotable node, so adopt is the right — and only — enrolment point. The raw secret is returned
+  // exactly once for the connect response to surface to the operator; only its scrypt verifier is
+  // persisted, and it is NEVER logged (the mirror-bundle sync-token discipline).
+  const breakGlassSecret = await mintBreakGlassSecret(deps.ownerDb);
+
+  return { tenantId: designated.tenantId, breakGlassSecret };
 }
