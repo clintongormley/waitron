@@ -8,7 +8,7 @@ import { resolveActiveLocale } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { diag } from "./diagnostics.js";
 import { LocaleChangeController } from "./state/locale-controller.js";
-import { TillApi } from "./api/client.js";
+import { TillApi, isNetworkFailure } from "./api/client.js";
 import type { ServerRouter } from "./api/server-router.js";
 import { WorkingOrderStore } from "./state/working-order.js";
 import { toWireLineExtras, toWireOption } from "./state/order-line.js";
@@ -961,10 +961,12 @@ export class TillApp extends LitElement {
       // simply re-reads an unchanged list. Self-heals even if it fails — a retrieve of the settled
       // order 404s → `held.stale` → refresh — and cannot double-file (pay is idempotent, spec §3).
       await this.#refreshHeldOrders();
-    } catch {
+    } catch (err) {
       // A rejected {code} must not lose the sale in progress: stay on the counter, basket intact, and
-      // surface a generic, non-fatal message — never the raw domain code.
-      this.errorKey = "sale.error";
+      // surface a generic, non-fatal message — never the raw domain code. A NETWORK failure (no answer)
+      // is `sale.unconfirmed` instead — the sale may have filed, so a human checks before retrying
+      // (till-reroute §4.3).
+      this.errorKey = isNetworkFailure(err) ? "sale.unconfirmed" : "sale.error";
     } finally {
       // Re-enable Pay whichever way the sale settled: on success the counter is already gone (screen
       // is now `ticket`), on rejection the operator is back on the counter and may retry.
@@ -1018,8 +1020,10 @@ export class TillApp extends LitElement {
       } else {
         this.cardOutcome = out.outcome;
       }
-    } catch {
-      this.errorKey = "sale.error";
+    } catch (err) {
+      // A NETWORK failure (no answer) is `sale.unconfirmed` — the sale may have filed, so a human
+      // checks before retrying (till-reroute §4.3); a server `{ code }` stays the generic `sale.error`.
+      this.errorKey = isNetworkFailure(err) ? "sale.unconfirmed" : "sale.error";
     } finally {
       this.submitting = false;
     }
@@ -1128,10 +1132,13 @@ export class TillApp extends LitElement {
       await this.api.placeOrder(id);
       this.stage = "collect";
       await this.#refreshStationQueue();
-    } catch {
+    } catch (err) {
       // A rejected {code} must not lose the order in progress: stay on the counter, basket (and its
       // `"order"` stage) intact, and surface a generic, non-fatal message — never the raw domain code.
-      this.errorKey = "place.error";
+      // A NETWORK failure (no answer) is `sale.unconfirmed` — the placement/deferred invoice may have
+      // filed, so a human checks before retrying (till-reroute §4.3); a server refusal keeps
+      // `place.error`.
+      this.errorKey = isNetworkFailure(err) ? "sale.unconfirmed" : "place.error";
     } finally {
       this.placing = false;
     }
@@ -1945,8 +1952,10 @@ export class TillApp extends LitElement {
     try {
       this.result = await this.api.recordSale([], tender, id);
       this.#showTicket();
-    } catch {
-      this.errorKey = "sale.error";
+    } catch (err) {
+      // A NETWORK failure (no answer) is `sale.unconfirmed` — the tab sale may have filed, so a human
+      // checks before retrying (till-reroute §4.3); a server `{ code }` stays the generic `sale.error`.
+      this.errorKey = isNetworkFailure(err) ? "sale.unconfirmed" : "sale.error";
     } finally {
       this.submitting = false;
     }

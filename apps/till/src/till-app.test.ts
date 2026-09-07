@@ -1586,6 +1586,28 @@ describe("till-app", () => {
     expect(el.shadowRoot!.textContent).not.toContain("server.internal"); // never leaks the raw code
   });
 
+  it("shows sale.unconfirmed, basket kept, when the sale request got no answer", async () => {
+    // A `recordSale` whose `fetch` rejects at the NETWORK level (a TypeError — the host never answered)
+    // is not the same as a server that refused with a `{ code }` (till-reroute §4.3): the operator must
+    // check whether the sale went through before retrying, so the banner is `sale.unconfirmed`, not the
+    // free-to-retry `sale.error`. Basket kept, still on the counter.
+    const recordSale = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({ recordSale });
+    const c = await toCounter(el);
+    const store = c.store;
+    store.addProduct(cafe, "1");
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    expect(ticket(el)).toBeNull();
+    expect(counter(el)).not.toBeNull(); // still on the counter
+    expect(store.lines).toHaveLength(1); // basket kept
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("sale.unconfirmed"));
+  });
+
   it("walk-up pay retry: a re-tapped confirm sends the SAME store id (idempotent replay, never two ids)", async () => {
     // A lost pay response then an operator re-tap must replay against the same working-order id, not
     // mint a second one — otherwise a second POST /api/sales files a second chained fiscal record

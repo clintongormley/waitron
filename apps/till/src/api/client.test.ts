@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   TillApi,
+  isNetworkFailure,
   type FloorZone,
   type MyAbsence,
   type MyShift,
@@ -1831,5 +1832,14 @@ describe("TillApi", () => {
       }),
     );
     expect(out).toBeUndefined();
+  });
+});
+
+describe("isNetworkFailure", () => {
+  it("is true for a fetch TypeError or an AbortError, false for a server {code}", () => {
+    expect(isNetworkFailure(new TypeError("Failed to fetch"))).toBe(true);
+    expect(isNetworkFailure(new DOMException("aborted", "AbortError"))).toBe(true);
+    expect(isNetworkFailure({ code: "sale.empty_basket" })).toBe(false);
+    expect(isNetworkFailure(new Error("x"))).toBe(false);
   });
 });

@@ -30,6 +30,16 @@ import type { StationThresholds, TimingBand } from "@waitron/shared";
 export type FetchLike = typeof fetch;
 
 /**
+ * Whether a rejected request never reached a server (till-reroute §4.3): `fetch` rejects with a
+ * TypeError when the host is unreachable and with an AbortError on a timeout; a server that answered
+ * rejects through `#request` as a `{ code }`. The distinction decides `sale.unconfirmed` (a human must
+ * check before retrying) versus `sale.error` (the server refused; retry freely).
+ */
+export function isNetworkFailure(err: unknown): boolean {
+  return err instanceof TypeError || (err instanceof DOMException && err.name === "AbortError");
+}
+
+/**
  * `GET /api/till` — the public boot info the app reads before login. `orderFlow` (7c prepare &
  * collect) is the location's pay-timing mode — see {@link OrderFlow}'s own doc — needed BEFORE login
  * so the app can select which pay control (Place/Collect vs Pay) to render once the operator reaches
