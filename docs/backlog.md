@@ -442,9 +442,18 @@ All three decisions are now taken.
    refactor the rebase surfaced, the setup UI dropping the secret, and an awaiting-cert flag that
    cleared on a no-work drain pass — all fixed before land.
    **STILL OWED (this item's "then", NOT built — separate slices):** **cert distribution to a
-   promoted mirror** (re-seal `fiscal.aeat` at adopt / ship in the bundle) — the named dependency
-   that unblocks **filing** on a promoted cloud; **re-admission** of a rejoined wiped-and-restored box
-   as the standby (R3 follow-up (b)); the **resume-at-restore marker** (R3 follow-up (a)); the
+   promoted mirror** — DESIGNED 2026-09-07
+   ([`2026-09-07-fiscal-cert-distribution-design.md`](superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md),
+   not yet built): the standby receives the certificate at adopt wrapped under the break-glass secret
+   and sealed DORMANT (`fiscal.aeat.dormant`), unwrapped into the live `fiscal.aeat` row on promotion
+   (or via a new `/management-api/fiscal-certificate/unlock`); a new install/replace endpoint doubles
+   as the missing renewal path; folded in the SAME slice, cloud nodes take the vault key from the
+   ENVIRONMENT (Waitron Cloud's secrets service) and their backups carry no key — so a snapshot,
+   dump or backup never yields a usable certificate, only a live-process compromise does. This is the
+   named dependency that unblocks **filing** on a promoted cloud; **re-admission** of a rejoined
+   wiped-and-restored box as the standby (R3 follow-up (b)) — **when built, it must DELETE the
+   re-admitted node's live `fiscal.aeat` row and hold only the dormant copy again** (cert-distribution
+   design §8); the **resume-at-restore marker** (R3 follow-up (a)); the
    **worker-lifecycle manager** (promote-action Slice 3 — would make mirror promotion in-process, no
    restart); a friendly **dashboard promote UI**; and an **a11y test** for the new break-glass secret
    panel.
