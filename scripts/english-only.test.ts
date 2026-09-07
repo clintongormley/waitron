@@ -100,6 +100,8 @@ describe("configuration", () => {
       "fiscal-none",
       "provisioning",
       "ui",
+      "dashboard-kit",
+      "dashboard-modules",
     ]);
   });
 
