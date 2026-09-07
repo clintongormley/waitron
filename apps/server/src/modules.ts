@@ -1,5 +1,5 @@
 import { ALL_MODULES } from "@waitron/composition";
-import type { EnrolledTable } from "@waitron/sync";
+import { tablesForPublication, type ClassifiedTable, type EnrolledTable } from "@waitron/sync";
 import type { FloorAnnotator, ModulePermission, WaitronModule } from "@waitron/module";
 
 export { ALL_MODULES };
@@ -39,4 +39,18 @@ export const ALL_SYNC_ENROLMENTS: readonly EnrolledTable[] = ALL_MODULES.flatMap
  * SP-2a's enrolment type and its threading stay untouched (spec §5). */
 export const MODULE_BY_TABLE: ReadonlyMap<string, string> = new Map(
   ALL_MODULES.flatMap((m) => (m.sync ?? []).map((e) => [e.table, m.name] as const)),
+);
+
+/** Swap S1: every module's table classification, in ALL_MODULES order. DERIVED, not yet consumed at
+ * runtime — S2 (provisioning) creates the two publications from the table lists below. */
+export const ALL_CLASSIFICATIONS: readonly ClassifiedTable[] = ALL_MODULES.flatMap(
+  (m) => m.classification ?? [],
+);
+export const LEDGER_PUBLICATION_TABLES: readonly string[] = tablesForPublication(
+  ALL_CLASSIFICATIONS,
+  "ledger",
+);
+export const STATE_PUBLICATION_TABLES: readonly string[] = tablesForPublication(
+  ALL_CLASSIFICATIONS,
+  "state",
 );

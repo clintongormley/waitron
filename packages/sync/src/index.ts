@@ -17,8 +17,15 @@ export { SYNC_MIGRATIONS } from "./migrations.js";
 // no central enrolment constant here any more): the assembled module set is injected by the composition
 // root (SP-2a inversion). The lane helper and types travel here; the per-table apply metadata is
 // declared by each owning package.
-export { SYNC_LANES, tablesForLane } from "@waitron/sync-enrolment";
-export type { CaptureOp, EnrolledTable, SyncLane, SyncMode } from "@waitron/sync-enrolment";
+export { classify, SYNC_LANES, tablesForLane, tablesForPublication } from "@waitron/sync-enrolment";
+export type {
+  CaptureOp,
+  ClassifiedTable,
+  EnrolledTable,
+  SyncLane,
+  SyncMode,
+  TableClass,
+} from "@waitron/sync-enrolment";
 
 // The producer-side disposal guard — a returned/fenced node proves LOCALLY that its own-origin
 // sync_log tail has fully drained onto the carrier (per-lane own high-water vs the carrier's reported

@@ -1,6 +1,8 @@
-import { CORE_ENROLMENT } from "@waitron/db";
+import { CREDENTIALS_CLASSIFICATION } from "@waitron/credentials";
+import { CORE_CLASSIFICATION, CORE_ENROLMENT } from "@waitron/db";
 import { FISCAL_NONE_SLOT } from "@waitron/fiscal-none";
 import {
+  FISCAL_CLASSIFICATION,
   FISCAL_ENROLMENT,
   FISCAL_PROVISIONING,
   FISCAL_RESTORE,
@@ -13,10 +15,13 @@ import {
   BOOKINGS_PERMISSIONS,
   BOOKINGS_ROUTES,
 } from "@waitron/bookings";
-import { IDENTITY_ENROLMENT } from "@waitron/identity";
+import { IDENTITY_CLASSIFICATION, IDENTITY_ENROLMENT } from "@waitron/identity";
 import type { WaitronModule } from "@waitron/module";
-import { PAYMENTS_ENROLMENT } from "@waitron/payments";
-import { WORKFORCE_ES_VOCABULARY } from "@waitron/workforce-es";
+import { PAYMENTS_CLASSIFICATION, PAYMENTS_ENROLMENT } from "@waitron/payments";
+import { SCHEDULER_CLASSIFICATION } from "@waitron/scheduler";
+import { SYNC_CLASSIFICATION } from "@waitron/sync";
+import { WORKFORCE_CLASSIFICATION } from "@waitron/workforce";
+import { WORKFORCE_ES_CLASSIFICATION, WORKFORCE_ES_VOCABULARY } from "@waitron/workforce-es";
 
 /**
  * Every Waitron module, in composition order. The one place that names every module package: the
@@ -34,6 +39,7 @@ import { WORKFORCE_ES_VOCABULARY } from "@waitron/workforce-es";
  * `CREATE TRIGGER … ON <table>` and the `sync_capture()` SPI call — which the root
  * `module-graph-honesty` guard cross-checks against the migrations. Populated seats today: `sync` on
  * every enrolling module (SP-2a/3a), `vocabulary` on the Spanish-by-design modules (SP-3b),
+ * `classification` on every table-owning module (swap S1 — `fiscal-none` owns no tables and has none),
  * `backup.nonDbState` on `core`, and `provisioning`, `fiscal` + `backup.restore` on `fiscal-verifactu`.
  * Two modules fill the `fiscal` slot — `fiscal-verifactu` and the no-regime `fiscal-none` — so exactly
  * one is enabled per deployment (`fiscalSlot`); provisioning selects it from the venue's territory. The
@@ -46,6 +52,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     tier: "mandatory",
     migrations: { name: "core", table: "__drizzle_migrations_db", from: "../db/drizzle" },
     sync: CORE_ENROLMENT,
+    classification: CORE_CLASSIFICATION,
     // The content-addressed media store is core's non-DB state; a backup must capture it
     // alongside the DB.
     backup: { nonDbState: [{ kind: "content-addressed-dir", source: "media" }] },
@@ -61,6 +68,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../identity/drizzle",
     },
     sync: IDENTITY_ENROLMENT,
+    classification: IDENTITY_CLASSIFICATION,
   },
   {
     name: "workforce",
@@ -72,6 +80,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       table: "__drizzle_migrations_workforce",
       from: "../workforce/drizzle",
     },
+    classification: WORKFORCE_CLASSIFICATION,
   },
   {
     name: "workforce-es",
@@ -84,6 +93,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../workforce-es/drizzle",
     },
     vocabulary: WORKFORCE_ES_VOCABULARY,
+    classification: WORKFORCE_ES_CLASSIFICATION,
   },
   {
     name: "payments",
@@ -96,6 +106,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../payments/drizzle",
     },
     sync: PAYMENTS_ENROLMENT,
+    classification: PAYMENTS_CLASSIFICATION,
   },
   {
     name: "scheduler",
@@ -107,6 +118,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       table: "__drizzle_migrations_scheduler",
       from: "../scheduler/drizzle",
     },
+    classification: SCHEDULER_CLASSIFICATION,
   },
   {
     name: "credentials",
@@ -118,6 +130,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       table: "__drizzle_migrations_credentials",
       from: "../credentials/drizzle",
     },
+    classification: CREDENTIALS_CLASSIFICATION,
   },
   {
     name: "sync",
@@ -125,6 +138,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     tier: "toggleable",
     requires: { core: "*", modules: { identity: "*", payments: "*" } },
     migrations: { name: "sync", table: "__drizzle_migrations_sync", from: "../sync/drizzle" },
+    classification: SYNC_CLASSIFICATION,
   },
   {
     name: "fiscal-verifactu",
@@ -137,6 +151,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../fiscal-verifactu/drizzle",
     },
     sync: FISCAL_ENROLMENT,
+    classification: FISCAL_CLASSIFICATION,
     vocabulary: FISCAL_VOCABULARY,
     provisioning: FISCAL_PROVISIONING,
     fiscal: FISCAL_SLOT,

@@ -425,6 +425,9 @@ importers:
       '@waitron/bookings':
         specifier: workspace:*
         version: link:../bookings
+      '@waitron/credentials':
+        specifier: workspace:*
+        version: link:../credentials
       '@waitron/db':
         specifier: workspace:*
         version: link:../db
@@ -443,6 +446,15 @@ importers:
       '@waitron/payments':
         specifier: workspace:*
         version: link:../payments
+      '@waitron/scheduler':
+        specifier: workspace:*
+        version: link:../scheduler
+      '@waitron/sync':
+        specifier: workspace:*
+        version: link:../sync
+      '@waitron/workforce':
+        specifier: workspace:*
+        version: link:../workforce
       '@waitron/workforce-es':
         specifier: workspace:*
         version: link:../workforce-es
