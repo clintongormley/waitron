@@ -147,6 +147,68 @@ describe("ServerRouter", () => {
     expect(r.statuses()[0]?.state).toBe("unreachable");
   });
 
+  it("degrades to memory when the DEFAULT localStorage global throws on access (blocked site data)", () => {
+    // A browser that blocks site data throws on the bare `localStorage` access itself, not only on
+    // getItem/setItem. With no `storage` opt the constructor takes the default-acquisition path, which
+    // must swallow that throw and fall back to memory rather than abort construction.
+    const prev = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      get() {
+        throw new DOMException("blocked", "SecurityError");
+      },
+    });
+    try {
+      const r = new ServerRouter({ origin: BOX, fetchImpl: probeFetch({}) });
+      expect(r.statuses().map((s) => s.url)).toEqual([BOX]);
+    } finally {
+      if (prev) Object.defineProperty(globalThis, "localStorage", prev);
+      else delete (globalThis as { localStorage?: unknown }).localStorage;
+    }
+  });
+
+  it("coalesces an overlapping probeNow into the in-flight round (an older round cannot undo a move)", async () => {
+    const calls: string[] = [];
+    const resolvers: Array<() => void> = [];
+    const gated = vi.fn((input: RequestInfo | URL) => {
+      const url = new URL(
+        typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+      );
+      calls.push(url.origin);
+      const yes = url.origin === CLOUD;
+      return new Promise<Response>((res) => {
+        resolvers.push(() =>
+          res(
+            new Response(
+              JSON.stringify({ acceptingSales: yes, term: yes ? 2 : null, nodeId: "x" }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            ),
+          ),
+        );
+      });
+    }) as unknown as typeof fetch;
+    const r = new ServerRouter({ origin: BOX, fetchImpl: gated, storage: memoryStorage() });
+    r.setServers([{ url: BOX }, { url: CLOUD }]);
+    const first = r.probeNow();
+    const second = r.probeNow();
+    expect(second).toBe(first);
+    for (const done of resolvers) done();
+    await Promise.all([first, second]);
+    expect(calls).toEqual([BOX, CLOUD]);
+    expect(r.current).toBe(CLOUD);
+  });
+
+  it("drops a non-http(s) server entry instead of crashing statuses()", () => {
+    const r = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch({}),
+      storage: memoryStorage(),
+    });
+    r.setServers([{ url: "mailto:x@y" }, { url: CLOUD }]);
+    expect(() => r.statuses()).not.toThrow();
+    expect(r.statuses().map((s) => s.url)).toEqual([BOX, CLOUD]);
+  });
+
   it("persists the list and reads it back; a throwing storage degrades to the page origin", () => {
     const storage = memoryStorage();
     const r = new ServerRouter({ origin: BOX, fetchImpl: probeFetch({}), storage });

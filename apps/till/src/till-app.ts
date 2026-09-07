@@ -176,9 +176,9 @@ export class TillApp extends LitElement {
   /** The HTTP face of the till. Defaults to a real same-origin client; a test injects a stub. */
   @property({ attribute: false }) api: TillApi = new TillApi();
 
-  /** The venue's server router (till-reroute §4.1), wired in `main.ts`. Held here so the app can read
-   * its state and follow its `server-changed`/`state-changed` events; the event wiring is S5's Task 17,
-   * so this slice only declares the property. Undefined in tests that do not inject one. */
+  /** The venue's server router (till-reroute §4.1), set as a property in `main.ts`. Held here so the
+   * app can read its state and follow a server move through its `server-changed`/`state-changed`
+   * events. Undefined in tests that do not inject one. */
   @property({ attribute: false }) router?: ServerRouter;
 
   /** The one basket the whole flow shares. A stable reference (widgets subscribe to it directly). */

@@ -19,7 +19,18 @@ export interface RouterOptions {
 
 export const SERVERS_STORAGE_KEY = "waitron.servers";
 
+/** The bare `localStorage` access itself throws (SecurityError) in a browser that blocks site data, so
+ * the default acquisition degrades to memory-only exactly like `#load`/`#save`. */
+function defaultStorage(): Pick<Storage, "getItem" | "setItem"> | undefined {
+  try {
+    return typeof localStorage === "undefined" ? undefined : localStorage;
+  } catch {
+    return undefined;
+  }
+}
+
 interface Tracked extends ServerEntry {
+  label: string;
   state: ServerState;
   term: number | null;
 }
@@ -36,6 +47,7 @@ export class ServerRouter extends EventTarget {
   #current: string;
   #waiting = false;
   #inFlight = 0;
+  #round: Promise<void> | undefined;
   #timer: ReturnType<typeof setInterval> | undefined;
   readonly #origin: string;
   readonly #fetch: typeof fetch;
@@ -47,8 +59,7 @@ export class ServerRouter extends EventTarget {
     super();
     this.#origin = opts.origin;
     this.#fetch = opts.fetchImpl;
-    this.#storage =
-      opts.storage ?? (typeof localStorage === "undefined" ? undefined : localStorage);
+    this.#storage = opts.storage ?? defaultStorage();
     this.#intervalMs = opts.intervalMs ?? 5_000;
     this.#timeoutMs = opts.timeoutMs ?? 3_000;
     this.#current = opts.origin;
@@ -65,7 +76,7 @@ export class ServerRouter extends EventTarget {
   statuses(): ServerStatus[] {
     return this.#servers.map((s) => ({
       url: s.url,
-      label: new URL(s.url).hostname,
+      label: s.label,
       state: s.state,
       term: s.term,
     }));
@@ -95,8 +106,20 @@ export class ServerRouter extends EventTarget {
     this.#inFlight = Math.max(0, this.#inFlight - 1);
   }
 
-  /** One probe round over every listed server, then the target rule (§4.1). */
-  async probeNow(): Promise<void> {
+  /** One probe round over every listed server, then the target rule (§4.1). Overlapping calls share
+   * the in-flight round: two rounds mutating `#servers[].state` in place would let an older round
+   * resolving last overwrite a newer round's target and undo a move (reachable once S5 calls this while
+   * the interval round is in flight). */
+  probeNow(): Promise<void> {
+    if (this.#round === undefined) {
+      this.#round = this.#runRound().finally(() => {
+        this.#round = undefined;
+      });
+    }
+    return this.#round;
+  }
+
+  async #runRound(): Promise<void> {
     await Promise.all(this.#servers.map((s) => this.#probe(s)));
     const yes = this.#servers.filter((s) => s.state === "primary");
     this.#waiting = yes.length === 0;
@@ -148,11 +171,16 @@ export class ServerRouter extends EventTarget {
     for (const s of this.#servers ?? []) byUrl.set(s.url, s);
     const next: Tracked[] = [];
     const push = (e: ServerEntry) => {
-      const url = new URL(e.url).origin;
+      const parsed = new URL(e.url);
+      // Opaque-origin URLs (mailto:/data:/file:) yield the literal origin "null", which statuses()
+      // would later feed to new URL() and crash the render — treat them like a malformed URL: drop.
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return;
+      const url = parsed.origin;
       if (next.some((n) => n.url === url)) return;
       const prev = byUrl.get(url);
       next.push({
         url,
+        label: parsed.hostname,
         nodeId: e.nodeId ?? prev?.nodeId,
         state: prev?.state ?? "unknown",
         term: prev?.term ?? null,
@@ -178,7 +206,7 @@ export class ServerRouter extends EventTarget {
         ? (parsed.servers as ServerEntry[]).filter((e) => typeof e?.url === "string")
         : [];
     } catch {
-      return [];
+      return []; // unreadable/blocked storage or bad JSON: start empty (the page origin still merges in)
     }
   }
 
@@ -192,7 +220,8 @@ export class ServerRouter extends EventTarget {
 }
 
 /** Apply the router as a fetch wrapper (§4.1): the TillApi keeps `baseUrl = ""` and never learns that
- * more than one server exists. Same-origin behaviour is byte-identical until a move happens. */
+ * more than one server exists. Only an absolute-path (`/`-rooted, not `//`) relative request is
+ * rewritten; the TillApi issues only those, and each is unchanged while `current` is the page origin. */
 export function withServerTarget(fetchImpl: typeof fetch, router: ServerRouter): typeof fetch {
   return async (input, init) => {
     const target =

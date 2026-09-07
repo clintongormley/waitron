@@ -181,7 +181,7 @@ const till = {
   // shows); a KDS boot below supplies `["act-as-kds"]` so its kds-board card renders.
   capabilities: [] as CapabilityFlag[],
   // This node's id + the venue's routable servers (till-reroute §3.2). `[]` by default (the server sends
-  // an empty list while no membership document is held); a later slice drives it. Types-only here.
+  // an empty list while no membership document is held).
   nodeId: "n1",
   servers: [] as {
     nodeId: string;
