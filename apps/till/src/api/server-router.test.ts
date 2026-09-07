@@ -230,6 +230,36 @@ describe("ServerRouter", () => {
     expect(r3.statuses().map((s) => s.url)).toEqual([BOX]);
     expect(() => r3.setServers([{ url: CLOUD }])).not.toThrow();
   });
+
+  // Change-detection (till-reroute §4.1, S4 deferral D2): a probe round dispatches `state-changed` only
+  // when the render-relevant state actually changed since the last dispatch, so the app's lock-screen
+  // repaint is not driven every 5 s in the steady state. BEFORE the fix, `#runRound` dispatched
+  // unconditionally, so the second identical round would fire a second event (this test would see 2, not
+  // 1) — that is the failing case this proves.
+  it("dispatches state-changed only when the render-relevant state changes, not every steady round", async () => {
+    const table: Record<string, Answer> = {
+      [BOX]: { acceptingSales: true, term: 1, nodeId: "b" },
+      [CLOUD]: { acceptingSales: false, term: 1, nodeId: "c" },
+    };
+    const r = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(table),
+      storage: memoryStorage(),
+    });
+    r.setServers([{ url: BOX }, { url: CLOUD }]); // setServers keeps its own unconditional dispatch
+    const changed = vi.fn();
+    r.addEventListener("state-changed", changed); // attach AFTER setServers, so we count only rounds
+    // First round settles the state (unknown → known): a genuine change, so it dispatches.
+    await r.probeNow();
+    expect(changed).toHaveBeenCalledTimes(1);
+    // A second round with identical probe results changes nothing visible — it must NOT re-dispatch.
+    await r.probeNow();
+    expect(changed).toHaveBeenCalledTimes(1);
+    // A round whose results DO change (the cloud's term moves) is a real change — it dispatches again.
+    table[CLOUD] = { acceptingSales: false, term: 5, nodeId: "c" };
+    await r.probeNow();
+    expect(changed).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("withServerTarget", () => {
