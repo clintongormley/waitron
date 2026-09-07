@@ -94,8 +94,10 @@ the gate — software still cannot verify a partitioned peer, so the human attes
 
 **Commit, respond, then restart.** Mirror promotion is **restart-into-primary** (R3b §4): the one
 owner transaction flips both axes and writes the term-guarded membership document
-(`commitMirrorPromotionTx`, the point-of-no-return), the endpoint returns `200 {restarting: true}`,
-and the boot-wired closure then triggers `process.kill(pid, "SIGTERM")`
+(`commitMirrorPromotionTx`, the point-of-no-return), the endpoint returns
+`200 { alreadyPrimary: false, restarting: true }` (the uniform response body — an already-primary
+no-op returns `{ alreadyPrimary: true, restarting: false }`), and the boot-wired closure then triggers
+`process.kill(pid, "SIGTERM")`
 ([boot.ts:2098](../../../apps/server/src/boot.ts#L2098)) → graceful `server.close`, so the supervisor
 (systemd / Docker / Waitron Cloud) brings the process back up as `mode = primary`. **Experiment to
 run at implementation** (`CLAUDE.md` §1 — the existing test mocks `process.kill`, so it does not prove

@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- **Target: mirror → primary ONLY.** The endpoint mounts on `isMirror` nodes; `promoteLocalSecondaryToPrimary` stays unwired (shelved active-active — spec §2). Do not add a target parameter.
+- **Target: mirror → primary ONLY, but mounted on BOTH modes (spec §6).** The endpoint is mounted on every trading node; the handler is the guard. On a mirror it promotes; on an unfenced primary it returns `alreadyPrimary`; on a fenced node it returns `promotion.node_fenced`. `promoteLocalSecondaryToPrimary` stays **UNWIRED** (shelved active-active — spec §2): the non-mirror path derives its status from a read-only `assertNotFenced` check, it NEVER calls that function. Do not add a target parameter.
 - **Sell now, file later (explicit).** A promoted cloud sells + chains locally; it does NOT file until a separate cert-distribution slice. The not-filing state MUST be surfaced (log + box-status), never silent (spec §4.3).
 - **Error codes name the domain concept, never the throwing package**, and are never renamed once shipped (`CLAUDE.md` §3). New code: `promotion.break_glass_invalid` (the `promotion.*` family).
 - **The owner write needs the owner/admin connection** — `app_user` holds no `UPDATE` on `deployment`; it fails closed with `42501`, never a silent no-op (spec §5).
@@ -32,7 +32,7 @@
 - Test: `packages/identity/src/permissions.test.ts` (or the existing permissions test — grep for where `mirror.create` is asserted)
 
 **Interfaces:**
-- Produces: `"node.promote"` as a member of the `Permission` union (`export type Permission = (typeof PERMISSIONS)[number]`), granted to the same admin/manager role(s) that hold `mirror.create`.
+- Produces: `"node.promote"` as a member of the `Permission` union (`export type Permission = (typeof PERMISSIONS)[number]`), granted to the SAME role that holds `mirror.create` — which is **admin-only** (`PersonRoleValue = "staff" | "supervisor" | "manager" | "admin"`; `mirror.create` reaches `admin` via `ALL`, and is not in the supervisor/manager sets — `permissions.ts:86,125-131`). There is no `"owner"` role.
 
 - [ ] **Step 1: Read the siblings.** Open `packages/identity/src/permissions.ts` and find how `mirror.create` is (a) listed in `PERMISSIONS` and (b) mapped to a role in `roleHasPermission`'s backing table. Match that shape exactly — `node.promote` is an admin-only, operator-triggered action like `mirror.create`.
 
@@ -46,10 +46,11 @@ describe("node.promote permission", () => {
   it("is a registered permission", () => {
     expect(PERMISSIONS).toContain("node.promote");
   });
-  it("is held by the same role that holds mirror.create", () => {
-    // Pick the admin role constant this file uses for mirror.create (grep it in step 1).
-    expect(roleHasPermission("owner", "node.promote")).toBe(true);
-    expect(roleHasPermission("owner", "mirror.create")).toBe(true);
+  it("is held by admin, the same role that holds mirror.create", () => {
+    expect(roleHasPermission("admin", "node.promote")).toBe(true);
+    expect(roleHasPermission("admin", "mirror.create")).toBe(true);
+    // and NOT by a non-admin role, matching mirror.create's admin-only scope:
+    expect(roleHasPermission("manager", "node.promote")).toBe(false);
   });
 });
 ```
@@ -140,7 +141,7 @@ git commit -s -m "feat(db): deployment.break_glass_verifier column + accessors"
 ### Task 3: The `promotion.break_glass_invalid` error code
 
 **Files:**
-- Modify: `apps/server/src/errors.ts` (the `promotion.*` block, ~line 1344–1392)
+- Modify: `apps/server/src/errors.ts` (the `promotion.*` block, ~line 1371–1417; add beside `promotion.node_fenced` at ~1417)
 - Test: covered by `scripts/errors-reachable.test.ts` (root project) once a thrower imports `./errors.js` — no separate test needed here; the endpoint task exercises it.
 
 **Interfaces:**
@@ -253,11 +254,24 @@ it("adminDatabaseUrl uses WAITRON_ADMIN_DATABASE_URL when set", () => {
   const cfg = loadConfig({ ...baseEnv, DATABASE_URL: "postgres://app", WAITRON_ADMIN_DATABASE_URL: "postgres://owner" });
   expect(cfg.adminDatabaseUrl).toBe("postgres://owner");
 });
+it("adminDatabaseUrl falls through migrations to databaseUrl when BOTH are unset", () => {
+  const cfg = loadConfig({ ...baseEnv, DATABASE_URL: "postgres://app" }); // no migrations, no admin
+  expect(cfg.adminDatabaseUrl).toBe("postgres://app");
+});
 ```
 
 - [ ] **Step 2: Run it, watch it fail.** Run: `pnpm --filter @waitron/server test config` — Expected: FAIL (`adminDatabaseUrl` undefined).
 
-- [ ] **Step 3: Add the field + parse.** Add `adminDatabaseUrl: string;` to the trading `Config` type with a comment (the table-owner connection the owner write needs; env-only, never in trading.env). In the parser (~line 739): `adminDatabaseUrl: isUnset(env.WAITRON_ADMIN_DATABASE_URL) ? migrationsDatabaseUrl : env.WAITRON_ADMIN_DATABASE_URL,`.
+- [ ] **Step 3: Add the field + parse — fall through to a RESOLVED migrations value.** Add `adminDatabaseUrl: string;` to the trading `Config` type with a comment (the table-owner connection the owner write needs; env-only, never in trading.env). NOTE: the local `migrationsDatabaseUrl` at `config.ts:699` is the RAW env var and may be `undefined`; the resolved value is computed inline at line 740. So compute a resolved const first, then chain admin through it:
+
+```ts
+const resolvedMigrations = isUnset(migrationsDatabaseUrl) ? databaseUrl : migrationsDatabaseUrl;
+// ...in the returned object:
+migrationsDatabaseUrl: resolvedMigrations,
+adminDatabaseUrl: isUnset(env.WAITRON_ADMIN_DATABASE_URL) ? resolvedMigrations : env.WAITRON_ADMIN_DATABASE_URL,
+```
+
+so both-unset resolves to `databaseUrl` (never `undefined`, keeping the `string` type).
 
 - [ ] **Step 4: Route `withOwnerDb` through it.** In `boot.ts` change `createPostgresDb(config.migrationsDatabaseUrl)` (~line 1983) to `createPostgresDb(config.adminDatabaseUrl)`, and update the comment: the owner write uses the table-owner admin connection; unset → migrations URL → app URL, so a misconfigured role-split appliance fails closed `42501`, never a silent no-op. Confirm the boot-time fenced-demote (~line 929) uses the same owner pool/helper so it inherits the fallback (if it opens its own pool from `migrationsDatabaseUrl`, switch it to `adminDatabaseUrl` too).
 
@@ -281,31 +295,32 @@ git commit -s -m "feat(server): WAITRON_ADMIN_DATABASE_URL for the promote owner
 **Interfaces:**
 - Consumes: `loginManagerById`/`authorizeManager`/`endManagementSession` (`@waitron/identity`), `withTenant`/`asAppUser`/`Database` (`@waitron/db`), `verifyBreakGlass` (Task 4), `createErrorBoundary`, `readJsonBody`, `isUuid`, `FenceAttestation`/`MirrorPromotionResult` (`./promote.js`).
 - Produces: `mountPromoteApi(app: Hono, deps: PromoteApiDeps, log?: Logger): void` mounting `POST /management-api/promote`, where
-  `PromoteApiDeps = { appDb: Database; tenantId: string; run: (a: FenceAttestation) => Promise<MirrorPromotionResult> }`.
+  `PromoteApiDeps = { appDb: Database; tenantId: string; run: (a: FenceAttestation) => Promise<PromoteRunResult> }` and
+  `PromoteRunResult = { alreadyPrimary: boolean; restarting: boolean }` (boot supplies `run`, Task 7 — it computes both flags; the endpoint does not need `MirrorPromotionResult`).
 
-Body shape: `{ oldNodeNeutralised: boolean } &` either `{ personId, password, totp? }` (manager path) or `{ breakGlass: string }` (fallback). Success → `200 { promoted: boolean, seriesId: string }` (`promoted = !alreadyPrimary`).
+Body shape: `{ oldNodeNeutralised: boolean } &` either `{ personId, password, totp? }` (admin login path) or `{ breakGlass: string }` (fallback). Success → `200 { alreadyPrimary, restarting }` (spec §3; `restarting` is true only for a real mirror promote).
 
 - [ ] **Step 1: Write the failing tests.**
 
 ```ts
-// A stub run() that records the attestation and returns a MirrorPromotionResult.
-function appWith(run = vi.fn(async () => ({ alreadyPrimary: false, seriesId: "s1" }))) {
+// A stub run() that records the attestation and returns a PromoteRunResult.
+function appWith(run = vi.fn(async () => ({ alreadyPrimary: false, restarting: true }))) {
   const app = new Hono();
   mountPromoteApi(app, { appDb: fakeDb, tenantId: TENANT, run });
   return { app, run };
 }
 
-it("manager login with node.promote authorizes and promotes", async () => {
+it("an admin login with node.promote authorizes and promotes", async () => {
   const { app, run } = appWith();
-  // fakeDb wired so loginManagerById + authorizeManager('node.promote') succeed (mirror the
-  // mirror-bundle-api.test.ts auth-double pattern).
+  // fakeDb wired so loginManagerById + authorizeManager('node.promote') succeed for an ADMIN
+  // (mirror the mirror-bundle-api.test.ts auth-double pattern; node.promote is admin-only).
   const res = await app.request("/management-api/promote", {
     method: "POST",
     body: JSON.stringify({ oldNodeNeutralised: true, personId: PERSON, password: "pw" }),
   });
   expect(res.status).toBe(200);
   expect(run).toHaveBeenCalledWith({ oldNodeNeutralised: true });
-  expect(await res.json()).toEqual({ promoted: true, seriesId: "s1" });
+  expect(await res.json()).toEqual({ alreadyPrimary: false, restarting: true });
 });
 
 it("break-glass secret authorizes and promotes", async () => {
@@ -346,17 +361,22 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
 import { asAppUser, withTenant, type Database } from "@waitron/db";
 import { authorizeManager, endManagementSession, loginManagerById } from "@waitron/identity";
-import type { FenceAttestation, MirrorPromotionResult } from "./promote.js";
+import type { FenceAttestation } from "./promote.js";
 import { verifyBreakGlass } from "./break-glass.js";
 import { createErrorBoundary } from "./error-boundary.js";
 import { readJsonBody } from "./read-json-body.js";
 import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
 
+export interface PromoteRunResult {
+  alreadyPrimary: boolean;
+  restarting: boolean;
+}
+
 export interface PromoteApiDeps {
   appDb: Database;
   tenantId: string;
-  run: (attestation: FenceAttestation) => Promise<MirrorPromotionResult>;
+  run: (attestation: FenceAttestation) => Promise<PromoteRunResult>;
 }
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -396,9 +416,11 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
       } else {
         throw new AppError("password.invalid", {}); // no usable credential
       }
-      // Delegate: run() calls promoteMirrorToPrimary (assertFenced + assertNotFenced + PONR + restart).
+      // Delegate: run() is the boot-wired closure (Task 7). On a mirror it calls promoteMirrorToPrimary
+      // (assertFenced + assertNotFenced + PONR + restart); on a non-mirror it returns alreadyPrimary or
+      // throws promotion.node_fenced — it NEVER calls promoteLocalSecondaryToPrimary (spec §2).
       const result = await deps.run({ oldNodeNeutralised: body.oldNodeNeutralised === true });
-      return c.json({ promoted: !result.alreadyPrimary, seriesId: result.seriesId });
+      return c.json(result);
     }),
   );
 }
@@ -415,25 +437,49 @@ git commit -s -m "feat(server): mountPromoteApi — two-path auth over the promo
 
 ---
 
-### Task 7: Wire the endpoint into boot (mount, gate exemption, closure hoist)
+### Task 7: Wire the endpoint into boot (both modes, gate exemption, `promoteRun` closure)
 
 **Files:**
-- Modify: `apps/server/src/boot.ts` — hoist `withOwnerDb` + the mirror promote `run` closure above the mount point; mount `mountPromoteApi` on `isMirror` before the SPA catch-alls; add the read-only-gate exemption for `POST /management-api/promote`.
-- Test: `apps/server/src/boot.promote-endpoint.test.ts` (real-PG) OR extend `boot.promote.test.ts` — a booted mirror serves the endpoint; a booted primary does not (404).
+- Modify: `apps/server/src/boot.ts` — build `promoteRun` after `till` is in scope; mount `mountPromoteApi` on the trading app (BOTH modes) before the SPA catch-alls; add the read-only-gate exemption for `POST /management-api/promote`.
+- Test: `apps/server/src/boot.promote-endpoint.test.ts` (real-PG) — a mirror, a primary, and a fenced node each serve the endpoint with the right response.
 
 **Interfaces:**
-- Consumes: `mountPromoteApi` (Task 6), the existing mirror promote closure body (`boot.ts` ~2060–2101).
-- Produces: no new exports; the running mirror serves `POST /management-api/promote`.
+- Consumes: `mountPromoteApi`/`PromoteRunResult` (Task 6), `promoteMirrorToPrimary`/`assertNotFenced`/`readNodeMembership` (`./promote.js`, `@waitron/db`), the existing mirror closure body (`boot.ts` ~2060–2101).
+- Produces: `promoteRun: (a: FenceAttestation) => Promise<PromoteRunResult>` — the endpoint's delegate; the trading app serves `POST /management-api/promote` in both modes.
 
-- [ ] **Step 1: Hoist the closure.** Extract the mirror promote `run` closure (currently inline in the `makeStartedServer` call, `boot.ts` ~2063–2101, including `withOwnerDb` + `persistTradingEnv` + the `setTimeout(SIGTERM)` restart) into a `const promoteRun` defined once, after `holders`/`ring`/`till`/`config` are in scope and BEFORE the SPA catch-all mount. Pass `promoteRun` both to `mountPromoteApi` and, unchanged, to `makeStartedServer` (so the in-process `StartedServer.promoteMirrorToPrimary` the existing tests call still works). Keep `withOwnerDb` using `config.adminDatabaseUrl` (Task 5).
+- [ ] **Step 1: Build `promoteRun` after `till` is in scope.** IMPORTANT anchor correction: `withOwnerDb` and the mirror closure reference the local `till` (`TillConfig`), which is not defined until `boot.ts:1138` — AFTER the read-only gate (984–998) and the `isMirror` branch (999–1010). So build `promoteRun` (and keep `withOwnerDb`, using `config.adminDatabaseUrl` from Task 5) at/after `till` (≥1138) and BEFORE the SPA catch-alls (~1836), naturally alongside `mountMirrorBundleApi` (~1842). Registering the route after the `app.use("*")` gate (985) is fine — the gate still runs first and the exemption (Step 3) passes the promote POST through.
 
-- [ ] **Step 2: Mount the endpoint.** In the `isMirror` branch, before the SPA catch-alls (near where the read-only gate is applied, ~line 998), add:
+```ts
+// promoteRun: the endpoint's delegate. On a mirror → the real restart-into-primary promote.
+// On a non-mirror (primary or fenced) → an informative read-only status; NEVER calls
+// promoteLocalSecondaryToPrimary (shelved active-active, spec §2).
+const promoteRun = async (attestation: FenceAttestation): Promise<PromoteRunResult> => {
+  if (isMirror) {
+    return withOwnerDb(async (deps) => {
+      const result = await promoteMirrorToPrimary(
+        { ...deps, persistTradingEnv: async (seriesId) => { /* unchanged from the current inline closure, ~2075-2088 */ } },
+        attestation,
+      );
+      if (!result.alreadyPrimary) setTimeout(() => process.kill(process.pid, "SIGTERM"), 0);
+      return { alreadyPrimary: result.alreadyPrimary, restarting: !result.alreadyPrimary };
+    });
+  }
+  // Non-mirror: a fenced node throws promotion.node_fenced; an unfenced primary is already-primary.
+  const held = await readNodeMembership(db);
+  assertNotFenced(held, till.nodeId); // throws promotion.node_fenced on a fenced (primary, secondary) node
+  return { alreadyPrimary: true, restarting: false };
+};
+```
+
+Keep the existing `{ kind, run }` descriptor passed to `makeStartedServer` (so the in-process `StartedServer.promoteMirrorToPrimary` the existing `boot.promote.test.ts` calls still works) — its `run` can now be `promoteRun` on a mirror; leave the local-secondary descriptor as-is on a non-mirror (still unexposed by the endpoint, which uses `promoteRun`).
+
+- [ ] **Step 2: Mount the endpoint on BOTH modes** (spec §6), before the SPA catch-alls (alongside the mirror-bundle mount, ~1842), on the trading `app`:
 
 ```ts
 mountPromoteApi(app, { appDb: db, tenantId: config.till.tenantId, run: promoteRun }, log);
 ```
 
-- [ ] **Step 3: Exempt the path from the read-only gate.** In the `readOnlyGate` `isExempt` predicate (`boot.ts` ~993–995), add the promote path so the authorized POST reaches the handler (the handler is the real guard; a fenced mirror is refused by `assertNotFenced` inside `run`):
+- [ ] **Step 3: Exempt the path from the read-only gate.** In the `readOnlyGate` `isExempt` predicate (`boot.ts` ~993–995) add the promote path unconditionally, so the authorized POST reaches the handler on a mirror AND on a fenced node (where the handler returns the precise `promotion.node_fenced` rather than a generic gate 403):
 
 ```ts
 (c) =>
@@ -442,30 +488,43 @@ mountPromoteApi(app, { appDb: db, tenantId: config.till.tenantId, run: promoteRu
   (c.req.method === "POST" && c.req.path === "/management-api/promote"),
 ```
 
-- [ ] **Step 4: Write the failing boot test.**
+(On an unfenced primary the gate is not mounted at all — `fencedOrMirror` is false — so no exemption is needed there.)
+
+- [ ] **Step 4: Write the failing boot tests** (real-PG; reuse the mirror/primary/fenced boot helpers from `boot.promote.test.ts` / `boot.mirror.test.ts` / `boot.fence.test.ts`).
 
 ```ts
-it("a mirror serves POST /management-api/promote (not 404, not gated 403)", async () => {
-  const mirror = await bootMirror(); // existing helper in boot.promote.test.ts / boot.mirror.test.ts
+it("a mirror serves the endpoint; no creds → 401 (reached the handler, not gated 403/404)", async () => {
+  const mirror = await bootMirror();
   const res = await fetch(`${mirror.url}/management-api/promote`, {
-    method: "POST", body: JSON.stringify({ oldNodeNeutralised: true }), // no creds → 401, proves it reached the handler
+    method: "POST", body: JSON.stringify({ oldNodeNeutralised: true }),
   });
-  expect(res.status).toBe(401); // NOT 403 node_read_only, NOT 404
+  expect(res.status).toBe(401);
 });
-it("a primary does not mount the promote endpoint (404)", async () => {
+it("a primary serves the endpoint and returns alreadyPrimary with a valid admin login", async () => {
   const primary = await bootPrimary();
-  const res = await fetch(`${primary.url}/management-api/promote`, { method: "POST", body: "{}" });
-  expect(res.status).toBe(404);
+  const res = await fetch(`${primary.url}/management-api/promote`, {
+    method: "POST", body: JSON.stringify({ oldNodeNeutralised: true, personId: ADMIN, password: PW }),
+  });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ alreadyPrimary: true, restarting: false });
+});
+it("a fenced node returns promotion.node_fenced (409), not a lying alreadyPrimary or a 403/404", async () => {
+  const fencedNode = await bootFenced();
+  const res = await fetch(`${fencedNode.url}/management-api/promote`, {
+    method: "POST", body: JSON.stringify({ oldNodeNeutralised: true, personId: ADMIN, password: PW }),
+  });
+  expect(res.status).toBe(409);
+  expect((await res.json()).error.code).toBe("promotion.node_fenced");
 });
 ```
 
-- [ ] **Step 5: Run it, watch it fail then pass.** Run: `pnpm --filter @waitron/server test boot.promote-endpoint` — iterate until PASS. Then run the whole promote area unfiltered enough to catch boot regressions: `pnpm --filter @waitron/server test boot.promote boot.mirror`.
+- [ ] **Step 5: Run it, watch it fail then pass.** Run: `pnpm --filter @waitron/server test boot.promote-endpoint` — iterate until PASS. Then run the neighbours to catch boot regressions: `pnpm --filter @waitron/server test boot.promote boot.mirror boot.fence`.
 
 - [ ] **Step 6: Commit.**
 
 ```bash
 git add apps/server/src/boot.ts apps/server/src/boot.promote-endpoint.test.ts
-git commit -s -m "feat(server): mount promote endpoint on a mirror + read-only-gate exemption"
+git commit -s -m "feat(server): mount promote endpoint (both modes) + read-only-gate exemption"
 ```
 
 ---
@@ -508,15 +567,15 @@ git commit -s -m "feat(server): mint the break-glass secret at adopt, surfaced o
 
 ### Task 9: Make the awaiting-fiscal-certificate state explicit
 
-**Files:**
-- Modify: the fiscal drain worker / its boot wiring (grep `fiscal.aeat` + `credentials.missing` + the drain start; likely `apps/server/src/aeat-transport.ts` and the drain loop in `boot.ts`) so a promoted primary with no `fiscal.aeat` credential surfaces an "awaiting fiscal certificate" status instead of a silent retry loop.
-- Modify: the box-status surface (grep `box-status` / `boxStatus` route) to report it.
+**Files (anchor corrections):** the fiscal drain lives in `apps/server/src/pass.ts` (the `DRAIN_DUTY = "fiscal.drain"` seat), NOT `aeat-transport.ts` (which is `packages/fiscal-verifactu/src/aeat-transport.ts`, a different package). `credentials.missing` originates in `@waitron/credentials` and the cert is fetched via `apps/server/src/credentials.ts:18` (`getCredential`); box-status is `apps/server/src/box-status.ts:213` (`mountBoxStatusApi`).
+- Modify: `apps/server/src/pass.ts` (the `fiscal.drain` seat — catch `credentials.missing` for `fiscal.aeat`, set the flag, skip submit)
+- Modify: `apps/server/src/box-status.ts` (report the flag) and its in-process status holder / boot wiring in `boot.ts` as needed
 - Test: `apps/server/src/awaiting-fiscal-cert.test.ts` (real-PG) — a primary with no cert surfaces the state, does not crash, does not file.
 
 **Interfaces:**
 - Produces: a box-status field (e.g. `awaitingFiscalCertificate: boolean`) true when the node is a filing primary but `getCredential(fiscal.aeat)` is missing; a single clear log (`fiscal.awaiting_certificate`), not a per-tick error spew.
 
-- [ ] **Step 1: Confirm the drain's current behaviour.** Read how the drain obtains the cert and what it does on `credentials.missing` today (a promoted mirror is the first node that hits this). Establish the failing case: without a cert the drain currently throws/retries silently.
+- [ ] **Step 1: Confirm the drain's current behaviour.** Read `apps/server/src/pass.ts` (the `fiscal.drain` seat) and `apps/server/src/credentials.ts` — how the drain obtains the cert and what it does on `credentials.missing` today (a promoted mirror is the first node that hits this). Establish the failing case: without a cert the drain currently throws/retries silently.
 
 - [ ] **Step 2: Write the failing test.**
 
@@ -536,7 +595,7 @@ it("a filing primary with no fiscal cert surfaces awaiting-cert and does not cra
 - [ ] **Step 5: Commit.**
 
 ```bash
-git add apps/server/src/aeat-transport.ts apps/server/src/boot.ts apps/server/src/awaiting-fiscal-cert.test.ts
+git add apps/server/src/pass.ts apps/server/src/box-status.ts apps/server/src/boot.ts apps/server/src/awaiting-fiscal-cert.test.ts
 git commit -s -m "feat(server): surface awaiting-fiscal-certificate on a promoted primary (sell now, file later)"
 ```
 
@@ -559,7 +618,7 @@ it("mirror → primary over the HTTP endpoint: restarts, sells + chains, does NO
     body: JSON.stringify({ oldNodeNeutralised: true, personId: ADMIN, password: PW }),
   });
   expect(res.status).toBe(200);
-  expect(await res.json()).toMatchObject({ promoted: true });
+  expect(await res.json()).toEqual({ alreadyPrimary: false, restarting: true });
   // Restart into primary (the harness restarts on SIGTERM, as boot.promote.test.ts does).
   const primary = await restart(mirror);
   // Sells + chains on its own reserved SIF:
@@ -592,19 +651,21 @@ git commit -s -m "test(server): promote-endpoint e2e — sell-now-file-later, bo
 
 ## Self-Review
 
+(Revised 2026-09-07 after a fresh-context plan-vs-spec review: the endpoint mounts on BOTH modes per spec §6, not mirror-only; the non-mirror path returns `alreadyPrimary`/`promotion.node_fenced` via a read-only `assertNotFenced` and never wires `promoteLocalSecondaryToPrimary`; Task 1 uses the real `admin` role; Task 5's fallback resolves migrations before chaining; Task 7's mount point is after `till` is in scope (≥1138); Task 9's drain anchor is `pass.ts`; the response body is `{ alreadyPrimary, restarting }`.)
+
 **Spec coverage:**
-- §3 endpoint (mirror-only, boot-wired closure, restart) → Tasks 6, 7, 10. ✓
-- §3 fenced refusal / no-lying-alreadyPrimary → handled by mounting on `isMirror` only + `assertNotFenced` inside `run` (Task 7); the endpoint never dispatches the local-secondary path. ✓
-- §4.1 manager login + `node.promote` → Tasks 1, 6, 10. ✓
+- §3 endpoint (boot-wired closure, restart) → Tasks 6, 7, 10. ✓
+- §3 fenced refusal / no-lying-alreadyPrimary → Task 7's `promoteRun` non-mirror branch runs `assertNotFenced` (→ `promotion.node_fenced`) and returns `alreadyPrimary` only for an unfenced primary; it never calls `promoteLocalSecondaryToPrimary`. Proven in Task 7 (fenced → 409) and Task 10. ✓
+- §4.1 admin login + `node.promote` → Tasks 1, 6, 10. ✓
 - §4.2 break-glass mint/verify (scrypt) → Tasks 2, 3, 4, 8, 10. ✓
 - §4.3 sell-now-file-later, explicit awaiting-cert → Task 9, asserted in Task 10. ✓
 - §5 admin DB connection, fail-closed, both `withOwnerDb` callers, not in trading.env → Task 5, proven in Task 10 step 5. ✓
-- §6 mount both/gate hole → Task 7; proven-by-deletion Task 10 step 4. ✓
+- §6 mount BOTH modes / gate hole → Task 7 (mounted on the trading app in both modes; exemption unconditional over fenced); proven-by-deletion Task 10 step 4. ✓
 - §7 fiscal safety (fence passthrough, new chain, immutability) → inherited from `promoteMirrorToPrimary`; the e2e (Task 10) asserts the new chain on its own reserved SIF and no submission. ✓
 - §8/§9 receipts → Task 10 (mirror-promote-restart-drain), Task 2 step 7 (grant shape), Task 10 step 1 (auth-row replication is exercised by a real adopted mirror). ✓
 
 **Receipts owed still outside a task:** §9.4 (the 200 reaches the operator before the restart-exit) — Task 10 step 1 exercises the real HTTP round trip and asserts the 200 body, which IS that experiment; if the harness cannot observe the body before SIGTERM, narrow the response contract there (noted in the spec).
 
-**Placeholder scan:** the `00NN` migration number (Task 2) is resolved by `db:generate:custom` at implementation, not a placeholder to hand-fill; grep-confirm steps (Task 1 step 1, Task 4 step 1, Task 8/9 file greps) are deliberate "find the exact sibling" actions, each with a concrete fallback. No `TODO`/`TBD`/"add error handling".
+**Placeholder scan:** the `00NN` migration number (Task 2) is resolved by `db:generate:custom` at implementation, not a placeholder to hand-fill; grep-confirm steps (Task 1 step 1, Task 4 step 1, Task 8 caller grep) are deliberate "find the exact sibling" actions, each with a concrete fallback. No `TODO`/`TBD`/"add error handling".
 
-**Type consistency:** `run: (a: FenceAttestation) => Promise<MirrorPromotionResult>` is used identically in Tasks 6 and 7; `readBreakGlassVerifier`/`setBreakGlassVerifierTx` (Task 2) are consumed with matching signatures in Task 4; `verifyBreakGlass`/`mintBreakGlassSecret` (Task 4) match their uses in Tasks 6 and 8; `adminDatabaseUrl` (Task 5) matches its use in `withOwnerDb`.
+**Type consistency:** `run: (a: FenceAttestation) => Promise<PromoteRunResult>` is used identically in Tasks 6 and 7 (`PromoteRunResult = { alreadyPrimary, restarting }`); `readBreakGlassVerifier`/`setBreakGlassVerifierTx` (Task 2) are consumed with matching signatures in Task 4; `verifyBreakGlass`/`mintBreakGlassSecret` (Task 4) match their uses in Tasks 6 and 8; `adminDatabaseUrl` (Task 5) matches its use in `withOwnerDb`.
