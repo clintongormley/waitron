@@ -307,11 +307,20 @@ unfiltered `main` run, not a wrong hook.
 - **With Ryuk off, INTERRUPTED runs leak containers** (a clean vitest exit self-reaps via
   `globalTeardown`). The bloat (once: 173 volumes, 23 GB) starves PGlite `beforeAll`s and the
   `freePort` race, while an isolated re-run passes and proves nothing. `pnpm reap`
-  (`scripts/reap-testcontainers.mjs`, also first in the hook) removes only containers labelled
+  (`scripts/reap-testcontainers.mjs`, also first in the hook) removes containers labelled
   `com.waitron.reapable` (stamped by `startPostgresContainer`, pinned by test) AND older than 2 h —
   so another repo's or a live watch-mode container survives — with their anon volumes. It never
   touches images and there is no blanket `docker volume prune` (it would reach other projects and
-  the named dev volumes). `docker volume inspect` before any manual `rm`.
+  the named dev volumes). `docker volume inspect` before any manual `rm`. Once a leaked container is
+  gone its anon VOLUME is orphaned (no `com.waitron.reapable` label to find it by), so `pnpm reap`
+  cannot reclaim it — a dangling-anon prune would reach the HA repos' testcontainers on this machine,
+  so those stay a clean-exit-plus-manual-targeted sweep.
+- **An interrupted run also ORPHANS its vitest workers**, and `pnpm reap` sweeps these too. A hard
+  interrupt (an Esc, a killed parent, a timeout signal) can take the orchestrator while its tinypool
+  workers reparent to launchd (ppid 1) and spin at ~100% CPU indefinitely — SIGTERM did not stop them,
+  `kill -9` did (cost: four burned the fan for hours on 2026-09-07). The sweep is scoped by ppid 1 AND
+  the `node (vitest N)` process TITLE (its parens), NOT a bare `vitest` word anywhere in the line —
+  that broader match killed a real orphan whose argv only held a `vitest` log path (run-it review).
 - **A probe that needs a Unix SOCKET runs inside the container.** Bind-mounting a `postgres` socket
   dir out of Docker Desktop's VM gives `ECONNREFUSED` on macOS (and a scratchpad path blows the
   104-byte `sun_path` first). `apk add nodejs npm && npm i pg` in the container; parsing-only probes

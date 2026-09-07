@@ -503,12 +503,14 @@ if [ "$scope_kind" = "root" ]; then
   exit 0
 fi
 
-# Reap STALE waitron testcontainers left by earlier interrupted runs, before this push's own test phase.
-# Scoped by the `com.waitron.reapable` label (so another project's containers are never touched) AND a 2h
-# age filter (so a watch-mode session's container is spared — unless that one session has itself run past
-# the threshold, the accepted residual edge). See the script's own header (scripts/reap-testcontainers.mjs)
-# for WHY they leak, what it costs, and the two guards. Manual equivalent is `pnpm reap`. Best-effort: the
-# script exits 0 even with Docker absent or nothing to reap, and `|| true` guarantees it never blocks a push.
+# Reap what earlier interrupted runs leaked, before this push's own test phase: STALE waitron
+# testcontainers (scoped by the `com.waitron.reapable` label so another project's containers are never
+# touched, AND a 2h age filter so a watch-mode session's container is spared — unless that one session has
+# itself run past the threshold, the accepted residual edge) AND orphaned vitest workers (reparented to
+# launchd, ppid 1, spinning at ~100% CPU — scoped by ppid 1 + the `node (vitest N)` title). See the
+# script's own header (scripts/reap-testcontainers.mjs) for WHY each leaks and the guards. Manual
+# equivalent is `pnpm reap`. Best-effort: the script exits 0 even with Docker or `ps` absent or nothing to
+# reap, and `|| true` guarantees it never blocks a push.
 node scripts/reap-testcontainers.mjs || true
 
 # Refuses a SCOPED run that would execute no test at all. pnpm reports both of its "nothing to do"
