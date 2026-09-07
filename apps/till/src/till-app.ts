@@ -1164,8 +1164,11 @@ export class TillApp extends LitElement {
     try {
       this.result = await this.api.collectOrder(id, tender);
       this.#showTicket();
-    } catch {
-      this.errorKey = "sale.error";
+    } catch (err) {
+      // Collect is a terminal fiscal-file moment (Mode T files immediate, Mode I settles the deferred
+      // invoice), so a NETWORK failure (no answer) is `sale.unconfirmed` — the collect may have filed,
+      // a human checks before retrying (till-reroute §4.3); a server `{ code }` stays `sale.error`.
+      this.errorKey = isNetworkFailure(err) ? "sale.unconfirmed" : "sale.error";
     } finally {
       this.submitting = false;
     }

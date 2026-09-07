@@ -3732,6 +3732,31 @@ describe("till-app", () => {
       expect(el.shadowRoot!.textContent).not.toContain("working_order.not_placed");
     });
 
+    it("collect-order: a NETWORK failure (no answer) shows sale.unconfirmed, basket kept", async () => {
+      // Collect is a terminal fiscal-file moment (Mode T files immediate, Mode I settles the deferred
+      // invoice), so a `collectOrder` whose `fetch` got no answer has the same "did it file?" ambiguity
+      // as `#onConfirmPayment` (till-reroute §4.3): `sale.unconfirmed`, not the free-to-retry
+      // `sale.error`. The `{ code }` refusal path stays `sale.error` (the test above).
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        collectOrder: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "place-order");
+      await flush(el);
+
+      emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
+      await flush(el);
+
+      expect(ticket(el)).toBeNull();
+      expect(counter(el)).not.toBeNull();
+      expect(tenderPay(el).stage).toBe("collect"); // still awaiting collection, basket kept
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("sale.unconfirmed"));
+    });
+
     it("collect single-flight: a second collect-order while the first is pending collects EXACTLY ONCE", async () => {
       const collectOrder = vi.fn(() => new Promise<TillSaleResult>(() => {})); // never resolves
       const { el } = await mountApp({
