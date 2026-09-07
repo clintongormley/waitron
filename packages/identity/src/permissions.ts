@@ -119,10 +119,27 @@ const ROLE_PERMISSIONS: Record<PersonRoleValue, ReadonlySet<Permission>> = {
   admin: ALL,
 };
 
+// Returns its argument unchanged, but only type-checks when the tuple lists EVERY `PersonRoleValue`.
+// It is the exhaustiveness tie for ROLE_LADDER below: a role added to `PersonRoleValue` but forgotten
+// in the tuple makes the argument's required type `never`, so the call fails to compile — a LOUD
+// error, not a silent mis-fold (an unlisted role would make `indexOf` return -1 and fold into
+// `["admin"]` alone). Both directions are caught: a tuple entry outside `PersonRoleValue` breaks the
+// `U extends readonly PersonRoleValue[]` bound.
+const arrayOfAll =
+  <T>() =>
+  <U extends readonly T[]>(array: U & ([T] extends [U[number]] ? unknown : never)): U =>
+    array;
+
 // staff < supervisor < manager < admin — identity OWNS the ladder. A module states only the floor a
 // permission is granted from (grantedFrom); the fold below spreads it to that role and every role
-// above. The one source of the ordering, reused by registerModulePermissions.
-const ROLE_LADDER = ["staff", "supervisor", "manager", "admin"] as const;
+// above. The one source of the ordering, reused by registerModulePermissions; tied exhaustively to
+// `PersonRoleValue` by `arrayOfAll` so it cannot silently diverge from the role enum.
+const ROLE_LADDER = arrayOfAll<PersonRoleValue>()([
+  "staff",
+  "supervisor",
+  "manager",
+  "admin",
+] as const);
 
 // Module-contributed permissions, folded into their roles at boot (registerModulePermissions). A
 // module's permission lives HERE, never in the static PERMISSIONS catalog; roleHasPermission consults
@@ -140,7 +157,8 @@ export function registerModulePermissions(
   perms: readonly { permission: string; grantedFrom: PersonRoleValue }[],
 ): void {
   for (const { permission, grantedFrom } of perms) {
-    // indexOf never returns -1: `grantedFrom` is a PersonRoleValue, so it is always in ROLE_LADDER.
+    // indexOf never returns -1: `grantedFrom` is a PersonRoleValue and `arrayOfAll` above forces
+    // ROLE_LADDER to list every one, so the floor is always found and `slice` spreads to it and above.
     const floor = ROLE_LADDER.indexOf(grantedFrom);
     MODULE_PERMISSIONS.set(permission, new Set(ROLE_LADDER.slice(floor)));
   }

@@ -48,10 +48,15 @@ export interface ModuleRoutes {
 /**
  * The four person roles, lowest-to-highest on identity's ladder. Written here rather than imported
  * from `@waitron/identity` because the module CONTRACT package must not depend on a domain module
- * (identity depends on this contract, never the reverse). identity's `registerModulePermissions`
- * indexes its OWN role map by `grantedFrom`, so this union and identity's `PersonRoleValue` cannot
- * silently diverge: boot's registration call assigns a `ModulePermission[]` into that parameter and
- * fails to compile if the two drift.
+ * (identity depends on this contract, never the reverse). This union mirrors identity's
+ * `PersonRoleValue`; the two are kept honest ASYMMETRICALLY, not by a single guard:
+ *   - a MODULE naming a role identity does not know (this union wider) fails boot's
+ *     `registerModulePermissions(ALL_MODULE_PERMISSIONS)` call — the extra literal is not assignable
+ *     to the `PersonRoleValue` parameter;
+ *   - an identity-side role ADDITION (PersonRoleValue wider) is forced into identity's own
+ *     `ROLE_PERMISSIONS` `Record` and its `ROLE_LADDER` exhaustiveness tie (permissions.ts). It is
+ *     NOT caught at the boot call — a narrower `ModuleRole` stays assignable to a wider parameter —
+ *     which is why identity carries its own guards rather than relying on this call site.
  */
 export type ModuleRole = "staff" | "supervisor" | "manager" | "admin";
 
