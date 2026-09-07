@@ -20,6 +20,14 @@ export type BackupManifest = {
   readonly environment: DeploymentEnvironment;
   /** Module name → applied schema version (0 for a module present in the list but never migrated). */
   readonly modules: Record<string, number>;
+  /**
+   * Where this artifact's vault key lives (§4). `"embedded"` — the box holds it on disk (`secrets.env`),
+   * so the artifact CARRIES it and restores self-contained (on-prem). `"external"` — the key lives only
+   * in `WAITRON_CREDENTIALS_KEY` (a cloud node), so the artifact carries NO key; restore onto a node
+   * with no env key is refused (`restore.credentials_key_external`) rather than left with an unopenable
+   * vault. Read by restore's up-front gate, beside `environment`.
+   */
+  readonly credentialsKey: "embedded" | "external";
 };
 
 /**
@@ -52,11 +60,16 @@ export async function buildManifest(deps: {
   readonly modules: readonly WaitronModule[];
   readonly environment: DeploymentEnvironment;
   readonly now: Date;
+  /** Where this box holds its vault key (§4) — recorded so restore can refuse an "external" artifact
+   * onto a keyless node. The caller (backup-sweep) threads the SAME value into `collectStateSecrets`,
+   * so the manifest and the secrets it packs agree on whether `secrets.env` rides along. */
+  readonly credentialsKey: "embedded" | "external";
 }): Promise<BackupManifest> {
   return {
     manifestVersion: 1,
     createdAt: deps.now.toISOString(),
     environment: deps.environment,
     modules: await schemaVersionsByModule(deps.db, deps.modules),
+    credentialsKey: deps.credentialsKey,
   };
 }

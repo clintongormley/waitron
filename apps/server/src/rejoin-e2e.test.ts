@@ -281,6 +281,7 @@ beforeAll(async () => {
       modules: ALL_MODULES,
       environment: "preproduction",
       now: new Date(),
+      credentialsKey: "embedded",
     });
 
     const baselineName = new URL(baselinePg.uri).pathname.replace(/^\//, "");

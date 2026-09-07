@@ -16,6 +16,10 @@ export type RecoveryBundleDeps = {
   cfg: { tenantId: string };
   /** The box's persisted state dir — the secret files the bundle packs live here (`config.stateDir`). */
   stateDir: string;
+  /** Where this box holds its vault key (§4): `"embedded"` packs `secrets.env` into the bundle,
+   * `"external"` (a cloud node) omits it — the key lives only in `WAITRON_CREDENTIALS_KEY` and unpack
+   * requires it to be supplied, so no downloaded bundle carries the vault key off the instance. */
+  credentialsKey: "embedded" | "external";
   now: () => Date;
 };
 
@@ -64,7 +68,10 @@ export function mountRecoveryBundleApi(app: Hono, deps: RecoveryBundleDeps, log:
         throw new AppError("recovery.passphrase_required", {});
       }
       // encryptBundle enforces MIN_PASSPHRASE_LENGTH (→ recovery.passphrase_too_short, 400).
-      const envelope = encryptBundle(await collectStateSecrets(deps.stateDir), body.passphrase);
+      const envelope = encryptBundle(
+        await collectStateSecrets(deps.stateDir, { credentialsKey: deps.credentialsKey }),
+        body.passphrase,
+      );
       const date = deps.now().toISOString().slice(0, 10);
       log("info", "recovery.bundle_downloaded", { sessionId });
       return c.body(envelope, 200, {

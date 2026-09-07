@@ -10,7 +10,13 @@ describe("checkRestoreCompatibility", () => {
   it("refuses a newer backup schema", () => {
     expect(() =>
       checkRestoreCompatibility(
-        { manifestVersion: 1, createdAt: "x", environment: "preproduction", modules: { core: 41 } },
+        {
+          manifestVersion: 1,
+          createdAt: "x",
+          environment: "preproduction",
+          modules: { core: 41 },
+          credentialsKey: "embedded",
+        },
         target,
       ),
     ).toThrowError(expect.objectContaining({ code: "restore.schema_too_new" }));
@@ -19,7 +25,13 @@ describe("checkRestoreCompatibility", () => {
   it("refuses an environment mismatch", () => {
     expect(() =>
       checkRestoreCompatibility(
-        { manifestVersion: 1, createdAt: "x", environment: "production", modules: { core: 40 } },
+        {
+          manifestVersion: 1,
+          createdAt: "x",
+          environment: "production",
+          modules: { core: 40 },
+          credentialsKey: "embedded",
+        },
         target,
       ),
     ).toThrowError(expect.objectContaining({ code: "restore.environment_mismatch" }));
@@ -32,7 +44,13 @@ describe("checkRestoreCompatibility", () => {
     // module the target runs, and backup 1 > 0 must refuse.
     expect(() =>
       checkRestoreCompatibility(
-        { manifestVersion: 1, createdAt: "x", environment: "preproduction", modules: { core: 1 } },
+        {
+          manifestVersion: 1,
+          createdAt: "x",
+          environment: "preproduction",
+          modules: { core: 1 },
+          credentialsKey: "embedded",
+        },
         { environment: "preproduction", expectedVersions: { core: 0 } },
       ),
     ).toThrowError(expect.objectContaining({ code: "restore.schema_too_new" }));
@@ -46,6 +64,7 @@ describe("checkRestoreCompatibility", () => {
           createdAt: "x",
           environment: "preproduction",
           modules: { core: 40, ghost: 99 },
+          credentialsKey: "embedded",
         },
         target,
       ),
@@ -55,7 +74,13 @@ describe("checkRestoreCompatibility", () => {
   it("carries the backup/target environments on the mismatch error", () => {
     expect(() =>
       checkRestoreCompatibility(
-        { manifestVersion: 1, createdAt: "x", environment: "production", modules: {} },
+        {
+          manifestVersion: 1,
+          createdAt: "x",
+          environment: "production",
+          modules: {},
+          credentialsKey: "embedded",
+        },
         target,
       ),
     ).toThrowError(
@@ -74,6 +99,7 @@ describe("checkRestoreCompatibility", () => {
           createdAt: "x",
           environment: "preproduction",
           modules: { "fiscal-verifactu": 13 },
+          credentialsKey: "embedded",
         },
         target,
       ),

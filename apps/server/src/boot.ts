@@ -935,6 +935,18 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     throw error;
   }
 
+  // Where this box holds its vault key (§4), threaded into the backup sweep and the recovery-bundle
+  // download below so an env-keyed node's artifacts carry NO key. The discriminator is the on-disk
+  // presence of `secrets.env`, NOT `WAITRON_CREDENTIALS_KEY` in `env`: in trading mode the supervisor
+  // ALWAYS sources the key into the process env (an on-prem box from its own `secrets.env`, a cloud
+  // node from the platform), so `env` cannot tell the two apart — but only an on-prem box mints the
+  // `secrets.env` file (`ensureBoxSecrets`, Task 12), so its presence is exactly "embedded". A cloud
+  // node never wrote one, so "external": its backup omits `secrets.env` and a restore onto a keyless
+  // node is refused rather than left with an unopenable vault.
+  const credentialsKey: "embedded" | "external" = existsSync(join(config.stateDir, "secrets.env"))
+    ? "embedded"
+    : "external";
+
   // Which role this database plays (C2a design §4). A mirror pulls + applies and serves read-only; a
   // primary is today's flow. Read ONCE here into a refreshable holder that the promote action
   // (`promoteLocalSecondaryToPrimary`, this slice) refreshes after its owner-role write — so a mode flip
@@ -1716,6 +1728,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         environment: config.environment,
         resolvers: { media: config.mediaDir },
         stateDir: config.stateDir,
+        // §4: an env-keyed (cloud) node's archive carries no `secrets.env`, and its manifest records
+        // "external" so a restore onto a keyless node is refused rather than left unopenable.
+        credentialsKey,
         stagingDir: backupStagingDir,
         databaseUrl: backupConfig.databaseUrl,
         recoveryKey: backupConfig.recoveryKey,
@@ -1865,7 +1880,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // trading branch only — a setup box has no provisioned identity to recover.
   mountRecoveryBundleApi(
     app,
-    { db, cfg: { tenantId: till.tenantId }, stateDir: config.stateDir, now },
+    { db, cfg: { tenantId: till.tenantId }, stateDir: config.stateDir, credentialsKey, now },
     log,
   );
 

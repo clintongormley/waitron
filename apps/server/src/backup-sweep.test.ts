@@ -33,6 +33,7 @@ const FIXED_MANIFEST: BackupManifest = {
   createdAt: "2026-09-05T00:00:00.000Z",
   environment: "preproduction",
   modules: { core: 3 },
+  credentialsKey: "embedded",
 };
 const fixedManifest: ManifestBuilder = async () => FIXED_MANIFEST;
 
@@ -42,11 +43,12 @@ const fixedManifest: ManifestBuilder = async () => FIXED_MANIFEST;
 const dumpSpy = () =>
   vi.fn(async ({ outFile }: { outFile: string }) => writeFile(outFile, "DUMP-BYTES"));
 
-// Write the full RECOVERY_FILES set under a fresh temp state dir, so `collectStateSecrets` succeeds.
-// Omit one path (`skip`) to drive the fail-visible "incomplete state" case.
+// Write the full RECOVERY_FILES set PLUS `secrets.env` (an on-prem/"embedded" box) under a fresh temp
+// state dir, so `collectStateSecrets({ credentialsKey: "embedded" })` succeeds. Omit one path (`skip`)
+// to drive the fail-visible "incomplete state" case.
 async function makeStateDir(skip?: string): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "backup-state-"));
-  for (const rel of RECOVERY_FILES) {
+  for (const rel of [...RECOVERY_FILES, "secrets.env"]) {
     if (rel === skip) continue;
     const target = join(dir, rel);
     await mkdir(join(dir, dirname(rel)), { recursive: true });
@@ -106,6 +108,7 @@ describe("runOnce (fan-out)", () => {
     environment: "preproduction" as const,
     resolvers: { media: mediaDir },
     stateDir,
+    credentialsKey: "embedded" as const,
     buildManifest: fixedManifest,
     databaseUrl: "postgres://x",
     recoveryKey: "recovery-key-1",
@@ -316,6 +319,7 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
     environment: "preproduction",
     resolvers: { media: mediaDir },
     stateDir,
+    credentialsKey: "embedded" as const,
     buildManifest: fixedManifest,
     databaseUrl: "postgres://x",
     recoveryKey: "recovery-key-1",
@@ -465,6 +469,7 @@ describe("runOnce with the real buildManifest (useTemplateDb)", () => {
       environment: "preproduction",
       resolvers: { media: mediaDir },
       stateDir,
+      credentialsKey: "embedded",
       // buildManifest intentionally OMITTED so the real default runs.
       databaseUrl: suite.pg.uri,
       recoveryKey: "recovery-key-1",
@@ -487,6 +492,7 @@ describe("runOnce with the real buildManifest (useTemplateDb)", () => {
     const manifest = JSON.parse(entries.get("manifest.json")!.toString()) as BackupManifest;
     expect(manifest.environment).toBe("preproduction");
     expect(manifest.createdAt).toBe("2026-09-05T00:00:00.000Z");
+    expect(manifest.credentialsKey).toBe("embedded");
     // `core` is mandatory and migrated by the `manifest` template, so its applied version is positive.
     expect(manifest.modules.core).toBeGreaterThan(0);
   });
