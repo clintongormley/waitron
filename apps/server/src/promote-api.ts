@@ -47,7 +47,12 @@ export interface PromoteRunResult {
 export interface PromoteApiDeps {
   appDb: Database;
   tenantId: string;
-  run: (attestation: FenceAttestation) => Promise<PromoteRunResult>;
+  /**
+   * The boot-wired promote closure (Task 7). `ctx.breakGlass` carries the VERIFIED break-glass secret
+   * when the operator authorized that way (Task 9) — the closure unwraps the dormant AEAT cert with it
+   * inside the promote's point-of-no-return; the admin-login path passes an empty `ctx`.
+   */
+  run: (attestation: FenceAttestation, ctx: { breakGlass?: string }) => Promise<PromoteRunResult>;
 }
 
 /**
@@ -96,10 +101,14 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
       // Authorize: the break-glass fallback if a secret is present, else the admin-login path. A
       // present break-glass secret is authoritative — it is never silently downgraded to the login
       // path, so a wrong secret is refused here rather than falling through to `password.invalid`.
+      // The verified secret is threaded to `run` as `ctx.breakGlass` (Task 9): the boot closure
+      // unwraps the dormant AEAT cert with it inside the promote's point-of-no-return.
+      let verifiedBreakGlass: string | undefined;
       if (typeof body.breakGlass === "string") {
         if (!(await verifyBreakGlass(deps.appDb, body.breakGlass))) {
           throw new AppError("promotion.break_glass_invalid", {});
         }
+        verifiedBreakGlass = body.breakGlass;
       } else if (
         typeof body.personId === "string" &&
         isUuid(body.personId) &&
@@ -134,7 +143,9 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
       // Delegate to the boot-wired closure (Task 7). It computes `alreadyPrimary`/`restarting`, runs
       // the correct promote path, and either returns a result or throws a `promotion.*` code the
       // STATUS map above maps. The endpoint never calls the promote functions directly (spec §2).
-      const result = await deps.run({ oldNodeNeutralised: body.oldNodeNeutralised === true });
+      // The admin-login path passes an empty ctx; the break-glass path passes the verified secret.
+      const ctx = verifiedBreakGlass === undefined ? {} : { breakGlass: verifiedBreakGlass };
+      const result = await deps.run({ oldNodeNeutralised: body.oldNodeNeutralised === true }, ctx);
       return c.json(result);
     }),
   );

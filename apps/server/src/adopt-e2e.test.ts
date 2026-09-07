@@ -784,7 +784,7 @@ describe("adopt headline e2e — setup-mode adopt, reboot into mirror mode, pull
         const heldBefore = await readNodeMembership(mirror.admin);
         const expectedTerm = (heldBefore?.body.term ?? -1) + 1;
 
-        const result = await server.promoteMirrorToPrimary!({ oldNodeNeutralised: true });
+        const result = await server.promoteMirrorToPrimary!({ oldNodeNeutralised: true }, {});
         expect(result.alreadyPrimary).toBe(false);
 
         // The point-of-no-return committed: deployment flipped to (primary, primary).

@@ -197,6 +197,15 @@ export interface MirrorPromoteDeps extends PromoteDeps {
    * before the flip is a correctness invariant, so it lives here rather than in the caller.
    */
   readonly persistTradingEnv: (seriesId: string) => Promise<void>;
+  /**
+   * Seals the live `fiscal.aeat` cert INSIDE the point-of-no-return owner transaction
+   * (`commitMirrorPromotionTx`), so a promoted primary that holds a dormant cert becomes primary and
+   * holds its filing cert atomically (cert-distribution design §3.1). Injected by the boot closure,
+   * which does the ~128 MiB scrypt unwrap of the dormant row BEFORE the PONR and passes only the
+   * `putCredential` in here. Undefined when there is nothing to unlock (no break-glass secret on the
+   * promote, or an absent/corrupt dormant row) — the membership-only promote is unchanged.
+   */
+  readonly sealLiveCert?: (tx: Transaction) => Promise<void>;
 }
 
 /**
@@ -220,6 +229,7 @@ export interface MirrorPromoteDeps extends PromoteDeps {
 export async function commitMirrorPromotionTx(
   tx: Transaction,
   document: SignedMembershipDocument,
+  sealLiveCert?: (tx: Transaction) => Promise<void>,
 ): Promise<void> {
   await setDeploymentModeTx(tx, "primary"); // (primary, secondary) — valid transient pair
   await setSingletonRoleTx(tx, "primary"); // (primary, primary)
@@ -231,6 +241,13 @@ export async function commitMirrorPromotionTx(
       mintedTerm: document.body.term,
     });
   }
+  // Seal the unlocked AEAT cert in the SAME point-of-no-return transaction (cert-distribution design
+  // §3.1): "became primary" and "holds the filing cert" commit or roll back together, so a promoted
+  // primary is never left without the cert its drain files with. The ~128 MiB scrypt open already
+  // happened BEFORE this transaction (the caller unwrapped the dormant row); only the `putCredential`
+  // is inside. Undefined when there was nothing to unlock (no break-glass secret, or an absent/corrupt
+  // dormant row) — the membership-only promote is unchanged.
+  if (sealLiveCert !== undefined) await sealLiveCert(tx);
 }
 
 /**
@@ -297,8 +314,9 @@ export async function promoteMirrorToPrimary(
   // `MirrorPromoteDeps.persistTradingEnv`.
   await deps.persistTradingEnv(seriesId);
 
-  // PONR: mode + singleton + term-guarded doc in ONE owner transaction (CLAUDE.md §3).
-  await deps.ownerDb.transaction((tx) => commitMirrorPromotionTx(tx, document));
+  // PONR: mode + singleton + term-guarded doc + (optional) live-cert seal in ONE owner transaction
+  // (CLAUDE.md §3). `deps.sealLiveCert` is undefined on a membership-only promote.
+  await deps.ownerDb.transaction((tx) => commitMirrorPromotionTx(tx, document, deps.sealLiveCert));
 
   await refreshDeploymentHolders(deps.appDb, deps.holders);
   deps.log("info", "promotion.completed", { target: "mirror" });

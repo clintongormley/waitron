@@ -52,10 +52,12 @@ import {
 } from "./promote.js";
 import type {
   FenceAttestation,
+  MirrorPromoteDeps,
   MirrorPromotionResult,
   PromoteDeps,
   PromotionResult,
 } from "./promote.js";
+import { deleteDormantCert, sealLiveCertTx, unwrapDormantCert } from "./fiscal-cert.js";
 import { codeOf } from "@waitron/server-kit";
 import { createLogger, type Logger } from "./logger.js";
 import { createRotatingFileSink, createLogReader, tee } from "./log-file.js";
@@ -166,9 +168,13 @@ export interface StartedServer {
    * the box into `mode=primary` (a mirror is not selling, so a brief restart costs nothing). Present only
    * in MIRROR mode; a non-mirror trading box omits it and exposes `promoteLocalSecondaryToPrimary` instead.
    * IN-PROCESS ONLY: no network endpoint yet (spec §8). Requires a fence attestation or it refuses
-   * (`promotion.fence_not_attested`).
+   * (`promotion.fence_not_attested`). `ctx.breakGlass`, when set, unwraps the dormant AEAT cert and
+   * seals the live copy inside the promote's point-of-no-return (Task 9, cert-distribution §3.1).
    */
-  promoteMirrorToPrimary?: (attestation: FenceAttestation) => Promise<MirrorPromotionResult>;
+  promoteMirrorToPrimary?: (
+    attestation: FenceAttestation,
+    ctx: { breakGlass?: string },
+  ) => Promise<MirrorPromotionResult>;
   /** Resolves when the loop has stopped, the listener is closed and the pool is drained. */
   close(): Promise<void>;
 }
@@ -400,7 +406,10 @@ function makeStartedServer(
   teardown: BootTeardown,
   mdns: MdnsResponder,
   promote?:
-    | { kind: "mirror"; run: (a: FenceAttestation) => Promise<MirrorPromotionResult> }
+    | {
+        kind: "mirror";
+        run: (a: FenceAttestation, ctx: { breakGlass?: string }) => Promise<MirrorPromotionResult>;
+      }
     | { kind: "local-secondary"; run: (a: FenceAttestation) => Promise<PromotionResult> },
 ): StartedServer {
   // Guards a second, LOSING concurrent `close()`: without it, both calls would reach the pool
@@ -1946,11 +1955,41 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // still-read-only mirror), runs the PONR owner transaction, and restarts into `mode=primary` on a real
   // promote — an already-primary re-run is an idempotent no-op that skips the restart. Only a mirror
   // changes its selling series + `deployment.mode` on promotion, so this path exists only in mirror mode.
-  const promoteMirrorRun = (attestation: FenceAttestation): Promise<MirrorPromotionResult> =>
+  const promoteMirrorRun = (
+    attestation: FenceAttestation,
+    ctx: { breakGlass?: string },
+  ): Promise<MirrorPromotionResult> =>
     withOwnerDb(async (deps) => {
+      // Break-glass unlock of the dormant AEAT cert (Task 9, cert-distribution §3.1). The ~128 MiB
+      // scrypt open runs HERE, BEFORE the point-of-no-return — on material it becomes `sealLiveCert`,
+      // whose only work (a `putCredential`) runs INSIDE the PONR owner transaction so "became primary"
+      // and "holds the filing cert" commit together. A corrupt dormant (a secret that will not open the
+      // envelope) never blocks failover: the row is deleted and the promote proceeds with no live cert.
+      let sealLiveCert: MirrorPromoteDeps["sealLiveCert"];
+      if (ctx.breakGlass !== undefined) {
+        const breakGlass = ctx.breakGlass;
+        const material = await withTenant(db, till.tenantId, (tx) =>
+          unwrapDormantCert(tx, ring, till.tenantId, breakGlass),
+        );
+        if (material === "corrupt") {
+          // Delete the corrupt dormant row via the REAL owner handle (`withOwnerDb` hands a
+          // `PromoteDeps` with `.ownerDb`, not a bare tx). A separate owner transaction, deliberately
+          // outside the PONR — the promote must succeed even when the cert cannot be unlocked.
+          await withOwnerDb((ownerDeps) =>
+            withTenant(ownerDeps.ownerDb, till.tenantId, (tx) =>
+              deleteDormantCert(tx, till.tenantId),
+            ),
+          );
+          log("warn", "fiscal.certificate_unlock_failed", { tenantId: till.tenantId });
+        } else if (material !== "absent") {
+          sealLiveCert = (tx) => sealLiveCertTx(tx, ring, till.tenantId, material);
+          log("info", "fiscal.certificate_unlocked", { tenantId: till.tenantId });
+        }
+      }
       const result = await promoteMirrorToPrimary(
         {
           ...deps,
+          sealLiveCert,
           // The promoted primary numbers under its OWN reserved standard series, not the primary's inert
           // `till.seriesId` that adopt wrote; every other value is re-emitted unchanged from the running
           // config. Called BEFORE the PONR (inert on a still-read-only mirror), so a PROCESS crash can
@@ -1987,13 +2026,27 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // (primary or fenced) → an informative read-only status: a node its OWN held document marks fenced
   // throws `promotion.node_fenced` (the endpoint maps it to 409), an unfenced primary is already-primary.
   // NEVER calls `promoteLocalSecondaryToPrimary` (shelved active-active, spec §2).
-  const promoteRun = async (attestation: FenceAttestation): Promise<PromoteRunResult> => {
+  const promoteRun = async (
+    attestation: FenceAttestation,
+    ctx: { breakGlass?: string },
+  ): Promise<PromoteRunResult> => {
     if (isMirror) {
-      const result = await promoteMirrorRun(attestation);
+      const result = await promoteMirrorRun(attestation, ctx);
       return { alreadyPrimary: result.alreadyPrimary, restarting: !result.alreadyPrimary };
     }
     const held = await readNodeMembership(db);
     assertNotFenced(held, till.nodeId); // throws promotion.node_fenced on a fenced (primary, secondary) node
+    // An already-primary node has no PONR to fold the cert seal into (`promoteMirrorToPrimary`
+    // early-returns before it), so a break-glass secret cannot unlock here. Do NOT silently drop it
+    // (cert-distribution §3.1): report already-primary as usual, but tell the operator to unlock the
+    // dormant cert out-of-band via Task 10's endpoint.
+    if (ctx.breakGlass !== undefined) {
+      log("warn", "fiscal.certificate_unlock_skipped", {
+        tenantId: till.tenantId,
+        reason: "already_primary",
+        endpoint: "/management-api/fiscal-certificate/unlock",
+      });
+    }
     return { alreadyPrimary: true, restarting: false };
   };
 
