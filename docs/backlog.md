@@ -434,7 +434,7 @@ All three decisions are now taken.
 7. **Register/device model — DECIDED 2026-09-05** (SP-A.2 follow-up 2; keep both —
    [`2026-09-05-register-and-device-model-decision.md`](superpowers/specs/2026-09-05-register-and-device-model-decision.md) §4). The build split: the
    no-migration half (register create + auto-create at till enrol, handheld picker, register/device
-   wording, shift login keyed to the device's register) — **LANDED (feat/device-enrolment-login,
+   wording, shift login keyed to the device's register) — **LANDED #269 (feat/device-enrolment-login,
    2026-09-07;** design [`2026-09-07-device-enrolment-and-login-design.md`](superpowers/specs/2026-09-07-device-enrolment-and-login-design.md)). Shipped: the
    device **profile** is now the single description of a device — `device_kind` is **gone** (both the
    pgEnum and the column dropped); a device's kind derives from its profile's new `form_factor`
@@ -450,7 +450,13 @@ All three decisions are now taken.
      form-factor label differs across two pickers — `canvas_editor.form_factor.till` = "TPV" vs
      `device_profiles.form_factor.till` = "Caja registradora"; pick one. (c) `WAITRON_TILL_TILL_ID` /
      provisioning still seeds a "Caja 1" register while a till enrol now auto-creates its own — the
-     dedupe deferred by the decision doc.
+     dedupe deferred by the decision doc. (d) the hardware PATCH validates `card_provider` and
+     `card_reader_id` independently — the "reader id only for `stripe_terminal`" coherence rule lives
+     only in the dashboard UI, so a direct API call can persist an incoherent (non-secret, off the
+     fiscal path) row; move it server-side if it is a real invariant. (e) the device-management routes
+     build their `devices ⨝ device_profiles` read inline in the HTTP layer (repeated across
+     `device-api`/`device-session`); a `listDevices` store verb would restore the layer. Both are
+     whole-branch-review deferrals (#269), not blockers.
 
 **Track C — product / modules** (sequential; owns `packages/fiscal*`, the module framework packages,
 `packages/composition` (the `ALL_MODULES` list), every NEW module package, `apps/dashboard` module
