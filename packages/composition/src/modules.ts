@@ -10,6 +10,7 @@ import {
   FISCAL_VOCABULARY,
 } from "@waitron/fiscal-verifactu";
 import {
+  BOOKINGS_CLASSIFICATION,
   BOOKINGS_ENROLMENT,
   BOOKINGS_FLOOR_ANNOTATIONS,
   BOOKINGS_PERMISSIONS,
@@ -190,6 +191,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../bookings/drizzle",
     },
     sync: BOOKINGS_ENROLMENT,
+    classification: BOOKINGS_CLASSIFICATION,
     routes: BOOKINGS_ROUTES,
     permissions: BOOKINGS_PERMISSIONS,
     floorAnnotations: BOOKINGS_FLOOR_ANNOTATIONS,

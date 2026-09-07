@@ -6,9 +6,10 @@ const STATE = "manager configuration / live service; copied to a standby, never 
 const LOCAL = "this node's own record of what it is; not copied";
 
 /**
- * Core's 51 tables, classified for native replication (swap spec §2.1). `canvases` is `state` (it
- * succeeded the dropped `layout_profiles`). The completeness of this list against core's migrations
- * is guarded by `classification.test.ts`, which scans `drizzle/*.sql` for `CREATE TABLE`.
+ * Core's tables, classified for native replication (swap spec §2.1). `canvases` is `state` (it
+ * succeeded the dropped `layout_profiles`); `bookings` left for `@waitron/bookings` (#270). The
+ * completeness of this list against core's migrations is guarded by `classification.test.ts`, which
+ * scans `drizzle/*.sql` for `CREATE TABLE`.
  */
 export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   // ledger (12) — append-only history copied to a standby AND drained back from a returned box.
@@ -66,7 +67,6 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("canvases", "state", STATE),
   classify("tenant_themes", "state", STATE),
   classify("tenant_receipts", "state", STATE),
-  classify("bookings", "state", STATE),
   classify("incidents", "state", STATE),
   classify("working_orders", "state", "orders in flight; copied to a standby, never drained back"),
   classify(
