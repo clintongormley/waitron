@@ -460,6 +460,20 @@ screens, `apps/server/src/modules.ts` (the maps derived from that list), and the
      `fiscal-modules.ts` so provisioning production is scannable.
 3. **Bookings as the first UI-bearing module** (own package, own tables, own dashboard screen):
    proves cards, permissions and i18n arriving with a module — fiscal never exercises them.
+   **Decomposed SP1 → SP2** (owner 2026-09-07, full end-to-end module):
+   - **SP1 — server + data extraction (specced, next to plan+build).** `@waitron/bookings`: the tables
+     leave the core migration set into their own set (a clean leaf — nothing in core references them);
+     verbs + routes move in behind a typed `routes` seat `boot.ts` mounts generically; a `permissions`
+     seat carries `booking.manage` out of `@waitron/identity` (identity keeps the role ladder); a
+     `floorAnnotations` seat carries the "Reserved HH:MM" concern out of core's `listTablesWithState`;
+     enrolled into sync as `state` (first genuinely-toggleable module — unblocks the deferred
+     enabled-set-aware pull, `boot.ts:556`); the four request helpers lift to a new `@waitron/server-kit`.
+     Dashboard UNTOUCHED (same URLs). Spec:
+     [module-bookings-sp1-server-extraction](superpowers/specs/2026-09-07-module-bookings-sp1-server-extraction-design.md).
+   - **SP2 — dashboard module-UI seat (own spec, later).** The GENERAL, reusable mechanism (owner: general
+     now) by which a module contributes a dashboard screen + i18n bundle + nav + permission gate into the
+     browser bundle without importing the server package, migrating the existing screens onto it; proven by
+     moving the bookings screen/widget/strings. Gated on SP1 (the package it hangs off).
 4. **Control plane brainstorm — NEW (owner-added 2026-09-05).** With one tenant per database and a
    dedicated cloud instance per tenant, the only multi-tenant service Waitron will run is a small
    control plane: accounts (a customer of ours, a concept the schema does not have — a tenant is a
