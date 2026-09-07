@@ -428,7 +428,8 @@ export const en = {
   "server.waiting_promotion": "Local server unreachable — waiting for the standby to be promoted",
   "server.check_again": "Check again",
   "server.switched": "Moved to another server. Enter your PIN.",
-  "sale.unconfirmed": "The server did not answer. Check whether the sale went through before trying again.",
+  "sale.unconfirmed":
+    "The server did not answer. Check whether the sale went through before trying again.",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -681,10 +682,12 @@ export const es: Record<StringKey, string> = {
   "server.unreachable": "sin conexión",
   "server.standby": "en espera, sin promover",
   "server.primary": "aceptando ventas",
-  "server.waiting_promotion": "Servidor local sin conexión — esperando a que se promueva el de reserva",
+  "server.waiting_promotion":
+    "Servidor local sin conexión — esperando a que se promueva el de reserva",
   "server.check_again": "Comprobar de nuevo",
   "server.switched": "Cambiado a otro servidor. Introduce tu PIN.",
-  "sale.unconfirmed": "El servidor no respondió. Comprueba si la venta se registró antes de reintentar.",
+  "sale.unconfirmed":
+    "El servidor no respondió. Comprueba si la venta se registró antes de reintentar.",
 };
 
 // Locale → catalogue. `en` is included as its own catalogue so an explicit
