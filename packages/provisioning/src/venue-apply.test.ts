@@ -6,7 +6,7 @@ import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import type { CapabilityFlag } from "@waitron/layouts";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { planVenue, type VenueAction, type VenueRequest } from "./venue-plan.js";
-import { obligadoTenantId } from "./tenant-id.js";
+import { deriveTenantId } from "./tenant-id.js";
 import { applyVenue } from "./venue-apply.js";
 
 // PGlite's default connection is a SUPERUSER holding every grant, so a privilege or trigger
@@ -100,7 +100,7 @@ describe("applyVenue", () => {
 
   it("seeds exactly one admin person carrying the display name, role, and pin hash", async () => {
     // A freshly provisioned venue must have someone who can log in and authorize privileged actions.
-    // A distinct obligado so the person count is this run's alone (the suite shares one database).
+    // A distinct tenant so the person count is this run's alone (the suite shares one database).
     const seedRequest = request("B55555555");
     seedRequest.admin = {
       displayName: "Alicia",
@@ -132,7 +132,7 @@ describe("applyVenue", () => {
   it("seeds exactly the three starter device profiles (names per the venue locale, no canvas, form-factor caps)", async () => {
     // task-3 follow-on b: every new tenant is seeded Counter/Kitchen/Handheld at provisioning. es-ES
     // venue → the Spanish names; each binds canvasId NULL (→ form-factor default canvas at runtime) and
-    // carries the form-factor default capabilities. A distinct obligado so the profile set is this
+    // carries the form-factor default capabilities. A distinct tenant so the profile set is this
     // run's alone (the suite shares one database). Proven by deletion: drop the seed-device-profiles
     // handler in applyVenue and this reads zero rows.
     const result = await applyVenue(planVenue(request("B10101010"), ALL_MODULES), {
@@ -179,7 +179,7 @@ describe("applyVenue", () => {
     // Onboarding captures the admin's dashboard-login email; provisioning threads it into the seeded
     // `persons` row so the email-based dashboard login can resolve the address. It is OPTIONAL — the
     // CLI/dev-setup/e2e paths seed an admin with no email — so an absent email must write NULL, not a
-    // throw or an empty string. Two distinct obligados so each admin is this run's alone.
+    // throw or an empty string. Two distinct tenants so each admin is this run's alone.
     const withEmail = request("B66666666");
     withEmail.admin = {
       displayName: "Owner",
@@ -206,7 +206,7 @@ describe("applyVenue", () => {
     expect(emailless.rows[0]?.email).toBeNull();
   });
 
-  it("reuses the obligado on a re-run rather than duplicating it (idempotent tenant, spec D8)", async () => {
+  it("reuses the tenant on a re-run rather than duplicating it (idempotent tenant, spec D8)", async () => {
     const first = await applyVenue(planVenue(request("B99999999"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -219,12 +219,12 @@ describe("applyVenue", () => {
 
     const tenants = await suite.db.execute<{ n: number }>(sql`
       select count(*)::int as n from tenants where country = 'ES' and tax_id = 'B99999999'`);
-    expect(tenants.rows[0]?.n).toBe(1); // exactly one obligado, not two
+    expect(tenants.rows[0]?.n).toBe(1); // exactly one tenant, not two
   });
 
-  it("collapses country/taxId case + surrounding-whitespace variants to ONE obligado on re-run (no duplicate, no PK error, §5)", async () => {
+  it("collapses country/taxId case + surrounding-whitespace variants to ONE tenant on re-run (no duplicate, no PK error, §5)", async () => {
     // The fiscal footgun: es/ES (or a taxId differing only in letter case or leading/trailing
-    // whitespace) for the SAME business must never mint two permanent, unmergeable obligados (§5).
+    // whitespace) for the SAME business must never mint two permanent, unmergeable tenants (§5).
     // Internal whitespace is NOT normalized (a distinct identity). planVenue canonicalizes, so both runs
     // carry the SAME derived id AND the SAME (country, tax_id) unique-index row → the second run's
     // `on conflict (country, tax_id) do nothing` fires. Proven by DELETION: strip planVenue's
@@ -241,13 +241,13 @@ describe("applyVenue", () => {
         modules: ALL_MODULES,
       },
     );
-    expect(second.tenantId).toBe(first.tenantId); // same canonical obligado, reused
-    expect(first.tenantId).toBe(obligadoTenantId("ES", "B88888888"));
+    expect(second.tenantId).toBe(first.tenantId); // same canonical tenant, reused
+    expect(first.tenantId).toBe(deriveTenantId("ES", "B88888888"));
 
     const tenants = await suite.db.execute<{ n: number }>(sql`
       select count(*)::int as n from tenants
       where upper(country) = 'ES' and upper(tax_id) = 'B88888888'`);
-    expect(tenants.rows[0]?.n).toBe(1); // exactly one obligado across both casings, not two
+    expect(tenants.rows[0]?.n).toBe(1); // exactly one tenant across both casings, not two
   });
 
   it("seeds the admin only once across re-runs — the D8 second-shop path adds no duplicate", async () => {
@@ -264,7 +264,7 @@ describe("applyVenue", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    expect(first.tenantId).toBe(obligadoTenantId("ES", "B77777777"));
+    expect(first.tenantId).toBe(deriveTenantId("ES", "B77777777"));
 
     const admins = await suite.db.execute<{ n: number }>(sql`
       select count(*)::int as n from persons
@@ -272,7 +272,7 @@ describe("applyVenue", () => {
     expect(admins.rows[0]?.n).toBe(1); // exactly one admin, not one per run
   });
 
-  it("mints a distinct installation number per node under one obligado", async () => {
+  it("mints a distinct installation number per node under one tenant", async () => {
     const a = await applyVenue(planVenue(request("B11111111"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -320,7 +320,7 @@ describe("applyVenue", () => {
     // ON CONFLICT DO NOTHING. Its id must NOT reach the result, and the venue must end with exactly
     // one series row — the honest reflection of what was written.
     const taxId = "B22222222";
-    const tenantId = obligadoTenantId("ES", taxId);
+    const tenantId = deriveTenantId("ES", taxId);
     const collidingPlan: VenueAction[] = [
       { kind: "ensure-tenant", tenantId, country: "ES", taxId, legalName: "Deli SL" },
       {
@@ -359,7 +359,7 @@ describe("applyVenue", () => {
     // VenueResult with `tillId === ""` — a venue with no real till, which fails confusingly later
     // (recordSale needs one). A post-loop completeness guard names the missing step instead.
     const taxId = "B44444444";
-    const tenantId = obligadoTenantId("ES", taxId);
+    const tenantId = deriveTenantId("ES", taxId);
     const planWithoutTill: VenueAction[] = [
       { kind: "ensure-tenant", tenantId, country: "ES", taxId, legalName: "Deli SL" },
       {
@@ -394,7 +394,7 @@ describe("applyVenue", () => {
     // guard turns that into a clear plan-integrity Error BEFORE any such write, not an operator-facing
     // AppError: a malformed plan is a programming bug, not operator input.
     const taxId = "B33333333";
-    const tenantId = obligadoTenantId("ES", taxId);
+    const tenantId = deriveTenantId("ES", taxId);
     const ensure: VenueAction = {
       kind: "ensure-tenant",
       tenantId,
@@ -497,7 +497,7 @@ describe("applyVenue", () => {
     });
 
     it("runs the seed with the node it just created and reports its line", async () => {
-      // Its own obligado: the suite shares one database, and B44444444 belongs to the create-till
+      // Its own tenant: the suite shares one database, and B44444444 belongs to the create-till
       // completeness case above.
       const modules = [...ALL_MODULES, recorder];
       const result = await applyVenue(planVenue(request("B47474747"), modules), {
@@ -519,7 +519,7 @@ describe("applyVenue", () => {
         applyVenue(planVenue(request(taxId), modules), { db: suite.db, modules }),
       ).rejects.toThrow("seed failed");
       const tenant = await suite.db.execute(
-        sql`select 1 from tenants where id = ${obligadoTenantId("ES", taxId)}`,
+        sql`select 1 from tenants where id = ${deriveTenantId("ES", taxId)}`,
       );
       expect(tenant.rows).toEqual([]);
     });

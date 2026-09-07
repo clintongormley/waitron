@@ -2,7 +2,7 @@ import { AppError } from "@waitron/shared";
 import { DEFAULT_DEVICE_PROFILES, defaultProfileName, type CapabilityFlag } from "@waitron/layouts";
 import type { WaitronModule } from "@waitron/module";
 import { resolveFiscalModules } from "./fiscal-modules.js";
-import { obligadoTenantId } from "./tenant-id.js";
+import { deriveTenantId } from "./tenant-id.js";
 import "@waitron/fiscal"; // side-effect: registers fiscal.regime_not_implemented on ErrorParams
 import "./errors.js"; // side-effect: registers provisioning.invalid_locales on ErrorParams
 
@@ -81,7 +81,7 @@ export type VenueAction =
  * The location/till/node ids are NOT in the actions: they are generated at apply time and threaded
  * by order (ensure-tenant sets the scope; create-location makes a location; create-node makes the
  * node the following actions reference). Only the tenant id is here, and it is DERIVED — so a
- * re-run reuses the same obligado by its deterministic id without a tax_id lookup (spec D8).
+ * re-run reuses the same tenant by its deterministic id without a tax_id lookup (spec D8).
  */
 export function planVenue(request: VenueRequest, modules: readonly WaitronModule[]): VenueAction[] {
   // Canonicalize the fiscal identity ONCE, at the top, and use these values for BOTH the derived id
@@ -91,12 +91,12 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
   // taxId but never uppercases it (its `assertCountry` already upper-cases country, now belt-and-
   // suspenders). Deriving the id from a raw casing, OR storing a raw (country, tax_id) row, would let
   // `es`/`ES` (or a taxId that differs only in letter case or in leading/trailing whitespace) for the
-  // same business mint a second, permanent, unmergeable obligado — a re-run meant to add a shop would
+  // same business mint a second, permanent, unmergeable tenant — a re-run meant to add a shop would
   // silently start a second SIF/hash chain. `.trim().toUpperCase()` collapses exactly those two
   // differences; INTERNAL whitespace is deliberately left alone (a taxId's inner content is not ours
   // to alter), so `"B123 45678"` stays a distinct identity. Canonicalizing makes the id AND the
   // unique-index row match across case/surrounding-space variants, so applyVenue's `on conflict
-  // (country, tax_id) do nothing` reuses the one obligado. No data to preserve (pre-production, no
+  // (country, tax_id) do nothing` reuses the one tenant. No data to preserve (pre-production, no
   // backfill); ISO-3166 alpha-2 is upper-case by convention.
   const country = request.country.trim().toUpperCase();
   const taxId = request.taxId.trim().toUpperCase();
@@ -124,7 +124,7 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
       fiscalTerritory: request.location.fiscalTerritory,
     });
   }
-  const tenantId = obligadoTenantId(country, taxId);
+  const tenantId = deriveTenantId(country, taxId);
 
   return [
     {

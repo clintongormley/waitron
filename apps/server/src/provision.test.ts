@@ -158,10 +158,10 @@ describe("provisionVenue", () => {
     expect(await fiscalCounts(db)).toEqual(afterFirst);
   });
 
-  it("refuses a FOREIGN obligado in an occupied database and mints no second tenant (§5)", async () => {
+  it("refuses a FOREIGN tenant in an occupied database and mints no second tenant (§5)", async () => {
     // The production gap: `POST /setup-api/provision` reaches this function, and one tenant per
     // database is the post-RLS isolation boundary — with row-level security gone a second
-    // `(country, tax_id)` would expose one business's rows to the other (§5). A DIFFERENT obligado in
+    // `(country, tax_id)` would expose one business's rows to the other (§5). A DIFFERENT tenant in
     // an occupied database is refused BEFORE stamping or applyVenue, exactly as the `venue` CLI does.
     const db = ownerDb();
     await provisionVenue(
@@ -180,7 +180,7 @@ describe("provisionVenue", () => {
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     ).catch((e: unknown) => e);
     expect(isAppError(error)).toBe(true);
-    expect(isAppError(error) && error.code).toBe("provisioning.foreign_obligado");
+    expect(isAppError(error) && error.code).toBe("provisioning.foreign_tenant");
 
     // Still exactly one tenant — and no second SIF/series/node/chain.
     const tenants = await db.execute<{ n: number }>(sql`select count(*)::int as n from tenants`);
@@ -189,11 +189,11 @@ describe("provisionVenue", () => {
   });
 
   it("refuses a re-provision of the SAME business in a DIFFERENT casing — cross-layer invariance (§5)", async () => {
-    // The most load-bearing path: the double-provision guard (provision.ts) recomputes the obligado id
-    // from the RAW request (`obligadoTenantId(req.venue.country, req.venue.taxId)`), while the stored
+    // The most load-bearing path: the double-provision guard (provision.ts) recomputes the tenant id
+    // from the RAW request (`deriveTenantId(req.venue.country, req.venue.taxId)`), while the stored
     // id comes from `planVenue` (which canonicalizes country/taxId). For the guard to recognize a
     // re-provision in a different casing, BOTH normalization layers must agree: planVenue canonicalizes
-    // the plan/stored row, and obligadoTenantId self-normalizes the id the guard recomputes. Without
+    // the plan/stored row, and deriveTenantId self-normalizes the id the guard recomputes. Without
     // the latter, a re-provision in a NON-canonical casing recomputes a raw id that MISSES the stored
     // (canonical) tenant, so the guard passes and applyVenue ADDS a second node → a second, permanent,
     // unmergeable SIF/hash chain (§5). No existing test catches this: "refuses a second provision" sends
@@ -202,7 +202,7 @@ describe("provisionVenue", () => {
     // The re-provision is SECOND in a NON-canonical casing on purpose: the guard reads the SECOND
     // call's raw request, so that call must be non-canonical for the cross-layer invariance to be under
     // test. (A canonical second call derives the canonical id directly and would be refused even with
-    // obligadoTenantId's normalization removed — a false green.) `nextNif()` ends in an uppercase "K",
+    // deriveTenantId's normalization removed — a false green.) `nextNif()` ends in an uppercase "K",
     // so lower-casing the NIF plus a lowercase country gives a genuinely non-canonical re-provision of
     // the same business.
     const db = ownerDb();

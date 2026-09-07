@@ -715,8 +715,8 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         const persistTrading = async (cfg: TradingConfig): Promise<void> => {
           await writeTradingEnv(config.stateDir, cfg);
         };
-        // The NAME of the database `ownerDb` writes — echoed by `provisioning.foreign_obligado` if a
-        // fresh venue or a mirror adopt is pointed at a database already holding a different obligado.
+        // The NAME of the database `ownerDb` writes — echoed by `provisioning.foreign_tenant` if a
+        // fresh venue or a mirror adopt is pointed at a database already holding a different tenant.
         // Parsed from the owner URL, but never the URL itself (it can carry a password, and that code param is
         // operator-typed configuration, never a secret): an unparseable string (a bare Unix-socket
         // path throws in `new URL` — cli.ts's socket note) falls back to a neutral label.

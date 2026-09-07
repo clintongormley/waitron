@@ -58,11 +58,11 @@ export async function applyVenue(
   }
   const tenantId = ensure.tenantId;
 
-  // Re-run idempotency (reuse the obligado, ON CONFLICT DO NOTHING) relies on every tenant for a
-  // (country, tax_id) having been created with this deterministic obligadoTenantId: a re-run adopts
+  // Re-run idempotency (reuse the tenant, ON CONFLICT DO NOTHING) relies on every tenant for a
+  // (country, tax_id) having been created with this deterministic deriveTenantId: a re-run adopts
   // the derived id as its scope and inserts locations under it. This holds because BOTH production
   // tenant-creation paths — `provisionVenue` (UI) and the `venue` CLI — derive the id through
-  // planVenue's obligadoTenantId (bootstrap-tenant.sql retired 2026-08-04). A future path inserting a
+  // planVenue's deriveTenantId (bootstrap-tenant.sql retired 2026-08-04). A future path inserting a
   // random-id tenant for the same identity would leave the ensure-tenant ON CONFLICT a no-op while
   // this scope adopts the derived id, so the locations FK to tenants(id) fails.
   return withTenant(deps.db, tenantId, async (tx) => {
@@ -75,7 +75,7 @@ export async function applyVenue(
     for (const action of actions) {
       switch (action.kind) {
         case "ensure-tenant":
-          // The deterministic id and DO NOTHING reuse an existing obligado (spec D8).
+          // The deterministic id and DO NOTHING reuse an existing tenant (spec D8).
           await tx.execute(sql`
             insert into tenants (id, country, tax_id, legal_name)
             values (${action.tenantId}, ${action.country}, ${action.taxId}, ${action.legalName})
@@ -83,7 +83,7 @@ export async function applyVenue(
           break;
         case "seed-admin":
           // Seed the tenant's admin ONCE. Like ensure-tenant's ON CONFLICT DO NOTHING, this makes a
-          // re-run a no-op on a row keyed to the TENANT — the admin belongs to the obligado, not to a
+          // re-run a no-op on a row keyed to the TENANT — the admin belongs to the tenant, not to a
           // shop, so the D8 second-shop re-run (create-location/create-till/create-node deliberately
           // ADD a shop each run) must not add a duplicate admin each time. A plain insert did exactly
           // that. `insert … select … where not exists` seeds the admin only if the tenant has none

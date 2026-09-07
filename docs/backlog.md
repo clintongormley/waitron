@@ -174,7 +174,7 @@ conflict):**
 - **No database will ever hold two tenants** (a throwaway preproduction demo aside). The
   multi-tenant SaaS goal is gone; a box is single-tenant, on-prem or cloud. Supersedes cloud-storage
   §9's "one shared cloud database". **Confirmed and extended 2026-09-05 (owner decision): ONE TENANT
-  PER DATABASE everywhere, the cloud included.** A tenant is the obligado (`country` + `tax_id`, one
+  PER DATABASE everywhere, the cloud included.** A tenant is one taxpayer (`country` + `tax_id`, one
   NIF; `packages/provisioning/src/tenant-id.ts` derives its id) holding all of its locations. The
   cloud is a dedicated instance per tenant — the shape the built cloud mirror already has — as a warm
   mirror today or as a primary (hosted in Spain, so Q16 does not arise); the shared multi-tenant cloud store
@@ -255,10 +255,11 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    CLAUDE.md §2–§4 rewritten. Proof: old migrations vs new baselines, `pg_dump --schema-only`,
    normalised diff EMPTY. Measurements: real-PG test files 212 → 159; full-suite wall clock
    352 s → 319 s. Post-squash follow-ups: (0) DONE — the mirror adopt path (`adoptFromPrimary`) now
-   shares the one-obligado guard (owner: mirror-adopt of a foreign obligado into an occupied DB is
-   refused, `provisioning.foreign_obligado`); the guard/types/error were renamed off the infra word
-   "tenant" onto the fiscal concept (`assertNoForeignObligado`/`readObligadoIdentities`/
-   `ObligadoIdentity`/`obligado-guard.ts`), and `adopt.test.ts` now clones a fresh mirror per test;
+   shares the one-tenant guard (`assertNoForeignTenant`; a foreign tenant adopted into an occupied DB is
+   refused, `provisioning.foreign_tenant`), and `adopt.test.ts` clones a fresh mirror per test. #258
+   briefly renamed the guard/types/error onto the Spanish word `obligado`; reverted the next cycle — core
+   code is English-only, Spanish only in the verifactu/fiscal modules + translations. The pre-existing
+   `obligadoTenantId` became `deriveTenantId` in the same pass;
    (1) `sales_assert_tenders_cover`'s "even though
    the definer sees every row" clause (core baseline) is now false — kept byte-verbatim so the
    equivalence proof stays EMPTY; thin it on the first change to that function; (2) `sync_peers`

@@ -59,9 +59,9 @@ const ADVERTISED_ORIGIN = "https://standby.deli.test";
 // fresh venue with its own NIF per test accumulates there harmlessly — nothing guards the source).
 const source = useTemplateDb({ template: "manifest" });
 
-// The MIRROR is cloned FRESH PER TEST, not shared: `adoptFromPrimary` now refuses a foreign obligado
-// (assertNoForeignObligado, one obligado per database, §5), and each test adopts a DIFFERENT obligado,
-// so a shared mirror would make the second adopt throw `provisioning.foreign_obligado`. A per-test
+// The MIRROR is cloned FRESH PER TEST, not shared: `adoptFromPrimary` now refuses a foreign tenant
+// (assertNoForeignTenant, one tenant per database, §5), and each test adopts a DIFFERENT tenant,
+// so a shared mirror would make the second adopt throw `provisioning.foreign_tenant`. A per-test
 // clone is exactly the production shape anyway — adopt runs against a fresh, never-stamped instance.
 let mirror: RealPostgres;
 let mirrorAdmin: Database; // owner connection to the fresh mirror clone
@@ -543,11 +543,11 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
     expect(orphanTenant.rows).toHaveLength(0);
   });
 
-  it("refuses adopt (fail-closed) when the mirror database already holds a DIFFERENT obligado (§5)", async () => {
-    // adoptFromPrimary shares the same `assertNoForeignObligado` guard as the provision paths (§5).
-    // Adopt obligado A, then a DIFFERENT obligado B into the SAME mirror: B is refused before any side
+  it("refuses adopt (fail-closed) when the mirror database already holds a DIFFERENT tenant (§5)", async () => {
+    // adoptFromPrimary shares the same `assertNoForeignTenant` guard as the provision paths (§5).
+    // Adopt tenant A, then a DIFFERENT tenant B into the SAME mirror: B is refused before any side
     // effect. Deletion-proof: drop the guard in adopt.ts and B is ADOPTED (the same-environment re-stamp
-    // is idempotent, so nothing else stops it) — two obligados in one database, the leak §5 forbids.
+    // is idempotent, so nothing else stops it) — two tenants in one database, the leak §5 forbids.
     const deps = (bundle: MirrorBundle, onPersistTrading?: () => void) => ({
       ownerDb: mirrorAdmin,
       ring: RING,
@@ -572,7 +572,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
       moduleOverrides: {},
     };
 
-    // Obligado A adopted — the mirror now serves it.
+    // Tenant A adopted — the mirror now serves it.
     const a = await buildBundleParts();
     await adoptFromPrimary(
       deps({
@@ -585,7 +585,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
       req,
     );
 
-    // A DIFFERENT obligado B (fresh NIF) adopted into the same mirror — refused.
+    // A DIFFERENT tenant B (fresh NIF) adopted into the same mirror — refused.
     const b = await buildBundleParts();
     let tradingPersistedForB = false;
     const error = await adoptFromPrimary(
@@ -603,7 +603,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
       ),
       req,
     ).catch((e: unknown) => e);
-    expect(isAppError(error) && error.code).toBe("provisioning.foreign_obligado");
+    expect(isAppError(error) && error.code).toBe("provisioning.foreign_tenant");
     // Refused before any side effect: trading.env not written, B's tenant never inserted, A still alone.
     expect(tradingPersistedForB).toBe(false);
     const bRow = await mirrorAdmin.execute(
