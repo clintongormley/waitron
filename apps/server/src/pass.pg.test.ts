@@ -96,6 +96,7 @@ describe("one pass as the non-superuser deployment role", () => {
               now,
             ),
           reconcile: (now) => runDue({ db: probe, duties: [duty], ...DEFAULTS }, tenants, now),
+          awaitingCert: { current: false },
           monotonicMs: () => performance.now(),
           log: createLogger(
             (line) => lines.push(line),

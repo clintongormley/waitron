@@ -558,9 +558,12 @@ describe("adopt headline e2e — setup-mode adopt, reboot into mirror mode, pull
       password: ADMIN_PASSWORD,
     });
     expect(res.status).toBe(200);
+    // The connect response surfaces the break-glass secret adopt minted, ONCE (a real high-entropy
+    // base64url value, so match its shape rather than a fixed string).
     expect(await res.json()).toEqual({
       adopted: true,
       tenantId: designated.tenantId,
+      breakGlassSecret: expect.stringMatching(/^[A-Za-z0-9_-]{20,}$/),
       restarting: true,
     });
     expect(capturedBundle).toBeDefined();

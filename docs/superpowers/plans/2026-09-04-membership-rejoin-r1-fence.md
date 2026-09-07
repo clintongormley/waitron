@@ -19,6 +19,7 @@
 - **Identifiers English; Spanish only as fiscal vocabulary** (english-only guard). All standing values are already English.
 - **`@waitron/membership` is a pure leaf** (deps: `@waitron/shared` only) — the fence predicates must stay pure (no db/crypto/side-effects) and 100%-covered.
 - **Owner-role writes:** `deployment` UPDATEs run on the owner pool (`createPostgresDb(config.migrationsDatabaseUrl)`), never `app_user` — the same dev-correct pattern R3b promote uses (`withOwnerDb`, boot.ts:1632); the real runtime-admin connection is deferred with break-glass, unchanged by this slice.
+  > **2026-09-07 update:** the fenced-demote owner write now uses `config.adminDatabaseUrl` (promote-endpoint Slice 2), so the runtime-admin connection is no longer deferred here — the `migrationsDatabaseUrl` in this bullet and in the §"boot" snippet below (`createPostgresDb(config.migrationsDatabaseUrl)`) is superseded.
 - **Fiscal-adjacent → owner sign-off before land** (backlog). Do not self-land.
 
 ---

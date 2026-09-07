@@ -38,6 +38,7 @@ import { ALL_MODULES } from "./modules.js";
 import type { MirrorBundle, ReservedIdentity } from "./mirror-bundle.js";
 import { readMirrorToken } from "./mirror-token.js";
 import { readNodeIdentityKey } from "./node-identity.js";
+import { verifyBreakGlass } from "./break-glass.js";
 
 // Real Postgres, not PGlite: adopt inserts the parent rows and stamps deployment/mirror_config on the
 // OWNER connection while the read-back runs as `app_user` — a two-role split PGlite's superuser-only
@@ -457,6 +458,51 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
       capturedStandby!.nodeId,
     );
     expect(endorsement).toEqual(reservedIdentity.endorsement);
+  });
+
+  it("mints a break-glass secret at adopt and stores only its verifier", async () => {
+    // This is the only promotable node, so adopt is where its offline promote fallback is minted. The
+    // raw secret comes back on the result exactly once (the connect route surfaces it, never logs it);
+    // only its scrypt verifier is persisted, so the mirror's app pool verifies the returned secret.
+    const { rows, designated } = await buildBundleParts();
+    const bundle: MirrorBundle = {
+      rows,
+      designated,
+      environment: "preproduction",
+      boxHostname: "waitron.local",
+      boxCaPem: "x",
+      relayUrl: "https://relay.test/",
+      syncToken: "peer-token-breakglass",
+      reservedIdentity: nextReservedIdentity(),
+      moduleOverrides: {},
+    };
+
+    const result = await adoptFromPrimary(
+      {
+        ownerDb: mirrorAdmin,
+        ring: RING,
+        advertisedOrigin: ADVERTISED_ORIGIN,
+        fetchBundle: async () => bundle,
+        persistTrading: async () => {},
+        persistModuleConfig: async () => {},
+        databaseUrl: "postgres://app@mirror/db",
+        migrationsDatabaseUrl: "postgres://owner@mirror/db",
+        syncDatabaseUrl: "postgres://sync@mirror/db",
+        database: "mirror_db",
+      },
+      {
+        primaryUrl: "https://primary.test/",
+        credential: { personId: "99999999-9999-9999-9999-999999999999", password: "p" },
+      },
+    );
+
+    // High-entropy base64url, returned once. Deletion-proof: drop the mint in adopt.ts and
+    // `result.breakGlassSecret` is undefined, failing this match.
+    expect(result.breakGlassSecret).toMatch(/^[A-Za-z0-9_-]{20,}$/);
+    // Only the verifier persists: the mirror's app pool verifies the returned secret and rejects a
+    // wrong one (a stored plaintext would verify anything / nothing differently).
+    expect(await verifyBreakGlass(mirrorApp, result.breakGlassSecret)).toBe(true);
+    expect(await verifyBreakGlass(mirrorApp, "wrong")).toBe(false);
   });
 
   it("bootstraps the mirror's module set from the bundle's overrides", async () => {

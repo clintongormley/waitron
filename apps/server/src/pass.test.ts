@@ -16,6 +16,7 @@ const PERIOD = { from: new Date("2026-07-25T00:00:00Z"), to: new Date("2026-07-2
 function drainResult(over: Partial<DrainResult> = {}): DrainResult {
   return {
     nextDueAt: null,
+    tenantsWithWork: 0,
     batchesSent: 0,
     recordsSubmitted: 0,
     recordsAccepted: 0,
@@ -50,6 +51,9 @@ function deps(over: Partial<PassDeps> = {}): PassDeps & { lines: string[] } {
     lines,
     drain: () => Promise.resolve(drainResult()),
     reconcile: () => Promise.resolve(tickResult()),
+    // A fresh awaiting-cert cell per pass fixture — the edge-triggered "log once" tests below flip
+    // it and assert on the transitions, so each `deps()` starts from the same false baseline.
+    awaitingCert: { current: false },
     monotonicMs: () => (ticks += 10),
     log: (level, event, fields) => lines.push(`${level} ${event} ${JSON.stringify(fields ?? {})}`),
     ...over,
@@ -175,6 +179,139 @@ describe("runPass", () => {
     await runPass(d, NOW);
     expect(d.lines.some((line) => line.startsWith("warn drain.tenant_skipped"))).toBe(true);
     expect(d.lines.some((line) => line.includes("credentials.missing"))).toBe(true);
+  });
+
+  it("sets the awaiting-cert flag and logs fiscal.awaiting_certificate for a credentials.missing skip, without failing the drain", async () => {
+    // A promoted mirror with no fiscal.aeat cert: the drain skips filing (does not throw), so the pass
+    // does not fail, the flag flips true, and the once-only awaiting line is logged alongside the
+    // per-pass drain.tenant_skipped trace (both signals, different consumers).
+    const d = deps({
+      drain: () =>
+        Promise.resolve(
+          drainResult({
+            nextDueAt: NOW,
+            tenantsWithWork: 1,
+            skipped: [{ tenantId: TENANT, errorCode: "credentials.missing" }],
+          }),
+        ),
+    });
+    const report = await runPass(d, NOW);
+    expect(report.duties.find((e) => e.duty === DRAIN_DUTY)?.ok).toBe(true);
+    expect(d.awaitingCert.current).toBe(true);
+    expect(d.lines.some((line) => line.startsWith("warn fiscal.awaiting_certificate"))).toBe(true);
+    // The per-pass per-tenant skip trace still fires — the awaiting-cert flag is in ADDITION to it.
+    expect(d.lines.some((line) => line.startsWith("warn drain.tenant_skipped"))).toBe(true);
+    // It counts toward the duty's skipped total, so /health sees the unmet obligation.
+    expect(report.duties.find((e) => e.duty === DRAIN_DUTY)?.skipped).toBe(1);
+  });
+
+  it("logs fiscal.awaiting_certificate ONCE across repeated passes with the cert still missing", async () => {
+    const d = deps({
+      drain: () =>
+        Promise.resolve(
+          drainResult({
+            nextDueAt: NOW,
+            tenantsWithWork: 1,
+            skipped: [{ tenantId: TENANT, errorCode: "credentials.missing" }],
+          }),
+        ),
+    });
+    await runPass(d, NOW);
+    await runPass(d, NOW);
+    await runPass(d, NOW);
+    expect(
+      d.lines.filter((line) => line.startsWith("warn fiscal.awaiting_certificate")),
+    ).toHaveLength(1);
+  });
+
+  it("clears the awaiting-cert flag and logs recovery once when the cert appears, re-arming for a later loss", async () => {
+    let missing = true;
+    const d = deps({
+      drain: () =>
+        Promise.resolve(
+          missing
+            ? drainResult({
+                nextDueAt: NOW,
+                tenantsWithWork: 1,
+                skipped: [{ tenantId: TENANT, errorCode: "credentials.missing" }],
+              })
+            : drainResult({ nextDueAt: SOON, tenantsWithWork: 1, batchesSent: 1 }),
+        ),
+    });
+    await runPass(d, NOW); // missing → flag true, one warn
+    missing = false;
+    await runPass(d, NOW); // cert present, work drained → flag false, one recovery info
+    expect(d.awaitingCert.current).toBe(false);
+    expect(
+      d.lines.filter((line) => line.startsWith("info fiscal.certificate_available")),
+    ).toHaveLength(1);
+    missing = true;
+    await runPass(d, NOW); // lost again → flag true, a SECOND warn (one line per episode)
+    expect(d.awaitingCert.current).toBe(true);
+    expect(
+      d.lines.filter((line) => line.startsWith("warn fiscal.awaiting_certificate")),
+    ).toHaveLength(2);
+  });
+
+  it("leaves the awaiting-cert flag UNCHANGED on a no-work pass — does not clear it, does not log recovery", async () => {
+    // Regression (Codex experiment): a no-work pass (`tenantsWithWork === 0`) read no certificate at
+    // all, so it must NOT clear a flag set by an earlier missing-cert pass and must NOT emit
+    // `fiscal.certificate_available`. Before the fix, the flag cleared on any pass with no
+    // missing-cert skip — including an empty DB — signalling "cert arrived" when nothing had.
+    let missing = true;
+    const d = deps({
+      // First pass: a due tenant, cert missing (skip). Later passes: NO due work at all — the empty-DB
+      // shape a promoted mirror sits in between sales, which never reads the cert.
+      drain: () =>
+        Promise.resolve(
+          missing
+            ? drainResult({
+                nextDueAt: NOW,
+                tenantsWithWork: 1,
+                skipped: [{ tenantId: TENANT, errorCode: "credentials.missing" }],
+              })
+            : drainResult(),
+        ),
+    });
+    await runPass(d, NOW); // missing → flag true
+    expect(d.awaitingCert.current).toBe(true);
+    missing = false;
+    await runPass(d, NOW); // no work → flag must stay true
+    await runPass(d, NOW);
+    expect(d.awaitingCert.current).toBe(true);
+    expect(
+      d.lines.filter((line) => line.startsWith("info fiscal.certificate_available")),
+    ).toHaveLength(0);
+  });
+
+  it("clears the awaiting-cert flag on a pass that genuinely resolves the cert — due work, no missing-cert skip", async () => {
+    // The other half of the regression: a pass with due work that submitted (cert read and used) DOES
+    // clear the flag and logs recovery once — proving the no-work guard above did not disable clearing.
+    let missing = true;
+    const d = deps({
+      drain: () =>
+        Promise.resolve(
+          missing
+            ? drainResult({
+                nextDueAt: NOW,
+                tenantsWithWork: 1,
+                skipped: [{ tenantId: TENANT, errorCode: "credentials.missing" }],
+              })
+            : drainResult({
+                nextDueAt: SOON,
+                tenantsWithWork: 1,
+                batchesSent: 1,
+                recordsSubmitted: 1,
+              }),
+        ),
+    });
+    await runPass(d, NOW); // missing → flag true
+    missing = false;
+    await runPass(d, NOW); // due work, cert resolved → flag clears
+    expect(d.awaitingCert.current).toBe(false);
+    expect(
+      d.lines.filter((line) => line.startsWith("info fiscal.certificate_available")),
+    ).toHaveLength(1);
   });
 
   it("logs drain's own summary counts", async () => {

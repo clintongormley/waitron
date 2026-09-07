@@ -805,6 +805,9 @@ const ADOPT_CREDENTIAL: AdoptCredential = {
   personId: "88888888-8888-8888-8888-888888888888",
   password: "correct-horse-battery",
 };
+// The break-glass secret `adoptFromPrimary` mints and returns once; the route surfaces it in the
+// connect response and must never log it.
+const BREAK_GLASS_SECRET = "break-glass-secret-abc123DEF456";
 
 /** Adopt deps, each a spy. An adopt-only box wires just `adopt` + `requestRestart` (the two the adopt
  * route's gate needs); the provision deps are irrelevant to this route and left unwired. */
@@ -817,7 +820,7 @@ function makeAdoptDeps(overrides: Partial<SetupDeps> = {}): {
   const adoptRequests: AdoptRequest[] = [];
   const adopt = vi.fn(async (req: AdoptRequest) => {
     adoptRequests.push(req);
-    return { tenantId: TENANT_ID };
+    return { tenantId: TENANT_ID, breakGlassSecret: BREAK_GLASS_SECRET };
   });
   const requestRestart = vi.fn();
   const deps: SetupDeps = {
@@ -849,7 +852,13 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
 
     const res = await postAdopt(app, adoptBody());
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ adopted: true, tenantId: TENANT_ID, restarting: true });
+    // The connect response surfaces the minted break-glass secret ONCE, alongside the adopted tenant.
+    expect(await res.json()).toEqual({
+      adopted: true,
+      tenantId: TENANT_ID,
+      breakGlassSecret: BREAK_GLASS_SECRET,
+      restarting: true,
+    });
 
     // `adopt` saw exactly the operator's `{ primaryUrl, credential }` — no reshaping at the boundary.
     expect(adopt).toHaveBeenCalledTimes(1);
@@ -859,6 +868,23 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     expect(requestRestart).not.toHaveBeenCalled();
     await tick();
     expect(requestRestart).toHaveBeenCalledTimes(1);
+  });
+
+  it("surfaces the break-glass secret in the response but NEVER logs it", async () => {
+    const app = new Hono();
+    const { deps } = makeAdoptDeps();
+    const { log, lines } = capturingLog();
+    mountSetup(app, deps, log);
+
+    const res = await postAdopt(app, adoptBody());
+    expect(res.status).toBe(200);
+    // The secret is on the wire once...
+    expect((await res.json()).breakGlassSecret).toBe(BREAK_GLASS_SECRET);
+    await tick();
+    // ...but no log line — at any level, in any event name or field value — carries it. Serialize every
+    // captured line and assert the secret never appears (mirror-bundle sync-token discipline).
+    const logged = JSON.stringify(lines);
+    expect(logged).not.toContain(BREAK_GLASS_SECRET);
   });
 
   it("maps a mirror.bundle_fetch_failed from adopt to HTTP 502", async () => {
@@ -880,8 +906,8 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
 
   it("latches out a second concurrent adopt with 409 while the first is in flight", async () => {
     const app = new Hono();
-    let release!: (v: { tenantId: string }) => void;
-    const pending = new Promise<{ tenantId: string }>((resolve) => {
+    let release!: (v: { tenantId: string; breakGlassSecret: string }) => void;
+    const pending = new Promise<{ tenantId: string; breakGlassSecret: string }>((resolve) => {
       release = resolve;
     });
     const adopt = vi.fn(() => pending);
@@ -899,7 +925,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     });
     expect(adopt).toHaveBeenCalledTimes(1); // the second never reached adopt
 
-    release({ tenantId: TENANT_ID });
+    release({ tenantId: TENANT_ID, breakGlassSecret: BREAK_GLASS_SECRET });
     expect((await first).status).toBe(200);
     await tick();
   });
@@ -909,7 +935,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     const adopt = vi
       .fn()
       .mockRejectedValueOnce(new Error("transient boom"))
-      .mockResolvedValueOnce({ tenantId: TENANT_ID });
+      .mockResolvedValueOnce({ tenantId: TENANT_ID, breakGlassSecret: BREAK_GLASS_SECRET });
     const { deps, requestRestart } = makeAdoptDeps({ adopt });
     mountSetup(app, deps, noopLog);
 
@@ -1055,7 +1081,10 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
         release = resolve;
       });
       const provision = vi.fn(() => pending);
-      const adopt = vi.fn(async () => ({ tenantId: TENANT_ID }));
+      const adopt = vi.fn(async () => ({
+        tenantId: TENANT_ID,
+        breakGlassSecret: BREAK_GLASS_SECRET,
+      }));
       const { deps } = makeDeps({ provision, adopt });
       mountSetup(app, deps, noopLog);
 
@@ -1076,8 +1105,8 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     // adopt in flight → a concurrent provision is refused 409 (the reverse direction)
     {
       const app = new Hono();
-      let release!: (v: { tenantId: string }) => void;
-      const pending = new Promise<{ tenantId: string }>((resolve) => {
+      let release!: (v: { tenantId: string; breakGlassSecret: string }) => void;
+      const pending = new Promise<{ tenantId: string; breakGlassSecret: string }>((resolve) => {
         release = resolve;
       });
       const adopt = vi.fn(() => pending);
@@ -1093,7 +1122,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
       });
       expect(provision).not.toHaveBeenCalled(); // the shared latch refused it synchronously
 
-      release({ tenantId: TENANT_ID });
+      release({ tenantId: TENANT_ID, breakGlassSecret: BREAK_GLASS_SECRET });
       expect((await first).status).toBe(200);
       await tick();
     }

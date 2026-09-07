@@ -197,3 +197,23 @@ export async function setSingletonRoleTx(tx: Transaction, role: SingletonRole): 
     throw new AppError("deployment.not_stamped", {});
   }
 }
+
+/** The stored scrypt verifier of the offline break-glass secret, or `null` when unset — a node
+ * minted before this column, an unstamped database, or the primary (never promoted) all read `null`.
+ * A plain `select … limit 1` (not the `to_regclass` probe the axis readers use): the singleton row's
+ * absence already reads `null` via `row?.v ?? null`, and every caller of this holds a stamped
+ * database. Never returns the break-glass SECRET — only the verifier stored against it. */
+export async function readBreakGlassVerifier(db: Database | Transaction): Promise<string | null> {
+  const [row] = await db.select({ v: deployment.breakGlassVerifier }).from(deployment).limit(1);
+  return row?.v ?? null;
+}
+
+/** Writes the break-glass verifier onto the singleton `deployment` row, on a caller-provided
+ * transaction so a promotion can commit it atomically with its other writes (CLAUDE.md §3). An
+ * OWNER-role write: `app_user` holds no UPDATE on `deployment` (deployment.break-glass.test.ts's
+ * real-PG receipt asserts the app-role write is refused 42501), so this runs on the owner connection.
+ * Requires the singleton row (stamp the environment first); on an unstamped database the UPDATE is a
+ * silent 0-row no-op, which never happens for a node reaching promotion. */
+export async function setBreakGlassVerifierTx(tx: Transaction, verifier: string): Promise<void> {
+  await tx.update(deployment).set({ breakGlassVerifier: verifier });
+}

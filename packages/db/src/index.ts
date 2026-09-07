@@ -75,10 +75,12 @@ export type { DailyCloseSnapshot } from "./schema/daily-closes.js";
 export { incidents } from "./schema/incidents.js";
 export type { IncidentSeverity } from "./schema/incidents.js";
 export {
+  readBreakGlassVerifier,
   readDeploymentAxes,
   readDeploymentEnvironment,
   readDeploymentMode,
   readSingletonRole,
+  setBreakGlassVerifierTx,
   setDeploymentMode,
   setDeploymentModeTx,
   setSingletonRole,

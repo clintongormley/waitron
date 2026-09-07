@@ -34,6 +34,13 @@ export type BoxStatus = {
   environment: DeploymentEnvironment;
   time: TimeHealth;
   cert: { available: true; notAfter: string; daysRemaining: number } | { available: false };
+  /**
+   * True when this node is a filing primary whose last drain pass skipped for a missing `fiscal.aeat`
+   * certificate — the promoted-mirror "sell and chain now, file once the cert lands" state (pass.ts's
+   * `AwaitingCertStatus`). `false` on any node that is filing normally, or not the singleton primary
+   * (a non-primary runs no drain, so the cell never leaves its `false` default).
+   */
+  awaitingFiscalCertificate: boolean;
   chain: ChainHeight;
   singletonRole: SingletonRole;
   replication:
@@ -65,6 +72,9 @@ export type BoxStatusReaders = {
   environment: DeploymentEnvironment;
   time: () => Promise<TimeHealth>;
   cert: (() => Promise<CertExpiry>) | undefined;
+  /** The awaiting-fiscal-certificate cell read (pass.ts's `AwaitingCertStatus`). Always present — it is
+   * an in-process boolean, never an off-vs-on slot — read synchronously like `duties`. */
+  awaitingFiscalCertificate: () => boolean;
   chain: () => Promise<ChainHeight>;
   singletonRole: () => Promise<SingletonRole>;
   replicationLag: (() => Promise<SubscriberLag[]>) | undefined;
@@ -145,6 +155,7 @@ export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxSt
     environment: readers.environment,
     time,
     cert,
+    awaitingFiscalCertificate: readers.awaitingFiscalCertificate(),
     chain,
     singletonRole,
     replication,
@@ -168,6 +179,10 @@ export type BoxStatusDeps = {
   readConfigConflicts: (() => Promise<{ count: number }>) | undefined;
   readMode: () => DeploymentMode;
   readSingletonRole: () => SingletonRole;
+  /** Reads the awaiting-fiscal-certificate cell the fiscal pass writes (pass.ts's `AwaitingCertStatus`),
+   * the same live holder, so box-status tracks a promoted mirror's "sell now, file later" state without
+   * a DB read. */
+  readAwaitingFiscalCertificate: () => boolean;
 };
 
 /**
@@ -230,6 +245,7 @@ export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): 
         environment: deps.environment,
         time: () => checkTimeHealth(),
         cert: certPath === undefined ? undefined : () => readCertExpiry(certPath, deps.now()),
+        awaitingFiscalCertificate: () => deps.readAwaitingFiscalCertificate(),
         chain: async () => chain,
         replicationLag: deps.readReplicationLag,
         disposal: deps.readDisposal,

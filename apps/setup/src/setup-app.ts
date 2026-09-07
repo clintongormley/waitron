@@ -215,6 +215,14 @@ export class SetupApp extends LitElement {
   @state() private connectError?: string;
 
   /**
+   * The break-glass secret the adopt path minted, captured from the 200 to hand to the `done` screen.
+   * Present ONLY on the mirror path after a successful adopt (the primary provision path mints none);
+   * `undefined` otherwise. The adopt response carries it once (spec §4.2), so this is the operator's
+   * only chance to see and record it before the box restarts.
+   */
+  @state() private breakGlassSecret?: string;
+
+  /**
    * The mapped failure message shown ON the `provisioning` screen for the codes that stay there (the
    * two fiscal 409s, `already_provisioning`, `not_ready`, `provision_failed`). `undefined` while a
    * POST is in flight (the screen then shows the in-flight state) or before one is attempted.
@@ -448,8 +456,11 @@ export class SetupApp extends LitElement {
     this.provisionReloadLabel = undefined;
     this.screen = "provisioning";
     try {
-      await this.api.adopt(event.detail.body);
+      const outcome = await this.api.adopt(event.detail.body);
       if (!this.isConnected) return;
+      // Capture the break-glass secret before advancing: the adopt response carries it ONCE (spec
+      // §4.2), so the `done` screen must show it to the operator to record before the box restarts.
+      this.breakGlassSecret = outcome.breakGlassSecret;
       this.screen = "done";
     } catch (error) {
       if (!this.isConnected) return;
@@ -531,7 +542,8 @@ export class SetupApp extends LitElement {
    * on a production box); `admin`, `venue`, `cert` and `review` read the accumulated `draft` (to seed
    * their fields / summarise it, so stepping Back is non-destructive); `venue` and `review` also take a
    * routed-back server error (`venueError` / `reviewError`); `provisioning` takes the mapped message +
-   * retry flag + terminal reload label; `done` takes the `api` to poll during the restart. All are
+   * retry flag + terminal reload label; `done` takes the `api` to poll during the restart, and — on
+   * the mirror path — the once-only `breakGlassSecret` to surface for the operator to record. All are
    * passed as properties, since neither an api nor a draft object can travel as an attribute.
    */
   #renderScreen(): TemplateResult {
@@ -581,6 +593,7 @@ export class SetupApp extends LitElement {
         return html`<setup-done-screen
           data-test="screen-done"
           .api=${this.api}
+          .breakGlassSecret=${this.breakGlassSecret}
         ></setup-done-screen>`;
       default:
         return html`<setup-role-screen data-test="screen-role"></setup-role-screen>`;

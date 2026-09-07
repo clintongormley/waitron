@@ -132,6 +132,14 @@ export interface IntegrityReport {
  */
 export interface DrainResult {
   nextDueAt: Date | null;
+  /**
+   * How many tenants this pass found DUE WORK for and attempted — every tenant the sweep enumerated,
+   * whether it submitted, deferred to a gate, or landed in `skipped`. Zero means a no-work pass: the
+   * drain touched no tenant and therefore read no certificate. The awaiting-fiscal-certificate flag
+   * (`apps/server/src/pass.ts`) keys off this — a no-work pass must not clear it, since a pass that
+   * exercised no cert is no evidence the cert has arrived.
+   */
+  tenantsWithWork: number;
   batchesSent: number;
   recordsSubmitted: number;
   recordsAccepted: number; // includes accepted-with-errors — still counts as accepted
@@ -156,6 +164,7 @@ export interface DrainResult {
 export function emptyDrainResult(): DrainResult {
   return {
     nextDueAt: null,
+    tenantsWithWork: 0,
     batchesSent: 0,
     recordsSubmitted: 0,
     recordsAccepted: 0,

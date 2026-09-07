@@ -31,6 +31,17 @@ export interface ServerConfig {
    */
   migrationsDatabaseUrl: string;
   /**
+   * The table-OWNER connection the owner write (the promote's fenced demote) opens over, from
+   * `WAITRON_ADMIN_DATABASE_URL`. Distinct from `migrationsDatabaseUrl` only on a role-split
+   * appliance where the migrator role and the table owner differ; on today's single-role and dev/CI
+   * hosts it resolves to the same value. Unset → `migrationsDatabaseUrl` (which itself falls back to
+   * `databaseUrl`), so a misconfigured role-split appliance opens the LEAST-privileged connection and
+   * the owner write fails CLOSED (`42501`), never a silent no-op against a superuser pool. Env/config
+   * ONLY — never written into `trading.env` (the promote rewrites `trading.env` from a fixed field
+   * set and would drop it — spec §5).
+   */
+  adminDatabaseUrl: string;
+  /**
    * The mirror's OWN least-privileged sync-pool connection (a `sync_applier` LOGIN role), from
    * `WAITRON_SYNC_DATABASE_URL`. OPTIONAL at setup boot — the primary provision path never needs it,
    * and a setup box may not have it set yet — so it is read via `isUnset` (absent OR empty →
@@ -697,6 +708,10 @@ export function loadConfig(
   const resolvedStateDir = resolveConfigDir(stateDir, defaultStateRoot);
   const databaseUrl = required(env, "DATABASE_URL");
   const migrationsDatabaseUrl = env.WAITRON_MIGRATIONS_DATABASE_URL;
+  // Resolved ONCE here (the raw env var above may be undefined) so both the returned
+  // `migrationsDatabaseUrl` and `adminDatabaseUrl`'s fallback chain through the SAME concrete string —
+  // `adminDatabaseUrl` unset must resolve to `databaseUrl` when migrations is also unset, never `undefined`.
+  const resolvedMigrations = isUnset(migrationsDatabaseUrl) ? databaseUrl : migrationsDatabaseUrl;
   const httpHost = env.WAITRON_HTTP_HOST;
   // BOTH-or-NEITHER: a certificate with no private key cannot complete a TLS handshake, and a key
   // with no certificate has nothing to present — a half-configured pair is refused here rather than
@@ -737,7 +752,13 @@ export function loadConfig(
   );
   return {
     databaseUrl,
-    migrationsDatabaseUrl: isUnset(migrationsDatabaseUrl) ? databaseUrl : migrationsDatabaseUrl,
+    migrationsDatabaseUrl: resolvedMigrations,
+    // The owner write's table-owner connection — `WAITRON_ADMIN_DATABASE_URL` when set, else the
+    // resolved migrations URL (itself falling back to `databaseUrl`), so both-unset is a concrete
+    // string and a role-split appliance fails CLOSED rather than silently no-op'ing (see the field's doc).
+    adminDatabaseUrl: isUnset(env.WAITRON_ADMIN_DATABASE_URL)
+      ? resolvedMigrations
+      : env.WAITRON_ADMIN_DATABASE_URL,
     // The mirror's own sync pool — OPTIONAL at setup boot (the primary provision path never needs
     // it), so an unset OR empty value is undefined here via `isUnset`, never `""` reaching a sync
     // pool (CLAUDE.md §3). Adopt refuses an unset value at adopt time (boot's guard, Ruling 1); this

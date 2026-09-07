@@ -8,6 +8,7 @@ describe("emptyDrainResult", () => {
   it("is every counter zero, no next due time, nothing skipped", () => {
     expect(emptyDrainResult()).toEqual({
       nextDueAt: null,
+      tenantsWithWork: 0,
       batchesSent: 0,
       recordsSubmitted: 0,
       recordsAccepted: 0,

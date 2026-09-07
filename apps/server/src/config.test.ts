@@ -68,6 +68,10 @@ describe("loadConfig", () => {
       // WAITRON_MIGRATIONS_DATABASE_URL keeps a single connection string for both jobs, matching
       // this package's behaviour before the split.
       migrationsDatabaseUrl: "postgres://u@h/d",
+      // No WAITRON_ADMIN_DATABASE_URL set — falls through the resolved migrations URL to DATABASE_URL,
+      // so the owner write hits the least-privileged role and fails CLOSED (42501) on a role-split
+      // appliance rather than silently no-op'ing. Same single-connection default as migrations above.
+      adminDatabaseUrl: "postgres://u@h/d",
       // No WAITRON_SYNC_DATABASE_URL set — OPTIONAL at setup boot (the primary provision path never
       // needs it), so it is present-but-undefined here, asserted explicitly the same way
       // settlementLagMs below is. An adopt REQUEST is where its absence is refused (boot's guard),
@@ -510,6 +514,37 @@ describe("loadConfig", () => {
       STATE_ROOT,
     );
     expect(config.migrationsDatabaseUrl).toBe(config.databaseUrl);
+  });
+
+  // WAITRON_ADMIN_DATABASE_URL is the owner-write (promote's fenced demote) table-owner connection.
+  // Its fallback chains admin → migrations → databaseUrl so a role-split appliance that misconfigures
+  // it opens the LEAST-privileged connection and fails CLOSED (42501), never a silent no-op against a
+  // superuser pool (the 42501 itself is proven in the Task 10 e2e).
+  it("adminDatabaseUrl defaults to the resolved migrations URL when unset", () => {
+    const config = loadConfig(
+      { ...MIN_ENV, WAITRON_MIGRATIONS_DATABASE_URL: "postgres://migrator@h/d" },
+      ROOT,
+      MEDIA_ROOT,
+      STATE_ROOT,
+    );
+    expect(config.adminDatabaseUrl).toBe("postgres://migrator@h/d");
+  });
+
+  it("adminDatabaseUrl uses WAITRON_ADMIN_DATABASE_URL when set", () => {
+    const config = loadConfig(
+      { ...MIN_ENV, WAITRON_ADMIN_DATABASE_URL: "postgres://owner@h/d" },
+      ROOT,
+      MEDIA_ROOT,
+      STATE_ROOT,
+    );
+    expect(config.adminDatabaseUrl).toBe("postgres://owner@h/d");
+  });
+
+  it("adminDatabaseUrl falls through migrations to databaseUrl when BOTH are unset", () => {
+    // Both env vars absent: the fallback must land on a concrete string (databaseUrl), never
+    // `undefined` — the resolved-migrations const, not the raw env var, is what admin chains through.
+    const config = loadConfig(MIN_ENV, ROOT, MEDIA_ROOT, STATE_ROOT);
+    expect(config.adminDatabaseUrl).toBe(config.databaseUrl);
   });
 
   // WAITRON_SYNC_DATABASE_URL is the mirror's OWN least-privileged sync pool (a `sync_applier` role),
