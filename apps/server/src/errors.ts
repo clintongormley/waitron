@@ -459,17 +459,9 @@ declare module "@waitron/shared" {
      */
     "order_prep.invalid_transition": { workingOrderId: string };
     /**
-     * The deployment holds one tenant per database. No such dining table for this tenant.
-     * `tableId` is a caller-supplied uuid the till already holds, not a secret — an id that
-     * matches nothing is unactionable if withheld (the rule `tenant.not_found`'s note gives).
-     * Qualified `tableId` to match the domain-record not_found family
-     * (`working_order.not_found`'s `workingOrderId`). `table.*` names the DOMAIN CONCEPT, never
-     * the throwing package (`tenant.not_found`'s note); destined for @waitron/tables if that
-     * package is ever extracted. An absent id in this database reports THIS one code. (A
-     * DEACTIVATED table is a different fact — `table.inactive` below — surfaced only where
-     * openTab needs it; CRUD operates on a deactivated row by id regardless.)
-     */
-    "table.not_found": { tableId: string };
+    // `table.not_found` moved to @waitron/db's errors.ts — dining_tables is a core table and the
+    // code now has a cross-package thrower (@waitron/bookings' requireActiveTable), which cannot
+    // import this app. Codes are never renamed, only relocated with (or ahead of) their throwers.
     /**
      * A dining table label already exists in this venue — the `(tenant_id, location_id, label)` unique
      * (`dining_tables_location_label_key`) rejected the insert/update. `label` is the operator-supplied
@@ -535,51 +527,8 @@ declare module "@waitron/shared" {
      * new tab).
      */
     "tab.already_open": { tableId: string };
-    /**
-     * The deployment holds one tenant per database. No such reservation for this tenant.
-     * `bookingId` is a caller-supplied uuid the dashboard already holds, not a secret — an id
-     * that matches nothing is unactionable if withheld (the rule `tenant.not_found`'s note
-     * gives). Qualified `bookingId` to match the domain-record not_found family
-     * (`table.not_found`'s `tableId`, `working_order.not_found`'s `workingOrderId`). `booking.*`
-     * names the DOMAIN CONCEPT (a restaurant reservation), never the throwing package (the rule
-     * `tenant.not_found`'s note gives); destined for @waitron/bookings if that package is ever
-     * extracted. An absent id in this database reports THIS one code. Mapped to 404 in the route
-     * layer (Task 5's booking-api.ts STATUS map). Never renamed once shipped.
-     */
-    "booking.not_found": { bookingId: string };
-    /**
-     * A reservation was created or edited with a party size that is not a positive integer — `party_size
-     * ≤ 0` (design §3a validates `partySize > 0`). The offending `partySize` is echoed: a headcount is
-     * not a secret and echoing it is what makes the error actionable, the same echo-the-offending-value
-     * shape `tab.transfer_quantity_invalid`'s `quantity` uses. `booking.*` names the DOMAIN CONCEPT, never
-     * the throwing package (`tenant.not_found`'s note gives the rule). A CLIENT request-shape fault (mapped
-     * to 400 in Task 5's route STATUS map), distinct from the state-conflict `booking.invalid_transition`
-     * (409). Never renamed once shipped.
-     */
-    "booking.invalid": { partySize: number };
-    /**
-     * A lifecycle verb (`cancel`/`no-show`/`complete`/`seat`) found the reservation is not in a
-     * state the move is legal from — e.g. a cancel of an already-`cancelled`/`completed` booking,
-     * or a seat of a booking that is not `booked` (design §3a). Carries the affected `bookingId`,
-     * NOT a from/to pair: this matches the house `*.invalid_transition` convention —
-     * `order_prep.invalid_transition` (`workingOrderId`) and `ticket.invalid_transition`
-     * (`ticketItemId`) both name the affected record's own qualified id, the fail-closed shape
-     * `working_order.not_open` uses for its own state machine. An absent id surfaces
-     * `booking.not_found` before this. `bookingId` is a caller-supplied uuid, not a secret.
-     * `booking.*` names the DOMAIN CONCEPT (`tenant.not_found`'s note gives the rule). Mapped to
-     * 409 (the booking's state forbids the move). Never renamed once shipped.
-     */
-    "booking.invalid_transition": { bookingId: string };
-    /**
-     * `seatBooking` could not resolve a table to seat the party at — neither a `tableId` was passed nor
-     * does the booking carry a `table_id` (design §3a step 2). No params: the seat request itself
-     * identifies the booking (the route path carries its id), and the refusal names no row to echo — the
-     * same no-row shape the `mirror.*` refusals use. `booking.*` names the DOMAIN CONCEPT, never the
-     * throwing package (`tenant.not_found`'s note gives the rule). A CLIENT request-shape fault (mapped to
-     * 400 in Task 5's route STATUS map): a table must be supplied, so the request is incomplete rather
-     * than in a forbidden state. Never renamed once shipped.
-     */
-    "booking.table_required": Record<string, never>;
+    // The four `booking.*` codes moved to @waitron/bookings/src/errors.ts when bookings became a
+    // module (SP1). Codes are never renamed, only relocated with their thrower.
     /**
      * The deployment holds one tenant per database. A tab verb found the working order it was
      * asked to modify is not an OPEN tab — it is not `open` (already settled/abandoned), no

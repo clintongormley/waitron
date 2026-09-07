@@ -35,6 +35,15 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    /**
+     * No such dining table for this tenant. `dining_tables` is a core table, so this code lives here
+     * rather than in a verb package: it has throwers in more than one package (apps/server's table
+     * verbs and @waitron/bookings' `requireActiveTable`), and only their common dependency — this
+     * package — can hold the one declaration they all import. `tableId` is a caller-supplied uuid, not
+     * a secret. `table.*` names the DOMAIN CONCEPT, never the throwing package. A DEACTIVATED table is
+     * the distinct `table.inactive` (apps/server), surfaced only where openTab needs it. Never renamed.
+     */
+    "table.not_found": { tableId: string };
     "series.not_found": { seriesId: string };
     /**
      * A node has no `purpose='standard'` invoice series. Reached by R3b's mirror→primary promote when

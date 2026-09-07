@@ -48,6 +48,8 @@ const HIGH_BAR_PACKAGES = [
   "@waitron/db",
   "@waitron/sync",
   "@waitron/payments",
+  // @waitron/bookings is a data-layer module with its own migration set (SP1 — CLAUDE.md §2).
+  "@waitron/bookings",
 ];
 
 /** A `thresholds: { … }` literal at the start of a line (so a `//` comment line never matches). */

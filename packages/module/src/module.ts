@@ -1,11 +1,49 @@
 import semver from "semver";
+import type { Hono } from "hono";
 import { AppError } from "@waitron/shared";
+import type { LocationId, TenantId } from "@waitron/shared";
+import type { Database, Transaction } from "@waitron/db";
+import type { Logger } from "@waitron/server-kit";
 import type { MigrationSet } from "@waitron/migrations";
 import type { EnrolledTable } from "@waitron/sync-enrolment";
 import type { FiscalContribution } from "@waitron/fiscal";
 import type { ModuleProvisioning } from "./provisioning.js";
 import type { RestoreHook } from "./restore.js";
 import "./errors.js";
+
+/**
+ * The core verbs a module's routes need but cannot import — a module never depends on `apps/server`.
+ * The module DECLARES this interface; boot SATISFIES it, binding the venue's full `TillConfig` into
+ * the closure (so the method takes only a per-request `tx`, never the config). The dependency points
+ * module → interface, core → implementation: no cycle. Today the sole verb is `openTab`
+ * (`apps/server/src/working-order.ts`), how a booking's `seat` reaches the tab verb.
+ */
+export interface CoreServices {
+  openTab(
+    tx: Transaction,
+    req: { tableId: string; lines?: { productId: string; quantity: string }[] },
+  ): Promise<{ tabId: string; orderNumber: number }>;
+}
+
+/**
+ * What a module's route handlers receive: the app `db`, the two `TillConfig` fields booking-shaped
+ * routes actually read (`tenantId`/`locationId`, as their branded types), and `core`. `nodeId`/
+ * `tillId` are read only INSIDE `core.openTab`, which boot binds, so they never enter `cfg`.
+ */
+export interface ModuleRouteContext {
+  db: Database;
+  cfg: { tenantId: TenantId; locationId: LocationId };
+  core: CoreServices;
+}
+
+/**
+ * A module's HTTP contribution: it mounts its routes on the shared Hono app. Boot iterates every
+ * ENABLED module's `routes` seat through one generic loop, so toggling a module off mounts nothing
+ * — no hand-written guard at the mount site (spec §4.1).
+ */
+export interface ModuleRoutes {
+  mount(app: Hono, ctx: ModuleRouteContext, log: Logger): void;
+}
 
 /** A reference to non-DB state a module owns, resolved to a path by the composition root. */
 export type NonDbSource = { readonly kind: "content-addressed-dir"; readonly source: string };
@@ -62,7 +100,9 @@ export interface WaitronModule {
   readonly provisioning?: ModuleProvisioning;
   /** The module's contribution to the fiscal slot — `fiscalSlot` selects exactly one. */
   readonly fiscal?: FiscalContribution;
-  readonly routes?: unknown; // incremental
+  /** SP1 (bookings): the module's HTTP routes, mounted generically by boot over the enabled set.
+   * Incremental — bookings is the first `*-api.ts` migrated behind the seat (spec §4.1). */
+  readonly routes?: ModuleRoutes;
   readonly backup?: ModuleBackupContribution; // The module's non-DB backup sources and restore hook.
 }
 

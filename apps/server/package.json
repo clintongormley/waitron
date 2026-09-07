@@ -38,6 +38,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.13.0",
+    "@waitron/bookings": "workspace:*",
     "@waitron/catalogue": "workspace:*",
     "@waitron/composition": "workspace:*",
     "@waitron/core": "workspace:*",

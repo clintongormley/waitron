@@ -33,5 +33,4 @@ export * from "./sales.js";
 export * from "./sale-voids.js";
 export * from "./daily-closes.js";
 export * from "./incidents.js";
-export * from "./bookings.js";
 // deployment.js is deliberately NOT re-exported here — see its own file for why.

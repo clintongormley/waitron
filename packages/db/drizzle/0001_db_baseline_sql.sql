@@ -561,18 +561,6 @@ ALTER TABLE "locations"
   ADD CONSTRAINT "locations_catalogue_fk"
   FOREIGN KEY ("tenant_id", "catalogue_id") REFERENCES "catalogues" ("tenant_id", "id");
 --> statement-breakpoint
-REVOKE ALL ON "bookings" FROM app_user;
---> statement-breakpoint
-GRANT SELECT, INSERT, UPDATE ON "bookings" TO app_user;
---> statement-breakpoint
-ALTER TABLE "bookings"
-  ADD CONSTRAINT "bookings_table_fk"
-  FOREIGN KEY ("tenant_id", "table_id") REFERENCES "dining_tables" ("tenant_id", "id");
---> statement-breakpoint
-ALTER TABLE "bookings"
-  ADD CONSTRAINT "bookings_tab_fk"
-  FOREIGN KEY ("tenant_id", "tab_id") REFERENCES "working_orders" ("tenant_id", "id");
---> statement-breakpoint
 GRANT SELECT, INSERT, UPDATE, DELETE ON "option_groups" TO app_user;
 --> statement-breakpoint
 GRANT SELECT, INSERT, UPDATE, DELETE ON "option_group_items" TO app_user;

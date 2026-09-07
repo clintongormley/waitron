@@ -13,7 +13,9 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import { locations, tenants } from "./tenants.js";
+// The FK targets are core tables — this module's schema points INTO core (a clean leaf), so they
+// import from @waitron/db rather than a sibling file.
+import { locations, tenants } from "@waitron/db";
 
 /**
  * The lifecycle of a staff-entered reservation (design §1). `booked` on creation; `seated` when the

@@ -1186,6 +1186,7 @@ jobs:
           set -- "$@" --filter "!@waitron/server"
           set -- "$@" --filter "!@waitron/fiscal-verifactu"
           # LIGHT_A_PACKAGES — the other bin, subtracted so what remains is bin B.
+          set -- "$@" --filter "!@waitron/bookings"
           set -- "$@" --filter "!@waitron/core"
           set -- "$@" --filter "!@waitron/payments"
           set -- "$@" --filter "!@waitron/provisioning"

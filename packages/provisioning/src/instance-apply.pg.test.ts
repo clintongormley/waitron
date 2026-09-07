@@ -118,6 +118,7 @@ describe("applyInstance against a blank container", () => {
         "sync",
         "fiscal-verifactu",
         "fiscal-none",
+        "bookings",
       ]);
       expect(Object.keys(after.roles).sort()).toEqual(["waitron_app", "waitron_migrator"]);
       expect(after.roles.waitron_migrator?.createRole).toBe(true);
@@ -433,18 +434,20 @@ describe("applyInstance against a blank container", () => {
     const sets = manifestSets();
     // The SCHEMA probe further down is not derived from the manifest and cannot be — `MigrationSet`
     // carries `name`, `table` and `from` (manifest.ts:9-14) and no list of what each set creates — so
-    // it targets `registros_facturacion`, which `packages/fiscal-verifactu/drizzle` creates. That set is
-    // the second-to-last now: the last set is the no-regime `fiscal-none`, whose migration is EMPTY (it
-    // owns no table), so a rolled-back `fiscal-none` would leave nothing to probe. Simulate a rolled-back
-    // `fiscal-verifactu` instead: apply every set BEFORE it, then hand-create BOTH fiscal-slot members'
-    // journals empty (so `migratedSets` reads all present while `registros_facturacion` is still absent).
-    // This assertion keeps the hardcoded half honest — reorder the fiscal sets and it fails here, loudly.
+    // it targets `registros_facturacion`, which `packages/fiscal-verifactu/drizzle` creates. The
+    // no-regime `fiscal-none` after it has an EMPTY migration (it owns no table), so a rolled-back
+    // `fiscal-none` would leave nothing to probe. Simulate a rolled-back `fiscal-verifactu` instead:
+    // apply every set BEFORE it, then hand-create every set from it onward with an empty journal (so
+    // `migratedSets` reads all present while `registros_facturacion` is still absent). This assertion
+    // keeps the hardcoded half honest — reorder the trailing sets and it fails here, loudly.
     const fiscalIdx = sets.findIndex((set) => set.name === "fiscal-verifactu");
     expect(sets.slice(fiscalIdx).map((set) => set.name)).toEqual([
       "fiscal-verifactu",
       "fiscal-none",
+      "bookings",
     ]);
-    const emptyJournalSets = sets.slice(fiscalIdx); // fiscal-verifactu + the empty fiscal-none
+    // fiscal-verifactu + the empty fiscal-none + bookings (all sets from the rolled-back one onward).
+    const emptyJournalSets = sets.slice(fiscalIdx);
 
     await admin.execute(sql.raw(`create database ${quoteIdent(database)}`));
     try {

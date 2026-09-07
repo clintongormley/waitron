@@ -13,6 +13,7 @@ import {
   hashPin,
   loginWithPin,
 } from "@waitron/identity";
+import { BOOKINGS_MIGRATIONS } from "@waitron/bookings";
 import { DEFAULT_CANVASES, DEFAULT_RECEIPT } from "@waitron/layouts";
 import type { ReceiptConfig } from "@waitron/layouts";
 import {
@@ -74,7 +75,7 @@ let cervezaProduct: { id: string; catalogueId: string };
 let tillDeviceCookie: string;
 
 const suite = usePgliteDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, BOOKINGS_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
     const tenantId = await seedTenant(db);

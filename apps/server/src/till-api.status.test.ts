@@ -7,6 +7,7 @@ import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
+import { BOOKINGS_MIGRATIONS } from "@waitron/bookings";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -37,7 +38,7 @@ let STATUS_ID: string;
 let INACTIVE_STATUS_ID: string;
 
 const suite = usePgliteDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, BOOKINGS_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
     const tenantId = await seedTenant(db);

@@ -17,7 +17,6 @@ CREATE TYPE "public"."purchase_regime" AS ENUM('general', 'equivalence_surcharge
 CREATE TYPE "public"."purchase_vat_kind" AS ENUM('ordinary', 'capital');--> statement-breakpoint
 CREATE TYPE "public"."fiscal_state" AS ENUM('recorded', 'not_applicable');--> statement-breakpoint
 CREATE TYPE "public"."tender_method" AS ENUM('cash', 'card', 'voucher', 'transfer', 'other');--> statement-breakpoint
-CREATE TYPE "public"."booking_status" AS ENUM('booked', 'seated', 'completed', 'no_show', 'cancelled');--> statement-breakpoint
 CREATE TABLE "locations" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
@@ -668,25 +667,6 @@ CREATE TABLE "incidents" (
 	CONSTRAINT "incidents_code_ck" CHECK ("incidents"."code" <> '')
 );
 --> statement-breakpoint
-CREATE TABLE "bookings" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"tenant_id" uuid NOT NULL,
-	"location_id" uuid NOT NULL,
-	"booking_date" date NOT NULL,
-	"booking_time" time NOT NULL,
-	"party_size" integer NOT NULL,
-	"contact_name" text NOT NULL,
-	"contact_phone" text,
-	"notes" text,
-	"table_id" uuid,
-	"tab_id" uuid,
-	"status" "booking_status" DEFAULT 'booked' NOT NULL,
-	"created_by" uuid NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "bookings_tenant_id_key" UNIQUE("tenant_id","id"),
-	CONSTRAINT "bookings_party_size_ck" CHECK ("bookings"."party_size" > 0)
-);
---> statement-breakpoint
 ALTER TABLE "locations" ADD CONSTRAINT "locations_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tills" ADD CONSTRAINT "tills_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tills" ADD CONSTRAINT "tills_location_id_locations_id_fk" FOREIGN KEY ("location_id") REFERENCES "public"."locations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -768,8 +748,6 @@ ALTER TABLE "daily_closes" ADD CONSTRAINT "daily_closes_node_fk" FOREIGN KEY ("t
 ALTER TABLE "incidents" ADD CONSTRAINT "incidents_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "incidents" ADD CONSTRAINT "incidents_till_id_tills_id_fk" FOREIGN KEY ("till_id") REFERENCES "public"."tills"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "incidents" ADD CONSTRAINT "incidents_sale_id_sales_id_fk" FOREIGN KEY ("sale_id") REFERENCES "public"."sales"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "bookings" ADD CONSTRAINT "bookings_tenant_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "bookings" ADD CONSTRAINT "bookings_location_fk" FOREIGN KEY ("location_id") REFERENCES "public"."locations"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "locations_tenant_id_idx" ON "locations" USING btree ("tenant_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "tenants_country_tax_id_key" ON "tenants" USING btree ("country","tax_id");--> statement-breakpoint
 CREATE INDEX "tills_tenant_id_idx" ON "tills" USING btree ("tenant_id");--> statement-breakpoint
@@ -798,6 +776,4 @@ CREATE INDEX "sales_tenant_issued_idx" ON "sales" USING btree ("tenant_id","issu
 CREATE INDEX "sales_fiscal_state_idx" ON "sales" USING btree ("tenant_id","fiscal_state");--> statement-breakpoint
 CREATE INDEX "sales_corrects_idx" ON "sales" USING btree ("tenant_id","corrects_sale_id");--> statement-breakpoint
 CREATE INDEX "tenders_sale_idx" ON "tenders" USING btree ("sale_id");--> statement-breakpoint
-CREATE INDEX "incidents_till_open_idx" ON "incidents" USING btree ("till_id","detected_at");--> statement-breakpoint
-CREATE INDEX "bookings_tenant_location_date_idx" ON "bookings" USING btree ("tenant_id","location_id","booking_date");--> statement-breakpoint
-CREATE INDEX "bookings_tenant_table_status_date_time_idx" ON "bookings" USING btree ("tenant_id","table_id","status","booking_date","booking_time");
+CREATE INDEX "incidents_till_open_idx" ON "incidents" USING btree ("till_id","detected_at");

@@ -3,11 +3,11 @@
 // own authorization. By-id lifecycle operations address the supplied reservation id.
 import "./errors.js";
 import { and, asc, eq, inArray, type InferSelectModel } from "drizzle-orm";
-import { bookings, diningTables, type Transaction } from "@waitron/db";
+import { diningTables, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { LocationId, TenantId } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
-import { openTab } from "./working-order.js";
+import type { CoreServices } from "@waitron/module";
+import { bookings } from "./schema/bookings.js";
 
 /** A stored reservation row, exactly as `listBookings`/`getBooking` return it (camelCase columns). */
 export type Booking = InferSelectModel<typeof bookings>;
@@ -225,13 +225,15 @@ export async function completeBooking(
 /**
  * Seat a booked reservation by opening a tab and linking it in the same transaction.
  * Use the requested table or the reservation's table; require one before opening the tab.
- * openTab supplies its table checks and locking. No fiscal record is filed here.
+ * `core.openTab` supplies its table checks and locking (the venue's full `TillConfig` is bound
+ * into `core` by boot — the module never sees it). No fiscal record is filed here.
  */
 export async function seatBooking(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: BookingConfig,
   id: string,
   req: { tableId?: string },
+  core: CoreServices,
 ): Promise<{ tabId: string }> {
   const booking = await getBooking(tx, cfg, id);
   if (booking === undefined) {
@@ -257,7 +259,7 @@ export async function seatBooking(
       throw new AppError("table.not_found", { tableId: req.tableId });
     }
   }
-  const { tabId } = await openTab(tx, cfg, { tableId });
+  const { tabId } = await core.openTab(tx, { tableId });
   // Compare-and-swap on the `booked` predecessor (the `advanceStatus` shape), NOT a bare id write. The
   // pre-`openTab` check above is the fast common-path error; this is the concurrency backstop for the
   // window between that lock-free `getBooking` read and here — a concurrent cancel (would be silently

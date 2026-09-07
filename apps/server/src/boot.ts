@@ -24,6 +24,7 @@ import {
 import type { PaymentProvider } from "@waitron/payments";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules, fiscalSlot, orderedMigrationSets, reconcile } from "@waitron/module";
+import type { ModuleRouteContext } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { ALL_MODULES, ALL_SYNC_ENROLMENTS, MODULE_BY_TABLE } from "./modules.js";
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
@@ -77,7 +78,7 @@ import { mountNodeApi } from "./node-api.js";
 import { mountDeviceApi } from "./device-api.js";
 import { mountPrintApi } from "./print-api.js";
 import { mountManagementApi } from "./management-api.js";
-import { mountBookingsApi } from "./booking-api.js";
+import { openTab } from "./working-order.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
 import { mountReportApi } from "./report-api.js";
@@ -1309,8 +1310,18 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // runs per request. This is the #91 fast-follow's capture surface, feeding the headless modelo
   // 303 IVA-deducible reporting.
   mountPurchasingApi(app, { db, cfg: { tenantId: till.tenantId } }, log);
-  // Mount booking routes with the venue configuration and shared authorization gate.
-  mountBookingsApi(app, { db, cfg: till }, log);
+  // Mount every ENABLED module's routes generically (SP1). `setsToMigrate` is the enabled module
+  // set on this trading branch (boot.ts:552), so a module toggled off mounts nothing — no
+  // hand-written guard at the mount site. `routeCtx` binds cfg to the two `TillConfig` fields a
+  // module route reads (`tenantId`/`locationId`); `core.openTab` closes over the FULL `till` HERE,
+  // so `nodeId`/`tillId` never enter the module's cfg. Bookings is the first `*-api.ts` behind the
+  // seat; the other `mount*Api` calls stay as they are.
+  const routeCtx: ModuleRouteContext = {
+    db,
+    cfg: { tenantId: till.tenantId, locationId: till.locationId },
+    core: { openTab: (tx, req) => openTab(tx, till, req) },
+  };
+  for (const m of setsToMigrate) m.routes?.mount(app, routeCtx, log);
   // The deployment holds one tenant per database. The dashboard's gated reporting surface on the
   // SAME app, the identical convention. Reuses the EXACT `db` and tenant (`till.tenantId`)
   // `mountPurchasingApi` above receives so the two cannot drift. `nodeId` here is `dataNodeId` —

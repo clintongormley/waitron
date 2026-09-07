@@ -276,6 +276,7 @@ export const OWN_SHARD_PACKAGES = [
  * assertion fails — loudly, on the pull request, not silently.
  */
 export const LIGHT_A_PACKAGES = [
+  "@waitron/bookings",
   "@waitron/core",
   "@waitron/payments",
   "@waitron/provisioning",

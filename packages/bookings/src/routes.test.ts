@@ -1,135 +1,93 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTenant, type Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
-import { applyVenue, planVenue } from "@waitron/provisioning";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-  tenantId as brandTenantId,
-  tillId as brandTillId,
-} from "@waitron/shared";
-import type { Logger } from "./logger.js";
-import { ALL_MODULES } from "./modules.js";
-import type { TillConfig } from "./till-config.js";
-import { mountBookingsApi } from "./booking-api.js";
-import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { hashPin, startManagementSession } from "@waitron/identity";
+import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
+import type { ModuleRouteContext } from "@waitron/module";
+import { fakeCore } from "./testing/fake-core.js";
+import type { BookingConfig } from "./bookings.js";
+import { BOOKINGS_ROUTES } from "./routes.js";
 
-// Real Postgres, not PGlite: every DB touch below goes through `mountBookingsApi`'s `gated` helper
+// Real Postgres, not PGlite: every DB touch below goes through `BOOKINGS_ROUTES`' `gated` helper
 // (withTenant + asAppUser + authorizeManager), so the booking routes run as the non-superuser
 // `app_user` and the table GRANTS are actually enforced. PGlite connects as a superuser holding every
 // privilege (CLAUDE.md §4), so a missing grant would pass there and fail only at runtime. The
-// `booking.manage` gate is proven by deletion on the block below.
-const LOCALE = "es-ES";
+// `booking.manage` gate is proven by deletion on the block below. `core.openTab` is `fakeCore` (the
+// real verb lives in apps/server, which a module cannot import); the seat still opens a real
+// working_orders row, so the seat happy-path and read-back are exercised end to end.
 
 const suite = useTemplateDb({ template: "manifest" });
 
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF — the per-suite counter the sibling real-Postgres suites use.
-let nifCounter = 0;
-function nextNif(): string {
-  nifCounter += 1;
-  return `${String(72_000_000 + nifCounter).padStart(8, "0")}K`;
-}
-
 interface Venue {
-  cfg: TillConfig;
+  cfg: BookingConfig;
+  /** The route context `BOOKINGS_ROUTES.mount` receives — `core.openTab` bound to this venue. */
+  ctx: ModuleRouteContext;
   /** A live MANAGEMENT session cookie for a `manager` (holds `booking.manage`). */
   managerCookie: string;
   /** A live MANAGEMENT session cookie for a `staff` person (holds nothing — the gate refuses it). */
   staffCookie: string;
 }
 
-/** Provision a venue as owner and seed the people and sessions this route fixture needs. */
+/** Hand-seed a venue (tenant + location + till + node) and the manager/staff people and sessions this
+ * route fixture needs. Not `applyVenue`: that would import `@waitron/composition`'s `ALL_MODULES`,
+ * closing a composition → bookings → composition cycle. The tables come from the `manifest` template. */
 async function setupVenue(): Promise<Venue> {
-  const venue = await applyVenue(
-    planVenue(
-      {
-        country: "ES",
-        taxId: nextNif(),
-        legalName: "Deli Test SL",
-        location: {
-          name: "Sala principal",
-          fiscalTerritory: "ES-common",
-          invoiceLocales: [LOCALE],
-          operationDescription: "Venta en establecimiento",
-          addressLine1: "Calle Mayor 1",
-          addressLine2: null,
-          postalCode: "28013",
-          city: "Madrid",
-          province: "Madrid",
-          timeZone: "Europe/Madrid",
-          dayCutover: "05:00",
-        },
-        tillName: "Caja 1",
-        seriesCode: "A",
-        rectificativeSeriesCode: "R",
-        admin: {
-          displayName: "Administradora",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
-        },
-      },
-      ALL_MODULES,
-    ),
-    { db: suite.admin, modules: ALL_MODULES },
-  );
+  const db: Database = suite.admin;
+  const tenantId = await seedTenant(db);
+  const loc = await db.execute<{ id: string }>(sql`
+    insert into locations (tenant_id, name, invoice_locales, operation_description)
+    values (${tenantId}, 'Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
+  const locationId = loc.rows[0]!.id;
+  const till = await db.execute<{ id: string }>(sql`
+    insert into tills (tenant_id, location_id, name)
+    values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
+  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
 
-  const { managerSid, staffSid } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+  const { managerSid, staffSid } = await withTenant(db, tenantId, async (tx) => {
     await asAppUser(tx);
     const mgr = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${venue.tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+      values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
     const stf = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${venue.tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+      values (${tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
     const managerSession = await startManagementSession(tx, {
-      tenantId: venue.tenantId,
+      tenantId,
       personId: mgr.rows[0]!.id,
     });
-    const staffSession = await startManagementSession(tx, {
-      tenantId: venue.tenantId,
-      personId: stf.rows[0]!.id,
-    });
+    const staffSession = await startManagementSession(tx, { tenantId, personId: stf.rows[0]!.id });
     return { managerSid: managerSession.id, staffSid: staffSession.id };
   });
 
-  const cfg: TillConfig = {
-    tenantId: brandTenantId(venue.tenantId),
-    tillId: brandTillId(venue.tillId),
-    nodeId: brandNodeId(venue.nodeId),
-    seriesId: brandSeriesId(venue.seriesIds[0] ?? venue.tillId),
-    locationId: brandLocationId(venue.locationId),
-    locale: LOCALE,
-    invoiceLocales: [LOCALE],
-    cardProvider: "none",
-    tipsEnabled: false,
-    orderFlow: "prepay",
+  const cfg: BookingConfig = {
+    tenantId: brandTenantId(tenantId),
+    locationId: brandLocationId(locationId),
   };
-
   return {
     cfg,
+    ctx: { db, cfg, core: fakeCore({ tenantId, tillId: till.rows[0]!.id, nodeId }) },
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSid}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSid}`,
   };
 }
 
-/** One Hono app per venue — `mountBookingsApi` binds ONE tenant via `cfg`, so each venue's routes need
+/** One Hono app per venue — the routes bind ONE tenant via `ctx.cfg`, so each venue's routes need
  * their own app (mirrors `purchasing-api.pg.test.ts`). */
-function mountApp(cfg: TillConfig): Hono {
+function mountApp(ctx: ModuleRouteContext): Hono {
   const app = new Hono();
-  mountBookingsApi(app, { db: suite.admin, cfg }, noopLog);
+  BOOKINGS_ROUTES.mount(app, ctx, noopLog);
   return app;
 }
 
 /** Insert an ACTIVE dining table for the venue as the app role, returning its id. */
-async function seedTable(cfg: TillConfig, label = "12"): Promise<string> {
+async function seedTable(cfg: BookingConfig, label = "12"): Promise<string> {
   return withTenant(suite.admin, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
     const row = await tx.execute<{ id: string }>(sql`
@@ -192,9 +150,9 @@ async function createBooking(
 
 describe("Bookings API over real Postgres (routes, gates and request screens)", () => {
   it("runs the manager happy path: create → list → patch → seat → read-back", async () => {
-    const { cfg, managerCookie } = await setupVenue();
-    const app = mountApp(cfg);
-    const tableId = await seedTable(cfg);
+    const { ctx, managerCookie } = await setupVenue();
+    const app = mountApp(ctx);
+    const tableId = await seedTable(ctx.cfg);
 
     const id = await createBooking(app, managerCookie, {
       tableId,
@@ -239,9 +197,9 @@ describe("Bookings API over real Postgres (routes, gates and request screens)", 
   });
 
   it("seats with an explicit tableId in the body when the booking has none", async () => {
-    const { cfg, managerCookie } = await setupVenue();
-    const app = mountApp(cfg);
-    const tableId = await seedTable(cfg, "7");
+    const { ctx, managerCookie } = await setupVenue();
+    const app = mountApp(ctx);
+    const tableId = await seedTable(ctx.cfg, "7");
     const id = await createBooking(app, managerCookie);
 
     const seatRes = await send(app, "POST", `/management-api/bookings/${id}/seat`, managerCookie, {
@@ -253,8 +211,8 @@ describe("Bookings API over real Postgres (routes, gates and request screens)", 
   });
 
   it("cancels a booking (204) and reflects it in the day list", async () => {
-    const { cfg, managerCookie } = await setupVenue();
-    const app = mountApp(cfg);
+    const { ctx, managerCookie } = await setupVenue();
+    const app = mountApp(ctx);
     const id = await createBooking(app, managerCookie);
     const res = await send(app, "POST", `/management-api/bookings/${id}/cancel`, managerCookie, {});
     expect(res.status).toBe(204);
@@ -263,8 +221,8 @@ describe("Bookings API over real Postgres (routes, gates and request screens)", 
   });
 
   it("marks a booking no-show (204)", async () => {
-    const { cfg, managerCookie } = await setupVenue();
-    const app = mountApp(cfg);
+    const { ctx, managerCookie } = await setupVenue();
+    const app = mountApp(ctx);
     const id = await createBooking(app, managerCookie);
     const res = await send(
       app,
@@ -279,9 +237,9 @@ describe("Bookings API over real Postgres (routes, gates and request screens)", 
   });
 
   it("completes a seated booking (204)", async () => {
-    const { cfg, managerCookie } = await setupVenue();
-    const app = mountApp(cfg);
-    const tableId = await seedTable(cfg);
+    const { ctx, managerCookie } = await setupVenue();
+    const app = mountApp(ctx);
+    const tableId = await seedTable(ctx.cfg);
     const id = await createBooking(app, managerCookie, { tableId });
     await send(app, "POST", `/management-api/bookings/${id}/seat`, managerCookie, {});
     const res = await send(
@@ -308,8 +266,8 @@ describe("Bookings API over real Postgres (routes, gates and request screens)", 
     // expected 403 instead reached its op (POST → 201, GET → 200, the by-id routes → 404/409/204), so
     // the `toBe(403)` assertions flipped green→red. Restored the line and the test passed again;
     // `git diff booking-api.ts` is clean afterwards.
-    const { cfg, managerCookie, staffCookie } = await setupVenue();
-    const app = mountApp(cfg);
+    const { ctx, managerCookie, staffCookie } = await setupVenue();
+    const app = mountApp(ctx);
     // A real booking the manager owns, so the staff by-id calls target an id that DOES exist — the
     // refusal is the gate, not a not_found masking it.
     const id = await createBooking(app, managerCookie);
@@ -345,8 +303,8 @@ describe("Bookings API over real Postgres (routes, gates and request screens)", 
   });
 
   it("rejects an unauthenticated request → 401 management_session.required", async () => {
-    const { cfg } = await setupVenue();
-    const app = mountApp(cfg);
+    const { ctx } = await setupVenue();
+    const app = mountApp(ctx);
     const res = await send(app, "POST", "/management-api/bookings", "", bookingBody());
     expect(res.status).toBe(401);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
@@ -355,8 +313,8 @@ describe("Bookings API over real Postgres (routes, gates and request screens)", 
   });
 
   it("rejects a non-positive party size → 400 booking.invalid", async () => {
-    const { cfg, managerCookie } = await setupVenue();
-    const app = mountApp(cfg);
+    const { ctx, managerCookie } = await setupVenue();
+    const app = mountApp(ctx);
     const res = await send(
       app,
       "POST",
@@ -371,8 +329,8 @@ describe("Bookings API over real Postgres (routes, gates and request screens)", 
   });
 
   it("rejects an empty PATCH body → 400 management.request_invalid", async () => {
-    const { cfg, managerCookie } = await setupVenue();
-    const app = mountApp(cfg);
+    const { ctx, managerCookie } = await setupVenue();
+    const app = mountApp(ctx);
     const id = await createBooking(app, managerCookie);
     const res = await send(app, "PATCH", `/management-api/bookings/${id}`, managerCookie, {});
     expect(res.status).toBe(400);
@@ -382,8 +340,8 @@ describe("Bookings API over real Postgres (routes, gates and request screens)", 
   });
 
   it("rejects a non-uuid :id → 400 shared.invalid_id", async () => {
-    const { cfg, managerCookie } = await setupVenue();
-    const app = mountApp(cfg);
+    const { ctx, managerCookie } = await setupVenue();
+    const app = mountApp(ctx);
     const res = await send(
       app,
       "POST",
@@ -398,8 +356,8 @@ describe("Bookings API over real Postgres (routes, gates and request screens)", 
   });
 
   it("rejects an illegal lifecycle transition → 409 booking.invalid_transition", async () => {
-    const { cfg, managerCookie } = await setupVenue();
-    const app = mountApp(cfg);
+    const { ctx, managerCookie } = await setupVenue();
+    const app = mountApp(ctx);
     const id = await createBooking(app, managerCookie);
     // A booking is `booked`; only a `seated` one may complete, so this is an illegal move.
     const res = await send(
@@ -416,8 +374,8 @@ describe("Bookings API over real Postgres (routes, gates and request screens)", 
   });
 
   it("404s a lifecycle move on an absent booking → booking.not_found", async () => {
-    const { cfg, managerCookie } = await setupVenue();
-    const app = mountApp(cfg);
+    const { ctx, managerCookie } = await setupVenue();
+    const app = mountApp(ctx);
     const absent = "00000000-0000-0000-0000-000000000000";
     const res = await send(
       app,
@@ -433,8 +391,8 @@ describe("Bookings API over real Postgres (routes, gates and request screens)", 
   });
 
   it("400s a missing or malformed date query → management.request_invalid", async () => {
-    const { cfg, managerCookie } = await setupVenue();
-    const app = mountApp(cfg);
+    const { ctx, managerCookie } = await setupVenue();
+    const app = mountApp(ctx);
     for (const path of ["/management-api/bookings", "/management-api/bookings?date=2026-13-40"]) {
       const res = await send(app, "GET", path, managerCookie);
       expect(res.status).toBe(400);
@@ -445,8 +403,8 @@ describe("Bookings API over real Postgres (routes, gates and request screens)", 
   });
 
   it("400s malformed create-body fields via the request screens", async () => {
-    const { cfg, managerCookie } = await setupVenue();
-    const app = mountApp(cfg);
+    const { ctx, managerCookie } = await setupVenue();
+    const app = mountApp(ctx);
     const bad: Record<string, unknown>[] = [
       { bookingDate: "2026-99-99" }, // requirePeriod
       { bookingTime: "7pm" }, // requireTime bad format
@@ -478,8 +436,8 @@ describe("Bookings API over real Postgres (routes, gates and request screens)", 
     // `management.request_invalid` by `requireTime`'s range-validating regex BEFORE it reaches the
     // `time` column (where it would `22007` → an opaque `server.internal` 500). A valid `20:00` still
     // creates (201), so the tightened regex has not broken the accepted shape.
-    const { cfg, managerCookie } = await setupVenue();
-    const app = mountApp(cfg);
+    const { ctx, managerCookie } = await setupVenue();
+    const app = mountApp(ctx);
 
     const bad = await send(
       app,
@@ -510,8 +468,8 @@ describe("Bookings API over real Postgres (routes, gates and request screens)", 
     // `!== undefined` only, so `requireString(null)` threw `management.request_invalid` → a blank-phone
     // booking created via the real UI 400'd. On a CREATE a `null` blank is equivalent to absent (no prior
     // value to clear), so it must SUCCEED and store the column null.
-    const { cfg, managerCookie } = await setupVenue();
-    const app = mountApp(cfg);
+    const { ctx, managerCookie } = await setupVenue();
+    const app = mountApp(ctx);
     const res = await send(app, "POST", "/management-api/bookings", managerCookie, {
       ...bookingBody(),
       contactPhone: null,
@@ -536,5 +494,54 @@ describe("Bookings API over real Postgres (routes, gates and request screens)", 
       notes: null,
       tableId: null,
     });
+  });
+});
+
+// The routes SEAT proven by deletion (CLAUDE.md §4): the descriptor is the only thing that mounts the
+// booking routes, so a module list whose bookings descriptor OMITS `routes` mounts nothing and all
+// seven paths fall through to Hono's default 404. A mounted route always answers through the `run`
+// error boundary (JSON `{ error }`) — even a lifecycle POST on an absent booking, which is a
+// booking.not_found 404 with a JSON body — so a lifecycle route's mounted 404 is distinguished from an
+// unmounted 404 by the absence of `application/json`, not by the status alone.
+describe("routes seat inversion — deletion proof", () => {
+  const UUID = "00000000-0000-4000-8000-000000000000";
+  const SEVEN: [method: "GET" | "POST" | "PATCH", path: string][] = [
+    ["GET", "/management-api/bookings?date=2026-08-20"],
+    ["POST", "/management-api/bookings"],
+    ["PATCH", `/management-api/bookings/${UUID}`],
+    ["POST", `/management-api/bookings/${UUID}/seat`],
+    ["POST", `/management-api/bookings/${UUID}/cancel`],
+    ["POST", `/management-api/bookings/${UUID}/no-show`],
+    ["POST", `/management-api/bookings/${UUID}/complete`],
+  ];
+
+  it("with the bookings descriptor's `routes` omitted, all seven routes fall through to a plain 404", async () => {
+    const { ctx, managerCookie } = await setupVenue();
+    // The generic boot loop over a module list whose bookings descriptor carries NO `routes` seat.
+    const modules: { routes?: typeof BOOKINGS_ROUTES }[] = [{}];
+    const app = new Hono();
+    for (const m of modules) m.routes?.mount(app, ctx, noopLog);
+    for (const [method, path] of SEVEN) {
+      const res = await send(app, method, path, managerCookie, method === "GET" ? undefined : {});
+      expect(res.status, `${method} ${path}`).toBe(404);
+      // Not the mounted error boundary (which answers JSON) — Hono's default not-found.
+      expect(res.headers.get("content-type") ?? "", `${method} ${path}`).not.toContain(
+        "application/json",
+      );
+    }
+  });
+
+  it("positive control: WITH the `routes` seat present, none of the seven is an unmounted 404", async () => {
+    const { ctx, managerCookie } = await setupVenue();
+    const modules: { routes?: typeof BOOKINGS_ROUTES }[] = [{ routes: BOOKINGS_ROUTES }];
+    const app = new Hono();
+    for (const m of modules) m.routes?.mount(app, ctx, noopLog);
+    for (const [method, path] of SEVEN) {
+      const res = await send(app, method, path, managerCookie, method === "GET" ? undefined : {});
+      // Every mounted route answers through `run` (JSON), whatever its status — the inverse of above.
+      expect(res.headers.get("content-type") ?? "", `${method} ${path}`).toContain(
+        "application/json",
+      );
+    }
   });
 });

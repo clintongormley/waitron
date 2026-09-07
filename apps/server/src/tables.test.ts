@@ -10,6 +10,7 @@ import {
   workingOrderLines,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
+import { BOOKINGS_MIGRATIONS } from "@waitron/bookings";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -49,7 +50,12 @@ import {
 import "./errors.js";
 
 const LOCALE = "es-ES";
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+// [core, bookings]: the reserved-on-floor cases (listTablesWithState's raw-SQL sub-select — the floor
+// read STAYS in working-order.ts until Task 5) seed the `bookings` table, which now lives in the module.
+const suite = usePgliteDb({
+  migrations: [CORE_MIGRATIONS, BOOKINGS_MIGRATIONS],
+  timeoutMs: 60_000,
+});
 let db: Database;
 beforeAll(() => {
   db = suite.db;
