@@ -306,7 +306,7 @@ in an interface, field name, or doc comment.
   `TimeEntry`, `WorkSession` (the projected workday: start/end, pauses, worked minutes, overtime),
   `Shift`, `Roster`, `Absence`, `Correction`.
 - **The generic engine:** the append-only immutable chained time-entry stream + role-revocation +
-  per-location chain (§5); the work-session projection; the scheduling engine; and a **rule-validation
+  per-location chain (§5 — now keyed per (node, location); see the 2026-09-07 rekey pointer there); the work-session projection; the scheduling engine; and a **rule-validation
   engine** that consumes an injected ruleset.
 - **`WorkTimeRuleset` interface** — max weekly minutes, min inter-shift rest, break thresholds,
   weekly rest, overtime cap, night window + premium. The *engine* is generic; the *numbers and rules*
@@ -371,7 +371,7 @@ never gated behind rostering.
 | Worker identity | **Slice of Identity #5 first** — one `person` + PIN + minimal role, shared by till login and clock-in |
 | Immutability model | Immutable **history** not values; corrections = append rows referencing the original |
 | Storage integrity | **Role-revocation floor + hash chain** (both, per user) |
-| Chain scope | **Per location (centro de trabajo), central-server ingest** — not per-till |
+| Chain scope | **Per location (centro de trabajo), central-server ingest** — not per-till _(2026-09-07: rekeyed per (node, location) — see §5)_ |
 | Offline | Events captured offline, buffered (locally role-revoked), chained at central ingest; project by timestamp |
 | Time-entries shape | **Single unified append-only stream** (events + corrections) |
 | Clock-in method | **PIN / card**; biometrics off by default (AEPD) |

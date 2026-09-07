@@ -232,8 +232,9 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    `max_slot_wal_keep_size` (a dead standby otherwise fills the primary's disk — the one failure that
    would stop sales). Also: `FOR ALL TABLES` is superuser-only, so each module publishes an explicit
    table list; additive DDL is subscriber-first and the missing-column stall is loud and self-heals;
-   `time_entries.ingest_seq` does not replicate; one superuser provisioning step for the `REPLICATION`
-   role. **Cross-track (Track C):** module SP-2b's schema-version gate (LANDED #230) rests on
+   `time_entries.ingest_seq` does not replicate — DISCHARGED 2026-09-07 by the working-time per-node
+   rekey, which drops `ingest_seq` (its ordering role moved to the hashed `recorded_at`); one
+   superuser provisioning step for the `REPLICATION` role. **Cross-track (Track C):** module SP-2b's schema-version gate (LANDED #230) rests on
    "deliberate rejection of native logical replication"; item 4's spec retires it (its §5).
 3. **Drop FORCE RLS + the multi-role set, squash the migrations, delete the outbox — STEP 1
    LANDED #255 (2026-09-06); steps 2–5 pending owner review:**

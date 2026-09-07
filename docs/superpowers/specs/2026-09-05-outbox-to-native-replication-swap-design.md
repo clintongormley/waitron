@@ -23,7 +23,7 @@ Two things the brainstorm did not reach were decided on review the same day: **(
 rows the box wrote in its final seconds (open tabs, kitchen progress, print jobs) are treated like
 settings — copied to a standby, never drained back — because by the time the box returns the new
 primary's live state is the real one (§4.3, owner: "correct"); and **(5)** the working-time record's
-chain, keyed per location today, is rekeyed **per node** like the fiscal chain, so each server keeps
+chain, keyed per location today (per location at the time; rekeyed per (node, location) — built 2026-09-07, §4.4), is rekeyed **per node** like the fiscal chain, so each server keeps
 its own clock-in chain (§4.4, owner: "I'm ok with that").
 
 ## 1. What changes, in one paragraph
