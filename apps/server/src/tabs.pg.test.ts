@@ -314,9 +314,9 @@ describe("openTab tenant scope (a by-id table read must not cross tenants)", () 
   // VULNERABLE: B's read reaches A's row, sees `active = false`, and throws `table.inactive` — proof the
   // read crossed the tenant boundary and leaked A's table state to B. FIXED: the read carries
   // `tenant_id = cfg.tenantId`, A's row is invisible to B, and openTab throws `table.not_found`. Both are
-  // AppError codes, so a green is not a raw-error false pass. Real Postgres as `app_user` (rolsuper=f),
-  // NOT PGlite: PGlite runs every connection as superuser and serialises onto one backend, so a
-  // cross-tenant read there is a false pass (CLAUDE.md §4).
+  // AppError codes, so a green is not a raw-error false pass. It runs as `app_user` (rolsuper=f) in
+  // this real-PG suite for realism, but the isolation itself is an application `WHERE` predicate
+  // PGlite would enforce identically — so real PG here is reuse, not a §4 false-pass case.
   it("tenant B's openTab cannot read tenant A's table — table.not_found, not table.inactive", async () => {
     const { cfg: cfgA } = await setupVenue();
     const { cfg: cfgB, cafe: cafeB } = await setupVenue();
@@ -651,6 +651,43 @@ describe("counter delivery (deliveryTableId on a walk-up sale)", () => {
       sql`select count(*)::text as n from working_orders where id = ${orderId}`,
     );
     expect(Number(rows[0]!.n)).toBe(0);
+  });
+
+  it("a deliveryTableId naming ANOTHER TENANT's table is refused table.not_found (till-reroute S3 §3)", async () => {
+    // Tenant A rings a counter delivery naming tenant B's REAL table id. The existence pre-check must
+    // scope to A's own tenant: before the fix it read `dining_tables` by id alone, so B's table PASSED
+    // it and the path ran on to the insert, failing only at the composite FK (23503 → an opaque
+    // server.internal 500) — and the pre-check itself confirmed B's table exists (the §3 read leak).
+    // Scoped, the pre-check misses, so A gets the same clean table.not_found as a non-existent id.
+    // The sibling `openTab` path is already scoped (its own cross-tenant test above); this closes the
+    // counter-delivery path. (It lives in this real-PG suite to reuse its fiscal scaffolding —
+    // `recordTillSale` + a real `VerifactuBackend`; the isolation itself is an application `WHERE`
+    // predicate PGlite would enforce identically, so real PG here is reuse, not a §4 false-pass case.)
+    const { cfg: cfgA, cafe: cafeA } = await setupVenue();
+    const { cfg: cfgB } = await setupVenue();
+    const tableB = await seedTable(cfgB, "B-only");
+    const deps = { db: suite.admin, backend, clock };
+    const orderId = randomUUID();
+
+    await expect(
+      recordTillSale(deps, cfgA, {
+        workingOrderId: orderId,
+        lines: [{ productId: cafeA.id, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+        deliveryTableId: tableB,
+      }),
+    ).rejects.toMatchObject({ code: "table.not_found", params: { tableId: tableB } });
+
+    // Nothing filed and no order created for A; B's table is untouched (still exactly one row).
+    expect(await saleCount(orderId)).toBe(0);
+    const { rows } = await suite.admin.execute<{ n: string }>(
+      sql`select count(*)::text as n from working_orders where id = ${orderId}`,
+    );
+    expect(Number(rows[0]!.n)).toBe(0);
+    const stillThere = await suite.admin.execute<{ n: string }>(
+      sql`select count(*)::text as n from dining_tables where id = ${tableB}`,
+    );
+    expect(Number(stillThere.rows[0]!.n)).toBe(1);
   });
 });
 
