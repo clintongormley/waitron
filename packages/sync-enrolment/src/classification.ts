@@ -8,8 +8,9 @@
 export type TableClass = "ledger" | "state" | "local";
 
 /** One table's classification: the physical table name, its class, and the stated reason (§1's
- * "no unstated claims" rule — a bare class is not auditable). Declared by the OWNING module,
- * assembled by the composition root, consumed by `@waitron/sync`'s publication derivation. */
+ * "no unstated claims" rule — a bare class is not auditable). Declared by the OWNING module and
+ * assembled by the composition root, which turns the combined list into the two publication
+ * table-lists in `apps/server` via `tablesForPublication` (`@waitron/sync` only re-exports it). */
 export interface ClassifiedTable {
   table: string;
   class: TableClass;

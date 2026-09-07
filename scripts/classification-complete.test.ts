@@ -42,8 +42,8 @@ function stripSql(source: string): string {
 }
 
 /** From every descriptor's `migrations.from` (`../<pkg>/drizzle`), the package DIR → module NAME map,
- * through `@waitron/module`'s `packageDirOf`. A package is in scope only if a descriptor points at it,
- * so `fiscal-verifactu` resolves to the module named `fiscal`. */
+ * through `@waitron/module`'s `packageDirOf`. A package is in scope only if a descriptor points at it
+ * (the dir `fiscal-verifactu` maps to the module named `fiscal-verifactu`). */
 function packageDirToModule(): Map<string, string> {
   return new Map(ALL_MODULES.map((module) => [packageDirOf(module), module.name]));
 }

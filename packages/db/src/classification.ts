@@ -12,7 +12,7 @@ const LOCAL = "this node's own record of what it is; not copied";
  * scans `drizzle/*.sql` for `CREATE TABLE`.
  */
 export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
-  // ledger (12) — append-only history copied to a standby AND drained back from a returned box.
+  // ledger — append-only history copied to a standby AND drained back from a returned box.
   classify("sales", "ledger", LEDGER),
   classify("sale_lines", "ledger", LEDGER),
   classify("tenders", "ledger", LEDGER),
@@ -30,7 +30,7 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("purchase_invoices", "ledger", LEDGER),
   classify("purchase_invoice_vat", "ledger", LEDGER),
 
-  // state (34) — manager configuration and live service; copied to a standby, never drained back.
+  // state — manager configuration and live service; copied to a standby, never drained back.
   classify(
     "working_order_counters",
     "state",
@@ -81,7 +81,7 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   ),
   classify("print_jobs", "state", STATE),
 
-  // local (5) — this node's own record of what it is; not copied, not drained.
+  // local — this node's own record of what it is; not copied, not drained.
   classify("deployment", "local", LOCAL),
   classify("mirror_config", "local", "this node's link to its cloud mirror; not copied"),
   classify("node_membership", "local", "this node's membership record; not copied"),

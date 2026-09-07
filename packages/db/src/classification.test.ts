@@ -9,7 +9,7 @@ function tablesInDrizzle(): string[] {
   const names: string[] = [];
   for (const file of readdirSync(DRIZZLE).filter((f) => f.endsWith(".sql"))) {
     const sql = readFileSync(join(DRIZZLE, file), "utf8");
-    for (const m of sql.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?"?([a-z_]+)"?/gi)) {
+    for (const m of sql.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?"?([a-z0-9_]+)"?/gi)) {
       names.push(m[1]!);
     }
   }
