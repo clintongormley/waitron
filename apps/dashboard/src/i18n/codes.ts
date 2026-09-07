@@ -1,4 +1,4 @@
-import { currentLocale, pickLocale } from "./t.js";
+import { codeMessage, codeOf, registerCodeMessages } from "@waitron/dashboard-kit";
 
 // Localised copy for the raw error/status CODES the server and client emit.
 //
@@ -444,38 +444,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
 };
 
-// The message shown for any code not in CODE_MESSAGES. Deliberately the SAME entry as
-// `server.internal`: an unmapped code and an internal error are the same thing to the operator —
-// something failed and retrying is the next move — and neither ever exposes the underlying code.
-// Referencing the entry (rather than re-typing its strings) keeps the two in step by construction.
-const GENERIC = CODE_MESSAGES["server.internal"];
+// The resolver (codeMessage/codeOf, the GENERIC degrade and the Object.hasOwn guard) now lives in
+// @waitron/dashboard-kit, shared with any module UI. This module still OWNS the dashboard's code copy:
+// it registers CODE_MESSAGES at load and re-exports the kit's resolver, so the app's importers and the
+// "never show a raw code" guarantee are unchanged.
+registerCodeMessages(CODE_MESSAGES);
 
-/**
- * Extract the wire error CODE from a rejected value.
- *
- * The dashboard's API client rejects with a bare `{ code }` (see api/client.ts); this pulls that code
- * out, falling back to `fallback` (default `server.internal`) when the rejection carries none — the
- * companion to `codeMessage`, which turns the code into localised copy. The body is byte-identical to
- * the `(error as { code?: string }).code ?? …` expression the screens used to hand-copy, so hoisting it
- * here cannot change what any call site computes.
- */
-export function codeOf(error: unknown, fallback = "server.internal"): string {
-  return (error as { code?: string }).code ?? fallback;
-}
-
-/**
- * Resolve an error/status `code` to localised copy for `locale` (default: the active locale).
- *
- * `locale` may be a full BCP-47 tag ("es-ES"): the region subtag is stripped before the lookup, so
- * "es-ES" resolves to the "es" copy. An unknown code degrades to the GENERIC message and an unknown
- * language degrades to the English copy — so the return is always a readable sentence and NEVER the
- * raw code.
- */
-export function codeMessage(code: string, locale: string = currentLocale()): string {
-  // Own-key check, not `?? GENERIC`: a code colliding with an Object.prototype member (`toString`,
-  // `constructor`, `valueOf`, `hasOwnProperty`) resolves the inherited method — truthy, so `??` would
-  // skip GENERIC and pickLocale would return undefined (an empty banner). Object.hasOwn keeps the
-  // "only ever a sentence, never the raw code and never undefined" guarantee true for every string.
-  const entry = Object.hasOwn(CODE_MESSAGES, code) ? CODE_MESSAGES[code] : GENERIC;
-  return pickLocale(entry, locale);
-}
+export { codeMessage, codeOf };

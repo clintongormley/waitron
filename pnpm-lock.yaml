@@ -50,6 +50,9 @@ importers:
       '@simplewebauthn/browser':
         specifier: ^13.0.0
         version: 13.3.0
+      '@waitron/dashboard-kit':
+        specifier: workspace:*
+        version: link:../../packages/dashboard-kit
       '@waitron/diagnostics':
         specifier: workspace:*
         version: link:../../packages/diagnostics
@@ -542,6 +545,28 @@ importers:
       fast-check:
         specifier: ^4.9.0
         version: 4.9.0
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.7(@types/node@24.13.3)(@vitest/browser@3.2.7)(tsx@4.23.1)(yaml@2.9.0)
+
+  packages/dashboard-kit:
+    dependencies:
+      '@waitron/shared':
+        specifier: workspace:*
+        version: link:../shared
+      lit:
+        specifier: ^3.2.0
+        version: 3.3.3
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
+      '@vitest/coverage-v8':
+        specifier: ^3.0.0
+        version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
       typescript:
         specifier: ^5.7.0
         version: 5.9.3

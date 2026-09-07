@@ -1,4 +1,4 @@
-import { currentLocale, pickLocale } from "./t.js";
+import { currentLocale, pickLocale } from "@waitron/dashboard-kit";
 import type { AllergenDeclaration } from "../api/client.js";
 
 // Localised DISPLAY NAMES for the enum tokens the server hands the dashboard — roles, statuses,

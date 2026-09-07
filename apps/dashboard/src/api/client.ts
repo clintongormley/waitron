@@ -20,6 +20,7 @@
  * dependency, exactly the precedent `apps/till/src/api/client.ts` sets for the same type.
  */
 import type { TimingBand } from "@waitron/shared";
+import { createRequest, type DashboardRequest, type FetchLike } from "@waitron/dashboard-kit";
 
 /** A person's role in the management model — the four levels the slice-1b staff API assigns. */
 export type PersonRole = "staff" | "supervisor" | "manager" | "admin";
@@ -1203,12 +1204,10 @@ export type DiagnosticsLine = {
  * is the standing default, with no pending revert). */
 export type Verbosity = { level: "debug" | "info"; revertsAt: string | null };
 
-/** The subset of `fetch` this client uses; the global satisfies it, and a test injects a stub. */
-type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
-
 export class DashboardApi {
-  readonly #baseUrl: string;
-  readonly #fetchImpl: FetchLike;
+  /** The one request primitive every method funnels through (see @waitron/dashboard-kit's
+   * createRequest for the credentials/JSON/FormData/empty-body/`{ code }` rules). */
+  readonly #request: DashboardRequest;
   #localesPromise?: Promise<{
     locales: Array<{ code: string; label: string }>;
     venueDefault: string;
@@ -1220,8 +1219,7 @@ export class DashboardApi {
    * @param fetchImpl the `fetch` to use (default the global; a test injects a stub).
    */
   constructor(baseUrl = "", fetchImpl: FetchLike = fetch) {
-    this.#baseUrl = baseUrl;
-    this.#fetchImpl = fetchImpl;
+    this.#request = createRequest({ baseUrl, fetchImpl });
   }
 
   /** `GET /management-api/staff-roster` — the staff self-service colleague picker in
@@ -2424,44 +2422,4 @@ export class DashboardApi {
     });
   }
 
-  /**
-   * The one request path every method funnels through. `credentials: "include"` on every call (the
-   * session cookie). A JSON `body` is JSON-encoded under a `content-type: application/json` header; a
-   * `FormData` body (the image upload) is passed through AS-IS with NO `content-type`, so the browser
-   * sets `multipart/form-data` and its boundary itself (a manual header would drop the boundary and
-   * corrupt the upload); a GET/DELETE with no body carries neither header nor body. A non-2xx becomes a
-   * rejected `{ code }` read from the server's `{ error: { code } }` envelope — falling back to
-   * `server.internal` when the body names none — so callers branch on a stable domain code, never on an
-   * HTTP status or a raw message.
-   *
-   * `fetchImpl` is read into a local before the call so it is invoked as a free function, not as a
-   * method of `this` (which would rebind a native `fetch`).
-   *
-   * A 2xx with an EMPTY body resolves to `undefined` rather than being JSON-parsed: the mutation
-   * routes (`logout`, `updatePerson`, `resetPin`, `setPassword`) answer empty 204s (`c.body(null,
-   * 204)` in `apps/server/src/management-api.ts`), on which `res.json()` would throw a `SyntaxError`.
-   * Those callers type `T` as `void`; every JSON route sends a body, so the non-empty branch parses
-   * exactly as before. The branch keys off the empty body (`res.text() === ""`), not the status.
-   */
-  async #request<T>(path: string, method: string, body?: unknown): Promise<T> {
-    const fetchImpl = this.#fetchImpl;
-    const init: RequestInit =
-      body === undefined
-        ? { method, credentials: "include" }
-        : body instanceof FormData
-          ? { method, credentials: "include", body }
-          : {
-              method,
-              credentials: "include",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify(body),
-            };
-    const res = await fetchImpl(this.#baseUrl + path, init);
-    if (!res.ok) {
-      const envelope = (await res.json()) as { error?: { code?: string } };
-      throw { code: envelope.error?.code ?? "server.internal" };
-    }
-    const text = await res.text();
-    return (text === "" ? undefined : JSON.parse(text)) as T;
-  }
 }
