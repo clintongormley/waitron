@@ -16,12 +16,16 @@
   },
   "dependencies": {
     "@waitron/bookings": "workspace:*",
+    "@waitron/credentials": "workspace:*",
     "@waitron/db": "workspace:*",
     "@waitron/fiscal-none": "workspace:*",
     "@waitron/fiscal-verifactu": "workspace:*",
     "@waitron/identity": "workspace:*",
     "@waitron/module": "workspace:*",
     "@waitron/payments": "workspace:*",
+    "@waitron/scheduler": "workspace:*",
+    "@waitron/sync": "workspace:*",
+    "@waitron/workforce": "workspace:*",
     "@waitron/workforce-es": "workspace:*"
   },
   "devDependencies": {

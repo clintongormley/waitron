@@ -9,6 +9,7 @@ describe("the public surface", () => {
         "ANOS_CONSERVACION",
         "TITULARES_ACCESO",
         "exportTimeRecord",
+        "WORKFORCE_ES_CLASSIFICATION",
         "WORKFORCE_ES_MIGRATIONS",
         "WORKFORCE_ES_VOCABULARY",
         "convenioConfig",

@@ -425,6 +425,9 @@ importers:
       '@waitron/bookings':
         specifier: workspace:*
         version: link:../bookings
+      '@waitron/credentials':
+        specifier: workspace:*
+        version: link:../credentials
       '@waitron/db':
         specifier: workspace:*
         version: link:../db
@@ -443,6 +446,15 @@ importers:
       '@waitron/payments':
         specifier: workspace:*
         version: link:../payments
+      '@waitron/scheduler':
+        specifier: workspace:*
+        version: link:../scheduler
+      '@waitron/sync':
+        specifier: workspace:*
+        version: link:../sync
+      '@waitron/workforce':
+        specifier: workspace:*
+        version: link:../workforce
       '@waitron/workforce-es':
         specifier: workspace:*
         version: link:../workforce-es
@@ -505,6 +517,9 @@ importers:
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
+      '@waitron/sync-enrolment':
+        specifier: workspace:*
+        version: link:../sync-enrolment
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@electric-sql/pglite@0.5.4)(@types/pg@8.20.0)(pg@8.22.0)
@@ -576,6 +591,9 @@ importers:
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10
+      testcontainers:
+        specifier: ^12.0.4
+        version: 12.0.4
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
@@ -1194,6 +1212,9 @@ importers:
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
+      '@waitron/sync-enrolment':
+        specifier: workspace:*
+        version: link:../sync-enrolment
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@electric-sql/pglite@0.5.4)(@types/pg@8.20.0)(pg@8.22.0)
@@ -1410,6 +1431,9 @@ importers:
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
+      '@waitron/sync-enrolment':
+        specifier: workspace:*
+        version: link:../sync-enrolment
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@electric-sql/pglite@0.5.4)(@types/pg@8.20.0)(pg@8.22.0)
@@ -1444,6 +1468,9 @@ importers:
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
+      '@waitron/sync-enrolment':
+        specifier: workspace:*
+        version: link:../sync-enrolment
       '@waitron/workforce':
         specifier: workspace:*
         version: link:../workforce

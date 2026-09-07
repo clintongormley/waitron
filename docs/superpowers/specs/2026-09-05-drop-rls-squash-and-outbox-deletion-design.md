@@ -158,6 +158,12 @@ waits for the owner's signature.
    exactly once" and "every `reject_mutation` trigger is `ENABLE ALWAYS`"; the two-container harness
    seeded from the prototype scripts. Additive; the outbox still runs on the old enrolment data
    until step 4.
+
+   > **2026-09-07 — step 2 built.** The contract is `classify()` (`@waitron/sync-enrolment`) building
+   > per-module `<MODULE>_CLASSIFICATION` lists ALONGSIDE enrol (enrol + outbox untouched); the two
+   > root guards are `scripts/classification-complete.test.ts` and
+   > `scripts/append-only-enable-always.test.ts`; the fixture is `packages/db/src/testing/two-node.ts`.
+   > In PR (Track A item 3 step 2).
 3. **Provisioning** — swap spec S2. The superuser step, publications and subscriptions on adopt, the
    WireGuard key in the bundle, environment refusal, the three instance settings. Proven against the
    fixture; proven on real machines by Track B item 2.

@@ -5,7 +5,13 @@ import * as api from "./index.js";
 describe("the public surface", () => {
   it("exports exactly the intended names", () => {
     expect(Object.keys(api).sort()).toEqual(
-      ["DEFAULTS", "SCHEDULER_MIGRATIONS", "runDue", "scheduledRuns"].sort(),
+      [
+        "DEFAULTS",
+        "SCHEDULER_CLASSIFICATION",
+        "SCHEDULER_MIGRATIONS",
+        "runDue",
+        "scheduledRuns",
+      ].sort(),
     );
   });
 
