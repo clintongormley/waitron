@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { SERVERS_STORAGE_KEY, ServerRouter } from "./server-router.js";
+import { SERVERS_STORAGE_KEY, ServerRouter, withServerTarget } from "./server-router.js";
 
 const BOX = "https://box.deli.test";
 const CLOUD = "https://cloud.deli.test";
@@ -9,7 +9,9 @@ type Answer = { acceptingSales: boolean; term: number | null; nodeId: string } |
 /** A fetch that answers /api/node per origin from a mutable table; "down" rejects like a dead host. */
 function probeFetch(table: Record<string, Answer>): typeof fetch {
   return vi.fn(async (input: RequestInfo | URL) => {
-    const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = new URL(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     const a = table[url.origin];
     if (a === undefined || a === "down") throw new TypeError("Failed to fetch");
     return new Response(JSON.stringify({ ...a, standing: null, environment: "preproduction" }), {
@@ -26,9 +28,19 @@ function memoryStorage(): Pick<Storage, "getItem" | "setItem"> & { data: Map<str
 
 describe("ServerRouter", () => {
   it("starts on the page origin and stays there when a round has no yes anywhere (a blip moves nothing)", async () => {
-    const table: Record<string, Answer> = { [BOX]: "down", [CLOUD]: { acceptingSales: false, term: 1, nodeId: "c" } };
-    const r = new ServerRouter({ origin: BOX, fetchImpl: probeFetch(table), storage: memoryStorage() });
-    r.setServers([{ nodeId: "b", url: BOX }, { nodeId: "c", url: CLOUD }]);
+    const table: Record<string, Answer> = {
+      [BOX]: "down",
+      [CLOUD]: { acceptingSales: false, term: 1, nodeId: "c" },
+    };
+    const r = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(table),
+      storage: memoryStorage(),
+    });
+    r.setServers([
+      { nodeId: "b", url: BOX },
+      { nodeId: "c", url: CLOUD },
+    ]);
     const moved = vi.fn();
     r.addEventListener("server-changed", moved);
     await r.probeNow();
@@ -42,8 +54,15 @@ describe("ServerRouter", () => {
   });
 
   it("moves to the first server that says yes, in the round it says it", async () => {
-    const table: Record<string, Answer> = { [BOX]: "down", [CLOUD]: { acceptingSales: false, term: 1, nodeId: "c" } };
-    const r = new ServerRouter({ origin: BOX, fetchImpl: probeFetch(table), storage: memoryStorage() });
+    const table: Record<string, Answer> = {
+      [BOX]: "down",
+      [CLOUD]: { acceptingSales: false, term: 1, nodeId: "c" },
+    };
+    const r = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(table),
+      storage: memoryStorage(),
+    });
     r.setServers([{ url: BOX }, { url: CLOUD }]);
     await r.probeNow();
     table[CLOUD] = { acceptingSales: true, term: 2, nodeId: "c" };
@@ -57,8 +76,15 @@ describe("ServerRouter", () => {
   });
 
   it("moves back when the box says yes and the cloud says no", async () => {
-    const table: Record<string, Answer> = { [BOX]: { acceptingSales: false, term: 3, nodeId: "b" }, [CLOUD]: { acceptingSales: true, term: 2, nodeId: "c" } };
-    const r = new ServerRouter({ origin: BOX, fetchImpl: probeFetch(table), storage: memoryStorage() });
+    const table: Record<string, Answer> = {
+      [BOX]: { acceptingSales: false, term: 3, nodeId: "b" },
+      [CLOUD]: { acceptingSales: true, term: 2, nodeId: "c" },
+    };
+    const r = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(table),
+      storage: memoryStorage(),
+    });
     r.setServers([{ url: BOX }, { url: CLOUD }]);
     await r.probeNow();
     expect(r.current).toBe(CLOUD);
@@ -69,16 +95,30 @@ describe("ServerRouter", () => {
   });
 
   it("prefers the higher term when two servers both say yes", async () => {
-    const table: Record<string, Answer> = { [BOX]: { acceptingSales: true, term: 1, nodeId: "b" }, [CLOUD]: { acceptingSales: true, term: 2, nodeId: "c" } };
-    const r = new ServerRouter({ origin: BOX, fetchImpl: probeFetch(table), storage: memoryStorage() });
+    const table: Record<string, Answer> = {
+      [BOX]: { acceptingSales: true, term: 1, nodeId: "b" },
+      [CLOUD]: { acceptingSales: true, term: 2, nodeId: "c" },
+    };
+    const r = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(table),
+      storage: memoryStorage(),
+    });
     r.setServers([{ url: BOX }, { url: CLOUD }]);
     await r.probeNow();
     expect(r.current).toBe(CLOUD);
   });
 
   it("does not move while a request is in flight; moves on the next round", async () => {
-    const table: Record<string, Answer> = { [BOX]: "down", [CLOUD]: { acceptingSales: true, term: 2, nodeId: "c" } };
-    const r = new ServerRouter({ origin: BOX, fetchImpl: probeFetch(table), storage: memoryStorage() });
+    const table: Record<string, Answer> = {
+      [BOX]: "down",
+      [CLOUD]: { acceptingSales: true, term: 2, nodeId: "c" },
+    };
+    const r = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(table),
+      storage: memoryStorage(),
+    });
     r.setServers([{ url: BOX }, { url: CLOUD }]);
     r.beginRequest();
     await r.probeNow();
@@ -89,10 +129,20 @@ describe("ServerRouter", () => {
   });
 
   it("times out a hanging probe as unreachable", async () => {
-    const hanging = vi.fn((_: RequestInfo | URL, init?: RequestInit) =>
-      new Promise<Response>((_, reject) => init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")))),
+    const hanging = vi.fn(
+      (_: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_, reject) =>
+          init?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError")),
+          ),
+        ),
     ) as unknown as typeof fetch;
-    const r = new ServerRouter({ origin: BOX, fetchImpl: hanging, storage: memoryStorage(), timeoutMs: 20 });
+    const r = new ServerRouter({
+      origin: BOX,
+      fetchImpl: hanging,
+      storage: memoryStorage(),
+      timeoutMs: 20,
+    });
     await r.probeNow();
     expect(r.statuses()[0]?.state).toBe("unreachable");
   });
@@ -101,12 +151,74 @@ describe("ServerRouter", () => {
     const storage = memoryStorage();
     const r = new ServerRouter({ origin: BOX, fetchImpl: probeFetch({}), storage });
     r.setServers([{ nodeId: "c", url: CLOUD }]);
-    expect(JSON.parse(storage.data.get(SERVERS_STORAGE_KEY)!)).toEqual({ servers: [{ nodeId: "c", url: CLOUD }] });
+    expect(JSON.parse(storage.data.get(SERVERS_STORAGE_KEY)!)).toEqual({
+      servers: [{ nodeId: "c", url: CLOUD }],
+    });
     const r2 = new ServerRouter({ origin: BOX, fetchImpl: probeFetch({}), storage });
     expect(r2.statuses().map((s) => s.url)).toEqual([BOX, CLOUD]);
-    const broken = { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); } };
+    const broken = {
+      getItem: () => {
+        throw new Error("blocked");
+      },
+      setItem: () => {
+        throw new Error("blocked");
+      },
+    };
     const r3 = new ServerRouter({ origin: BOX, fetchImpl: probeFetch({}), storage: broken });
     expect(r3.statuses().map((s) => s.url)).toEqual([BOX]);
     expect(() => r3.setServers([{ url: CLOUD }])).not.toThrow();
+  });
+});
+
+describe("withServerTarget", () => {
+  it("rewrites a relative path onto the current target and leaves absolute inputs alone", async () => {
+    const seen: string[] = [];
+    const base = vi.fn(async (input: RequestInfo | URL) => {
+      seen.push(String(input instanceof Request ? input.url : input));
+      return new Response("{}");
+    }) as unknown as typeof fetch;
+    const r = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch({ [CLOUD]: { acceptingSales: true, term: 1, nodeId: "c" } }),
+      storage: memoryStorage(),
+    });
+    r.setServers([{ url: CLOUD }]);
+    await r.probeNow();
+    const f = withServerTarget(base, r);
+    await f("/api/till");
+    await f("https://elsewhere.test/x");
+    await f(new URL("https://elsewhere.test/y"));
+    expect(seen).toEqual([
+      `${CLOUD}/api/till`,
+      "https://elsewhere.test/x",
+      "https://elsewhere.test/y",
+    ]);
+  });
+
+  it("holds a move while a wrapped request is in flight", async () => {
+    let release!: () => void;
+    const base = vi.fn(
+      () =>
+        new Promise<Response>((res) => {
+          release = () => res(new Response("{}"));
+        }),
+    ) as unknown as typeof fetch;
+    const table: Record<string, Answer> = {
+      [BOX]: "down",
+      [CLOUD]: { acceptingSales: true, term: 1, nodeId: "c" },
+    };
+    const r = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(table),
+      storage: memoryStorage(),
+    });
+    r.setServers([{ url: CLOUD }]);
+    const pending = withServerTarget(base, r)("/api/sales", { method: "POST" });
+    await r.probeNow();
+    expect(r.current).toBe(BOX);
+    release();
+    await pending;
+    await r.probeNow();
+    expect(r.current).toBe(CLOUD);
   });
 });

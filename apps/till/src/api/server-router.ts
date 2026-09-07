@@ -1,6 +1,14 @@
 export type ServerState = "unknown" | "unreachable" | "standby" | "primary";
-export interface ServerEntry { nodeId?: string; url: string }
-export interface ServerStatus { url: string; label: string; state: ServerState; term: number | null }
+export interface ServerEntry {
+  nodeId?: string;
+  url: string;
+}
+export interface ServerStatus {
+  url: string;
+  label: string;
+  state: ServerState;
+  term: number | null;
+}
 export interface RouterOptions {
   origin: string;
   fetchImpl: typeof fetch;
@@ -11,7 +19,10 @@ export interface RouterOptions {
 
 export const SERVERS_STORAGE_KEY = "waitron.servers";
 
-interface Tracked extends ServerEntry { state: ServerState; term: number | null }
+interface Tracked extends ServerEntry {
+  state: ServerState;
+  term: number | null;
+}
 
 /**
  * The one place the till knows more than one server exists (till-reroute design §4.1). It holds the
@@ -36,18 +47,28 @@ export class ServerRouter extends EventTarget {
     super();
     this.#origin = opts.origin;
     this.#fetch = opts.fetchImpl;
-    this.#storage = opts.storage ?? (typeof localStorage === "undefined" ? undefined : localStorage);
+    this.#storage =
+      opts.storage ?? (typeof localStorage === "undefined" ? undefined : localStorage);
     this.#intervalMs = opts.intervalMs ?? 5_000;
     this.#timeoutMs = opts.timeoutMs ?? 3_000;
     this.#current = opts.origin;
     this.#servers = this.#merge(this.#load());
   }
 
-  get current(): string { return this.#current; }
-  get waiting(): boolean { return this.#waiting; }
+  get current(): string {
+    return this.#current;
+  }
+  get waiting(): boolean {
+    return this.#waiting;
+  }
 
   statuses(): ServerStatus[] {
-    return this.#servers.map((s) => ({ url: s.url, label: new URL(s.url).hostname, state: s.state, term: s.term }));
+    return this.#servers.map((s) => ({
+      url: s.url,
+      label: new URL(s.url).hostname,
+      state: s.state,
+      term: s.term,
+    }));
   }
 
   setServers(list: ServerEntry[]): void {
@@ -67,8 +88,12 @@ export class ServerRouter extends EventTarget {
     this.#timer = undefined;
   }
 
-  beginRequest(): void { this.#inFlight += 1; }
-  endRequest(): void { this.#inFlight = Math.max(0, this.#inFlight - 1); }
+  beginRequest(): void {
+    this.#inFlight += 1;
+  }
+  endRequest(): void {
+    this.#inFlight = Math.max(0, this.#inFlight - 1);
+  }
 
   /** One probe round over every listed server, then the target rule (§4.1). */
   async probeNow(): Promise<void> {
@@ -93,9 +118,20 @@ export class ServerRouter extends EventTarget {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.#timeoutMs);
     try {
-      const res = await this.#fetch(`${s.url}/api/node`, { signal: controller.signal, cache: "no-store" });
-      if (!res.ok) { s.state = "unreachable"; s.term = null; return; }
-      const body = (await res.json()) as { acceptingSales?: unknown; term?: unknown; nodeId?: unknown };
+      const res = await this.#fetch(`${s.url}/api/node`, {
+        signal: controller.signal,
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        s.state = "unreachable";
+        s.term = null;
+        return;
+      }
+      const body = (await res.json()) as {
+        acceptingSales?: unknown;
+        term?: unknown;
+        nodeId?: unknown;
+      };
       s.state = body.acceptingSales === true ? "primary" : "standby";
       s.term = typeof body.term === "number" ? body.term : null;
       if (typeof body.nodeId === "string") s.nodeId = body.nodeId;
@@ -115,10 +151,21 @@ export class ServerRouter extends EventTarget {
       const url = new URL(e.url).origin;
       if (next.some((n) => n.url === url)) return;
       const prev = byUrl.get(url);
-      next.push({ url, nodeId: e.nodeId ?? prev?.nodeId, state: prev?.state ?? "unknown", term: prev?.term ?? null });
+      next.push({
+        url,
+        nodeId: e.nodeId ?? prev?.nodeId,
+        state: prev?.state ?? "unknown",
+        term: prev?.term ?? null,
+      });
     };
     push({ url: this.#origin });
-    for (const e of list) { try { push(e); } catch { /* a malformed url is dropped, never fatal */ } }
+    for (const e of list) {
+      try {
+        push(e);
+      } catch {
+        /* a malformed url is dropped, never fatal */
+      }
+    }
     return next;
   }
 
@@ -127,7 +174,9 @@ export class ServerRouter extends EventTarget {
       const raw = this.#storage?.getItem(SERVERS_STORAGE_KEY);
       if (raw === null || raw === undefined) return [];
       const parsed = JSON.parse(raw) as { servers?: unknown };
-      return Array.isArray(parsed.servers) ? (parsed.servers as ServerEntry[]).filter((e) => typeof e?.url === "string") : [];
+      return Array.isArray(parsed.servers)
+        ? (parsed.servers as ServerEntry[]).filter((e) => typeof e?.url === "string")
+        : [];
     } catch {
       return [];
     }
@@ -140,4 +189,19 @@ export class ServerRouter extends EventTarget {
       /* private window / blocked storage: the list lives in memory for this page */
     }
   }
+}
+
+/** Apply the router as a fetch wrapper (§4.1): the TillApi keeps `baseUrl = ""` and never learns that
+ * more than one server exists. Same-origin behaviour is byte-identical until a move happens. */
+export function withServerTarget(fetchImpl: typeof fetch, router: ServerRouter): typeof fetch {
+  return async (input, init) => {
+    const target =
+      typeof input === "string" && input.startsWith("/") ? `${router.current}${input}` : input;
+    router.beginRequest();
+    try {
+      return await fetchImpl(target, init);
+    } finally {
+      router.endRequest();
+    }
+  };
 }
