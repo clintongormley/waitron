@@ -234,6 +234,13 @@ brainstorm and PR. What remains for the labour advisor is presentation only: whe
 registro de jornada for a location may be shown as two chains. Until the rekey lands, `time_entries`
 is the drain-stall shape named in §4.2.
 
+> **2026-09-07 — built** (branch `feat/workforce-chain-per-node-rekey`). The rekey is done: the
+> chain key is now (`tenant`, `node`, `location`) — `node_id` was ADDED to the position key, not
+> substituted for `location_id`. A cold-restored box CONTINUES its chain from the backup's head (no
+> reset, no restore hook). A genuine fork with a surviving copy is no longer a silent clash; it
+> surfaces as the `multiple_unique_conflicts` drain stall §4.2 already handles. So `time_entries` is
+> no longer the drain-stall shape this section named — the S3/S4 prerequisite is discharged.
+
 ## 5. Schema upgrades
 
 Postgres replicates rows, never DDL, so a schema change is a rolling event. Measured: a column added

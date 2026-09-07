@@ -397,7 +397,10 @@ _Reference_.
   automatically for a node that was filing: it floors the installation counter by the clock (the counter is in
   the dump, so an older artifact would otherwise re-mint a number a previous restore used), retires
   the node's invoice series and opens disjoint ones, and writes the box's identity only after that
-  commits — `docs/superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md`.
+  commits — `docs/superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md`. UNLIKE the
+  fiscal chain, the working-time chain is NOT reset on a cold restore — it continues from the backup's
+  head, and a fork with a surviving copy surfaces as a loud drain stall, because the fiscal reset
+  exists to mint a fresh SIF for AEAT and the working-time record has no equivalent.
 
 ---
 

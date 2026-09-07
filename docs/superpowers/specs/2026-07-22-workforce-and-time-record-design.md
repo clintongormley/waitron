@@ -272,6 +272,14 @@ history retained — the shown end-time updates while every prior value stays vi
 "central server" is that node — ingest is immediate, the location chain is local, no distributed
 step. The distributed picture appears only in the multi-till + separate-server topology.
 
+> **2026-09-07 — per-node rekey built** (branch `feat/workforce-chain-per-node-rekey`). "One chain
+> **per location**" above is now **one chain per (node, location)**: `node_id` is part of the chain
+> key, so a promoted cloud and a returned box each keep their own chain of a location's clock-ins and
+> cannot collide (the fiscal server-as-SIF shape, #54). A location's registro de jornada is the
+> **union of its per-node chains**. The "central-server ingest" framing therefore now spans a
+> promotion — ingest continues on whichever node is primary, and the location's history is read
+> across the per-node chains rather than from one. See the swap design §4.4.
+
 **Escalation (deferred — trigger: the published RD demands capture-window cryptographic
 tamper-evidence):** add lightweight **per-device local chaining** so the offline buffer is itself
 chained before sync. Off by default; the ingest chain is designed to fold device sub-chains in.
