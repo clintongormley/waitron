@@ -1329,6 +1329,15 @@ declare module "@waitron/shared" {
      */
     "promotion.node_fenced": { standing: "sell-only" | "evicted" };
     /**
+     * The offline break-glass fallback for an authenticated promote was presented wrong or absent —
+     * the secret did not match, or none was supplied where one was required. Refused BEFORE any state
+     * change (before the point-of-no-return), so the node is left exactly as it was. No params: a wrong
+     * credential carries no enumerable, non-secret detail, the same shape `password.invalid` follows —
+     * echoing anything would leak. `promotion.*` names the DOMAIN CONCEPT, never the throwing package —
+     * the rule `promotion.fence_not_attested` gives. Never renamed once shipped.
+     */
+    "promotion.break_glass_invalid": Record<string, never>;
+    /**
      * `retireSelf` (retire/evict R3) was invoked on a node that is NOT fenced — a node with a
      * `serving-primary`/`serving-secondary` standing in the held chart, a node ABSENT from the chart,
      * or a node holding no membership document at all. Only a fenced (`sell-only`) node leaves for
