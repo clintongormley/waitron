@@ -13,5 +13,8 @@ describe("fiscal-cert error codes", () => {
     expect(new AppError("restore.credentials_key_external", {}).code).toBe(
       "restore.credentials_key_external",
     );
+    expect(new AppError("server.credentials_key_conflict", {}).code).toBe(
+      "server.credentials_key_conflict",
+    );
   });
 });

@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import type { Hono } from "hono";
@@ -36,6 +36,7 @@ import {
 } from "./modules.js";
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
 import { parseEnvFile } from "./env-file.js";
+import { isUnset } from "./env-value.js";
 import {
   loadConfig,
   loadMirrorSyncConfig,
@@ -715,17 +716,30 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         stateDir: config.stateDir,
         hostnames: [BOX_HOSTNAME, "localhost"],
         now,
+        // Pass THIS boot's env, not process.env: on a cloud node it carries the platform-injected
+        // WAITRON_CREDENTIALS_KEY, which tells `ensureBoxSecrets` to write no `secrets.env` (§4 — the
+        // key never touches disk). An on-prem box has no such key and mints `secrets.env` as before.
+        env,
       });
-      // Recover the vault key ring (slice 2b R5). `ensureBoxSecrets` above WROTE
-      // `WAITRON_CREDENTIALS_KEY`(+`_VERSION`) into `<stateDir>/secrets.env` but never loaded it into
-      // this process's env — so, unlike the trading branch (which reads the ring from `env`), the
-      // setup process has no key material in `process.env`. Read the file 2a just wrote back off disk
-      // and build the ring from it, so the provision route can seal the first tenant's `fiscal.aeat`
-      // credential. A missing/unreadable `secrets.env` is a LOUD boot failure (`readFileSync` throws,
-      // caught by the guard above) — correct, since the write above guarantees it on the happy path.
-      const ring = loadKeyRing(
-        parseEnvFile(readFileSync(join(config.stateDir, "secrets.env"), "utf8")),
-      );
+      // Recover the vault key ring (slice 2b R5), ENV-FIRST, FILE-FALLBACK. A cloud node's key is
+      // injected into the environment by the platform's secrets service and lives on no disk; an
+      // on-prem box's key is the one `ensureBoxSecrets` above minted into `<stateDir>/secrets.env`
+      // (and never loaded into this process's env). The ring is built from whichever is present, so
+      // the provision route can seal the first tenant's `fiscal.aeat` credential either way.
+      //
+      // Precedence, in this ONE place: the env key WINS. If a usable env key AND a `secrets.env` both
+      // exist and DISAGREE, refuse to boot loudly rather than seal under one ring and later read under
+      // the other — a mismatch would strand every credential sealed under whichever key we did not use.
+      const secretsPath = join(config.stateDir, "secrets.env");
+      const fileText = existsSync(secretsPath) ? readFileSync(secretsPath, "utf8") : null;
+      const envKey = env.WAITRON_CREDENTIALS_KEY;
+      if (!isUnset(envKey) && fileText !== null) {
+        const fileKey = parseEnvFile(fileText).WAITRON_CREDENTIALS_KEY;
+        if (fileKey !== undefined && fileKey !== envKey) {
+          throw new AppError("server.credentials_key_conflict", {});
+        }
+      }
+      const ring = loadKeyRing(!isUnset(envKey) ? env : parseEnvFile(fileText ?? ""));
       // The OWNER connection every setup-mode owner write opens over — `applyVenue`'s INSERT into
       // `tenants` (which `app_user` deliberately cannot — CLAUDE.md §3), `stampDeployment`'s
       // `deployment` singleton, and the break-glass secret mint the adopt path rides through this same

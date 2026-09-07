@@ -157,6 +157,17 @@ declare module "@waitron/shared" {
      */
     "server.mirror_bind_exposed": { host: string };
     /**
+     * Setup boot found a usable `WAITRON_CREDENTIALS_KEY` in the environment (a cloud node's
+     * platform-injected vault key) AND a DIFFERING key in `<stateDir>/secrets.env` — refuse rather
+     * than seal under one ring and read under the other, which would strand every credential sealed
+     * under whichever key we did not use. The env key wins; remove one. `server.*` — a fact about the
+     * PROCESS refusing to boot, not about a sale, payment or credential (a boot-config disagreement,
+     * the class `server.config_missing`/`server.mirror_bind_exposed` cover). No params: neither key
+     * may land in an error, the no-leak discipline the rest of this file's `server.*` codes keep.
+     * Never renamed once shipped.
+     */
+    "server.credentials_key_conflict": Record<string, never>;
+    /**
      * This host is configured for one environment and the database belongs to another. Thrown
      * before migrations run, so nothing is written.
      *

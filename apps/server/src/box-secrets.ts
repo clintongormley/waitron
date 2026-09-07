@@ -5,6 +5,7 @@ import { generateKeyRing, type GeneratedKeyRing } from "@waitron/provisioning";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { writeFileAtomic } from "./fs-atomic.js";
 import { formatEnvFile } from "./env-file.js";
+import { isUnset } from "./env-value.js";
 
 /**
  * The three TLS file paths `node:https` needs to serve setup-mode HTTPS from the box's self-signed
@@ -16,6 +17,13 @@ export interface BoxTlsFiles {
   certFile: string;
   keyFile: string;
   caCertFile: string;
+  /**
+   * Where this box's vault master key comes from. `"embedded"` — minted into `<stateDir>/secrets.env`
+   * on this or an earlier boot, the on-prem box; `"external"` — supplied by the platform through
+   * `WAITRON_CREDENTIALS_KEY` in the process environment and written to NO disk file, the cloud node,
+   * so a disk snapshot/dump/backup yields no usable key.
+   */
+  credentialsKey: "embedded" | "external";
 }
 
 /**
@@ -37,6 +45,14 @@ export interface EnsureBoxSecretsDeps {
    */
   hostnames: string[];
   now: () => Date;
+  /**
+   * The process environment, checked for a platform-injected `WAITRON_CREDENTIALS_KEY` (defaults to
+   * `process.env`). When one is present (non-empty — `isUnset` treats `""` as absent), this is a cloud
+   * node whose vault key the platform's secrets service supplies at runtime: NO `secrets.env` is
+   * written, so a disk snapshot leaks no key. When absent, the on-prem box mints `secrets.env` as
+   * before. Boot passes its OWN env here, not `process.env`, so a test/deploy env governs the choice.
+   */
+  env?: Record<string, string | undefined>;
   // Injectables (all default to the real implementations):
   mint?: typeof mintSelfSignedServerCert;
   makeKeyRing?: () => GeneratedKeyRing; // default generateKeyRing
@@ -131,17 +147,33 @@ export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxT
     await writeFileAtomic(files.keyFile, m.serverKeyPem, 0o600);
   }
 
+  // The vault master key: on a cloud node the platform's secrets service injects it into the
+  // environment (`WAITRON_CREDENTIALS_KEY`), and it must NEVER be written to disk — a snapshot/dump/
+  // backup of the box would otherwise carry the key that opens its vault. On an on-prem box no such
+  // key is supplied, so the box mints its own into `secrets.env` (presence-guarded, as before).
+  const env = deps.env ?? process.env;
   const secretsFile = join(deps.stateDir, "secrets.env");
-  if (!(await exists(secretsFile))) {
-    const ring = makeKeyRing();
-    const body = formatEnvFile({
-      WAITRON_CREDENTIALS_KEY: ring.key,
-      WAITRON_CREDENTIALS_KEY_VERSION: String(ring.version),
-    });
-    // A single atomic write: secrets.env holds the unrepairable vault master key, so it must never be
-    // observed torn — temp-then-rename means it is either fully present or absent, never truncated.
-    await writeFileAtomic(secretsFile, body, 0o600);
+  let credentialsKey: "embedded" | "external";
+  if (isUnset(env.WAITRON_CREDENTIALS_KEY)) {
+    if (!(await exists(secretsFile))) {
+      const ring = makeKeyRing();
+      const body = formatEnvFile({
+        WAITRON_CREDENTIALS_KEY: ring.key,
+        WAITRON_CREDENTIALS_KEY_VERSION: String(ring.version),
+      });
+      // A single atomic write: secrets.env holds the unrepairable vault master key, so it must never be
+      // observed torn — temp-then-rename means it is either fully present or absent, never truncated.
+      await writeFileAtomic(secretsFile, body, 0o600);
+    }
+    credentialsKey = "embedded";
+  } else {
+    credentialsKey = "external";
   }
 
-  return { certFile: files.certFile, keyFile: files.keyFile, caCertFile: files.caCertFile };
+  return {
+    certFile: files.certFile,
+    keyFile: files.keyFile,
+    caCertFile: files.caCertFile,
+    credentialsKey,
+  };
 }
