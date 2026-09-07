@@ -804,7 +804,10 @@ export async function openTab(
   const [table] = await tx
     .select({ active: diningTables.active, tabId: diningTables.tabId })
     .from(diningTables)
-    .where(eq(diningTables.id, req.tableId))
+    // Scope the by-id read to the tenant: since RLS was dropped (#255) `withTenant` no longer isolates
+    // SELECTs, so a by-id read is not the isolation boundary (CLAUDE.md §3, till-reroute S3). Without
+    // `tenant_id` this read reaches another tenant's row in a multi-tenant DB, leaking its state.
+    .where(and(eq(diningTables.id, req.tableId), eq(diningTables.tenantId, cfg.tenantId)))
     .for("update");
   if (table === undefined) {
     throw new AppError("table.not_found", { tableId: req.tableId });
