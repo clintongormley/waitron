@@ -23,7 +23,7 @@ function provisioned(): InstanceState {
       waitron_app: HEALTHY,
     },
     inside: {
-      migratedSets: ["core", "fiscal", "payments", "scheduler", "credentials"],
+      migratedSets: ["core", "fiscal-verifactu", "payments", "scheduler", "credentials"],
       stamp: "preproduction",
     },
   };

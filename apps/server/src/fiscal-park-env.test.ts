@@ -249,8 +249,8 @@ describe("fiscal apply gate — module-version park (SP-2b) holds a version-ahea
     // re-delivers it. A park is NOT an apply (applied stays 0) and NOT a drop (the row is redelivered).
     const parked = await syncPullOnce(
       depsFor(ids.tenantId, {
-        sourceModuleVersions: { fiscal: 2 },
-        subscriberModuleVersions: { fiscal: 1 },
+        sourceModuleVersions: { "fiscal-verifactu": 2 },
+        subscriberModuleVersions: { "fiscal-verifactu": 1 },
         moduleByTable: MODULE_BY_TABLE,
       }),
       peer,
@@ -266,8 +266,8 @@ describe("fiscal apply gate — module-version park (SP-2b) holds a version-ahea
     // and now APPLIES — the proof the registro was parked, not dropped. Equal versions never park.
     const swept = await syncPullOnce(
       depsFor(ids.tenantId, {
-        sourceModuleVersions: { fiscal: 2 },
-        subscriberModuleVersions: { fiscal: 2 },
+        sourceModuleVersions: { "fiscal-verifactu": 2 },
+        subscriberModuleVersions: { "fiscal-verifactu": 2 },
         moduleByTable: MODULE_BY_TABLE,
       }),
       peer,
@@ -290,8 +290,8 @@ describe("fiscal apply gate — module-version park (SP-2b) holds a version-ahea
 
     const result = await syncPullOnce(
       depsFor(ids.tenantId, {
-        sourceModuleVersions: { fiscal: 2 },
-        subscriberModuleVersions: { fiscal: 2 },
+        sourceModuleVersions: { "fiscal-verifactu": 2 },
+        subscriberModuleVersions: { "fiscal-verifactu": 2 },
         moduleByTable: MODULE_BY_TABLE,
       }),
       peer,

@@ -1233,25 +1233,28 @@ declare module "@waitron/shared" {
      */
     "setup.request_invalid": { field: string };
     /**
-     * A LIVE provision of an `ES-common` venue arrived with no AEAT certificate (onboarding slice 2b,
-     * spec §10). A production ES-common till files its registros to the real AEAT and cannot do so
-     * without a sealed `fiscal.aeat` credential, so the provision is refused BEFORE `provisionVenue`
-     * runs — nothing is stamped and no SIF/chain is minted (an unrecoverable write, CLAUDE.md §5). A
-     * DEMO provision (preproduction) is exempt: it records its chain locally and never submits, so the
-     * cert is optional there.
+     * A provision of an environment that DEMANDS the fiscal regime's provisioning secret arrived
+     * without it (onboarding slice 2b, spec §10). The regime decides through its
+     * `provisioningSecret.required(environment)` seat — for Veri*Factu a PRODUCTION provision must
+     * carry the AEAT signing certificate, because a production till files its registros to the real
+     * AEAT and cannot do so without a sealed `fiscal.aeat` credential. The provision is refused BEFORE
+     * `provisionVenue` runs — nothing is stamped and no SIF/chain is minted (an unrecoverable write,
+     * CLAUDE.md §5). A preproduction provision is exempt: it records its chain locally and never
+     * submits, so the secret is optional there.
      *
-     * NO params: the fix is simply to supply the certificate, and there is nothing non-secret to
-     * carry — the same no-param shape `setup.cert_hostnames_empty` uses for its own "you gave me
-     * nothing to certify" guard. Never echoes the PFX or passphrase (they are not even present here).
+     * `module` is the fiscal module's own id (e.g. `"verifactu"`) — this host's config, never a
+     * secret — so a translator/operator can name which regime demanded the secret. The PFX/passphrase
+     * are NEVER echoed (they are not even present here). Renamed from `setup.aeat_cert_required` when
+     * the cert moved behind the generic provisioning-secret seat (fiscal-none slice): the code no
+     * longer names AEAT, the regime-specific thing, but the generic concept the host knows.
      *
      * `setup.*` names the DOMAIN CONCEPT (the box's first-boot setup/onboarding, the same concept
      * `setup.request_invalid` and `setup-api.ts` name), never the throwing file; `server.*` is
-     * reserved for facts about the process itself, and "this venue needs a cert to go live" is a fact
-     * about the setup request, the rule `tenant.not_found`'s note above gives. A request-shape fault
-     * → HTTP 400 by `setup-api.ts`'s provision route, matching `setup.request_invalid`. Never renamed
-     * once shipped.
+     * reserved for facts about the process itself, and "this provision needs its secret to go live" is
+     * a fact about the setup request, the rule `tenant.not_found`'s note above gives. A request-shape
+     * fault → HTTP 400 by `setup-api.ts`'s provision route, matching `setup.request_invalid`.
      */
-    "setup.aeat_cert_required": Record<string, never>;
+    "setup.provisioning_secret_required": { module: string };
     /**
      * A first-boot setup POST arrived while another is still in flight (onboarding slice 2b). One
      * one-shot latch is SHARED across the provision and adopt (C2b Task 9) routes — a box is set up

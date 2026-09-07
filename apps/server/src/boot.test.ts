@@ -206,10 +206,23 @@ const TILL_ENV = {
 // run from SOURCE, resolves to `apps/server/src/media` and would pollute the checkout on every run.
 // Created synchronously so the `KEY_ENV` const below can reference it; torn down in `afterAll`.
 const MEDIA_ROOT = mkdtempSync(join(tmpdir(), "waitron-boot-media-"));
+// Every trading boot in this suite carries a `modules.json` that resolves the fiscal slot to Veri*Factu
+// (disabling the no-regime `fiscal-none`) — the shape a real ES provision persists. `ALL_MODULES` now
+// holds TWO fiscal-slot members, so the default-on set (an absent file) would enable both and boot would
+// refuse `module.fiscal_slot_ambiguous` at `makeFiscalBackend`. Folded into `KEY_ENV` so every trading
+// boot reads it; setup-mode tests build their own env (no `KEY_ENV`, no `config.till`) and never reach
+// the fiscal slot. Written synchronously so the `KEY_ENV` const below can reference the dir; a test that
+// needs a DIFFERENT set overrides `WAITRON_STATE_DIR` after the `...KEY_ENV` spread with its own dir.
+const TRADING_STATE_DIR = mkdtempSync(join(tmpdir(), "waitron-boot-trading-state-"));
+writeFileSync(
+  join(TRADING_STATE_DIR, "modules.json"),
+  JSON.stringify({ modules: { "fiscal-none": false } }),
+);
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
   WAITRON_MEDIA_DIR: MEDIA_ROOT,
+  WAITRON_STATE_DIR: TRADING_STATE_DIR,
   // The passkey Relying Party ID + origin, now REQUIRED by `loadConfig` in production — every
   // real-host boot in this suite that sets `WAITRON_ENV: "production"` would otherwise throw
   // `server.config_missing` before reaching the behaviour it tests. Folded into `KEY_ENV` for the
@@ -314,9 +327,11 @@ beforeAll(async () => {
 // must not be followed by an `rm(undefined)` reported as a second failure beside the real one.
 afterAll(async () => {
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
-  // `MEDIA_ROOT` is created synchronously at module load (always defined), so no undefined guard —
-  // `force: true` also absorbs the case where a boot's own nested subdir was already removed.
+  // `MEDIA_ROOT` and `TRADING_STATE_DIR` are created synchronously at module load (always defined), so
+  // no undefined guard — `force: true` also absorbs the case where a boot's own nested subdir was
+  // already removed.
   await rm(MEDIA_ROOT, { recursive: true, force: true });
+  await rm(TRADING_STATE_DIR, { recursive: true, force: true });
 });
 
 /** An OS-assigned port, released before use. `WAITRON_HTTP_PORT` rejects `"0"` as not a positive
@@ -685,7 +700,10 @@ describe("startServer, against a real container as the deployment role", () => {
       // empty and confirming trading mode leaves the same nine journals consistent covers both.
       for (const set of orderedMigrationSets(ALL_MODULES)) {
         const expected = expectedSchemaVersion(set, migrationsRoot);
-        expect(expected).toBeGreaterThan(0);
+        // `fiscal-none` owns an EMPTY migration set (it has no tables), so its version is legitimately
+        // 0; every other set ships migrations, so `> 0` is the control that a real set was measured.
+        if (set.name === "fiscal-none") expect(expected).toBe(0);
+        else expect(expected).toBeGreaterThan(0);
         expect(await appliedSchemaVersion(suite.admin, set)).toBe(expected);
       }
     } finally {
@@ -797,7 +815,7 @@ describe("startServer, against a real container as the deployment role", () => {
     }
   }, 60_000);
 
-  it("setup mode migrates all nine module sets from an EMPTY database — boot is the sole migrator (SP-1a)", async () => {
+  it("setup mode migrates every module set from an EMPTY database — boot is the sole migrator (SP-1a)", async () => {
     // The from-empty probe SP-1a's inversion needs (spec §6, §4 pin 2): boot, and only boot, must
     // migrate every module set the composition list carries. The other boot tests clone the
     // pre-migrated `manifest` template, so their journals are populated whether or not boot's seam
@@ -838,14 +856,16 @@ describe("startServer, against a real container as the deployment role", () => {
       });
 
       probe = await pg.connect();
-      // Every one of the nine module sets `ALL_MODULES` derives — the new source boot.ts reads — is
-      // migrated to its shipped-folder head. `expected > 0` is the control: a set with an empty
-      // journal would make `0 === 0` pass without boot having migrated anything (CLAUDE.md §1).
+      // Every one of the module sets `ALL_MODULES` derives — the new source boot.ts reads — is migrated
+      // to its shipped-folder head. `expected > 0` is the control: a set with an empty journal would make
+      // `0 === 0` pass without boot having migrated anything (CLAUDE.md §1) — except `fiscal-none`, which
+      // ships NO migrations by design, so its version is legitimately 0.
       const sets = orderedMigrationSets(ALL_MODULES);
-      expect(sets).toHaveLength(9);
+      expect(sets).toHaveLength(10);
       for (const set of sets) {
         const expected = expectedSchemaVersion(set, migrationsRoot);
-        expect(expected).toBeGreaterThan(0);
+        if (set.name === "fiscal-none") expect(expected).toBe(0);
+        else expect(expected).toBeGreaterThan(0);
         expect(await appliedSchemaVersion(probe, set)).toBe(expected);
       }
     } finally {
@@ -946,9 +966,11 @@ describe("startServer, against a real container as the deployment role", () => {
     // ¬enabled` = softDisabled and logs it. Captured on stdout below.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-drift-state-"));
+    // `fiscal-none` disabled too, so the enabled set resolves the fiscal slot to Veri*Factu (the seeded
+    // node's stamped regime) and this boot SUCCEEDS — the drift being tested is scheduler's, not the slot.
     await writeFile(
       join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { scheduler: false } }),
+      JSON.stringify({ modules: { scheduler: false, "fiscal-none": false } }),
     );
     let server: StartedServer | undefined;
     try {
@@ -1028,11 +1050,13 @@ describe("startServer, against a real container as the deployment role", () => {
 
   it("refuses a trading boot whose enabled set fills no fiscal slot (fiscal off) — module.fiscal_slot_empty", async () => {
     // SP-3c: the till's fiscal backend comes from whichever ENABLED module fills the `fiscal` seat
-    // (boot.ts's `makeFiscalBackend(setsToMigrate, …)` → `fiscalSlot`). Disabling `fiscal` in
-    // modules.json leaves the enabled set with no contributor, and a trading boot must REFUSE rather
-    // than mount the till routes with no way to chain a sale (§5 — a sale needs its record).
-    // `fiscal` is `provision-only`, and nothing `requires` it, so the enabled set stays
-    // dependency-complete: the refusal that fires is the slot's, not SP-1c's.
+    // (boot.ts's `makeFiscalBackend(setsToMigrate, …)` → `fiscalSlot`). Disabling BOTH fiscal-slot
+    // members (`fiscal-verifactu` and the no-regime `fiscal-none`) leaves the enabled set with no
+    // contributor, and a trading boot must REFUSE rather than mount the till routes with no way to chain
+    // a sale (§5 — a sale needs its record). Both are `provision-only`, and nothing `requires` them, so
+    // the enabled set stays dependency-complete: the refusal that fires is the slot's, not SP-1c's.
+    // (Disabling only Veri*Factu would leave `fiscal-none` filling the slot, and the seeded node stamped
+    // `verifactu` would then refuse with `fiscal_slot_mismatch` — a different, node-specific refusal.)
     //
     // The shared suite DB (already migrated + seeded) is enough, exactly as the drift-log case above:
     // the filtered migration is a no-op for the enabled sets and never drops fiscal's tables, so the
@@ -1043,7 +1067,7 @@ describe("startServer, against a real container as the deployment role", () => {
     try {
       await writeFile(
         join(stateDir, "modules.json"),
-        JSON.stringify({ modules: { fiscal: false } }),
+        JSON.stringify({ modules: { "fiscal-verifactu": false, "fiscal-none": false } }),
       );
       await expect(
         startServer({
@@ -1562,9 +1586,10 @@ describe("startServer, against a real container as the deployment role", () => {
   it("setup mode: a LIVE ES-common provision WITH an AEAT cert seals it into the tenant's fiscal.aeat vault, stamps production, restarts", async () => {
     // The legitimate seal path end-to-end — the assertion the (now-inverted) demo+cert test used to
     // make, moved onto the CORRECT path. A LIVE ES-common venue files to the real AEAT, so its cert
-    // IS expected (`certExpected` in setup-api.ts): the endpoint accepts it and `sealAeat` seals it via
-    // boot.ts's real `sealAeatCredential(ownerDb, ring, …)` wiring — the ONLY full-boot exercise of
-    // that binding, and of the ring `boot.ts` reads back off `secrets.env` (a broken recovery would
+    // IS expected (`expected` in setup-api.ts): the endpoint accepts it and seals it through the fiscal
+    // contribution's `provisioningSecret.seal` seat, wired to boot.ts's real `db: ownerDb` + `ring`
+    // injection — the ONLY full-boot exercise of that binding, and of the ring `boot.ts` reads back off
+    // `secrets.env` (a broken recovery would
     // throw here). Reuses `mintMtlsMaterial`'s PKCS#12 fixture, as the mTLS-transport test does.
     //
     // No real AEAT call is made and none can be: a FRESH provision seeds NO `envios`, and a box in
@@ -1622,7 +1647,7 @@ describe("startServer, against a real container as the deployment role", () => {
           expect(await readDeploymentEnvironment(check)).toBe("production");
 
           // Exactly one `fiscal.aeat` credential was sealed, for the tenant just provisioned — the real
-          // `sealAeatCredential` wiring (boot.ts:529) ran end-to-end.
+          // provisioning-secret seal seat (fed boot.ts's `db: ownerDb` + `ring`) ran end-to-end.
           const sealed = await check.execute<{ n: number; tenant: string }>(
             sql`select count(*)::int as n, max(tenant_id::text) as tenant
                 from tenant_credentials where purpose = 'fiscal.aeat'`,

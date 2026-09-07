@@ -3,15 +3,11 @@ import { AppError } from "@waitron/shared";
 import type { NodeId, SaleId, TenantId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import type {
-  AckState,
-  DrainResult,
   FiscalBackend,
   FiscalRecordRef,
   IntegrityIssue,
   IntegrityReport,
   NodeRegistration,
-  ReconcileMismatch,
-  ReconcileResult,
   SaleForFiscalRecord,
   VatBreakdownLine,
 } from "../backend.js";
@@ -60,7 +56,6 @@ export class FakeFiscalBackend implements FiscalBackend {
   readonly id = "fake";
 
   private readonly injectedIssues = new Map<string, IntegrityIssue[]>();
-  private readonly reportedState = new Map<string, AckState | null>();
 
   constructor(private readonly db: Database) {}
 
@@ -321,86 +316,6 @@ export class FakeFiscalBackend implements FiscalBackend {
     return Number(rows.rows[0].count);
   }
 
-  /**
-   * Minimal-but-honest: every `pending` fake record, across every tenant and till, is marked
-   * `acknowledged` in one pass — there is no external submission target here to reject or delay
-   * anything, so "submitted" and "accepted" are the same event and `recordsHalted`/`incidentsRaised`
-   * stay zero. `nextDueAt` is always `null`: a fake with nothing left to retry has nothing to
-   * schedule. `now` is unused — this fake has no retry-scheduling concept to consult — and kept
-   * only so callers on the concrete class are still typechecked against the real one-argument
-   * signature, matching `recordVoid`'s identical `_reason` convention above.
-   */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- see comment above
-  async drain(_now: Date): Promise<DrainResult> {
-    const pending = await this.db.execute<{ count: string }>(sql`
-      select count(*)::text as count from fake_fiscal_records where state = 'pending'
-    `);
-    const accepted = Number(pending.rows[0].count);
-    await this.db.execute(sql`
-      update fake_fiscal_records set state = 'acknowledged' where state = 'pending'
-    `);
-    return {
-      nextDueAt: null,
-      batchesSent: accepted > 0 ? 1 : 0,
-      recordsSubmitted: accepted,
-      recordsAccepted: accepted,
-      recordsHalted: 0,
-      incidentsRaised: 0,
-      // This fake has no per-tenant loop or containment at all — one `db.execute` sweeps every
-      // pending record in a single shot. Those `db.execute` calls above CAN throw like any real
-      // query; there is simply no per-tenant try/catch here to turn that into a `skipped` entry —
-      // a throw propagates straight out of this method, unlike the real `VerifactuBackend.drain`.
-      // `skipped` is always `[]` because nothing here is wired to ever push to it, not because
-      // nothing can fail.
-      skipped: [],
-    };
-  }
-
-  /**
-   * A genuine diff, not a stub: reads every one of this tenant's fake records and classifies each
-   * against `reportedState` — the test-only injectable view set via `setReportedState`, standing
-   * in for whatever a real regime would report back. This fake's own records carry no date, so —
-   * unlike a real backend's period-scoped implementation — this does not filter by `period` at
-   * all; it exists to demonstrate the three-way diff and the result shape, nothing more.
-   * `incidentsRaised` stays zero: this fake has no incident sink to raise one into.
-   */
-  async reconcile(
-    tenantId: TenantId,
-    period: { year: string; month: string },
-  ): Promise<ReconcileResult> {
-    const rows = await this.db.execute<{ record_id: string; state: string }>(sql`
-      select record_id, state from fake_fiscal_records where tenant_id = ${tenantId}
-    `);
-    const lostAck: ReconcileMismatch[] = [];
-    const noTrace: ReconcileMismatch[] = [];
-    const drift: ReconcileMismatch[] = [];
-    for (const row of rows.rows) {
-      const reported = this.reportedState.get(row.record_id) ?? null;
-      const mismatch: ReconcileMismatch = {
-        recordId: row.record_id,
-        localState: row.state,
-        reportedState: reported,
-      };
-      if (row.state === "pending") {
-        // reported === null: still in flight, which is ordinary, not a mismatch.
-        if (reported !== null) lostAck.push(mismatch);
-      } else if (row.state === "acknowledged") {
-        if (reported === null) noTrace.push(mismatch);
-        // reported === "accepted": clean, otherwise the regime's report disagrees.
-        else if (reported !== "accepted") drift.push(mismatch);
-      }
-    }
-    return {
-      year: period.year,
-      month: period.month,
-      checked: rows.rows.length,
-      lostAck,
-      noTrace,
-      drift,
-      incidentsRaised: 0,
-    };
-  }
-
   // ---- test-only affordances ------------------------------------------------------------
 
   /** Makes `checkIntegrity` report a failure. Without this the "records the next sale anyway"
@@ -411,14 +326,6 @@ export class FakeFiscalBackend implements FiscalBackend {
 
   restoreIntegrity(nodeId: NodeId): void {
     this.injectedIssues.delete(nodeId);
-  }
-
-  /** Sets what the (fake) regime reports back for `recordId` — the injectable view `reconcile`
-   * diffs its own records against. `null` means the regime has no record of it at all. Without
-   * this, `reconcile`'s three-way classification could not be exercised at all — mirrors
-   * `breakIntegrity`'s identical injectable-state convention above. */
-  setReportedState(recordId: string, state: AckState | null): void {
-    this.reportedState.set(recordId, state);
   }
 
   async acknowledge(recordId: string): Promise<void> {

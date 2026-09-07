@@ -8,7 +8,8 @@ import { asAppUser, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { VerifactuBackend } from "./backend.js";
-import { reconcile } from "./reconcile.js";
+import { DEFAULT_SKIP_RETRY_MS, drain, type DrainDeps } from "./drain.js";
+import { reconcile, type ReconcileDeps } from "./reconcile.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
@@ -39,11 +40,25 @@ beforeEach(async () => {
   await pg.db.execute(sql`truncate table acks, incidents, envios cascade`);
 });
 
+// The drainer/reconcile deps a `VerifactuBackend` used to assemble internally — built here directly
+// now that the runtime pass lives on the standalone `drain`/`reconcile` functions. `pg.db` is this
+// file's one connection; `staticResolver(...)` and the seeded clock are per-test.
+const drainDeps = (resolveClient: DrainDeps["resolveClient"]): DrainDeps => ({
+  db: pg.db,
+  resolveClient,
+  skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+  environment: "production",
+});
+const reconcileDeps = (
+  resolveClient: ReconcileDeps["resolveClient"],
+  clock: ReconcileDeps["clock"],
+): ReconcileDeps => ({ db: pg.db, resolveClient, clock });
+
 /** Drives AEAT to hold every seeded record as `Correcta` (keyed by `RefExterna` = registro id) and
  * marks our own `envios` `aceptado` — the drainer's happy path, the starting point every
  * divergence below is then produced from with the fake's Task-1 consulta hooks. */
-async function storeAllAtAeat(backend: VerifactuBackend): Promise<void> {
-  await backend.drain(DRAIN_AT);
+async function storeAllAtAeat(resolveClient: DrainDeps["resolveClient"]): Promise<void> {
+  await drain(drainDeps(resolveClient), DRAIN_AT);
 }
 
 async function incidentsFor(
@@ -141,15 +156,14 @@ describe("reconcile — the three audit cases", () => {
   it("clean audit: our records all match AEAT — empty lists", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(pg.db, { count: 3 });
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
-    await storeAllAtAeat(backend);
+    const resolveClient = staticResolver(aeat.client());
+    await storeAllAtAeat(resolveClient);
 
-    const result = await backend.reconcile(seeded.tenantId, PERIOD);
+    const result = await reconcile(
+      reconcileDeps(resolveClient, seeded.clock),
+      seeded.tenantId,
+      PERIOD,
+    );
 
     expect(result.checked).toBe(3);
     expect(result.lostAck).toEqual([]);
@@ -162,20 +176,19 @@ describe("reconcile — the three audit cases", () => {
   it("lostAck: we believe pendiente, AEAT holds it (Correcta) → lostAck", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(pg.db, { count: 3 });
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
-    await storeAllAtAeat(backend); // AEAT now holds all three as Correcta
+    const resolveClient = staticResolver(aeat.client());
+    await storeAllAtAeat(resolveClient); // AEAT now holds all three as Correcta
 
     // Our acknowledgement was lost: our side reads pendiente though AEAT already holds them.
     await withTenant(pg.db, seeded.tenantId, (tx) =>
       tx.execute(sql`update envios set estado = 'pendiente' where tenant_id = ${seeded.tenantId}`),
     );
 
-    const result = await backend.reconcile(seeded.tenantId, PERIOD);
+    const result = await reconcile(
+      reconcileDeps(resolveClient, seeded.clock),
+      seeded.tenantId,
+      PERIOD,
+    );
 
     expect(result.checked).toBe(3);
     expect([...result.lostAck.map((m) => m.recordId)].sort()).toEqual(
@@ -203,16 +216,15 @@ describe("reconcile — the three audit cases", () => {
     // carries no ack). Only a SECOND, still-missing detection escalates (see the test below).
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
-    await storeAllAtAeat(backend); // aceptado at us, stored at AEAT
+    const resolveClient = staticResolver(aeat.client());
+    await storeAllAtAeat(resolveClient); // aceptado at us, stored at AEAT
     aeat.forget(seeded.facturaKeys[0]!); // AEAT loses all trace of it
 
-    const result = await backend.reconcile(seeded.tenantId, PERIOD);
+    const result = await reconcile(
+      reconcileDeps(resolveClient, seeded.clock),
+      seeded.tenantId,
+      PERIOD,
+    );
 
     expect(result.checked).toBe(1);
     // The audit finding is still reported, from the PRE-remediation snapshot.
@@ -242,13 +254,8 @@ describe("reconcile — the three audit cases", () => {
   it("noTrace already remediated (marker set) and still missing: raises one idempotent error incident, no re-reset", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
-    await storeAllAtAeat(backend); // aceptado at us, stored at AEAT
+    const resolveClient = staticResolver(aeat.client());
+    await storeAllAtAeat(resolveClient); // aceptado at us, stored at AEAT
     aeat.forget(seeded.facturaKeys[0]!); // AEAT loses all trace of it
 
     // Simulate an already-remediated record: the marker is set (a prior sweep's first detection),
@@ -259,7 +266,11 @@ describe("reconcile — the three audit cases", () => {
       ),
     );
 
-    const first = await backend.reconcile(seeded.tenantId, PERIOD);
+    const first = await reconcile(
+      reconcileDeps(resolveClient, seeded.clock),
+      seeded.tenantId,
+      PERIOD,
+    );
 
     expect(first.checked).toBe(1);
     expect(first.noTrace).toHaveLength(1);
@@ -283,7 +294,11 @@ describe("reconcile — the three audit cases", () => {
 
     // Sweep 2 re-detects the SAME persistent noTrace — still classified, still escalated, but must
     // NOT insert a second incident row (recordIncidentOnce dedup).
-    const second = await backend.reconcile(seeded.tenantId, PERIOD);
+    const second = await reconcile(
+      reconcileDeps(resolveClient, seeded.clock),
+      seeded.tenantId,
+      PERIOD,
+    );
     expect(second.noTrace).toHaveLength(1);
     expect(second.incidentsRaised).toBe(0); // deduped — no NEW incident counted this sweep
 
@@ -298,18 +313,13 @@ describe("reconcile — the three audit cases", () => {
     // (the acks invariant `acks.test.ts`'s own INVARIANT test guards from the other direction).
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
-    await storeAllAtAeat(backend); // aceptado at us, with an `accepted` ack, stored at AEAT
+    const resolveClient = staticResolver(aeat.client());
+    await storeAllAtAeat(resolveClient); // aceptado at us, with an `accepted` ack, stored at AEAT
     aeat.forget(seeded.facturaKeys[0]!); // AEAT loses all trace of it
 
     expect((await ackStatesFor(seeded.tenantId)).size).toBe(1); // the pre-reset accepted ack
 
-    await backend.reconcile(seeded.tenantId, PERIOD); // first detection — remediates silently
+    await reconcile(reconcileDeps(resolveClient, seeded.clock), seeded.tenantId, PERIOD); // first detection — remediates silently
 
     const estados = await estadosFor(seeded.tenantId);
     expect(estados.get(seeded.registroIds[0]!)).toBe("pendiente");
@@ -321,13 +331,8 @@ describe("reconcile — the three audit cases", () => {
   it("a record AEAT has a trace of clears a set marker", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
-    await storeAllAtAeat(backend); // aceptado at us, AEAT holds it Correcta
+    const resolveClient = staticResolver(aeat.client());
+    await storeAllAtAeat(resolveClient); // aceptado at us, AEAT holds it Correcta
 
     // Simulate a marker left over from an earlier noTrace remediation that has since self-healed.
     await withTenant(pg.db, seeded.tenantId, (tx) =>
@@ -336,7 +341,11 @@ describe("reconcile — the three audit cases", () => {
       ),
     );
 
-    const result = await backend.reconcile(seeded.tenantId, PERIOD);
+    const result = await reconcile(
+      reconcileDeps(resolveClient, seeded.clock),
+      seeded.tenantId,
+      PERIOD,
+    );
 
     expect(result.noTrace).toEqual([]);
     expect(result.drift).toEqual([]);
@@ -350,16 +359,15 @@ describe("reconcile — the three audit cases", () => {
   it("drift: we believe aceptado, AEAT holds AceptadaConErrores → drift + warning incident", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
-    await storeAllAtAeat(backend);
+    const resolveClient = staticResolver(aeat.client());
+    await storeAllAtAeat(resolveClient);
     aeat.setConsultaState(seeded.facturaKeys[0]!, "AceptadaConErrores");
 
-    const result = await backend.reconcile(seeded.tenantId, PERIOD);
+    const result = await reconcile(
+      reconcileDeps(resolveClient, seeded.clock),
+      seeded.tenantId,
+      PERIOD,
+    );
 
     expect(result.checked).toBe(1);
     expect(result.drift).toHaveLength(1);
@@ -391,16 +399,15 @@ describe("reconcile — the three audit cases", () => {
     // cross-sweep idempotency are covered by the two tests below.
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
-    await storeAllAtAeat(backend);
+    const resolveClient = staticResolver(aeat.client());
+    await storeAllAtAeat(resolveClient);
     aeat.setConsultaState(seeded.facturaKeys[0]!, "Anulada");
 
-    const result = await backend.reconcile(seeded.tenantId, PERIOD);
+    const result = await reconcile(
+      reconcileDeps(resolveClient, seeded.clock),
+      seeded.tenantId,
+      PERIOD,
+    );
 
     expect(result.checked).toBe(1);
     expect(result.drift).toHaveLength(1);
@@ -452,11 +459,12 @@ describe("reconcile — the three audit cases", () => {
       loginWithPin(tx, { tenantId, tillId, personId: mgr[0]!.id, pin: "1234" }),
     );
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
+    const resolveClient = staticResolver(aeat.client());
     const backend = new VerifactuBackend({
       deploymentEnvironment: "production",
       clock: steadyClock,
       db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
+      resolveClient,
     });
 
     const sale = await withTenant(pg.db, tenantId, async (tx) => {
@@ -474,7 +482,7 @@ describe("reconcile — the three audit cases", () => {
         sql`update envios set proximo_intento_en = ${DRAIN_AT.toISOString()} where tenant_id = ${tenantId}`,
       );
     });
-    await backend.drain(DRAIN_AT); // alta: local aceptado, AEAT Correcta
+    await drain(drainDeps(resolveClient), DRAIN_AT); // alta: local aceptado, AEAT Correcta
 
     const alta = await altaIdentityFor(tenantId, sale.saleId);
     await withTenant(pg.db, tenantId, async (tx) => {
@@ -489,7 +497,7 @@ describe("reconcile — the three audit cases", () => {
     // AEAT now reports the alta itself Anulada — the expected authority state post-void.
     aeat.setConsultaState(alta.facturaKey, "Anulada");
 
-    const result = await backend.reconcile(tenantId, period);
+    const result = await reconcile(reconcileDeps(resolveClient, steadyClock), tenantId, period);
 
     expect(result.checked).toBe(2); // the alta's envío + the anulación's own pendiente envío
     expect(result.drift).toEqual([]); // agreement — the alta is NOT flagged
@@ -509,23 +517,26 @@ describe("reconcile — the three audit cases", () => {
     // has no entry for it) and so re-detects as drift on every sweep for as long as it stays open.
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
-    await storeAllAtAeat(backend);
+    const resolveClient = staticResolver(aeat.client());
+    await storeAllAtAeat(resolveClient);
     aeat.setConsultaState(seeded.facturaKeys[0]!, "Anulada"); // no local anulación at all
 
-    const first = await backend.reconcile(seeded.tenantId, PERIOD);
+    const first = await reconcile(
+      reconcileDeps(resolveClient, seeded.clock),
+      seeded.tenantId,
+      PERIOD,
+    );
     expect(first.drift).toHaveLength(1);
     expect(first.incidentsRaised).toBe(1);
     expect(await incidentsFor(seeded.tenantId)).toHaveLength(1);
 
     // Sweep 2 re-detects the SAME persistent Anulada — still classified as drift (there is no
     // converged state to agree with), but must NOT insert a second incident row.
-    const second = await backend.reconcile(seeded.tenantId, PERIOD);
+    const second = await reconcile(
+      reconcileDeps(resolveClient, seeded.clock),
+      seeded.tenantId,
+      PERIOD,
+    );
     expect(second.drift).toHaveLength(1);
     expect(second.incidentsRaised).toBe(0); // deduped — no NEW incident counted this sweep
 
@@ -543,18 +554,17 @@ describe("reconcile — the three audit cases", () => {
     // proves sweep 2 now finds a clean match: exactly ONE incident total, not two.
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
-    await storeAllAtAeat(backend); // local aceptado, AEAT Correcta
+    const resolveClient = staticResolver(aeat.client());
+    await storeAllAtAeat(resolveClient); // local aceptado, AEAT Correcta
     aeat.setConsultaState(seeded.facturaKeys[0]!, "AceptadaConErrores"); // AEAT now disagrees
 
     // Sweep 1: genuine aceptado → AceptadaConErrores divergence — classifies as drift, raises the
     // warning incident, and corrects local estado toward the authority.
-    const first = await backend.reconcile(seeded.tenantId, PERIOD);
+    const first = await reconcile(
+      reconcileDeps(resolveClient, seeded.clock),
+      seeded.tenantId,
+      PERIOD,
+    );
     expect(first.drift).toHaveLength(1);
     expect(first.drift[0]).toEqual({
       recordId: seeded.registroIds[0],
@@ -570,7 +580,11 @@ describe("reconcile — the three audit cases", () => {
     // Sweep 2: local is now aceptado_con_errores, AEAT still reports AceptadaConErrores — the SAME
     // state, which is agreement, not a fresh divergence. The fix must classify this as a clean
     // match: no drift entry, no new incident, no re-correction.
-    const second = await backend.reconcile(seeded.tenantId, PERIOD);
+    const second = await reconcile(
+      reconcileDeps(resolveClient, seeded.clock),
+      seeded.tenantId,
+      PERIOD,
+    );
     expect(second.drift).toEqual([]);
     expect(second.incidentsRaised).toBe(0);
 
@@ -595,20 +609,19 @@ describe("reconcile — the three audit cases", () => {
     // re-flagged as drift just because aceptado_con_errores is a member of the accepted family.
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(pg.db, { count: 1, futureDated: true }); // 2004 → AceptadoConErrores
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
-    await backend.drain(DRAIN_AT); // sets local aceptado_con_errores; AEAT's own store already
+    const resolveClient = staticResolver(aeat.client());
+    await drain(drainDeps(resolveClient), DRAIN_AT); // sets local aceptado_con_errores; AEAT's own store already
     // holds AceptadaConErrores for this key too (createFakeAeat's future-dated branch) — no
     // `setConsultaState` needed, this is the drainer's own genuine happy-with-errors path.
 
     // Isolate reconcile's own incidents from the drainer's `fiscal.aceptado_con_errores` warning.
     await pg.db.execute(sql`truncate table incidents`);
 
-    const result = await backend.reconcile(seeded.tenantId, PERIOD);
+    const result = await reconcile(
+      reconcileDeps(resolveClient, seeded.clock),
+      seeded.tenantId,
+      PERIOD,
+    );
 
     expect(result.checked).toBe(1);
     expect(result.drift).toEqual([]);
@@ -639,16 +652,15 @@ describe("reconcile — paging", () => {
         return base.consultar(cabecera, filtro);
       },
     };
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(counting),
-    });
-    await backend.drain(DRAIN_AT); // all 5 stored at AEAT as Correcta, ours aceptado
+    const resolveClient = staticResolver(counting);
+    await drain(drainDeps(resolveClient), DRAIN_AT); // all 5 stored at AEAT as Correcta, ours aceptado
     consultarCalls = 0;
 
-    const result = await backend.reconcile(seeded.tenantId, PERIOD);
+    const result = await reconcile(
+      reconcileDeps(resolveClient, seeded.clock),
+      seeded.tenantId,
+      PERIOD,
+    );
 
     expect(result.checked).toBe(5);
     // The teeth: if paging stopped after page 1, records 3-5 would be aceptado locally but absent
@@ -665,15 +677,14 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
   it("does NOT flag a pendiente record as noTrace (in-flight tolerance)", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
+    const resolveClient = staticResolver(aeat.client());
     // Deliberately DO NOT drain: our record is pendiente and AEAT holds nothing for this NIF —
     // exactly the mid-submission / later-page case §4.3 forbids calling noTrace.
-    const result = await backend.reconcile(seeded.tenantId, PERIOD);
+    const result = await reconcile(
+      reconcileDeps(resolveClient, seeded.clock),
+      seeded.tenantId,
+      PERIOD,
+    );
 
     expect(result.checked).toBe(1);
     expect(result.noTrace).toEqual([]);
@@ -686,20 +697,19 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
   it("skips a rechazado record — neither pending nor accepted, so never a mismatch", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
-    await storeAllAtAeat(backend);
+    const resolveClient = staticResolver(aeat.client());
+    await storeAllAtAeat(resolveClient);
     // A record we already know AEAT refused: not stored there, and our side reads rechazado.
     aeat.forget(seeded.facturaKeys[0]!);
     await withTenant(pg.db, seeded.tenantId, (tx) =>
       tx.execute(sql`update envios set estado = 'rechazado' where tenant_id = ${seeded.tenantId}`),
     );
 
-    const result = await backend.reconcile(seeded.tenantId, PERIOD);
+    const result = await reconcile(
+      reconcileDeps(resolveClient, seeded.clock),
+      seeded.tenantId,
+      PERIOD,
+    );
 
     expect(result.checked).toBe(1);
     // Absent from AEAT, yet NOT noTrace: noTrace is asserted only for a record we believe accepted.
@@ -713,13 +723,8 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
   it("ignores an AEAT record with no RefExterna (one we cannot attribute)", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
-    await storeAllAtAeat(backend); // our one record: aceptado + Correcta
+    const resolveClient = staticResolver(aeat.client());
+    await storeAllAtAeat(resolveClient); // our one record: aceptado + Correcta
 
     // A record AEAT holds for the SAME obligado that WE did not submit — no RefExterna keys it to
     // any of our registros (the multi-OT case: another software system filing for this NIF).
@@ -729,7 +734,11 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
         { RegistroAlta: foreignAlta(seeded.nif, seeded.legalName) },
       ]);
 
-    const result = await backend.reconcile(seeded.tenantId, PERIOD);
+    const result = await reconcile(
+      reconcileDeps(resolveClient, seeded.clock),
+      seeded.tenantId,
+      PERIOD,
+    );
 
     // The foreign record is skipped, never keyed; our own record still matches cleanly.
     expect(result.checked).toBe(1); // only OUR envios row is in scope
@@ -745,14 +754,9 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
       submit: () => Promise.reject(new Error("reconcile must not submit")),
       consultar: () => Promise.reject(new Error("reconcile must not consult an empty period")),
     };
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: steadyClock,
-      db: pg.db,
-      resolveClient: staticResolver(throwing),
-    });
+    const resolveClient = staticResolver(throwing);
 
-    const result = await backend.reconcile(tenantId, PERIOD);
+    const result = await reconcile(reconcileDeps(resolveClient, steadyClock), tenantId, PERIOD);
 
     expect(result).toEqual({
       year: "2026",
@@ -774,15 +778,13 @@ describe("reconcile — period normalization", () => {
     // instead of auditing July.
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(pg.db, { count: 3 });
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
-    await storeAllAtAeat(backend); // all three: local aceptado, AEAT Correcta — a clean match
+    const resolveClient = staticResolver(aeat.client());
+    await storeAllAtAeat(resolveClient); // all three: local aceptado, AEAT Correcta — a clean match
 
-    const result = await backend.reconcile(seeded.tenantId, { year: "2026", month: "7" });
+    const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), seeded.tenantId, {
+      year: "2026",
+      month: "7",
+    });
 
     // Must audit the same 3 records the zero-padded "07" form audits (see the "clean audit" case
     // above) — not the false-clean `checked: 0` an un-normalized query silently returns.

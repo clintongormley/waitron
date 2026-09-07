@@ -1,7 +1,33 @@
 import { describe, expect, it } from "vitest";
 import { decimal, nodeId, saleId, seriesId, tenantId, tillId } from "@waitron/shared";
 import type { FiscalBackend, IntegrityReport, SaleForFiscalRecord } from "./backend.js";
+import { emptyDrainResult } from "./backend.js";
 import { FakeFiscalBackend } from "./testing/fake-backend.js";
+
+describe("emptyDrainResult", () => {
+  it("is every counter zero, no next due time, nothing skipped", () => {
+    expect(emptyDrainResult()).toEqual({
+      nextDueAt: null,
+      batchesSent: 0,
+      recordsSubmitted: 0,
+      recordsAccepted: 0,
+      recordsHalted: 0,
+      incidentsRaised: 0,
+      skipped: [],
+    });
+  });
+
+  it("returns a FRESH object each call — a caller may mutate its result", () => {
+    const a = emptyDrainResult();
+    const b = emptyDrainResult();
+    expect(a).not.toBe(b);
+    expect(a.skipped).not.toBe(b.skipped);
+    a.skipped.push({ tenantId: TENANT, errorCode: "x" });
+    a.recordsSubmitted = 5;
+    expect(b.skipped).toEqual([]);
+    expect(b.recordsSubmitted).toBe(0);
+  });
+});
 
 const TENANT = tenantId("3f2504e0-4f89-41d3-9a0c-0305e82c3301");
 const TILL = tillId("6ba7b810-9dad-11d1-80b4-00c04fd430c8");

@@ -4,8 +4,8 @@ import { tenantId as brandTenantId } from "@waitron/shared";
 import "./errors.js";
 
 // The mirror's per-peer sync bearer token, sealed into the credentials vault under the new purpose
-// `sync.mirror_token` (design §6). It is the EXACT `sealAeatCredential`/`readCredential` shape
-// (aeat-credential.ts:81-101, credentials.ts:16-23), specialised to this purpose's single `token`
+// `sync.mirror_token` (design §6). It is the EXACT `sealAeatSecret`/`readCredential` shape
+// (packages/fiscal-verifactu/src/provisioning-secret.ts, credentials.ts:16-23), specialised to this purpose's single `token`
 // field. The token crosses from the primary in plaintext, once (design §3), and is re-sealed here
 // under the mirror's OWN box key: a value sealed with the primary's key cannot be opened with the
 // mirror's (AES-256-GCM authentication fails → `credentials.decrypt_failed`), which is the design's

@@ -22,13 +22,11 @@ import {
   StripeTerminalProvider,
 } from "@waitron/payments-stripe";
 import type { PaymentProvider } from "@waitron/payments";
-import { drain } from "@waitron/fiscal-verifactu";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
-import { enabledModules, orderedMigrationSets, reconcile } from "@waitron/module";
+import { enabledModules, fiscalSlot, orderedMigrationSets, reconcile } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { ALL_MODULES, ALL_SYNC_ENROLMENTS, MODULE_BY_TABLE } from "./modules.js";
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
-import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { parseEnvFile } from "./env-file.js";
 import {
   loadConfig,
@@ -91,12 +89,11 @@ import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { mountMedia } from "./media-api.js";
 import { assertBuiltApp, mountSpa } from "./spa-api.js";
 import { mountSetup } from "./setup-api.js";
-import { provisionVenue } from "./provision.js";
+import { provisionVenue, venueModuleConfig } from "./provision.js";
 import { adoptFromPrimary } from "./adopt.js";
 import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
-import { sealAeatCredential } from "./aeat-credential.js";
 import { writeTradingEnv, type TradingConfig } from "./trading-config.js";
 import { mountDiscovery } from "./discovery-api.js";
 import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
@@ -727,8 +724,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         } catch {
           // Keep the neutral label — a malformed/socket URL must not leak into the error param.
         }
-        // The setup surface, now with the slice-2b provisioning deps bound. `provision`/`sealAeat`
-        // capture `ownerDb` + `ring`; `persistTrading` writes `<stateDir>/trading.env`; `requestRestart`
+        // The setup surface, now with the slice-2b provisioning deps bound. `provision` captures
+        // `ownerDb`; `db`/`ring` are handed to the fiscal contribution's provisioning-secret seal seat
+        // (so boot imports no regime); `persistTrading` writes `<stateDir>/trading.env`; `requestRestart`
         // SIGTERMs this process so the supervisor restarts it into trading mode (`bin.ts`'s latch does
         // the graceful shutdown). `databaseUrl`/`migrationsDatabaseUrl` become `trading.env`'s own
         // connection strings for the next boot. `adopt` is the MIRROR-side sibling (C2b): it fetches the
@@ -740,8 +738,20 @@ export async function startServer(env: Record<string, string | undefined>): Prom
           app,
           {
             environment: config.environment,
+            // Resolve the fiscal slot from the REQUEST's territory (authoritative, §4): the box's
+            // `moduleConfig` base is default-on, which with two fiscal-slot members would be ambiguous;
+            // `venueModuleConfig` forces exactly the territory's fiscal module on before provisionVenue's
+            // gate/slot check runs and before it persists the set to `<stateDir>/modules.json`.
             provision: (req) =>
-              provisionVenue({ ownerDb, moduleConfig, database: ownerDatabaseName }, req),
+              provisionVenue(
+                {
+                  ownerDb,
+                  moduleConfig: venueModuleConfig(moduleConfig, req.venue.location.fiscalTerritory),
+                  database: ownerDatabaseName,
+                  stateDir: config.stateDir,
+                },
+                req,
+              ),
             adopt: (req) => {
               // Ruling 1 (fail loud at adopt, not at reboot): an adopted mirror MUST end up with
               // WAITRON_SYNC_DATABASE_URL in `trading.env`, because the next (mirror) boot's
@@ -787,7 +797,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
                 nodeId,
                 config.advertisedOrigin,
               ),
-            sealAeat: (tenantId, cert) => sealAeatCredential(ownerDb, ring, tenantId, cert),
+            // The owner DB + vault ring the setup surface seals the regime's provisioning secret with,
+            // through the fiscal contribution's `provisioningSecret.seal` seat — so BOOT imports no
+            // regime package (module-seams). The seal fires only for a provision whose regime demands
+            // a secret (Veri*Factu: a production provision's AEAT cert).
+            db: ownerDb,
+            ring,
             persistTrading,
             databaseUrl: config.databaseUrl,
             migrationsDatabaseUrl: config.migrationsDatabaseUrl,
@@ -1114,6 +1129,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     readOrderFlow(db, config.till),
     readFilingModule(db, config.till),
   ]);
+  // The enabled module that fills the fiscal slot, resolved ONCE for the runtime `drain` seat below.
+  // `fiscalSlot` (generic `@waitron/module`, not a regime package) refuses zero, two, or a node
+  // stamped for another regime — the same guard `makeFiscalBackend` runs for the sale-path backend.
+  // The regime's transport now lives behind this contribution's `drain`, so `boot.ts` names no regime
+  // package (`scripts/module-seams.test.ts`).
+  const enabledFiscal = fiscalSlot(setsToMigrate, filingModule);
   const till: TillConfig = { ...config.till, orderFlow };
   // The venue's DEFAULT UI locale, derived ONCE now the pool is open — the DISPLAY counterpart to the
   // fiscal `till.locale`/`invoiceLocales` (left untouched). `readVenueLocale` applies the shared
@@ -1824,7 +1845,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         appDb: db,
         retentionDb,
         // The box vault key `assembleMirrorBundle` uses to unseal the primary's identity key and endorse
-        // the standby's key (membership promotion R2). Already in scope for `sealAeat`/identity above.
+        // the standby's key (membership promotion R2). Already in scope for the provisioning-secret seal / identity above.
         ring,
         stateDir: config.stateDir,
         // A FULL https URL, not bare host:port: the mirror consumes this as its `peer.url` and
@@ -1891,42 +1912,23 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       (at) =>
         runPass(
           {
-            // Per pass, not once at boot: `closeAll` below must release exactly the transports THIS
-            // pass built. Each holds a TLS connection pool keyed to one tenant's client certificate,
-            // and nothing closed them before — they accumulated for the process lifetime.
-            drain: async (at2) => {
-              const resolver = aeatClientResolver(
+            // The regime owns the submission transport: `enabledFiscal.drain` builds a per-pass mTLS
+            // resolver (one TLS pool per tenant with due work, released in its own `finally`) and runs
+            // the pass. The host injects only the vault ring, the deployment identity and the cadence —
+            // `config.environment` is the `WAITRON_ENV`-derived value `deployment-guard.ts` pinned
+            // against the database at boot, and the regime's `entorno` guard refuses any due registro
+            // whose own `entorno` disagrees or is unrecorded. `boot.ts` names no regime package.
+            drain: (at2) =>
+              enabledFiscal.drain(
                 {
                   db,
                   ring,
-                  endpointFor: aeatEndpointFor(config.environment),
-                  // `mtlsFetch` directly, not a wrapping arrow: its own second parameter (`ca`, for a
-                  // private trust root) is optional, so `mtlsFetch` already has the exact shape
-                  // `fetchFor` wants when called with one argument. A wrapper here would be one more
-                  // never-invoked closure.
-                  fetchFor: mtlsFetch,
+                  environment: config.environment,
+                  skipRetryMs: config.skipRetryMs,
+                  log,
                 },
-                log,
-              );
-              try {
-                return await drain(
-                  {
-                    db,
-                    resolveClient: resolver.resolve,
-                    skipRetryMs: config.skipRetryMs,
-                    // Which deployment THIS host is — the same `WAITRON_ENV`-derived value
-                    // `config.environment` already is (`deployment-guard.ts` pins it against the
-                    // database at boot). `drain`'s guard (`@waitron/fiscal-verifactu`'s `claimBatch`)
-                    // refuses any due registro whose own `entorno` disagrees, or is unrecorded,
-                    // rather than ever submitting it to AEAT.
-                    environment: config.environment,
-                  },
-                  at2,
-                );
-              } finally {
-                await resolver.closeAll();
-              }
-            },
+                at2,
+              ),
             // Enumerated per pass, not at boot: a tenant provisioned while the host runs is served
             // on the next pass rather than after a restart.
             reconcile: async (at2) =>

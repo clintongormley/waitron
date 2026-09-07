@@ -20,6 +20,8 @@ export { adoptVenue } from "./venue-adopt.js";
 export type { AdoptResult, AdoptVenueDeps, AdoptVenueRows, VenueRow } from "./venue-adopt.js";
 export { FISCAL_TERRITORIES, resolveFiscalModules } from "./fiscal-modules.js";
 export type { FiscalModules } from "./fiscal-modules.js";
+export { venueFiscalSelection } from "./venue-fiscal.js";
+export type { VenueFiscalSelection } from "./venue-fiscal.js";
 export { deriveTenantId } from "./tenant-id.js";
 export { assertNoForeignTenant, readTenantIdentities } from "./tenant-guard.js";
 export type { TenantIdentity } from "./tenant-guard.js";

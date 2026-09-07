@@ -63,7 +63,7 @@ const FIXTURE: ReadonlySet<string> = new Set([
  * the scan, so an anchor must occur in the owner's REAL source.
  */
 const ANCHORS: Record<string, readonly string[]> = {
-  fiscal: ["huella", "registro", "facturacion"],
+  "fiscal-verifactu": ["huella", "registro", "facturacion"],
   "workforce-es": ["convenio", "jornada", "trabajador"],
 };
 
@@ -100,11 +100,11 @@ describe("configuration", () => {
 
   it("derives the vocabulary owners from the descriptors, in ALL_MODULES order", () => {
     // The vacuous-pass anchor for the derivation itself: these are the two Spanish-by-design
-    // packages, resolved from `migrations.from` — `fiscal` names the SLOT, `fiscal-verifactu` the
-    // package filling it. A third owner appears here the day a module declares vocabulary.
+    // packages, each the descriptor `name` paired with the package its `migrations.from` resolves to.
+    // A third owner appears here the day a module declares vocabulary.
     expect(OWNERS.map((o) => [o.module, o.packageDir])).toEqual([
       ["workforce-es", "workforce-es"],
-      ["fiscal", "fiscal-verifactu"],
+      ["fiscal-verifactu", "fiscal-verifactu"],
     ]);
   });
 

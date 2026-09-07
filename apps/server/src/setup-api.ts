@@ -1,13 +1,15 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { VenueRequest, VenueResult } from "@waitron/provisioning";
+import { venueFiscalSelection } from "@waitron/provisioning";
+import { ALL_MODULES } from "@waitron/composition";
 import { hashPassword, hashPin, normalizeAndValidateEmail } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
+import type { Database } from "@waitron/db";
+import type { KeyRing } from "@waitron/credentials";
 import type { DeploymentEnvironment } from "./config.js";
 import type { ProvisionRequest } from "./provision.js";
 import type { AdoptCredential, AdoptRequest } from "./adopt.js";
-import { validateAeatCert } from "./aeat-credential.js";
-import type { AeatCert, CertKind } from "./aeat-credential.js";
 import type { TradingConfig } from "./trading-config.js";
 import { createErrorBoundary } from "./error-boundary.js";
 import { readJsonBody } from "./read-json-body.js";
@@ -31,9 +33,11 @@ export interface SetupDeps {
   /** The deployment environment (`production` / `preproduction`) this box booted under, echoed by
    * `/setup-api/status` so slice 2's wizard can warn before it provisions a real production venue. */
   environment: DeploymentEnvironment;
-  /** `provisionVenue({ ownerDb, moduleConfig, database })` bound in boot: refuses a foreign/existing
-   * tenant, stamps the environment, then mints the venue, returning the five ids the trading boot
-   * needs. Plaintext admin secrets never reach it — the provision route hashes them at the boundary. */
+  /** `provisionVenue({ ownerDb, moduleConfig, database, stateDir })` bound in boot: resolves the fiscal
+   * slot from the request's territory (`venueModuleConfig`), refuses a foreign/existing tenant, stamps
+   * the environment, mints the venue, and persists the resolved `modules.json` — returning the five ids
+   * the trading boot needs. Plaintext admin secrets never reach it — the provision route hashes them at
+   * the boundary. */
   provision?: (req: ProvisionRequest) => Promise<VenueResult>;
   /** `adoptFromPrimary({ ownerDb, ring, fetchBundle, persistTrading, … })` bound in boot: the
    * mirror-side sibling of `provision`. Fetches the primary's bundle SERVER-SIDE (so the admin
@@ -42,9 +46,12 @@ export interface SetupDeps {
    * the same reason `provision` is: a `POST /setup-api/adopt` that arrives before it is wired is
    * answered `503 setup.not_ready`. */
   adopt?: (req: AdoptRequest) => Promise<{ tenantId: string }>;
-  /** `sealAeatCredential(db, ring, …)` bound in boot: seals the AEAT cert into the tenant's
-   * `fiscal.aeat` vault purpose. Needed only when a LIVE ES-common provision supplies a certificate. */
-  sealAeat?: (tenantId: string, cert: AeatCert) => Promise<void>;
+  /** The owner DB connection and vault key ring, injected by boot (which already holds both). Used to
+   * seal the fiscal regime's provision-time secret through the fiscal contribution's
+   * `provisioningSecret.seal` seat — so BOOT imports no regime package. Needed only when the resolved
+   * regime demands a secret for this environment (Veri*Factu: a production provision's AEAT cert). */
+  db?: Database;
+  ring?: KeyRing;
   /** Establishes the node's membership identity after provisionVenue mints it (design §4): generates a
    * keypair, seals the private key, stamps nodes.public_key. Bound in boot to
    * `establishNodeIdentity({ ownerDb, ring }, …)`. Optional like the other provision deps so an unwired
@@ -109,7 +116,7 @@ const REVALIDATE_CACHE_CONTROL = "no-cache";
 
 /**
  * Every AppError code the provision route can THROW inside its error boundary, and its HTTP status.
- * Request-shape faults (`setup.request_invalid`, `setup.aeat_cert_required`) default to 400 but are
+ * Request-shape faults (`setup.request_invalid`, `setup.provisioning_secret_required`) default to 400 but are
  * enumerated anyway so this map is the surface's whole 4xx contract (the house style `me-api.ts`'s
  * `STATUS` follows). The 409s are provisioning refusals raised by `provisionVenue`:
  * `setup.already_provisioned` (the box already holds this tenant) and `deployment.already_stamped`
@@ -130,7 +137,7 @@ const REVALIDATE_CACHE_CONTROL = "no-cache";
  */
 const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   "setup.request_invalid": 400,
-  "setup.aeat_cert_required": 400,
+  "setup.provisioning_secret_required": 400,
   // A present-but-malformed `admin.email` fails identity's `isValidEmail` screen (see `parseVenue`).
   // The domain-named code identity raises for the same write-boundary check; defaults to 400 anyway,
   // enumerated so this map stays the surface's whole 4xx contract.
@@ -174,7 +181,7 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
 const runAdopt = createErrorBoundary(ADOPT_STATUS, "setup.adopt_failed");
 
 /** Throw the request-shape refusal for `field`, naming it but NEVER echoing its value (a PIN,
- * password, passphrase or PFX is exactly the secret a caller can mis-send). */
+ * password or certificate secret is exactly the value a caller can mis-send). */
 function invalidRequest(field: string): never {
   throw new AppError("setup.request_invalid", { field });
 }
@@ -251,22 +258,6 @@ function parseVenue(venueRaw: unknown): VenueRequest {
   };
 }
 
-/** Validate the OPTIONAL AEAT cert. First the SHAPE (present fields, right types), then the VALUES
- * via `validateAeatCert` — the `certKind` (`sello`|`representante`) and the base64-ness of `pfxBase64`.
- * That value check happens HERE, before `provision`, so a malformed cert is a `400 setup.request_invalid`
- * with NOTHING stamped or minted; `sealAeatCredential` runs the same checks again as defense-in-depth,
- * but by the time it would fire the SIF/hash chain is already minted and unrepairable (CLAUDE.md §5). */
-function parseCert(certRaw: unknown): AeatCert {
-  const cert = asObject(certRaw, "aeatCert");
-  const parsed: AeatCert = {
-    pfxBase64: asString(cert.pfxBase64, "pfxBase64"),
-    passphrase: asString(cert.passphrase, "passphrase"),
-    certKind: asString(cert.certKind, "certKind") as CertKind,
-  };
-  validateAeatCert(parsed);
-  return parsed;
-}
-
 /** A direct structured error response mirroring the error boundary's `{ error: { code, params } }`
  * shape, for the two refusals that are returned OUTSIDE the boundary (the latch and the deps gate). */
 function directError(
@@ -324,15 +315,16 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   let provisioning = false;
 
   // POST /setup-api/provision — orchestrates the whole flow: demo/live fork → validate + hash →
-  // cert-required gate → provisionVenue → seal AEAT cert → persist trading config → restart.
-  // Registered BEFORE the `GET *` catch-all below (Hono first-match wins).
+  // provisioning-secret gate (validate upfront) → provisionVenue → seal the secret → persist trading
+  // config → restart. Registered BEFORE the `GET *` catch-all below (Hono first-match wins).
   app.post("/setup-api/provision", (c) => {
     // Deps gate — SYNCHRONOUS, before the latch, so an unwired box never engages it. Captured as
     // consts so TypeScript narrows them non-undefined for the async closure below.
     const provision = deps.provision;
     const establishIdentity = deps.establishIdentity;
     const seedMembership = deps.seedMembership;
-    const sealAeat = deps.sealAeat;
+    const db = deps.db;
+    const ring = deps.ring;
     const persistTrading = deps.persistTrading;
     const requestRestart = deps.requestRestart;
     const databaseUrl = deps.databaseUrl;
@@ -341,7 +333,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       provision === undefined ||
       establishIdentity === undefined ||
       seedMembership === undefined ||
-      sealAeat === undefined ||
+      db === undefined ||
+      ring === undefined ||
       persistTrading === undefined ||
       requestRestart === undefined ||
       databaseUrl === undefined ||
@@ -377,33 +370,39 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         // Demo/live fork: live stamps production, demo stamps preproduction (provisionVenue writes it).
         const environment: DeploymentEnvironment = mode === "live" ? "production" : "preproduction";
 
-        // The AEAT signing cert is meaningful IFF a LIVE ES-common venue files to the real AEAT — that
-        // is exactly the condition the required-gate below (spec §10) demands it. Make the rule
-        // SYMMETRIC, gating on PRESENCE (not the parsed value) BEFORE `parseCert`, both arms checked
-        // BEFORE `provision` so nothing is stamped/minted/sealed on a bad request:
-        //   - cert expected but MISSING → `setup.aeat_cert_required` (a live ES-common box must ship one);
-        //   - cert NOT expected but PRESENT → `setup.request_invalid` naming `aeatCert`. The 2c client
-        //     already gates the cert on live mode and never sends it otherwise, so this is
+        // Resolve the fiscal regime the REQUEST's territory picks (the box's enabled set is not yet
+        // written at setup) through the shared `venueFiscalSelection` seam, and reach its provision-time
+        // secret only through the `provisioningSecret` seat — the host holds the opaque blob and the
+        // vault ring but not the regime's shape, so it imports no regime package. The seam throws
+        // `fiscal.regime_not_implemented` for an unimplemented territory, the SAME code `planVenue`
+        // would raise inside `provision`, only earlier (both before any mint). A regime with no
+        // `provisioningSecret` seat (e.g. a files-nothing regime) leaves `expected` false.
+        const { contribution } = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
+        const secret = contribution?.provisioningSecret;
+        const expected = secret?.required(environment) ?? false;
+        const present = body.aeatCert !== undefined;
+        // SYMMETRIC gate on PRESENCE (not the parsed value), both arms checked BEFORE `provision` so
+        // nothing is stamped/minted/sealed on a bad request:
+        //   - secret expected but MISSING → `setup.provisioning_secret_required` naming the module;
+        //   - secret NOT expected but PRESENT → `setup.request_invalid` naming `aeatCert`. The 2c
+        //     client already gates the cert on live mode and never sends it otherwise, so this is
         //     defense-in-depth (CLAUDE.md §5): it stops a real AEAT signing cert being sealed into a
         //     preproduction tenant's vault by a hand-crafted demo body. Gating on presence means a
-        //     MALFORMED cert on a non-expected request rejects cleanly with `{ field: "aeatCert" }` and
-        //     no wasted `parseCert` validation — instead of `parseCert` naming a sub-field
-        //     (`pfxBase64`/`passphrase`/`certKind`, or `aeatCert` for a non-object), which would leak
-        //     which part of a cert we were never going to accept.
-        const certExpected = mode === "live" && venue.location.fiscalTerritory === "ES-common";
-        const certPresent = body.aeatCert !== undefined;
-        if (certExpected && !certPresent) {
-          throw new AppError("setup.aeat_cert_required", {});
+        //     MALFORMED secret on a non-expected request rejects cleanly with `{ field: "aeatCert" }`
+        //     and no wasted validation — never leaking which sub-field of a secret we were never
+        //     going to accept.
+        if (expected && !present) {
+          throw new AppError("setup.provisioning_secret_required", { module: contribution!.id });
         }
-        if (!certExpected && certPresent) {
+        if (!expected && present) {
           invalidRequest("aeatCert");
         }
-        // `certExpected` implies `certPresent` here (we threw otherwise), so `parseCert` — and its
-        // value validation — runs ONLY on the expected path, where a malformed cert must still fail
-        // with `parseCert`'s field detail: the offending sub-field (`pfxBase64`/`passphrase`/
-        // `certKind`), or `aeatCert` when the whole value is not an object. Non-expected requests
-        // never reach it.
-        const aeatCert = certExpected ? parseCert(body.aeatCert) : undefined;
+        // Validate the secret's SHAPE upfront — BEFORE `provision` mints the unrepairable SIF/hash
+        // chain (CLAUDE.md §5) — so a malformed blob 400s with `setup.request_invalid` naming the
+        // offending sub-field and NOTHING stamped or minted. `expected` implies `present` (we threw
+        // otherwise) and implies `secret` is defined (`required` returned true). The seal below
+        // re-validates as defense-in-depth for a direct caller.
+        if (expected) secret!.validate(body.aeatCert);
 
         const result = await provision({ environment, venue });
 
@@ -417,11 +416,10 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         // nothing to bump yet.
         await seedMembership(result.tenantId, result.nodeId);
 
-        // Seal the AEAT cert AFTER provision mints the tenant (the vault row is FK-restricted to it)
-        // and BEFORE the trading config is persisted.
-        if (aeatCert !== undefined) {
-          await sealAeat(result.tenantId, aeatCert);
-        }
+        // Seal the regime's provisioning secret AFTER provision mints the tenant (the vault row is
+        // FK-restricted to it) and BEFORE the trading config is persisted. Reaches the regime only
+        // through the `seal` seat, so this host imports no regime package.
+        if (expected) await secret!.seal({ db, ring }, result.tenantId, body.aeatCert);
 
         await persistTrading({
           tenantId: result.tenantId,

@@ -1,7 +1,7 @@
 import { createServer } from "node:net";
 import type { AddressInfo } from "node:net";
 import { cp, mkdtemp, rm } from "node:fs/promises";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -78,10 +78,18 @@ const TILL_ENV = {
 };
 
 const MEDIA_ROOT = mkdtempSync(join(tmpdir(), "waitron-singleton-media-"));
+// A `modules.json` resolving the two-member fiscal slot to Veri*Factu (disabling `fiscal-none`), so a
+// trading boot does not refuse `module.fiscal_slot_ambiguous` under the default-on both-enabled set.
+const STATE_ROOT = mkdtempSync(join(tmpdir(), "waitron-singleton-state-"));
+writeFileSync(
+  join(STATE_ROOT, "modules.json"),
+  JSON.stringify({ modules: { "fiscal-none": false } }),
+);
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
   WAITRON_MEDIA_DIR: MEDIA_ROOT,
+  WAITRON_STATE_DIR: STATE_ROOT,
   WAITRON_ENV: "preproduction",
   ...TILL_ENV,
 };
@@ -168,6 +176,7 @@ afterAll(async () => {
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
   if (backupDir !== undefined) await rm(backupDir, { recursive: true, force: true });
   rmSync(MEDIA_ROOT, { recursive: true, force: true });
+  rmSync(STATE_ROOT, { recursive: true, force: true });
 });
 
 /** An OS-assigned free port, released before use (boot.test.ts's helper — WAITRON_HTTP_PORT rejects "0"). */

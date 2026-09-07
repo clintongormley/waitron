@@ -1,5 +1,6 @@
 import { AppError } from "@waitron/shared";
 import type { FiscalContribution } from "@waitron/fiscal";
+import type { ModuleConfig } from "./config.js";
 import type { WaitronModule } from "./module.js";
 import "./errors.js";
 
@@ -29,4 +30,28 @@ export function fiscalSlot(
     throw new AppError("module.fiscal_slot_mismatch", { stamped, enabled: only.fiscal.id });
   }
   return only.fiscal;
+}
+
+/**
+ * Build the ModuleConfig a venue provisions and boots under, forcing the fiscal slot onto exactly the
+ * member whose contribution `id` equals `filingId` (the value `resolveFiscalModules(territory).filing`
+ * returns). Starting from `base` (the operator's overrides, or empty), it sets EVERY fiscal-slot
+ * member's override — the matching one `true`, every other `false` — so the territory is authoritative
+ * for the slot and no default-on or operator toggle can leave two members enabled (`fiscal_slot_ambiguous`
+ * at boot) or emit a second fiscal seed at provision. Non-fiscal overrides in `base` are carried through
+ * untouched. Generic: it iterates `m.fiscal?.id` and names no module.
+ *
+ * A `filingId` no slot member declares leaves every fiscal member `false` (an empty slot) — the caller's
+ * `fiscalSlot` then refuses it rather than provisioning under no regime.
+ */
+export function selectFiscalModule(
+  modules: readonly WaitronModule[],
+  filingId: string,
+  base: ModuleConfig,
+): ModuleConfig {
+  const overrides = new Map(base.overrides);
+  for (const m of modules) {
+    if (m.fiscal !== undefined) overrides.set(m.name, m.fiscal.id === filingId);
+  }
+  return { overrides };
 }

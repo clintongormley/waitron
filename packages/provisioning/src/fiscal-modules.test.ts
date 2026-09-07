@@ -7,6 +7,10 @@ describe("resolveFiscalModules", () => {
     expect(resolveFiscalModules("ES-common")).toEqual({ filing: "verifactu", tax: "iva" });
   });
 
+  it("resolves GB-vat to the no-regime filing module (records nothing)", () => {
+    expect(resolveFiscalModules("GB-vat")).toEqual({ filing: "none", tax: "none" });
+  });
+
   it("throws fiscal.regime_not_implemented for any other territory, echoing it", () => {
     try {
       resolveFiscalModules("ES-PV-bizkaia");
@@ -27,7 +31,10 @@ describe("resolveFiscalModules", () => {
 
 describe("FISCAL_TERRITORIES", () => {
   it("lists the territories the registry resolves, and resolves each of them", () => {
-    expect(FISCAL_TERRITORIES).toEqual(["ES-common"]);
-    for (const t of FISCAL_TERRITORIES) expect(resolveFiscalModules(t).filing).toBe("verifactu");
+    expect(FISCAL_TERRITORIES).toEqual(["ES-common", "GB-vat"]);
+    // Every listed territory resolves to a non-empty filing module (the id the composition root maps
+    // to a slot member); the specific values are pinned by the per-territory tests above.
+    for (const t of FISCAL_TERRITORIES)
+      expect(resolveFiscalModules(t).filing.length).toBeGreaterThan(0);
   });
 });

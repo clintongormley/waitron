@@ -348,7 +348,7 @@ describe("waitron-restore restore", () => {
       out: (line) => out.push(line),
       restore: async () => {
         throw new AppError("restore.hook_failed", {
-          module: "fiscal",
+          module: "fiscal-verifactu",
           code: "series.code_too_long",
         });
       },
@@ -356,7 +356,7 @@ describe("waitron-restore restore", () => {
     expect(code).toBe(1);
     expect(out).toEqual([
       expect.stringMatching(/^cold restore: use only when no peer/),
-      "restore failed: restore.hook_failed (module fiscal: series.code_too_long)",
+      "restore failed: restore.hook_failed (module fiscal-verifactu: series.code_too_long)",
     ]);
   });
 });

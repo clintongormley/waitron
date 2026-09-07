@@ -206,23 +206,6 @@ describe("pendingCount", () => {
   });
 });
 
-describe("drain", () => {
-  beforeEach(() =>
-    suite.db.transaction((tx) => backend.registerNode(tx, NODE_A, { tenantId: TENANT })),
-  );
-
-  it("acknowledges pending records so pendingCount drops to zero", async () => {
-    await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 1)));
-    await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 2)));
-    const before = await backend.pendingCount(TENANT, NODE_A);
-    expect(before).toBeGreaterThan(0);
-    const result = await backend.drain(new Date("2026-07-21T00:00:00Z"));
-    expect(result.recordsAccepted).toBe(before);
-    expect(result.nextDueAt).toBeNull();
-    expect(await backend.pendingCount(TENANT, NODE_A)).toBe(0);
-  });
-});
-
 describe("recordVoid", () => {
   beforeEach(() =>
     suite.db.transaction((tx) => backend.registerNode(tx, NODE_A, { tenantId: TENANT })),
@@ -422,100 +405,5 @@ describe("filedReceiptFor", () => {
     const unknown = saleId("00000000-0000-0000-0000-000000000000");
     const filed = await suite.db.transaction((tx) => backend.filedReceiptFor(tx, unknown));
     expect(filed).toBeUndefined();
-  });
-});
-
-describe("reconcile", () => {
-  beforeEach(() =>
-    suite.db.transaction((tx) => backend.registerNode(tx, NODE_A, { tenantId: TENANT })),
-  );
-
-  it("counts zero for a tenant with no records, without complaining", async () => {
-    // The start-of-period case in generic clothing, mirroring checkIntegrity's identical
-    // "nothing recorded is normal" test above.
-    const result = await backend.reconcile(TENANT, { year: "2027", month: "03" });
-    expect(result).toEqual({
-      year: "2027",
-      month: "03",
-      checked: 0,
-      lostAck: [],
-      noTrace: [],
-      drift: [],
-      incidentsRaised: 0,
-    });
-  });
-
-  it("reports a clean audit when a pending record has no reported state yet", async () => {
-    // In-flight tolerance: local 'pending' + no reported state at all is ordinary, not a
-    // mismatch — the regime simply has not gotten to it yet.
-    await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 1)));
-    const result = await backend.reconcile(TENANT, { year: "2027", month: "03" });
-    expect(result.checked).toBe(1);
-    expect(result.lostAck).toEqual([]);
-    expect(result.noTrace).toEqual([]);
-    expect(result.drift).toEqual([]);
-  });
-
-  it("reports a clean audit when an acknowledged record is reported accepted", async () => {
-    const sale = await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 1)));
-    await backend.acknowledge(sale.recordId);
-    backend.setReportedState(sale.recordId, "accepted");
-    const result = await backend.reconcile(TENANT, { year: "2027", month: "03" });
-    expect(result.checked).toBe(1);
-    expect(result.lostAck).toEqual([]);
-    expect(result.noTrace).toEqual([]);
-    expect(result.drift).toEqual([]);
-  });
-
-  it("classifies a pending record the regime already reported on as lostAck", async () => {
-    const sale = await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 1)));
-    backend.setReportedState(sale.recordId, "accepted");
-    const result = await backend.reconcile(TENANT, { year: "2027", month: "03" });
-    expect(result.lostAck).toEqual([
-      { recordId: sale.recordId, localState: "pending", reportedState: "accepted" },
-    ]);
-    expect(result.noTrace).toEqual([]);
-    expect(result.drift).toEqual([]);
-  });
-
-  it("classifies an acknowledged record the regime has no trace of as noTrace", async () => {
-    const sale = await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 1)));
-    await backend.acknowledge(sale.recordId);
-    // No setReportedState call at all: the regime has nothing recorded for this record.
-    const result = await backend.reconcile(TENANT, { year: "2027", month: "03" });
-    expect(result.noTrace).toEqual([
-      { recordId: sale.recordId, localState: "acknowledged", reportedState: null },
-    ]);
-    expect(result.lostAck).toEqual([]);
-    expect(result.drift).toEqual([]);
-  });
-
-  it("classifies an acknowledged record the regime rejected as drift", async () => {
-    const sale = await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 1)));
-    await backend.acknowledge(sale.recordId);
-    backend.setReportedState(sale.recordId, "rejected");
-    const result = await backend.reconcile(TENANT, { year: "2027", month: "03" });
-    expect(result.drift).toEqual([
-      { recordId: sale.recordId, localState: "acknowledged", reportedState: "rejected" },
-    ]);
-    expect(result.lostAck).toEqual([]);
-    expect(result.noTrace).toEqual([]);
-  });
-
-  it("echoes the requested period back on the result", async () => {
-    const result = await backend.reconcile(TENANT, { year: "2026", month: "12" });
-    expect(result.year).toBe("2026");
-    expect(result.month).toBe("12");
-  });
-
-  it("counts only the records belonging to the requested tenant", async () => {
-    const otherTenant = tenantId("6ba7b810-9dad-11d1-80b4-00c04fd430ca");
-    await suite.db.transaction((tx) => backend.registerNode(tx, NODE_B, { tenantId: otherTenant }));
-    await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 1)));
-    await suite.db.transaction((tx) =>
-      backend.recordSale(tx, { ...saleOn(NODE_B, 1), tenantId: otherTenant }),
-    );
-    const result = await backend.reconcile(TENANT, { year: "2027", month: "03" });
-    expect(result.checked).toBe(1);
   });
 });

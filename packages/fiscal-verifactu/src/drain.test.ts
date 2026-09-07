@@ -26,24 +26,30 @@ import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtu
 // sync_capture() from the sync set. See ../test/migrations.ts.
 const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
+// The `DrainDeps` a `VerifactuBackend` used to assemble internally, built here directly now that the
+// submission pass lives on the standalone `drain` function. `pg.db` is this file's one connection;
+// the resolver is per-test. Tests that need a custom cap (`maxRegistrosPorEnvio`) build their own
+// `DrainDeps` inline instead.
+const drainDeps = (resolveClient: DrainDeps["resolveClient"]): DrainDeps => ({
+  db: pg.db,
+  resolveClient,
+  skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+  environment: "production",
+});
+
 describe("drain — happy path", () => {
   let seeded: SeededDrain;
   let aeat: ReturnType<typeof createFakeAeat>;
-  let backend: VerifactuBackend;
+  let deps: DrainDeps;
 
   beforeEach(async () => {
     aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     seeded = await seedPendingEnvios(pg.db, { count: 3 }); // 3 pending altas on one till/tenant
-    backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
+    deps = drainDeps(staticResolver(aeat.client()));
   });
 
   it("submits the pending batch, marks it aceptado, and persists a CSV on every row", async () => {
-    const result = await backend.drain(new Date("2026-07-21T00:01:00Z"));
+    const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
     expect(result.recordsSubmitted).toBe(3);
     expect(result.recordsAccepted).toBe(3);
@@ -60,13 +66,13 @@ describe("drain — happy path", () => {
   });
 
   it("stamps RefExterna = registro id, so AEAT stored our id", async () => {
-    await backend.drain(new Date("2026-07-21T00:01:00Z"));
+    await drain(deps, new Date("2026-07-21T00:01:00Z"));
     const stored = aeat.stored();
     expect(new Set(stored.map((s) => s.refExterna))).toEqual(new Set(seeded.registroIds));
   });
 
   it("TEETH: dropping the CSV write leaves a row with no CSV — this test must fail if csv is not persisted", async () => {
-    await backend.drain(new Date("2026-07-21T00:01:00Z"));
+    await drain(deps, new Date("2026-07-21T00:01:00Z"));
     const rows = await withTenant(pg.db, seeded.tenantId, (tx) =>
       tx.execute<{ csv: string | null }>(sql`select csv from envios`),
     );
@@ -113,7 +119,10 @@ describe("drain — happy path, an anulación row", () => {
 
     // Both envíos (the alta's and the anulación's) were inserted with the column's own
     // `defaultNow()` — comfortably before a `now` a minute past actual wall-clock time.
-    const result = await backend.drain(new Date(Date.now() + 60_000));
+    const result = await drain(
+      drainDeps(staticResolver(aeat.client())),
+      new Date(Date.now() + 60_000),
+    );
 
     expect(result.recordsSubmitted).toBe(2);
     expect(result.recordsAccepted).toBe(2);
@@ -203,17 +212,12 @@ describe("drain — batching (the >cap split)", () => {
 describe("drain — flow control (envio_flujo)", () => {
   let seeded: SeededDrain;
   let aeat: ReturnType<typeof createFakeAeat>;
-  let backend: VerifactuBackend;
+  let deps: DrainDeps;
 
   beforeEach(async () => {
     aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     seeded = await seedPendingEnvios(pg.db, { count: 3 }); // 3 pending altas on one till/tenant
-    backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
+    deps = drainDeps(staticResolver(aeat.client()));
   });
 
   // Delete this describe's own seeded rows after every test — the same "deletes what it seeded in a
@@ -234,7 +238,7 @@ describe("drain — flow control (envio_flujo)", () => {
 
   it("persists the server's TiempoEsperaEnvio into envio_flujo and sets nextDueAt when a partial batch remains for next time", async () => {
     // 3 records → one envío that drains the whole backlog; the tenant's NEXT envío waits t.
-    const result = await backend.drain(new Date("2026-07-21T00:01:00Z"));
+    const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
     // Each case seeds a fresh tenant; select that tenant's flow-control row.
     const flujo = await withTenant(pg.db, seeded.tenantId, (tx) =>
       tx.execute<{ proximo_envio_en: string; tiempo_espera_seg: number }>(
@@ -251,13 +255,8 @@ describe("drain — flow control (envio_flujo)", () => {
       serverNow: new Date("2026-07-21T00:00:00Z"),
       tiempoEsperaInicial: 10000,
     });
-    const backend2 = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(big.client()),
-    });
-    await backend2.drain(new Date("2026-07-21T00:01:00Z"));
+    const deps2 = drainDeps(staticResolver(big.client()));
+    await drain(deps2, new Date("2026-07-21T00:01:00Z"));
     // Earlier cases may retain flow-control rows for other tenants in this shared database.
     const flujo = await withTenant(pg.db, seeded.tenantId, (tx) =>
       tx.execute<{ tiempo_espera_seg: number }>(
@@ -286,7 +285,7 @@ describe("drain — flow control (envio_flujo)", () => {
     `);
 
     const now = new Date("2026-07-21T00:01:00Z"); // before proximoEnvioEn — the gate is still closed
-    const result = await backend.drain(now);
+    const result = await drain(deps, now);
 
     expect(result.batchesSent).toBe(0);
     expect(result.recordsSubmitted).toBe(0);
@@ -328,13 +327,8 @@ describe("drain — stale claim recovery", () => {
         where tenant_id = ${seeded.tenantId}
       `),
     );
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
-    await backend.drain(new Date("2026-07-21T00:01:00Z")); // > RECUPERACION_ENVIANDO_MS past enviado_en
+    const deps = drainDeps(staticResolver(aeat.client()));
+    await drain(deps, new Date("2026-07-21T00:01:00Z")); // > RECUPERACION_ENVIANDO_MS past enviado_en
 
     const rows = await withTenant(pg.db, seeded.tenantId, (tx) =>
       tx.execute<{ estado: string; incidencia: boolean }>(sql`
@@ -361,13 +355,8 @@ describe("drain — stale claim recovery", () => {
         where tenant_id = ${seeded.tenantId}
       `),
     );
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
-    const result = await backend.drain(now);
+    const deps = drainDeps(staticResolver(aeat.client()));
+    const result = await drain(deps, now);
 
     expect(result.recordsSubmitted).toBe(0); // untouched — not stale, so not reclaimed
     const rows = await withTenant(pg.db, seeded.tenantId, (tx) =>
@@ -391,13 +380,8 @@ describe("drain — retry backoff on a transient submit failure", () => {
       },
     };
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(failing),
-    });
-    const result = await backend.drain(new Date("2026-07-21T00:01:00Z"));
+    const deps = drainDeps(staticResolver(failing));
+    const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
     const rows = await withTenant(pg.db, seeded.tenantId, (tx) =>
       tx.execute<{
@@ -434,13 +418,8 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const seeded = await seedPendingEnvios(pg.db, { count: 3 }); // secuencia 1,2,3 on one SIF
     aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente"); // reject the middle record
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
-    const result = await backend.drain(new Date("2026-07-21T00:01:00Z"));
+    const deps = drainDeps(staticResolver(aeat.client()));
+    const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
     const rows = await withTenant(pg.db, seeded.tenantId, (tx) =>
       tx.execute<{ secuencia: number; estado: string; incidencia: boolean }>(sql`
@@ -472,13 +451,8 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
   it("marks aceptado_con_errores and raises a warning incident, but the record still counts as accepted", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const seeded = await seedPendingEnvios(pg.db, { count: 1, futureDated: true }); // triggers 2004 → AceptadoConErrores
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
-    const result = await backend.drain(new Date("2026-07-21T00:01:00Z"));
+    const deps = drainDeps(staticResolver(aeat.client()));
+    const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
     const rows = await withTenant(pg.db, seeded.tenantId, (tx) =>
       tx.execute<{ estado: string; csv: string | null }>(
@@ -519,15 +493,10 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     });
     const seeded = await seedPendingEnvios(pg.db, { count: 3 });
     aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente");
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
+    const deps = drainDeps(staticResolver(aeat.client()));
     // First pass: secuencia 2 rechazado, secuencia 3 halted to detenido (the previous test's own
     // scenario) — the chain is left with an OPEN halt.
-    const first = await backend.drain(new Date("2026-07-21T00:01:00Z"));
+    const first = await drain(deps, new Date("2026-07-21T00:01:00Z"));
     expect(first.recordsHalted).toBe(2);
 
     // A NEW record lands on the SAME chain (sif) while the halt is still open — e.g. staff kept
@@ -536,7 +505,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
 
     // Gate opens at 00:01:05Z (tiempoEsperaInicial: 5 above); 00:01:30Z is comfortably past that
     // and comfortably short of the 00:02:00Z shared-`pg.db` hazard this test's own comment explains.
-    const second = await backend.drain(new Date("2026-07-21T00:01:30Z"));
+    const second = await drain(deps, new Date("2026-07-21T00:01:30Z"));
 
     const row4 = await withTenant(pg.db, seeded.tenantId, (tx) =>
       tx.execute<{ estado: string; incidencia: boolean }>(sql`
@@ -572,13 +541,8 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     });
     const seeded = await seedPendingEnvios(pg.db, { count: 3 });
     aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente");
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
-    const first = await backend.drain(new Date("2026-07-21T00:01:00Z"));
+    const deps = drainDeps(staticResolver(aeat.client()));
+    const first = await drain(deps, new Date("2026-07-21T00:01:00Z"));
     expect(first.recordsHalted).toBe(2); // chain A: secuencia 2 rechazado + secuencia 3 detenido
 
     // A new record lands on the halted chain (A) AND an entirely separate, healthy chain (B) on
@@ -591,7 +555,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
 
     // Gate opens at 00:01:05Z (tiempoEsperaInicial: 5); 00:01:30Z avoids this file's own shared-`pg.db`
     // hazards (see the previous test's own comment: 00:02:00Z and 00:05:00Z).
-    const second = await backend.drain(new Date("2026-07-21T00:01:30Z"));
+    const second = await drain(deps, new Date("2026-07-21T00:01:30Z"));
 
     const rowA = await withTenant(pg.db, seeded.tenantId, (tx) =>
       tx.execute<{ estado: string; incidencia: boolean }>(
@@ -651,13 +615,8 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
 
   it("TEETH: a 3000 whose RegistroDuplicado is Correcta resolves to aceptado, not rechazado/detenido", async () => {
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
-    await backend.drain(new Date("2026-07-21T00:01:00Z")); // stores it — AEAT now genuinely holds "Correcta"
+    const deps = drainDeps(staticResolver(aeat.client()));
+    await drain(deps, new Date("2026-07-21T00:01:00Z")); // stores it — AEAT now genuinely holds "Correcta"
 
     // Resubmit the SAME identity without changing anything AEAT's store holds: a genuine
     // resubmission of our own already-accepted record — e.g. a lost response after a real T1/T2
@@ -670,7 +629,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
         where tenant_id = ${seeded.tenantId}
       `),
     );
-    const result = await backend.drain(new Date("2026-07-21T00:01:30Z")); // gate opens 00:01:05Z
+    const result = await drain(deps, new Date("2026-07-21T00:01:30Z")); // gate opens 00:01:05Z
 
     const rows = await withTenant(pg.db, seeded.tenantId, (tx) =>
       tx.execute<{ estado: string }>(
@@ -704,13 +663,8 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
    */
   it("Route A: duplicate_annulled halts detenido, and halts a same-batch successor too, raising a fiscal.duplicado_anulado incident", async () => {
     const seeded = await seedPendingEnvios(pg.db, { count: 2 });
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
-    await backend.drain(new Date("2026-07-21T00:01:00Z")); // stores both — AEAT now genuinely holds both "Correcta"
+    const deps = drainDeps(staticResolver(aeat.client()));
+    await drain(deps, new Date("2026-07-21T00:01:00Z")); // stores both — AEAT now genuinely holds both "Correcta"
 
     aeat.annul(seeded.facturaKeys[0]!); // AEAT's own copy of secuencia 1's identity is now Anulada
     await withTenant(pg.db, seeded.tenantId, (tx) =>
@@ -719,7 +673,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
         where tenant_id = ${seeded.tenantId}
       `),
     );
-    const result = await backend.drain(new Date("2026-07-21T00:01:30Z")); // resubmit both -> 3000 each
+    const result = await drain(deps, new Date("2026-07-21T00:01:30Z")); // resubmit both -> 3000 each
 
     const rows = await withTenant(pg.db, seeded.tenantId, (tx) =>
       tx.execute<{ secuencia: number; estado: string; incidencia: boolean }>(sql`
@@ -747,13 +701,8 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
 
   it("Route B: duplicate_unknown with a matching huella resolves to aceptado", async () => {
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
-    await backend.drain(new Date("2026-07-21T00:01:00Z")); // AEAT now genuinely stores OUR real huella
+    const deps = drainDeps(staticResolver(aeat.client()));
+    await drain(deps, new Date("2026-07-21T00:01:00Z")); // AEAT now genuinely stores OUR real huella
 
     // Force the NEXT response for this identity to omit RegistroDuplicado.EstadoRegistroDuplicado
     // entirely — exactly what `resolveEstadoEfectivo` reads as `duplicate_unknown` rather than a
@@ -766,7 +715,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
         where tenant_id = ${seeded.tenantId}
       `),
     );
-    const result = await backend.drain(new Date("2026-07-21T00:01:30Z"));
+    const result = await drain(deps, new Date("2026-07-21T00:01:30Z"));
 
     const rows = await withTenant(pg.db, seeded.tenantId, (tx) =>
       tx.execute<{ estado: string; incidencia: boolean }>(
@@ -842,16 +791,11 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
       ]);
     aeat.dropRegistroDuplicadoDetail(seeded.facturaKeys[0]!);
 
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
+    const deps = drainDeps(staticResolver(aeat.client()));
     // secuencia 1 -> error 3000 (identity already taken), no detail -> duplicate_unknown -> routeB
     // consults -> gets back "D"*64, which is NOT our own stored huella. secuencia 2 is genuinely
     // fresh and, on its own per-line merits, would read "Correcto" -> accepted.
-    const result = await backend.drain(new Date("2026-07-21T00:01:00Z"));
+    const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
     const rows = await withTenant(pg.db, seeded.tenantId, (tx) =>
       tx.execute<{ secuencia: number; estado: string; incidencia: boolean }>(sql`
@@ -903,13 +847,8 @@ describe("drain — halted records get a halted ack (the bulk chain-halt paths)"
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const seeded = await seedPendingEnvios(pg.db, { count: 3 }); // secuencia 1,2,3 on one SIF
     aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente"); // reject the middle record
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
-      db: pg.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
-    await backend.drain(new Date("2026-07-21T00:01:00Z"));
+    const deps = drainDeps(staticResolver(aeat.client()));
+    await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
     // secuencia 1 accepted, 2 rejected, 3 halted — the successor `haltSuccessors` swept to detenido.
     const envios = await withTenant(pg.db, seeded.tenantId, (tx) =>
@@ -977,13 +916,8 @@ describe("drain — the deployment-environment guard", () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const seeded = await seedPendingEnvios(pg.db, { count: 1, entorno: "preproduction" });
     try {
-      const backend = new VerifactuBackend({
-        deploymentEnvironment: "production",
-        clock: seeded.clock,
-        db: pg.db,
-        resolveClient: staticResolver(aeat.client()),
-      });
-      const result = await backend.drain(new Date("2026-07-21T00:01:00Z"));
+      const deps = drainDeps(staticResolver(aeat.client()));
+      const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
       expect(result.recordsSubmitted).toBe(0);
       expect(result.incidentsRaised).toBe(1);
@@ -1029,13 +963,8 @@ describe("drain — the deployment-environment guard", () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const seeded = await seedPendingEnvios(pg.db, { count: 1, entorno: null });
     try {
-      const backend = new VerifactuBackend({
-        deploymentEnvironment: "production",
-        clock: seeded.clock,
-        db: pg.db,
-        resolveClient: staticResolver(aeat.client()),
-      });
-      const result = await backend.drain(new Date("2026-07-21T00:01:00Z"));
+      const deps = drainDeps(staticResolver(aeat.client()));
+      const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
       expect(result.recordsSubmitted).toBe(0);
 
@@ -1070,13 +999,8 @@ describe("drain — the deployment-environment guard", () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const seeded = await seedPendingEnvios(pg.db, { count: 1, entorno: "production" });
     try {
-      const backend = new VerifactuBackend({
-        deploymentEnvironment: "production",
-        clock: seeded.clock,
-        db: pg.db,
-        resolveClient: staticResolver(aeat.client()),
-      });
-      const result = await backend.drain(new Date("2026-07-21T00:01:00Z"));
+      const deps = drainDeps(staticResolver(aeat.client()));
+      const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
       expect(result.recordsSubmitted).toBeGreaterThan(0);
       expect(result.recordsAccepted).toBeGreaterThan(0);
@@ -1119,13 +1043,8 @@ describe("drain — the deployment-environment guard", () => {
       await appendPendingAlta(pg.db, seeded, 2);
       await appendPendingAlta(pg.db, seeded, 3);
 
-      const backend = new VerifactuBackend({
-        deploymentEnvironment: "production",
-        clock: seeded.clock,
-        db: pg.db,
-        resolveClient: staticResolver(aeat.client()),
-      });
-      const result = await backend.drain(new Date("2026-07-21T00:01:00Z"));
+      const deps = drainDeps(staticResolver(aeat.client()));
+      const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
       expect(result.recordsSubmitted).toBe(0);
       // Exactly ONE incident for the whole chain — the first refusal, not one per row — mirroring

@@ -116,7 +116,8 @@ describe("applyInstance against a blank container", () => {
         "scheduler",
         "credentials",
         "sync",
-        "fiscal",
+        "fiscal-verifactu",
+        "fiscal-none",
       ]);
       expect(Object.keys(after.roles).sort()).toEqual(["waitron_app", "waitron_migrator"]);
       expect(after.roles.waitron_migrator?.createRole).toBe(true);
@@ -430,31 +431,34 @@ describe("applyInstance against a blank container", () => {
     // rather than exiting 0. A test built that way would pass while demonstrating the wrong thing.
     const database = "waitron_interrupted_suite";
     const sets = manifestSets();
-    const last = sets[sets.length - 1];
-    if (last === undefined) throw new Error("the manifest is empty");
-    // The journal table below is derived from the manifest; the SCHEMA probe further down is not,
-    // and cannot be — `MigrationSet` carries `name`, `table` and `from` (manifest.ts:9-14) and no
-    // list of what each set creates, so there is nothing to derive `registros_facturacion` from.
-    // This assertion is what keeps the hardcoded half honest: `registros_facturacion` is created by
-    // `packages/fiscal-verifactu/drizzle/0000_fiscal_baseline.sql`, which is the `fiscal` set (now
-    // last, since SP-3a: fiscal's capture triggers will call sync's `sync_capture()` SPI, so the
-    // `sync` set must migrate first). Append a further set to the manifest and this fails here,
-    // loudly, instead of silently probing a table that belongs to a set which was never the one
-    // left empty.
-    expect(last.name).toBe("fiscal");
+    // The SCHEMA probe further down is not derived from the manifest and cannot be — `MigrationSet`
+    // carries `name`, `table` and `from` (manifest.ts:9-14) and no list of what each set creates — so
+    // it targets `registros_facturacion`, which `packages/fiscal-verifactu/drizzle` creates. That set is
+    // the second-to-last now: the last set is the no-regime `fiscal-none`, whose migration is EMPTY (it
+    // owns no table), so a rolled-back `fiscal-none` would leave nothing to probe. Simulate a rolled-back
+    // `fiscal-verifactu` instead: apply every set BEFORE it, then hand-create BOTH fiscal-slot members'
+    // journals empty (so `migratedSets` reads all present while `registros_facturacion` is still absent).
+    // This assertion keeps the hardcoded half honest — reorder the fiscal sets and it fails here, loudly.
+    const fiscalIdx = sets.findIndex((set) => set.name === "fiscal-verifactu");
+    expect(sets.slice(fiscalIdx).map((set) => set.name)).toEqual([
+      "fiscal-verifactu",
+      "fiscal-none",
+    ]);
+    const emptyJournalSets = sets.slice(fiscalIdx); // fiscal-verifactu + the empty fiscal-none
 
     await admin.execute(sql.raw(`create database ${quoteIdent(database)}`));
     try {
-      // Every set but the last, applied for real by the real migrator.
+      // Every set before `fiscal-verifactu`, applied for real by the real migrator (this stops short of
+      // creating `registros_facturacion`, the table the probe below expects absent).
       await applyMigrations(
         withDatabase(adminUri, database),
-        migrationOptionsFor(sets.slice(0, -1), null),
+        migrationOptionsFor(sets.slice(0, fiscalIdx), null),
       );
 
       const target = await createPostgresDb(withDatabase(adminUri, database));
       try {
-        // The last set's journal, by hand, in Drizzle's own shape (`dialect.js:48-51`) and with no
-        // rows — which is exactly what the rolled-back transaction leaves behind.
+        // Both remaining sets' journals, by hand, in Drizzle's own shape (`dialect.js:48-51`) and with
+        // no rows — which is exactly what a rolled-back transaction leaves behind.
         //
         // Schema-QUALIFIED, because both of the things this fixture has to line up with name
         // `public` explicitly and neither consults `search_path`: Drizzle creates the journal at
@@ -464,13 +468,15 @@ describe("applyInstance against a blank container", () => {
         // instead resolves through the session's `search_path` — `"$user", public` by default, so
         // it lands in `public` here only because no schema is named after the connecting role.
         // That is a default this fixture would otherwise be silently depending on.
-        await target.execute(
-          sql.raw(
-            `create table public.${quoteIdent(last.table)} (
-               id serial primary key, hash text not null, created_at bigint
-             )`,
-          ),
-        );
+        for (const set of emptyJournalSets) {
+          await target.execute(
+            sql.raw(
+              `create table public.${quoteIdent(set.table)} (
+                 id serial primary key, hash text not null, created_at bigint
+               )`,
+            ),
+          );
+        }
 
         const state = await readInstanceState(admin, database, target);
         // The precondition, asserted rather than assumed: every journal reads as present, so the

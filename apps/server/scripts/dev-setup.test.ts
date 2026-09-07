@@ -9,7 +9,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import { loadConfig } from "../src/config.js";
+import { ALL_MODULES } from "../src/modules.js";
 import {
   ADMIN_PIN,
   buildDevEnv,
@@ -180,7 +182,7 @@ describe("devSetup against real Postgres", () => {
     mediaDir = await mkdtemp(join(tmpdir(), "waitron-dev-setup-media-"));
     process.env.WAITRON_MEDIA_DIR = mediaDir;
     // The FIRST run: a fresh database with no `.env` — provisions.
-    first = await devSetup({ databaseUrl: suite.pg.uri, envPath, log: () => {} });
+    first = await devSetup({ databaseUrl: suite.pg.uri, envPath, stateDir: envDir, log: () => {} });
   }, 180_000);
 
   afterAll(async () => {
@@ -224,6 +226,19 @@ describe("devSetup against real Postgres", () => {
     expect(first.env.WAITRON_TILL_LOCALE).toBe("en-GB");
   });
 
+  it("writes a modules.json that resolves the fiscal slot to exactly one member (verifactu)", () => {
+    // The regression this guards: `ALL_MODULES` carries TWO fiscal-slot members, so an absent
+    // modules.json is all-enabled and boot refuses `module.fiscal_slot_ambiguous`. dev-setup now writes
+    // one selecting the ES-common venue's regime, so `pnpm dev` boots. Read the file back through the
+    // SAME parser boot uses and prove the enabled set resolves to a single member — the boot-time
+    // `fiscalSlot` call, minus the container/compose a full boot needs.
+    const raw: unknown = JSON.parse(readFileSync(join(envDir, "modules.json"), "utf8"));
+    const config = parseModuleConfig(raw, ALL_MODULES);
+    // fiscal-none is explicitly disabled; verifactu stays enabled (default-on).
+    expect((raw as { modules: Record<string, boolean> }).modules["fiscal-none"]).toBe(false);
+    expect(fiscalSlot(enabledModules(ALL_MODULES, config), null).id).toBe("verifactu");
+  });
+
   it("writes a .env that loadConfig and loadKeyRing accept as valid server config", () => {
     const written = parseEnvFile(readFileSync(envPath, "utf8"));
     // loadConfig resolves the whole server config, including the five WAITRON_TILL_* ids via
@@ -255,7 +270,12 @@ describe("devSetup against real Postgres", () => {
   });
 
   it("reuses an already-provisioned venue rather than minting a second chain", async () => {
-    const second = await devSetup({ databaseUrl: suite.pg.uri, envPath, log: () => {} });
+    const second = await devSetup({
+      databaseUrl: suite.pg.uri,
+      envPath,
+      stateDir: envDir,
+      log: () => {},
+    });
 
     expect(second.reused).toBe(true);
     // The fiscal assertion: no second till (no second SIF, no second chain).
@@ -300,9 +320,9 @@ describe("devSetup against real Postgres", () => {
     // (CLAUDE.md §5), so devSetup must REFUSE rather than provision — the volume wipe (dev:reset) is
     // the only sanctioned way to start over.
     rmSync(envPath);
-    await expect(devSetup({ databaseUrl: suite.pg.uri, envPath, log: () => {} })).rejects.toThrow(
-      /already holds a venue/i,
-    );
+    await expect(
+      devSetup({ databaseUrl: suite.pg.uri, envPath, stateDir: envDir, log: () => {} }),
+    ).rejects.toThrow(/already holds a venue/i);
     // The fiscal assertion: still exactly one till, no second chain.
     expect(await tillsCount()).toBe(1);
   });

@@ -86,7 +86,7 @@ function nextReservedIdentity(): ReservedIdentity {
   reservedCounter += 1;
   return {
     modules: {
-      fiscal: {
+      "fiscal-verifactu": {
         nif: `${String(90_000_000 + reservedCounter).padStart(8, "0")}K`,
         // Two characters: `establish` applies the same `id_sistema_informatico` length rule as
         // `registerSif`, and refuses a longer reservation with `sif.reservation_invalid`.
@@ -446,7 +446,8 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
     expect(reservedSif.rows[0]!.node_id).toBe(capturedStandby!.nodeId);
     expect(reservedSif.rows[0]!.node_id).not.toBe(designated.nodeId);
     expect(reservedSif.rows[0]!.numero_instalacion).toBe(
-      (reservedIdentity.modules.fiscal as { numeroInstalacion: number }).numeroInstalacion,
+      (reservedIdentity.modules["fiscal-verifactu"] as { numeroInstalacion: number })
+        .numeroInstalacion,
     );
 
     // The primary's endorsement of the standby's key is stored on the standby's node row, verbatim.

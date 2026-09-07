@@ -370,6 +370,9 @@ importers:
       '@waitron/db':
         specifier: workspace:*
         version: link:../db
+      '@waitron/fiscal-none':
+        specifier: workspace:*
+        version: link:../fiscal-none
       '@waitron/fiscal-verifactu':
         specifier: workspace:*
         version: link:../fiscal-verifactu
@@ -536,6 +539,9 @@ importers:
 
   packages/fiscal:
     dependencies:
+      '@waitron/credentials':
+        specifier: workspace:*
+        version: link:../credentials
       '@waitron/db':
         specifier: workspace:*
         version: link:../db
@@ -562,11 +568,48 @@ importers:
         specifier: ^3.0.0
         version: 3.2.7(@types/node@24.13.3)(@vitest/browser@3.2.7)(tsx@4.23.1)(yaml@2.9.0)
 
+  packages/fiscal-none:
+    dependencies:
+      '@waitron/db':
+        specifier: workspace:*
+        version: link:../db
+      '@waitron/fiscal':
+        specifier: workspace:*
+        version: link:../fiscal
+      '@waitron/shared':
+        specifier: workspace:*
+        version: link:../shared
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@electric-sql/pglite@0.5.4)(@types/pg@8.20.0)(pg@8.22.0)
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.5.4
+        version: 0.5.4
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
+      '@vitest/coverage-v8':
+        specifier: ^3.0.0
+        version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
+      drizzle-kit:
+        specifier: ^0.31.10
+        version: 0.31.10
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.7(@types/node@24.13.3)(@vitest/browser@3.2.7)(tsx@4.23.1)(yaml@2.9.0)
+
   packages/fiscal-verifactu:
     dependencies:
       '@waitron/core':
         specifier: workspace:*
         version: link:../core
+      '@waitron/credentials':
+        specifier: workspace:*
+        version: link:../credentials
       '@waitron/db':
         specifier: workspace:*
         version: link:../db
@@ -588,6 +631,9 @@ importers:
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@electric-sql/pglite@0.5.4)(@types/pg@8.20.0)(pg@8.22.0)
+      undici:
+        specifier: ^8.7.0
+        version: 8.7.0
     devDependencies:
       '@electric-sql/pglite':
         specifier: ^0.5.4
@@ -595,6 +641,9 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
+      '@types/node-forge':
+        specifier: ^1.3.0
+        version: 1.3.14
       '@vitest/coverage-v8':
         specifier: ^3.0.0
         version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
@@ -607,6 +656,9 @@ importers:
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10
+      node-forge:
+        specifier: ^1.3.1
+        version: 1.4.0
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
@@ -740,6 +792,9 @@ importers:
       '@waitron/credentials':
         specifier: workspace:*
         version: link:../credentials
+      '@waitron/fiscal-none':
+        specifier: workspace:*
+        version: link:../fiscal-none
       '@waitron/fiscal-verifactu':
         specifier: workspace:*
         version: link:../fiscal-verifactu

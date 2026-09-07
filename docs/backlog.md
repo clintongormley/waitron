@@ -401,10 +401,12 @@ screens, `apps/server/src/modules.ts` (the maps derived from that list), and the
 1. **Finish fiscal as a module:** SP-3b vocabulary (landed #240), SP-3c gated-provisioning seam (landed #245),
    SP-3d backup/restore hook (= BR-4) landed #248 (2026-09-06) — fiscal-as-a-module is complete; see
    *Waitron module system*.
-2. **`fiscal-none` module** (tiny; the UK case; forces every chain/huella/`entorno` assumption
-   through the `FiscalBackend` seam — a better pluggability proof than TicketBAI). Put the two agreed
-   rules (new domains land as modules; no new core table without a stated reason) into CLAUDE.md §3
-   in this PR.
+2. **`fiscal-none` module — LANDED** (`feat/fiscal-none`, spec
+   `2026-09-06-module-fiscal-none-design.md`). The no-op regime (`@waitron/fiscal-none`) fills the
+   fiscal slot with an empty runtime-duty (`drain`) seat and records nothing; provisioning selects the
+   fiscal module by territory; `apps/server` now imports NO regime package and the seams
+   `DEFERRED_RUNTIME_PASS` allowlist is EMPTY (`scripts/module-seams.test.ts`). The two agreed CLAUDE.md
+   §3 rules (new domains land as modules; no new core table without a stated reason) landed with it.
    - **Follow-on (gated on this): English-only generic guard.** Owner principle (2026-09-07): Spanish
      only in Spain-specific modules (verifactu, workforce-es, reporting=modelo-303); core/generic code
      must be English — identifiers, strings AND comments. The guard today doesn't scan `provisioning`
@@ -941,7 +943,10 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
     `fiscal-none`, where an implementation with no transport makes that seat's shape obvious rather than
     guessed (spec §12). `scripts/module-seams.test.ts` (root project, reads text) pins the boundary and
     allowlists the deferred files WITH their reason, so the deferral is a ratchet: `fiscal-none` shrinks
-    the list, nothing grows it. Spec:
+    the list, nothing grows it. _(2026-09-07: discharged by fiscal-none — `boot.ts`'s `drain`,
+    `aeat-transport.ts`, `aeat-credential.ts`, the wizard's cert gate and `FiscalBackend.reconcile` are
+    all behind seats now; `apps/server` is regime-free and the `DEFERRED_RUNTIME_PASS` allowlist is
+    empty.)_ Spec:
     [sp-3c](superpowers/specs/2026-09-05-module-sp3c-gated-provisioning-design.md); plan:
     [sp-3c plan](superpowers/plans/2026-09-05-module-sp3c-gated-provisioning.md).
     - *Left behind, not gaps (recorded at land):* (a) **a `provisionTestVenue(db, overrides)` helper

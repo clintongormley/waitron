@@ -3,7 +3,7 @@ import { withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { recordIncident } from "@waitron/core";
 import type { IncidentSeverity } from "@waitron/core";
-import type { DrainResult } from "@waitron/fiscal";
+import { emptyDrainResult, type DrainResult } from "@waitron/fiscal";
 import { AppError, isAppError, tenantId as brandTenantId } from "@waitron/shared";
 import type { SaleId, TenantId, TillId } from "@waitron/shared";
 import { MAX_REGISTROS_POR_ENVIO, resolveEstadoEfectivo } from "@waitron/verifactu";
@@ -164,15 +164,7 @@ async function tenantsWithWork(db: Database, now: Date): Promise<TenantId[]> {
 }
 
 export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
-  const result: DrainResult = {
-    nextDueAt: null,
-    batchesSent: 0,
-    recordsSubmitted: 0,
-    recordsAccepted: 0,
-    recordsHalted: 0,
-    incidentsRaised: 0,
-    skipped: [],
-  };
+  const result = emptyDrainResult();
   // The batch cap, resolved ONCE here (default `MAX_REGISTROS_POR_ENVIO`) and threaded to every
   // use site below, so a test injecting a small cap and production's default 1000 share one code
   // path. See `DrainDeps.maxRegistrosPorEnvio`'s own doc comment for why this is injectable.

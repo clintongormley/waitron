@@ -47,8 +47,8 @@ import { packageDirOf } from "../packages/module/src/module.js";
  *   tree (so it is `sync`, not hardcoded), but a trigger calling some OTHER module's function
  *   would not surface. This is deliberate — a general function-call scan would surface unrelated
  *   edges (shared trigger functions) beyond SP-3a's scope. Extend `EXECUTE_SYNC_CAPTURE` when
- *   another cross-module SPI appears. The `fiscal→sync` vacuous-pass anchor pins that this edge
- *   is actually found in the tree's real spelling.
+ *   another cross-module SPI appears. The `fiscal-verifactu→sync` vacuous-pass anchor pins that
+ *   this edge is actually found in the tree's real spelling.
  * - It is a regex over comment- and string-stripped text, NOT a SQL parser. `stripSql` blanks
  *   slash-star blocks, `--` line comments, and `'…'` string literals (preserving line numbers),
  *   so a `references`/`create trigger` mention in any of those is ignored — pinned by the
@@ -363,7 +363,7 @@ describe("the tree's module graph is honest", () => {
     expect(foundEdges.has("sync→identity")).toBe(true);
     expect(foundEdges.has("sync→payments")).toBe(true);
     expect(foundEdges.has("workforce→identity")).toBe(true);
-    expect(foundEdges.has("fiscal→sync")).toBe(true);
+    expect(foundEdges.has("fiscal-verifactu→sync")).toBe(true);
   });
 
   it("every FK/trigger edge in the SQL is named in the depending descriptor's requires", () => {

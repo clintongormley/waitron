@@ -360,7 +360,7 @@ beforeAll(async () => {
   };
 
   // A real trading primary establishes its own membership identity at setup (the setup-api provision
-  // handler calls this beside sealAeat). `applyVenue` alone does not, so seal it here under RING — the
+  // handler calls this beside the provisioning-secret seal). `applyVenue` alone does not, so seal it here under RING — the
   // key `assembleMirrorBundle` unseals to endorse the standby's key (membership promotion R2). Without
   // it the bundle mint throws `credentials.missing`.
   await establishNodeIdentity(
@@ -669,6 +669,13 @@ describe("adopt headline e2e — setup-mode adopt, reboot into mirror mode, pull
     // Boot under the mirror's OWN node id (what adopt persisted), NOT designated.nodeId (R3a). The state
     // dir catches the promotion leg's corrected `trading.env` below (torn down in the finally).
     const mirrorStateDir = await mkdtemp(join(tmpdir(), "waitron-adopt-e2e-mirror-state-"));
+    // Resolve the two-member fiscal slot to Veri*Factu for the reboot (this per-test reboot dir is kept
+    // separate from the adopt's `mirrorModuleStateDir`, so it carries its own modules.json). The adopted
+    // node was minted under Veri*Factu, so `fiscal-none` off leaves the slot resolving to its stamped regime.
+    await writeModuleConfig(
+      mirrorStateDir,
+      parseModuleConfig({ modules: { "fiscal-none": false } }, ALL_MODULES),
+    );
     const server = await bootMirror(port, standbyNodeId, mirrorStateDir).catch(
       async (err: unknown) => {
         // On a boot failure `server` is never assigned, so the finally below never runs — clean up the

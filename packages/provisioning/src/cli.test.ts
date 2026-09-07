@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import type { WaitronModule } from "@waitron/module";
+import type { ModuleConfig, WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
+import type { FiscalBackend, FiscalContribution } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import type { Database, DeploymentEnvironment } from "@waitron/db";
 import { manifestSets } from "@waitron/migrations";
@@ -24,7 +25,10 @@ const VENUE_RESULT = {
   nodeId: "44444444-4444-4444-4444-444444444444",
   seriesIds: ["66666666-6666-6666-6666-666666666666", "77777777-7777-7777-7777-777777777777"],
   seeded: [
-    { module: "fiscal", report: "SIF 55555555-5555-5555-5555-555555555555 (installation 1)" },
+    {
+      module: "fiscal-verifactu",
+      report: "SIF 55555555-5555-5555-5555-555555555555 (installation 1)",
+    },
   ],
 } as unknown as VenueResult;
 
@@ -134,6 +138,7 @@ interface Harness {
   apply: ReturnType<typeof vi.fn>;
   readState: ReturnType<typeof vi.fn>;
   applyVenue: ReturnType<typeof vi.fn>;
+  writeModuleConfig: ReturnType<typeof vi.fn>;
   readEnvironment: ReturnType<typeof vi.fn>;
   readTenants: ReturnType<typeof vi.fn>;
   connect: ReturnType<typeof vi.fn>;
@@ -149,6 +154,8 @@ function harness(
     apply?: CliDeps["apply"];
     readState?: () => Promise<InstanceState>;
     applyVenue?: CliDeps["applyVenue"];
+    writeModuleConfig?: CliDeps["writeModuleConfig"];
+    modules?: readonly WaitronModule[];
     readEnvironment?: () => Promise<DeploymentEnvironment | null>;
     readTenants?: () => Promise<{ country: string; taxId: string }[]>;
   } = {},
@@ -168,6 +175,7 @@ function harness(
   // The two venue seams, injected exactly like `readState`/`apply`: their real implementations need
   // a live target database and what `venue` DECIDES — what it prompts, prints, refuses — does not.
   const applyVenue = vi.fn(options.applyVenue ?? (async () => VENUE_RESULT));
+  const writeModuleConfig = vi.fn(options.writeModuleConfig ?? (async () => {}));
   const readEnvironment = vi.fn(
     options.readEnvironment ?? (async () => "preproduction" as DeploymentEnvironment),
   );
@@ -184,6 +192,7 @@ function harness(
     apply,
     readState,
     applyVenue,
+    writeModuleConfig,
     readEnvironment,
     readTenants,
     connect,
@@ -207,7 +216,8 @@ function harness(
       readState: readState as unknown as CliDeps["readState"],
       apply: apply as unknown as CliDeps["apply"],
       applyVenue: applyVenue as unknown as CliDeps["applyVenue"],
-      modules: MODULES,
+      modules: options.modules ?? MODULES,
+      writeModuleConfig: writeModuleConfig as unknown as CliDeps["writeModuleConfig"],
       readEnvironment: readEnvironment as unknown as CliDeps["readEnvironment"],
       readTenants: readTenants as unknown as CliDeps["readTenants"],
     },
@@ -1074,9 +1084,12 @@ describe("runCli venue", () => {
       "postgres://admin:adminsecret@db.example:5432/waitron_demo",
     );
     expect(applyDeps.db).toBe(await h.connect.mock.results[0].value);
-    // The same composition list the plan was built from reaches the apply, so a seed-module action
-    // always names a module the runner holds.
-    expect(applyDeps.modules).toBe(MODULES);
+    // The same (fiscal-slot-resolved) module list the plan was built from reaches the apply, so a
+    // seed-module action always names a module the runner holds. The fake MODULES carries no fiscal-slot
+    // member, so the selection leaves the set unchanged — hence content-equal to MODULES.
+    expect(applyDeps.modules).toEqual(MODULES);
+    // The resolved fiscal-slot config is persisted after the apply.
+    expect(h.writeModuleConfig).toHaveBeenCalledTimes(1);
 
     const printed = h.lines.join("\n");
     expect(printed).toContain("Plan for a venue in waitron_demo (preproduction):");
@@ -1090,7 +1103,7 @@ describe("runCli venue", () => {
     // The result summary names the node and one line per module seed the apply ran.
     expect(printed).toContain(`node:     ${VENUE_RESULT.nodeId}`);
     expect(printed).toContain(
-      "seeded:   fiscal — SIF 55555555-5555-5555-5555-555555555555 (installation 1)",
+      "seeded:   fiscal-verifactu — SIF 55555555-5555-5555-5555-555555555555 (installation 1)",
     );
 
     // No secret anywhere: the admin connection string is never echoed, the admin PIN never appears,
@@ -1102,6 +1115,43 @@ describe("runCli venue", () => {
     expect(printedUris(h.lines)).toEqual([]);
     // The target connection was closed, whichever way the run ended.
     expect(h.closes()).toBe(1);
+  });
+
+  it("resolves the fiscal slot from the territory: a GB-vat venue disables verifactu, keeps `none`", async () => {
+    // A synthetic composition list with BOTH fiscal-slot members — the real shape ALL_MODULES takes.
+    // `--territory GB-vat` resolves `filing: "none"`, so the selection enables `fiscal-none` and disables
+    // `fiscal-verifactu`; the persisted config carries exactly that, and only the enabled set reaches the
+    // apply so verifactu's seed is never planned for a no-regime node.
+    const contribution = (id: string): FiscalContribution => ({
+      id,
+      makeBackend: () => ({ id }) as unknown as FiscalBackend,
+      drain: () => Promise.reject(new Error("cli selection tests never run the drain seat")),
+    });
+    const modules: readonly WaitronModule[] = [
+      fakeModule("core"),
+      fakeModule("fiscal-verifactu", { fiscal: contribution("verifactu") }),
+      fakeModule("fiscal-none", { fiscal: contribution("none") }),
+    ];
+    let written: ModuleConfig | undefined;
+    const h = harness({
+      env: VENUE_ENV,
+      modules,
+      writeModuleConfig: async (config) => void (written = config),
+    });
+    // GB country + GB-vat territory (the territory must be country-prefixed).
+    const gbArgs = VENUE_ARGS.map((arg) =>
+      arg === "ES" ? "GB" : arg === "ES-common" ? "GB-vat" : arg,
+    );
+    const code = await runCli([...gbArgs, "--yes"], h.deps);
+    expect(code).toBe(0);
+
+    // Only the enabled set reaches the apply — verifactu (and its seed) is dropped for a no-regime node.
+    const [, applyDeps] = h.applyVenue.mock.calls[0] as [VenueAction[], VenueApplyDeps];
+    expect(applyDeps.modules.map((m) => m.name)).toEqual(["core", "fiscal-none"]);
+
+    // The persisted config disables verifactu and enables `none`.
+    expect(written?.overrides.get("fiscal-verifactu")).toBe(false);
+    expect(written?.overrides.get("fiscal-none")).toBe(true);
   });
 
   it("reads the admin PIN echo-OFF from a prompt when WAITRON_ADMIN_PIN is unset, and never prints it", async () => {

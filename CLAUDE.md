@@ -277,6 +277,18 @@ unfiltered `main` run, not a wrong hook.
   `rebase --continue`, and verify by RUNNING the package's grant assertions and `privileges.test.ts`
   plus `inmutabilidad`. Works because the snapshot chain deliberately lags the DB (custom migrations
   are snapshot-less). Paid for on #165.
+- **A new product domain lands as a MODULE, not as new code in the core.** A domain is a package that
+  fills the contract seats (schema, sync, provisioning, fiscal, vocabulary…) and is named only by
+  `@waitron/composition`; generic code never learns it exists. Cost of the other shape: a whole regime
+  wired straight into `apps/server`, the till backend and the venue runners, so `fiscal-none` could
+  not be added until SP-3 pulled it back behind the slot — after which the no-op regime was a package
+  with an empty runtime duty and `apps/server` imported no regime at all (`fiscal-none`, this branch;
+  design `docs/superpowers/specs/2026-09-06-module-fiscal-none-design.md`, SP-3).
+- **No new table enters the core migration set without a stated reason in the commit.** A
+  `tenant_id`-bearing domain table belongs to its module's own migration set (`migrations.from`), where
+  its grants travel with it; a core-set addition is a deliberate exception and says why it is
+  not a module's. Same defect class as §1's unstated claims — an unexplained core table is a boundary
+  decision no future reader can audit.
 
 ---
 

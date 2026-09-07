@@ -162,7 +162,7 @@ describe("assembleMirrorBundle (primary side, real Postgres)", () => {
     // The reserved identity: a fresh installation number, disjoint series (FA/RF suffixed with it,
     // purpose preserved), and an endorsement of the standby's key by the primary node.
     const r = bundle.reservedIdentity;
-    const fiscal = r.modules.fiscal as {
+    const fiscal = r.modules["fiscal-verifactu"] as {
       nif: string;
       idSistemaInformatico: string;
       numeroInstalacion: number;

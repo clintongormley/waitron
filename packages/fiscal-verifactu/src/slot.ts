@@ -1,5 +1,8 @@
 import type { FiscalContribution } from "@waitron/fiscal";
 import { VerifactuBackend } from "./backend.js";
+import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
+import { drain as runDrain } from "./drain.js";
+import { parseAeatCert, sealAeatSecret } from "./provisioning-secret.js";
 
 /**
  * The sale path never contacts AEAT — only `drain`/`reconcile` do, and the backend built here is
@@ -23,4 +26,31 @@ export const FISCAL_SLOT: FiscalContribution = {
       deploymentEnvironment: environment,
       resolveClient: rejectResolveClient,
     }),
+  // The runtime submission pass. The regime OWNS its transport: it builds a per-pass mTLS resolver
+  // (one TLS pool per tenant with due work, released in `finally`) and hands `runDrain` only the
+  // vault-scoped `resolveClient`. `environment` doubles as `runDrain`'s `Entorno` guard and
+  // `aeatEndpointFor`'s host selector — the same `"production" | "preproduction"` union — so no cast.
+  drain: async ({ db, ring, environment, skipRetryMs, log }, now) => {
+    const resolver = aeatClientResolver(
+      { db, ring, endpointFor: aeatEndpointFor(environment), fetchFor: mtlsFetch },
+      log,
+    );
+    try {
+      return await runDrain({ db, resolveClient: resolver.resolve, skipRetryMs, environment }, now);
+    } finally {
+      await resolver.closeAll();
+    }
+  },
+  // The provision-time secret: a Veri*Factu venue's AEAT signing certificate. Required only for a
+  // PRODUCTION provision (a preproduction box records its chain locally and never submits, so the
+  // cert is optional there — spec §10). `validate` refuses a malformed blob with `setup.request_invalid`
+  // and writes nothing, run by the host BEFORE `provisionVenue` mints the unrepairable SIF/chain
+  // (CLAUDE.md §5); `seal` writes it under the tenant's transaction after the mint.
+  provisioningSecret: {
+    required: (environment) => environment === "production",
+    validate: (raw) => {
+      parseAeatCert(raw);
+    },
+    seal: (deps, tenantId, raw) => sealAeatSecret(deps, tenantId, raw),
+  },
 };

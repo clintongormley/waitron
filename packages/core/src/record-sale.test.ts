@@ -225,8 +225,6 @@ function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>)
     recordSubstitution: (tx, sale, substitution) => fake.recordSubstitution(tx, sale, substitution),
     checkIntegrity: (tx, tenant, node) => fake.checkIntegrity(tx, tenant, node),
     pendingCount: (tenant, node) => fake.pendingCount(tenant, node),
-    drain: (now) => fake.drain(now),
-    reconcile: (tenant, period) => fake.reconcile(tenant, period),
     ...overrides,
   };
 }

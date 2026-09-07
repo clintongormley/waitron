@@ -148,6 +148,24 @@ export interface DrainResult {
 }
 
 /**
+ * A fresh empty `DrainResult` — every counter zero, no next due time, nothing skipped. The no-regime
+ * regime returns it wholesale (it has no authority to contact), and `drain`'s own pass seeds its
+ * result from it. A FUNCTION, not a shared constant, because a caller mutates the object it gets back
+ * (`drain` accumulates counts into its seed), so each call must own a fresh `skipped` array.
+ */
+export function emptyDrainResult(): DrainResult {
+  return {
+    nextDueAt: null,
+    batchesSent: 0,
+    recordsSubmitted: 0,
+    recordsAccepted: 0,
+    recordsHalted: 0,
+    incidentsRaised: 0,
+    skipped: [],
+  };
+}
+
+/**
  * How this POS classifies what a regime reports back about a submission — plan 3b's own settled
  * classification, independent of whatever raw code a particular regime uses for the same idea.
  * `"accepted_with_errors"` still counts as accepted, mirroring `DrainResult.recordsAccepted`'s
@@ -173,7 +191,7 @@ export interface ReconcileMismatch {
  * The outcome of one `reconcile(tenantId, period)` pass — the read-side counterpart to
  * `DrainResult` above. `lostAck`/`noTrace`/`drift` are non-overlapping: a record still awaiting
  * acknowledgement that the regime has simply not reported on yet is ordinary in-flight state, not
- * any of the three. See `FiscalBackend.reconcile`'s own doc comment for the full classification.
+ * any of the three.
  */
 export interface ReconcileResult {
   year: string;
@@ -198,15 +216,11 @@ export interface ReconcileResult {
  * one: a second backend arrives with its own tables and its own vocabulary and changes nothing
  * here.
  *
- * `drain(now)` and `reconcile(tenantId, period)` were reserved names for the submission plan,
- * deliberately absent until that plan designed flow control, error-3000 resolution and the
- * file-export persistence rule — every one of which constrains their return types, and guessing
- * at a signature before that design existed would mean implementing against one that changes
- * anyway. Both are now filled in below, their shapes settled by that design (`DrainResult` and
- * `ReconcileResult` above) — no reserved names remain. An interface method with no caller and no
- * meaningful fake is dead surface that mutation testing cannot reach: exactly the shape of
- * vacuous test this project must not add another instance of. Do not introduce `flush`, `sync` or
- * `push` in either method's place.
+ * The runtime submission pass (`drain`) and the reconciliation sweep (`reconcile`) are NOT on this
+ * interface: they run outside the sale path, on the module's own tables, and are reached through
+ * the `FiscalContribution` slot's own seats — not by every caller that records a sale. `DrainResult`
+ * and `ReconcileResult` above are their return shapes, produced by `@waitron/fiscal-verifactu`'s
+ * standalone `drain`/`reconcile` functions.
  */
 export interface FiscalBackend {
   /** This backend's identifying string — what `sales.fiscal_backend` records, and the value the
@@ -322,21 +336,4 @@ export interface FiscalBackend {
    * explicitly. `nodeId` because the chain is per-node (node-id rekey, 2026-08-03).
    */
   pendingCount(tenantId: TenantId, nodeId: NodeId): Promise<number>;
-
-  /**
-   * Submits everything currently due as of `now`, in batches, and returns when to run again. One
-   * pass; the repeating cadence is the caller re-invoking on `nextDueAt`, driven by the database,
-   * never an in-memory timer. A backend with nothing to submit answers `{ nextDueAt: null, …zeros }`.
-   */
-  drain(now: Date): Promise<DrainResult>;
-
-  /**
-   * Audits one calendar period against whatever the regime reports back for it, classifying every
-   * disagreement into `lostAck`/`noTrace`/`drift` (see `ReconcileResult`). Takes `tenantId` and NO
-   * transaction, like `pendingCount`: the read happens outside any sale transaction, and it is
-   * scoped to the tenant as a whole rather than one till — a regime's own reporting works the same
-   * way. A backend with nothing to check for the period answers `{ year, month, checked: 0,
-   * lostAck: [], noTrace: [], drift: [], incidentsRaised: 0 }`.
-   */
-  reconcile(tenantId: TenantId, period: { year: string; month: string }): Promise<ReconcileResult>;
 }

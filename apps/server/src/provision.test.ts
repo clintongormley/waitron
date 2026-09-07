@@ -1,5 +1,8 @@
 import { clearProvisionFixture } from "./testing/clear-provision-fixture.js";
-import { afterEach, describe, expect, it } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { readDeploymentEnvironment, stampDeployment, type Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
@@ -8,11 +11,15 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import type { VenueRequest } from "@waitron/provisioning";
 import { isAppError } from "@waitron/shared";
 import { parseModuleConfig } from "@waitron/module";
-import { provisionVenue } from "./provision.js";
+import { provisionVenue, venueModuleConfig } from "./provision.js";
+import { readModuleConfig } from "./module-config.js";
 import { ALL_MODULES } from "./modules.js";
 
-/** All modules enabled (an absent/empty modules.json) — the default the happy-path deps pass. */
+/** All modules enabled (an absent/empty modules.json) — the operator base a provision starts from. */
 const ALL_ENABLED = parseModuleConfig({}, ALL_MODULES);
+/** The fiscal-slot-resolved config a Spanish (ES-common → Veri*Factu) provision runs and persists —
+ * what boot's `venueModuleConfig` builds from the request's territory before calling `provisionVenue`. */
+const ES_CONFIG = venueModuleConfig(ALL_ENABLED, "ES-common");
 
 // Each provisioned venue needs its own NIF (`tenants_country_tax_id_key` is unique); the shared database
 // draws from one generator, the same nextNif shape `till-sale.test.ts` uses.
@@ -52,6 +59,16 @@ function venueRequest(taxId: string): VenueRequest {
   };
 }
 
+/** A valid no-regime (`GB-vat`) venue: country GB, a country-prefixed territory, everything else the
+ * same shape as the ES fixture. Its filing module resolves to `none`, so it registers no SIF. */
+function gbVenueRequest(taxId: string): VenueRequest {
+  return {
+    ...venueRequest(taxId),
+    country: "GB",
+    location: { ...venueRequest(taxId).location, fiscalTerritory: "GB-vat" },
+  };
+}
+
 /** The row counts a duplicate provision would grow — each a fresh node = a fresh SIF/hash chain. */
 interface FiscalCounts {
   sif: number;
@@ -78,6 +95,17 @@ async function fiscalCounts(db: Database): Promise<FiscalCounts> {
 const suite = usePgliteDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
 afterEach(() => clearProvisionFixture(suite.db));
+// A fresh state dir per test so `provisionVenue`'s `writeModuleConfig(stateDir, …)` has somewhere to
+// land and its `modules.json` can be read back and asserted.
+let stateDir: string;
+
+beforeEach(async () => {
+  stateDir = await mkdtemp(join(tmpdir(), "waitron-provision-"));
+});
+
+afterEach(async () => {
+  await rm(stateDir, { recursive: true, force: true });
+});
 
 function ownerDb(): Database {
   return suite.db;
@@ -89,7 +117,7 @@ describe("provisionVenue", () => {
     expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 0, nodes: 0, registros: 0 });
 
     const result = await provisionVenue(
-      { ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" },
+      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     );
 
@@ -105,23 +133,61 @@ describe("provisionVenue", () => {
       expect((id as string).length).toBeGreaterThan(0);
     }
     expect(result.seriesIds).toHaveLength(2);
-    expect(result.seeded.map((s) => s.module)).toEqual(["fiscal"]);
+    expect(result.seeded.map((s) => s.module)).toEqual(["fiscal-verifactu"]);
 
     // The box is now stamped for the requested environment.
     expect(await readDeploymentEnvironment(db)).toBe("preproduction");
 
     // Exactly one SIF, one series set (standard + rectificative) and one node.
     expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 2, nodes: 1, registros: 0 });
+
+    // The resolved slot was persisted: `fiscal-none` disabled so the trading boot resolves to
+    // Veri*Factu rather than failing `module.fiscal_slot_ambiguous` under the default-on set.
+    const written = await readModuleConfig(stateDir);
+    expect(written.overrides.get("fiscal-none")).toBe(false);
+    expect(written.overrides.get("fiscal-verifactu")).toBe(true);
   });
 
-  it("refuses venue provisioning when a provision-only module is disabled — before minting anything", async () => {
-    // The SP-1b fiscal gate (spec §4): disabling the `fiscal` (provision-only) module must REFUSE
-    // provisioning outright — never mint an unrecoverable SIF/hash chain for a module that is off
-    // (CLAUDE.md §5). The guard is step 0, before planVenue/stampDeployment/applyVenue, so nothing is
-    // validated, stamped or minted. Proven by an `ownerDb` Proxy that THROWS on ANY property access:
-    // if the guard short-circuits first, the DB is never touched, so a `module.provision_only_disabled`
-    // throw (rather than "ownerDb must not be touched") is the proof.
-    const moduleConfig = parseModuleConfig({ modules: { fiscal: false } }, ALL_MODULES);
+  it("a GB (no-regime) venue mints no SIF/chain and persists modules.json disabling fiscal-verifactu", async () => {
+    // The `GB-vat` territory resolves `filing: "none"`, so `venueModuleConfig` selects `fiscal-none`
+    // and disables `fiscal-verifactu`. A no-regime node registers NO SIF and runs no fiscal seed —
+    // it still gets its two invoice series (a core concern, not fiscal). This is the first venue that
+    // provisions the second fiscal-slot member, the coexistence the whole slice exists to prove.
+    const db = ownerDb();
+    const config = venueModuleConfig(ALL_ENABLED, "GB-vat");
+
+    const result = await provisionVenue(
+      { ownerDb: db, moduleConfig: config, database: "waitron", stateDir },
+      { environment: "preproduction", venue: gbVenueRequest(nextNif()) },
+    );
+
+    // No fiscal seed ran (fiscal-none contributes none), so nothing was seeded.
+    expect(result.seeded).toEqual([]);
+    expect(result.seriesIds).toHaveLength(2);
+    // No registro_sif, no chain — but the node and its two series exist.
+    expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 2, nodes: 1, registros: 0 });
+
+    // The persisted slot disables Veri*Factu and keeps `fiscal-none`.
+    const written = await readModuleConfig(stateDir);
+    expect(written.overrides.get("fiscal-verifactu")).toBe(false);
+    expect(written.overrides.get("fiscal-none")).toBe(true);
+  });
+
+  it("refuses venue provisioning when the fiscal slot is emptied — before minting anything", async () => {
+    // A caller that hands `provisionVenue` a config with BOTH fiscal-slot members disabled empties the
+    // slot, so provisioning must REFUSE outright — never mint an unrecoverable SIF/hash chain with no
+    // regime to file it (CLAUDE.md §5). Both members carry a `fiscal` seat, so the provision-only gate
+    // no longer flags them (that set is governed by the slot's exactly-one rule); the slot check is what
+    // refuses, as step 0b, before planVenue/stampDeployment/applyVenue — nothing is validated, stamped
+    // or minted. Proven by an `ownerDb` Proxy that THROWS on ANY property access: a
+    // `module.fiscal_slot_empty` throw (rather than "ownerDb must not be touched") is the proof the slot
+    // check short-circuits before the DB is ever reached. (Normal callers reach `provisionVenue` through
+    // `venueModuleConfig`, which forces exactly one member on — the empty slot is the defensive branch a
+    // territory whose filing has no module would hit.)
+    const moduleConfig = parseModuleConfig(
+      { modules: { "fiscal-verifactu": false, "fiscal-none": false } },
+      ALL_MODULES,
+    );
     const ownerDb = new Proxy(
       {},
       {
@@ -131,24 +197,27 @@ describe("provisionVenue", () => {
       },
     ) as never;
     const err = await provisionVenue(
-      { ownerDb, moduleConfig, database: "waitron" },
+      { ownerDb, moduleConfig, database: "waitron", stateDir },
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     ).catch((e: unknown) => e);
     expect(isAppError(err)).toBe(true);
-    expect(isAppError(err) && err.code).toBe("module.provision_only_disabled");
+    expect(isAppError(err) && err.code).toBe("module.fiscal_slot_empty");
   });
 
   it("refuses a second provision of the same NIF and mints no second SIF/chain (the fiscal footgun)", async () => {
     const db = ownerDb();
     const request = { environment: "preproduction" as const, venue: venueRequest(nextNif()) };
 
-    await provisionVenue({ ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" }, request);
+    await provisionVenue(
+      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
+      request,
+    );
     const afterFirst = await fiscalCounts(db);
     expect(afterFirst).toEqual({ sif: 1, series: 2, nodes: 1, registros: 0 });
 
     // A second provision with the SAME NIF is refused BEFORE any fiscal write.
     const error = await provisionVenue(
-      { ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" },
+      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
       request,
     ).catch((e: unknown) => e);
     expect(isAppError(error)).toBe(true);
@@ -165,7 +234,7 @@ describe("provisionVenue", () => {
     // an occupied database is refused BEFORE stamping or applyVenue, exactly as the `venue` CLI does.
     const db = ownerDb();
     await provisionVenue(
-      { ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" },
+      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     );
     const afterFirst = await fiscalCounts(db);
@@ -176,7 +245,7 @@ describe("provisionVenue", () => {
 
     // A DIFFERENT business (a fresh NIF) against the SAME database is refused as a foreign tenant.
     const error = await provisionVenue(
-      { ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" },
+      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     ).catch((e: unknown) => e);
     expect(isAppError(error)).toBe(true);
@@ -211,7 +280,7 @@ describe("provisionVenue", () => {
 
     // First: provision in the CANONICAL casing.
     await provisionVenue(
-      { ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" },
+      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
       { environment: env, venue: venueRequest(nif) },
     );
     const afterFirst = await fiscalCounts(db);
@@ -220,7 +289,7 @@ describe("provisionVenue", () => {
     // Second: re-provision the SAME business in a NON-canonical casing (lowercase country + NIF).
     const nonCanonical = { ...venueRequest(nif), country: "es", taxId: nif.toLowerCase() };
     const error = await provisionVenue(
-      { ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" },
+      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
       { environment: env, venue: nonCanonical },
     ).catch((e: unknown) => e);
     expect(isAppError(error)).toBe(true);
@@ -240,7 +309,7 @@ describe("provisionVenue", () => {
 
     // ... so provisioning it for preproduction is refused at the stamp step, before any venue mint.
     const error = await provisionVenue(
-      { ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" },
+      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     ).catch((e: unknown) => e);
     expect(isAppError(error)).toBe(true);

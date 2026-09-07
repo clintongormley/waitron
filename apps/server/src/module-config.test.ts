@@ -23,7 +23,7 @@ afterEach(() => {
 describe("readModuleConfig", () => {
   it("absent file → everything enabled", async () => {
     const c = await readModuleConfig(dir);
-    expect(isEnabled(c, "fiscal")).toBe(true);
+    expect(isEnabled(c, "fiscal-verifactu")).toBe(true);
     expect(isEnabled(c, "payments")).toBe(true);
   });
   it("reads and validates a present file", async () => {

@@ -3,12 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { AppError, hasCode, isAppError } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import type { VenueResult } from "@waitron/provisioning";
 import { verifyPassword, verifyPin } from "@waitron/identity";
+import type { Database } from "@waitron/db";
+import type { KeyRing } from "@waitron/credentials";
 import type { ProvisionRequest } from "./provision.js";
 import type { AdoptCredential, AdoptRequest } from "./adopt.js";
-import { validateAeatCert, type AeatCert } from "./aeat-credential.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
 
@@ -105,7 +106,10 @@ function makeVenueResult(): VenueResult {
     nodeId: NODE_ID,
     seriesIds: [SERIES_ID_0, SERIES_ID_1],
     seeded: [
-      { module: "fiscal", report: "SIF 55555555-5555-5555-5555-555555555555 (installation 1)" },
+      {
+        module: "fiscal-verifactu",
+        report: "SIF 55555555-5555-5555-5555-555555555555 (installation 1)",
+      },
     ],
   };
 }
@@ -151,11 +155,13 @@ function liveBody(): Record<string, unknown> {
   return { ...demoBody(), mode: "live" };
 }
 
-const CERT: AeatCert = {
+// A well-formed AEAT-cert wire blob (the shape the wizard POSTs as `aeatCert`). A plain object, not
+// a regime type: the host sees the secret only as opaque `unknown`, validated through the seat.
+const CERT = {
   pfxBase64: Buffer.from("fake-pfx-bytes").toString("base64"),
   passphrase: "cert-secret",
   certKind: "sello",
-};
+} as const;
 
 /** A full set of provision deps, each a spy that records its invocation ORDER into `calls`. The
  * default `provision` also captures every request it saw into `provisionRequests`. */
@@ -166,7 +172,6 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
   provision: ReturnType<typeof vi.fn>;
   establishIdentity: ReturnType<typeof vi.fn>;
   seedMembership: ReturnType<typeof vi.fn>;
-  sealAeat: ReturnType<typeof vi.fn>;
   persistTrading: ReturnType<typeof vi.fn>;
   requestRestart: ReturnType<typeof vi.fn>;
 } {
@@ -183,21 +188,31 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
   const seedMembership = vi.fn(async () => {
     calls.push("seedMembership");
   });
-  const sealAeat = vi.fn(async () => {
-    calls.push("sealAeat");
-  });
   const persistTrading = vi.fn(async () => {
     calls.push("persistTrading");
   });
   const requestRestart = vi.fn(() => {
     calls.push("requestRestart");
   });
+  // The regime's provisioning-secret seal runs `withTenant(db, …)` — i.e. `db.transaction(cb)`. A fake
+  // db that RECORDS the seal (in order, into `calls`) and resolves stands in for the real vault write.
+  // The seal's DB correctness — the sealed row, the right tenant, the round-trip — is covered by the
+  // regime's `provisioning-secret.test.ts` and boot.ts's end-to-end live-seal test; here we only assert
+  // the orchestration reaches the seal in order, exactly what the old injected `sealAeat` spy asserted.
+  // `ring` is a sentinel: the recording db never invokes the callback that would use it.
+  const db = {
+    transaction: async () => {
+      calls.push("sealAeat");
+    },
+  } as unknown as Database;
+  const ring = {} as unknown as KeyRing;
   const deps: SetupDeps = {
     environment: "preproduction",
     provision,
     establishIdentity,
     seedMembership,
-    sealAeat,
+    db,
+    ring,
     persistTrading,
     requestRestart,
     databaseUrl: DATABASE_URL,
@@ -211,7 +226,6 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
     provision,
     establishIdentity,
     seedMembership,
-    sealAeat,
     persistTrading,
     requestRestart,
   };
@@ -240,7 +254,6 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
       provisionRequests,
       establishIdentity,
       seedMembership,
-      sealAeat,
       requestRestart,
       persistTrading,
     } = makeDeps();
@@ -270,8 +283,8 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
     expect(establishIdentity).toHaveBeenCalledWith(TENANT_ID, NODE_ID);
     expect(seedMembership).toHaveBeenCalledWith(TENANT_ID, NODE_ID);
 
-    // Demo → no AEAT cert seal, and the demo/live fork stamped preproduction.
-    expect(sealAeat).not.toHaveBeenCalled();
+    // Demo → no AEAT cert seal (the seal is never reached), and the demo/live fork stamped preproduction.
+    expect(calls).not.toContain("sealAeat");
     const req = provisionRequests[0];
     expect(req.environment).toBe("preproduction");
 
@@ -334,7 +347,7 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
     expect(requestRestart).not.toHaveBeenCalled();
   });
 
-  it("refuses a live ES-common provision with no AEAT cert (400), without provisioning", async () => {
+  it("refuses a live production provision with no AEAT cert (400 setup.provisioning_secret_required naming the module), without provisioning", async () => {
     const app = new Hono();
     const { deps, provision, requestRestart } = makeDeps();
     mountSetup(app, deps, noopLog);
@@ -342,7 +355,12 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
     const res = await postProvision(app, liveBody());
 
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ error: { code: "setup.aeat_cert_required", params: {} } });
+    // Renamed from `setup.aeat_cert_required` when the cert moved behind the provisioning-secret seat;
+    // the module id names which regime demanded it (Veri*Factu here), resolved from the request's
+    // ES-common territory via the composition list.
+    expect(await res.json()).toEqual({
+      error: { code: "setup.provisioning_secret_required", params: { module: "verifactu" } },
+    });
     expect(provision).not.toHaveBeenCalled();
     await tick();
     expect(requestRestart).not.toHaveBeenCalled();
@@ -350,7 +368,7 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
 
   it("provisions a live venue with a cert: stamps production and seals the cert in order", async () => {
     const app = new Hono();
-    const { deps, calls, provisionRequests, sealAeat } = makeDeps();
+    const { deps, calls, provisionRequests } = makeDeps();
     mountSetup(app, deps, noopLog);
 
     const res = await postProvision(app, { ...liveBody(), aeatCert: CERT });
@@ -358,11 +376,10 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
     expect(res.status).toBe(200);
     await tick();
     expect(provisionRequests[0].environment).toBe("production");
-    expect(sealAeat).toHaveBeenCalledTimes(1);
-    expect(sealAeat.mock.calls[0]).toEqual([TENANT_ID, CERT]);
-    // The seal runs AFTER provision mints the tenant and BEFORE the trading config is persisted;
-    // identity establishment and the term-0 membership seed sit between provision and the seal
-    // (design §4 + §6 R1).
+    // The seal (recorded by the fake db, above) runs AFTER provision mints the tenant and BEFORE the
+    // trading config is persisted; identity establishment and the term-0 membership seed sit between
+    // provision and the seal (design §4 + §6 R1). Its DB write + right-tenant are covered by the
+    // regime's provisioning-secret.test.ts and boot.ts's end-to-end live-seal test.
     expect(calls).toEqual([
       "provision",
       "establishIdentity",
@@ -373,18 +390,18 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
     ]);
   });
 
-  // Symmetric to the cert-required gate above: the AEAT signing cert is meaningful ONLY for a LIVE
-  // ES-common venue (exactly when `setup.aeat_cert_required` DEMANDS it). A demo/preproduction box
-  // files nothing to AEAT, so a demo body carrying a cert is an invalid request — refused
-  // defense-in-depth so a real AEAT signing cert can never be sealed into a preproduction tenant's
-  // vault, even though the 2c client now gates the cert on live mode and never sends it otherwise.
-  // Refused BEFORE `provision`, so NOTHING is stamped/minted/sealed. Deletion-proof: remove the
-  // `if (!certExpected && certPresent) invalidRequest("aeatCert")` line in setup-api.ts (where
-  // `certPresent === (body.aeatCert !== undefined)`) and this goes RED — the cert reaches `provision`
-  // and then `sealAeat` on a preproduction tenant.
+  // Symmetric to the secret-required gate above: the AEAT signing cert is meaningful ONLY for a
+  // provision whose regime demands it (a LIVE ES-common venue). A demo/preproduction box files
+  // nothing to AEAT, so a demo body carrying a cert is an invalid request — refused defense-in-depth
+  // so a real AEAT signing cert can never be sealed into a preproduction tenant's vault, even though
+  // the 2c client now gates the cert on live mode and never sends it otherwise. Refused BEFORE
+  // `provision`, so NOTHING is stamped/minted/sealed. Deletion-proof: remove the
+  // `if (!expected && present) invalidRequest("aeatCert")` line in setup-api.ts (where
+  // `present === (body.aeatCert !== undefined)`) and this goes RED — the cert reaches `provision`
+  // and then the seal on a preproduction tenant.
   it("refuses a demo provision carrying an AEAT cert (400 setup.request_invalid, field aeatCert), without provisioning or sealing", async () => {
     const app = new Hono();
-    const { deps, provision, sealAeat, requestRestart } = makeDeps();
+    const { deps, provision, calls, requestRestart } = makeDeps();
     mountSetup(app, deps, noopLog);
 
     const res = await postProvision(app, { ...demoBody(), aeatCert: CERT });
@@ -395,22 +412,21 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
     expect(json.error.params.field).toBe("aeatCert");
     // NOTHING stamped, minted or sealed — the cert was rejected before `provision` ran.
     expect(provision).not.toHaveBeenCalled();
-    expect(sealAeat).not.toHaveBeenCalled();
+    expect(calls).not.toContain("sealAeat");
     await tick();
     expect(requestRestart).not.toHaveBeenCalled();
   });
 
   // The presence gate (Copilot, backlog i): a non-expected request carrying a MALFORMED cert must
-  // reject with the CLEAN "cert not expected" fault naming `aeatCert`, and must NOT run
-  // `parseCert`/`validateAeatCert` at all — no wasted validation on a cert that is refused regardless.
-  // The cert below has a non-base64 `pfxBase64`: were `parseCert` reached first (the pre-Copilot
-  // order), `validateAeatCert` would throw naming `pfxBase64` (see its own direct tests below). The
-  // field being EXACTLY `aeatCert` is the proof the PRESENCE gate fired before any parse. Deletion-
-  // proof: move the `const aeatCert = … parseCert(…)` line in setup-api.ts back above the gate and
-  // this test flips to field `pfxBase64` (RED).
-  it("refuses a demo provision carrying a MALFORMED aeatCert with field EXACTLY 'aeatCert' (not a parseCert sub-field like 'pfxBase64'), without parsing/provisioning/sealing", async () => {
+  // reject with the CLEAN "cert not expected" fault naming `aeatCert`, and must NOT run the regime's
+  // `validate` seat at all — no wasted validation on a cert that is refused regardless. The cert below
+  // has a non-base64 `pfxBase64`: were `validate` reached first, it would throw naming `pfxBase64`
+  // (see the regime's own direct validator tests). The field being EXACTLY `aeatCert` is the proof the
+  // PRESENCE gate fired before any parse. Deletion-proof: move the `if (expected) secret!.validate(…)`
+  // line in setup-api.ts above the presence gate and this test flips to field `pfxBase64` (RED).
+  it("refuses a demo provision carrying a MALFORMED aeatCert with field EXACTLY 'aeatCert' (not a validator sub-field like 'pfxBase64'), without validating/provisioning/sealing", async () => {
     const app = new Hono();
-    const { deps, provision, sealAeat, requestRestart } = makeDeps();
+    const { deps, provision, calls, requestRestart } = makeDeps();
     mountSetup(app, deps, noopLog);
 
     const malformedCert = {
@@ -423,24 +439,24 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json.error.code).toBe("setup.request_invalid");
-    // EXACTLY "aeatCert" — not "pfxBase64", which parseCert/validateAeatCert would have named had the
-    // reject fired only AFTER parsing. That distinguishes the presence gate from a value-level reject.
+    // EXACTLY "aeatCert" — not "pfxBase64", which the regime's validator would have named had the
+    // reject fired only AFTER validation. That distinguishes the presence gate from a value-level reject.
     expect(json.error.params.field).toBe("aeatCert");
     expect(json.error.params.field).not.toBe("pfxBase64");
     expect(provision).not.toHaveBeenCalled();
-    expect(sealAeat).not.toHaveBeenCalled();
+    expect(calls).not.toContain("sealAeat");
     await tick();
     expect(requestRestart).not.toHaveBeenCalled();
   });
 
   // CRITICAL fiscal guard: a malformed AEAT cert must be refused BEFORE `provision` runs. Without the
-  // upfront `validateAeatCert` in `parseCert`, a live ES-common provision with `certKind:"bogus"` or a
-  // non-base64 `pfxBase64` would run `provision` first — stamping production and minting the SIF/hash
-  // chain (UNREPAIRABLE, CLAUDE.md §5) — and only THEN 400 inside `sealAeatCredential`, wedging the box
-  // permanently (a corrected retry then hits `setup.already_provisioned` 409 forever). The 0 provision
-  // calls below are the proof that NOTHING was stamped or minted. Deletion-proof: remove the
-  // `validateAeatCert(parsed)` line in `setup-api.ts`'s `parseCert` and these go RED — the bogus cert
-  // reaches `provision`.
+  // upfront `secret.validate(body.aeatCert)` (the regime's `provisioningSecret.validate` seat), a live
+  // production provision with `certKind:"bogus"` or a non-base64 `pfxBase64` would run `provision`
+  // first — stamping production and minting the SIF/hash chain (UNREPAIRABLE, CLAUDE.md §5) — and only
+  // THEN 400 inside the seal, wedging the box permanently (a corrected retry then hits
+  // `setup.already_provisioned` 409 forever). The 0 provision calls below are the proof that NOTHING
+  // was stamped or minted. Deletion-proof: remove the `if (expected) secret!.validate(body.aeatCert)`
+  // line in `setup-api.ts` and these go RED — the bogus cert reaches `provision`.
   it.each<[string, Record<string, unknown>]>([
     ["a certKind outside {sello, representante}", { ...CERT, certKind: "bogus" }],
     ["a non-base64 pfxBase64", { ...CERT, pfxBase64: "not valid base64!!!" }],
@@ -647,7 +663,7 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
   it("maps a thrown module.provision_only_disabled to 409 (SP-1b fiscal gate)", async () => {
     const app = new Hono();
     const provision = vi.fn(async () => {
-      throw new AppError("module.provision_only_disabled", { module: "fiscal" });
+      throw new AppError("module.provision_only_disabled", { module: "fiscal-verifactu" });
     });
     const { deps } = makeDeps({ provision });
     mountSetup(app, deps, noopLog);
@@ -673,7 +689,8 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
     ["provision"],
     ["establishIdentity"],
     ["seedMembership"],
-    ["sealAeat"],
+    ["db"],
+    ["ring"],
     ["persistTrading"],
     ["requestRestart"],
     ["databaseUrl"],
@@ -690,42 +707,9 @@ describe("POST /setup-api/provision — orchestration, demo/live fork, cert gate
   });
 });
 
-// The upfront cert validator `parseCert` calls before `provision`. Tested directly (not only through
-// the endpoint) because `parseCert`'s own `asString` already rejects an empty passphrase, so that
-// branch is defense-in-depth unreachable from the endpoint — a direct test is what proves it fires.
-describe("validateAeatCert — full cert-value validation before provisioning", () => {
-  function goodCert(overrides: Partial<AeatCert> = {}): AeatCert {
-    return { ...CERT, ...overrides };
-  }
-
-  it("accepts a well-formed cert (sello + base64 pfx + non-empty passphrase)", () => {
-    expect(() => validateAeatCert(goodCert())).not.toThrow();
-    expect(() => validateAeatCert(goodCert({ certKind: "representante" }))).not.toThrow();
-  });
-
-  it.each<[string, AeatCert, string]>([
-    [
-      "a certKind outside the set",
-      goodCert({ certKind: "bogus" as AeatCert["certKind"] }),
-      "certKind",
-    ],
-    ["an empty pfxBase64", goodCert({ pfxBase64: "" }), "pfxBase64"],
-    ["a non-base64 pfxBase64", goodCert({ pfxBase64: "not base64!" }), "pfxBase64"],
-    ["a malformed base64 length", goodCert({ pfxBase64: "QQ" }), "pfxBase64"],
-    ["an empty passphrase", goodCert({ passphrase: "" }), "passphrase"],
-  ])("rejects %s with setup.request_invalid naming the field", (_label, cert, field) => {
-    let error: unknown;
-    try {
-      validateAeatCert(cert);
-    } catch (e) {
-      error = e;
-    }
-    expect(isAppError(error)).toBe(true);
-    expect(isAppError(error) && hasCode(error, "setup.request_invalid") && error.params.field).toBe(
-      field,
-    );
-  });
-});
+// The upfront cert-shape validator (`parseAeatCert`/`validateAeatCert`) moved into the regime with the
+// cert itself (fiscal-none slice): its direct tests — including the empty-passphrase branch unreachable
+// through the endpoint — now live in `packages/fiscal-verifactu/src/provisioning-secret.test.ts`.
 
 // Slice 2c: when a built setup-wizard dir is configured, `mountSetup` serves it as the setup surface's
 // root catch-all via `mountSpa` (basePath "" = origin root, exactly like the till) INSTEAD of the

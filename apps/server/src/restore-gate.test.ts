@@ -3,7 +3,7 @@ import { checkRestoreCompatibility } from "./restore-gate.js";
 
 const target = {
   environment: "preproduction" as const,
-  expectedVersions: { core: 40, fiscal: 12 },
+  expectedVersions: { core: 40, "fiscal-verifactu": 12 },
 };
 
 describe("checkRestoreCompatibility", () => {
@@ -73,14 +73,14 @@ describe("checkRestoreCompatibility", () => {
           manifestVersion: 1,
           createdAt: "x",
           environment: "preproduction",
-          modules: { fiscal: 13 },
+          modules: { "fiscal-verifactu": 13 },
         },
         target,
       ),
     ).toThrowError(
       expect.objectContaining({
         code: "restore.schema_too_new",
-        params: { module: "fiscal", backup: 13, target: 12 },
+        params: { module: "fiscal-verifactu", backup: 13, target: 12 },
       }),
     );
   });

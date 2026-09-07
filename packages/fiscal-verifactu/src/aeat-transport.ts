@@ -1,14 +1,13 @@
 import { Agent, fetch as undiciFetch } from "undici";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
-import type { Database } from "@waitron/db";
+import { withTenant } from "@waitron/db";
+import type { Database, DeploymentEnvironment } from "@waitron/db";
+import { getCredential } from "@waitron/credentials";
 import type { KeyRing } from "@waitron/credentials";
 import { SOAP_ENDPOINTS, SOAP_ENDPOINTS_SELLO, createClient } from "@waitron/verifactu";
 import type { VerifactuClient } from "@waitron/verifactu";
-import type { DeploymentEnvironment } from "./config.js";
-import { readCredential } from "./credentials.js";
-import { codeOf } from "./error-code.js";
-import type { Logger } from "./logger.js";
+import type { FiscalDutyLog } from "@waitron/fiscal";
 import "./errors.js";
 
 /** The two FNMT certificate kinds this host routes on. `CertKind` is derived FROM this array (not
@@ -20,7 +19,7 @@ const CERT_KINDS = ["sello", "representante"] as const;
 export type CertKind = (typeof CERT_KINDS)[number];
 
 /** The single runtime membership check for `CertKind`, derived from the same `CERT_KINDS` array the
- * type is — exported so `aeat-credential.ts`'s cert validation checks membership against THIS list
+ * type is — exported so `provisioning-secret.ts`'s cert validation checks membership against THIS list
  * rather than redeclaring its own. */
 export function isCertKind(value: string): value is CertKind {
   // Cast to a plain string array: `readonly ["sello", "representante"]` only accepts a `CertKind`
@@ -81,7 +80,9 @@ export async function readCertMaterial(
   ring: KeyRing,
   tenantId: TenantId,
 ): Promise<CertMaterial> {
-  const payload = await readCredential(db, ring, tenantId, "fiscal.aeat");
+  const payload = await withTenant(db, tenantId, (tx) =>
+    getCredential(tx, ring, { tenantId, purpose: "fiscal.aeat" }),
+  );
   return certMaterialFrom(payload, { tenantId, purpose: "fiscal.aeat" });
 }
 
@@ -164,7 +165,7 @@ export interface ClientResolver {
  * then scoped by construction, with no residue between passes to reset and no way for one pass's
  * `closeAll` to reach another's.
  */
-export function aeatClientResolver(deps: TransportDeps, log?: Logger): ClientResolver {
+export function aeatClientResolver(deps: TransportDeps, log?: FiscalDutyLog): ClientResolver {
   // The tenant travels WITH its transport, not just the bare `TenantTransport` `resolve` used to
   // push: `closeAll`'s own failure log otherwise has no way to say WHICH tenant's Agent failed to
   // close — see its own comment below.
@@ -213,15 +214,14 @@ export function aeatClientResolver(deps: TransportDeps, log?: Logger): ClientRes
               // how many others in this same `Promise.allSettled` are failing at the same time.
               try {
                 // `tenantId` and a `message` that survives a non-`AppError` are both required to make
-                // this line actionable — `codeOf` alone flattens a plain socket-layer `Error` (which
-                // is all `Agent.close()` can ever throw) to the bare string `"unknown"`, and nothing
-                // else here says WHICH tenant's mTLS pool failed to release. Unlike
-                // `server.shutdown_failed`'s own `errorCode`-only convention (errors.ts's own doc
-                // comment on why `pg`'s driver messages can carry a connection string), an `Agent`
-                // close failure is a socket-layer error with no such secret to leak.
+                // this line actionable — the `isAppError(error) ? error.code : "unknown"` code alone
+                // flattens a plain socket-layer `Error` (which is all `Agent.close()` can ever throw)
+                // to the bare string `"unknown"`, and nothing else here says WHICH tenant's mTLS pool
+                // failed to release. An `Agent` close failure is a socket-layer error with no secret
+                // to leak, so the raw `message` is safe to log here.
                 log?.("warn", "transport.close_failed", {
                   tenantId,
-                  errorCode: codeOf(error),
+                  errorCode: isAppError(error) ? error.code : "unknown",
                   message: error instanceof Error ? error.message : String(error),
                 });
               } catch {
