@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { asAppUser, DEFAULT_TIME_ZONE, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
@@ -188,6 +188,58 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     expect(m.get(within)).toEqual({ reservedTime: "11:45" });
     expect(m.get(beyond)).toEqual({ reservedTime: null });
     expect(m.get(boundary)).toEqual({ reservedTime: "11:30" });
+  });
+
+  it("builds the Intl.DateTimeFormat once per timezone and reuses it across polls (memoized)", async () => {
+    // Constructing `Intl.DateTimeFormat` is expensive and the floor polls every table read; the
+    // formatter is memoized per zone so a zone builds once and later polls reuse the same instance.
+    // Novel zones (unused by other tests) so the module cache is cold when the spy is installed.
+    const tzA = "Asia/Tokyo";
+    const tzB = "America/New_York";
+    const va = await setupVenue({ timeZone: tzA });
+    const vb = await setupVenue({ timeZone: tzB });
+    const ta = await makeTable(va, "tz-a");
+    const tb = await makeTable(vb, "tz-b");
+
+    // Return a GENUINE instance from the mock (a bare construct-through spy yields an object whose
+    // prototype chain is the spy's, so `formatToParts` throws "incompatible receiver").
+    const OriginalDTF = Intl.DateTimeFormat;
+    const spy = vi
+      .spyOn(Intl, "DateTimeFormat")
+      .mockImplementation(
+        ((...args: ConstructorParameters<typeof Intl.DateTimeFormat>) =>
+          new OriginalDTF(...args)) as unknown as typeof Intl.DateTimeFormat,
+      );
+    try {
+      await annotate(va, MADRID_NOON, [ta]); // same zone, twice
+      await annotate(va, MADRID_NOON, [ta]);
+      await annotate(vb, MADRID_NOON, [tb]); // a different zone
+
+      const builtFor = (tz: string): Intl.DateTimeFormat[] =>
+        spy.mock.results
+          .filter(
+            (_r, i) =>
+              (spy.mock.calls[i]![1] as Intl.DateTimeFormatOptions | undefined)?.timeZone === tz,
+          )
+          .map((r) => r.value as Intl.DateTimeFormat);
+      // One construction for tzA despite two polls (non-memoized code builds two per poll → four).
+      expect(builtFor(tzA)).toHaveLength(1);
+      // A different zone keys a distinct, separately-built formatter.
+      expect(builtFor(tzB)).toHaveLength(1);
+      expect(builtFor(tzA)[0]).not.toBe(builtFor(tzB)[0]);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("never caches an invalid timezone as valid — repeated polls still fall back to the default", async () => {
+    // A failed formatter construction (invalid zone) must not be memoized as if valid; every poll of
+    // an invalid zone re-throws and falls back, so the 14:00 Madrid-default booking keeps surfacing.
+    const v = await setupVenue({ timeZone: "Not/AZone" });
+    const t = await makeTable(v, "invalid-cache");
+    await insertBooking(v, { tableId: t, date: "2026-09-15", time: "14:00" });
+    expect((await annotate(v, MADRID_NOON, [t])).get(t)).toEqual({ reservedTime: "14:00" });
+    expect((await annotate(v, MADRID_NOON, [t])).get(t)).toEqual({ reservedTime: "14:00" });
   });
 
   it("scopes to cfg.tenantId — another tenant's booking on its own table is not surfaced (CLAUDE.md §3)", async () => {
