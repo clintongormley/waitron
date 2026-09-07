@@ -39,23 +39,23 @@ export interface TimeEntryRecord {
   entryId: string;
   personId: string;
   locationId: string;
-  /** The node whose chain this entry belongs to (`node_id`) — part of the chain key and, with
-   * `recordedAt`, the cross-node correction tie-break (Task 2). */
+  /** The node whose chain this entry belongs to (`node_id`) — part of the chain key and the second
+   * key of the cross-node correction order (`applyCorrections`). */
   nodeId: string;
   entryKind: WorkforceEntryKind;
   /** The trusted event instant (`event_at`), an ISO-8601 timestamptz string. On a `correction` this
    * is the CORRECTED value (the new clock time), not a recording time — that is `recordedAt`. */
   eventAt: string;
   /** The recording node's clock at append (`recorded_at`), an ISO-8601 timestamptz string. Hashed and
-   * monotonic per chain (spec §4.1); the cross-node correction tie-break reads it (Task 2). */
+   * monotonic per chain (spec §4.1); the first key of the cross-node correction order
+   * (`applyCorrections`). */
   recordedAt: string;
   /** The wall-clock offset in minutes (`event_offset_minutes`), for deriving the local calendar day. */
   offsetMinutes: number;
   /** The 1-based tamper-evident chain position (`sequence_no`) within this (tenant, node, location)
    * chain — hashed (chain-hash.ts) AND contiguity-checked by `verifyChain`, so it cannot be reordered
-   * undetected. `applyCorrections` breaks ties between two approved corrections of one target on this
-   * field (Task 1 keeps today's rule; Task 2 makes it the cross-node `(recordedAt, nodeId, sequenceNo)`
-   * order). */
+   * undetected. The last key of the cross-node correction order (`applyCorrections`), decisive only
+   * within a single chain once `recordedAt` and `nodeId` tie. */
   sequenceNo: number;
   /** On a `correction`, the entry it supersedes (a base event or an earlier correction). Null/absent
    * on a base event. */
@@ -209,21 +209,33 @@ function groupByPerson(entries: readonly TimeEntryRecord[]): Map<string, TimeEnt
 }
 
 /**
+ * True when `a` is the later of two approved corrections under the total order
+ * `(recordedAt, nodeId, sequenceNo)` (spec §4.2). A single tuple compare, NOT a "same-node →
+ * sequenceNo, else recordedAt" special case — that is not transitive across three entries spanning
+ * two chains, so it could pick different winners depending on comparison order. Within one chain
+ * `recordedAt` is monotonic and `nodeId` constant (spec §4.1), so this reduces to the old
+ * greatest-`sequenceNo` rule and the single-node tests still hold.
+ */
+function laterThan(a: TimeEntryRecord, b: TimeEntryRecord): boolean {
+  if (a.recordedAt !== b.recordedAt) return a.recordedAt > b.recordedAt;
+  if (a.nodeId !== b.nodeId) return a.nodeId > b.nodeId;
+  return a.sequenceNo > b.sequenceNo;
+}
+
+/**
  * The effective (corrected) timestamp and offset for one base event, and the base events with their
  * corrections applied.
  *
  * A correction never mutates a stored row — it is an append that carries a new timestamp and points
  * at the entry it supersedes (`correctsEntryId`). Reprojection resolves each base event by walking
- * the approved corrections that target it, latest-correction-wins by highest `sequenceNo`, following
- * a chain when a correction is itself corrected (design §5).
+ * the approved corrections that target it, latest-correction-wins by the total order `laterThan`
+ * commits to, following a chain when a correction is itself corrected (design §5).
  *
- * The tie-break is `sequenceNo` — the position the tamper-evidence hash commits to and `verifyChain`
- * checks for contiguity (chain-hash.ts) — so a reorder of two approved corrections is tamper-evident.
- * This is Task 1's within-chain rule; Task 2 generalises it to the cross-node
- * `(recordedAt, nodeId, sequenceNo)` order, which reduces to this when `recorded_at` is monotonic and
- * `node_id` constant (spec §4.2). All corrections of one target share that target's location, but a
- * correction is chained under its OWN recording node, so two nodes' approved corrections of one target
- * can sit in different chains — the reason Task 2's order exists.
+ * All corrections of one target share that target's location, but a correction is chained under its
+ * OWN recording node, so two nodes' approved corrections of one target can sit in different chains —
+ * the reason the winner is ordered across chains by `(recordedAt, nodeId, sequenceNo)` rather than by
+ * `sequenceNo` alone (spec §4.2). `sequenceNo` remains the within-chain position the tamper-evidence
+ * hash commits to, so a reorder within a chain is still tamper-evident.
  *
  * Only `approved` corrections are followed; a `requested` one is retained in history but pending, so
  * it is invisible here. The walk needs no cycle guard: a correction can only be inserted after the
@@ -236,7 +248,7 @@ function applyCorrections(entries: readonly TimeEntryRecord[]): TimeEntryRecord[
     if (e.entryKind !== "correction" || e.correctionStatus !== "approved") continue;
     if (e.correctsEntryId === undefined || e.correctsEntryId === null) continue;
     const current = latestApprovedByTarget.get(e.correctsEntryId);
-    if (current === undefined || e.sequenceNo > current.sequenceNo) {
+    if (current === undefined || laterThan(e, current)) {
       latestApprovedByTarget.set(e.correctsEntryId, e);
     }
   }

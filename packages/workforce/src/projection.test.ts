@@ -243,12 +243,12 @@ describe("projectWorkSessions applies corrections (reprojection, latest-approved
     expect(session?.workedMinutes).toBe(480);
   });
 
-  it("lets the latest approved correction of the same entry win", () => {
-    // Two approved corrections target the original out. Latest-correction-wins is highest sequenceNo
-    // (the tamper-evident append position), not latest event_at — so the 18:30 correction (seq 4)
-    // beats 18:00 (seq 3). This is the NORMAL case where append order and ingest order AGREE
-    // (ingestSeq ascends with sequenceNo); the disagree test below is what pins the tie-break to
-    // sequenceNo specifically.
+  it("lets the latest approved correction of the same entry win (single chain reduces to sequenceNo-max)", () => {
+    // A single chain: both approved corrections carry the default nodeId and a recordedAt that ascends
+    // WITH sequenceNo (the helper's monotonic-per-chain default), so the total order
+    // (recordedAt, nodeId, sequenceNo) reduces to the sequenceNo-max it generalises (§4.2) — the 18:30
+    // correction (seq 4) beats 18:00 (seq 3). The cross-node tests below are where recordedAt and
+    // sequenceNo disagree, so this and they cannot both be satisfied by a sequenceNo-only rule.
     const [session] = projectWorkSessions([
       entry("p1", "in", "2026-01-05T09:00:00Z", { sequenceNo: 1 }),
       entry("p1", "out", "2026-01-05T17:00:00Z", { entryId: "out-1", sequenceNo: 2 }),
@@ -268,29 +268,84 @@ describe("projectWorkSessions applies corrections (reprojection, latest-approved
     expect(session?.endedAt).toBe("2026-01-05T18:30:00Z");
   });
 
-  it("breaks a correction tie on the hashed sequenceNo, not the unhashed ingestSeq", () => {
-    // Tamper-evidence teeth-test (same class as Task B: the chain must protect the ordering it
-    // claims to). `ingest_seq` is GENERATED ALWAYS AS IDENTITY and is NOT in the chain hash
-    // (chain-hash.ts hashes `sequence_no`), so a party past the immutability floor could SWAP two
-    // approved corrections' `ingest_seq` and flip which corrected time is effective while
-    // `verifyChain` still returns ok. Here the two orderings DISAGREE — the 18:00 correction carries
-    // the HIGHER ingestSeq (20) but the LOWER sequenceNo (3), the 18:30 one the LOWER ingestSeq (10)
-    // but the HIGHER sequenceNo (4) — modelling that post-swap state. The tamper-evident answer is
-    // the higher sequenceNo (18:30); an ingestSeq tie-break would pick 18:00. Because the answers
-    // genuinely disagree, this measures which field the tie-break uses (CLAUDE.md §1: a test whose
-    // two answers cannot differ measures nothing).
+  it("picks the correction with the greatest (recordedAt, nodeId, sequenceNo) across nodes — later recorded_at wins", () => {
+    // §4.2: once corrections chain per node, sync can leave ONE target with an approved correction in
+    // two chains (the box's and a promoted cloud's), so precedence is the total order over
+    // (recordedAt, nodeId, sequenceNo), NOT sequenceNo alone. Here the box correction carries the
+    // HIGHER sequenceNo (9) but was recorded EARLIER (10:05); the cloud one the LOWER sequenceNo (2)
+    // but recorded LATER (10:06). recorded_at is the first key, so the cloud's 18:20 wins — a
+    // sequenceNo-max rule would instead pick the box's 18:05, so the two rules give different answers
+    // here (CLAUDE.md §1: a probe whose answers cannot differ measures nothing).
+    const [session] = projectWorkSessions([
+      entry("p1", "in", "2026-01-05T09:00:00Z", { sequenceNo: 1 }),
+      entry("p1", "out", "2026-01-05T17:00:00Z", { entryId: "out-1", sequenceNo: 2 }),
+      entry("p1", "correction", "2026-01-05T18:05:00Z", {
+        entryId: "corr-box",
+        nodeId: "node-A",
+        sequenceNo: 9,
+        recordedAt: "2026-01-05T10:05:00Z",
+        correctsEntryId: "out-1",
+        correctionStatus: "approved",
+      }),
+      entry("p1", "correction", "2026-01-05T18:20:00Z", {
+        entryId: "corr-cloud",
+        nodeId: "node-B",
+        sequenceNo: 2,
+        recordedAt: "2026-01-05T10:06:00Z",
+        correctsEntryId: "out-1",
+        correctionStatus: "approved",
+      }),
+    ]);
+    expect(session?.endedAt).toBe("2026-01-05T18:20:00Z");
+  });
+
+  it("breaks a same-recorded_at cross-node tie on nodeId (before sequenceNo)", () => {
+    // When two chains' approved corrections carry the SAME recorded_at (clocks agree to the second),
+    // nodeId is the next key, sequenceNo the last. node-B > node-A, so node-B's 18:20 wins even though
+    // it carries the LOWER sequenceNo (2 vs 9) — proving the tie-break is nodeId ahead of sequenceNo.
+    // A sequenceNo-max rule would pick node-A's 18:05, so the answers differ (CLAUDE.md §1).
+    const [session] = projectWorkSessions([
+      entry("p1", "in", "2026-01-05T09:00:00Z", { sequenceNo: 1 }),
+      entry("p1", "out", "2026-01-05T17:00:00Z", { entryId: "out-1", sequenceNo: 2 }),
+      entry("p1", "correction", "2026-01-05T18:05:00Z", {
+        entryId: "corr-A",
+        nodeId: "node-A",
+        sequenceNo: 9,
+        recordedAt: "2026-01-05T10:05:00Z",
+        correctsEntryId: "out-1",
+        correctionStatus: "approved",
+      }),
+      entry("p1", "correction", "2026-01-05T18:20:00Z", {
+        entryId: "corr-B",
+        nodeId: "node-B",
+        sequenceNo: 2,
+        recordedAt: "2026-01-05T10:05:00Z",
+        correctsEntryId: "out-1",
+        correctionStatus: "approved",
+      }),
+    ]);
+    expect(session?.endedAt).toBe("2026-01-05T18:20:00Z");
+  });
+
+  it("breaks a same-node, same-recorded_at tie on sequenceNo (the last key)", () => {
+    // Within ONE chain two appends can land in the same whole second (recorded_at is whole-second and
+    // clamped non-decreasing, §4.1), so recordedAt and nodeId both tie and sequenceNo — the position
+    // the tamper-evidence hash commits to — is the last key. seq 4 (18:30) beats seq 3 (18:00), so a
+    // swap of two same-second corrections' sequenceNo stays tamper-evident.
     const [session] = projectWorkSessions([
       entry("p1", "in", "2026-01-05T09:00:00Z", { sequenceNo: 1 }),
       entry("p1", "out", "2026-01-05T17:00:00Z", { entryId: "out-1", sequenceNo: 2 }),
       entry("p1", "correction", "2026-01-05T18:00:00Z", {
-        entryId: "corr-high-ingest",
+        entryId: "corr-lo",
         sequenceNo: 3,
+        recordedAt: "2026-01-05T10:05:00Z",
         correctsEntryId: "out-1",
         correctionStatus: "approved",
       }),
       entry("p1", "correction", "2026-01-05T18:30:00Z", {
-        entryId: "corr-high-sequence",
+        entryId: "corr-hi",
         sequenceNo: 4,
+        recordedAt: "2026-01-05T10:05:00Z",
         correctsEntryId: "out-1",
         correctionStatus: "approved",
       }),
