@@ -236,9 +236,11 @@ unfiltered `main` run, not a wrong hook.
   after adding any table anywhere.
 - **The two publications a node holds are created by the table OWNER, and the replication role is a
   bootstrap the app provisioner only verifies.** `waitron_migrator` creates `waitron_<env>_ledger` /
-  `_state` from the module classification (`@waitron/sync`); `waitron_repl` (`LOGIN REPLICATION` +
-  `pg_create_subscription` + the restart-required `wal_level=logical`/`track_commit_timestamp=on`)
-  is a SUPERUSER/box-image bootstrap, never performed by the app — `assertReplicationReady`
+  `_state` from the module classification (`@waitron/sync`). A SUPERUSER/box-image bootstrap holds
+  the rest, each on its own role SHAPE: `waitron_repl` is a `LOGIN REPLICATION` role; the migrator
+  (`waitron_migrator`) is granted `pg_create_subscription`; and `wal_level=logical` /
+  `track_commit_timestamp=on` are restart-required CLUSTER settings held by no role (the box image's
+  `postgresql.conf`). The app performs none of it — `assertReplicationReady`
   (`provisioning.replication_not_ready`) verifies it instead. A subscription's connection string
   carries the `waitron_repl` password, so its statement is never logged and a failure throws only a
   SQLSTATE (`sync.subscription_failed`), like `CREATE ROLE`; `sqlStateOf` lives in `@waitron/shared`.

@@ -1,28 +1,8 @@
 import { sql } from "drizzle-orm";
-import { AppError, sqlStateOf } from "@waitron/shared";
+import { AppError, quoteLiteral, sqlStateOf } from "@waitron/shared";
 import type { Database } from "@waitron/db";
+import { quoted } from "./identifier.js";
 import "./errors.js";
-
-// A subscription/publication name. Same validate-and-throw discipline as publications.ts: a name
-// outside the set is a wiring bug, refused loudly, never quoted around.
-const IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
-function quoted(name: string): string {
-  if (!IDENTIFIER.test(name)) {
-    throw new Error(`unsafe replication identifier: ${JSON.stringify(name)}`);
-  }
-  return `"${name}"`;
-}
-
-/** A SQL string literal for the CONNECTION conninfo (which carries the password — the result is
- * secret, never logged). Mirrors `packages/provisioning/src/identifiers.ts`'s `quoteLiteral`: when a
- * backslash is present it emits the `E'…'` form with doubled backslashes, because
- * `standard_conforming_strings` is per-session and the plain form would corrupt a backslash-bearing
- * literal. Single quotes are always doubled. */
-function sqlLiteral(value: string): string {
-  const doubledQuotes = value.replace(/'/g, "''");
-  if (value.includes("\\")) return `E'${doubledQuotes.replace(/\\/g, "\\\\")}'`;
-  return `'${doubledQuotes}'`;
-}
 
 /** The replication login and the peer to reach it. Secret in whole. */
 export interface ReplicationConnection {
@@ -34,7 +14,7 @@ export interface ReplicationConnection {
 }
 
 // libpq keyword/value: each value single-quoted, `\` and `'` backslash-escaped INSIDE the libpq
-// quotes. The outer SQL-literal escaping is applied separately by `sqlLiteral` at CREATE time.
+// quotes. The outer SQL-literal escaping is applied separately by `quoteLiteral` at CREATE time.
 function libpqValue(value: string): string {
   return `'${value.replace(/([\\'])/g, "\\$1")}'`;
 }
@@ -63,7 +43,7 @@ export function createSubscriptionStatement(opts: {
 }): string {
   const pubs = opts.publications.map(quoted).join(", ");
   return (
-    `CREATE SUBSCRIPTION ${quoted(opts.name)} CONNECTION ${sqlLiteral(opts.conninfo)} ` +
+    `CREATE SUBSCRIPTION ${quoted(opts.name)} CONNECTION ${quoteLiteral(opts.conninfo)} ` +
     `PUBLICATION ${pubs} ` +
     `WITH (copy_data = ${opts.copyData ? "true" : "false"}, origin = none, enabled = ${opts.enabled ? "true" : "false"})`
   );

@@ -1,20 +1,10 @@
 import { sql } from "drizzle-orm";
 import type { Database } from "@waitron/db";
+import { quoted } from "./identifier.js";
 
 /** The two publications a node holds (swap spec §2.1): `ledger` (what happened, drained back) and
  * `state` (configuration + live service, copied only). `local` tables are in neither. */
 export type PublicationClass = "ledger" | "state";
-
-// A physical table / publication name. The classification's table names are `[a-z_]+` (guard-
-// enforced, S1) and publication names are derived below, so this is validate-and-throw, not an
-// escaper: a name outside the set is a wiring bug, refused loudly, never quoted around.
-const IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
-function quoted(name: string): string {
-  if (!IDENTIFIER.test(name)) {
-    throw new Error(`unsafe replication identifier: ${JSON.stringify(name)}`);
-  }
-  return `"${name}"`;
-}
 
 /** `waitron_<environment>_<ledger|state>` — the name carries the environment, half of the isolation
  * in spec §2.4 (a production subscriber naming `waitron_production_*` finds nothing on a
