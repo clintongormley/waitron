@@ -295,7 +295,7 @@ describe("describeVenueAction", () => {
       "seed device profiles Mostrador, Cocina, Móvil",
       "create location Mostrador in ES-common (es-ES)",
       "create till Caja 1",
-      "create node Mostrador filing=verifactu tax=iva",
+      "create node Mostrador filing=verifactu tax=vat",
       "create standard series A",
       "create rectificative series R",
       "seed module probe: seed the probe",

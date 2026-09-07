@@ -35,18 +35,24 @@ export const GENERIC_PACKAGES = [
   "diagnostics",
   "sync-enrolment",
   "composition",
+  "fiscal-none",
   "provisioning",
   "ui",
 ] as const;
 
 /**
  * Packages whose TEST files are excluded from the scan — a documented, production-only INTERIM, and
- * the guard's ONLY test exemption. `provisioning`'s e2e/pg tests provision a real Veri*Factu venue
- * and name the Spanish fiscal TABLES in SQL (`registros_facturacion`, `registro_sif`, `cadenas`),
- * which cannot be renamed. Removal condition: run provisioning's tests against `fiscal-none` so they
- * never touch the Spanish fiscal schema, then delete this set (design §6 step 5). Every other
- * generic package keeps the "tests are scanned too" rule — a Spanish fixture name is exactly as
- * wrong as a Spanish column.
+ * the guard's ONLY test exemption. `provisioning`'s e2e/pg tests provision a REAL Spanish Veri*Factu
+ * venue, so their Spanish is domain data, not fixture sloppiness: the unrenameable fiscal TABLES in
+ * SQL (`registros_facturacion`, `registro_sif`, `cadenas`) AND realistic Spanish venue data for an
+ * es-ES venue — localized default names the code itself resolves (`Mostrador`/`Counter` from
+ * `@waitron/layouts`' `nameByLocale`, asserted by `venue-plan.test.ts`), a `"Caja 1"` till name, an
+ * operation description in Spanish. Scanning these would force either renaming real tables or
+ * anglicising a Spanish venue's own data, both wrong. So the skip is whole-file (the table names are
+ * interleaved through the SQL) and deliberately covers the venue data too. `ui` is the contrast: its
+ * tests are NOT provisioning a Spanish venue, so their Spanish was gratuitous and was reworded, no
+ * exemption. Removal condition: run provisioning's tests against `fiscal-none` so they never touch
+ * the Spanish fiscal schema, then delete this set (design §6 step 5).
  */
 export const PRODUCTION_ONLY: ReadonlySet<string> = new Set(["provisioning"]);
 
@@ -198,17 +204,21 @@ function blankBackticks(comment: string): string {
 /** Blanks backtick citations inside every block comment; the rest of the comment prose, and all
  * code, is left for the scan. */
 function scrubBlockComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, (block) => blankBackticks(block));
+  return source.replace(/\/\*[\s\S]*?\*\//g, blankBackticks);
 }
 
 /**
  * Keeps a line's code part unchanged and blanks backtick citations in its `//` comment tail. The
  * `[^:]` guard keeps `https://…` in a string literal from being read as a comment — a URL is the
  * one place a `//` appears in code rather than before a comment.
+ *
+ * Comment boundaries are matched by regex, not parsed, so a `//` (or, in `scrubBlockComments`, a
+ * `/*`) INSIDE a string literal earlier on the same line is misread as a comment start — a
+ * pre-existing text-heuristic limit (the guard reads text, the same reason a `from "./errors.js"`
+ * in a comment fools `errors-reachable`). It predates comment-scanning and is not tightened here.
  */
 function scrubLineComment(line: string): string {
-  const match = line.match(/^(.*?(?:^|[^:]))(\/\/.*)$/);
-  return match === null ? line : match[1] + blankBackticks(match[2]!);
+  return line.replace(/(^|[^:])(\/\/.*)$/, (_match, pre, comment) => pre + blankBackticks(comment));
 }
 
 /**

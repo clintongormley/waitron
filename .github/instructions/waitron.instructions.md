@@ -91,10 +91,13 @@ non-audited code inside that boundary. This is already enforced by an
 if a PR touching that package needs to loosen or work around that rule, treat it as a design
 question to raise, not a lint config nit to wave through.
 
-`packages/db`, `packages/core`, `packages/fiscal` and `@waitron/shared` are English throughout —
-identifiers and table/column names alike; `packages/verifactu`, `packages/fiscal-verifactu` and
-`packages/workforce-es` are Spanish by design (the first two mirror AEAT's own specification, XML
-and conformance vectors 1:1; the third is the Spain labour module). Both directions are mechanically
+The generic packages (`packages/db`, `core`, `fiscal`, `@waitron/shared`, `provisioning`,
+`workforce`, `catalogue`, `payments`, `migrations`, `ui`, `fiscal-none` and the rest) are English
+throughout — identifiers, table/column names AND comments (since 2026-09-07 the guard scans comment
+prose too, leaving only `«…»` quotes and backtick citations); `packages/verifactu`,
+`packages/fiscal-verifactu`, `packages/reporting` (the modelo-303 form) and `packages/workforce-es`
+are Spanish by design (the first two mirror AEAT's own specification, XML and conformance vectors 1:1;
+`reporting` is the Spanish VAT return; the last is the Spain labour module). Both directions are mechanically
 enforced (`scripts/english-only.test.ts` for the English packages — its forbidden set is the base
 list in `packages/db/src/english-only.ts` plus each Spanish module's own `vocabulary` declaration;
 `packages/fiscal/src/no-regime-vocabulary.test.ts` for regime words such as "chain"/"hash" written

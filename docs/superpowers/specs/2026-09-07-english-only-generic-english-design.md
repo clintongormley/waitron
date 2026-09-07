@@ -32,11 +32,14 @@ full proposed scanned set (snapshot for planning; a count goes stale — CLAUDE.
 - **The real identifier/string leak in generic PRODUCTION code is ~1 line** — `fiscal-modules.ts`'s
   `{ filing:"verifactu", tax:"iva" }` registry, whose `iva` §4 renames to `vat` (behaviourally inert).
   Every other generic package's production code is already English at the identifier/string level.
-- **`provisioning` tests (~72) and `ui` tests (~8)** hold the other code-level hits: provisioning's
-  e2e/pg probes name the REAL fiscal tables in SQL (`registros_facturacion`, `registro_sif`,
-  `cadenas`, `contadores_instalacion` — unrenameable) plus avoidable fixtures (`"Caja 1"`,
-  `"venta en establecimiento"`, `tax:"iva"`); `ui`'s are avoidable fixture strings
-  (`"Anular venta"`, `"Precio"`).
+- **`provisioning` tests (~72) and `ui` tests (~8)** hold the other code-level hits. Provisioning's
+  e2e/pg probes provision a REAL Spanish Veri\*Factu venue, so their Spanish is DOMAIN DATA: the
+  unrenameable fiscal tables in SQL (`registros_facturacion`, `registro_sif`, `cadenas`,
+  `contadores_instalacion`) and realistic es-ES venue data — localized default names the code
+  resolves (`Mostrador` from `@waitron/layouts`' `nameByLocale`, asserted by `venue-plan.test.ts`), a
+  `"Caja 1"` till name, a Spanish operation description. The one genuinely avoidable token, `tax:"iva"`,
+  is the §4 rename. `ui`'s hits are DIFFERENT — gratuitous Spanish fixture strings (`"Anular venta"`,
+  `"Precio"`) in tests that are NOT provisioning a Spanish venue, so they were reworded, no exemption.
 - **The body of the work is ~400 COMMENT hits** (after the quotation exemption, §3). They are not
   sloppiness: `core` reaches fiscal ONLY through the `@waitron/fiscal` seat (`FiscalBackend`;
   `fiscal-none` implements the same `recordCorrection`), so the code is genuinely regime-neutral —
@@ -66,7 +69,10 @@ Every `packages/*` and `apps/*` is exactly one of:
     `schema-version.ts`); the Veri\*Factu DDL already lives in `packages/fiscal-verifactu/src/schema`.
     Measured clean but for one SQL-injection *test fixture* string. ADD to `GENERIC_PACKAGES`.
   - Newly added to the scan: **`provisioning`**, **`tunnel`**, **`payments-stripe`**, **`ui`**
-    (`tunnel`/`payments-stripe` measured already clean).
+    (`tunnel`/`payments-stripe` measured already clean), and **`fiscal-none`** — the no-op regime is
+    generic English (declares no vocabulary), so it belongs in the scanned set; it was unscanned by
+    omission (the same silent gap this design closes), and measured clean. Contrast the Spanish
+    regime `verifactu`, which owns `FISCAL_VOCABULARY` and is never scanned.
   - Already scanned: `core`, `db`, `shared`, `payments`, `scheduler`, `credentials`, `workforce`,
     `identity`, `catalogue`, `sync`, `membership`, `module`, `layouts`, `recipes`, `purchasing`,
     `printing`, `diagnostics`, `sync-enrolment`, `composition`.
@@ -136,8 +142,11 @@ So the fix is to **rename the tax-module slot value `iva`→`vat`** and leave th
 provisioning. `vat` is the tax MODEL (owner 2026-09-07: the tax model — VAT / GST — is generic and
 English and belongs in core with helpers; the fiscal module supplies the rates and the localised
 display label, e.g. `«IVA»` in verifactu). The value is behaviourally INERT — stamped into
-`nodes.tax_module`, never branched on, no calculation reads it — so the rename is safe pre-production
-(CLAUDE.md §5: no bwc, drop-and-recreate). Blast radius: the registry (1 prod line) + ~7 test files
+`nodes.tax_module` and copied verbatim during mirror adoption (`apps/server/src/adopt.ts`,
+`reserved-identity.ts`), but never BRANCHED on: no calculation depends on which value it holds (so
+"nothing reads it" would be wrong — adoption reads and copies it; nothing acts on the value). The
+rename is safe pre-production (CLAUDE.md §5: no bwc, drop-and-recreate). Blast radius: the registry
+(1 prod line) + ~8 test files
 asserting the stored value; `GB-vat`'s `tax:"none"` stays (no tax module wired for GB yet). Update
 `fiscal-modules.ts`'s header: the "parked here to dodge the guards" justification is gone — it now
 passes the scan honestly.
