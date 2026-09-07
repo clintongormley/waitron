@@ -860,7 +860,16 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
       sync/mirror path. **Root-cause the timing race and replace wall-clock waits with condition-based
       waiting**, exactly as the `boot.test` 503 flake above was fixed (`fetchHealthOk` poll-until-200);
       `ci.yml` already uploads the shard blob on failure (artifact `server-blob-1`) to name the exact
-      test. Memory: `test-server-e2e-timing-flakes`.
+      test. Memory: `test-server-e2e-timing-flakes`. **RECURRED WORSE on PR #260** (obligado→English
+      rename, no sync-path change): shard 1 failed TWICE (needed a 3rd attempt to go green). Signature
+      this time: a `pg` "client.query() when the client is already executing a query" warning, then
+      ~90 s of silent `sync.pull_failed` retries, blob written, then vitest exit 1 with NO failed test
+      in the blob — i.e. an UNHANDLED REJECTION from the sync worker's background loop during real-PG
+      e2e teardown (`promote`/`restore-fiscal-e2e` are the heavy suites in shard 1), not an assertion.
+      That the blob records zero test failures is the tell: the fix is to make the sync loop's teardown
+      await/settle its in-flight pulls (and stop the concurrent-query-on-one-client pattern the pg
+      warning names) so a stopped server cannot leave a rejecting promise. Two-re-run cost is over the
+      "re-run before investigating" budget — this now blocks clean landings.
   - **SP-3b — module-owned vocabulary — LANDED #240 (2026-09-05).** Fiscal's and workforce-es's Spanish
     terms live in `FISCAL_VOCABULARY` / `WORKFORCE_ES_VOCABULARY`, declared on each descriptor's
     `vocabulary` seat; `packages/db/src/english-only.ts` keeps a 23-word base list and `findSpanish(source,
