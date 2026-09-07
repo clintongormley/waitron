@@ -711,19 +711,19 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       const ring = loadKeyRing(
         parseEnvFile(readFileSync(join(config.stateDir, "secrets.env"), "utf8")),
       );
-      // The OWNER connection provisioning needs. `applyVenue` INSERTs into `tenants` (which `app_user`
-      // deliberately cannot — CLAUDE.md §3) and `stampDeployment` writes the `deployment` singleton, so
-      // both need a role that OWNS the tables, NOT the app pool's `config.databaseUrl`. In dev
-      // `config.migrationsDatabaseUrl` is the container superuser (owns everything), so it works here.
-      // NOTE (do not read this as "the migrator owns the tables"): the true owner is the role that ran
-      // `waitron-provision instance` — it ran CREATE DATABASE + the migrations over the ADMIN string
-      // (`packages/provisioning/src/instance-apply.ts`), NOT `waitron_migrator`, which is an `app_user`
-      // member with no INSERT on `tenants`. On a role-split appliance the setup-mode owner connection
-      // must be that admin, not `migrationsDatabaseUrl`; wiring it is deferred with the instance
-      // role-split (R1). Closed in the setup teardown
-      // (`closePools`) beside `db`, and on any throw below (the inner catch) so a later failure — from
-      // `mountSetup` or `startListening` — never leaks it.
-      const ownerDb = await createPostgresDb(config.migrationsDatabaseUrl);
+      // The OWNER connection every setup-mode owner write opens over — `applyVenue`'s INSERT into
+      // `tenants` (which `app_user` deliberately cannot — CLAUDE.md §3), `stampDeployment`'s
+      // `deployment` singleton, and the break-glass secret mint the adopt path rides through this same
+      // pool. All need the role that OWNS the tables, NOT the app pool's `config.databaseUrl`.
+      // `config.adminDatabaseUrl` IS that table-owner connection (the role that ran
+      // `waitron-provision instance` — CREATE DATABASE + the migrations over the admin string,
+      // `packages/provisioning/src/instance-apply.ts`); on a role-split appliance it is distinct from
+      // `migrationsDatabaseUrl` (an `app_user` member with no INSERT on `tenants`), and unset it falls
+      // back to `migrationsDatabaseUrl`→`databaseUrl` so dev/CI is unchanged and a misconfigured
+      // appliance fails CLOSED (`42501`) rather than writing under a stray pool. Closed in the setup
+      // teardown (`closePools`) beside `db`, and on any throw below (the inner catch) so a later
+      // failure — from `mountSetup` or `startListening` — never leaks it.
+      const ownerDb = await createPostgresDb(config.adminDatabaseUrl);
       try {
         // `writeTradingEnv` returns the path it wrote; both setup verbs only need `Promise<void>`, so
         // discard it explicitly rather than widen the dep's type. Extracted to a const so `provision`
@@ -738,7 +738,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         // path throws in `new URL` — cli.ts's socket note) falls back to a neutral label.
         let ownerDatabaseName = "the target database";
         try {
-          const parsed = new URL(config.migrationsDatabaseUrl).pathname.replace(/^\//, "");
+          const parsed = new URL(config.adminDatabaseUrl).pathname.replace(/^\//, "");
           if (parsed !== "") ownerDatabaseName = parsed;
         } catch {
           // Keep the neutral label — a malformed/socket URL must not leak into the error param.
