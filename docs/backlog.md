@@ -238,7 +238,8 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    superuser provisioning step for the `REPLICATION` role. **Cross-track (Track C):** module SP-2b's schema-version gate (LANDED #230) rests on
    "deliberate rejection of native logical replication"; item 4's spec retires it (its §5).
 3. **Drop FORCE RLS + the multi-role set, squash the migrations, delete the outbox — STEP 1
-   LANDED #255 (2026-09-06), STEP 2 LANDED #271 (2026-09-07); steps 3–5 pending owner review:**
+   LANDED #255 (2026-09-06), STEP 2 LANDED #271 (2026-09-07), STEP 3 in PR (2026-09-07); steps
+   4–5 pending owner review:**
    [drop-rls-squash-and-outbox-deletion-design](superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md).
    Owner decisions: all at once (item 4's swap slices are steps 2–5 of this chain, since nothing is
    deployed); ONE owner signature, on step 4 (where fiscal rows first flow natively and `ENABLE
@@ -269,6 +270,19 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    entry — deleted with the outbox in step 4). Exports only; nothing consumed at runtime yet.
    Rebased onto #270 (bookings extracted to `@waitron/bookings`): the `bookings` classification moved
    core→its module (still `state`), and the completeness guard validated the result.
+
+   **Step 3 in PR (2026-09-07):** the provisioning capability — the superuser replication bootstrap
+   (`REPLICATION_ROLE`, `replicationBootstrapStatements`, run against the TARGET database) and its
+   readiness check (`assertReplicationReady`, incl. a per-database `pg_default_acl` SELECT-grant
+   check that catches a bootstrap applied to the wrong database) in `@waitron/provisioning`;
+   publications/subscriptions (`publicationName`, `createPublications`, the subscription verbs,
+   `sync.subscription_failed`) in `@waitron/sync`; the WireGuard-key bundle field
+   (`wireguardPublicKey`); `sqlStateOf` consolidated into `@waitron/shared`. Proven against the
+   two-node fixture; the live adopt/promote/return flip and the fiscal-fidelity suites are step 4.
+   **Ownership gap flagged, not resolved:** `waitron-provision instance` leaves the bootstrap admin,
+   not `waitron_migrator`, owning the baseline tables (`instance-apply.ts:172`) — native replication
+   needs the publication-creating role to own the tables, so step 4 must close this before publishing
+   against a live instance (swap spec §13).
 
    **Step 1 LANDED (#255).** Per-module baselines, FORCE RLS and the seven helper roles gone,
    the `*.rls.test.ts` suites replaced by per-module grant suites and `privileges.test.ts`, and

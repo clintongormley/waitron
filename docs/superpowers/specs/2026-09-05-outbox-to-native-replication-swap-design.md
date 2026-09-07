@@ -145,7 +145,35 @@ on a preproduction publisher fails with "publication does not exist"), and the a
 `deployment.environment` on both ends before creating anything and refuses a mismatch. The
 `/sync-api/hello` environment handshake it replaces was one reason; this is two.
 
+> **2026-09-07 — measured, correcting the sentence above.** `CREATE SUBSCRIPTION … WITH
+> (connect=true)` naming a publication absent on the target database does not fail synchronously:
+> PostgreSQL 16+'s `check_publications` step WARNs and creates the subscription anyway (S2,
+> `subscriptions.test.ts`). The name-carried isolation is real, but it manifests as NO ROWS ever
+> copying, not a `CREATE SUBSCRIPTION` error. The hard refusal is the second reason above — the
+> adoption code's `deployment.environment` check — which is step 4 (the live path); S2 built only the
+> name-carried half.
+
 ## 3. Roles and privileges — the provisioning delta
+
+> **2026-09-07 — S2 built.** Capability + fixture only: `publications.ts`/`subscriptions.ts` land in
+> `@waitron/sync`, runtime-decoupled (import only `drizzle-orm`, `@waitron/db` and, for
+> `subscriptions.ts`, `@waitron/shared`); `REPLICATION_ROLE`, `replicationBootstrapStatements` (the
+> superuser bootstrap, emitted as SQL, never run by the app) and the readiness check
+> (`assertReplicationReady` / `provisioning.replication_not_ready`) land in `@waitron/provisioning` —
+> bootstrap-and-verify: the app provisioner stays superuser-free and only verifies; the box
+> image/operator runs the bootstrap. The bootstrap must run against the TARGET database: it mixes
+> cluster-global statements (`CREATE ROLE`, the `pg_create_subscription` grant, `ALTER SYSTEM
+> max_slot_wal_keep_size`) with schema-local ones (`GRANT SELECT ON ALL TABLES IN SCHEMA public`,
+> `ALTER DEFAULT PRIVILEGES … IN SCHEMA public`), which land wherever the connection happens to be.
+> `wal_level=logical`/`track_commit_timestamp=on` stay restart-required box-image `postgresql.conf`
+> settings (the bootstrap never sets them); `max_slot_wal_keep_size=4GB` is set by both the bootstrap
+> and the fixture's boot command. The readiness check verifies both the cluster-global facts AND a
+> per-database `pg_default_acl` SELECT grant (migrator→`waitron_repl`) — added mid-slice after a
+> cluster-global-only check false-passed a bootstrap applied to the wrong database (§13). §13
+> verification #3 is RUN, not just asserted, against the fixture. `sqlStateOf` moved to
+> `@waitron/shared` (single source; provisioning re-exports it). The live adopt/promote/return paths,
+> the fiscal-fidelity suites and the full every-table copy matrix (§11) are untouched — deferred to
+> step 4, along with the ownership-gap fix recorded in §13. In PR (Track A item 3 step 3).
 
 Measured in the prototype under `waitron_migrator` with `rolsuper = f`:
 
@@ -382,6 +410,16 @@ with the owner's sign-off, and its PR carries the two-node suite's output.
    second run was botched by a leftover slot; the spec requires it on regardless.
 6. The per-node rekey of the working-time chain (§4.4): its own brainstorm and PR before S3; the
    labour advisor's answer on presenting a location's record as per-node chains, in parallel.
+7. **The ownership gap, found in S2 and not resolved by it.** §3 above assumes the migrator owns
+   every table because the prototype's database was hand-built that way; the built
+   `waitron-provision instance` CLI does not produce that shape — `instance-apply.ts:172` runs
+   `migrate` against `deps.adminUri`, so the bootstrap admin owns the baseline tables and
+   `waitron_migrator` is created afterward as a separate role. `CREATE PUBLICATION` needs the
+   publication-creating role to own the tables, so the S2 fixture provisions and asserts the required
+   ownership directly rather than through `instance`. Step 4 must make `waitron-provision instance`
+   leave `waitron_migrator` owning every table before publications can be created against a live
+   instance — candidates: `CREATE DATABASE … OWNER waitron_migrator` plus migrate as it, or
+   `REASSIGN OWNED BY <admin> TO waitron_migrator` after the migration step.
 
 ## 14. Slices (each its own plan; order matters)
 
@@ -400,6 +438,9 @@ with the owner's sign-off, and its PR carries the two-node suite's output.
 - **S2 — provisioning:** the superuser step, publications and subscriptions created on adopt, the
   mirror bundle carries the key, environment refusal. The cloud standby end-to-end (Track B item 2)
   proves it on real machines.
+
+  > **2026-09-07 — S2 built** as capability + fixture, not the live adopt path — see the dated note
+  > atop §3. In PR (Track A item 3 step 3).
 - **S3 — the fiscal module converted [owner sign-off].**
 - **S4 — promotion and return on LSNs:** §4; rejoin/retire/box-status rewritten; disposal deleted.
 - **S5 — delete the outbox:** everything in §7's first paragraph, in one PR so no half-state ships.
