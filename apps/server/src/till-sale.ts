@@ -647,7 +647,9 @@ async function fileImmediateSale(
       settledAt: settledAt.toISOString(),
       ...(markCollected ? { collectedAt: settledAt.toISOString() } : {}),
     })
-    .where(eq(workingOrders.id, workingOrderId));
+    // Tenant-scoped for uniformity with the sibling finalize updates; the caller has already taken a
+    // tenant-scoped `.for("update")` lock on this row, so this can only ever match its own order.
+    .where(and(eq(workingOrders.id, workingOrderId), eq(workingOrders.tenantId, cfg.tenantId)));
 
   // `FiscalRecordRef` exposes no series code or invoice number (it is regime-opaque), so the
   // human-facing "A/1" is read back from the sale row and its series (the shared `readInvoiceNumber`
