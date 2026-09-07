@@ -447,7 +447,7 @@ screens, `apps/server/src/modules.ts` (the maps derived from that list), and the
      declaration-merged into the regime package (§3 nuance, self-guarding, precedented). The Task-8
      provision-only gate keeps a synthetic-module test for the `provision_only_disabled` branch (no
      real non-fiscal provision-only module exists yet).
-   - **Follow-on: English-only generic guard — IN FLIGHT (branch `generic-english-comments`).** Owner
+   - **Follow-on: English-only generic guard — LANDED #266 (2026-09-07).** Owner
      principle (2026-09-07): Spanish only in Spain-specific modules (verifactu, workforce-es,
      reporting=modelo-303); core/generic code must be English — identifiers, strings AND comments.
      The guard now SCANS comments (was stripping them), leaving quotations intact (`«…»` regulatory
