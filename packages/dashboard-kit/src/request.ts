@@ -15,7 +15,9 @@ export type DashboardRequest = <T>(path: string, method: string, body?: unknown)
  * (the 204 mutation routes), keyed off the empty body, not the status. This primitive does NOT redirect
  * on 401 — it only decodes and throws the code.
  */
-export function createRequest(opts: { baseUrl?: string; fetchImpl?: FetchLike } = {}): DashboardRequest {
+export function createRequest(
+  opts: { baseUrl?: string; fetchImpl?: FetchLike } = {},
+): DashboardRequest {
   const baseUrl = opts.baseUrl ?? "";
   const fetchImpl = opts.fetchImpl ?? fetch;
   return async <T>(path: string, method: string, body?: unknown): Promise<T> => {

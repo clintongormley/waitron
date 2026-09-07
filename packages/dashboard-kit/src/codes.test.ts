@@ -4,7 +4,10 @@ import { setLocale } from "./i18n.js";
 
 beforeEach(() => {
   registerCodeMessages({
-    "password.invalid": { en: "Incorrect password, try again", es: "Contraseña incorrecta, inténtalo de nuevo" },
+    "password.invalid": {
+      en: "Incorrect password, try again",
+      es: "Contraseña incorrecta, inténtalo de nuevo",
+    },
   });
   setLocale("es-ES");
 });

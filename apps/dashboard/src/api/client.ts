@@ -2421,5 +2421,4 @@ export class DashboardApi {
       ttlMinutes,
     });
   }
-
 }

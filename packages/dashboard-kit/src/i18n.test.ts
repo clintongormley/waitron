@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { currentLocale, makeT, pickLocale, registerCatalogue, setLocale, subscribeLocale, t } from "./i18n.js";
+import {
+  currentLocale,
+  makeT,
+  pickLocale,
+  registerCatalogue,
+  setLocale,
+  subscribeLocale,
+  t,
+} from "./i18n.js";
 
 beforeEach(() => {
   registerCatalogue({ en: { "x.hi": "Hi" }, es: { "x.hi": "Hola" } });

@@ -294,6 +294,7 @@ export const LIGHT_A_PACKAGES = [
 ];
 
 export const LIGHT_B_PACKAGES = [
+  "@waitron/dashboard-kit",
   "@waitron/payments-stripe",
   "@waitron/identity",
   "@waitron/workforce",

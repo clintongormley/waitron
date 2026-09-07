@@ -67,7 +67,9 @@ it("passes a FormData body through with NO content-type header", async () => {
 });
 
 it("rejects with { code } read from the server's { error: { code } } envelope on a non-2xx", async () => {
-  const fetchImpl = vi.fn<FetchLike>().mockResolvedValue(jsonResponse({ error: { code: "password.invalid" } }, 401));
+  const fetchImpl = vi
+    .fn<FetchLike>()
+    .mockResolvedValue(jsonResponse({ error: { code: "password.invalid" } }, 401));
   const request = createRequest({ fetchImpl });
 
   await expect(request("/session", "POST", {})).rejects.toEqual({ code: "password.invalid" });

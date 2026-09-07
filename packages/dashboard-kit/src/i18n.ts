@@ -35,7 +35,10 @@ export function currentLocale(): string {
 }
 
 /** Merge a module's strings into the registry. Called at module load, before any t(). */
-export function registerCatalogue(cat: { en: Record<string, string>; es: Record<string, string> }): void {
+export function registerCatalogue(cat: {
+  en: Record<string, string>;
+  es: Record<string, string>;
+}): void {
   Object.assign(catalogues.en, cat.en);
   Object.assign(catalogues.es, cat.es);
 }
