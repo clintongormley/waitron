@@ -446,12 +446,19 @@ All three decisions are now taken.
    original build-halves left this item: **(a) transport waits on Track A steps 2–4** — item 2 does
    NOT build WireGuard/native replication, it consumes them once Track A lands them (verified
    2026-09-07: both are docs-only, zero code; the live mirror transport is still
-   outbox-pull-over-HTTP-over-`@waitron/tunnel`). **(b) per-tenant cloud provisioning is NOT this
+   outbox-pull-over-HTTP-over-`@waitron/tunnel`; UPDATE 2026-09-08: WireGuard now has its first code —
+   a local two-host TEST-sim fixture, see (c) — though nothing wires it to the live path yet).
+   **(b) per-tenant cloud provisioning is NOT this
    repo** — it belongs to **Waitron Cloud**, a separate closed-source commercial service (not
    started): the customer signs up, Waitron Cloud spawns the instance + sets up WireGuard and hands
    back a URL + credentials; this repo's only job is to *talk to* a provisioned instance. **(c) the
-   run-it proof will be a two-host LOCAL simulation** (repeatable, no real cloud) when built. The
-   software failover arc is already proven in-process (till-reroute S6). **Do not restart until Track A
+   run-it proof will be a two-host LOCAL simulation** (repeatable, no real cloud) — its transport
+   primitive now exists (branch `feat/two-node-wireguard-fixture`, in flight):
+   `@waitron/db/testing/two-node-wireguard.ts` joins two Postgres nodes
+   over a real kernel-WireGuard tunnel (NET_ADMIN only, no privileged container), and `sync`'s
+   `replication-over-tunnel.pg.test` proves native logical replication copies A→B across it; the
+   standby e2e ON that primitive is still unbuilt. The software failover arc is already proven
+   in-process (till-reroute S6). **Do not restart until Track A
    steps 2–4 land AND the Waitron↔Waitron-Cloud boundary contract is settled.** Original description,
    kept for its receipts: the box↔cloud-instance WireGuard link (relay DECIDED
    2026-09-05: none; `@waitron/tunnel`, `WAITRON_TUNNEL_*` and the tunnel-aware dispatcher are
