@@ -75,6 +75,12 @@ export type { EnrolPeerInput, PeerSummary } from "./peers.js";
 
 export { SYNC_CLASSIFICATION } from "./classification.js";
 
+// Native logical replication (swap S2): build and create a node's two publications from the derived
+// table lists. Utility DDL, created by the non-superuser table OWNER; not wired into the live adopt
+// path until step 4.
+export { createPublications, createPublicationStatement, publicationName } from "./publications.js";
+export type { PublicationClass } from "./publications.js";
+
 // Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable from
 // this package's own public barrel, per the reachability rule in packages/shared/src/errors.ts.
 // See errors.reachability.test.ts.
