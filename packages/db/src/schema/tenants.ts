@@ -65,7 +65,7 @@ export const receiptPrintMode = pgEnum("receipt_print_mode", ["auto", "on_reques
 export const drawerOpenPolicy = pgEnum("drawer_open_policy", ["gated", "open"]);
 
 /**
- * The obligado tributario. Fiscal identity is country + tax_id, regime-agnostic: for a Spanish
+ * One taxpayer per database. Fiscal identity is country + tax_id, regime-agnostic: for a Spanish
  * tenant `tax_id` IS the NIF, and the Veri*Factu backend reads `tax_id` where it once read `nif`
  * (a NIF cannot be asked for before the country is known — spec D2). Unique on (country, tax_id).
  */

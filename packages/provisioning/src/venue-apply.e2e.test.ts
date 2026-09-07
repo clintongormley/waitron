@@ -189,7 +189,7 @@ describe("the provisioned admin authenticates by id with its password", () => {
     // `venue` seeds the admin's password but NO email, so the email-based dashboard login
     // (`loginManager`) has no address to resolve. The emailless admin authenticates by id via
     // `loginManagerById` — the same path the C2b mirror-bundle route uses to adopt from the primary.
-    // A distinct obligado (B33333333) so this test's admin is its own (the PGlite suite shares one
+    // A distinct tenant (B33333333) so this test's admin is its own (the PGlite suite shares one
     // database).
     const venue = await applyVenue(planVenue(request("B33333333"), ALL_MODULES), {
       db: suite.db,
@@ -235,7 +235,7 @@ describe("the onboarding-provisioned admin authenticates by email", () => {
     // (captured by the onboarding UI, validated + normalized at the setup-api boundary, written by
     // `applyVenue`'s seed-admin insert) can sign in to the dashboard by EMAIL via `loginManager` —
     // not only by id via `loginManagerById`. A valid, already-normalized lowercase address, as the
-    // setup-api boundary produces. A distinct obligado (B44444444) so this admin is its own in the
+    // setup-api boundary produces. A distinct tenant (B44444444) so this admin is its own in the
     // shared PGlite database.
     const adminEmail = "owner@venue.example";
     const venue = await applyVenue(planVenue(request("B44444444", adminEmail), ALL_MODULES), {

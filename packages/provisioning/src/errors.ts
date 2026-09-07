@@ -172,7 +172,7 @@ declare module "@waitron/shared" {
     "provisioning.database_unstamped": { database: string };
     /** `applyVenue` hit a unique-key violation (SQLSTATE 23505, detected by `isUniqueViolation`
      * from `packages/db`, which walks the `cause` chain). `applyVenue` guards the natural keys it
-     * knows — the obligado `(country, tax_id)` and each series `(tenant_id, node_id, code)` — with
+     * knows — the tenant `(country, tax_id)` and each series `(tenant_id, node_id, code)` — with
      * `ON CONFLICT DO NOTHING`, so this is the residual case those clauses do not absorb: most
      * plausibly a second `venue` run racing between this run's plan and its apply. Named here rather
      * than left to reach the operator as `unexpected failure` (`bin.ts`'s catch-all).
@@ -181,24 +181,24 @@ declare module "@waitron/shared" {
      * statement back in its message, and this file's header forbids a param that could carry one.
      * `database` is operator-typed configuration and never a secret. */
     "provisioning.venue_conflict": { database: string };
-    /** A SECOND, DIFFERENT fiscal obligado was asked to stand up in a database that already holds
-     * one. Refused: one obligado per database is the post-RLS isolation boundary. This branch dropped
-     * row-level security on the premise that each database carries a single obligado, so `withTenant`
+    /** A SECOND, DIFFERENT tenant was asked to stand up in a database that already holds
+     * one. Refused: one tenant per database is the post-RLS isolation boundary. This branch dropped
+     * row-level security on the premise that each database carries a single tenant, so `withTenant`
      * no longer filters rows by tenant (`packages/db/src/tenancy.ts`); a second `(country, tax_id)`
      * in the same database would therefore expose one business's rows to the other — a cross-tenant
      * leak a hash-chained fiscal record (§5) cannot take back. The invariant is enforced at EVERY
      * tenant-creation entry point — the setup-api provision handler (`provisionVenue`,
      * `apps/server/src/provision.ts`), the `venue` CLI (`packages/provisioning/src/cli.ts`), and the
      * mirror adopt orchestrator (`adoptFromPrimary`, `apps/server/src/adopt.ts`) — through the shared
-     * `assertNoForeignObligado` guard (`packages/provisioning/src/obligado-guard.ts`): each reads the
+     * `assertNoForeignTenant` guard (`packages/provisioning/src/tenant-guard.ts`): each reads the
      * existing `(country, tax_id)` set before applying and refuses any identity but the one already
      * present. The SAME identity re-provisions (spec D8 second shop); an empty database proceeds as
-     * the first obligado. This is NOT `venue_conflict` (a concurrent unique-key race on ONE identity);
+     * the first tenant. This is NOT `venue_conflict` (a concurrent unique-key race on ONE identity);
      * it is a refusal of a FOREIGN identity.
      *
      * `database` only, and never the driver's own error: the same discipline `venue_conflict` keeps
      * — `database` is operator-typed configuration and never a secret. */
-    "provisioning.foreign_obligado": { database: string };
+    "provisioning.foreign_tenant": { database: string };
     /** `adoptVenue` finished its inserts but one of the five DESIGNATED ids the mirror bundle names
      * for `trading.env` is not present among the rows it inserted — a malformed or incomplete bundle
      * (spec §5). `adoptVenue` inserts the primary's tenant/location/node/till/series rows VERBATIM

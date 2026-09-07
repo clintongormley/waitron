@@ -23,7 +23,7 @@ import { sqlStateOf } from "./sql-state.js";
 import { formatStatus } from "./status-command.js";
 import { applyVenue } from "./venue-apply.js";
 import { describeVenueAction, planVenue, type VenueRequest } from "./venue-plan.js";
-import { assertNoForeignObligado, readObligadoIdentities } from "./obligado-guard.js";
+import { assertNoForeignTenant, readTenantIdentities } from "./tenant-guard.js";
 import "./errors.js";
 
 /**
@@ -58,10 +58,10 @@ export interface CliDeps {
   /** Reads a target database's deployment stamp. Injected so the "unstamped is refused" path is
    * reachable without a container; the real one (`@waitron/db`) needs the target connection. */
   readEnvironment: typeof readDeploymentEnvironment;
-  /** Reads the fiscal identity of every obligado already in the target database. Injected like
-   * `readEnvironment` so the foreign-obligado refusal is reachable without a container; the real one
-   * (`readObligadoIdentities`, `./obligado-guard.js`) needs the target connection. */
-  readObligados: typeof readObligadoIdentities;
+  /** Reads the fiscal identity of every tenant already in the target database. Injected like
+   * `readEnvironment` so the foreign-tenant refusal is reachable without a container; the real one
+   * (`readTenantIdentities`, `./tenant-guard.js`) needs the target connection. */
+  readTenants: typeof readTenantIdentities;
 }
 
 const ENVIRONMENTS: DeploymentEnvironment[] = ["production", "preproduction"];
@@ -484,18 +484,18 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
         throw new AppError("provisioning.database_unstamped", { database });
       }
 
-      // One obligado per database is the post-RLS isolation boundary (§5), enforced here, at the
+      // One tenant per database is the post-RLS isolation boundary (§5), enforced here, at the
       // setup-api provision handler (`provisionVenue`) and at the mirror adopt orchestrator
-      // (`adoptFromPrimary`) — every tenant-creation path — through the shared `assertNoForeignObligado`
+      // (`adoptFromPrimary`) — every tenant-creation path — through the shared `assertNoForeignTenant`
       // guard: with row-level security gone, `withTenant` no longer filters by tenant, so a foreign
       // `(country, tax_id)` in this database would expose one business's rows to the other. The SAME
-      // identity proceeds — `applyVenue`'s ON CONFLICT DO NOTHING reuses the obligado and adds a shop
-      // (D8) — and an empty database proceeds as the first obligado. The identity applied is the
+      // identity proceeds — `applyVenue`'s ON CONFLICT DO NOTHING reuses the tenant and adds a shop
+      // (D8) — and an empty database proceeds as the first tenant. The identity applied is the
       // ensure-tenant action's, canonicalized by planVenue.
       const ensure = actions.find((a) => a.kind === "ensure-tenant");
       if (ensure !== undefined && ensure.kind === "ensure-tenant") {
-        assertNoForeignObligado(
-          await deps.readObligados(target),
+        assertNoForeignTenant(
+          await deps.readTenants(target),
           { country: ensure.country, taxId: ensure.taxId },
           database,
         );
@@ -673,9 +673,9 @@ function asUnreadable(error: unknown, database: string): unknown {
  * (`.trim()` below). This keeps every field's flag and prompt paths in step (a stored `legalName`,
  * `city`, etc. carries no leading/trailing spaces either way). For the fiscal identity specifically,
  * the casing / leading-or-trailing-whitespace footgun is now closed further in — `planVenue`
- * canonicalizes `country`/`taxId` (`.trim().toUpperCase()`) and `obligadoTenantId` self-normalizes —
+ * canonicalizes `country`/`taxId` (`.trim().toUpperCase()`) and `deriveTenantId` self-normalizes —
  * so a non-interactive `--tax-id " B12345678 "` can no longer derive a different, permanent,
- * unmergeable obligado than the trimmed form an interactive operator would produce; this trim is
+ * unmergeable tenant than the trimmed form an interactive operator would produce; this trim is
  * belt-and-suspenders for it. (Only surrounding whitespace and letter case are collapsed; INTERNAL
  * whitespace is left intact, so `--tax-id "B123 45678"` stays a distinct identity.)
  */
@@ -839,14 +839,14 @@ function assertEnvironment(environment: string): DeploymentEnvironment {
  * before it is returned. This upper-casing is now BELT-AND-SUSPENDERS rather than the sole defence:
  * `planVenue` canonicalizes BOTH `country` and `taxId` (`.trim().toUpperCase()`) for BOTH paths — so
  * the wizard, which never calls `assertCountry`, is covered, and a taxId that differs only in letter
- * case or in leading/trailing whitespace is handled too — and `obligadoTenantId` self-normalizes as a
+ * case or in leading/trailing whitespace is handled too — and `deriveTenantId` self-normalizes as a
  * backstop. The footgun this all defends: `es`/`ES` (or a taxId differing only in case or surrounding
  * whitespace) for one business would otherwise derive DIFFERENT tenant ids and mint two permanent,
- * unmergeable obligados — a re-run meant to add a shop would silently start a second SIF chain instead
+ * unmergeable tenants — a re-run meant to add a shop would silently start a second SIF chain instead
  * of reusing the first (§5). `.trim().toUpperCase()` collapses exactly case and surrounding
  * whitespace; INTERNAL whitespace is left intact (a taxId's inner content is not ours to alter), so
  * `"B123 45678"` stays a distinct identity. Canonicalizing collapses the case/space variants to the
- * one obligado (ISO-3166 alpha-2 is upper-case by convention); there is no data to preserve either
+ * one tenant (ISO-3166 alpha-2 is upper-case by convention); there is no data to preserve either
  * way (pre-production, no backfill). Keeping the shape-validation + upper-casing here is harmless and
  * still refuses a mistyped code early. `value` is echoed: it is operator-typed configuration, never a
  * secret. */

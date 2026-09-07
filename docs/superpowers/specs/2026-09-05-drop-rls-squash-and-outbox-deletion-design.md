@@ -58,28 +58,28 @@ where tenants are created and by `app_user` holding no INSERT on `tenants`, pinn
 matrix.
 
 **Correction (2026-09-06, finish-branch fix wave).** "Enforced where tenants are created" was
-aspirational, not real, when the line above was first written: nothing refused a second obligado.
+aspirational, not real, when the line above was first written: nothing refused a second tenant.
 There are TWO production tenant-creation paths — the setup-api provision handler (`provisionVenue`,
 the UI's `POST /setup-api/provision`) and the `venue` CLI (ops/dev) — and the first fix guarded only
 the CLI, so the UI gap stood. Both now read the existing `(country, tax_id)` set before applying and
 throw `provisioning.foreign_tenant` for any identity but the one already present (the same identity
 re-provisions, D8; an empty database is the first tenant), through ONE shared decision —
-`assertNoForeignTenant` (`packages/provisioning/src/tenant-guard.ts`) — both renamed to obligado, and a
-third entry point (mirror adopt) added, by the 2026-09-06 correction below. The guard lives at those
-entry points, NOT in `applyVenue`: ~50 real-PG suites provision many distinct obligados through
-`applyVenue` into one shared container by design ("each test gets its own tenant so its state is
-order-independent"), and a guard inside `applyVenue` would break all of them while enforcing nothing
-production does not already route through the two entry points.
+`assertNoForeignTenant` (`packages/provisioning/src/tenant-guard.ts`). A THIRD entry point (mirror
+adopt) was added 2026-09-07 — see the correction below. The guard lives at those entry points, NOT in
+`applyVenue`: ~50 real-PG suites provision many distinct tenants through `applyVenue` into one shared
+container by design ("each test gets its own tenant so its state is order-independent"), and a guard
+inside `applyVenue` would break all of them while enforcing nothing production does not already route
+through the entry points.
 
-**Correction (2026-09-06, adopt-guard fix wave).** The correction above found TWO tenant-creation
+**Correction (2026-09-07, adopt-guard + naming).** The correction above found TWO tenant-creation
 paths; there is a THIRD — the mirror adopt orchestrator (`adoptFromPrimary`, `apps/server/src/adopt.ts`),
-which `adoptVenue` inserts a tenant through and which stood UNguarded (a foreign bundle adopted into
-an occupied instance database would have stood up a second obligado, worst of all on the box where
-hash-chained fiscal rows later flow in by sync). It now shares the same guard. The guard, its types
-and its error were also renamed off the infra word "tenant" onto the fiscal concept they enforce:
-`assertNoForeignObligado` / `readObligadoIdentities` / `ObligadoIdentity` in
-`packages/provisioning/src/obligado-guard.ts`, error `provisioning.foreign_obligado`. The `tenants`
-table, `withTenant` and `tenant_id` (legitimate multi-tenancy infra) keep their names.
+which inserts a tenant through `adoptVenue` and stood UNguarded (a foreign bundle adopted into an
+occupied instance database would have stood up a second tenant, worst of all on the box where
+hash-chained fiscal rows later flow in by sync). It now calls the same `assertNoForeignTenant`. An
+intermediate step (#258) renamed the guard/types/error onto the Spanish word `obligado`; that was
+reverted the same cycle — core code is English-only, and Spanish belongs only in the verifactu/fiscal
+modules and translations. The pre-existing `obligadoTenantId` (which derives `tenants.id` from the
+`(country, tax_id)` natural key) was renamed `deriveTenantId` at the same time.
 
 **Gone.** All 95 policies and 190 `ENABLE`/`FORCE` switches; `current_tenant_id()`; the
 `sync_log` / `sync_cursor` / `sync_peers` / `sync_config_conflicts` tables, `sync_capture()` and

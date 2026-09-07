@@ -10,7 +10,7 @@ import type { CliDeps } from "./cli.js";
 import type { InstanceState, RoleFacts } from "./instance-state.js";
 import type { VenueAction } from "./venue-plan.js";
 import type { VenueApplyDeps, VenueResult } from "./venue-apply.js";
-import { obligadoTenantId } from "./tenant-id.js";
+import { deriveTenantId } from "./tenant-id.js";
 
 const DATABASE = "waitron_demo";
 const ADMIN_URI = "postgres://admin:adminsecret@db.example:5432/postgres";
@@ -135,7 +135,7 @@ interface Harness {
   readState: ReturnType<typeof vi.fn>;
   applyVenue: ReturnType<typeof vi.fn>;
   readEnvironment: ReturnType<typeof vi.fn>;
-  readObligados: ReturnType<typeof vi.fn>;
+  readTenants: ReturnType<typeof vi.fn>;
   connect: ReturnType<typeof vi.fn>;
   closes: () => number;
 }
@@ -150,7 +150,7 @@ function harness(
     readState?: () => Promise<InstanceState>;
     applyVenue?: CliDeps["applyVenue"];
     readEnvironment?: () => Promise<DeploymentEnvironment | null>;
-    readObligados?: () => Promise<{ country: string; taxId: string }[]>;
+    readTenants?: () => Promise<{ country: string; taxId: string }[]>;
   } = {},
 ): Harness {
   const lines: string[] = [];
@@ -173,7 +173,7 @@ function harness(
   );
   // Empty by default: a fresh, single-tenant database, so the foreign-tenant guard proceeds. Tests
   // exercising the refusal supply an existing identity.
-  const readObligados = vi.fn(options.readObligados ?? (async () => []));
+  const readTenants = vi.fn(options.readTenants ?? (async () => []));
 
   return {
     lines,
@@ -185,7 +185,7 @@ function harness(
     readState,
     applyVenue,
     readEnvironment,
-    readObligados,
+    readTenants,
     connect,
     deps: {
       io: {
@@ -209,7 +209,7 @@ function harness(
       applyVenue: applyVenue as unknown as CliDeps["applyVenue"],
       modules: MODULES,
       readEnvironment: readEnvironment as unknown as CliDeps["readEnvironment"],
-      readObligados: readObligados as unknown as CliDeps["readObligados"],
+      readTenants: readTenants as unknown as CliDeps["readTenants"],
     },
   };
 }
@@ -1237,25 +1237,23 @@ describe("runCli venue", () => {
   });
 
   it("refuses a SECOND, DIFFERENT fiscal identity in the same database, before applying (§5)", async () => {
-    // One obligado per database is the post-RLS isolation boundary: this branch dropped row-level
-    // security, so `withTenant` no longer filters by tenant and a second obligado would leak one
+    // One tenant per database is the post-RLS isolation boundary: this branch dropped row-level
+    // security, so `withTenant` no longer filters by tenant and a second tenant would leak one
     // business's rows to the other. `venue` is one of the tenant-creation paths (the setup-api
     // `provisionVenue` and the mirror `adoptFromPrimary` are the others), and each calls the shared
-    // `assertNoForeignObligado`: it reads the existing `(country, tax_id)` set and refuses any identity
+    // `assertNoForeignTenant`: it reads the existing `(country, tax_id)` set and refuses any identity
     // but the one present. Here the database already holds ES/B99999999 while the request is
-    // ES/B12345678 (VENUE_ARGS), so the apply is refused — never reached — leaving no second obligado.
+    // ES/B12345678 (VENUE_ARGS), so the apply is refused — never reached — leaving no second tenant.
     const h = harness({
       env: VENUE_ENV,
-      readObligados: async () => [{ country: "ES", taxId: "B99999999" }],
+      readTenants: async () => [{ country: "ES", taxId: "B99999999" }],
     });
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
     expect(code).toBe(1);
-    expect(h.lines.join("\n")).toContain(
-      'provisioning.foreign_obligado {"database":"waitron_demo"}',
-    );
-    // The identities were read — that is how the foreign obligado was learnt — and nothing was
+    expect(h.lines.join("\n")).toContain('provisioning.foreign_tenant {"database":"waitron_demo"}');
+    // The identities were read — that is how the foreign tenant was learnt — and nothing was
     // applied: no second tenant can be written.
-    expect(h.readObligados).toHaveBeenCalledTimes(1);
+    expect(h.readTenants).toHaveBeenCalledTimes(1);
     expect(h.applyVenue).not.toHaveBeenCalled();
     expect(h.closes()).toBe(1);
   });
@@ -1263,14 +1261,14 @@ describe("runCli venue", () => {
   it("re-provisions when the SAME fiscal identity is already present (D8 second shop)", async () => {
     // The guard refuses only a FOREIGN identity, never an idempotent re-run: a database already
     // holding ES/B12345678 (the VENUE_ARGS identity) proceeds to apply, where `applyVenue`'s
-    // `ON CONFLICT DO NOTHING` reuses the obligado and adds a shop.
+    // `ON CONFLICT DO NOTHING` reuses the tenant and adds a shop.
     const h = harness({
       env: VENUE_ENV,
-      readObligados: async () => [{ country: "ES", taxId: "B12345678" }],
+      readTenants: async () => [{ country: "ES", taxId: "B12345678" }],
     });
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
     expect(code).toBe(0);
-    expect(h.readObligados).toHaveBeenCalledTimes(1);
+    expect(h.readTenants).toHaveBeenCalledTimes(1);
     expect(h.applyVenue).toHaveBeenCalledTimes(1);
   });
 
@@ -1284,11 +1282,11 @@ describe("runCli venue", () => {
     expect(h.applyVenue).not.toHaveBeenCalled();
   });
 
-  it("upper-cases the country so es and ES resolve to the same obligado", async () => {
+  it("upper-cases the country so es and ES resolve to the same tenant", async () => {
     // ISO-3166 alpha-2 is upper-case by convention, but an operator may type `es`. The derived
     // tenant id hashes `country` verbatim (tenant-id.ts) and `(country, tax_id)` is a case-sensitive
-    // unique index, so `es` and `ES` must NOT mint two permanent obligados — the CLI normalises to
-    // upper-case at the boundary, which is what makes a D8 re-run reuse the same obligado.
+    // unique index, so `es` and `ES` must NOT mint two permanent tenants — the CLI normalises to
+    // upper-case at the boundary, which is what makes a D8 re-run reuse the same tenant.
     const args = VENUE_ARGS.map((arg) => (arg === "ES" ? "es" : arg));
     const h = harness({ env: VENUE_ENV });
     const code = await runCli([...args, "--yes"], h.deps);
@@ -1299,15 +1297,15 @@ describe("runCli venue", () => {
     expect(ensureTenant).toMatchObject({
       kind: "ensure-tenant",
       country: "ES",
-      tenantId: obligadoTenantId("ES", "B12345678"),
+      tenantId: deriveTenantId("ES", "B12345678"),
     });
   });
 
-  it("trims a flag-provided --tax-id so surrounding whitespace derives the SAME obligado", async () => {
+  it("trims a flag-provided --tax-id so surrounding whitespace derives the SAME tenant", async () => {
     // The load-bearing one: prompted values are trimmed (`(await io.prompt(...)).trim()`) but flag
-    // values were not, so `--tax-id " B12345678 "` used to reach `obligadoTenantId` verbatim and
+    // values were not, so `--tax-id " B12345678 "` used to reach `deriveTenantId` verbatim and
     // hash into a DIFFERENT tenant id than the trimmed form — a permanent, unmergeable second
-    // obligado from nothing but a stray space, the same footgun class as the country-case bug. The
+    // tenant from nothing but a stray space, the same footgun class as the country-case bug. The
     // derived id and the stored tax_id must both match the trimmed identity.
     const args = VENUE_ARGS.map((arg) => (arg === "B12345678" ? " B12345678 " : arg));
     const h = harness({ env: VENUE_ENV });
@@ -1319,7 +1317,7 @@ describe("runCli venue", () => {
     expect(ensureTenant).toMatchObject({
       kind: "ensure-tenant",
       taxId: "B12345678",
-      tenantId: obligadoTenantId("ES", "B12345678"),
+      tenantId: deriveTenantId("ES", "B12345678"),
     });
   });
 

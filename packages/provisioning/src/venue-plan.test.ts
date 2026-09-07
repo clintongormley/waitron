@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { isAppError } from "@waitron/shared";
-import { obligadoTenantId } from "./tenant-id.js";
+import { deriveTenantId } from "./tenant-id.js";
 import { describeVenueAction, planVenue, type VenueRequest } from "./venue-plan.js";
 
 // planVenue is generic over the module list now, so these tests build their own: a seedless module
@@ -109,7 +109,7 @@ describe("planVenue", () => {
     const tenant = actions.find((a) => a.kind === "ensure-tenant");
     const node = actions.find((a) => a.kind === "create-node");
     expect(tenant).toMatchObject({
-      tenantId: obligadoTenantId("ES", "B12345678"),
+      tenantId: deriveTenantId("ES", "B12345678"),
       country: "ES",
       taxId: "B12345678",
     });
@@ -213,12 +213,12 @@ describe("planVenue", () => {
     }
   });
 
-  it("canonicalizes country/taxId case and leading/trailing whitespace so es/ES cannot mint two obligados (§5)", () => {
+  it("canonicalizes country/taxId case and leading/trailing whitespace so es/ES cannot mint two tenants (§5)", () => {
     // The wizard emits a trimmed-but-not-uppercased country ("es") and never touches taxId casing;
     // the CLI trims taxId but never uppercases it. Both paths go through planVenue, so canonicalizing
     // HERE — once, at the top, via `.trim().toUpperCase()` — makes the derived id AND the stored
     // (country, tax_id) unique-index row canonical for both. Without it, a re-run of the SAME business
-    // differing only in case or surrounding whitespace mints a second, permanent, unmergeable obligado
+    // differing only in case or surrounding whitespace mints a second, permanent, unmergeable tenant
     // (§5). (Internal whitespace is deliberately NOT normalized; see the tenant-id primitive's test.)
     // Proven by deletion: strip planVenue's normalization and the id-equality / stored-value
     // assertions below go red.
@@ -232,12 +232,12 @@ describe("planVenue", () => {
     expect(messyTenant).toMatchObject({ kind: "ensure-tenant", country: "ES", taxId: "B12345678" });
     // ...and the derived id matches the already-canonical run's id.
     expect(messyTenant?.tenantId).toBe(canonicalTenant?.tenantId);
-    expect(messyTenant?.tenantId).toBe(obligadoTenantId("ES", "B12345678"));
+    expect(messyTenant?.tenantId).toBe(deriveTenantId("ES", "B12345678"));
   });
 
   it("accepts a country in a different case than the territory prefix (ES matches es-common)", () => {
     // The check is case-insensitive on the country-prefixed convention, so a lowercase country still
-    // matches its territory prefix. This never mints two obligados (planVenue canonicalizes country
+    // matches its territory prefix. This never mints two tenants (planVenue canonicalizes country
     // before deriving the id and storing the row — see the casing test above), but planVenue must not
     // refuse the coherent combination on case alone.
     const actions = planVenue(
