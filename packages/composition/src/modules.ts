@@ -7,7 +7,7 @@ import {
   FISCAL_SLOT,
   FISCAL_VOCABULARY,
 } from "@waitron/fiscal-verifactu";
-import { BOOKINGS_ROUTES } from "@waitron/bookings";
+import { BOOKINGS_ENROLMENT, BOOKINGS_ROUTES } from "@waitron/bookings";
 import { IDENTITY_ENROLMENT } from "@waitron/identity";
 import type { WaitronModule } from "@waitron/module";
 import { PAYMENTS_ENROLMENT } from "@waitron/payments";
@@ -154,20 +154,22 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     fiscal: FISCAL_NONE_SLOT,
   },
   {
-    // Bookings — the first UI-bearing module (SP1: server + data). Listed LAST at its FINAL
-    // post-`sync` position: this task declares only `core` (four FKs into core), and SP1's later
-    // slices add `sync` (the capture trigger), `permissions` and `floorAnnotations` with no reorder
-    // — a core-then-sync dep still lands here under Kahn's input-order tie-break. `routes` carries the
-    // seven booking routes boot mounts generically; the descriptor is the only place bookings is named.
+    // Bookings — the first UI-bearing AND first genuinely-toggleable enrolling module (SP1: server +
+    // data). Listed LAST at its FINAL post-`sync` position: it FKs into `core` and installs a
+    // `sync_capture()` trigger owned by `sync`, so it requires both; a core-then-sync dep still lands
+    // here under Kahn's input-order tie-break. `sync` carries the state-class enrolment (its one
+    // `bookings` capture trigger); `routes` the seven booking routes boot mounts generically. The
+    // descriptor is the only place bookings is named.
     name: "bookings",
     version: "0.0.0",
     tier: "toggleable",
-    requires: { core: "*" },
+    requires: { core: "*", modules: { sync: "*" } },
     migrations: {
       name: "bookings",
       table: "__drizzle_migrations_bookings",
       from: "../bookings/drizzle",
     },
+    sync: BOOKINGS_ENROLMENT,
     routes: BOOKINGS_ROUTES,
   },
 ];

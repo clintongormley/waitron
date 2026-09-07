@@ -15,3 +15,11 @@ ALTER TABLE "bookings"
 ALTER TABLE "bookings"
   ADD CONSTRAINT "bookings_tab_fk"
   FOREIGN KEY ("tenant_id", "tab_id") REFERENCES "working_orders" ("tenant_id", "id");
+--> statement-breakpoint
+-- Sync enrolment (state class): capture INSERT/UPDATE into sync_log via sync's SPI. No DELETE — a
+-- booking is CANCELLED, never removed, so app_user holds no DELETE. The WHEN echo-guard suppresses
+-- capture on the apply path (app.sync_apply = 'on'), or an applied row would re-enqueue itself.
+-- sync_capture() is owned by the sync module, so bookings requires it (composition requires.modules.sync).
+CREATE TRIGGER bookings_capture AFTER INSERT OR UPDATE ON bookings
+  FOR EACH ROW WHEN (current_setting('app.sync_apply', true) IS DISTINCT FROM 'on')
+  EXECUTE FUNCTION sync_capture();

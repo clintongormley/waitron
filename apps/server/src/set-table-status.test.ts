@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { BOOKINGS_MIGRATIONS } from "@waitron/bookings";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -18,9 +18,10 @@ import { listTablesWithState, openTab } from "./working-order.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
-// listTablesWithState's reserved-on-floor sub-select reads the `bookings` table (now a module).
+// listTablesWithState's reserved-on-floor sub-select reads the `bookings` table (now a module). The
+// whole manifest, not [core, bookings]: bookings' capture trigger EXECUTEs sync's `sync_capture()`.
 const suite = usePgliteDb({
-  migrations: [CORE_MIGRATIONS, BOOKINGS_MIGRATIONS],
+  migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
 });
 let db: Database;

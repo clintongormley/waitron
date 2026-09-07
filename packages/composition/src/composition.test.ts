@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { BOOKINGS_ENROLMENT } from "@waitron/bookings";
 import {
   FISCAL_PROVISIONING,
   FISCAL_RESTORE,
@@ -58,6 +59,16 @@ describe("ALL_MODULES provisioning and fiscal seats", () => {
       "fiscal-verifactu",
       "fiscal-none",
     ]);
+  });
+});
+
+describe("ALL_MODULES bookings enrolment seat", () => {
+  it("bookings declares its state-class enrolment by reference and requires the sync module", () => {
+    const bookings = ALL_MODULES.find((m) => m.name === "bookings");
+    expect(bookings?.sync).toBe(BOOKINGS_ENROLMENT);
+    // The capture trigger calls sync_capture() (sync's SPI), so the descriptor names that edge —
+    // scripts/module-graph-honesty.test.ts cross-checks it against the trigger SQL.
+    expect(bookings?.requires?.modules?.sync).toBe("*");
   });
 });
 

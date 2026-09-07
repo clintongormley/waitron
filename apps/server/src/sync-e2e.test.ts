@@ -7,7 +7,7 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { enrolPeer, syncPullOnce, type HttpClient } from "@waitron/sync";
 import type { Logger } from "./logger.js";
 import { mountSyncApi } from "./sync-api.js";
-import { ALL_SYNC_ENROLMENTS } from "./modules.js";
+import { ALL_SYNC_ENROLMENTS, MODULE_BY_TABLE } from "./modules.js";
 
 // Two-node end-to-end (design §5, §7). TWO manifest-migrated databases in the shared container,
 // each a `useTemplateDb` clone of the `manifest` template — `source` and `target` — are the
@@ -147,6 +147,31 @@ const targetPaymentCount = async (id: string): Promise<string> => {
     sql`select count(*)::int::text as v from payments where id = ${id}`,
   );
   return r.rows[0]!.v;
+};
+
+/** Capture a booking on the SOURCE under withTenant{nodeId: NODE_A} — bookings is the first
+ * genuinely-toggleable enrolling module (SP1), a STATE-class ordered-lane table. Its capture trigger
+ * (bookings_capture) writes the row to source.sync_log with origin_id = NODE_A. table_id/tab_id stay
+ * NULL (no dining_tables/working_orders assignment needed for the round-trip); created_by is a plain
+ * uuid with no FK. The tenant + location FK parents are the ones seedParents wrote on BOTH DBs. */
+async function captureBookingOnSource(bookingId: string): Promise<void> {
+  await withTenant(
+    sourceWriter,
+    TENANT,
+    (tx) =>
+      tx.execute(sql`insert into bookings
+        (id, tenant_id, location_id, booking_date, booking_time, party_size, contact_name, created_by)
+        values (${bookingId}, ${TENANT}, ${LOCATION}, '2026-08-11', '20:00', 4, 'Round Trip',
+                'cccccccc-0000-4000-8000-000000000001')`),
+    { nodeId: NODE_A },
+  );
+}
+
+const targetBookingStatus = async (id: string): Promise<string | null> => {
+  const r = await targetAdmin.execute<{ status: string | null }>(
+    sql`select status from bookings where id = ${id}`,
+  );
+  return r.rows[0]?.status ?? null;
 };
 
 beforeAll(async () => {
@@ -295,5 +320,34 @@ describe("two-node sync end-to-end over a real HTTP wire", () => {
     );
     expect(cursors.rows.map((r) => r.lane)).toEqual(["fast", "ordered"]);
     expect(cursors.rows.every((r) => BigInt(r.seq) > 0n)).toBe(true);
+  });
+
+  it("carries a bookings row (the first toggleable enrolling module) from source to mirror over the ordered lane", async () => {
+    // Exercises the whole SP1-t3 wiring end-to-end: the bookings_capture trigger writes the insert to
+    // source.sync_log (enrolment from BOOKINGS_ENROLMENT, table resolved by MODULE_BY_TABLE), the ordered
+    // lane pulls it, and the target's watermark-upsert apply lands it on the mirror.
+    expect(MODULE_BY_TABLE.get("bookings")).toBe("bookings");
+
+    await stampEnv(targetAdmin, "production");
+    const bookingId = "bbbbbbbb-0000-4bbb-8bbb-bbbbbbbbbbbb";
+    await captureBookingOnSource(bookingId);
+
+    const deps = {
+      localDb: targetApplier,
+      subscriberId: SUB_MAIN,
+      tenantId: TENANT,
+      localEnvironment: "production",
+      http: sourceHttp("production"),
+      batchLimit: 500,
+      enrolments: ALL_SYNC_ENROLMENTS,
+      moduleVersions: {},
+      moduleByTable: MODULE_BY_TABLE,
+    };
+    const peer = { nodeId: NODE_A, url: "", token: sourcePeerToken };
+
+    expect(await targetBookingStatus(bookingId)).toBeNull(); // not on the mirror yet
+    const applied = await syncPullOnce({ ...deps, lane: "ordered" as const }, peer);
+    expect(applied.applied).toBeGreaterThanOrEqual(1);
+    expect(await targetBookingStatus(bookingId)).toBe("booked"); // landed with its default status
   });
 });

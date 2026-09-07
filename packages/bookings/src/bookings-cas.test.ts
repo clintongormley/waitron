@@ -18,7 +18,7 @@ import {
 } from "./bookings.js";
 import "./errors.js";
 
-// Real PostgreSQL (a shared-container clone of the core+bookings template), NOT PGlite. `seatBooking`'s terminal
+// Real PostgreSQL (a shared-container clone of the whole-manifest template), NOT PGlite. `seatBooking`'s terminal
 // write is a compare-and-swap — `update … where id = ? and status = 'booked'`, throwing
 // `booking.invalid_transition` on an empty match — the concurrency backstop for the window between its
 // lock-free `getBooking` read (which sees `booked`) and this write. PGlite serialises every query onto
@@ -29,7 +29,7 @@ import "./errors.js";
 // DISTINCT backends. The shared-container globalSetup THROWS `dockerRequired` rather than skipping, so a
 // vanished suite fails loudly instead of reporting a green that proves nothing.
 const LOCALE = "es-ES";
-const suite = useTemplateDb({ template: "core_bookings" });
+const suite = useTemplateDb({ template: "manifest" });
 let db: Database;
 beforeAll(() => {
   db = suite.admin;

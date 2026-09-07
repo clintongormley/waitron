@@ -3,16 +3,16 @@ import { CORE_MIGRATIONS } from "@waitron/db";
 import { runMigrationSets } from "@waitron/db/testing/postgres.js";
 import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { BOOKINGS_MIGRATIONS } from "../migrations.js";
 
 /**
- * Migrate the three templates the real-Postgres suites clone once, per file:
+ * Migrate the two templates the real-Postgres suites clone once, per file:
  *
- *  - `core_bookings` = [core, bookings]: the schema, verb-CAS and privilege suites, and the
- *    migration-split proof (bookings + its four FKs exist).
+ *  - `manifest` = the whole manifest in order: the schema, verb-CAS, privilege, routes and
+ *    migration-split (has-bookings) suites. Bookings cannot migrate on top of `core` alone — its
+ *    capture trigger EXECUTEs `sync_capture()`, which `sync` owns, and `sync` in turn enrols
+ *    identity's / payments' tables — so the fixtures apply the full chain (core … sync … bookings),
+ *    exactly as `@waitron/fiscal-verifactu` does.
  *  - `core` = [core] alone: the migration-split proof that core carries no `bookings` relation.
- *  - `manifest` = the whole manifest: the routes suite, which needs identity's `persons` /
- *    `management_sessions` for `authorizeManager` alongside core and bookings.
  *
  * Docker is required before any worker starts; the real-PG suites cannot degrade to a skip (PGlite is
  * a superuser holding every grant and serialises onto one backend, so it answers neither the privilege
@@ -25,9 +25,8 @@ export default async function ({ provide }: GlobalSetupContext) {
       "superuser (so it cannot answer the app_user privilege matrix) and serialises every query onto " +
       "one backend (so it cannot stage the seat CAS race).",
     templates: {
-      core_bookings: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS, BOOKINGS_MIGRATIONS]),
-      core: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS]),
       manifest: (uri) => runMigrationSets(uri, migrationOptionsFor(manifestSets(), null)),
+      core: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS]),
     },
   });
   provide("sharedPg", handle);

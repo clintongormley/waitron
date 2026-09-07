@@ -1,13 +1,14 @@
 // Real PostgreSQL: app_user's grants on `bookings`, read back from the live catalog (CLAUDE.md §3/§4).
 // PGlite is a superuser holding every grant, so it cannot answer a privilege matrix. The whole-manifest
 // matrix in @waitron/fiscal-verifactu pins the same row from the other side; this suite proves the
-// MODULE's own set grants it correctly, applied with just core (the `core_bookings` template).
+// MODULE's own set grants it correctly, applied over the whole manifest (the `manifest` template —
+// bookings' capture trigger EXECUTEs sync's `sync_capture()`, so it cannot migrate on core alone).
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { PRIVILEGES } from "./privileges.expected.js";
 
-const suite = useTemplateDb({ template: "core_bookings" });
+const suite = useTemplateDb({ template: "manifest" });
 
 describe("app_user's privileges on bookings are exactly SELECT, INSERT, UPDATE", () => {
   it("holds S, I, U and NOT DELETE / TRUNCATE (has_table_privilege)", async () => {

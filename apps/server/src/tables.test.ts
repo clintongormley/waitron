@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  CORE_MIGRATIONS,
   DEFAULT_TIME_ZONE,
   asAppUser,
   ticketItems,
@@ -10,7 +9,7 @@ import {
   workingOrderLines,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { BOOKINGS_MIGRATIONS } from "@waitron/bookings";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -50,10 +49,11 @@ import {
 import "./errors.js";
 
 const LOCALE = "es-ES";
-// [core, bookings]: the reserved-on-floor cases (listTablesWithState's raw-SQL sub-select — the floor
-// read STAYS in working-order.ts until Task 5) seed the `bookings` table, which now lives in the module.
+// The reserved-on-floor cases (listTablesWithState's raw-SQL sub-select — the floor read STAYS in
+// working-order.ts until Task 5) seed the `bookings` table, which now lives in the module. The whole
+// manifest, not [core, bookings]: bookings' capture trigger EXECUTEs sync's `sync_capture()`.
 const suite = usePgliteDb({
-  migrations: [CORE_MIGRATIONS, BOOKINGS_MIGRATIONS],
+  migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
 });
 let db: Database;

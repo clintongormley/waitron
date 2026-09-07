@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { CoreServices } from "@waitron/module";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import { bookings } from "./schema/bookings.js";
-import { BOOKINGS_MIGRATIONS } from "./migrations.js";
+import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
 import { fakeCore } from "./testing/fake-core.js";
 import {
   cancelBooking,
@@ -28,9 +28,10 @@ import "./errors.js";
 // race is proven against real Postgres in `bookings-cas.test.ts`, the routes in `booking-api.test.ts`). Every read/write still runs
 // through `withTenant` + `asAppUser`, so the tenant scope and the `party_size > 0` CHECK are exercised
 // exactly as production does, not bypassed. `TESTCONTAINERS_RYUK_DISABLED` is irrelevant here — no
-// container is started.
+// container is started. Fixtures apply the whole manifest (BOOKINGS_TEST_MIGRATIONS): bookings'
+// capture trigger EXECUTEs sync's `sync_capture()`, so it cannot migrate on core alone.
 const suite = usePgliteDb({
-  migrations: [CORE_MIGRATIONS, BOOKINGS_MIGRATIONS],
+  migrations: BOOKINGS_TEST_MIGRATIONS,
   timeoutMs: 60_000,
 });
 
