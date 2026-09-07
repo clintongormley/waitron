@@ -30,10 +30,12 @@ import type { StationThresholds, TimingBand } from "@waitron/shared";
 export type FetchLike = typeof fetch;
 
 /**
- * Whether a rejected request never reached a server (till-reroute §4.3): `fetch` rejects with a
- * TypeError when the host is unreachable and with an AbortError on a timeout; a server that answered
- * rejects through `#request` as a `{ code }`. The distinction decides `sale.unconfirmed` (a human must
- * check before retrying) versus `sale.error` (the server refused; retry freely).
+ * Whether a rejected request got NO answer (till-reroute §4.3): `fetch` rejects with a TypeError when
+ * the connection fails and with an AbortError on a timeout — either way the outcome is UNKNOWN, because
+ * the request may or may not have reached or been processed by the server (a server can receive it and
+ * then drop the connection). A server that DID answer rejects through `#request` as a `{ code }`. That
+ * uncertainty is exactly why the caller shows `sale.unconfirmed` (a human must check before retrying)
+ * rather than `sale.error` (the server refused; retry freely).
  */
 export function isNetworkFailure(err: unknown): boolean {
   return err instanceof TypeError || (err instanceof DOMException && err.name === "AbortError");
