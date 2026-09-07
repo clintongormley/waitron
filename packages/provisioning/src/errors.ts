@@ -347,5 +347,11 @@ declare module "@waitron/shared" {
       memberOf: string;
       sqlState: string | null;
     };
+    /** The instance is not set up for native logical replication. `missing` lists each unmet
+     * precondition in words (`wal_level is not logical`, `replication role missing`,
+     * `migrator lacks pg_create_subscription`, …) — the box image / operator runs the bootstrap
+     * (`replication-bootstrap.ts`), and this refusal says what it has not yet done. `provisioning.*`
+     * because it is a fact about standing a deployment up; labels only, never a secret. */
+    "provisioning.replication_not_ready": { missing: string[] };
   }
 }
