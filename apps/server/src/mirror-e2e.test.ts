@@ -409,14 +409,25 @@ describe("mirror-mode headline e2e — pull through the tunnel, apply, serve rea
       );
       expect(applied.rows.map((r) => r.name)).toEqual([...CATALOGUE_NAMES]);
 
-      // 2. THE CURSOR ADVANCED to the source's max ordered seq for this origin.
-      const cursor = await orderedCursor(mirror.admin);
-      expect(cursor).not.toBeNull();
-      expect(BigInt(cursor!)).toBeGreaterThan(0n);
-      const sourceMax = await source.admin.execute<{ seq: string }>(
-        sql`select max(seq)::text as seq from sync_log where origin_id = ${PRIMARY_SYNC_NODE}::uuid`,
-      );
-      expect(cursor).toBe(sourceMax.rows[0]!.seq);
+      // 2. THE CURSOR ADVANCED to the source's max ordered seq for this origin. Poll the cursor until it
+      //    REACHES that max rather than reading it once: `catalogueCount === 2` (step 1) settles the
+      //    instant the catalogue ROWS commit, but the lane cursor advances in a SEPARATE, later
+      //    transaction (`advanceCursor`, apply.ts §4), so reading it immediately after the row count
+      //    raced `null` under CI contention (the `test-server` shard-1 flake). The source is static
+      //    during the test, so its max seq is fixed; once the cursor reaches it, every ordered row at or
+      //    below it — the catalogues included — has applied AND the advance has committed.
+      const sourceMax = (
+        await source.admin.execute<{ seq: string }>(
+          sql`select max(seq)::text as seq from sync_log where origin_id = ${PRIMARY_SYNC_NODE}::uuid`,
+        )
+      ).rows[0]!.seq;
+      // A real, positive target: without this the poll below would pass vacuously (`null === null`) if
+      // the source had captured no rows for this origin.
+      expect(sourceMax).not.toBeNull();
+      expect(BigInt(sourceMax)).toBeGreaterThan(0n);
+      expect(
+        await waitFor(async () => (await orderedCursor(mirror.admin)) === sourceMax, 40_000),
+      ).toBe(true);
 
       // 3. A DASHBOARD GET SERVES THE APPLIED DATA WITH NO LOGIN (the ambient viewer). The browser's
       // first page load primes the session cookie on the RESPONSE (Hono setCookie is a response header,

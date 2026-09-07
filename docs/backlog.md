@@ -900,28 +900,37 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
     - *Flake stabilised, not just re-run (owner directive):* the CI `test-server` shard's documented
       `boot.test.ts` 503-not-200 flake (a wall-clock `/health` readiness race) was root-caused and fixed
       with condition-based-waiting (`fetchHealthOk` poll-until-200); ci.yml now uploads shard blobs on
-      failure so a future flake names its exact test. Sibling `mirror-e2e.test.ts:~381` remains a
-      candidate if it recurs. See memory `test-server-e2e-timing-flakes`.
+      failure so a future flake names its exact test. The sibling `mirror-e2e.test.ts` cursor flake it
+      predicted was later root-caused and FIXED the same way (see the entry immediately below). See
+      memory `test-server-e2e-timing-flakes`.
 
-    - ***FIX the `test-server (1)` mirror/promotion CI timing flake (owner directive 2026-09-06 — flaky
-      tests waste time; fix, don't re-run).*** It RECURRED on PR #255: `test-server` shard 1 failed once
-      in the real-PG mirror/promotion/e2e suites (`mirror-e2e`, `boot.mirror`, `boot.promote`,
-      `adopt-e2e`, `promote`) with the signature `sync.stream_stalled` + a ~90 s gap before a vitest
-      timeout, while the same suite passed locally and on CI re-run. Not branch-specific — the drop-RLS
-      branch's server changes touch the provisioning guard / boot db-name / brandTenantId, none of the
-      sync/mirror path. **Root-cause the timing race and replace wall-clock waits with condition-based
-      waiting**, exactly as the `boot.test` 503 flake above was fixed (`fetchHealthOk` poll-until-200);
-      `ci.yml` already uploads the shard blob on failure (artifact `server-blob-1`) to name the exact
-      test. Memory: `test-server-e2e-timing-flakes`. **RECURRED WORSE on PR #260** (obligado→English
-      rename, no sync-path change): shard 1 failed TWICE (needed a 3rd attempt to go green). Signature
-      this time: a `pg` "client.query() when the client is already executing a query" warning, then
-      ~90 s of silent `sync.pull_failed` retries, blob written, then vitest exit 1 with NO failed test
-      in the blob — i.e. an UNHANDLED REJECTION from the sync worker's background loop during real-PG
-      e2e teardown (`promote`/`restore-fiscal-e2e` are the heavy suites in shard 1), not an assertion.
-      That the blob records zero test failures is the tell: the fix is to make the sync loop's teardown
-      await/settle its in-flight pulls (and stop the concurrent-query-on-one-client pattern the pg
-      warning names) so a stopped server cannot leave a rejecting promise. Two-re-run cost is over the
-      "re-run before investigating" budget — this now blocks clean landings.
+    - **`test-server (1)` mirror CI timing flake — ROOT-CAUSED and FIXED (condition-based waiting).**
+      The blob from the actual #260 failure (artifact `server-blob-1`, parsed with `flatted`) named the
+      real failure, which the earlier hypotheses in this entry got wrong: **3 failed tasks in
+      `mirror-e2e.test.ts`**, the headline "a mirror pulls the primary's sync_log through the tunnel"
+      test, `expected null not to be null` at `mirror-e2e.test.ts:405`. NOT an unhandled rejection, NOT
+      the sync worker, and the blob does NOT record zero failures — it records this assertion. The
+      `sync.pull_failed`/`sync.stream_stalled` storm and the `pg` "already executing a query" warning
+      are ambient noise from OTHER shard-1 files running concurrently (`maxForks: 4`), not the cause; the
+      ~90 s "gap" is the heavy `restore-fiscal-e2e`/`promote` suites running silently (execFile) after
+      the mirror test already failed. **Mechanism:** step 1 waits for `catalogueCount === 2`, but the
+      catalogue ROWS commit per-row (`apply.ts` `tryApplyRow`) while the lane cursor advances in a
+      SEPARATE, later transaction (`advanceCursor`, `apply.ts` §4) — so the cursor read at line 405 raced
+      `null` in that gap under CI contention (v8 coverage + 4 forks + the ambient storm widen the
+      window). (`apply.ts` §4 can also hold the cursor below a still-parked seq for whole pull cycles,
+      but this static two-catalogue fixture has no unresolved FK parent, so the window here is just the
+      per-row-vs-cursor commit split.) **Fix:** poll the ordered
+      cursor until it REACHES the source's (static) max seq — the true convergence signal, guarded by a
+      not-null/positive check on that max so the poll cannot pass vacuously — the same
+      condition-based-waiting shape as the `boot.test` 503 fix above.
+      Localised to `mirror-e2e.test.ts`; `adopt-e2e` waits on `catalogueCount` too but never asserts the
+      cursor, so it did not share the race. Memory: [[test-server-e2e-timing-flakes]].
+      *Separate latent finding (NOT this flake, do-anytime):* the `pg` "client.query() when the client
+      is already executing a query" deprecation warning comes from `report-api.ts`'s
+      `Promise.all([computeDailyClose(tx), computeTopSellers(tx), countOpenTables(tx)])` — three
+      concurrent queries on ONE `withTenant` transaction (also `daily-close` etc.). pg@8 queues them
+      (serial, correct results, no speedup); it BREAKS in pg@9. Replace the `Promise.all` on a single
+      `tx` with sequential awaits (or one combined query) when pg@9 lands.
   - **SP-3b — module-owned vocabulary — LANDED #240 (2026-09-05).** Fiscal's and workforce-es's Spanish
     terms live in `FISCAL_VOCABULARY` / `WORKFORCE_ES_VOCABULARY`, declared on each descriptor's
     `vocabulary` seat; `packages/db/src/english-only.ts` keeps a 23-word base list and `findSpanish(source,
