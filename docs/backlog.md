@@ -453,7 +453,7 @@ All three decisions are now taken.
    started): the customer signs up, Waitron Cloud spawns the instance + sets up WireGuard and hands
    back a URL + credentials; this repo's only job is to *talk to* a provisioned instance. **(c) the
    run-it proof will be a two-host LOCAL simulation** (repeatable, no real cloud) — its transport
-   primitive now exists (branch `feat/two-node-wireguard-fixture`, in flight):
+   primitive landed 2026-09-08 (#275):
    `@waitron/db/testing/two-node-wireguard.ts` joins two Postgres nodes
    over a real kernel-WireGuard tunnel (NET_ADMIN only, no privileged container), and `sync`'s
    `replication-over-tunnel.pg.test` proves native logical replication copies A→B across it; the
