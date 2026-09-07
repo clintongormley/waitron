@@ -1,14 +1,11 @@
-// This file throws only `management_session.required`, which is DECLARED in `@waitron/identity`'s
-// errors.ts (1a) and reaches here transitively via `./till-session.js` importing from
-// `@waitron/identity` — so that code is already reachable WITHOUT this line. The `import "./errors.js"`
-// is kept for consistency with `till-session.ts`, whose thrown `session.required` IS a host code that
-// makes the import genuinely load-bearing there; here it is convention only, not reachability. See the
-// note atop `errors.ts`.
+// Side-effect: loads this package's errors.ts, which co-declares `management_session.required` (the
+// code `requireManagementSession` below throws). Load-bearing here — `@waitron/identity` also owns and
+// declares that code, but this package does not import identity, so the augmentation reaches this file
+// only through this line. See the note atop `errors.ts`.
 import "./errors.js";
-import { AppError } from "@waitron/shared";
+import { AppError, isUuid } from "@waitron/shared";
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { isUuid } from "./till-session.js";
 
 /**
  * The name of the browser management-session cookie — the till's `waitron_till_session` parallel for
@@ -51,7 +48,7 @@ export function readManagementSessionId(c: Context): string | null {
 /**
  * Reads the request's management cookie and returns its id, or throws `management_session.required`
  * when the cookie is absent OR not a UUID. This screens the cookie's SHAPE only — a real
- * live-session lookup happens in the route layer (Task 3/4). Reuses `isUuid` from `till-session.ts`
+ * live-session lookup happens in the route layer (Task 3/4). Reuses `isUuid` from `@waitron/shared`
  * so the anchored-UUID regex has one home: a non-UUID id looked up against a Postgres `uuid` column
  * raises `22P02` → an opaque 500, so the shape check keeps a forged cookie a clean fault instead.
  */

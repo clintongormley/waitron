@@ -34,7 +34,7 @@ import { startServer } from "./boot.js";
 import { mountSyncApi } from "./sync-api.js";
 import { ALL_SYNC_ENROLMENTS } from "./modules.js";
 import { establishNodeIdentity } from "./node-identity.js";
-import { MANAGEMENT_COOKIE } from "./management-session.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { roleUrl } from "./testing/postgres.js";
 
 // Membership rejoin R1 (design §6) boot integration: a returned ex-primary whose held membership

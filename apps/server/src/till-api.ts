@@ -21,8 +21,8 @@ import type { CanvasDef, CapabilityFlag } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
 import { routableServers } from "@waitron/membership";
-import { createErrorBoundary } from "./error-boundary.js";
-import { readJsonBody } from "./read-json-body.js";
+import { createErrorBoundary } from "@waitron/server-kit";
+import { readJsonBody } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import type { TillConfig } from "./till-config.js";
 import {
@@ -97,7 +97,7 @@ import {
   requireSaleTillId,
   tryReadDevice,
 } from "./device-session.js";
-import { requireUuidParam } from "./request-screens.js";
+import { requireUuidParam } from "@waitron/server-kit";
 // Side-effect only: loads errors.ts's augmentation for the host codes this file THROWS — the
 // `working_order.*` / `order_prep.*` it constructs via `requireUuidId` — under the "every file that
 // throws one of these imports ./errors.js" convention errors.ts states. (The sale/pay body id screens

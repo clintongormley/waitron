@@ -3,6 +3,7 @@ import { AppError } from "./errors.js";
 import type { SaleId, TenantId } from "./ids.js";
 import {
   fiscalRecordId,
+  isUuid,
   locationId,
   nodeId,
   saleId,
@@ -127,5 +128,18 @@ describe("brand assignability", () => {
     // with no unwrapping step, while a string does not go into a TenantId slot without one.
     const asPlain: string = tenantId(UUID_A);
     expect(asPlain).toBe(UUID_A);
+  });
+});
+
+describe("isUuid", () => {
+  it("accepts a well-formed UUID, in either case", () => {
+    expect(isUuid(UUID_A)).toBe(true);
+    expect(isUuid("6BA7B810-9DAD-11D1-80B4-00C04FD430C8")).toBe(true);
+  });
+  it("rejects a malformed or unanchored value", () => {
+    expect(isUuid("not-a-uuid")).toBe(false);
+    expect(isUuid("")).toBe(false);
+    // Anchored: a well-formed UUID with trailing junk is rejected, or it would travel onward in a bind.
+    expect(isUuid(`${UUID_A} drop table x`)).toBe(false);
   });
 });

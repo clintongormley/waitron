@@ -16,8 +16,8 @@ import { readCertExpiry, type CertExpiry } from "./cert-expiry.js";
 import { readChainHeight, type ChainHeight } from "./chain-height.js";
 import { checkTimeHealth, type TimeHealth } from "./time-health.js";
 import { healthSnapshot, type HealthState } from "./health.js";
-import { requireManagementSession } from "./management-session.js";
-import { createErrorBoundary } from "./error-boundary.js";
+import { requireManagementSession } from "@waitron/server-kit";
+import { createErrorBoundary } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 
 /**

@@ -6,7 +6,7 @@ import {
   clearManagementCookie,
   requireManagementSession,
   setManagementCookie,
-} from "./management-session.js";
+} from "./management-cookie.js";
 
 const VALID = "11111111-1111-4111-8111-111111111111";
 

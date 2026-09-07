@@ -9,7 +9,7 @@ import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/i
 import { createCatalogue, createProduct } from "@waitron/catalogue";
 import type { Logger } from "./logger.js";
 import { mountRecipeApi } from "./recipe-api.js";
-import { MANAGEMENT_COOKIE } from "./management-session.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
 // PGlite, not real Postgres: this suite proves the recipe-authoring ROUTES — the request/response

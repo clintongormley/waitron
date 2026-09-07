@@ -16,7 +16,7 @@ import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/i
 import { addDecimal, decimal } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mountReportApi } from "./report-api.js";
-import { MANAGEMENT_COOKIE } from "./management-session.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { BOX_27, packAeatNumeric } from "./testing/dr303.js";
 import "./errors.js";
 

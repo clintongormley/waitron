@@ -16,7 +16,7 @@ import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { mountBookingsApi } from "./booking-api.js";
-import { MANAGEMENT_COOKIE } from "./management-session.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 
 // Real Postgres, not PGlite: every DB touch below goes through `mountBookingsApi`'s `gated` helper
 // (withTenant + asAppUser + authorizeManager), so the booking routes run as the non-superuser

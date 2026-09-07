@@ -44,7 +44,7 @@ import type {
   PromoteDeps,
   PromotionResult,
 } from "./promote.js";
-import { codeOf } from "./error-code.js";
+import { codeOf } from "@waitron/server-kit";
 import { createLogger, type Logger } from "./logger.js";
 import { createRotatingFileSink, createLogReader, tee } from "./log-file.js";
 import { createVerbosityController } from "./verbosity.js";

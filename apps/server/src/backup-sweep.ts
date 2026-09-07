@@ -30,7 +30,7 @@ import { packArchive, type ArchiveEntry } from "./backup-archive.js";
 import { buildManifest, type BackupManifest } from "./backup-manifest.js";
 import { collectModuleNonDbState } from "./backup-sources.js";
 import type { DeploymentEnvironment } from "./config.js";
-import { codeOf } from "./error-code.js";
+import { codeOf } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import {
   BACKUP_KEY_PREFIX,

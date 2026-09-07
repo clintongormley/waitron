@@ -29,6 +29,7 @@ export type {
 } from "./ids.js";
 export {
   fiscalRecordId,
+  isUuid,
   locationId,
   nodeId,
   saleId,

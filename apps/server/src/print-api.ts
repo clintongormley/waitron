@@ -45,22 +45,17 @@ import {
   type UpdatePrinterInput,
 } from "@waitron/printing";
 import { authorizeManager, type Permission } from "@waitron/identity";
-import { createErrorBoundary } from "./error-boundary.js";
+import { createErrorBoundary } from "@waitron/server-kit";
 import {
   attachPrinterToStation,
   detachPrinterFromStation,
   listStationPrinters,
 } from "./station-printers.js";
-import { readJsonBody } from "./read-json-body.js";
-import { requireManagementSession } from "./management-session.js";
+import { readJsonBody } from "@waitron/server-kit";
+import { requireManagementSession } from "@waitron/server-kit";
 import { requireAgent } from "./print-agent-session.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
-import {
-  requireBodyUuid,
-  requireEnum,
-  requireString,
-  requireUuidParam,
-} from "./request-screens.js";
+import { requireBodyUuid, requireEnum, requireString, requireUuidParam } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 
 /**

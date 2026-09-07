@@ -38,7 +38,7 @@ import { mountMeApi } from "./me-api.js";
 import type { TillConfig } from "./till-config.js";
 import { enrolDevice, generatePairingCode } from "./device.js";
 import { DEVICE_COOKIE } from "./device-session.js";
-import { MANAGEMENT_COOKIE } from "./management-session.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 
 // Real Postgres, not PGlite: capture runs as the non-superuser app role, whose INSERT on sync_log a
 // PGlite superuser connection would hold regardless — a false pass (CLAUDE.md §4). The full manifest runs once

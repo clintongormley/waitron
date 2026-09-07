@@ -3,8 +3,7 @@
 // `shared.invalid_id` (thrown by `requireUuidParam`) lives in @waitron/shared's base registry and loads
 // via the AppError value import.
 import "./errors.js";
-import { AppError } from "@waitron/shared";
-import { isUuid } from "./till-session.js";
+import { AppError, isUuid } from "@waitron/shared";
 
 /**
  * The request-shape SCREENS shared across the gated server API surfaces — e.g. `workforce-api.ts` /

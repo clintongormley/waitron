@@ -9,7 +9,7 @@ import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import { WORKFORCE_ES_MIGRATIONS } from "@waitron/workforce-es";
 import type { Logger } from "./logger.js";
 import { mountWorkforceApi } from "./workforce-api.js";
-import { MANAGEMENT_COOKIE } from "./management-session.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
 const noopLog: Logger = () => {};

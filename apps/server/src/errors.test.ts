@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import { createErrorBoundary } from "./error-boundary.js";
+import { createErrorBoundary } from "@waitron/server-kit";
 import "./errors.js";
 
 // One assertion per zone.* code (FP-1 Task 2): each is constructible via `new AppError(code, params)`

@@ -5,7 +5,7 @@ import {
   clearManagementCookie,
   readManagementSessionId,
   setManagementCookie,
-} from "./management-session.js";
+} from "@waitron/server-kit";
 
 /** Fixed, stable ids so the seed is idempotent (upsert on a known PK) and the middleware can name the
  * ambient session without a lookup. Valid v4-shaped UUIDs; arbitrary but MUST never change (the seed

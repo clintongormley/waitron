@@ -25,7 +25,7 @@ import { runPass, DRAIN_DUTY } from "./pass.js";
 import { singletonPass } from "./singleton-pass.js";
 import { seedFiscalRegistro } from "./testing/fiscal-fixtures.js";
 import { roleUrl } from "./testing/postgres.js";
-import { MANAGEMENT_COOKIE } from "./management-session.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { sealMirrorToken } from "./mirror-token.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 

@@ -5,7 +5,7 @@ import { withTenant, type Database, type DeploymentMode } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { resolveManagementSession, verifyPin } from "@waitron/identity";
-import { MANAGEMENT_COOKIE } from "./management-session.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import {
   ensureMirrorViewer,
   MIRROR_VIEWER_PERSON_ID,

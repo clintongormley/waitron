@@ -37,7 +37,7 @@ import {
 } from "./enrol-rate-limit.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { DEV_PAIRING_CODE } from "./dev-pairing.js";
-import { MANAGEMENT_COOKIE } from "./management-session.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 

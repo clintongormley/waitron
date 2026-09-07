@@ -27,9 +27,9 @@ import {
   type LiquidationPeriod,
 } from "@waitron/reporting";
 import { authorizeManager, type Permission } from "@waitron/identity";
-import { createErrorBoundary } from "./error-boundary.js";
-import { requireManagementSession } from "./management-session.js";
-import { requirePeriod } from "./request-screens.js";
+import { createErrorBoundary } from "@waitron/server-kit";
+import { requireManagementSession } from "@waitron/server-kit";
+import { requirePeriod } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 
 /**

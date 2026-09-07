@@ -17,15 +17,15 @@ import {
   listPendingAbsences,
 } from "@waitron/workforce";
 import { resolveWorkTimeRuleset } from "@waitron/workforce-es";
-import { createErrorBoundary } from "./error-boundary.js";
-import { readJsonBody } from "./read-json-body.js";
-import { requireManagementSession } from "./management-session.js";
+import { createErrorBoundary } from "@waitron/server-kit";
+import { readJsonBody } from "@waitron/server-kit";
+import { requireManagementSession } from "@waitron/server-kit";
 import {
   requireBodyUuid,
   requireNullableString,
   requirePeriod,
   requireUuidParam,
-} from "./request-screens.js";
+} from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 
 export interface WorkforceApiDeps {

@@ -5,9 +5,21 @@ import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import { createErrorBoundary } from "./error-boundary.js";
 import type { Logger, LogLevel } from "./logger.js";
-// The registry augmentation for the codes these tests throw/answer (`tenant.not_found`,
-// `session.required`, `server.internal`) — the reachability convention the API files follow.
+// This package's own registry augmentation (`management.request_invalid`, `management_session.required`).
 import "./errors.js";
+
+// The boundary is generic infrastructure, so this test exercises it with representative codes owned by
+// OTHER packages — `tenant.not_found` / `session.required` / `recovery.state_incomplete`
+// (`apps/server`), which are not in server-kit's own registry. Declared test-locally (identical params
+// to their real homes) purely so the fixtures typecheck in isolation; AppError validates nothing at
+// runtime, so this changes no assertion or behaviour.
+declare module "@waitron/shared" {
+  interface ErrorParams {
+    "tenant.not_found": { id: string };
+    "session.required": Record<string, never>;
+    "recovery.state_incomplete": { missing: string };
+  }
+}
 
 type Line = { level: LogLevel; event: string; fields: Record<string, unknown> };
 

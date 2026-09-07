@@ -289,6 +289,7 @@ export const LIGHT_A_PACKAGES = [
   "@waitron/migrations",
   "@waitron/fiscal",
   "@waitron/shared",
+  "@waitron/server-kit",
 ];
 
 export const LIGHT_B_PACKAGES = [

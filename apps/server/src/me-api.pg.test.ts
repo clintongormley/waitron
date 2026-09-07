@@ -8,7 +8,7 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { mountMeApi } from "./me-api.js";
-import { MANAGEMENT_COOKIE } from "./management-session.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
 
 // Real Postgres, not PGlite: the routes run their DB work as the non-superuser `app_user`, whose
