@@ -401,22 +401,36 @@ screens, `apps/server/src/modules.ts` (the maps derived from that list), and the
 1. **Finish fiscal as a module:** SP-3b vocabulary (landed #240), SP-3c gated-provisioning seam (landed #245),
    SP-3d backup/restore hook (= BR-4) landed #248 (2026-09-06) — fiscal-as-a-module is complete; see
    *Waitron module system*.
-2. **`fiscal-none` module — LANDED** (`feat/fiscal-none`, spec
+2. **`fiscal-none` module — LANDED #262 (2026-09-07)** (spec
    `2026-09-06-module-fiscal-none-design.md`). The no-op regime (`@waitron/fiscal-none`) fills the
    fiscal slot with an empty runtime-duty (`drain`) seat and records nothing; provisioning selects the
-   fiscal module by territory; `apps/server` now imports NO regime package and the seams
-   `DEFERRED_RUNTIME_PASS` allowlist is EMPTY (`scripts/module-seams.test.ts`). The two agreed CLAUDE.md
+   fiscal module by territory (`GB-vat`→none, `ES-common`→verifactu) through one `venueFiscalSelection`
+   seam; `apps/server` now imports NO regime package and the seams `DEFERRED_RUNTIME_PASS` allowlist is
+   EMPTY (`scripts/module-seams.test.ts`). Proven by a real-PG e2e (a GB venue sells/voids/corrects/
+   substitutes and writes zero rows in `registros_facturacion`/`registro_sif`/`cadenas`/`envios`) and
+   the run-it reviewer's live-catalog check (RLS genuinely dropped post-#255). The two agreed CLAUDE.md
    §3 rules (new domains land as modules; no new core table without a stated reason) landed with it.
+   Rebased twice (over #255 drop-RLS, then #260 obligado→English), whole-workspace green each time.
+   - **Left behind (deferred follow-ons, none on the sale path):** de-dup the `tls.ts` mTLS test
+     fixture — byte-copied into `@waitron/fiscal-verifactu/src/testing/` because `apps/server` can't
+     import the regime — into a neutral shared testing home; remove the now-inert
+     `VerifactuBackendOptions.resolveClient`/`skipRetryMs` (the sale-path backend no longer reads them,
+     so ~40 construction sites pass an inert resolver); the browser setup wizard still offers
+     `ES-common` only, so a GB/no-regime venue is CLI/test-provisionable but not yet wizard-reachable (a
+     territory picker is its own UI change); `server.*`/`setup.request_invalid` are now
+     declaration-merged into the regime package (§3 nuance, self-guarding, precedented). The Task-8
+     provision-only gate keeps a synthetic-module test for the `provision_only_disabled` branch (no
+     real non-fiscal provision-only module exists yet).
    - **Follow-on (gated on this): English-only generic guard.** Owner principle (2026-09-07): Spanish
      only in Spain-specific modules (verifactu, workforce-es, reporting=modelo-303); core/generic code
      must be English — identifiers, strings AND comments. The guard today doesn't scan `provisioning`
      at all (the guard-free zone `obligado` slipped through on #258, reverted #260) and strips
      comments. Design + decisions (reporting→Spanish-specific, workforce→English, migrations→English,
      `huella`→"fiscal fingerprint", relocate `fiscal-modules.ts`→`@waitron/composition`):
-     `docs/superpowers/specs/2026-09-07-english-only-generic-english-design.md`. **DELAYED until
-     `fiscal-none` completes** (owner 2026-09-07): most of the ~428 core/db Spanish is fiscal code
-     that `fiscal-none` makes regime-agnostic / relocates to the verifactu module, so rewording it
-     now is wasted — re-measure against post-`fiscal-none` `main` first. Two pieces are independent and
+     `docs/superpowers/specs/2026-09-07-english-only-generic-english-design.md`. **Was delayed behind
+     `fiscal-none` (LANDED #262) — now UNBLOCKED** (owner 2026-09-07): most of the ~428 core/db Spanish
+     was fiscal code that `fiscal-none` makes regime-agnostic / relocates to the verifactu module, so
+     re-measure against post-`fiscal-none` `main` before rewording. Two pieces are independent and
      could go anytime: add `tunnel`+`payments-stripe` to the scan (already clean); relocate
      `fiscal-modules.ts` so provisioning production is scannable.
 3. **Bookings as the first UI-bearing module** (own package, own tables, own dashboard screen):
