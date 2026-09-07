@@ -22,8 +22,7 @@ import { asAppUser, withTenant, type Database } from "@waitron/db";
 import { authorizeManager, endManagementSession, loginManagerById } from "@waitron/identity";
 import type { FenceAttestation } from "./promote.js";
 import { verifyBreakGlass } from "./break-glass.js";
-import { createErrorBoundary } from "./error-boundary.js";
-import { readJsonBody } from "./read-json-body.js";
+import { createErrorBoundary, readJsonBody } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
 
