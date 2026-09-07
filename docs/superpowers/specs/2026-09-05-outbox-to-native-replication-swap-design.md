@@ -40,6 +40,13 @@ return procedures rewritten against Postgres's own progress numbers, and a versi
 
 ### 2.1 Four classes of table, two publications
 
+> **2026-09-07 — S1 built.** Two reconciliations against the historical list below: `layout_profiles`
+> was dropped and its successor `canvases` is classified `state`; and the four `sync_*` outbox tables
+> (the sync bullet below says "nothing to classify") are classified `local` — they still exist in S1
+> and the completeness guard requires an entry, so they carry `local` until step 4 deletes them with
+> the outbox. The contract, all per-module lists, the two root guards and the two-node fixture are in PR
+> (Track A item 3 step 2).
+
 Every table is copied unless its module marks it **local** with a stated reason — the inverse of
 today's opt-in enrolment (28 of 82 tables enrolled; a standby that must take over needs all of them).
 The classes:

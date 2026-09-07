@@ -224,12 +224,16 @@ unfiltered `main` run, not a wrong hook.
   subquery: check base-vs-join and READ the emitted SQL with `.toSQL()`.
 - **Never widen a grant to make a test pass.** `app_user` holds `SELECT` on `tenants` and not `INSERT`
   deliberately.
-- **A new table is classified `ledger`, `state` or `local` (swap design §2.1), and an append-only
+- **A new table is classified `ledger`, `state` or `local` (swap design §2.1) in its module's
+  `<MODULE>_CLASSIFICATION` list via `classify()` (`@waitron/sync-enrolment`), and an append-only
   table's `reject_mutation()` triggers are `ENABLE ALWAYS`** — the replication apply worker skips
   ordinary triggers, and a copy of a corrupted row is exactly what those triggers exist to refuse.
-  No policies, no `ROW LEVEL SECURITY`: one tenant per database (owner decision 2026-09-05). The
-  guard is `packages/fiscal-verifactu`'s `inmutabilidad` suite (the trigger scan; the
-  classification guard arrives with step 2 of the chain) — run it after adding any table anywhere.
+  No policies, no `ROW LEVEL SECURITY`: one tenant per database (owner decision 2026-09-05). Two root
+  guards enforce this on every non-docs push: `scripts/classification-complete.test.ts` (every table
+  in every module's `drizzle/` is classified exactly once) and
+  `scripts/append-only-enable-always.test.ts` (every `reject_mutation` trigger is `ENABLE ALWAYS`);
+  `packages/fiscal-verifactu`'s `inmutabilidad` suite still scans the triggers themselves. Run them
+  after adding any table anywhere.
 - **A module/migration dependency graph has TWO kinds of cross-set edge**: FK `REFERENCES` and
   `CREATE [CONSTRAINT] TRIGGER … ON <table>`. `sync` enrols other modules' tables by installing capture
   triggers on them, so it depends on `identity` and `payments` with no FK between them; SP-1c's first

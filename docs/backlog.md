@@ -257,6 +257,17 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    reset, no hook), and a fork surfaces as the `multiple_unique_conflicts` drain stall the swap
    already handles — so the S3/S4 prerequisite is discharged (swap design §4.4).
 
+   **Step 2 built (swap S1) — in PR #TBD (2026-09-07):** the classification contract — `classify()`
+   (`@waitron/sync-enrolment`) adds `ledger`/`state`/`local` per-module `<MODULE>_CLASSIFICATION`
+   lists ALONGSIDE enrol's modes/lanes (enrol + outbox still run; deleted in step 4); every table
+   classified; the two root guards `scripts/classification-complete.test.ts` (classified exactly
+   once) and `scripts/append-only-enable-always.test.ts` (`reject_mutation` triggers `ENABLE
+   ALWAYS`); the publication lists derived from the classification; and the two-node
+   logical-replication fixture (`packages/db/src/testing/two-node.ts`). Two reconciliations against
+   swap §2.1: `canvases`→`state` (successor to the dropped `layout_profiles`); the four `sync_*`
+   outbox tables classified `local` (they still exist in S1 and the completeness guard needs an
+   entry — deleted with the outbox in step 4). Exports only; nothing consumed at runtime yet.
+
    **Step 1 LANDED (#255).** Per-module baselines, FORCE RLS and the seven helper roles gone,
    the `*.rls.test.ts` suites replaced by per-module grant suites and `privileges.test.ts`, and
    CLAUDE.md §2–§4 rewritten. Proof: old migrations vs new baselines, `pg_dump --schema-only`,
