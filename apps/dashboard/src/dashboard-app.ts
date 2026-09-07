@@ -450,7 +450,7 @@ export class DashboardApp extends LitElement {
     this.sessionRole = me.role;
     this.#sessionPermissions = me.permissions;
     // Activate ONLY the enabled modules (`me.modules`) before resolving the permitted screen, so a URL
-    // naming an enabled module's own screen (e.g. `bookings`) is recognised while a disabled one is not.
+    // naming an enabled module's own screen id is recognised while a disabled module's is not.
     // The per-permission gate is applied on top, in `#nav` and `#permittedScreen`.
     this.#activate(me.modules);
     this.screen = this.#permittedScreen(this.#url.read("dashboard"));
