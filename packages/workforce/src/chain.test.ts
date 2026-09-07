@@ -114,7 +114,7 @@ describe("appendToChain", () => {
     expect(rows[0]!.last_recorded_at).not.toBeNull();
   });
 
-  it("keeps a separate, independent chain per location", async () => {
+  it("keeps a separate, independent chain per (node, location)", async () => {
     const otherLocation = await seedLocation(pg.db, tenantId);
     const otherNode = await seedNode(
       pg.db,

@@ -168,7 +168,7 @@ describe("appendToChain under real contention", () => {
   });
 
   it("does not block an appender on a different location", async () => {
-    // Per-location parallelism is the reason the lock is on a row rather than a global key: a busy
+    // Per-(node, location) parallelism is the reason the lock is on a row rather than a global key: a busy
     // location must never stall a quiet one.
     const otherLocation = await seedLocation(suite.admin, tenantId);
     const otherNode = await seedNode(

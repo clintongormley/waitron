@@ -526,7 +526,7 @@ export class WorkforceBackend {
    * WHY `FOR NO KEY UPDATE` AND NOT `FOR UPDATE` — the lock modes are NOT interchangeable here, and
    * `FOR UPDATE` reintroduces a deadlock this exact clause was added to avoid. The lock ORDER is not
    * uniform across the write paths: this clock path takes the `persons` lock BEFORE `appendToChain`'s
-   * per-location `workforce_chains` head lock, but the CORRECTION paths (`requestCorrection` /
+   * per-(node, location) `workforce_chains` head lock, but the CORRECTION paths (`requestCorrection` /
    * `approveCorrection` → `appendCorrection` → `appendToChain`) do NOT call this — they lock the chain
    * head FIRST and then, on the `time_entries` INSERT, implicitly take `FOR KEY SHARE` on the
    * referenced `persons` rows via the FKs (`time_entries_person_fk`, `_recorded_by_person_fk`,

@@ -177,9 +177,10 @@ async function attemptAppend(
   // non-decreasing `recorded_at` per chain, so the cross-node precedence order reduces to today's
   // `sequence_no` order within one chain (spec §4.1).
   const nowMs = clock().getTime();
-  const flooredMs =
+  const clampedMs =
     head.lastRecordedAt === null ? nowMs : Math.max(nowMs, Date.parse(head.lastRecordedAt));
-  const recordedAt = truncateToWholeSecond(new Date(flooredMs).toISOString());
+  // Whole-second, like truncateToWholeSecond (used for event_at) but from the epoch-ms we already hold.
+  const recordedAt = new Date(Math.floor(clampedMs / 1000) * 1000).toISOString();
 
   const entryHash = computeEntryHash({
     sequenceNo,

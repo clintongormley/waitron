@@ -22,7 +22,7 @@ import { insertTimeEntry, seedLocation, seedPerson } from "../test/fixtures.js";
  *
  * The bug (whole-branch review): each of `clockIn`/`clockOut`/`breakStart`/`breakEnd` reads the
  * worker's current shift state with an UNLOCKED select and then appends. `appendToChain` serialises
- * per LOCATION (the `workforce_chains` head lock) but nothing serialises per PERSON across the
+ * per (node, location) (the `workforce_chains` head lock) but nothing serialises per PERSON across the
  * read→append, so two concurrent same-person clock-ins can both observe "out" and both append an
  * `in`. `projectWorkSessions` then overwrites the first open shift with the second (projection.ts:287
  * `case "in": open = { start: e }`), so worked time is computed from the SECOND `in` — undercounting
