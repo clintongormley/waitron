@@ -9,6 +9,7 @@ import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { diag } from "./diagnostics.js";
 import { LocaleChangeController } from "./state/locale-controller.js";
 import { TillApi } from "./api/client.js";
+import type { ServerRouter } from "./api/server-router.js";
 import { WorkingOrderStore } from "./state/working-order.js";
 import { toWireLineExtras, toWireOption } from "./state/order-line.js";
 // Side-effect imports register the three screen elements this app swaps between; it names them only
@@ -174,6 +175,11 @@ export class TillApp extends LitElement {
 
   /** The HTTP face of the till. Defaults to a real same-origin client; a test injects a stub. */
   @property({ attribute: false }) api: TillApi = new TillApi();
+
+  /** The venue's server router (till-reroute §4.1), set as a property in `main.ts`. Held here so the
+   * app can read its state and follow a server move through its `server-changed`/`state-changed`
+   * events. Undefined in tests that do not inject one. */
+  @property({ attribute: false }) router?: ServerRouter;
 
   /** The one basket the whole flow shares. A stable reference (widgets subscribe to it directly). */
   readonly #store = new WorkingOrderStore();

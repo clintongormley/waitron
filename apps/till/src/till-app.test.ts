@@ -180,6 +180,14 @@ const till = {
   // profile, now an explicit `/api/till` payload sibling. `[]` by default (nothing capability-gated
   // shows); a KDS boot below supplies `["act-as-kds"]` so its kds-board card renders.
   capabilities: [] as CapabilityFlag[],
+  // This node's id + the venue's routable servers (till-reroute §3.2). `[]` by default (the server sends
+  // an empty list while no membership document is held).
+  nodeId: "n1",
+  servers: [] as {
+    nodeId: string;
+    url: string;
+    standing: "serving-primary" | "serving-secondary" | "sell-only";
+  }[],
 };
 
 /** The form-factor canvas a `handheld` device boots (SP-B): a `floor` tab + an `order` tab (a

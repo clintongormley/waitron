@@ -103,6 +103,24 @@ export interface TillInfo {
    * absent. REQUIRED — the server resolves one for every boot.
    */
   capabilities: CapabilityFlag[];
+  /** This node's id, so the app can tell which `servers` entry it is on (till-reroute §3.2). ALWAYS
+   * present — every boot resolves the node it answered on. */
+  nodeId: string;
+  /** The venue's routable servers, primary first — the list the ServerRouter probes (§3.2). `[]` when
+   * no membership document is held. */
+  servers: TillServer[];
+}
+
+/**
+ * One venue-routable server as the boot payload carries it (till-reroute §3.2) — a LOCAL mirror of
+ * the server's `RoutableServer` shape (`packages/membership` `routableServers`), NOT imported (the
+ * bundle rule). `evicted` nodes never reach the till (excluded server-side), so `standing` is the
+ * three serving/sell states only.
+ */
+export interface TillServer {
+  nodeId: string;
+  url: string;
+  standing: "serving-primary" | "serving-secondary" | "sell-only";
 }
 
 /**
