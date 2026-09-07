@@ -1,7 +1,8 @@
 # Promote endpoint — Slice 2: authenticated mirror → primary promotion
 
 **Date:** 2026-09-07. **Status:** design — owner decisions taken 2026-09-07 (this session), listed
-inline. **Track B item 3** in `docs/backlog.md`.
+inline; refined after a fresh-context fiscal review the same day (§4.3 corrected — the earlier draft's
+"cert already unlocked" claim was false; see below). **Track B item 3** in `docs/backlog.md`.
 
 **Continues** the promote-action slices: Slice 1 (local secondary → primary, in-process, #160) and
 the `singleton_role` foundation (#158) landed; the mirror → primary *mechanism* landed via the
@@ -13,10 +14,12 @@ left open: *"whether R3b's promote is triggered by the same operator surface as 
 its own."*
 
 **Refines** [`2026-08-29-promotion-runbook-design.md`](2026-08-29-promotion-runbook-design.md) §4.
-That design specified one break-glass secret that both *authorized* the promote **and** *unlocked
-the key ring* to unseal the fiscal cert. The architecture has since moved — the vault is unlocked at
-boot from the deployment's own `WAITRON_CREDENTIALS_KEY` — so break-glass's key-ring-unlock role is
-retired here (§4.3); a dated pointer is added to the 2026-08-29 doc at land (`CLAUDE.md` §6).
+That design gave the break-glass secret two jobs — *authorize* the promote and *unlock the key ring*
+to unseal a **replicated** cert blob so the promoted node could file. This slice keeps only the
+authorization job (§4). The unseal job is **deferred with the unbuilt cert-distribution mechanism**
+(§4.3), not retired: the fiscal cert is not on the mirror at all today, so a promoted cloud sells but
+does not yet file — an explicit, accepted boundary (owner decision 2026-09-07, §4.3). A dated pointer
+is added to the 2026-08-29 doc at land (`CLAUDE.md` §6).
 
 ---
 
@@ -27,10 +30,12 @@ authorization (a manager login, or an offline break-glass secret as fallback), t
 secret mint, and a real runtime admin DB connection for the owner write (replacing the
 `migrationsDatabaseUrl` borrow).
 
-**Out** (stays deferred, each its own slice): the worker-lifecycle manager that would avoid the
-restart (promote-action Slice 3 — this slice restarts, §3); cold-restore operator surface (Slice 4);
-rejoin / re-admission (Slice 5); and the two R3 follow-ups (resume-at-restore marker; re-admission
-as standby). The `promoteLocalSecondaryToPrimary` function is **left in the code unwired** — see §2.
+**Out** (stays deferred, each its own slice): getting the fiscal cert onto a promoted mirror so it
+can **file** (§4.3 — a promoted cloud sells but does not file until this lands); the worker-lifecycle
+manager that would avoid the restart (promote-action Slice 3 — this slice restarts, §3); cold-restore
+operator surface (Slice 4); rejoin / re-admission (Slice 5); and the two R3 follow-ups
+(resume-at-restore marker; re-admission as standby). The `promoteLocalSecondaryToPrimary` function is
+**left in the code unwired** — see §2.
 
 ## 2. Topology: primary and mirror (the selling secondary is shelved active-active)
 
@@ -47,14 +52,15 @@ no singletons**, which exists only under **active-active**. Active-active was **
 | `mirror` | `secondary` | the read-only warm standby (cloud today; a post-MVP second local box is also a passive mirror) |
 
 `(primary, secondary)` as a *healthy selling* node does not occur in the MVP. It survives only as a
-transient inside `commitMirrorPromotionTx` and as a **fenced** returning ex-primary (read-only, which
-wipe-restores back to a mirror and never promotes in place — `assertNotFenced`,
-[`promote.ts`](../../../apps/server/src/promote.ts)). **Consequence for this slice:** the failover
-that happens is **mirror → primary**, so the endpoint targets only that path. Wiring
+transient inside `commitMirrorPromotionTx` and as a **fenced** returning ex-primary — read-only, which
+wipe-restores back to a mirror and never promotes in place (a fenced returned ex-primary boots
+`(primary, secondary)` + fenced, [boot.ts:918-945](../../../apps/server/src/boot.ts#L918)).
+**Consequence for this slice:** the failover that happens is **mirror → primary**, so the endpoint
+targets only that path and must handle the fenced case explicitly (§3). Wiring
 `promoteLocalSecondaryToPrimary` would expose a code path the MVP topology cannot reach (YAGNI); it
-stays in the tree under the shelving decision, unexposed. Collapsing the two axes into one
-`NodeRole` is a separate item (backlog Track B item 6) — this slice leaves the axes as they are and
-merely stops exercising the dead combination.
+stays in the tree under the shelving decision, unexposed. Collapsing the two axes into one `NodeRole`
+is a separate item (backlog Track B item 6) — this slice leaves the axes as they are and merely stops
+exercising the dead combination.
 
 ## 3. The endpoint
 
@@ -62,27 +68,49 @@ merely stops exercising the dead combination.
 [`mirror-bundle-api.ts`](../../../apps/server/src/mirror-bundle-api.ts): the operator may be calling
 a **remote cloud instance**, so credentials ride in the request **body**, not a cookie.
 
-- **One target: mirror → primary.** On a mirror the endpoint invokes the existing
-  `promoteMirrorToPrimary`; on a node already `(primary, primary)` it returns a clean `alreadyPrimary`
-  200 (idempotent — the operator retried, or two operators raced). No target parameter and no
-  dispatch branch: the node knows its own state, and the only promotable state is `mirror`.
-- **Fence attestation in the body.** `{ oldNodeNeutralised: true }` is passed straight through to the
-  existing `assertFenced` gate (`promotion.fence_not_attested` if absent). The endpoint does not
-  weaken the gate — software still cannot verify a partitioned peer, so the human attestation stays
-  required (2026-08-29 §6).
-- **Commit, respond, then restart.** Mirror promotion is **restart-into-primary** (R3b §4): the one
-  owner transaction flips both axes and writes the term-guarded membership document
-  (`commitMirrorPromotionTx`, the point-of-no-return), the endpoint returns `200 {restarting: true}`
-  **after the response is flushed**, then the process exits so its supervisor (systemd / Docker /
-  Waitron Cloud) brings it back up as `mode = primary` — where boot starts the primary-only workers
-  on the identity the mirror already held (R3b §4, "on reboot"). The mirror is not selling, so the
-  brief restart costs nothing. Promote-action Slice 3 later removes the restart with an in-process
-  worker manager; this slice depends on it, exactly as the R3b design and the
-  `boot.promote.test.ts` mirror e2e already do. **Assumption to state at land:** a process supervisor
-  with a restart policy is present (true on the appliance and on Waitron Cloud; the test harness
-  restarts explicitly).
-- **Everything before the PONR is abortable with zero effect** (auth failure, missing attestation, a
-  superseded term) — the node stays a read-only mirror (2026-08-29 §7).
+**Dispatch by the node's own state** — no target parameter (the node knows what it is):
+
+- **mirror `(mirror, secondary)`** → invoke the **boot-wired promote closure** (not
+  `promoteMirrorToPrimary` directly): the closure runs `assertFenced` → the abortable pre-PONR steps →
+  `commitMirrorPromotionTx` → and, on a real (`!alreadyPrimary`) promotion, triggers the restart
+  ([boot.ts:2092-2098](../../../apps/server/src/boot.ts#L2092)). Calling the library function directly
+  would skip the restart and leave the flipped node running with no primary-only workers.
+- **fenced node `(primary, secondary)` + fenced** → **refuse** with `promotion.node_fenced`, writing
+  nothing. A fenced ex-primary returns via wipe-restore, never in-place promotion (§2); the existing
+  `assertNotFenced` enforces this inside the promote functions, but the endpoint must reach it —
+  see the `alreadyPrimary` correction below.
+- **already `(primary, primary)`** → clean `alreadyPrimary` 200 (the operator retried, or two
+  operators raced). **Correction from review:** the current `alreadyPrimary` early-return keys on
+  `mode === "primary"` alone ([promote.ts:268-272](../../../apps/server/src/promote.ts#L268)), so a
+  *fenced* `(primary, secondary)` node would wrongly get `200 {alreadyPrimary}` before `assertNotFenced`
+  runs. The endpoint (or the closure it calls) must gate `alreadyPrimary` on `singleton_role ===
+  "primary"` too, so the fenced case falls through to the `promotion.node_fenced` refusal, not a lying
+  success — a false "already primary" during a disaster is exactly the wrong signal.
+
+**Fence attestation in the body.** `{ oldNodeNeutralised: true }` is passed straight through to the
+existing `assertFenced` gate (`promotion.fence_not_attested` if absent). The endpoint does not weaken
+the gate — software still cannot verify a partitioned peer, so the human attestation stays required
+(2026-08-29 §6).
+
+**Commit, respond, then restart.** Mirror promotion is **restart-into-primary** (R3b §4): the one
+owner transaction flips both axes and writes the term-guarded membership document
+(`commitMirrorPromotionTx`, the point-of-no-return), the endpoint returns `200 {restarting: true}`,
+and the boot-wired closure then triggers `process.kill(pid, "SIGTERM")`
+([boot.ts:2098](../../../apps/server/src/boot.ts#L2098)) → graceful `server.close`, so the supervisor
+(systemd / Docker / Waitron Cloud) brings the process back up as `mode = primary`. **Experiment to
+run at implementation** (`CLAUDE.md` §1 — the existing test mocks `process.kill`, so it does not prove
+this): confirm the 200 body reaches the operator's connection before the process exits; if it cannot
+be shown, narrow the response contract (e.g. the operator polls state) rather than asserting the flush.
+**Assumption to state at land:** a process supervisor with a restart policy is present (true on the
+appliance and on Waitron Cloud; the test harness restarts explicitly).
+
+**Abort semantics (corrected from review).** Auth failure, a missing attestation, and a fenced refusal
+all abort with the node **unchanged** (still a read-only mirror). Two nuances the earlier draft
+overstated: `persistTradingEnv` rewrites `trading.env` durably **before** the PONR (inert on a
+still-read-only mirror by the 2026-09-04 owner decision, but a lasting file write, not "zero effect" —
+[promote.ts:185-189](../../../apps/server/src/promote.ts#L185)); and a superseded-term failure is the
+**PONR transaction rolling back**, not a pre-PONR abort ([promote.ts:226-233](../../../apps/server/src/promote.ts#L226)).
+Net DB state on either failure is unchanged; the file rewrite is the only residue.
 
 ## 4. Authorization — two paths (owner decision 2026-09-07: both)
 
@@ -92,10 +120,12 @@ Both paths reach the same endpoint; either one authorizes a single promote call.
 
 Identical to the mirror-bundle flow: body carries `personId` + `password` + optional `totp` →
 `loginManagerById` → `authorizeManager(permission: "node.promote")` → `endManagementSession` (the
-session exists only to authorize this one call; no cookie is set). This works remotely and in the
-disaster case because the `persons`/permission rows are replicated to the mirror. A new `node.promote`
-permission is added to the permission registry — a domain-concept name (`CLAUDE.md` §3); **grep the
-sibling permissions (`mirror.create`, …) for the exact naming and grant shape at implementation.**
+session exists only to authorize this one call; no cookie is set). A new `node.promote` permission is
+added to the permission registry — a domain-concept name (`CLAUDE.md` §3); **grep the sibling
+permissions (`mirror.create`, …) for the exact naming and grant shape at implementation.**
+**Receipt owed:** confirm on a real adopted mirror that everything `loginManagerById` /
+`authorizeManager` reads — the password hash, TOTP secret, and the role→permission mapping — is
+actually enrolled/replicated to the mirror (the `persons` row is; the rest is asserted, not verified).
 
 ### 4.2 Fallback: an offline break-glass secret
 
@@ -107,109 +137,153 @@ node the operator cannot get a shell on. This slice's break-glass secret is net-
 - **Mint.** A high-entropy secret (192-bit base64url, via `generatePassword`,
   [`identifiers.ts`](../../../packages/provisioning/src/identifiers.ts)) minted **when a node is
   enrolled as a mirror** (the adopt / connect flow — the enrolment point for the only promotable
-  node). It is **shown to the operator exactly once** to store offline; the raw secret is never
-  persisted.
-- **Store a verifier, not the secret.** Persist only a KDF hash on a new owner-written,
+  node). It is **shown to the operator exactly once, in the connect-screen response that drives the
+  adopt** (a plan detail — pin the surface at implementation; the raw secret must not be logged), to
+  store offline; the raw secret is never persisted.
+- **Store a verifier, not the secret.** Persist only an **argon2id** hash on a new owner-written,
   app-readable `deployment.break_glass_verifier` column (`deployment` is the singleton the promote
   already owns; a one-way hash is safe for the app pool to read, and 192-bit entropy makes an offline
-  guess against the hash infeasible regardless of the KDF's cost). Alternative considered: a sealed
-  vault entry — rejected because a verifier needs no confidentiality, only integrity, and a column
-  keeps it beside the state the promote transaction already touches.
-- **Verify** with a constant-time compare of the presented secret's KDF hash against the stored
+  guess against the hash infeasible). Alternative considered: a sealed vault entry — rejected because a
+  verifier needs integrity, not confidentiality, and a column keeps it beside the state the promote
+  transaction already touches.
+- **Verify** with a constant-time argon2id compare of the presented secret against the stored
   verifier. Wrong or absent secret → refuse before any state change (error code in the `promotion.*`
   family, e.g. `promotion.break_glass_invalid` — grep siblings at implementation).
-- **Rotation.** Re-running the mint overwrites the verifier, invalidating the previous secret; this
-  is the rotation story for Slice 2 (a full custody/rotation ceremony stays the 2026-08-29 §9 open
-  item). The mint primitive is exposed as a small operator command so a lost secret can be replaced
-  without re-adopting.
+- **Rotation.** Re-running the mint overwrites the verifier, invalidating the previous secret; that is
+  the rotation story for Slice 2 (a full custody/rotation ceremony stays the 2026-08-29 §9 open item).
+  The mint primitive is exposed as a small operator command so a lost secret can be replaced without
+  re-adopting.
 
-### 4.3 Retiring break-glass's key-ring-unlock role
+### 4.3 The fiscal cert is not on the mirror — sell now, file later (owner decision 2026-09-07)
 
-The 2026-08-29 §4 design had the break-glass secret **also unlock the key ring** to unseal the
-fiscal cert, so a passive mirror could not file until an operator showed up — deliberately keeping
-the cert's standing exposure low. The current architecture already unlocks the vault at boot from the
-deployment's own `WAITRON_CREDENTIALS_KEY` ([boot.ts](../../../apps/server/src/boot.ts), the
-`loadKeyRing`/`ensureBoxSecrets` path), and the fiscal cert (`fiscal.aeat`) lives in that vault, so a
-running mirror already holds an unlocked cert. Break-glass's unlock role is therefore **obsolete**;
-in this slice break-glass is **purely authorization**. A dated pointer is added to the 2026-08-29 doc
-at land. **Receipt owed** (`CLAUDE.md` §1 — verify, don't assert): on a real mirror DB, confirm the
-KeyRing/`fiscal.aeat` is usable at boot without any operator secret (the standing-exposure trade-off
-this records is a consequence of the R3a "own sealed identity, decryptable by the app pool" posture,
-already flagged for Slice 5's threat model, #203 follow-up (c)).
+The 2026-08-29 §4 design had break-glass *also* unlock the key ring to unseal a **replicated** cert
+blob. **Verified this session (structural read, receipt below): the cert is not on the mirror at
+all.** `tenant_credentials` (which holds `fiscal.aeat`) is enrolled on **no sync lane** — no
+`enrol()`/`EnrolledTable`, no `sync_capture` trigger in the credentials migrations — and
+[`adoptFromPrimary`](../../../apps/server/src/adopt.ts) re-seals only the **sync token** and
+establishes the standby's **own node key + reserved SIF**; it never copies or re-seals `fiscal.aeat`.
+The cert is sealed under the **box's own** vault key at setup (`sealAeat`, provision-time) and stays
+on the box. So on a promoted cloud's first drain tick, `getCredential(..., "fiscal.aeat")` would throw
+`credentials.missing`.
+
+- **Decision:** a promoted cloud **sells and chains locally immediately** — trading never blocks on
+  filing, there is no filing deadline, and month-end AEAT `consultar` reconciles the tail
+  (`CLAUDE.md` §5; the cold-recovery posture). It **does not file** until a separate cert-distribution
+  mechanism lands. This is the accepted boundary; the risk is only if it ships *silently*, so it must
+  be **explicit** (below).
+- **Break-glass in Slice 2 is therefore purely authorization** (§4.2) — it neither unlocks nor
+  distributes the cert. The 2026-08-29 unlock job is **deferred with cert-distribution**, not retired
+  as obsolete (the earlier draft's framing was wrong: nothing had made the cert usable on the mirror).
+- **Make the not-filing state explicit.** On promotion the node logs, and box-status surfaces, that it
+  is a primary that cannot yet file (the drain worker's `credentials.missing` is turned into a visible
+  "awaiting fiscal certificate" status rather than a silent retry loop). Slice 2's e2e asserts the
+  promoted node **sells and chains** and explicitly asserts it does **not** file yet (surfacing the
+  awaiting-cert state), so the boundary is pinned by a test, not a comment.
+- **Named dependency for filing:** cert distribution to a promoted mirror (re-seal `fiscal.aeat` at
+  adopt like the sync token, or ship it in the bundle) — its own slice, adjacent to H2/provisioning.
+- **Receipt owed** (the definitive run, `CLAUDE.md` §1 — the above is a structural read): boot a real
+  adopted mirror, promote, restart, read the drain log — the failing print without cert-distribution is
+  `credentials.missing` for `fiscal.aeat`; the passing assertion is that selling and local chaining
+  work and the awaiting-cert state is surfaced. (This is also §8's e2e.)
 
 ## 5. The real runtime admin DB connection
 
 Today the owner write borrows `config.migrationsDatabaseUrl` via `withOwnerDb`
-([boot.ts](../../../apps/server/src/boot.ts)), which works only because that URL is the superuser in
-dev/CI; on a role-split appliance the true owner of the migrated objects (including `UPDATE` on
-`deployment`) is the admin that ran `instance`, not the migrator
-([`apps/server/README.md`](../../../apps/server/README.md), and the deferral stated in `boot.ts`).
+([boot.ts:1974-1997](../../../apps/server/src/boot.ts#L1974)), which works only because that URL is
+the superuser in dev/CI; on a role-split appliance the true owner of the migrated objects (the **table
+owner** — the admin that ran `instance`, which holds `UPDATE` on `deployment` implicitly) is not the
+migrator ([`apps/server/README.md`](../../../apps/server/README.md), and the deferral stated in
+`boot.ts`).
 
-- Add a config field (e.g. `WAITRON_ADMIN_DATABASE_URL` — **grep siblings for the final name**) = the
-  connection as that owning admin, supplied out-of-band by provisioning / Waitron Cloud.
+- Add a config field (e.g. `WAITRON_ADMIN_DATABASE_URL` — **grep siblings for the final name**), read
+  as an **env/config value like `migrationsDatabaseUrl`, NOT in `trading.env`** (the promote rewrites
+  `trading.env` from a fixed field set and would drop anything else stored there —
+  [boot.ts:2076-2087](../../../apps/server/src/boot.ts#L2076)). Value = the connection as the table
+  owner, supplied out-of-band by provisioning / Waitron Cloud.
 - The promote owner-write uses it via a **short-lived pool** (same transient posture as today's
   `withOwnerDb` — the process connects only while promoting, never holds a standing admin pool).
 - **Fall back** to `migrationsDatabaseUrl` (→ `databaseUrl`) when unset, so dev/CI is unchanged and a
   misconfigured appliance fails **closed** with `42501`, never a silent no-op.
-- This is **pure client-side consumption of a credential provisioning produces** — it does not build,
-  and does not depend on, Track A's instance role-split.
+- **Scope note (from review):** `withOwnerDb` is also the connection the **boot-time fenced-demote**
+  uses ([boot.ts:929](../../../apps/server/src/boot.ts#L929)). Route BOTH through the admin-URL
+  fallback (they share `withOwnerDb`), so the "fails closed, never a silent no-op" property holds for
+  the whole helper, not just the promote path — otherwise a role-split appliance's fenced boot would
+  `42501`. This is pure client-side consumption of a credential provisioning produces; it does not
+  build, and does not depend on, Track A's instance role-split.
 
 ## 6. Mounting and the read-only-gate hole
 
 - **Mount on both modes.** A mirror (read-only) must be promotable, so the endpoint is mounted
   regardless of `deployment.mode`, unlike the mirror-bundle API (primary-only). Mount it before the
   SPA catch-alls, as the other management-api routes are.
-- **Exempt the exact path from the read-only gate.** The gate
-  ([`read-only-gate.ts`](../../../apps/server/src/read-only-gate.ts)) blocks every non-GET on a
-  mirror; the promote endpoint is the **one deliberate hole**, guarded by §4's auth, **never** the
-  unauthenticated ambient viewer. On a successful mirror promotion the restart (not the ambient
-  teardown) brings the node up writable; the exemption is what lets the authorized POST reach the
-  handler in the first place.
+- **Exempt the exact path from the read-only gate**
+  ([`read-only-gate.ts`](../../../apps/server/src/read-only-gate.ts)) — the one deliberate hole,
+  guarded by §4's auth, **never** the unauthenticated ambient viewer. **Fenced condition (from
+  review):** the gate is also mounted for fenced nodes, and the endpoint must not become a
+  fenced-node promote path, so the exemption is scoped to the non-fenced mirror case (or the handler
+  refuses fenced before doing anything, §3). Pin which at implementation and prove it by deletion (§8).
 
 ## 7. Fiscal safety (invariants preserved)
 
 - **At most one primary per NIF.** Unchanged: the `FenceAttestation` gate (§3) plus the
   demote-never-promote membership witness keep the promoted mirror from coexisting with a live
-  primary. The endpoint only *conveys* the attestation; it does not relax the guard.
+  primary. The endpoint only *conveys* the attestation; it does not relax the guard. **Post-MVP
+  note:** the term guard catches a gossip-adopt at ≥ term, but two *different* mirrors (a post-MVP
+  second local box) each promoted by a separate human attestation are caught by nothing in software —
+  unchanged from R3b, now remotely reachable by a break-glass holder; the human attestation is the
+  guard, the fiscal backstop (new chain + disjoint series + AEAT `3000` dedup) is the safety net.
 - **New chain on takeover.** Unchanged: `promoteMirrorToPrimary` promotes onto the mirror's own
-  reserved SIF (R2/R3a), a distinct chain, never resuming the dead primary's (`CLAUDE.md` §5). This
-  slice writes no fiscal record — it writes `deployment` + `node_membership` + `trading.env` only.
-- **`registros_facturacion` immutability** untouched.
-- **Auth boundary.** The break-glass verifier is a one-way hash; the raw secret is never persisted and
-  is shown once. The admin DB connection is short-lived and used only for the owner write.
+  reserved SIF (R2/R3a), a distinct chain, never resuming the dead primary's (`CLAUDE.md` §5).
+- **`registros_facturacion` immutability** untouched. This slice writes `deployment` +
+  `node_membership` + `trading.env` (the promote), plus `deployment.break_glass_verifier` (at mint)
+  and a `management_sessions` row per manager-login call — no fiscal record.
+- **Auth boundary.** The break-glass verifier is a one-way argon2id hash; the raw secret is never
+  persisted and is shown once. The admin DB connection is short-lived and used only for the owner
+  write.
 
 ## 8. Testing (real Postgres — roles, the read-only gate, the admin connection; `CLAUDE.md` §4)
 
-- **Real-PG e2e through the HTTP endpoint** (not only the in-process call already covered by
-  `boot.promote.test.ts`): a booted mirror is promoted via `POST /management-api/promote` and comes
-  back a primary that files on its own reserved SIF.
+- **Real-PG e2e through the HTTP endpoint** (not only the in-process call `boot.promote.test.ts`
+  covers): a booted mirror is promoted via `POST /management-api/promote`, **restarts**, comes back a
+  primary, and **sells + chains locally** — and the test asserts it does **not** file yet, surfacing
+  the awaiting-fiscal-certificate state (§4.3). This is the mirror-promote-restart-drain receipt; note
+  today's e2e never reboots and spies the SIGTERM, so this is new coverage.
 - **Both auth paths:** manager login (right permission) authorizes; the break-glass secret authorizes;
-  a wrong/absent credential on both paths is refused **before any state change** (assert the node is
+  a wrong/absent credential on either path is refused **before any state change** (assert the node is
   still a read-only mirror after a refused call).
-- **The read-only-gate hole:** the promote POST reaches the handler on a mirror while an ordinary POST
-  is still blocked. **Prove by deletion:** remove the path exemption → the authorized promote is
-  blocked by the gate; restore, confirm green (`CLAUDE.md` §4).
+- **The fenced case:** a POST to a fenced `(primary, secondary)` node is refused `promotion.node_fenced`
+  (not a lying `alreadyPrimary`), node unchanged (§3).
+- **The read-only-gate hole:** the promote POST reaches the handler on a non-fenced mirror while an
+  ordinary POST stays blocked. **Prove by deletion:** remove the exemption → the authorized promote is
+  blocked; restore, confirm green (`CLAUDE.md` §4).
 - **Prove the auth guard by deletion:** remove the auth check → an unauthenticated caller can promote;
   restore.
-- **Fence attestation still required** through the endpoint (`promotion.fence_not_attested` without
-  it, node unchanged).
+- **Fence attestation still required** through the endpoint (`promotion.fence_not_attested` without it,
+  node unchanged).
 - **Break-glass secret handling:** the right secret authorizes; a wrong one is refused; the raw secret
-  never appears in the DB (only the verifier); re-minting invalidates the previous secret.
+  never appears in the DB (only the argon2id verifier); re-minting invalidates the previous secret.
 - **The admin connection:** with `WAITRON_ADMIN_DATABASE_URL` set to a non-owner role the owner write
   fails closed (`42501`), never a silent no-op; unset falls back to the migrations URL.
 
 ## 9. Receipts owed, open items, and out of scope
 
-**Receipts owed before implementation relies on them** (real-PG checks the plan must run —
-`CLAUDE.md` §1):
-1. The KeyRing / `fiscal.aeat` cert is usable at boot on a mirror with no operator secret (§4.3).
-2. `app_user` can read the `deployment.break_glass_verifier` column (for verification) but not write
-   it; the owner write path sets it — confirm the grant shape, don't assume it.
+**Receipts owed** (real-PG runs the plan must execute — `CLAUDE.md` §1; §4.3/§8 give the failing/passing prints):
+1. Mirror-promote-restart-drain: a promoted cloud sells + chains but does not file, surfacing the
+   awaiting-cert state (§4.3, §8) — the definitive run behind the structural read.
+2. The manager-login inputs (password hash, TOTP, role→permission mapping) are actually enrolled on the
+   mirror, not only the `persons` row (§4.1).
+3. `app_user` can read `deployment.break_glass_verifier` but not write it; the owner path sets it —
+   confirm the grant shape, don't assume it (§4.2).
+4. The 200 response reaches the operator before the restart-exit, or the response contract is narrowed
+   (§3).
 
-**Open (each its own later resolution, not this slice):** full break-glass custody/rotation ceremony
-(2026-08-29 §9); a friendly dashboard promote action (CLI/API-first here — 2026-08-29 §9 item 4); the
-two-axis → single-`NodeRole` collapse (backlog Track B item 6).
+**Named dependency (separate slice):** cert distribution to a promoted mirror, which gates **filing**
+(§4.3) — a promoted cloud sells without it.
+
+**Open (each its own later resolution):** full break-glass custody/rotation ceremony (2026-08-29 §9);
+a friendly dashboard promote action (CLI/API-first here — 2026-08-29 §9 item 4); the two-axis →
+single-`NodeRole` collapse (backlog Track B item 6).
 
 **Out of scope:** the worker-lifecycle manager (Slice 3); cold-restore surface (Slice 4); rejoin /
-re-admission (Slice 5); the R3 follow-ups (resume-at-restore marker; re-admission as standby); and
-`promoteLocalSecondaryToPrimary`'s trigger (shelved active-active, §2).
+re-admission (Slice 5); the R3 follow-ups (resume-at-restore marker; re-admission as standby);
+`promoteLocalSecondaryToPrimary`'s trigger (shelved active-active, §2); and cert distribution (above).
