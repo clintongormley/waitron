@@ -20,3 +20,10 @@ export function mondayOf(dateStr: string): string {
 export function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
+
+/** An ISO-8601 instant sliced to the minute as `YYYY-MM-DD HH:MM` (UTC — no per-venue timezone yet).
+ * The last-seen / job-timestamp formatter the devices and printers screens share; each caller supplies
+ * its OWN "never" placeholder for a null timestamp, so this formats only a present value. */
+export function formatIsoMinute(iso: string): string {
+  return `${iso.slice(0, 10)} ${iso.slice(11, 16)}`;
+}

@@ -1,6 +1,6 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { UrlStateController, submitOnEnter, baseStyles } from "@waitron/ui";
+import { UrlStateController, baseStyles } from "@waitron/ui";
 import { tillPath } from "../navigation.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -105,18 +105,7 @@ export class TillStationScreen extends LitElement {
         text-align: center;
       }
 
-      /* The device-mode enrol view (§5a): a narrow reading column so the code field + button don't span
-         a wide kitchen display. The hint + field + button stack via the .screen column gap above. */
-      .enrol {
-        max-width: 24rem;
-      }
-
-      .enrol-hint {
-        margin: 0;
-        color: var(--wt-color-text-muted);
-      }
-
-      /* The enrol error banner — the same danger-on-surface pairing the app + lock screen use (a11y-safe
+      /* The reprint error banner — the same danger-on-surface pairing the app + lock screen use (a11y-safe
          in both themes), never behind muted text. */
       .error {
         margin: 0;
@@ -143,19 +132,21 @@ export class TillStationScreen extends LitElement {
    * DEVICE MODE (device-identity-1 §5a). Default `false` — the EXISTING session-gated operator path
    * (listStations → picker → `advanceTicketItem`) runs exactly as before. When `true` the screen is an
    * always-on ENROLLED display: it probes `getDeviceStation()` (no login), renders that ONE bound
-   * station's queue with NO picker and NO Back-to-counter, and bumps through `deviceAdvance`; a 401
-   * (`device.unauthorized`) shows the enrol view instead. Threaded from the app (boot probe, or the lock
-   * screen's "set up" affordance).
+   * station's queue with NO picker and NO Back-to-counter, and bumps through `deviceAdvance`. A 401
+   * (`device.unauthorized`) on that probe means the device cookie was revoked/expired: the screen emits
+   * `device-unauthorized` so the app RE-BOOTS through the unified front door (device-enrolment §3.1),
+   * which routes the now-unauthorized device to the two-step enrol screen — this screen no longer carries
+   * its own enrol sub-view. Threaded from the app (the boot probe).
    */
   @property() deviceMode = false;
   /**
    * The device station the app ALREADY probed at cold boot (device-identity-1 §5a), handed in so the
    * screen does not fetch `GET /api/device/station` a SECOND time on mount (the boot probe and the mount
    * `#loadDevice` were both reading the same authenticated queue — one read per enrolled-display boot is
-   * enough). Present only on the cold-boot path (`till-app`'s `#boot` stashes the probe result); absent
-   * on a fresh-display / lock-screen "set up" entry, where the probe never ran and `#loadDevice` fetches
-   * (a 401 there is the enrol-view case). Adopted ONCE — a later enrol re-probe always fetches the freshly
-   * bound station (see {@link #loadDevice}).
+   * enough). Present on the cold-boot path (`till-app`'s `#boot` stashes the probe result); absent on a
+   * later re-connect, where `#loadDevice` fetches (and a 401 there emits `device-unauthorized` for the
+   * app to re-boot to the enrol front door). Adopted ONCE — a later fetch always reads the current bound
+   * station (see {@link #loadDevice}).
    */
   @property({ attribute: false }) initialDeviceStation?: DeviceStation;
   /**
@@ -181,24 +172,11 @@ export class TillStationScreen extends LitElement {
   /** The lens: kanban board (default) or ticket rail, flipped by the toggle. */
   @state() private view: "kanban" | "rail" = "kanban";
   /**
-   * Which device-mode sub-view is showing (ignored unless {@link deviceMode}). Default `queue` — an
-   * ENROLLED display is the steady state, so it shows the queue chrome (empty until the probe resolves)
-   * rather than flashing the enrol view first; a failed/401 probe flips it to `enrol`.
-   */
-  @state() private deviceView: "queue" | "enrol" = "queue";
-  /** The pairing code the operator is typing into the enrol view. */
-  @state() private enrolCode = "";
-  /** The raw error CODE of a rejected enrol, surfaced via {@link codeMessage} (never the raw code) — or
-   * `undefined` for none. Cleared as the operator retypes. */
-  @state() private enrolErrorCode?: string;
-  /** Reentry guard for enrolment — one in-flight `enrolDevice` at a time (a double-tap is a no-op). */
-  @state() private enrolling = false;
-  /**
    * The raw error CODE of a rejected reprint (KDS-4 §3d), surfaced via {@link codeMessage} in the operator
    * banner (never the raw code) — or `undefined` for none. UNLIKE the advance/collect/fire levers, a
    * reprint is swallow-and-reloaded by nobody: it changes no order state, so a reload reconciles nothing
    * and a silent failure would leave the operator no feedback that the ticket did not reprint. So it takes
-   * the enrol path's shape — try/catch → localised banner — not the degrade-gracefully `#advance` swallow.
+   * a try/catch → localised banner shape, not the degrade-gracefully `#advance` swallow.
    * Only ever set in operator mode ({@link #onReprintOrder} guards device mode), so the banner is
    * operator-only without a separate gate. Cleared on the next reprint attempt.
    */
@@ -264,31 +242,35 @@ export class TillStationScreen extends LitElement {
 
   /**
    * DEVICE MODE probe (§5a): read the display's OWN bound station + queue with no login. A 200 renders
-   * the queue; a 401 (`device.unauthorized`) — or ANY probe failure — flips to the enrol view, the only
-   * actionable state a device without a session has (a transient failure recovers on a page reload,
-   * which re-probes). State-only after the await, so no `isConnected` guard (the sibling screens' reasoning).
+   * the queue. A 401 (`device.unauthorized`) means the device cookie is gone (revoked/expired) — the
+   * screen emits `device-unauthorized` so the app RE-BOOTS through the unified front door, which routes
+   * the unauthorized device to the two-step enrol screen (device-enrolment §3.1); this screen holds no
+   * enrol sub-view of its own. Any OTHER failure is transient — keep the last-known queue and recover on
+   * the next reload/reboot, never tearing the kiosk down for a blip. State-only after the await, so no
+   * `isConnected` guard (the sibling screens' reasoning).
    */
   async #loadDevice(): Promise<void> {
     // Cold-boot fast path: the app already probed the device station and handed it in as
     // `initialDeviceStation`, so adopt it ONCE and skip the redundant fetch — one authenticated queue
-    // read per enrolled-display boot, not two. `#initialConsumed` makes it a one-shot: every LATER call
-    // (the enrol re-probe in `#enrol`, or a fresh-display mount that carried no prop) fetches instead, so
-    // a freshly enrolled display still reads its newly bound station rather than reusing a stale initial.
+    // read per enrolled-display boot, not two. `#initialConsumed` makes it a one-shot: a later re-connect
+    // fetches instead, so a display never reuses a stale initial.
     if (this.initialDeviceStation !== undefined && !this.#initialConsumed) {
       this.#initialConsumed = true;
       const { station } = this.initialDeviceStation;
       this.activeStationId = station.id;
       this.groups = station.queue;
-      this.deviceView = "queue";
       return;
     }
     try {
       const { station } = await this.api.getDeviceStation();
       this.activeStationId = station.id;
       this.groups = station.queue;
-      this.deviceView = "queue";
-    } catch {
-      this.deviceView = "enrol";
+    } catch (error) {
+      if ((error as { code?: string }).code === "device.unauthorized") {
+        this.dispatchEvent(
+          new CustomEvent("device-unauthorized", { bubbles: true, composed: true }),
+        );
+      }
     }
   }
 
@@ -402,36 +384,6 @@ export class TillStationScreen extends LitElement {
     }
   }
 
-  /** Capture the enrol code field's new value and clear any stale error as the operator retypes. */
-  #onEnrolCode(event: Event): void {
-    event.stopPropagation();
-    this.enrolCode = (event as CustomEvent<{ value: string }>).detail.value;
-    this.enrolErrorCode = undefined;
-  }
-
-  /**
-   * Redeem the entered pairing code (§5a): `enrolDevice` sets the trusted device cookie server-side, then
-   * a re-probe ({@link #loadDevice}) drops the display straight into its bound queue. The code is sent
-   * VERBATIM — the server normalises it, the client does not. A refused code (invalid/expired) stays on
-   * the enrol view with the localized reason ({@link enrolErrorCode}, resolved by {@link codeMessage} — never
-   * the raw wire code) so the operator can try a fresh one. Reentry-guarded and blank-guarded like the
-   * lock screen's PIN submit.
-   */
-  async #enrol(): Promise<void> {
-    if (this.enrolCode === "" || this.enrolling) return;
-    this.enrolling = true;
-    this.enrolErrorCode = undefined;
-    try {
-      await this.api.enrolDevice(this.enrolCode);
-      this.enrolCode = "";
-      await this.#loadDevice();
-    } catch (error) {
-      this.enrolErrorCode = (error as { code?: string }).code ?? "server.internal";
-    } finally {
-      this.enrolling = false;
-    }
-  }
-
   /**
    * A Mode-P collect from the widget's rail lens (a settled order's handover, KDS-1 §3e). Handle it HERE
    * and stop it — the app owns the counter's own default-station widget, so it must not double-handle this
@@ -505,15 +457,15 @@ export class TillStationScreen extends LitElement {
   }
 
   /**
-   * The DEVICE-mode display (§5a): the enrol view when this display holds no valid device cookie, else
-   * the shared queue surface with NO Back-to-counter and NO picker (a device has one fixed station and
-   * never logged in) over an ADVANCE-ONLY queue. The advance/collect/fire listeners are the SAME as the
-   * operator path — wired once by the shared surface; the handlers branch on {@link deviceMode} to route
-   * through the device-scoped verbs, and {@link #onMarkCollected}/{@link #onFireCourse} keep their
-   * device-mode guards as defense-in-depth (§3d).
+   * The DEVICE-mode display (§5a): the shared queue surface with NO Back-to-counter and NO picker (a
+   * device has one fixed station and never logged in) over an ADVANCE-ONLY queue. A revoked/expired
+   * cookie is handled by {@link #loadDevice} (which re-boots the app to the unified enrol front door),
+   * not by a sub-view here. The advance/collect/fire listeners are the SAME as the operator path — wired
+   * once by the shared surface; the handlers branch on {@link deviceMode} to route through the
+   * device-scoped verbs, and {@link #onMarkCollected}/{@link #onFireCourse} keep their device-mode guards
+   * as defense-in-depth (§3d).
    */
   #renderDevice(): TemplateResult {
-    if (this.deviceView === "enrol") return this.#renderEnrol();
     return this.#renderQueueSurface({ showBack: false, body: this.#queue(true) });
   }
 
@@ -573,45 +525,6 @@ export class TillStationScreen extends LitElement {
             : nothing
         }
         ${opts.body}
-      </section>
-    `;
-  }
-
-  /** The enrol view (§5a): a labelled pairing-code field → "Set up". On a refused code it shows the
-   * localized reason ({@link codeMessage}); on success the display re-probes into its bound queue. */
-  #renderEnrol(): TemplateResult {
-    return html`
-      <section class="screen enrol" aria-label=${t("device.enrol_title")}>
-        ${
-          this.embedded
-            ? nothing
-            : html`<header class="head">
-                <h1 class="title">${t("device.enrol_title")}</h1>
-              </header>`
-        }
-        <p class="enrol-hint">${t("device.enrol_hint")}</p>
-        ${
-          this.enrolErrorCode
-            ? html`<p class="error" role="alert">${codeMessage(this.enrolErrorCode)}</p>`
-            : nothing
-        }
-        <wt-input
-          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-enrol-submit]"))}
-          class="enrol-code"
-          data-enrol-code
-          .label=${t("device.enrol_code")}
-          .value=${this.enrolCode}
-          @wt-change=${(event: Event) => this.#onEnrolCode(event)}
-        ></wt-input>
-        <wt-button
-          class="enrol-submit"
-          data-enrol-submit
-          variant="primary"
-          ?disabled=${this.enrolCode === "" || this.enrolling}
-          @click=${() => void this.#enrol()}
-        >
-          ${t("device.enrol_submit")}
-        </wt-button>
       </section>
     `;
   }

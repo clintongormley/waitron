@@ -73,13 +73,18 @@ export async function seedNodeAndSeries(
   return { nodeId, seriesId: brandSeriesId(series.rows[0]!.id) };
 }
 
+// A venue-scoped unique index on tills(tenant_id, location_id, name) means two seeded tills in one
+// venue cannot share a name; the counter gives each a distinct one (seedVenue owns "Till 1").
+let tillSeq = 1;
+
 export async function seedTill(
   db: Database,
   tenantId: TenantId,
   locationId: string,
+  name = `Till ${++tillSeq}`,
 ): Promise<TillId> {
   const till = await db.execute<{ id: string }>(
-    sql`insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Till 2') returning id`,
+    sql`insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, ${name}) returning id`,
   );
   return brandTillId(till.rows[0]!.id);
 }

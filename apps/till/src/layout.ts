@@ -31,6 +31,29 @@ export interface ReceiptConfig {
 
 export type FormFactor = "till" | "phone-portrait" | "tablet-landscape" | "kds";
 
+/**
+ * The device KIND a form factor implies — a LOCAL mirror of `kindOfFormFactor`
+ * (`packages/layouts/src/canvas.ts`), bundle-decoupled like the rest of this file (deliberately NOT
+ * imported from `@waitron/layouts`). The boot probe reads `DeviceIdentity.formFactor` (an un-narrowed
+ * `string`, the same graceful-widening the old `kind` field had) and maps it here to pick the shell;
+ * an unknown form factor returns `undefined`, so a widened server never breaks an older client — the
+ * boot switch simply falls through to the normal operator till.
+ */
+export type DeviceKind = "kds_station" | "handheld" | "till";
+export function kindOfFormFactor(ff: string): DeviceKind | undefined {
+  switch (ff) {
+    case "till":
+      return "till";
+    case "phone-portrait":
+    case "tablet-landscape":
+      return "handheld";
+    case "kds":
+      return "kds_station";
+    default:
+      return undefined;
+  }
+}
+
 export type CapabilityFlag = "integrated-card-payment" | "open-cash-drawer" | "act-as-kds";
 
 export type CardType =

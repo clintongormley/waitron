@@ -171,7 +171,7 @@ export const en = {
   "devices.kind_till": "Till",
   "devices.kind_handheld": "Waiter handheld",
   "devices.station": "Station",
-  "devices.till": "Till",
+  "devices.till": "Cash register",
   "devices.device_profile": "Device profile",
   "devices.device_profile_none": "— no profile —",
   "devices.receipt_printer": "Receipt printer",
@@ -189,6 +189,8 @@ export const en = {
   "devices.copy": "Copy",
   "devices.copied": "Copied",
   "devices.done": "Done",
+  "devices.hardware": "Hardware",
+  "devices.save_hardware": "Save hardware",
   // Printers (Impresoras) screen — print agents (enrol code shown once · revoke · last-seen), printers
   // CRUD (create / edit / deactivate + test print), and recent job/printer status.
   "printers.title": "Printers",
@@ -230,10 +232,10 @@ export const en = {
   "printers.no_stations": "No stations yet",
   // Counter receipt/drawer (§5): the per-till receipt-printer picker + the per-location print-mode toggle.
   "printers.receipt_title": "Customer receipts",
-  "printers.receipt_printer_title": "Receipt printer per till",
+  "printers.receipt_printer_title": "Receipt printer per cash register",
   "printers.receipt_printer": "Receipt printer",
   "printers.receipt_no_printer": "— no printer —",
-  "printers.no_tills": "No tills yet",
+  "printers.no_tills": "No cash registers yet",
   "printers.print_mode_title": "Auto-print per location",
   "printers.print_mode": "When to print",
   "printers.no_locations": "No locations yet",
@@ -492,8 +494,8 @@ export const en = {
   "sales.title": "Sales & takings",
   "sales.from": "From",
   "sales.to": "To",
-  "sales.tender_title": "Tender by till",
-  "sales.till": "Till",
+  "sales.tender_title": "Tender by cash register",
+  "sales.till": "Cash register",
   "sales.method": "Method",
   "sales.amount": "Amount",
   "sales.tip": "Tips",
@@ -515,7 +517,7 @@ export const en = {
   "sales.total": "Total",
   "sales.empty_sellers": "No sales in this range.",
   "sales.period_note":
-    "Per-till tender detail is available for a single day only. Pick one day to see the cash-up.",
+    "Per-cash-register tender detail is available for a single day only. Pick one day to see the cash-up.",
   // Canvas editor (SP-B3.2) — the per-device grid-layout gallery + editor
   "canvas_editor.title": "Canvases",
   "canvas_editor.create": "New canvas",
@@ -536,7 +538,7 @@ export const en = {
   "canvas_editor.copy_suffix": " (copy)",
   "canvas_editor.delete_title": "Delete canvas",
   "canvas_editor.delete_message": "Delete this canvas? This cannot be undone.",
-  "canvas_editor.form_factor.till": "Till",
+  "canvas_editor.form_factor.till": "Cash register",
   "canvas_editor.form_factor.phone-portrait": "Phone (portrait)",
   "canvas_editor.form_factor.tablet-landscape": "Tablet (landscape)",
   "canvas_editor.form_factor.kds": "Kitchen display",
@@ -597,6 +599,13 @@ export const en = {
   "device_profiles.capability.integrated-card-payment": "Integrated card payment",
   "device_profiles.capability.open-cash-drawer": "Open cash drawer",
   "device_profiles.capability.act-as-kds": "Act as kitchen display",
+  // The form-factor picker: the field label plus one human label per FORM_FACTORS value (the `till`
+  // form factor is the CASH REGISTER, the owner's chosen word — never the raw token).
+  "device_profiles.form_factor": "Form factor",
+  "device_profiles.form_factor.till": "Cash register",
+  "device_profiles.form_factor.phone-portrait": "Handheld phone",
+  "device_profiles.form_factor.tablet-landscape": "Handheld tablet",
+  "device_profiles.form_factor.kds": "Kitchen display",
   // NOTE: the empty-name banner pseudo-code (device_profiles.err_no_name) and the server's
   // device_profile.* rejections live in i18n/codes.ts's CODE_MESSAGES, resolved via codeMessage().
 } as const;
@@ -762,6 +771,8 @@ export const es: Record<StringKey, string> = {
   "devices.copy": "Copiar",
   "devices.copied": "Copiado",
   "devices.done": "Hecho",
+  "devices.hardware": "Hardware",
+  "devices.save_hardware": "Guardar hardware",
   "printers.title": "Impresoras",
   "printers.agents_title": "Agentes de impresión",
   "printers.no_agents": "Aún no hay agentes",
@@ -1130,6 +1141,11 @@ export const es: Record<StringKey, string> = {
   "device_profiles.capability.integrated-card-payment": "Pago con tarjeta integrado",
   "device_profiles.capability.open-cash-drawer": "Abrir cajón portamonedas",
   "device_profiles.capability.act-as-kds": "Actuar como pantalla de cocina",
+  "device_profiles.form_factor": "Formato",
+  "device_profiles.form_factor.till": "Caja registradora",
+  "device_profiles.form_factor.phone-portrait": "Teléfono de mano",
+  "device_profiles.form_factor.tablet-landscape": "Tableta de mano",
+  "device_profiles.form_factor.kds": "Pantalla de cocina",
   // (device_profiles.err_no_name y device_profile.* viven en i18n/codes.ts — ver la nota en `en`.)
 };
 

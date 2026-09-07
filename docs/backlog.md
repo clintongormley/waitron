@@ -83,7 +83,8 @@ drawer, device = the screen, [`2026-09-05-register-and-device-model-decision.md`
 shapes the control plane — **taken 2026-09-05**, neither:
 [`2026-09-05-relay-decision.md`](superpowers/specs/2026-09-05-relay-decision.md)). **All three are Track B's first job** — its "decisions first" line below —
 taken before Track B builds anything; Track 1 and Track C consume them. **Track 1 therefore works areas 2–18 and, since 2026-09-05, area 19 (device management —
-decision (iii) taken; it carries that build's no-migration half); area 1 (setup wizard — its
+decision (iii) taken; its build's no-migration half LANDED on feat/device-enrolment-login,
+2026-09-07 — see Track B item 7); area 1 (setup wizard — its
 provisioning paths move under Track B item 2) waits.** Everything else in the four tracks
 proceeds in parallel under the coordination rules in the design-review section (serialised pushes;
 whoever lands second rebases — only on a code-file overlap or a conflict; a PR that is merely `BEHIND`
@@ -431,11 +432,25 @@ All three decisions are now taken.
    AbortController-per-worker (`boot.ts`, 1,665 lines). **After Track A item 3 lands** — both edit
    `boot.ts`'s role-pool wiring.
 7. **Register/device model — DECIDED 2026-09-05** (SP-A.2 follow-up 2; keep both —
-   [`2026-09-05-register-and-device-model-decision.md`](superpowers/specs/2026-09-05-register-and-device-model-decision.md) §4). The build splits: the
+   [`2026-09-05-register-and-device-model-decision.md`](superpowers/specs/2026-09-05-register-and-device-model-decision.md) §4). The build split: the
    no-migration half (register create + auto-create at till enrol, handheld picker, register/device
-   wording, shift login keyed to the device's register) goes to Track 1 area 19 now; one meaning per
-   hardware-binding column waits for Track A's squash. No new H2 receipt: what an immutable record's
-   `till_id` holds is unchanged.
+   wording, shift login keyed to the device's register) — **LANDED (feat/device-enrolment-login,
+   2026-09-07;** design [`2026-09-07-device-enrolment-and-login-design.md`](superpowers/specs/2026-09-07-device-enrolment-and-login-design.md)). Shipped: the
+   device **profile** is now the single description of a device — `device_kind` is **gone** (both the
+   pgEnum and the column dropped); a device's kind derives from its profile's new `form_factor`
+   (`kindOfFormFactor`, `@waitron/layouts`). Enrolment was rebuilt (verify-key → describe-device), a
+   `till`-form-factor enrol **auto-creates its own register** named after the device, a venue-scoped
+   unique index on `tills(tenant_id, location_id, name)` makes a duplicate register name
+   unrepresentable (`device.register_name_taken`/`device.register_required`), and the shift session is
+   keyed to the device's register. One meaning per hardware-binding column still waits for Track A's
+   squash. No new H2 receipt: what an immutable record's `till_id` holds is unchanged.
+   - *Follow-ups (pre-production edges, not blocking):* (a) the dev `?dev` chooser rows show
+     `label · kind`, not `name · profile · register`, because `GET /api/dev/devices` returns only
+     ids + kind — a small server-list widening if wanted. (b) **Owner copy decision:** the Spanish
+     form-factor label differs across two pickers — `canvas_editor.form_factor.till` = "TPV" vs
+     `device_profiles.form_factor.till` = "Caja registradora"; pick one. (c) `WAITRON_TILL_TILL_ID` /
+     provisioning still seeds a "Caja 1" register while a till enrol now auto-creates its own — the
+     dedupe deferred by the decision doc.
 
 **Track C — product / modules** (sequential; owns `packages/fiscal*`, the module framework packages,
 `packages/composition` (the `ALL_MODULES` list), every NEW module package, `apps/dashboard` module
@@ -594,6 +609,8 @@ editor + rendering) is the sole remaining sub-project of this track.**
        receipt — a real initiative, not a cleanup. Needs its own brainstorm + full fiscal trace; capture the
        "a moved till is a new register" philosophy there. _Decided 2026-09-05: keep `tills` as the register;
        the philosophy is rule 3 of [`2026-09-05-register-and-device-model-decision.md`](superpowers/specs/2026-09-05-register-and-device-model-decision.md)._
+       _No-migration build LANDED (feat/device-enrolment-login, 2026-09-07): a `till` enrol auto-creates its
+       register; `till_id` semantics unchanged, so still no new H2 receipt (Track B item 7)._
 - **SP-C — dev per-tab device switcher — LANDED #201 (2026-09-03).** Shipped: a third `WAITRON_ENV=dev`
   value that maps to `environment=preproduction` for all fiscal/AEAT/Stripe/DB-stamp code (no migration,
   fiscal enum untouched) and additionally sets a new `config.devMode`; a dev-override header
@@ -1270,7 +1287,7 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 2 | Sales spine | Immutable hash-chained sales, per-tenant series, catalogue, tenant model | — |
 | 3 | Fiscal layer | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first | F3 asesor/XSD confirmations (Debt) |
 | 4 | Payment layer | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook | SumUp provider; webhook `recordSale` hand-off; reconcile remediation UI |
-| 5 | Identity | persons/sessions, PIN, `authorize()`, roles/permissions, passkeys, email login, config sync flow-down to a read-only secondary (#195) | mid-shift-suspension enforce, discount gate, till-refund enforce; encrypt `totp_secret` at rest (**now a hard dep of the TOTP-enrollment slice** — #195 replicates it, see *Onboarding*); PIN-attempt throttle |
+| 5 | Identity | persons/sessions, PIN, `authorize()`, roles/permissions, passkeys, email login, config sync flow-down to a read-only secondary (#195) | mid-shift-suspension enforce, discount gate, till-refund enforce; encrypt `totp_secret` at rest (**now a hard dep of the TOTP-enrollment slice** — #195 replicates it, see *Onboarding*) — *PIN-attempt throttle CLOSED (feat/device-enrolment-login: `@waitron/identity` per-(device,person) throttle, `pin.throttled`)* |
 | 6 | Locations | provision-a-sellable-venue (`waitron-provision venue`) | multiple locations, edit/deactivate; then location-scope the by-id verb family (Debt) |
 | 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, layout/receipt editors, receipt/drawer printing, cash-drawer authorization — operable end to end | — |
 | 8 | Reporting | daily close, frozen *cierre Z*, VAT summary, modelo 303 output+input VAT + DR303 file/download, purchase-invoice UI; dashboard sales screen + business-overview home (#167) | fiscal filing remainder parked |

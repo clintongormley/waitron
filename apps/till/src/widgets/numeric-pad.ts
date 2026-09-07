@@ -118,7 +118,27 @@ export class TillNumericPad extends LitElement {
   @property() mode: "decimal" | "pin" = "decimal";
 
   #keys(): PadKey[] {
-    const keys: PadKey[] = [
+    if (this.mode === "pin") {
+      // Phone-dialpad order (1-2-3 on top), the layout muscle memory expects for a PIN. Digits only
+      // — the empty `key: ""` cell holds the decimal point's calculator position so `0` stays centred
+      // in the bottom row, and keeping no `.` key at all is what keeps a "." out of a PIN.
+      return [
+        { key: "1", glyph: "1" },
+        { key: "2", glyph: "2" },
+        { key: "3", glyph: "3" },
+        { key: "4", glyph: "4" },
+        { key: "5", glyph: "5" },
+        { key: "6", glyph: "6" },
+        { key: "7", glyph: "7" },
+        { key: "8", glyph: "8" },
+        { key: "9", glyph: "9" },
+        { key: "", glyph: "" },
+        { key: "0", glyph: "0" },
+        { key: "backspace", glyph: "⌫", label: t("pad.backspace") },
+      ];
+    }
+    // Calculator order (7-8-9 on top) for cash and kg entry — unchanged.
+    return [
       { key: "7", glyph: "7" },
       { key: "8", glyph: "8" },
       { key: "9", glyph: "9" },
@@ -132,9 +152,6 @@ export class TillNumericPad extends LitElement {
       { key: "0", glyph: "0" },
       { key: "backspace", glyph: "⌫", label: t("pad.backspace") },
     ];
-    // A PIN is digits only, so the decimal-point key has no place on it (and dropping it is what
-    // keeps a "." out of a PIN — the Minor half of this fix).
-    return this.mode === "pin" ? keys.filter((padKey) => padKey.key !== ".") : keys;
   }
 
   #press(key: string, event: Event): void {
@@ -149,6 +166,10 @@ export class TillNumericPad extends LitElement {
    * aria-label on the host.
    */
   #renderKey({ key, glyph, label }: PadKey) {
+    // An empty `key` is the pin layout's spacer: an inert grid cell that keeps `0` centred where the
+    // decimal-point key sits on the calculator layout. It carries no `data-key`, so it is not a
+    // tappable dead key and never appears in the pad's key sequence.
+    if (key === "") return html`<div class="key" aria-hidden="true"></div>`;
     const content = label
       ? html`<span aria-hidden="true">${glyph}</span><span class="sr-only">${label}</span>`
       : glyph;

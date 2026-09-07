@@ -17,7 +17,13 @@ const PROFILE_A = "11111111-0000-4000-8000-0000000000a4";
 const PROFILE_B = "22222222-0000-4000-8000-0000000000b4";
 const TOKEN_HASH = "scrypt$00$00";
 
-describe("devices + device_pairing_codes composite FKs (till / receipt_printer / device_profile)", () => {
+// The device composite FKs (till / receipt_printer / device_profile) are the subject here. Every seed
+// device points at a `till` device profile and names a till — a device is DEFINED by its profile
+// (device_profile_id is NOT NULL) and the binding rule (device_binding_rule_insert / _update, tested in
+// devices.trigger.pg.test.ts) requires a register and no station for a non-kds form factor — so the
+// ONLY constraint each case leaves violated is the FK under test. `device_pairing_codes` carries NO
+// binding columns any more (dropped when device_kind was), so it has no composite FK to test.
+describe("devices composite FKs (till / receipt_printer / device_profile)", () => {
   const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
   let admin: Database;
 
@@ -45,15 +51,14 @@ describe("devices + device_pairing_codes composite FKs (till / receipt_printer /
         (${PRINTER_A}, ${TENANT_A}, ${LOCATION_A}, 'Printer A', 'cloud_poll', 'poll-a'),
         (${PRINTER_B}, ${TENANT_B}, ${LOCATION_B}, 'Printer B', 'cloud_poll', 'poll-b')
       on conflict (id) do nothing`);
-    // One device_profiles row per tenant — the (tenant_id, device_profile_id) composite-FK target.
+    // One `till`-form-factor device_profiles row per tenant — the (tenant_id, device_profile_id)
+    // composite-FK target, and the form factor whose binding rule requires a register (a till).
     await admin.execute(sql`
-      insert into device_profiles (id, tenant_id, name) values
-        (${PROFILE_A}, ${TENANT_A}, 'Profile A'),
-        (${PROFILE_B}, ${TENANT_B}, 'Profile B')
+      insert into device_profiles (id, tenant_id, name, form_factor) values
+        (${PROFILE_A}, ${TENANT_A}, 'Profile A', 'till'),
+        (${PROFILE_B}, ${TENANT_B}, 'Profile B', 'till')
       on conflict (id) do nothing`);
   });
-
-  // ---- devices ------------------------------------------------------------------------------
 
   afterEach(async () => {
     await suite.db.execute(sql`delete from devices`);
@@ -63,48 +68,52 @@ describe("devices + device_pairing_codes composite FKs (till / receipt_printer /
     );
   });
 
-  it("devices: rejects a till_id naming a DIFFERENT tenant's till (composite FK)", async () => {
-    // Only till_id is cross-tenant; receipt_printer_id is NULL, so the ONLY
-    // violated constraint is devices_till_fk.
+  it("rejects a till_id naming a DIFFERENT tenant's till (composite FK)", async () => {
+    // TILL_B is cross-tenant; the profile (PROFILE_A) and every other binding are same-tenant/NULL, so
+    // the ONLY violated constraint is devices_till_fk. The binding rule is satisfied (a till profile
+    // with a till and no station) — TILL_B is non-null, which is all the rule checks.
     const e = await captureError(() =>
       admin.execute(
-        sql`insert into devices (tenant_id, location_id, device_kind, station_id, label, token_hash, till_id)
-            values (${TENANT_A}, ${LOCATION_A}, 'till', ${null}, 'Cross-tenant till', ${TOKEN_HASH}, ${TILL_B})`,
+        sql`insert into devices (tenant_id, location_id, device_profile_id, station_id, label, token_hash, till_id)
+            values (${TENANT_A}, ${LOCATION_A}, ${PROFILE_A}, ${null}, 'Cross-tenant till', ${TOKEN_HASH}, ${TILL_B})`,
       ),
     );
     expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation
   });
 
-  it("devices: rejects a receipt_printer_id naming a DIFFERENT tenant's printer (composite FK)", async () => {
+  it("rejects a receipt_printer_id naming a DIFFERENT tenant's printer (composite FK)", async () => {
+    // A valid same-tenant till (TILL_A) satisfies the binding rule; PRINTER_B is the only cross-tenant
+    // binding, so the ONLY violated constraint is devices_receipt_printer_fk.
     const e = await captureError(() =>
       admin.execute(
-        sql`insert into devices (tenant_id, location_id, device_kind, station_id, label, token_hash, receipt_printer_id)
-            values (${TENANT_A}, ${LOCATION_A}, 'till', ${null}, 'Cross-tenant printer', ${TOKEN_HASH}, ${PRINTER_B})`,
+        sql`insert into devices (tenant_id, location_id, device_profile_id, station_id, label, token_hash, till_id, receipt_printer_id)
+            values (${TENANT_A}, ${LOCATION_A}, ${PROFILE_A}, ${null}, 'Cross-tenant printer', ${TOKEN_HASH}, ${TILL_A}, ${PRINTER_B})`,
       ),
     );
     expect(pgErrorCode(e)).toBe("23503");
   });
 
-  it("devices: accepts same-tenant bindings; NULL bindings are unconstrained (MATCH SIMPLE)", async () => {
+  it("accepts same-tenant bindings; a NULL printer is unconstrained (MATCH SIMPLE) and the defaults apply", async () => {
     const bound = await admin.execute<{ id: string }>(
-      sql`insert into devices (tenant_id, location_id, device_kind, station_id, label, token_hash,
+      sql`insert into devices (tenant_id, location_id, device_profile_id, station_id, label, token_hash,
                                till_id, receipt_printer_id,
                                has_cash_drawer, card_provider, card_reader_id)
-          values (${TENANT_A}, ${LOCATION_A}, 'till', ${null}, 'Bound till', ${TOKEN_HASH},
+          values (${TENANT_A}, ${LOCATION_A}, ${PROFILE_A}, ${null}, 'Bound till', ${TOKEN_HASH},
                   ${TILL_A}, ${PRINTER_A}, true, 'sumup', 'reader-1') returning id`,
     );
     expect(bound.rows).toHaveLength(1);
 
-    // Both bindings NULL — the composite FKs skip the check on any NULL column, and the column
-    // defaults apply (has_cash_drawer false, card_provider 'none').
+    // A same-tenant till (required by the binding rule) with a NULL receipt_printer_id — the composite
+    // printer FK skips the check on the NULL column, and the hardware defaults apply (has_cash_drawer
+    // false, card_provider 'none', card_reader_id null).
     const [row] = (
       await admin.execute<{
         has_cash_drawer: boolean;
         card_provider: string;
         card_reader_id: string | null;
       }>(
-        sql`insert into devices (tenant_id, location_id, device_kind, station_id, label, token_hash)
-            values (${TENANT_A}, ${LOCATION_A}, 'till', ${null}, 'Unbound till', ${TOKEN_HASH})
+        sql`insert into devices (tenant_id, location_id, device_profile_id, station_id, label, token_hash, till_id)
+            values (${TENANT_A}, ${LOCATION_A}, ${PROFILE_A}, ${null}, 'Unbound printer', ${TOKEN_HASH}, ${TILL_A})
             returning has_cash_drawer, card_provider, card_reader_id`,
       )
     ).rows;
@@ -113,121 +122,41 @@ describe("devices + device_pairing_codes composite FKs (till / receipt_printer /
     expect(row!.card_reader_id).toBeNull();
   });
 
-  it("devices: rejects a device_profile_id naming a DIFFERENT tenant's profile (composite FK)", async () => {
-    // Only device_profile_id is cross-tenant; every other binding is NULL, so the ONLY violated
-    // constraint is devices_device_profile_fk.
+  it("rejects a device_profile_id naming a DIFFERENT tenant's profile (composite FK)", async () => {
+    // PROFILE_B is cross-tenant. The composite (tenant_id, device_profile_id) FK fires first (measured:
+    // devices_device_profile_fk, 23503) — ahead of the binding-rule trigger's own "no profile in
+    // tenant" raise, which would otherwise reject the same row. A valid same-tenant till is supplied so
+    // no other constraint is in play.
     const e = await captureError(() =>
       admin.execute(
-        sql`insert into devices (tenant_id, location_id, device_kind, station_id, label, token_hash, device_profile_id)
-            values (${TENANT_A}, ${LOCATION_A}, 'till', ${null}, 'Cross-tenant profile', ${TOKEN_HASH}, ${PROFILE_B})`,
+        sql`insert into devices (tenant_id, location_id, device_profile_id, station_id, label, token_hash, till_id)
+            values (${TENANT_A}, ${LOCATION_A}, ${PROFILE_B}, ${null}, 'Cross-tenant profile', ${TOKEN_HASH}, ${TILL_A})`,
       ),
     );
     expect(pgErrorCode(e)).toBe("23503");
   });
 
-  it("devices: accepts a same-tenant device_profile_id; a NULL is unconstrained (MATCH SIMPLE)", async () => {
+  it("accepts a same-tenant device_profile_id", async () => {
     const bound = await admin.execute<{ id: string }>(
-      sql`insert into devices (tenant_id, location_id, device_kind, station_id, label, token_hash, device_profile_id)
-          values (${TENANT_A}, ${LOCATION_A}, 'till', ${null}, 'Profile-bound', ${TOKEN_HASH}, ${PROFILE_A}) returning id`,
+      sql`insert into devices (tenant_id, location_id, device_profile_id, station_id, label, token_hash, till_id)
+          values (${TENANT_A}, ${LOCATION_A}, ${PROFILE_A}, ${null}, 'Profile-bound', ${TOKEN_HASH}, ${TILL_A}) returning id`,
     );
     expect(bound.rows).toHaveLength(1);
-
-    // device_profile_id NULL — the composite FK skips the check on any NULL column.
-    const nullProfile = await admin.execute<{ device_profile_id: string | null }>(
-      sql`insert into devices (tenant_id, location_id, device_kind, station_id, label, token_hash, device_profile_id)
-          values (${TENANT_A}, ${LOCATION_A}, 'till', ${null}, 'No profile', ${TOKEN_HASH}, ${null})
-          returning device_profile_id`,
-    );
-    expect(nullProfile.rows[0]!.device_profile_id).toBeNull();
   });
 
-  it("devices: refuses to delete a device_profile a device references (ON DELETE RESTRICT)", async () => {
-    // Bind a device to a fresh profile, then try to hard-delete that profile: RESTRICT blocks it. This
-    // is the delete-referenced case the Task-3 device-profile store test deferred to Task 5's FK.
+  it("refuses to delete a device_profile a device references (ON DELETE RESTRICT)", async () => {
+    // Bind a device to a fresh profile, then try to hard-delete that profile: RESTRICT blocks it.
     const profileC = "11111111-0000-4000-8000-0000000000c4";
     await admin.execute(sql`
-      insert into device_profiles (id, tenant_id, name) values (${profileC}, ${TENANT_A}, 'Profile C')`);
+      insert into device_profiles (id, tenant_id, name, form_factor) values (${profileC}, ${TENANT_A}, 'Profile C', 'till')`);
     await admin.execute(sql`
-      insert into devices (tenant_id, location_id, device_kind, station_id, label, token_hash, device_profile_id)
-      values (${TENANT_A}, ${LOCATION_A}, 'till', ${null}, 'Restrict device', ${TOKEN_HASH}, ${profileC})`);
+      insert into devices (tenant_id, location_id, device_profile_id, station_id, label, token_hash, till_id)
+      values (${TENANT_A}, ${LOCATION_A}, ${profileC}, ${null}, 'Restrict device', ${TOKEN_HASH}, ${TILL_A})`);
     const e = await captureError(() =>
       admin.execute(sql`delete from device_profiles where id = ${profileC}`),
     );
     // ON DELETE RESTRICT raises restrict_violation (23001) immediately on the delete — distinct from the
     // deferred foreign_key_violation (23503) a plain NO ACTION would give.
     expect(pgErrorCode(e)).toBe("23001");
-  });
-
-  // ---- device_pairing_codes ----------------------------------------------------------------
-
-  it("device_pairing_codes: rejects a till_id naming a DIFFERENT tenant's till (composite FK)", async () => {
-    const e = await captureError(() =>
-      admin.execute(
-        sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256, device_kind, station_id, label, till_id)
-            values (${TENANT_A}, ${LOCATION_A}, 'sha-fk-till', 'till', ${null}, 'Cross-tenant till', ${TILL_B})`,
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("23503");
-  });
-
-  it("device_pairing_codes: rejects a receipt_printer_id naming a DIFFERENT tenant's printer (composite FK)", async () => {
-    const e = await captureError(() =>
-      admin.execute(
-        sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256, device_kind, station_id, label, receipt_printer_id)
-            values (${TENANT_A}, ${LOCATION_A}, 'sha-fk-printer', 'till', ${null}, 'Cross-tenant printer', ${PRINTER_B})`,
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("23503");
-  });
-
-  it("device_pairing_codes: accepts same-tenant bindings; NULL bindings are unconstrained", async () => {
-    const bound = await admin.execute<{ id: string }>(
-      sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256, device_kind, station_id, label,
-                                            till_id, receipt_printer_id,
-                                            has_cash_drawer, card_provider, card_reader_id)
-          values (${TENANT_A}, ${LOCATION_A}, 'sha-fk-ok', 'till', ${null}, 'Bound till code',
-                  ${TILL_A}, ${PRINTER_A}, true, 'sumup', 'reader-9') returning id`,
-    );
-    expect(bound.rows).toHaveLength(1);
-
-    const [row] = (
-      await admin.execute<{
-        has_cash_drawer: boolean;
-        card_provider: string;
-        card_reader_id: string | null;
-      }>(
-        sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256, device_kind, station_id, label)
-            values (${TENANT_A}, ${LOCATION_A}, 'sha-fk-unbound', 'till', ${null}, 'Unbound till code')
-            returning has_cash_drawer, card_provider, card_reader_id`,
-      )
-    ).rows;
-    expect(row!.has_cash_drawer).toBe(false);
-    expect(row!.card_provider).toBe("none");
-    expect(row!.card_reader_id).toBeNull();
-  });
-
-  it("device_pairing_codes: rejects a device_profile_id naming a DIFFERENT tenant's profile (composite FK)", async () => {
-    const e = await captureError(() =>
-      admin.execute(
-        sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256, device_kind, station_id, label, device_profile_id)
-            values (${TENANT_A}, ${LOCATION_A}, 'sha-fk-profile', 'till', ${null}, 'Cross-tenant profile', ${PROFILE_B})`,
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("23503");
-  });
-
-  it("device_pairing_codes: accepts a same-tenant device_profile_id; a NULL is unconstrained", async () => {
-    const bound = await admin.execute<{ id: string }>(
-      sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256, device_kind, station_id, label, device_profile_id)
-          values (${TENANT_A}, ${LOCATION_A}, 'sha-fk-profile-ok', 'till', ${null}, 'Profile-bound code', ${PROFILE_A}) returning id`,
-    );
-    expect(bound.rows).toHaveLength(1);
-
-    const nullProfile = await admin.execute<{ device_profile_id: string | null }>(
-      sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256, device_kind, station_id, label, device_profile_id)
-          values (${TENANT_A}, ${LOCATION_A}, 'sha-fk-profile-null', 'till', ${null}, 'No profile code', ${null})
-          returning device_profile_id`,
-    );
-    expect(nullProfile.rows[0]!.device_profile_id).toBeNull();
   });
 });

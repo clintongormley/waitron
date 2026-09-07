@@ -2788,18 +2788,21 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
     // on the app role under the tenant (the production enrol path), so `tryReadDevice`'s
     // id-selected, `active = true` read resolves a genuine binding.
     const enrolTillDevice = async (boundTillId: string): Promise<string> => {
-      const { code } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        return generatePairingCode(tx, cfg, {
-          kind: "till",
-          stationId: null,
-          tillId: boundTillId,
-          label: "SP-C dev override device",
-        });
-      });
+      // Since Task 7 a `till` device auto-creates its OWN register; binding a SPECIFIC existing register
+      // is the sale-capable handheld leg (`registerId`). The dev-override read below only cares that the
+      // device resolves to its own bound till, which a handheld carries.
       const dev = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
         await asAppUser(tx);
-        return enrolDevice(tx, cfg, { code });
+        const { rows } = await tx.execute<{ id: string }>(sql`
+          insert into device_profiles (tenant_id, name, form_factor)
+          values (${cfg.tenantId}, ${`Override device ${boundTillId}`}, 'phone-portrait') returning id`);
+        const { code } = await generatePairingCode(tx, cfg);
+        return enrolDevice(tx, cfg, {
+          code,
+          name: "SP-C dev override device",
+          profileId: rows[0]!.id,
+          registerId: boundTillId,
+        });
       });
       return dev.deviceId;
     };

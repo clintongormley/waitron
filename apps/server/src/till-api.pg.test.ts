@@ -265,25 +265,37 @@ function apiDepsWithCardProvider(
  * tenant (the production enrol path), so the scrypt hash actually verifies and `tryReadDevice` resolves
  * a genuine binding rather than a miss.
  */
+let tillDeviceCounter = 0;
 async function enrolTillCookie(
   cfg: TillConfig,
   deviceProfileId: string | null = null,
 ): Promise<string> {
-  const { code } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
-    return generatePairingCode(tx, cfg, {
-      kind: "till",
-      stationId: null,
-      tillId: cfg.tillId,
-      deviceProfileId,
-      label: "Counter till",
-    });
-  });
+  tillDeviceCounter += 1;
+  // A `till` device is DEFINED by a `till`-form-factor profile (Task 7): the code is bare, the device
+  // describes itself at enrol, and `enrolDevice` AUTO-CREATES the register it rings against (named after
+  // the device). Each call names the device uniquely so its auto-created register cannot collide.
+  const profileId = deviceProfileId ?? (await seedProfileFF(cfg, "till"));
   const dev = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-    return enrolDevice(tx, cfg, { code });
+    const { code } = await generatePairingCode(tx, cfg);
+    return enrolDevice(tx, cfg, { code, name: `Counter till ${tillDeviceCounter}`, profileId });
   });
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
+}
+
+/** Log the operator (PIN "5555") in through the HTTP surface and return the Set-Cookie session cookie.
+ *  The login is DEVICE-GATED (§5/§6), so it enrols a throwaway `till` device and presents its cookie;
+ *  each sale/pay test enrols its OWN device (bound to the till/profile the case needs) for the sale call
+ *  itself. */
+async function loginSession(app: Hono, cfg: TillConfig, operatorId: string): Promise<string> {
+  const deviceCookie = await enrolTillCookie(cfg);
+  const login = await app.request("/api/session", {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: deviceCookie },
+    body: JSON.stringify({ personId: operatorId, pin: "5555" }),
+  });
+  expect(login.status).toBe(200);
+  return login.headers.get("set-cookie")!;
 }
 
 /** Insert a `device_profiles` row declaring both fenced flags (`integrated-card-payment` +
@@ -292,8 +304,24 @@ async function enrolTillCookie(
  *  (Task 9). */
 async function createTillProfile(cfg: TillConfig): Promise<string> {
   const prof = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (tenant_id, name, capabilities)
-    values (${cfg.tenantId}, 'Counter till', ${JSON.stringify(["integrated-card-payment", "open-cash-drawer"])}::jsonb)
+    insert into device_profiles (tenant_id, name, form_factor, capabilities)
+    values (${cfg.tenantId}, 'Counter till', 'till', ${JSON.stringify(["integrated-card-payment", "open-cash-drawer"])}::jsonb)
+    returning id`);
+  return prof.rows[0]!.id;
+}
+
+/** Seed a `device_profiles` row of a given FORM FACTOR (a device is DEFINED by its profile since Task
+ *  7). A per-suite counter keeps the tenant-unique name from colliding across repeated seeds. */
+let profileCounter = 0;
+async function seedProfileFF(
+  cfg: TillConfig,
+  formFactor: "till" | "kds" | "phone-portrait" | "tablet-landscape",
+  capabilities: string[] = [],
+): Promise<string> {
+  profileCounter += 1;
+  const prof = await suite.admin.execute<{ id: string }>(sql`
+    insert into device_profiles (tenant_id, name, form_factor, capabilities)
+    values (${cfg.tenantId}, ${`Profile ${formFactor} ${profileCounter}`}, ${formFactor}, ${JSON.stringify(capabilities)}::jsonb)
     returning id`);
   return prof.rows[0]!.id;
 }
@@ -321,13 +349,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     mountTillApi(app, apiDeps(cfg), noopLog);
 
     // 1. Log in through the HTTP surface and capture the session cookie the route sets.
-    const login = await app.request("/api/session", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ personId: operatorId, pin: "5555" }),
-    });
-    expect(login.status).toBe(200);
-    const cookie = login.headers.get("set-cookie")!;
+    const cookie = await loginSession(app, cfg, operatorId);
     expect(cookie).toMatch(/waitron_till_session=/);
     // SP-A.2 cutover: the sale resolves its till from the enrolled device, so the box carries a
     // `waitron_device` cookie for a till bound to THIS venue's own till — the resolved till equals the
@@ -397,13 +419,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     mountTillApi(app, apiDeps(cfg), noopLog);
 
     // 1. Log in through the HTTP surface and capture the session cookie.
-    const login = await app.request("/api/session", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ personId: operatorId, pin: "5555" }),
-    });
-    expect(login.status).toBe(200);
-    const cookie = login.headers.get("set-cookie")!;
+    const cookie = await loginSession(app, cfg, operatorId);
     expect(cookie).toMatch(/waitron_till_session=/);
     // SP-A.2 cutover: an enrolled till device bound to the venue's own till (resolved till == env
     // `cfg.tillId`), so both sales below file the same chain the pre-cutover env-till would.
@@ -526,15 +542,12 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
 
-    // A valid operator session but NO `waitron_device` cookie — an ordinary env-only till, which after
-    // the cutover is no longer a sellable box on its own. Prove-by-deletion: revert `saleCfg` → `deps.cfg`
-    // at `POST /api/sales` (drop the `requireSaleTillId` resolve) and this same request 200s + files one.
-    const login = await app.request("/api/session", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ personId: operatorId, pin: "5555" }),
-    });
-    const cookie = login.headers.get("set-cookie")!;
+    // A valid operator session, but the SALE below carries NO `waitron_device` cookie — an ordinary
+    // env-only till, which after the cutover is no longer a sellable box on its own. (The login itself
+    // is device-gated now, §5/§6, so `loginSession` presents a device to obtain the session; the SALE
+    // request deliberately omits it.) Prove-by-deletion: revert `saleCfg` → `deps.cfg` at
+    // `POST /api/sales` (drop the `requireSaleTillId` resolve) and this same request 200s + files one.
+    const cookie = await loginSession(app, cfg, operatorId);
 
     const res = await app.request("/api/sales", {
       method: "POST",
@@ -563,7 +576,7 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
 
-    // A `kds_station` binds a live station and NO till (`kindRequiresTill` is false), so its
+    // A `kds_station` binds a live station and NO till (a kds device rings no sale), so its
     // `devices.till_id` is null — `requireSaleTillId` refuses it `device.till_required`: a till-less
     // device (a kitchen screen) cannot ring a sale. The device authenticates (a real enrolled binding),
     // so this proves the SECOND branch, distinct from the no-cookie `device.unauthorized` above.
@@ -572,26 +585,15 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
       await asAppUser(tx);
       return createStation(tx, cfg, { name: "Pase", isDefault: false });
     });
-    const { code } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
-      await asAppUser(tx);
-      return generatePairingCode(tx, cfg, {
-        kind: "kds_station",
-        stationId: station.id,
-        label: "Pantalla",
-      });
-    });
+    const profileId = await seedProfileFF(cfg, "kds");
     const dev = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      return enrolDevice(tx, cfg, { code });
+      const { code } = await generatePairingCode(tx, cfg);
+      return enrolDevice(tx, cfg, { code, name: "Pantalla", profileId, stationId: station.id });
     });
     const deviceCookie = `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 
-    const login = await app.request("/api/session", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ personId: operatorId, pin: "5555" }),
-    });
-    const cookie = login.headers.get("set-cookie")!;
+    const cookie = await loginSession(app, cfg, operatorId);
 
     const res = await app.request("/api/sales", {
       method: "POST",
@@ -623,13 +625,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
     mountTillApi(app, apiDeps(cfg), noopLog);
 
     // 1. Log in and capture the session cookie.
-    const login = await app.request("/api/session", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ personId: operatorId, pin: "5555" }),
-    });
-    expect(login.status).toBe(200);
-    const cookie = login.headers.get("set-cookie")!;
+    const cookie = await loginSession(app, cfg, operatorId);
     // SP-A.2 cutover: the pay + replay below resolve their till from this enrolled till device (bound to
     // the venue's own till), so the filed record and the replay are byte-identical to the pre-cutover sale.
     const deviceCookie = await enrolTillCookie(cfg);
@@ -752,13 +748,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const app = new Hono();
       mountTillApi(app, apiDepsWithCardProvider(cfg, providerDb, new FakeStripe()), noopLog);
 
-      const login = await app.request("/api/session", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ personId: operatorId, pin: "5555" }),
-      });
-      expect(login.status).toBe(200);
-      const cookie = login.headers.get("set-cookie")!;
+      const cookie = await loginSession(app, cfg, operatorId);
 
       // SP-A.2 cutover: /api/pay resolves its till from the enrolled device AND runs the
       // integrated-card-payment capability firewall, so this device carries the venue's own till (so the
@@ -812,12 +802,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const app = new Hono();
       mountTillApi(app, apiDepsWithCardProvider(cfg, providerDb, client), noopLog);
 
-      const login = await app.request("/api/session", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ personId: operatorId, pin: "5555" }),
-      });
-      const cookie = login.headers.get("set-cookie")!;
+      const cookie = await loginSession(app, cfg, operatorId);
 
       // SP-A.2 cutover: an enrolled till device with a capability-bearing canvas (see the capture test).
       const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
@@ -864,12 +849,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const app = new Hono();
       mountTillApi(app, apiDepsWithCardProvider(cfg, providerDb, new FakeStripe()), noopLog);
 
-      const login = await app.request("/api/session", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ personId: operatorId, pin: "5555" }),
-      });
-      const cookie = login.headers.get("set-cookie")!;
+      const cookie = await loginSession(app, cfg, operatorId);
 
       // SP-A.2 cutover: the empty-basket fault is a genuine 400 AFTER the device gate + capability
       // firewall pass, so this device carries the venue's till and a capability-bearing canvas too.
@@ -906,13 +886,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
     mountTillApi(app, apiDeps(modeCfg), noopLog);
 
     // 1. Log in.
-    const login = await app.request("/api/session", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ personId: operatorId, pin: "5555" }),
-    });
-    expect(login.status).toBe(200);
-    const cookie = login.headers.get("set-cookie")!;
+    const cookie = await loginSession(app, cfg, operatorId);
     // SP-A.2 cutover: place + collect are sale routes now, so the box is an enrolled till device bound to
     // the venue's own till (resolved till == env `cfg.tillId`, so the record filed at collect is unchanged).
     const deviceCookie = await enrolTillCookie(cfg);
@@ -1098,13 +1072,7 @@ describe("POST /api/working-orders/:id/prep — Mode P's send-to-prep route", ()
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
 
-    const login = await app.request("/api/session", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ personId: operatorId, pin: "5555" }),
-    });
-    expect(login.status).toBe(200);
-    const cookie = login.headers.get("set-cookie")!;
+    const cookie = await loginSession(app, cfg, operatorId);
 
     // SP-A.2 cutover: the walk-up sale resolves its till from an enrolled till device (venue's own till).
     const deviceCookie = await enrolTillCookie(cfg);
@@ -1198,12 +1166,7 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const login = await app.request("/api/session", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ personId: operatorId, pin: "5555" }),
-    });
-    const cookie = login.headers.get("set-cookie")!;
+    const cookie = await loginSession(app, cfg, operatorId);
     // SP-A.2 cutover: the walk-up sale resolves its till from an enrolled till device (venue's own till).
     const deviceCookie = await enrolTillCookie(cfg);
 
@@ -1297,34 +1260,36 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
 // Real PostgreSQL exercises device lookup and fiscal writes as app_user; PGlite's default
 // superuser cannot establish that the deployment role holds the required grants.
 describe("handheld firewall (a handheld may settle a cash or manual-card sale, but not integrated pay, reprint, open the drawer, place, collect, or cancel)", () => {
-  /** Enrol a REAL handheld device in `cfg`'s tenant (no station — `kindRequiresStation("handheld")` is
+  /** Enrol a REAL handheld device in `cfg`'s tenant (no station — a handheld form factor binds none — it is
    * false, Task 2), returning the `waitron_device=<id>.<token>` cookie pair a handheld carries. The
    * token's scrypt hash actually verifies, so `tryReadDevice` resolves it to a genuine `handheld`
    * binding rather than folding into a miss. */
   async function enrolHandheldCookie(cfg: TillConfig): Promise<string> {
-    const { code } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
-      await asAppUser(tx);
-      return generatePairingCode(tx, cfg, {
-        kind: "handheld",
-        stationId: null,
-        // A handheld is sale-capable, so it REQUIRES a till_id (SP-A.2 §16.4) — the venue's own till.
-        tillId: cfg.tillId,
-        label: "Waiter phone",
-      });
-    });
+    // A handheld is DEFINED by a `phone-portrait`/`tablet-landscape` profile (Task 7) and, being
+    // sale-capable, binds an EXISTING register at enrol — the venue's own till (SP-A.2 §16.4).
+    const profileId = await seedProfileFF(cfg, "phone-portrait");
     const dev = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      return enrolDevice(tx, cfg, { code });
+      const { code } = await generatePairingCode(tx, cfg);
+      return enrolDevice(tx, cfg, {
+        code,
+        name: "Waiter phone",
+        profileId,
+        registerId: cfg.tillId,
+      });
     });
     return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
   }
 
   /** Log in through the HTTP surface and return just the `name=value` session cookie pair (stripping
-   * the Set-Cookie attributes), so it can be combined with a device cookie in one `Cookie` header. */
-  async function loginOperator(app: Hono, operatorId: string): Promise<string> {
+   * the Set-Cookie attributes), so it can be combined with a device cookie in one `Cookie` header. The
+   * login is DEVICE-GATED (§5/§6), so it enrols a throwaway `till` device for the login itself; each
+   * handheld test then carries its OWN handheld/till device cookie on the sale/pay call. */
+  async function loginOperator(app: Hono, cfg: TillConfig, operatorId: string): Promise<string> {
+    const loginDeviceCookie = await enrolTillCookie(cfg);
     const login = await app.request("/api/session", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", cookie: loginDeviceCookie },
       body: JSON.stringify({ personId: operatorId, pin: "5555" }),
     });
     expect(login.status).toBe(200);
@@ -1338,7 +1303,7 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     mountTillApi(app, apiDeps(cfg), noopLog);
 
     const deviceCookie = await enrolHandheldCookie(cfg);
-    const sessionPair = await loginOperator(app, operatorId);
+    const sessionPair = await loginOperator(app, cfg, operatorId);
 
     // The owner reversed the order-only firewall for the CASH tender (2026-08-30): a handheld may SETTLE a
     // cash sale because the fiscal chain is keyed by the submitting NODE (`nodeId`), not the till
@@ -1389,7 +1354,7 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     mountTillApi(app, apiDeps(cfg), noopLog);
 
     const deviceCookie = await enrolHandheldCookie(cfg);
-    const sessionPair = await loginOperator(app, operatorId);
+    const sessionPair = await loginOperator(app, cfg, operatorId);
 
     // The reversal was widened (2026-08-30) from cash to cash OR a MANUAL card tender: the `card` tender
     // on `POST /api/sales` is the datáfono / unintegrated tender — the operator charges the card on a
@@ -1460,7 +1425,7 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     mountTillApi(app, apiDeps(cfg), noopLog);
 
     const deviceCookie = await enrolTillCookie(cfg);
-    const sessionPair = await loginOperator(app, operatorId);
+    const sessionPair = await loginOperator(app, cfg, operatorId);
     const res = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
@@ -1490,7 +1455,7 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
       mountTillApi(app, apiDeps(cfg), noopLog);
 
       const deviceCookie = await enrolHandheldCookie(cfg);
-      const sessionPair = await loginOperator(app, operatorId);
+      const sessionPair = await loginOperator(app, cfg, operatorId);
 
       const res = await app.request(path, {
         method: "POST",
@@ -1514,28 +1479,24 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
 
-    // Author a capability-less device profile and enrol a device bound to it.
+    // Author a capability-less handheld device profile and enrol a device bound to it.
     const prof = await suite.admin.execute<{ id: string }>(sql`
-      insert into device_profiles (tenant_id, name, capabilities)
-      values (${cfg.tenantId}, 'Waiter phone', ${JSON.stringify([])}::jsonb)
+      insert into device_profiles (tenant_id, name, form_factor, capabilities)
+      values (${cfg.tenantId}, 'Waiter phone', 'phone-portrait', ${JSON.stringify([])}::jsonb)
       returning id`);
     const deviceProfileId = prof.rows[0]!.id;
-    const { code } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
-      await asAppUser(tx);
-      return generatePairingCode(tx, cfg, {
-        kind: "handheld",
-        stationId: null,
-        tillId: cfg.tillId,
-        deviceProfileId,
-        label: "Waiter phone",
-      });
-    });
     const dev = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      return enrolDevice(tx, cfg, { code });
+      const { code } = await generatePairingCode(tx, cfg);
+      return enrolDevice(tx, cfg, {
+        code,
+        name: "Waiter phone",
+        profileId: deviceProfileId,
+        registerId: cfg.tillId,
+      });
     });
     const deviceCookie = `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
-    const sessionPair = await loginOperator(app, operatorId);
+    const sessionPair = await loginOperator(app, cfg, operatorId);
 
     const res = await app.request("/api/pay", {
       method: "POST",
@@ -1567,7 +1528,7 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     mountTillApi(app, apiDeps(modeCfg), noopLog);
 
     const deviceCookie = await enrolHandheldCookie(cfg);
-    const sessionPair = await loginOperator(app, operatorId);
+    const sessionPair = await loginOperator(app, cfg, operatorId);
 
     // Park a real order (order-taking IS allowed for a handheld; only settlement is fenced) with the
     // ordinary-till session, so both actors below operate on a genuine open order.
@@ -1633,7 +1594,7 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     // A separate TILL device (venue's own till) for the place-setup + collect completion — both are sale
     // routes post-cutover and resolve their till from the enrolled device, not env.
     const tillDeviceCookie = await enrolTillCookie(cfg);
-    const sessionPair = await loginOperator(app, operatorId);
+    const sessionPair = await loginOperator(app, cfg, operatorId);
 
     // Park + place a real order as the ordinary till (Mode T files nothing at placing).
     const workingOrderId = randomUUID();
@@ -1705,7 +1666,7 @@ describe("handheld firewall (a handheld may settle a cash or manual-card sale, b
     mountTillApi(app, apiDeps(cfg), noopLog);
 
     const deviceCookie = await enrolHandheldCookie(cfg);
-    const sessionPair = await loginOperator(app, operatorId);
+    const sessionPair = await loginOperator(app, cfg, operatorId);
 
     // Park + place a real order as the ordinary till, so there is a PLACED order to cancel. Place is a
     // sale route post-cutover, so its completion carries an enrolled till device (the venue's own till);

@@ -46,6 +46,13 @@ export type { PersonSummary, StaffListEntry } from "./staff.js";
 export { hashSecret, verifySecret } from "./secret-hash.js";
 export { hashPin, verifyPin } from "./verify-pin.js";
 export {
+  PIN_THROTTLE_FREE_ATTEMPTS,
+  PIN_THROTTLE_IDLE_MS,
+  PIN_THROTTLE_MAX_WAIT_SECONDS,
+  createPinThrottle,
+} from "./pin-throttle.js";
+export type { PinThrottle, PinThrottleOptions } from "./pin-throttle.js";
+export {
   MIN_PASSWORD_LENGTH,
   assertPasswordLength,
   hashPassword,

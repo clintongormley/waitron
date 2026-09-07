@@ -138,10 +138,11 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
       // gap PGlite (a superuser holding every grant) cannot close.
       const profiles = await tx.execute<{
         name: string;
+        form_factor: string;
         canvas_id: string | null;
         capabilities: string[];
       }>(sql`
-        select name, canvas_id, capabilities from device_profiles
+        select name, form_factor, canvas_id, capabilities from device_profiles
         where tenant_id = ${result.tenantId} order by name`);
       return { counts, node, sif, profiles };
     });
@@ -151,15 +152,16 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
     // The SIF's nif came from the tenant's tax_id, read inside the transaction — never an argument.
     expect(sif.rows[0]?.nif).toBe("B12345678");
     // Exactly the three starter profiles, es-ES names (this venue's primary invoice locale), each with
-    // no bound canvas and the form-factor default capabilities.
+    // no bound canvas, its form-factor persisted, and the form-factor default capabilities.
     expect(profiles.rows).toEqual([
-      { name: "Cocina", canvas_id: null, capabilities: ["act-as-kds"] },
+      { name: "Cocina", form_factor: "kds", canvas_id: null, capabilities: ["act-as-kds"] },
       {
         name: "Mostrador",
+        form_factor: "till",
         canvas_id: null,
         capabilities: ["integrated-card-payment", "open-cash-drawer"],
       },
-      { name: "Móvil", canvas_id: null, capabilities: [] },
+      { name: "Móvil", form_factor: "phone-portrait", canvas_id: null, capabilities: [] },
     ]);
   });
 

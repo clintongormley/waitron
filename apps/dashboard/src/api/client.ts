@@ -569,8 +569,9 @@ export interface Course {
 /**
  * One `GET /management-api/devices` row as the device-management surface returns it — a faithful mirror
  * of the server projection (`apps/server/src/device-api.ts`, `devices` columns). An enrolled always-on
- * device (device-identity-1): `kind` is the `device_kind` enum (only `kds_station` today), `stationId`
- * the bound kitchen station (null for a future non-station kind), `active` false once revoked,
+ * device (device-identity-1): `kind` is DERIVED from the device profile's form factor (`kindOfFormFactor`,
+ * server-side — there is no `device_kind` column), `stationId`
+ * the bound kitchen station (null for a non-station kind), `active` false once revoked,
  * `lastSeenAt` the last time the device authenticated (null before its first call), `enrolledAt` when it
  * redeemed its pairing code. `deviceProfileId` is the device's currently-assigned device profile (null =
  * the form-factor default). The two timestamps are ISO-8601 strings (never `Date`s over the wire). The
@@ -602,19 +603,26 @@ export interface Canvas {
   definition: unknown;
 }
 
+/** A device's FORM FACTOR — the shape of hardware a profile targets, and what the server derives the
+ * device KIND from. A LOCAL copy of `@waitron/layouts`' `FormFactor` union (no runtime import — the
+ * #70 bundle rule the shapes above follow); the create/update routes re-validate it against
+ * `FORM_FACTORS`, so a bad value is a runtime `management.request_invalid`, not a compile break. */
+export type FormFactor = "till" | "phone-portrait" | "tablet-landscape" | "kds";
+
 /** One `GET /management-api/device-profiles` row — a reusable device profile (SP device-profile
  * feature): a named bundle of an assigned canvas (`canvasId`, `null` = fall back to the form-factor
- * default) and a capability set (`integrated-card-payment`/`open-cash-drawer`/`act-as-kds`). The
- * server answers `{ deviceProfiles: [...] }` for the list and the bare row elsewhere. `capabilities`
- * crosses the boundary as `string[]` DELIBERATELY — the dashboard renders it against a LOCAL flag
- * mirror rather than importing `@waitron/layouts`' `CapabilityFlag` (the #70 bundle rule the canvas /
- * printing shapes follow); an unknown flag is a runtime shape error a view test catches, not a compile
- * break. */
+ * default), a capability set (`integrated-card-payment`/`open-cash-drawer`/`act-as-kds`) and the
+ * `formFactor` it targets. The server answers `{ deviceProfiles: [...] }` for the list and the bare
+ * row elsewhere. `capabilities` crosses the boundary as `string[]` DELIBERATELY — the dashboard
+ * renders it against a LOCAL flag mirror rather than importing `@waitron/layouts`' `CapabilityFlag`
+ * (the #70 bundle rule the canvas / printing shapes follow); an unknown flag is a runtime shape error
+ * a view test catches, not a compile break. */
 export interface DeviceProfile {
   id: string;
   name: string;
   canvasId: string | null;
   capabilities: string[];
+  formFactor: FormFactor;
 }
 
 /** The venue's KDS fire-control mode (`locations.fire_control`) — `waiter` = the tab surfaces the
@@ -1803,30 +1811,13 @@ export class DashboardApi {
     return this.#request<DeviceRow[]>("/management-api/devices", "GET");
   }
 
-  /** `POST /management-api/device-codes` — mint a single-use pairing code, returning the plaintext code
-   * ONCE (201). The code is never re-readable (like a passkey challenge handle). `kind` is a `device_kind`
-   * value: a `"kds_station"` binds to a station (`stationId` required; a bad/absent/retired station rejects
-   * `{ code: "station.not_found" }`); a sale-capable `"till"`/`"handheld"` binds to a till (`tillId`
-   * required — the server rejects a missing one `{ code: "device.till_required" }`), while a
-   * `"kds_station"` sends none. The remaining bindings are optional (SP-A.2 §16): an assigned
-   * device profile (`deviceProfileId`, any kind) and the till's static hardware (`receiptPrinterId`,
-   * `hasCashDrawer`, `cardProvider` (`none`/`stripe_terminal`/`stripe_on_device`), `cardReaderId`). An
-   * omitted optional binding is left at the server default (`card_provider='none'`, `has_cash_drawer=false`,
-   * others NULL). A well-formed id naming no tenant row rejects `{ code: "device.binding_invalid" }`. */
-  createDeviceCode(input: {
-    kind: string;
-    stationId?: string;
-    tillId?: string;
-    deviceProfileId?: string;
-    receiptPrinterId?: string;
-    hasCashDrawer?: boolean;
-    cardProvider?: string;
-    cardReaderId?: string;
-    label: string;
-  }): Promise<{
-    code: string;
-  }> {
-    return this.#request<{ code: string }>("/management-api/device-codes", "POST", input);
+  /** `POST /management-api/device-codes` — mint a single-use ENROLMENT KEY, returning the plaintext code
+   * ONCE (201). The code is never re-readable (like a passkey challenge handle). It is now a BARE bearer
+   * token with NO body: the device describes itself (form factor, station/register binding, profile) when
+   * it redeems the code and enrols, and its per-device hardware is set afterwards through
+   * {@link patchDeviceHardware}. */
+  createDeviceCode(): Promise<{ code: string }> {
+    return this.#request<{ code: string }>("/management-api/device-codes", "POST");
   }
 
   /** `GET /management-api/canvases` — this tenant's canvases (`till.configure`-gated server-side;
@@ -1884,11 +1875,13 @@ export class DashboardApi {
     name: string,
     canvasId: string | null,
     capabilities: string[],
+    formFactor: FormFactor,
   ): Promise<DeviceProfile> {
     return this.#request<DeviceProfile>("/management-api/device-profiles", "POST", {
       name,
       canvasId,
       capabilities,
+      formFactor,
     });
   }
 
@@ -1899,11 +1892,13 @@ export class DashboardApi {
     name: string,
     canvasId: string | null,
     capabilities: string[],
+    formFactor: FormFactor,
   ): Promise<DeviceProfile> {
     return this.#request<DeviceProfile>(`/management-api/device-profiles/${id}`, "PUT", {
       name,
       canvasId,
       capabilities,
+      formFactor,
     });
   }
 
@@ -1931,6 +1926,32 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/devices/${id}/assign-device-profile`, "POST", {
       deviceProfileId,
     });
+  }
+
+  /** `PATCH /management-api/devices/:id/hardware` — set a device's static hardware bindings (SP-A.2
+   * §16.3, device.manage-gated): its receipt printer (`receiptPrinterId`, a tenant printer's id or
+   * `null` to clear), cash-drawer flag (`hasCashDrawer`), card provider (`cardProvider`,
+   * `none`/`stripe_terminal`/`stripe_on_device`) and the provider's reader id (`cardReaderId`, or
+   * `null`). Only a NAMED field is written. Returns the updated device's hardware (200). An unknown
+   * `cardProvider` rejects `{ code: "management.request_invalid" }`; a `receiptPrinterId` naming no
+   * printer of this tenant rejects `{ code: "device.binding_invalid" }`; an unknown device rejects
+   * `{ code: "device.not_found" }` (404). */
+  patchDeviceHardware(
+    id: string,
+    patch: {
+      receiptPrinterId?: string | null;
+      hasCashDrawer?: boolean;
+      cardProvider?: string;
+      cardReaderId?: string | null;
+    },
+  ): Promise<{
+    id: string;
+    receiptPrinterId: string | null;
+    hasCashDrawer: boolean;
+    cardProvider: string;
+    cardReaderId: string | null;
+  }> {
+    return this.#request(`/management-api/devices/${id}/hardware`, "PATCH", patch);
   }
 
   // ── Printing (print agents + printers + jobs) ────────────────────────────────────────────────────

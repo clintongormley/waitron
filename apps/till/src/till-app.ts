@@ -21,9 +21,10 @@ import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
 import "./screens/till-station-screen.js";
-// ONE parameterised enrol screen for all three device kinds (till / handheld / kds) — it replaced the
-// three near-identical clones, which differed only in copy and event name (rule-of-three collapse).
-import "./screens/till-device-enrol-screen.js";
+// The device front door (device-enrolment §3.1): the two-step enrol screen a fresh browser shows, and the
+// dev-only device chooser. The app's boot decision renders one of these ahead of the lock screen/shell.
+import "./screens/till-enrol-screen.js";
+import "./screens/till-device-chooser.js";
 import "./screens/till-expo-screen.js";
 // The allergen lookup screen (menu & allergens). In the legacy path the counter screen owns it as a
 // LOCAL overlay (its own Allergens button); once the shell is active the shell owns the button and the
@@ -60,11 +61,13 @@ import type {
   TillProduct,
   TillSaleResult,
 } from "./api/client.js";
+import { kindOfFormFactor } from "./layout.js";
 import type { CanvasDef, CapabilityFlag, ReceiptConfig, TabDef } from "./layout.js";
 import type { ShellAffordance } from "./widgets/tab-shell.js";
 import type { OrderLine } from "./state/working-order.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
-import type { DeviceEnrolKind } from "./screens/till-device-enrol-screen.js";
+import type { DevDeviceList } from "./api/client.js";
+import { readDevDeviceId, clearDevDeviceId } from "./api/dev-device.js";
 import type { TicketIssuer } from "./screens/till-ticket-view.js";
 import type {
   CollectCardDetail,
@@ -321,9 +324,9 @@ export class TillApp extends LitElement {
   /**
    * Whether the station screen runs in DEVICE mode (device-identity-1 §5a) — an always-on enrolled KDS
    * display with no login. Set `true` ONLY by {@link #boot} when the device probe reports `kds_station`
-   * (an already-enrolled display boots straight into its queue). A FRESH display reaches the enrol view
-   * through the standalone {@link enrolling} `"kds"` overlay instead (SP-B4 — see {@link #onSetupDevice}),
-   * and only becomes `deviceMode` once its redeemed cookie re-boots as `kds_station`. Threaded to
+   * (an already-enrolled display boots straight into its queue). A FRESH display reaches the enrol screen
+   * through the boot front door ({@link frontDoor} `"enrol"`) instead, and only becomes `deviceMode` once
+   * its redeemed cookie re-boots as a `kds` device. Threaded to
    * `<till-station-screen>` and the kiosk shell; default `false` keeps the operator "Kitchen" nav path
    * unchanged.
    */
@@ -331,7 +334,7 @@ export class TillApp extends LitElement {
   /**
    * Whether this browser is an enrolled HANDHELD device (handheld-tableside Task 7) — a waiter's phone,
    * as opposed to a `kds_station` display ({@link deviceMode}) or a normal operator till. Set `true` by
-   * {@link #boot} when the device probe's {@link DeviceIdentity.kind} is `handheld`; a handheld STAYS on
+   * {@link #boot} when the device probe's {@link DeviceIdentity.formFactor} maps to `handheld`; a handheld STAYS on
    * the lock screen (unlike a KDS display, which boots past it) — the waiter PIN-logs-in — and then lands
    * on the live floor rather than the counter POS ({@link #onLoggedIn} reads this to pick the post-login
    * face, {@link HANDHELD_FACES}). Default `false` keeps every normal operator till's counter landing
@@ -339,45 +342,39 @@ export class TillApp extends LitElement {
    */
   @state() private handheldMode = false;
   /**
-   * Which device-enrol OVERLAY the lock screen's "set up …" affordances have opened, or `undefined` when
-   * none is (the common case). While set, {@link render} shows the ONE `<till-device-enrol-screen>` with
-   * this value as its `.kind` — ahead of the shell/lock, so the overlay wins (and {@link #shellActive} is
-   * held false) — so a FRESH, cookieless browser can pair itself:
+   * The device FRONT DOOR (device-enrolment §3.1) the boot decision chose, or `undefined` once the browser
+   * is enrolled and past the door (a normal login/kiosk boot). While set, {@link render} shows it ahead of
+   * the shell/lock (and {@link #shellActive} is held false):
    *
-   *  - `"handheld"` (handheld-tableside Task 8) — a waiter's phone; a redeemed code re-boots into the
-   *    phone shell (the `handheld` cookie routes it there);
-   *  - `"till"` (SP-A.2 device unification) — a sale-capable counter; a redeemed code re-boots the now-set
-   *    `till` cookie, marking the browser device-enrolled;
-   *  - `"kds"` (SP-B4 fresh-display enrol overlay) — a kitchen display; a redeemed code boots the display
-   *    into its bound queue in the kiosk shell. This replaces the old `deviceMode`+`screen="station"`
-   *    path, which SP-B4's always-present canvas orphaned (the shell rendered the counter tab instead of
-   *    the enrol view).
+   *  - `"chooser"` — dev mode AND this tab has no adopted device: the `<till-device-chooser>` lists the
+   *    venue's devices to adopt, or opens a `DEMO` enrol;
+   *  - `"enrol"` — not enrolled (no device cookie, not a dev-chooser case): the `<till-enrol-screen>` at
+   *    step 1 (the key), for a FRESH production browser to pair itself.
    *
-   * Set by the `#onSetup*` handlers, cleared by the single {@link #onEnrolled} once the code is redeemed
-   * (which then re-runs {@link #boot} so the fresh cookie is read back on the next probe). ONE enum in
-   * place of the two parallel `handheldEnrolling`/`tillEnrolling` booleans (and the old
-   * `deviceMode`+`screen="station"` KDS path) it replaced — the overlays are mutually exclusive by
-   * construction, so an enum states that directly.
+   * An enrolled `kds` boots straight into the kiosk shell and a non-kds enrolled device to the login (lock)
+   * screen — both leave this `undefined`. Set by {@link #boot}; the enrol screen's `enrolled` event re-runs
+   * {@link #boot} (the fresh device cookie is then read back), and the dev "Switch device" affordance sets
+   * it back to `"chooser"`.
    */
-  @state() private enrolling?: DeviceEnrolKind;
-  /**
-   * Whether this browser is an enrolled sale-capable TILL device (SP-A.2 device unification) — a counter
-   * that holds the `waitron_device` cookie its sale routes now require, as opposed to a `kds_station`
-   * display ({@link deviceMode}), a `handheld` phone ({@link handheldMode}), or an un-enrolled browser.
-   * Set `true` by {@link #boot} when the device probe's {@link DeviceIdentity.kind} is `till`. A till STAYS
-   * on the lock screen exactly like a normal operator till (the operator PIN-logs-in and lands on the
-   * counter) — the ONLY behavioural effect is that it marks the browser device-enrolled, so the lock
-   * screen's setup affordances hide (fed into `deviceEnrolled`, §C2: an enrolled till must not offer
-   * re-enrolment as a KDS/handheld). Default `false` keeps a browser with no device cookie unchanged.
-   */
-  @state() private tillEnrolled = false;
+  @state() private frontDoor?: "chooser" | "enrol";
+  /** The dev device list the chooser renders — read by {@link #boot} when it detects dev mode (a resolved
+   * `getDevDevices`), threaded to `<till-device-chooser>` so the chooser need not re-fetch. */
+  @state() private devDevices?: DevDeviceList;
+  /** Whether THIS TAB has adopted a dev device (a `sessionStorage` id). Drives the login screen's dev-only
+   * "Switch device" affordance — meaningful only when there is a tab device to switch away from. Set by
+   * {@link #boot} from {@link readDevDeviceId}. */
+  @state() private devTab = false;
+  /** The enrolled device's own name and id from the boot probe (`GET /api/device/me`), threaded to the
+   * lock screen as its heading and the key for the remembered-operator default. Both stay `undefined`
+   * for a browser with no device identity. */
+  @state() private deviceName?: string;
+  @state() private deviceId?: string;
   /**
    * The device station the boot probe resolved (device-identity-1 §5a), stashed so it can be handed to
    * `<till-station-screen>` as `.initialDeviceStation` and the screen need not fetch
    * `GET /api/device/station` a SECOND time on mount (the boot probe already read it — one authenticated
    * queue read per enrolled-display boot, not two). Set ONLY by {@link #boot} on a successful probe;
-   * stays `undefined` for a normal operator till and for the lock-screen "set up" path
-   * ({@link #onSetupDevice}), where the screen fetches on mount (and a 401 there shows the enrol view).
+   * stays `undefined` for a normal operator till (a `kds` display is the only kind that prefetches).
    */
   @state() private initialDeviceStation?: DeviceStation;
   /** The issuer identity printed on the ticket (venue name + NIF), read once from `getTill` on boot. */
@@ -755,55 +752,81 @@ export class TillApp extends LitElement {
       this.errorKey = "boot.error";
       return;
     }
-    // DEVICE PROBE (device-identity §3b, handheld-tableside Task 7). An already-ENROLLED device holds the
-    // device cookie, so `GET /api/device/me` succeeds and reports its KIND; the boot then picks the shell:
-    //  - `handheld` (a waiter's phone): enter handheld mode but STAY on `lock` — the waiter PIN-logs-in and
-    //    `#onLoggedIn` lands them on the floor. It binds to no station, so nothing is prefetched here.
-    //  - `kds_station` (a kitchen display): boot STRAIGHT into device mode — the station screen with no
-    //    login. This makes a SECOND authenticated read (`getDeviceStation`) after the identity read — a
-    //    DELIBERATE, accepted cost (one extra read per KDS display boot) that PRESERVES the
-    //    `initialDeviceStation` prefetch, so the station screen adopts the queue instead of re-reading it
-    //    on mount (`#loadDevice`).
-    //  - any other kind: fall through and remain a normal operator till on `lock` (forward-compatible — an
-    //    older client ignores a kind it does not know).
-    // A normal operator till has no device cookie → 401 (`device.unauthorized`), the EXPECTED not-a-device
-    // case: swallow it and stay on `lock`. Deliberately NOT `boot.error` — a device 401 is not a boot
-    // failure (that is getTill's alone). State-only writes, so no isConnected guard is needed (the
-    // DISCONNECT SAFETY note; the module-global `setLocale` above is the only effect that took one).
-    // RESET the device-mode state to a clean baseline BEFORE re-probing. `#boot` runs more than once —
-    // the single enrol handler (`#onEnrolled`) re-runs it after a fresh
-    // device enrols — and the branches below only ever SET their mode, never clear a prior one, so state
-    // from an earlier boot (e.g. a prior boot that resolved `kds_station` and set `deviceMode`) would
-    // otherwise survive and mis-render. The reset is
-    // unconditional so every boot starts known: `screen` falls back to the normal `lock`, then the probe's
-    // branches re-establish the correct mode (`kds_station` moves to `station`; `handheld` and the
-    // no-device case both legitimately stay on `lock`).
+    // DEVICE FRONT DOOR (device-enrolment §3.1). RESET the device-mode state to a clean baseline BEFORE
+    // re-deciding. `#boot` runs more than once — the enrol handler (`#onEnrolled`) and the dev "Switch
+    // device" affordance re-run it — and the branches below only ever SET their mode, never clear a prior
+    // one, so state from an earlier boot (e.g. a prior boot that resolved `kds_station` and set
+    // `deviceMode`) would otherwise survive and mis-render. Every boot starts known: `screen` falls back
+    // to `lock` and the front door to `undefined`, then the decision below re-establishes the correct one.
     this.handheldMode = false;
     this.deviceMode = false;
-    this.tillEnrolled = false;
+    this.deviceName = undefined;
+    this.deviceId = undefined;
+    this.frontDoor = undefined;
+    this.devTab = readDevDeviceId() !== null;
     this.#setScreen("lock");
+    // DEV CHOOSER gate (§3.1 row 1): dev mode AND this tab has no adopted device → the chooser. "Dev mode"
+    // has no server flag on the till; the signal is the dev-only `GET /api/dev/devices` route, which 404s
+    // outside dev mode (the same fail-closed shape as the dev override header). Only probed when this tab
+    // has no device — a tab that already adopted one skips straight to the identity probe (its
+    // `x-waitron-dev-device` header names the device). A resolved list is BOTH the dev-mode signal and the
+    // chooser's data; any rejection (the 404, or a transient error) falls through to the identity probe.
+    if (!this.devTab) {
+      try {
+        this.devDevices = await this.api.getDevDevices();
+        if (!this.isConnected) return;
+        this.frontDoor = "chooser";
+        return;
+      } catch {
+        // Not dev mode (404), or a transient failure — fall through to the identity probe below.
+      }
+    }
+    // IDENTITY PROBE (device-identity §3b). An already-ENROLLED device holds the device cookie (or this
+    // dev tab's adopted-device header), so `GET /api/device/me` succeeds and reports its derived KIND; the
+    // boot then picks the destination:
+    //  - `kds` (a kitchen display): boot STRAIGHT into the kiosk shell — no login. This makes a SECOND
+    //    authenticated read (`getDeviceStation`) after the identity read, a DELIBERATE accepted cost that
+    //    PRESERVES the `initialDeviceStation` prefetch so the station screen adopts the queue rather than
+    //    re-reading it on mount (`#loadDevice`).
+    //  - `handheld` (a waiter's phone): enter handheld mode but stay on the login (lock) screen — the
+    //    waiter PIN-logs-in and `#onLoggedIn` lands them on the floor. It binds no station; nothing is
+    //    prefetched here.
+    //  - any other kind (a counter `till`, or an unknown forward-compatible value): stay on the login
+    //    screen as a normal operator till.
+    // A NOT-enrolled browser 401s (`device.unauthorized`) — the EXPECTED fresh-browser case: show the
+    // ENROL screen at step 1 (§3.1 row 2), NOT `boot.error` (a device 401 is not a boot failure — that is
+    // getTill's alone). State-only writes below need no isConnected guard (Lit never paints a detached
+    // element); the `getDeviceStation` await takes one.
     try {
       const identity = await this.api.getDeviceIdentity();
-      if (identity.kind === "handheld") {
-        // Stay on `lock`; the waiter PIN-logs-in, then `#onLoggedIn` lands them on the floor.
+      // The enrolled device's own name + id label the login screen (its heading) and key the remembered-
+      // operator default; held for every enrolled kind (a KDS boots past the login screen, but the read
+      // is harmless there).
+      this.deviceName = identity.name;
+      this.deviceId = identity.deviceId;
+      // The device kind is DERIVED from its profile's form factor (there is no kind field any more); an
+      // unknown form factor maps to `undefined` and stays a normal operator till on the login screen.
+      const kind = kindOfFormFactor(identity.formFactor);
+      if (kind === "handheld") {
         this.handheldMode = true;
-      } else if (identity.kind === "till") {
-        // A sale-capable enrolled TILL (SP-A.2): behaves like a normal operator till — STAYS on `lock`
-        // for the operator PIN login, then lands on the counter — but it holds the device cookie the
-        // sale routes now require, so mark it device-enrolled. That flag feeds `deviceEnrolled`, hiding
-        // the lock screen's setup affordances (§C2), and binds no station, so nothing is prefetched.
-        this.tillEnrolled = true;
-      } else if (identity.kind === "kds_station") {
-        // Prefetch the bound station's queue and hand it to the station screen as `.initialDeviceStation`,
-        // so its `#loadDevice` adopts it instead of re-reading `GET /api/device/station` on mount — the
-        // second read here is the accepted cost of keeping that one-mount-read optimisation (see above).
+      } else if (kind === "kds_station") {
         this.initialDeviceStation = await this.api.getDeviceStation();
+        if (!this.isConnected) return;
         this.deviceMode = true;
         this.#setScreen("station");
         this.#onHistory();
       }
-    } catch {
-      // Not an enrolled device (or a transient probe failure) — remain a normal operator till on `lock`.
+    } catch (error) {
+      // Route to the enrol front door ONLY on a genuine unauthorized answer — a 401 rejects with
+      // `{ code: "device.unauthorized" }` (a fresh browser, a dev tab's stale adopted id, or a KDS whose
+      // cookie was revoked mid-session and whose `getDeviceStation` now 401s: all recover through the
+      // unified two-step enrol). Any OTHER failure is TRANSIENT — a 5xx, a network blip, a ServerRouter
+      // failover to an origin without the device cookie — and carries no such code; stranding an
+      // otherwise-enrolled, SELLABLE till behind an enrol key it cannot clear without a manager would
+      // block sales (CLAUDE.md §5). So fall through to the login screen exactly as the pre-front-door boot
+      // did (`screen` is already `lock`; a resolved identity's name/id stay set). NOT `boot.error` either —
+      // a device probe failure was never a boot failure (that is getTill's alone).
+      if ((error as { code?: string }).code === "device.unauthorized") this.frontDoor = "enrol";
     }
   }
 
@@ -1264,68 +1287,40 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * Route a FRESH (unenrolled) display into the KDS enrol view from the lock screen's "set up as kitchen
-   * display" affordance (SP-B4 fresh-display enrol overlay) — the display twin of {@link #onSetupHandheld}
-   * and {@link #onSetupTill}. State-only switch: it sets {@link enrolling} to `"kds"`, so `render` shows the
-   * `<till-device-enrol-screen>` with `.kind="kds"` instead of the normal screen, and the operator can pair
-   * the display with a code. Like the handheld/till paths this does NOT touch `screen` or `deviceMode` — the
-   * enrol screen is an overlay on the boot state, and a successful enrol re-boots into the kiosk shell rather
-   * than navigating within this session. (The OLD path flipped `deviceMode`+`screen="station"` and relied on
-   * the station screen's own 401→enrol sub-view; SP-B4's always-present canvas orphaned that — the shell
-   * rendered the counter tab instead of the enrol view — so this overlay replaces it.)
+   * The production front-door enrol screen redeemed an enrolment key: the device cookie is now set, so
+   * re-run {@link #boot}. The boot's identity probe reads the fresh cookie and routes to the right
+   * destination — `kds` prefetches the bound station and boots the kiosk shell; a `handheld` or counter
+   * `till` lands on the login screen. The re-boot (not a bare state flip) is why the enrolled KIND is not
+   * read here: the redeemed cookie, not the event, is the source of truth, so a device picks up its shell
+   * exactly as a cold load of an already-enrolled device would. `#boot` clears {@link frontDoor} itself.
    *
-   * Defense-in-depth (§C2): a handheld returns to the lock screen on every logout and cold boot, so a
-   * leaked/bubbled `setup-device` must not let it open the KDS enrol overlay and re-pair the in-service
-   * phone as a `kds_station`. The `handheldMode` guard withholds it. The lock screen already hides this
-   * affordance from an enrolled device (`deviceEnrolled`); this is the second line if the event reaches
-   * the app anyway.
-   */
-  #onSetupDevice(): void {
-    if (this.handheldMode) return;
-    this.errorKey = undefined;
-    this.enrolling = "kds";
-  }
-
-  /**
-   * Route a FRESH phone into the handheld enrol overlay from the lock screen's "set up as waiter handheld"
-   * affordance (handheld-tableside Task 8) — the twin of {@link #onSetupDevice}. State-only switch: it sets
-   * {@link enrolling} to `"handheld"`, so `render` shows the `<till-device-enrol-screen>` with
-   * `.kind="handheld"` instead of the lock screen, and the operator can pair the phone with a code. Unlike
-   * the KDS path this does NOT touch `screen` — the enrol screen is an overlay on the boot state, and a
-   * successful enrol re-boots into the shell rather than navigating within this session.
-   */
-  #onSetupHandheld(): void {
-    this.errorKey = undefined;
-    this.enrolling = "handheld";
-  }
-
-  /**
-   * Route a FRESH counter into the till enrol overlay from the lock screen's "set up this till" affordance
-   * (SP-A.2 device unification) — the sale-capable twin of {@link #onSetupHandheld}. State-only switch: it
-   * sets {@link enrolling} to `"till"`, so `render` shows the `<till-device-enrol-screen>` with `.kind="till"`
-   * instead of the lock screen, and the operator can pair the counter with a code. Like the handheld path
-   * this does NOT touch `screen` — the enrol screen is an overlay on the boot state, and a successful enrol
-   * re-boots into the enrolled-till shell rather than navigating within this session.
-   */
-  #onSetupTill(): void {
-    this.errorKey = undefined;
-    this.enrolling = "till";
-  }
-
-  /**
-   * The enrol overlay redeemed a pairing code (any of the three kinds — the `<till-device-enrol-screen>`
-   * emits ONE `enrolled` event whatever its `.kind`): the device cookie is now set, so leave the enrol view
-   * ({@link enrolling} back to `undefined`) and re-run {@link #boot}. The boot's device probe reads the fresh
-   * cookie and routes accordingly — `handheld` sets {@link handheldMode} and stays on the lock screen (the
-   * phone shell, for the waiter's PIN login); `till` sets {@link tillEnrolled} and stays on the lock screen
-   * (a sale-capable counter, marked device-enrolled); `kds_station` prefetches the bound station, sets
-   * {@link deviceMode} and boots straight into the kiosk shell. The re-boot (not a bare state flip) is why
-   * the KIND is not read here — the redeemed cookie, not the overlay kind, is the source of truth — so one
-   * handler serves all three, and a device picks up its shell exactly as a cold load of an already-enrolled
-   * device would.
+   * The dev CHOOSER's embedded enrol screen does NOT reach this handler — it stops the `enrolled` event
+   * and writes the new id to the tab's `sessionStorage` + navigates instead (a dev-tab enrol, not a
+   * production re-boot).
    */
   async #onEnrolled(): Promise<void> {
-    this.enrolling = undefined;
+    await this.#boot();
+  }
+
+  /**
+   * The login screen's dev-only "Switch device" affordance: drop THIS TAB's adopted dev device and return
+   * to the chooser. Clearing the `sessionStorage` id means the next request falls back to the browser
+   * cookie; re-running {@link #boot} then re-detects dev mode (no tab device) and renders the chooser. The
+   * per-tab replacement for the removed cookie-reset button, scoped to the tab (device-enrolment §3.2).
+   */
+  async #onSwitchDevice(): Promise<void> {
+    clearDevDeviceId();
+    await this.#boot();
+  }
+
+  /**
+   * An enrolled DEVICE display's authenticated probe answered 401 (`device.unauthorized`) — its device
+   * cookie was revoked or expired mid-session (emitted by `till-station-screen`'s device-mode probe).
+   * Re-boot through the unified front door: `#boot`'s identity probe now 401s too, so the front-door
+   * decision routes the unauthorized device to the two-step enrol screen (device-enrolment §3.1) — the
+   * recovery, in place of the station screen's removed bespoke enrol sub-view.
+   */
+  async #onDeviceUnauthorized(): Promise<void> {
     await this.#boot();
   }
 
@@ -2010,14 +2005,10 @@ export class TillApp extends LitElement {
    * the handheld stays put. This makes {@link HANDHELD_FACES} the genuine gate rather than a scattered
    * `handheldMode` read.
    *
-   * The handlers routed through here are exactly the two whose events can reach the app from inside the
-   * phone shell:
+   * The handler routed through here is the one whose event can reach the app from inside the phone shell:
    *  - {@link #onBackToCounter} — a `back-to-counter` from the floor's Back or bubbled from the
    *    table-order subtree; the gate keeps it off the counter POS (and the `station`/`expo`/`schedule`
    *    it leads to).
-   *  - {@link #onSetupDevice} — a leaked/bubbled `setup-device` from the lock screen, itself a handheld
-   *    face; the gate refuses `station` (that handler ALSO guards its `deviceMode` identity flip on
-   *    `handheldMode`, which this gate cannot).
    *
    * The remaining counter-side setters — {@link #onShowStation}, {@link #onShowExpo},
    * {@link #onShowSchedule} and the payment→`ticket` transitions — route through {@link #setScreen}
@@ -2193,12 +2184,12 @@ export class TillApp extends LitElement {
    * phone-portrait canvas's `order` tab (a `table-order` card) and the kds canvas's `kitchen` tab (a
    * `kds-board` card) both render their embedded screens through the grid, so no device kind is fenced
    * off the shell. Only a boot FAILURE (no `canvas`) keeps the app on the lock screen off this predicate,
-   * via {@link #inShell}. The enrolling overlays are already handled ahead of this branch in
-   * {@link render}; they are guarded here too so the predicate reads true only for the surface it names,
-   * independent of render order.
+   * via {@link #inShell}. The front-door screens (chooser/enrol) are already handled ahead of this branch
+   * in {@link render}; they are guarded here too so the predicate reads true only for the surface it
+   * names, independent of render order.
    */
   #shellActive(): boolean {
-    return this.screen !== "lock" && this.enrolling === undefined;
+    return this.screen !== "lock" && this.frontDoor === undefined;
   }
 
   /** The active tab of the canvas shell — the one keyed by {@link activeTabKey}, or the first tab as
@@ -2391,10 +2382,9 @@ export class TillApp extends LitElement {
         @advance-ticket-item=${(event: Event) => void this.#onAdvanceTicketItem(event)}
         @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
         @show-station=${() => this.#onShowStation()}
-        @setup-device=${() => this.#onSetupDevice()}
-        @setup-handheld=${() => this.#onSetupHandheld()}
-        @setup-till=${() => this.#onSetupTill()}
         @enrolled=${() => void this.#onEnrolled()}
+        @switch-device=${() => void this.#onSwitchDevice()}
+        @device-unauthorized=${() => void this.#onDeviceUnauthorized()}
         @show-expo=${() => this.#onShowExpo()}
         @park-order=${(event: Event) => void this.#onParkOrder(event)}
         @retrieve-order=${(event: Event) => void this.#onRetrieveOrder(event)}
@@ -2452,59 +2442,61 @@ export class TillApp extends LitElement {
               ></till-supervisor-override-dialog>`
             : nothing
         }
-        <!-- The device enrol view (the ONE till-device-enrol-screen for all three kinds) overlays the
-             boot/lock state when a lock-screen "set up …" affordance opened it — a FRESH browser pairing
-             itself as a till (SP-A.2), a waiter handheld (handheld-tableside Task 8), or a kitchen display
-             (SP-B4). The enrolling enum names which kind, threaded as the kind property; its single
-             enrolled event (wired above) re-boots into the matching shell. Shown ahead of the normal
-             screen so it takes precedence over whatever screen the boot left set. -->
+        <!-- The device FRONT DOOR (device-enrolment §3.1), shown ahead of the shell/lock so it takes
+             precedence over whatever screen the boot left set. The chooser is the dev-only device picker
+             (its enrolled event is handled INSIDE the chooser — a dev-tab adopt, not the app's re-boot);
+             the enrol screen is the two-step enrolment a fresh production browser shows, whose enrolled
+             event (wired above) re-boots into the matching shell. -->
         ${
-          this.enrolling
-            ? html`<till-device-enrol-screen
+          this.frontDoor === "chooser"
+            ? html`<till-device-chooser
                 .api=${this.api}
-                .kind=${this.enrolling}
-              ></till-device-enrol-screen>`
-            : // The canvas tab shell (SP-B2.1) IS the authenticated surface once the operator (or a kds
-              // display) is off the lock screen (`#shellActive`) and a canvas is present — which a
-              // successful boot always resolves (SP-B4). The ELSE arm is the lock screen: the initial
-              // lock state, and a boot FAILURE (canvas undefined + `boot.error` banner above) — NOT a
-              // blank shell. Both arms are keyed on the active locale: a locale switch changes the key,
-              // so Lit DISCARDS and rebuilds the subtree, repainting every child in the new language
-              // (the screens/shell hold no LocaleChangeController of their own). A same-locale re-render
-              // keeps the key and reuses it.
-              this.#inShell()
-              ? keyed(
-                  currentLocale(),
-                  html`<till-tab-shell
-                    .tabs=${this.canvas?.tabs ?? []}
-                    .activeTabKey=${this.activeTabKey}
-                    .operatorName=${this.operatorName}
-                    .affordances=${this.#affordanceList}
-                    .kiosk=${this.deviceMode}
-                    .loadLocales=${this.#loadLocales}
-                    @tab-select=${(e: CustomEvent<{ key: string }>) => {
-                      this.#onTabSelect(e.detail.key);
-                    }}
-                  >
-                    ${this.#activeTabBody()}
-                    ${this.#drillBody() /* Task 8 fills the drill overlay */}
-                  </till-tab-shell>`,
-                )
-              : // The lock screen. `deviceEnrolled` gates its device-setup affordances (§C2): an
-                // already-enrolled device — a handheld or a till (both STAY on lock) or a KDS — must not
-                // offer "set up as kitchen display", or a waiter could re-enrol an in-service device as a
-                // KDS and escape the shell.
-                keyed(
-                  currentLocale(),
-                  html`<till-lock-screen
-                    .api=${this.api}
-                    .deviceEnrolled=${this.handheldMode || this.deviceMode || this.tillEnrolled}
-                    .serverStatuses=${this.router?.statuses() ?? []}
-                    .serverCurrent=${this.router?.current ?? ""}
-                    .serverWaiting=${this.router?.waiting ?? false}
-                    @check-again=${() => void this.router?.probeNow()}
-                  ></till-lock-screen>`,
-                )
+                .list=${this.devDevices}
+              ></till-device-chooser>`
+            : this.frontDoor === "enrol"
+              ? html`<till-enrol-screen .api=${this.api}></till-enrol-screen>`
+              : // The canvas tab shell (SP-B2.1) IS the authenticated surface once the operator (or a kds
+                // display) is off the lock screen (`#shellActive`) and a canvas is present — which a
+                // successful boot always resolves (SP-B4). The ELSE arm is the lock screen: the initial
+                // lock state, and a boot FAILURE (canvas undefined + `boot.error` banner above) — NOT a
+                // blank shell. Both arms are keyed on the active locale: a locale switch changes the key,
+                // so Lit DISCARDS and rebuilds the subtree, repainting every child in the new language
+                // (the screens/shell hold no LocaleChangeController of their own). A same-locale re-render
+                // keeps the key and reuses it.
+                this.#inShell()
+                ? keyed(
+                    currentLocale(),
+                    html`<till-tab-shell
+                      .tabs=${this.canvas?.tabs ?? []}
+                      .activeTabKey=${this.activeTabKey}
+                      .operatorName=${this.operatorName}
+                      .affordances=${this.#affordanceList}
+                      .kiosk=${this.deviceMode}
+                      .loadLocales=${this.#loadLocales}
+                      @tab-select=${(e: CustomEvent<{ key: string }>) => {
+                        this.#onTabSelect(e.detail.key);
+                      }}
+                    >
+                      ${this.#activeTabBody()}
+                      ${this.#drillBody() /* Task 8 fills the drill overlay */}
+                    </till-tab-shell>`,
+                  )
+                : // The lock screen, headed by the device's own name and keyed to it for the remembered-
+                  // operator default. The device front door (choosing/enrolling a fresh browser) moved to
+                  // boot (Task 13); this screen is now purely operator login.
+                  keyed(
+                    currentLocale(),
+                    html`<till-lock-screen
+                      .api=${this.api}
+                      .deviceName=${this.deviceName}
+                      .deviceId=${this.deviceId}
+                      .devMode=${this.devTab}
+                      .serverStatuses=${this.router?.statuses() ?? []}
+                      .serverCurrent=${this.router?.current ?? ""}
+                      .serverWaiting=${this.router?.waiting ?? false}
+                      @check-again=${() => void this.router?.probeNow()}
+                    ></till-lock-screen>`,
+                  )
         }
       </div>
     `;

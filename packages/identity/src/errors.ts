@@ -23,6 +23,9 @@ declare module "@waitron/shared" {
     /** A PIN below the minimum length was supplied to create/reset. `min` is the policy, never the
      * PIN. */
     "pin.too_short": { min: number };
+    /** Too many wrong PINs for this (device, person): the login is in a back-off window. `retryAfterSeconds`
+     * is the whole seconds the operator must wait before another attempt — a timing value, never the PIN. */
+    "pin.throttled": { retryAfterSeconds: number };
     /** A password below the minimum length was supplied. `min` is the policy, never the password. */
     "password.too_short": { min: number };
     /** The password did not verify against the stored hash. */

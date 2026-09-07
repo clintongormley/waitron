@@ -38,6 +38,14 @@ async function flush(el: TillLockScreen): Promise<void> {
   await el.updateComplete;
 }
 
+/** The fake-timer twin of {@link flush}: drains pending timers (the `setTimeout(0)` above included) and
+ * microtasks under `vi.useFakeTimers()`, so the roster fetch and a login rejection settle without the
+ * real clock — the throttle test needs the countdown's `setInterval` on the fake clock. */
+async function flushFake(el: TillLockScreen): Promise<void> {
+  await vi.advanceTimersByTimeAsync(0);
+  await el.updateComplete;
+}
+
 /** Taps one keypad key inside the screen and lets the parent re-render with the new value. */
 async function press(el: TillLockScreen, key: string): Promise<void> {
   const pad = el.shadowRoot!.querySelector("till-numeric-pad")!;
@@ -55,7 +63,16 @@ const query = (el: TillLockScreen, selector: string) => el.shadowRoot!.querySele
 const click = (el: TillLockScreen, selector: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(selector)!.click();
 
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  // The remembered-operator key is real localStorage; wipe it so one test's write never preselects in
+  // the next.
+  try {
+    localStorage.clear();
+  } catch {
+    // A storage-less environment (private window) — nothing to clear.
+  }
+});
 
 describe("till-lock-screen", () => {
   it("registers as a custom element", () => {
@@ -80,6 +97,17 @@ describe("till-lock-screen", () => {
     expect(buttons[1]!.textContent).toContain("Ben");
   });
 
+  it("shows the device name as the heading when one is supplied", async () => {
+    // The heading is the device's own name (device-enrolment §3.4) — its identity, not a mode label.
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi(),
+      deviceName: "Counter 1",
+      deviceId: "dev1",
+    });
+    await flush(el);
+    expect(query(el, ".heading")!.textContent).toContain("Counter 1");
+  });
+
   it("shows an empty-roster message when listStaff() returns no one", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api });
@@ -102,18 +130,108 @@ describe("till-lock-screen", () => {
     await flush(el);
     click(el, 'wt-button.operator-button[data-person="p1"]');
     await el.updateComplete;
-    expect(el.shadowRoot!.textContent).toContain(t("login.enter_pin"));
     expect(query(el, ".operator")!.textContent).toContain("Ana");
     expect(query(el, "till-numeric-pad")).not.toBeNull();
   });
 
-  it("returns to the staff list when the back control is used", async () => {
+  it("preselects the remembered operator and shows the pad immediately on connect", async () => {
+    // device-enrolment §3.4: "Login as" defaults to the last operator on THIS device. The roster loads,
+    // the remembered personId is still present, so the screen lands straight in PIN mode for them.
+    localStorage.setItem("waitron.lastOperator.dev1", "p2");
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi(),
+      deviceId: "dev1",
+    });
+    await flush(el);
+    expect(query(el, "till-numeric-pad")).not.toBeNull();
+    expect(query(el, ".operator")!.textContent).toContain("Ben");
+  });
+
+  it("ignores a remembered operator no longer on the roster", async () => {
+    // Prove-by-deletion counterpart: a stale id (a person since removed) must NOT preselect — the guard
+    // is the `staff.find`. With it gone the screen would try to enter PIN mode for a person not shown.
+    localStorage.setItem("waitron.lastOperator.dev1", "gone");
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi(),
+      deviceId: "dev1",
+    });
+    await flush(el);
+    expect(query(el, "till-numeric-pad")).toBeNull();
+    expect(el.shadowRoot!.querySelectorAll("wt-button.operator-button")).toHaveLength(2);
+  });
+
+  it("ignores the remembered operator when the localStorage read throws (private window)", async () => {
+    // Private windows throw on localStorage access; the read is wrapped, so a throw means simply no
+    // default — the screen stays on the roster rather than erroring.
+    const spy = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("access denied");
+    });
+    try {
+      const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+        api: stubApi(),
+        deviceId: "dev1",
+      });
+      await flush(el);
+      expect(query(el, "till-numeric-pad")).toBeNull();
+      expect(el.shadowRoot!.querySelectorAll("wt-button.operator-button")).toHaveLength(2);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("still logs in when remembering the operator throws (private window)", async () => {
+    // The write is a convenience wrapped in try/catch — a storage throw must never break the login.
+    const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("access denied");
+    });
+    try {
+      const login = vi
+        .fn()
+        .mockResolvedValue({ personId: "p1", canConfigureTill: false, locale: null });
+      const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+        api: stubApi({ login }),
+        deviceId: "dev1",
+      });
+      await flush(el);
+      const loggedIn = vi.fn();
+      el.addEventListener("logged-in", () => loggedIn());
+      click(el, 'wt-button.operator-button[data-person="p1"]');
+      await el.updateComplete;
+      await type(el, "1234");
+      click(el, ".submit");
+      await flush(el);
+      expect(loggedIn).toHaveBeenCalledOnce();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("defaults the throttle back-off to 1s when the error carries no retryAfterSeconds", async () => {
+    // A malformed/absent `retryAfterSeconds` still greys the pad — a 1s floor rather than an instant or
+    // NaN countdown. (Real timers: the initial render is asserted before any tick; cleanup clears it.)
+    const login = vi.fn().mockRejectedValue({ code: "pin.throttled" });
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi({ login }),
+    });
+    await flush(el);
+    click(el, 'wt-button.operator-button[data-person="p1"]');
+    await el.updateComplete;
+    await type(el, "1234");
+    click(el, ".submit");
+    await flush(el);
+    expect(query(el, ".pad-wrap[inert]")).not.toBeNull();
+    expect(query(el, ".throttle")!.textContent).toContain(t("login.throttled").replace("{n}", "1"));
+  });
+
+  it("clears selection and PIN when the Cancel control is used", async () => {
     const api = stubApi();
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api });
     await flush(el);
     click(el, 'wt-button.operator-button[data-person="p1"]');
     await el.updateComplete;
-    click(el, ".back");
+    await type(el, "12");
+    expect(query(el, ".cancel")!.textContent).toContain(t("action.cancel"));
+    click(el, ".cancel");
     await el.updateComplete;
     expect(query(el, "till-numeric-pad")).toBeNull();
     expect(el.shadowRoot!.textContent).toContain(t("login.pick_operator"));
@@ -151,6 +269,25 @@ describe("till-lock-screen", () => {
       displayName: "Ana",
       canConfigureTill: true,
     });
+  });
+
+  it("remembers the operator on this device after a successful login", async () => {
+    // device-enrolment §3.4: a confirmed login writes `waitron.lastOperator.<deviceId>` so the next
+    // unlock defaults to them. Keyed by deviceId, so two devices remember independently.
+    const login = vi
+      .fn()
+      .mockResolvedValue({ personId: "p1", canConfigureTill: false, locale: null });
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi({ login }),
+      deviceId: "dev1",
+    });
+    await flush(el);
+    click(el, 'wt-button.operator-button[data-person="p1"]');
+    await el.updateComplete;
+    await type(el, "1234");
+    click(el, ".submit");
+    await flush(el);
+    expect(localStorage.getItem("waitron.lastOperator.dev1")).toBe("p1");
   });
 
   it("threads the login response's per-user locale into the logged-in detail", async () => {
@@ -245,6 +382,46 @@ describe("till-lock-screen", () => {
     expect(query(el, "till-numeric-pad")).not.toBeNull(); // still on the PIN screen to retry
   });
 
+  it("greys the pad and counts a pin.throttled back-off down, re-enabling entry at zero", async () => {
+    // Task 10 throttle: a wrong-PIN flood answers `pin.throttled` with `retryAfterSeconds`. The screen
+    // greys the pad, disables submit, and shows "Try again in {n}s" ticking down each second; at 0 entry
+    // is live again. Fake timers drive both the settle and the countdown's setInterval.
+    vi.useFakeTimers();
+    try {
+      const login = vi.fn().mockRejectedValue({ code: "pin.throttled", retryAfterSeconds: 3 });
+      const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+        api: stubApi({ login }),
+      });
+      await flushFake(el);
+      click(el, 'wt-button.operator-button[data-person="p1"]');
+      await el.updateComplete;
+      await type(el, "1234");
+      click(el, ".submit");
+      await flushFake(el);
+      // Throttled: pad greyed (inert), submit disabled, countdown at the full window.
+      expect(query(el, ".pad-wrap[inert]")).not.toBeNull();
+      expect(query(el, ".submit")!.hasAttribute("disabled")).toBe(true);
+      expect(query(el, ".throttle")!.textContent).toContain(
+        t("login.throttled").replace("{n}", "3"),
+      );
+      // One second on: the countdown ticks.
+      await vi.advanceTimersByTimeAsync(1000);
+      await el.updateComplete;
+      expect(query(el, ".throttle")!.textContent).toContain(
+        t("login.throttled").replace("{n}", "2"),
+      );
+      // The remaining two seconds elapse → entry is live again (pad no longer inert, PIN still typed so
+      // submit re-enables) and the notice is gone.
+      await vi.advanceTimersByTimeAsync(2000);
+      await el.updateComplete;
+      expect(query(el, ".pad-wrap[inert]")).toBeNull();
+      expect(query(el, ".throttle")).toBeNull();
+      expect(query(el, ".submit")!.hasAttribute("disabled")).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("shows a sensible localised message for a suspended account", async () => {
     const login = vi.fn().mockRejectedValue({ code: "person.suspended" });
     const api = stubApi({ login });
@@ -315,88 +492,15 @@ describe("till-lock-screen", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  // Device mode (device-identity-1 §5a): the roster view carries a "set up as kitchen display"
-  // affordance so a FRESH (unenrolled) display can reach the enrol view; it emits `setup-device`, which
-  // the app turns into the device-mode station screen. The operator PIN login is untouched.
-  it("emits setup-device from the kitchen-display set-up affordance (roster view)", async () => {
+  it("no longer renders the device set-up affordances (the front door moved to boot)", async () => {
+    // device-enrolment Task 12: the three "Set up as …" controls left the lock screen; the device front
+    // door is chosen at boot (Task 13). None of them may render here any more.
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
-    await flush(el);
-    const spy = vi.fn();
-    el.addEventListener("setup-device", spy);
-    click(el, "[data-setup-device]");
-    expect(spy).toHaveBeenCalledOnce();
-  });
-
-  it("hides the set-up affordance in PIN mode (it belongs to the roster view, not operator login)", async () => {
-    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
-    await flush(el);
-    expect(query(el, "[data-setup-device]")).not.toBeNull();
-    click(el, 'wt-button.operator-button[data-person="p1"]');
-    await el.updateComplete;
-    // In PIN mode the operator is logging in — the display set-up affordance is gone.
-    expect(query(el, "[data-setup-device]")).toBeNull();
-  });
-
-  // Handheld (handheld-tableside Task 8): the roster view carries a SECOND set-up affordance beside the
-  // kitchen-display one, so a FRESH phone can reach the handheld enrol view; it emits `setup-handheld`,
-  // which the app turns into the handheld enrol screen. Same roster-only placement as `setup-device`.
-  it("emits setup-handheld from the waiter-handheld set-up affordance (roster view)", async () => {
-    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
-    await flush(el);
-    const spy = vi.fn();
-    el.addEventListener("setup-handheld", spy);
-    click(el, "[data-setup-handheld]");
-    expect(spy).toHaveBeenCalledOnce();
-  });
-
-  it("hides the handheld set-up affordance in PIN mode (roster view only, like setup-device)", async () => {
-    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
-    await flush(el);
-    expect(query(el, "[data-setup-handheld]")).not.toBeNull();
-    click(el, 'wt-button.operator-button[data-person="p1"]');
-    await el.updateComplete;
-    expect(query(el, "[data-setup-handheld]")).toBeNull();
-  });
-
-  // Till (SP-A.2 device unification): the roster view carries a THIRD set-up affordance beside the
-  // kitchen-display + waiter-handheld ones, so a FRESH counter can reach the till enrol view; it emits
-  // `setup-till`, which the app turns into the till enrol screen. Same roster-only placement.
-  it("emits setup-till from the till set-up affordance (roster view)", async () => {
-    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
-    await flush(el);
-    const spy = vi.fn();
-    el.addEventListener("setup-till", spy);
-    click(el, "[data-setup-till]");
-    expect(spy).toHaveBeenCalledOnce();
-  });
-
-  it("hides the till set-up affordance in PIN mode (roster view only, like setup-device)", async () => {
-    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
-    await flush(el);
-    expect(query(el, "[data-setup-till]")).not.toBeNull();
-    click(el, 'wt-button.operator-button[data-person="p1"]');
-    await el.updateComplete;
-    expect(query(el, "[data-setup-till]")).toBeNull();
-  });
-
-  // §C2 containment/identity: an ALREADY-ENROLLED device (a handheld, or a KDS) returns to the lock
-  // screen on every logout and cold boot. It must NOT see the device-setup affordances — tapping "Set
-  // up as kitchen display" would take the enrolled phone into the KDS enrol view, where any valid
-  // pairing code would SILENTLY replace its device cookie with a `kds_station` identity, bricking the
-  // phone as a handheld mid-shift (and escaping the face-set to `station`). `deviceEnrolled` (the app
-  // passes `handheldMode || deviceMode || tillEnrolled`) hides all three affordances (device / handheld
-  // / till); a fresh browser still shows them.
-  it("hides ALL THREE device-setup affordances once the device is enrolled (deviceEnrolled)", async () => {
-    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
-      api: stubApi(),
-      deviceEnrolled: true,
-    });
     await flush(el);
     expect(query(el, "[data-setup-device]")).toBeNull();
     expect(query(el, "[data-setup-handheld]")).toBeNull();
     expect(query(el, "[data-setup-till]")).toBeNull();
-    // The roster login is untouched — an enrolled handheld's waiter still picks their name and PINs in.
-    expect(el.shadowRoot!.querySelectorAll("wt-button.operator-button")).toHaveLength(2);
+    expect(query(el, ".device-setup")).toBeNull();
   });
 
   // Server status line (till-reroute §4.4): the roster view carries one row per known server with its
@@ -466,19 +570,5 @@ describe("till-lock-screen", () => {
     });
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-server-status]")).toBeNull();
-  });
-
-  it("keeps ALL THREE device-setup affordances on a FRESH (unenrolled) browser so first enrolment works", async () => {
-    // Prove-by-deletion counterpart: with `deviceEnrolled` false (the default — a fresh browser has no
-    // device cookie yet) all three set-up controls (kitchen-display, waiter-handheld, till) must remain,
-    // or a first-time enrolment would be impossible.
-    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
-      api: stubApi(),
-      deviceEnrolled: false,
-    });
-    await flush(el);
-    expect(query(el, "[data-setup-device]")).not.toBeNull();
-    expect(query(el, "[data-setup-handheld]")).not.toBeNull();
-    expect(query(el, "[data-setup-till]")).not.toBeNull();
   });
 });

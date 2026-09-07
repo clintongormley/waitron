@@ -1,6 +1,5 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { createRef, ref } from "lit/directives/ref.js";
 import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -8,58 +7,61 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-card.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import type {
-  DashboardApi,
-  DeviceProfile,
-  DeviceRow,
-  Printer,
-  Station,
-  Till,
-} from "../api/client.js";
+import { formatIsoMinute } from "../date-utils.js";
+import type { DashboardApi, DeviceProfile, DeviceRow, Printer, Station } from "../api/client.js";
 
-/** The card-payment providers the till-hardware picker offers, in render order — mirrors the
- * `devices.card_provider` text column's accepted values. `none` leads (a till with no integrated card
- * terminal, the column default), then the two Stripe integrations: `stripe_terminal` (a separate
- * Stripe Terminal reader, which carries its own reader id) and `stripe_on_device` (Tap to Pay on the
- * device itself, no separate reader id). The server stores the string as-is; the picker constrains the
- * choice to these three. */
+/** The card-payment providers the per-device hardware editor offers, in render order — mirrors the
+ * `devices.card_provider` text column's accepted values and the server's `CARD_PROVIDERS` screen. `none`
+ * leads (a device with no integrated card terminal, the column default), then the two Stripe
+ * integrations: `stripe_terminal` (a separate Stripe Terminal reader, which carries its own reader id)
+ * and `stripe_on_device` (Tap to Pay on the device itself, no separate reader id). The server stores
+ * the string as-is and re-validates it; the picker constrains the choice to these three. */
 const CARD_PROVIDERS: readonly string[] = ["none", "stripe_terminal", "stripe_on_device"];
 
+/** A device's editable hardware, held per row while the operator edits it (before Save). */
+interface HardwareEdit {
+  receiptPrinterId: string;
+  hasCashDrawer: boolean;
+  cardProvider: string;
+  cardReaderId: string;
+}
+
+const DEFAULT_HARDWARE: HardwareEdit = {
+  receiptPrinterId: "",
+  hasCashDrawer: false,
+  cardProvider: "none",
+  cardReaderId: "",
+};
+
 /**
- * The management dashboard's DEVICES screen (device-identity-1 §5b): manages the venue's always-on
- * enrolled devices — today the KDS station displays. It does three things, modelled on the kitchen /
- * service-status config screens (their inline list + "new" form idiom, `@waitron/ui` primitives, `--wt-*`
- * tokens):
+ * The management dashboard's DEVICES screen (device-identity-1 §5b): manages the venue's enrolled
+ * devices. It does four things, modelled on the kitchen / service-status config screens (their inline
+ * list idiom, `@waitron/ui` primitives, `--wt-*` tokens):
  *
- *  - LISTS the enrolled devices (`api.listDevices()`), one `wt-card` row each: the label, the bound
- *    station's display NAME (resolved from `api.listStations()` — the list carries only a `stationId`),
- *    the status (active / revoked) and the last-seen time. Newest-enrolled first is the server's order,
- *    rendered as-is. A null `stationId` (a future non-station kind) and a station no longer in the active
- *    list (retired) both show a neutral placeholder; a never-authenticated device shows a "Never"
- *    last-seen.
- *  - GENERATES a pairing code: pick a kind + the kind's bindings + type a label → `api.createDeviceCode(…)`
- *    (SP-A.2 unified the counter till into the device model). The kind gates the REQUIRED binding: a
- *    `kds_station` binds to a picked station (`stationId` sent); a sale-capable `till`/`handheld` binds to
- *    a picked till (`tillId` sent — the server rejects a missing one `device.till_required`), so a station
- *    picker shows only for `kds_station` and a till picker for `till`/`handheld`. The OPTIONAL bindings are
- *    an assigned device profile (`deviceProfileId`, offered for every kind from `api.listDeviceProfiles()`)
- *    and, for a `till`, the static hardware — a receipt printer (`api.listPrinters()`), a has-cash-drawer flag,
- *    a card provider (`none`/`stripe_terminal`/`stripe_on_device`) and, for `stripe_terminal`, a
- *    card-reader id — each sent only when set, else the server applies its column default. The returned
- *    code is shown ONCE in a prominent, copyable panel and lives ONLY in component state — it is NOT
- *    re-fetchable (like a passkey challenge handle), so dismissing the panel is final. Generating reloads
- *    the device list.
- *  - REVOKES a device (`api.revokeDevice(id)`) behind a TWO-STEP confirm (the purchase-list idiom): the
- *    first click on a row's Revoke ARMS it (label → confirm prompt), a second click confirms — a revoke
- *    stops a working kitchen screen, so an accidental single click must not fire it. Only ACTIVE devices
- *    show the control; an already-revoked one does not.
+ *  - LISTS the enrolled devices (`api.listDevices()`), one `wt-card` row each: the label, the assigned
+ *    device profile's NAME (resolved from `api.listDeviceProfiles()` — the list carries only a
+ *    `deviceProfileId`), the bound station's display NAME (resolved from `api.listStations()`; a
+ *    register-bound device carries no station and shows the neutral placeholder — the list shape carries
+ *    no register name), the status (active / revoked) and the last-seen time. Newest-enrolled first is
+ *    the server's order, rendered as-is.
+ *  - GENERATES an enrolment key: one button → `api.createDeviceCode()` (NO body — the code is a bare
+ *    bearer token now; the device describes itself at enrolment). The returned code is shown ONCE in a
+ *    prominent, copyable panel and lives ONLY in component state — it is NOT re-fetchable (like a passkey
+ *    challenge handle), so dismissing the panel is final. Generating reloads the device list.
+ *  - EDITS a device's static hardware (SP-A.2 §16.3): each ACTIVE row carries a receipt-printer picker
+ *    (`api.listPrinters()`), a has-cash-drawer switch, a card-provider picker and — only for a Stripe
+ *    Terminal reader — a card-reader-id field, saved through `api.patchDeviceHardware(id, …)`. The edit
+ *    is held in component state per row until Save; on success the controls reflect the server's stored
+ *    values. (The device list carries no hardware, so an unsaved editor opens at the neutral defaults.)
+ *  - REVOKES a device (`api.revokeDevice(id)`) behind a TWO-STEP confirm (the purchase-list idiom), and
+ *    REASSIGNS a device's profile (`api.reassignDeviceProfile(id, …)`) via a per-row select. Both controls
+ *    show only for ACTIVE devices.
  *
  * Gating is server-side (`device.manage`, admin + manager): the shell hides this nav from a `staff`
  * session and every route re-checks. ERROR HANDLING mirrors the sibling screens — every loader/mutation is
  * fully `try/catch`ed (invoked via `void`), so a rejection becomes `errorKey` (the raw `{ code }`, falling
  * back to `server.internal`) rendered in a `role="alert"` banner. The raw code stays in state; `codeMessage`
- * maps it to localised copy at the render edge, so the banner shows a sentence and never the raw wire code
- * (`station.not_found`, `device.not_found`).
+ * maps it to localised copy at the render edge, so the banner shows a sentence and never the raw wire code.
  */
 @customElement("dashboard-devices-screen")
 export class DevicesScreen extends LitElement {
@@ -114,17 +116,22 @@ export class DevicesScreen extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
-      .new {
+      .hardware {
         display: flex;
         gap: var(--wt-space-3);
         align-items: flex-end;
-        margin-top: var(--wt-space-6);
         flex-wrap: wrap;
+        margin-top: var(--wt-space-3);
+        padding-top: var(--wt-space-3);
+        border-top: 1px solid var(--wt-color-border);
       }
       .field {
         display: block;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+      .generate {
+        margin-top: var(--wt-space-2);
       }
       .code-panel {
         display: flex;
@@ -165,32 +172,21 @@ export class DevicesScreen extends LitElement {
   /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
 
-  // The enrolled devices, loaded on connect and re-synced after every mutation (server order kept).
+  // Whether an enrolment-key mint is in flight (disables the generate button).
   @state() private submitting = false;
+  // The enrolled devices, loaded on connect and re-synced after every mutation (server order kept).
   @state() private devices: DeviceRow[] = [];
-  // The venue's ACTIVE kitchen stations — both the generate-code picker's options and the source that
-  // resolves a device row's stationId to a display name.
+  // The venue's ACTIVE kitchen stations — the source that resolves a device row's stationId to a name.
   @state() private stations: Station[] = [];
-  // The venue's tills (the sale-capable till picker's options), device profiles (the assigned-profile
-  // picker's options, any kind) and printers (the till's receipt-printer picker's options), all
-  // (re)loaded alongside the stations. Feeds for the generate-code form's bindings (SP-A.2 §16).
-  @state() private tills: Till[] = [];
+  // The venue's device profiles (the row's profile name + the reassign picker's options) and printers
+  // (the hardware editor's receipt-printer options), (re)loaded alongside the stations.
   @state() private deviceProfiles: DeviceProfile[] = [];
   @state() private printers: Printer[] = [];
-  // The generate-code form's fields. `kind` gates which bindings show: a "kds_station" binds to a
-  // station; a sale-capable "till"/"handheld" binds to a till (REQUIRED); a "till" also carries the
-  // static hardware bindings. The picked station/till seed to the first on load; the optional bindings
-  // default to "unset" ("" / false / "none") and are sent only when set.
-  @state() private kind = "kds_station";
-  @state() private selectedStation = "";
-  @state() private selectedTill = "";
-  @state() private selectedDeviceProfile = "";
-  @state() private selectedPrinter = "";
-  @state() private hasCashDrawer = false;
-  @state() private cardProvider = "none";
-  @state() private cardReaderId = "";
-  @state() private label = "";
-  // The one-time pairing code, held ONLY here — never re-fetchable. null when no code is being shown.
+  // The per-device hardware being edited, keyed by device id. A row with no entry opens at
+  // DEFAULT_HARDWARE (the device list carries no hardware); a Save writes it and refreshes the entry
+  // from the server's stored values.
+  @state() private hardwareEdits: Record<string, HardwareEdit> = {};
+  // The one-time enrolment key, held ONLY here — never re-fetchable. null when no code is being shown.
   @state() private generatedCode: string | null = null;
   // Whether the shown code has just been copied (a transient confirmation next to the Copy button).
   @state() private copied = false;
@@ -199,212 +195,85 @@ export class DevicesScreen extends LitElement {
   @state() private armedRevokeId: string | null = null;
   @state() private errorKey: string | null = null;
 
-  // Handles to the native <select>s, reconciled to their state in `updated()` — a native select's
-  // `.value` bound in the template commits before its <option> children exist, so a non-first selection
-  // would fall back to the first (the login screen documents the same picker bug). Each is rendered only
-  // for the kind that shows it, so `updated()` GUARDS every ref access (a ref is undefined when its
-  // select is not in the DOM).
-  #stationSelect = createRef<HTMLSelectElement>();
-  #tillSelect = createRef<HTMLSelectElement>();
-  #deviceProfileSelect = createRef<HTMLSelectElement>();
-  #printerSelect = createRef<HTMLSelectElement>();
-  #cardProviderSelect = createRef<HTMLSelectElement>();
-
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
   }
 
-  /** Reconcile the native station <select>'s live value to `selectedStation` after every render, once its
-   * <option> children are in the DOM (mirrors login-screen). The select renders unconditionally, so the
-   * ref is normally live — but GUARD the access anyway: when the shell re-keys this screen to repaint it
-   * in a new language (`dashboard-app`'s `keyed(currentLocale(), …)`), a pending update can flush on the outgoing
-   * element after Lit has cleared its refs on disconnect, and an unguarded assert would then throw an
-   * unhandled `Cannot set properties of undefined`. Setting `.value` imperatively does not loop. */
+  /** Reconcile the per-row native <select>s to their state after every render, once their <option>
+   * children are in the DOM — a native select's `.value` set in the template commits before its options
+   * exist, so a non-first selection would fall back to the first (the login screen documents the same
+   * picker bug). These controls are DYNAMIC (one per device), so they carry no ref — query them and map
+   * each back by its `data-test` id. This both preselects and, after a FAILED reassign/save that
+   * re-renders without a reload, snaps a control off the operator's rejected pick back to the truth. */
   override updated(): void {
-    if (this.#stationSelect.value) this.#stationSelect.value.value = this.selectedStation;
-    if (this.#tillSelect.value) this.#tillSelect.value.value = this.selectedTill;
-    if (this.#deviceProfileSelect.value)
-      this.#deviceProfileSelect.value.value = this.selectedDeviceProfile;
-    if (this.#printerSelect.value) this.#printerSelect.value.value = this.selectedPrinter;
-    if (this.#cardProviderSelect.value) this.#cardProviderSelect.value.value = this.cardProvider;
-    // Reconcile every per-row reassign <select> to its device's ACTUAL binding (server truth). These are
-    // dynamic (one per device), so they carry no ref — query them and map each back by its `data-test` id.
-    // This both preselects (options now exist) and, after a FAILED reassign that re-renders without a
-    // reload, snaps the control off the operator's rejected pick back to `device.deviceProfileId`.
     for (const select of this.renderRoot.querySelectorAll<HTMLSelectElement>(
       '[data-test^="reassign-"]',
     )) {
       const device = this.devices.find((d) => `reassign-${d.id}` === select.dataset.test);
       if (device !== undefined) select.value = device.deviceProfileId ?? "";
     }
+    for (const select of this.renderRoot.querySelectorAll<HTMLSelectElement>(
+      '[data-test^="hw-printer-"]',
+    )) {
+      const id = select.dataset.test!.slice("hw-printer-".length);
+      select.value = this.#hardwareFor(id).receiptPrinterId;
+    }
+    for (const select of this.renderRoot.querySelectorAll<HTMLSelectElement>(
+      '[data-test^="hw-card-provider-"]',
+    )) {
+      const id = select.dataset.test!.slice("hw-card-provider-".length);
+      select.value = this.#hardwareFor(id).cardProvider;
+    }
   }
 
-  /** (Re)load the devices + stations. Called on connect and after every mutation. A rejection anywhere
-   * becomes the `errorKey` banner rather than an unhandled rejection. Disarms any armed revoke (the armed
-   * row may no longer exist) and seeds the station picker to the first station when it is still unset (so
-   * an operator's own pick survives a reload). */
+  /** (Re)load the devices + option feeds. Called on connect and after every mutation. A rejection
+   * anywhere becomes the `errorKey` banner rather than an unhandled rejection. Disarms any armed revoke
+   * (the armed row may no longer exist). */
   async #load(): Promise<void> {
     this.errorKey = null;
     this.armedRevokeId = null;
     try {
-      const [devices, stations, tills, deviceProfiles, printers] = await Promise.all([
+      const [devices, stations, deviceProfiles, printers] = await Promise.all([
         this.api.listDevices(),
         this.api.listStations(),
-        // The generate form's binding feeds. `listTills`/`listPrinters` are `printer.manage`-gated and
-        // `listDeviceProfiles` is `till.configure`-gated, whereas this screen is `device.manage`-gated —
-        // but that mismatch is unreachable: all three permissions sit in the {manager, admin} set
-        // (packages/identity/src/permissions.ts; admin holds ALL), so every user who reaches this screen
-        // holds them (the printers-screen documents the same reuse). A custom-role split is a documented
-        // follow-on — no device.manage-gated list variants (YAGNI).
-        this.api.listTills(),
+        // `listDeviceProfiles` is `till.configure`-gated and `listPrinters` is `printer.manage`-gated,
+        // whereas this screen is `device.manage`-gated — but that mismatch is unreachable: all three
+        // permissions sit in the {manager, admin} set (packages/identity/src/permissions.ts; admin holds
+        // ALL), so every user who reaches this screen holds them (the printers-screen documents the same
+        // reuse). A custom-role split is a documented follow-on — no device.manage-gated list variants.
         this.api.listDeviceProfiles(),
         this.api.listPrinters(),
       ]);
       this.devices = devices;
       this.stations = stations;
-      this.tills = tills;
       this.deviceProfiles = deviceProfiles;
       this.printers = printers;
-      // Seed the station + till pickers to their first option when still unset, so an operator's own
-      // pick survives a reload (mirrors the station seed; the till is REQUIRED for sale-capable kinds).
-      if (stations[0] !== undefined && this.selectedStation === "") {
-        this.selectedStation = stations[0].id;
-      }
-      if (tills[0] !== undefined && this.selectedTill === "") {
-        this.selectedTill = tills[0].id;
-      }
     } catch (error) {
       this.errorKey = codeOf(error);
     }
   }
 
-  /** Reload the DEVICES only (not the stations) after a mutation. `#generate` and `#revoke` change the
-   * device set but never the station set, so re-fetching `listStations` — which the initial {@link #load}
-   * does — would be pure waste; this fetches `listDevices` alone. It throws on failure like `listDevices`
-   * itself: both callers already run it inside their own `try/catch` that maps the rejection to the
-   * `errorKey` banner via `codeOf` (the error-envelope pattern), so there is no separate handling here.
-   * Disarms any armed revoke (mirroring {@link #load}): the armed row may no longer exist after the
-   * mutation, and a `#generate` while a revoke is armed on another row must not leave it armed — a no-op
-   * for the `#revoke` path, which {@link #onRevoke} already cleared before calling. */
+  /** Reload the DEVICES only (not the option feeds) after a mutation. `#generate` and `#revoke` change
+   * the device set but never the stations/profiles/printers, so re-fetching those — which {@link #load}
+   * does — would be pure waste. Throws on failure like `listDevices` itself: both callers run it inside
+   * their own `try/catch` that maps the rejection to the `errorKey` banner. Disarms any armed revoke
+   * (mirroring {@link #load}). */
   async #reloadDevices(): Promise<void> {
     this.armedRevokeId = null;
     this.devices = await this.api.listDevices();
   }
 
-  /** Capture the picked device kind — the value the whole add-device form surfaces its per-kind fields
-   * off. A `kds_station` shows the station field; `till`/`handheld` show the till field (:617); `till`
-   * additionally surfaces the hardware fields (:641, via {@link #renderTillHardware}). #generate gates
-   * the station requirement on this value. Same defensive `stopPropagation` as the station picker. */
-  #onKindChange(event: Event): void {
-    event.stopPropagation();
-    this.kind = (event.target as HTMLSelectElement).value;
-  }
-
-  /** Capture the picked station. A native `<select>` `change` is `composed: false`, so `stopPropagation`
-   * here is defensive consistency with the composed `wt-change` handler below, not a boundary guard. */
-  #onStationChange(event: Event): void {
-    event.stopPropagation();
-    this.selectedStation = (event.target as HTMLSelectElement).value;
-  }
-
-  /** Capture the picked till (sale-capable kinds). Same defensive `stopPropagation` as the station picker. */
-  #onTillChange(event: Event): void {
-    event.stopPropagation();
-    this.selectedTill = (event.target as HTMLSelectElement).value;
-  }
-
-  /** Capture the picked assigned device profile (`""` = none). */
-  #onDeviceProfileChange(event: Event): void {
-    event.stopPropagation();
-    this.selectedDeviceProfile = (event.target as HTMLSelectElement).value;
-  }
-
-  /** Capture the picked receipt printer for a till (`""` = none). */
-  #onPrinterChange(event: Event): void {
-    event.stopPropagation();
-    this.selectedPrinter = (event.target as HTMLSelectElement).value;
-  }
-
-  /** Capture the picked card provider (`none`/`stripe_terminal`/`stripe_on_device`). The card-reader-id
-   * field shows only for `stripe_terminal`; switching away hides it (and `#generate` then sends no id). */
-  #onCardProviderChange(event: Event): void {
-    event.stopPropagation();
-    this.cardProvider = (event.target as HTMLSelectElement).value;
-  }
-
-  /** Capture the has-cash-drawer switch's composed `wt-change` (`{ checked }`). */
-  #onCashDrawerChange(event: CustomEvent<{ checked: boolean }>): void {
-    event.stopPropagation();
-    this.hasCashDrawer = event.detail.checked;
-  }
-
-  /** The card-reader-id field's composed `wt-change`. `stopPropagation` keeps it inside this shadow. */
-  #onCardReaderChange(event: CustomEvent<{ value: string }>): void {
-    event.stopPropagation();
-    this.cardReaderId = event.detail.value;
-  }
-
-  /** The label field's composed `wt-change`. `stopPropagation` keeps it inside this screen's shadow. */
-  #onLabelChange(event: CustomEvent<{ value: string }>): void {
-    event.stopPropagation();
-    this.label = event.detail.value;
-  }
-
-  /** Mint a pairing code for the chosen kind + bindings + label, then show it ONCE and reload the list.
-   * A blank label is a no-op (the kitchen screen's blank-name guard). The kind gates the required
-   * binding: a `kds_station` needs a picked station (no-op when none configured); a sale-capable
-   * `till`/`handheld` needs a picked till (no-op when none configured — the server rejects a missing one
-   * `device.till_required`). The optional bindings are sent ONLY when set — an assigned device profile
-   * (any kind), and for a `till` the static hardware (receipt printer, cash-drawer flag, card provider,
-   * and the card-reader id when the provider is `stripe_terminal`); an unset binding is omitted, which
-   * `JSON.stringify` drops, so the server applies its column default. On success the code goes into
-   * state (never re-fetched) and the label resets; on rejection the `errorKey` banner shows and the form
-   * is left intact for a retry. */
+  /** Mint an enrolment key (a bare token — no body) then show it ONCE and reload the list. On success
+   * the code goes into state (never re-fetched); on rejection the `errorKey` banner shows. */
   async #generate(): Promise<void> {
     if (this.submitting) return;
     this.errorKey = null;
-    const label = this.label.trim();
-    if (label === "") return;
-    const needsStation = this.kind === "kds_station";
-    const needsTill = this.kind === "till" || this.kind === "handheld";
-    if (needsStation && this.selectedStation === "") return;
-    if (needsTill && this.selectedTill === "") return;
-    // Build the payload additively so an unset optional binding is absent (dropped by `JSON.stringify`),
-    // not sent as an empty string the server would treat as a real value.
-    const input: {
-      kind: string;
-      stationId?: string;
-      tillId?: string;
-      deviceProfileId?: string;
-      receiptPrinterId?: string;
-      hasCashDrawer?: boolean;
-      cardProvider?: string;
-      cardReaderId?: string;
-      label: string;
-    } = { kind: this.kind, label };
-    if (needsStation) input.stationId = this.selectedStation;
-    if (needsTill) input.tillId = this.selectedTill;
-    // The assigned device profile is a device-wide binding, offered for every kind; sent only when picked.
-    if (this.selectedDeviceProfile !== "") input.deviceProfileId = this.selectedDeviceProfile;
-    // The static hardware bindings belong to a `till`; each is sent only when set (else the server
-    // default applies: no printer, `has_cash_drawer` false, `card_provider` 'none').
-    if (this.kind === "till") {
-      if (this.selectedPrinter !== "") input.receiptPrinterId = this.selectedPrinter;
-      if (this.hasCashDrawer) input.hasCashDrawer = true;
-      if (this.cardProvider !== "none") input.cardProvider = this.cardProvider;
-      // The card-reader id is a `stripe_terminal`-only field; a non-empty value is sent only while that
-      // provider is picked (switching away hides the field, so a stale id is never sent).
-      if (this.cardProvider === "stripe_terminal" && this.cardReaderId.trim() !== "") {
-        input.cardReaderId = this.cardReaderId.trim();
-      }
-    }
     this.submitting = true;
     try {
-      const { code } = await this.api.createDeviceCode(input);
+      const { code } = await this.api.createDeviceCode();
       this.generatedCode = code;
       this.copied = false;
-      this.label = "";
       await this.#reloadDevices();
     } catch (error) {
       this.errorKey = codeOf(error);
@@ -442,9 +311,8 @@ export class DevicesScreen extends LitElement {
     this.armedRevokeId = id;
   }
 
-  /** Revoke the device `id` holds, then reload the device list (the station set is unchanged). A
-   * rejection becomes the `errorKey` banner. `#onRevoke` already cleared the armed state before calling
-   * this, so the devices-only reload needs no disarm. */
+  /** Revoke the device `id` holds, then reload the device list. A rejection becomes the `errorKey`
+   * banner. `#onRevoke` already cleared the armed state before calling this. */
   async #revoke(id: string): Promise<void> {
     this.errorKey = null;
     try {
@@ -456,10 +324,9 @@ export class DevicesScreen extends LitElement {
   }
 
   /** Reassign device `id`'s device profile to `deviceProfileId` (null = the form-factor default), then
-   * reload the device list (the station set is unchanged) so the row reflects the new binding. A rejection
-   * becomes the `errorKey` banner (the `#revoke` idiom); the caller void-invokes this off the select's
-   * `change`, so a rejection surfaces as the banner rather than an unhandled rejection. Unlike revoke this
-   * is a single-click action — reassigning a profile is reversible (pick another), so no confirm gate. */
+   * reload the device list so the row reflects the new binding. A rejection becomes the `errorKey`
+   * banner (the `#revoke` idiom). Unlike revoke this is a single-click action — reassigning a profile is
+   * reversible (pick another), so no confirm gate. */
   async #onReassign(id: string, deviceProfileId: string | null): Promise<void> {
     this.errorKey = null;
     try {
@@ -470,18 +337,72 @@ export class DevicesScreen extends LitElement {
     }
   }
 
-  /** Resolve a device's `stationId` to the loaded station's display name; a null id (a future non-station
-   * kind) or a station no longer in the active list (retired) both fall back to the neutral placeholder. */
+  /** The device's hardware being edited (the stored entry, else the neutral defaults). */
+  #hardwareFor(id: string): HardwareEdit {
+    return this.hardwareEdits[id] ?? DEFAULT_HARDWARE;
+  }
+
+  /** Merge a hardware-field change into device `id`'s edit entry (immutably, so Lit re-renders). */
+  #setHardware(id: string, patch: Partial<HardwareEdit>): void {
+    this.hardwareEdits = {
+      ...this.hardwareEdits,
+      [id]: { ...this.#hardwareFor(id), ...patch },
+    };
+  }
+
+  /** Save device `id`'s edited hardware through the PATCH, then reflect the server's stored values in the
+   * edit entry so the controls show what actually took. An empty printer / reader clears to `null`; the
+   * reader is sent only while the provider is a Stripe Terminal reader (else the field is hidden). A
+   * rejection becomes the `errorKey` banner (the `#revoke` idiom). */
+  async #saveHardware(id: string): Promise<void> {
+    this.errorKey = null;
+    const hw = this.#hardwareFor(id);
+    try {
+      const updated = await this.api.patchDeviceHardware(id, {
+        receiptPrinterId: hw.receiptPrinterId === "" ? null : hw.receiptPrinterId,
+        hasCashDrawer: hw.hasCashDrawer,
+        cardProvider: hw.cardProvider,
+        cardReaderId:
+          hw.cardProvider === "stripe_terminal" && hw.cardReaderId.trim() !== ""
+            ? hw.cardReaderId.trim()
+            : null,
+      });
+      this.hardwareEdits = {
+        ...this.hardwareEdits,
+        [id]: {
+          receiptPrinterId: updated.receiptPrinterId ?? "",
+          hasCashDrawer: updated.hasCashDrawer,
+          cardProvider: updated.cardProvider,
+          cardReaderId: updated.cardReaderId ?? "",
+        },
+      };
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    }
+  }
+
+  /** Resolve a device's `deviceProfileId` to the loaded profile's name; a null id or an unknown profile
+   * both fall back to the neutral placeholder. */
+  #profileName(deviceProfileId: string | null): string {
+    if (deviceProfileId === null) return t("devices.device_profile_none");
+    return (
+      this.deviceProfiles.find((p) => p.id === deviceProfileId)?.name ??
+      t("devices.device_profile_none")
+    );
+  }
+
+  /** Resolve a device's `stationId` to the loaded station's display name; a null id (a register-bound
+   * device) or a station no longer in the active list (retired) both fall back to the placeholder. */
   #stationName(stationId: string | null): string {
     if (stationId === null) return t("devices.no_station");
     return this.stations.find((s) => s.id === stationId)?.name ?? t("devices.no_station");
   }
 
-  /** Format a device's last-seen ISO timestamp to the minute (UTC — no per-venue timezone yet, matching
-   * date-utils' UTC slicing); a null last-seen (never authenticated) shows the "Never" placeholder. */
+  /** A device's last-seen ISO timestamp to the minute (`formatIsoMinute`, UTC); a null last-seen (never
+   * authenticated) shows the "Never" placeholder. */
   #lastSeen(iso: string | null): string {
     if (iso === null) return t("devices.last_seen_never");
-    return `${iso.slice(0, 10)} ${iso.slice(11, 16)}`;
+    return formatIsoMinute(iso);
   }
 
   /** The localised label for a card provider (`none`/`stripe_terminal`/`stripe_on_device`). */
@@ -491,20 +412,23 @@ export class DevicesScreen extends LitElement {
     return t("devices.card_provider_none");
   }
 
-  /** The `till` kind's static hardware bindings (SP-A.2 §16): a receipt-printer picker (the venue's
-   * ACTIVE printers plus a "none" clear option), a has-cash-drawer switch, a card-provider picker, and —
-   * only when the provider is a Stripe Terminal reader — a card-reader-id field. All optional: an unset
-   * one is not sent and the server applies its column default. The printer list is DELIBERATELY not
-   * filtered to the till's location (the deli is single-location, so every printer is in it); the
+  /** The per-device hardware editor (SP-A.2 §16.3): a receipt-printer picker (the venue's ACTIVE
+   * printers plus a "none" clear option), a has-cash-drawer switch, a card-provider picker, a
+   * card-reader-id field only when the provider is a Stripe Terminal reader, and a Save that PATCHes.
+   * The printer list is DELIBERATELY not filtered to a location (the deli is single-location); the
    * server's own binding check is the authority regardless. */
-  #renderTillHardware(): TemplateResult {
+  #renderHardware(device: DeviceRow): TemplateResult {
+    const hw = this.#hardwareFor(device.id);
     const activePrinters = this.printers.filter((p) => p.active);
-    return html`<label class="field"
+    return html`<div class="hardware" data-test="hardware-${device.id}">
+      <label class="field"
         >${t("devices.receipt_printer")}
         <select
-          ${ref(this.#printerSelect)}
-          data-test="receipt-printer-select"
-          @change=${(e: Event) => this.#onPrinterChange(e)}
+          data-test="hw-printer-${device.id}"
+          @change=${(e: Event) =>
+            this.#setHardware(device.id, {
+              receiptPrinterId: (e.target as HTMLSelectElement).value,
+            })}
         >
           <option value="">${t("devices.receipt_printer_none")}</option>
           ${activePrinters.map((p) => html`<option value=${p.id}>${p.name}</option>`)}
@@ -512,16 +436,21 @@ export class DevicesScreen extends LitElement {
       </label>
       <wt-switch
         label=${t("devices.has_cash_drawer")}
-        data-test="cash-drawer-switch"
-        .checked=${this.hasCashDrawer}
-        @wt-change=${(e: CustomEvent<{ checked: boolean }>) => this.#onCashDrawerChange(e)}
+        data-test="hw-cash-drawer-${device.id}"
+        .checked=${hw.hasCashDrawer}
+        @wt-change=${(e: CustomEvent<{ checked: boolean }>) => {
+          e.stopPropagation();
+          this.#setHardware(device.id, { hasCashDrawer: e.detail.checked });
+        }}
       ></wt-switch>
       <label class="field"
         >${t("devices.card_provider")}
         <select
-          ${ref(this.#cardProviderSelect)}
-          data-test="card-provider-select"
-          @change=${(e: Event) => this.#onCardProviderChange(e)}
+          data-test="hw-card-provider-${device.id}"
+          @change=${(e: Event) => {
+            e.stopPropagation();
+            this.#setHardware(device.id, { cardProvider: (e.target as HTMLSelectElement).value });
+          }}
         >
           ${CARD_PROVIDERS.map(
             (provider) =>
@@ -530,16 +459,31 @@ export class DevicesScreen extends LitElement {
         </select>
       </label>
       ${
-        this.cardProvider === "stripe_terminal"
+        hw.cardProvider === "stripe_terminal"
           ? html`<wt-input
-              @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=generate]"))}
+              @keydown=${(e: KeyboardEvent) =>
+                submitOnEnter(
+                  e,
+                  this.shadowRoot!.querySelector<HTMLElement>(`[data-test=hw-save-${device.id}]`),
+                )}
               label=${t("devices.card_reader")}
-              data-test="card-reader-id"
-              .value=${this.cardReaderId}
-              @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onCardReaderChange(e)}
+              data-test="hw-card-reader-${device.id}"
+              .value=${hw.cardReaderId}
+              @wt-change=${(e: CustomEvent<{ value: string }>) => {
+                e.stopPropagation();
+                this.#setHardware(device.id, { cardReaderId: e.detail.value });
+              }}
             ></wt-input>`
           : nothing
-      }`;
+      }
+      <wt-button
+        variant="secondary"
+        size="sm"
+        data-test="hw-save-${device.id}"
+        @click=${() => void this.#saveHardware(device.id)}
+        >${t("devices.save_hardware")}</wt-button
+      >
+    </div>`;
   }
 
   #renderDevice(device: DeviceRow): TemplateResult {
@@ -550,6 +494,9 @@ export class DevicesScreen extends LitElement {
           <div class="details">
             <span class="label" data-test="device-label-${device.id}">${device.label}</span>
             <span class="meta">
+              <span data-test="device-profile-${device.id}"
+                >${this.#profileName(device.deviceProfileId)}</span
+              >
               <span data-test="device-station-${device.id}"
                 >${this.#stationName(device.stationId)}</span
               >
@@ -565,10 +512,8 @@ export class DevicesScreen extends LitElement {
             device.active
               ? // The select's live value is reconciled to `device.deviceProfileId` in `updated()` (after
                 // its <option> children exist), NOT by a per-option `?selected` attribute — the same
-                // post-render pattern the enrol-form selects use. This is what makes a FAILED reassign snap
-                // the control back to the device's actual profile (the re-render runs `updated()` again)
-                // rather than stranding on the operator's rejected pick; `?selected` never resets the live
-                // `.selected` property once the operator has interacted.
+                // post-render pattern the hardware selects use. This is what makes a FAILED reassign snap
+                // the control back to the device's actual profile rather than stranding on the rejected pick.
                 html`<select
                   data-test="reassign-${device.id}"
                   aria-label=${`${t("devices.reassign")} ${device.label}`}
@@ -601,6 +546,7 @@ export class DevicesScreen extends LitElement {
               : nothing
           }
         </div>
+        ${device.active ? this.#renderHardware(device) : nothing}
       </wt-card>
     </li>`;
   }
@@ -650,64 +596,7 @@ export class DevicesScreen extends LitElement {
 
       <section>
         <h2 class="panel-title">${t("devices.generate_title")}</h2>
-        <div class="new">
-          <label class="field"
-            >${t("devices.kind")}
-            <select data-test="kind-select" @change=${(e: Event) => this.#onKindChange(e)}>
-              <option value="kds_station">${t("devices.kind_kds_station")}</option>
-              <option value="till">${t("devices.kind_till")}</option>
-              <option value="handheld">${t("devices.kind_handheld")}</option>
-            </select>
-          </label>
-          ${
-            this.kind === "kds_station"
-              ? html`<label class="field"
-                  >${t("devices.station")}
-                  <select
-                    ${ref(this.#stationSelect)}
-                    data-test="station-select"
-                    @change=${(e: Event) => this.#onStationChange(e)}
-                  >
-                    ${this.stations.map((s) => html`<option value=${s.id}>${s.name}</option>`)}
-                  </select>
-                </label>`
-              : nothing
-          }
-          ${
-            this.kind === "till" || this.kind === "handheld"
-              ? html`<label class="field"
-                  >${t("devices.till")}
-                  <select
-                    ${ref(this.#tillSelect)}
-                    data-test="till-select"
-                    @change=${(e: Event) => this.#onTillChange(e)}
-                  >
-                    ${this.tills.map((till) => html`<option value=${till.id}>${till.label}</option>`)}
-                  </select>
-                </label>`
-              : nothing
-          }
-          <label class="field"
-            >${t("devices.device_profile")}
-            <select
-              ${ref(this.#deviceProfileSelect)}
-              data-test="device-profile-select"
-              @change=${(e: Event) => this.#onDeviceProfileChange(e)}
-            >
-              <option value="">${t("devices.device_profile_none")}</option>
-              ${this.deviceProfiles.map(
-                (profile) => html`<option value=${profile.id}>${profile.name}</option>`,
-              )}
-            </select>
-          </label>
-          ${this.kind === "till" ? this.#renderTillHardware() : nothing}
-          <wt-input
-            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=generate]"))}
-            label=${t("devices.label")}
-            data-test="code-label"
-            .value=${this.label}
-            @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onLabelChange(e)}
-          ></wt-input>
+        <div class="generate">
           <wt-button
             variant="primary"
             data-test="generate"

@@ -433,10 +433,10 @@ describe("till-station-screen", () => {
     expect(el.shadowRoot!.querySelector("header.head")).not.toBeNull();
   });
 
-  it("suppresses the enrol header when embedded (device 401 → enrol view)", async () => {
-    // deviceMode + a rejecting getDeviceStation drives #loadDevice to the enrol view.
+  it("suppresses the queue-surface header when embedded", async () => {
+    // deviceMode renders the queue surface; embedded drops its own header (the card host supplies chrome).
     const api = stubApi({
-      getDeviceStation: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
@@ -444,8 +444,7 @@ describe("till-station-screen", () => {
       embedded: true,
     });
     await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-enrol-submit]")).not.toBeNull(); // enrol view shown
-    expect(el.shadowRoot!.querySelector("header.head")).toBeNull(); // its header suppressed
+    expect(el.shadowRoot!.querySelector("header.head")).toBeNull();
   });
 });
 
@@ -459,12 +458,6 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
   function deviceApi(overrides: Record<string, unknown> = {}): TillApi {
     return {
       getDeviceStation: vi.fn().mockResolvedValue({ station: boundStation }),
-      enrolDevice: vi.fn().mockResolvedValue({
-        deviceId: "dev-1",
-        kind: "kds_station",
-        stationId: "st-dev",
-        label: "Pase",
-      }),
       deviceAdvance: vi.fn().mockResolvedValue(undefined),
       listStations: vi.fn().mockResolvedValue(stations),
       getStationQueue: vi.fn().mockResolvedValue(cocinaQueue),
@@ -475,15 +468,6 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
       ...overrides,
     } as unknown as TillApi;
   }
-
-  const enrolInput = (el: TillStationScreen) =>
-    el.shadowRoot!.querySelector<HTMLElement>("[data-enrol-code]");
-  const typeCode = async (el: TillStationScreen, value: string): Promise<void> => {
-    enrolInput(el)!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
-    );
-    await el.updateComplete;
-  };
 
   it("probes the device station on connect and renders its queue — no picker, no session reads", async () => {
     const api = deviceApi();
@@ -533,58 +517,52 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     expect(el.shadowRoot!.querySelector("[data-back]")).toBeNull();
   });
 
-  it("a 401 device probe shows the enrol view (a code field), not the queue", async () => {
-    const api = deviceApi({
-      getDeviceStation: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
-    });
-    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
-      api,
-      deviceMode: true,
-    });
-    await flush(el);
-    expect(enrolInput(el)).not.toBeNull();
-    expect(queueWidget(el)).toBeNull();
+  it("a 401 device probe (revoked cookie) emits device-unauthorized and shows no enrol sub-view", async () => {
+    // The station screen holds no enrol sub-view of its own any more (device-enrolment §3.1): a revoked/
+    // expired device cookie surfaces as a 401, which it turns into a `device-unauthorized` event so the
+    // app re-boots through the unified front door to the two-step enrol screen. It never calls the old
+    // bare-code enrol.
+    // The composed event fires from `#loadDevice` (connectedCallback) during mount, so listen at the
+    // document BEFORE mounting — attaching after would miss it.
+    const reboot = vi.fn();
+    document.addEventListener("device-unauthorized", reboot);
+    try {
+      const api = deviceApi({
+        getDeviceStation: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+      });
+      const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+        api,
+        deviceMode: true,
+      });
+      await flush(el);
+      expect(reboot).toHaveBeenCalledOnce();
+      // No bespoke enrol code field — the screen has none.
+      expect(el.shadowRoot!.querySelector("[data-enrol-code]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-enrol-submit]")).toBeNull();
+    } finally {
+      document.removeEventListener("device-unauthorized", reboot);
+    }
   });
 
-  it("enrolling with a code sends it verbatim then re-probes into the queue", async () => {
-    const getDeviceStation = vi
-      .fn()
-      .mockRejectedValueOnce({ code: "device.unauthorized" }) // not enrolled yet → enrol view
-      .mockResolvedValueOnce({ station: boundStation }); // after enrol → the bound queue
-    const api = deviceApi({ getDeviceStation });
-    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
-      api,
-      deviceMode: true,
-    });
-    await flush(el);
-    await typeCode(el, "ABCD-1234");
-    el.shadowRoot!.querySelector<HTMLElement>("[data-enrol-submit]")!.click();
-    await flush(el);
-    // Sent verbatim — the server normalises the code, the client does not.
-    expect(api.enrolDevice).toHaveBeenCalledWith("ABCD-1234");
-    expect(queueWidget(el)!.groups).toEqual(cocinaQueue);
-    expect(enrolInput(el)).toBeNull();
-  });
-
-  it("a rejected enrol shows the localized reason and stays on the enrol view (never the raw code)", async () => {
-    const api = deviceApi({
-      getDeviceStation: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
-      enrolDevice: vi.fn().mockRejectedValue({ code: "device.pairing_expired" }),
-    });
-    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
-      api,
-      deviceMode: true,
-    });
-    await flush(el);
-    await typeCode(el, "STALE");
-    el.shadowRoot!.querySelector<HTMLElement>("[data-enrol-submit]")!.click();
-    await flush(el);
-    const alert = el.shadowRoot!.querySelector('[role="alert"]');
-    expect(alert).not.toBeNull();
-    expect(alert!.textContent).toContain(codeMessage("device.pairing_expired"));
-    expect(alert!.textContent).not.toContain("device.pairing_expired");
-    // Still on the enrol view so the operator can retry a fresh code.
-    expect(enrolInput(el)).not.toBeNull();
+  it("a NON-401 device probe failure keeps the queue chrome and does NOT emit device-unauthorized", async () => {
+    // A transient 5xx/network blip must not tear the kiosk down to the enrol front door — only a genuine
+    // 401 does. The screen keeps its (empty) queue surface and recovers on the next reload/reboot.
+    const reboot = vi.fn();
+    document.addEventListener("device-unauthorized", reboot);
+    try {
+      const api = deviceApi({
+        getDeviceStation: vi.fn().mockRejectedValue({ code: "server.internal" }),
+      });
+      const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+        api,
+        deviceMode: true,
+      });
+      await flush(el);
+      expect(reboot).not.toHaveBeenCalled();
+      expect(el.shadowRoot!.querySelector("[data-enrol-code]")).toBeNull();
+    } finally {
+      document.removeEventListener("device-unauthorized", reboot);
+    }
   });
 
   it("a per-line bump routes through deviceAdvance (never the session verb) and reloads via getDeviceStation", async () => {

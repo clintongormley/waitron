@@ -17,6 +17,10 @@ const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const STATION_A = "cccccccc-0000-4000-8000-000000000001";
 const STATION_B = "cccccccc-0000-4000-8000-000000000002";
+// A kds device profile per tenant — a device is DEFINED by its profile now (device_profile_id is NOT
+// NULL), and a `kds` form factor is what the binding rule requires for a station-bound device.
+const KDS_PROFILE_A = "eeeeeeee-0000-4000-8000-000000000001";
+const KDS_PROFILE_B = "eeeeeeee-0000-4000-8000-000000000002";
 // A location id that is never seeded — the negative for the direct location_id → locations.id FK.
 const GHOST_LOCATION = "dddddddd-0000-4000-8000-000000000099";
 // A non-null token_hash fixture (shape only — the DB stores it as opaque text; the real scrypt
@@ -37,7 +41,7 @@ async function rollBackAfter(
   });
 }
 
-describe("devices + device_pairing_codes schema (columns, CHECKs, FKs, unique)", () => {
+describe("devices + device_pairing_codes schema (columns, FKs, unique)", () => {
   const suite = useTemplateDb({ template: "core" });
 
   beforeAll(async () => {
@@ -45,10 +49,10 @@ describe("devices + device_pairing_codes schema (columns, CHECKs, FKs, unique)",
       { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
       { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
     ]);
-    // A location + a kitchen_station per tenant: devices/device_pairing_codes carry a
-    // tenant-consistent (tenant_id, station_id) → kitchen_stations FK, so a bound row needs a real
-    // owning station, which itself needs an owning location. operation_description is Spanish test
-    // DATA, not a schema identifier, exactly as the sibling kitchen-stations test uses 'Hostelería'.
+    // A location + a kitchen_station per tenant: a station-bound device carries a tenant-consistent
+    // (tenant_id, station_id) → kitchen_stations FK, so a bound row needs a real owning station, which
+    // itself needs an owning location. operation_description is Spanish test DATA, not a schema
+    // identifier, exactly as the sibling kitchen-stations test uses 'Hostelería'.
     await suite.admin.execute(sql`
       insert into locations (id, tenant_id, name, invoice_locales, operation_description)
       values
@@ -60,6 +64,15 @@ describe("devices + device_pairing_codes schema (columns, CHECKs, FKs, unique)",
       values
         (${STATION_A}, ${TENANT_A}, ${LOCATION_A}, 'Kitchen A'),
         (${STATION_B}, ${TENANT_B}, ${LOCATION_B}, 'Kitchen B')
+      on conflict (id) do nothing`);
+    // One kds device profile per tenant — the (tenant_id, device_profile_id) composite-FK target a
+    // station-bound device points at, and the `kds` form factor the binding rule reads to require a
+    // station.
+    await suite.admin.execute(sql`
+      insert into device_profiles (id, tenant_id, name, form_factor)
+      values
+        (${KDS_PROFILE_A}, ${TENANT_A}, 'KDS A', 'kds'),
+        (${KDS_PROFILE_B}, ${TENANT_B}, 'KDS B', 'kds')
       on conflict (id) do nothing`);
   });
 
@@ -76,16 +89,24 @@ describe("devices + device_pairing_codes schema (columns, CHECKs, FKs, unique)",
     return tenant === TENANT_A ? LOCATION_A : LOCATION_B;
   }
 
+  function profileOf(tenant: string): string {
+    return tenant === TENANT_A ? KDS_PROFILE_A : KDS_PROFILE_B;
+  }
+
+  // Seed a kds-profile device bound to `station` (a kds device binds a station and no register — the
+  // binding rule, tested in devices.trigger.pg.test.ts). `profile`/`location` default to the tenant's
+  // own, overridable to prove the composite FKs.
   async function seedDevice(
     tenant: string,
     station: string | null,
     label: string,
     location: string = locationOf(tenant),
+    profile: string = profileOf(tenant),
   ): Promise<string> {
     return asApp(tenant, async (tx) => {
       const r = await tx.execute<{ id: string }>(
-        sql`insert into devices (tenant_id, location_id, device_kind, station_id, label, token_hash)
-            values (${tenant}, ${location}, 'kds_station', ${station}, ${label}, ${TOKEN_HASH}) returning id`,
+        sql`insert into devices (tenant_id, location_id, device_profile_id, station_id, label, token_hash)
+            values (${tenant}, ${location}, ${profile}, ${station}, ${label}, ${TOKEN_HASH}) returning id`,
       );
       return r.rows[0]!.id;
     });
@@ -93,15 +114,13 @@ describe("devices + device_pairing_codes schema (columns, CHECKs, FKs, unique)",
 
   async function seedPairingCode(
     tenant: string,
-    station: string | null,
     codeSha256: string,
-    label: string,
     location: string = locationOf(tenant),
   ): Promise<string> {
     return asApp(tenant, async (tx) => {
       const r = await tx.execute<{ id: string }>(
-        sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256, device_kind, station_id, label)
-            values (${tenant}, ${location}, ${codeSha256}, 'kds_station', ${station}, ${label}) returning id`,
+        sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256)
+            values (${tenant}, ${location}, ${codeSha256}) returning id`,
       );
       return r.rows[0]!.id;
     });
@@ -115,14 +134,14 @@ describe("devices + device_pairing_codes schema (columns, CHECKs, FKs, unique)",
       tx.execute(sql`update devices set last_seen_at = now() where id = ${id}`),
     );
     // Read back through the Drizzle `devices` export (not raw SQL) — exercises the produced table
-    // export and its column mapping under the app role, incl. the device_kind enum column.
+    // export and its column mapping under the app role.
     const [row] = await asApp(TENANT_A, (tx) =>
       tx
         .select()
         .from(devices)
         .where(sql`id = ${id}`),
     );
-    expect(row!.deviceKind).toBe("kds_station");
+    expect(row!.deviceProfileId).toBe(KDS_PROFILE_A);
     expect(row!.locationId).toBe(LOCATION_A);
     expect(row!.stationId).toBe(STATION_A);
     expect(row!.label).toBe("Kitchen screen");
@@ -131,6 +150,9 @@ describe("devices + device_pairing_codes schema (columns, CHECKs, FKs, unique)",
   });
 
   it("devices: the station binding is tenant-consistent (composite FK to kitchen_stations)", async () => {
+    // STATION_B belongs to TENANT_B, so binding it on a TENANT_A device trips the composite
+    // (tenant_id, station_id) FK. The kds profile satisfies the binding rule (station present, no
+    // till), so the ONLY violated constraint is devices_station_fk.
     const e = await captureError(() => seedDevice(TENANT_A, STATION_B, "Cross-tenant station"));
     expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation
   });
@@ -139,8 +161,8 @@ describe("devices + device_pairing_codes schema (columns, CHECKs, FKs, unique)",
     // The direct FK the spec's `shifts` shape uses guarantees referential integrity to `locations`
     // (it does NOT enforce tenant-consistency — that would need the composite (tenant_id, location_id)
     // FK, which shifts and this table deliberately do not use). A never-seeded location → 23503.
-    // A valid station (STATION_A) is supplied so the per-kind station CHECK is satisfied and the ONLY
-    // violated constraint is the location FK.
+    // A valid station (STATION_A) is supplied so the binding rule is satisfied and the ONLY violated
+    // constraint is the location FK.
     const e = await captureError(() =>
       seedDevice(TENANT_A, STATION_A, "Ghost location", GHOST_LOCATION),
     );
@@ -150,8 +172,10 @@ describe("devices + device_pairing_codes schema (columns, CHECKs, FKs, unique)",
   // ---- device_pairing_codes ----------------------------------------------------------------
 
   it("device_pairing_codes: maps every column and is consumed by DELETE … RETURNING", async () => {
-    const id = await seedPairingCode(TENANT_A, STATION_A, "sha-control", "Code control");
-    // Read back through the Drizzle `devicePairingCodes` export — exercises its column mapping.
+    const id = await seedPairingCode(TENANT_A, "sha-control");
+    // Read back through the Drizzle `devicePairingCodes` export — exercises its column mapping. The
+    // code carries NO binding columns now: the enrolling device's profile (and everything it decides)
+    // is chosen at enrolment, not stamped on the code.
     const [row] = await asApp(TENANT_A, (tx) =>
       tx
         .select()
@@ -159,9 +183,7 @@ describe("devices + device_pairing_codes schema (columns, CHECKs, FKs, unique)",
         .where(sql`id = ${id}`),
     );
     expect(row!.codeSha256).toBe("sha-control");
-    expect(row!.deviceKind).toBe("kds_station");
     expect(row!.locationId).toBe(LOCATION_A);
-    expect(row!.stationId).toBe(STATION_A);
     // The redemption shape: a locking DELETE … RETURNING consumes the row (app_user holds DELETE).
     const deleted = await asApp(TENANT_A, (tx) =>
       tx
@@ -180,10 +202,8 @@ describe("devices + device_pairing_codes schema (columns, CHECKs, FKs, unique)",
     // single-use invariant. A UNIQUE index on (tenant_id, code_sha256) makes that unrepresentable: the
     // generator's ~1-in-2^40 duplicate code now fails the INSERT (the manager retries) instead of
     // silently minting a consumable duplicate.
-    await seedPairingCode(TENANT_A, STATION_A, "sha-dup", "First");
-    const e = await captureError(() =>
-      seedPairingCode(TENANT_A, STATION_A, "sha-dup", "Duplicate"),
-    );
+    await seedPairingCode(TENANT_A, "sha-dup");
+    const e = await captureError(() => seedPairingCode(TENANT_A, "sha-dup"));
     expect(pgErrorCode(e)).toBe("23505"); // unique_violation on (tenant_id, code_sha256)
 
     // Proof by deletion of the guard (§4): with the UNIQUE index replaced by a PLAIN one inside a
@@ -198,137 +218,10 @@ describe("devices + device_pairing_codes schema (columns, CHECKs, FKs, unique)",
       );
       await tx.execute(sql`set local role app_user`);
       const inserted = await tx.execute<{ id: string }>(
-        sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256, device_kind, station_id, label)
-            values (${TENANT_A}, ${LOCATION_A}, 'sha-dup', 'kds_station', ${STATION_A}, 'Now allowed') returning id`,
+        sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256)
+            values (${TENANT_A}, ${LOCATION_A}, 'sha-dup') returning id`,
       );
       expect(inserted.rows).toHaveLength(1); // the duplicate digest inserts once the UNIQUE index is gone
     });
-  });
-
-  // ---- per-kind station CHECK (kds_station ⇒ a station, handheld ⇒ none) --------------------
-
-  it("devices: the per-kind station CHECK ties station presence to device_kind", async () => {
-    // handheld is location-wide, never station-bound (spec §8a): a station on a handheld violates
-    // the CHECK. asApp so the insert runs the SAME app-role path the real enrolment does.
-    const withStation = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
-        tx.execute(
-          sql`insert into devices (tenant_id, location_id, device_kind, station_id, label, token_hash)
-              values (${TENANT_A}, ${LOCATION_A}, 'handheld', ${STATION_A}, 'Bad handheld', ${TOKEN_HASH})`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(withStation)).toBe("23514"); // check_violation
-
-    // handheld WITHOUT a station succeeds — the location-wide binding.
-    const ok = await asApp(TENANT_A, (tx) =>
-      tx.execute<{ id: string }>(
-        sql`insert into devices (tenant_id, location_id, device_kind, station_id, label, token_hash)
-            values (${TENANT_A}, ${LOCATION_A}, 'handheld', ${null}, 'Good handheld', ${TOKEN_HASH}) returning id`,
-      ),
-    );
-    expect(ok.rows).toHaveLength(1);
-
-    // kds_station WITHOUT a station is the opposite violation — a kitchen screen needs its station.
-    const kdsNoStation = await captureError(() => seedDevice(TENANT_A, null, "Bad kds"));
-    expect(pgErrorCode(kdsNoStation)).toBe("23514");
-
-    // Proof by deletion of the guard (§4): with the CHECK dropped inside a ROLLED-BACK tx, the SAME
-    // bad handheld-with-station insert now succeeds — attributing the 23514 above to this CHECK, not
-    // to some other constraint. The rollback restores it for the shared template clone. DROP runs as
-    // the owner (app_user holds no DDL), then `set local role app_user` inserts the app path.
-    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
-      await tx.execute(sql`alter table devices drop constraint devices_station_kind_ck`);
-      await tx.execute(sql`set local role app_user`);
-      const inserted = await tx.execute<{ id: string }>(
-        sql`insert into devices (tenant_id, location_id, device_kind, station_id, label, token_hash)
-            values (${TENANT_A}, ${LOCATION_A}, 'handheld', ${STATION_A}, 'Now allowed', ${TOKEN_HASH}) returning id`,
-      );
-      expect(inserted.rows).toHaveLength(1); // the bad row inserts once the CHECK is gone
-    });
-  });
-
-  it("device_pairing_codes: the per-kind station CHECK ties station presence to device_kind", async () => {
-    const withStation = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
-        tx.execute(
-          sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256, device_kind, station_id, label)
-              values (${TENANT_A}, ${LOCATION_A}, 'sha-hh-bad', 'handheld', ${STATION_A}, 'Bad handheld code')`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(withStation)).toBe("23514"); // check_violation
-
-    const ok = await asApp(TENANT_A, (tx) =>
-      tx.execute<{ id: string }>(
-        sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256, device_kind, station_id, label)
-            values (${TENANT_A}, ${LOCATION_A}, 'sha-hh-ok', 'handheld', ${null}, 'Good handheld code') returning id`,
-      ),
-    );
-    expect(ok.rows).toHaveLength(1);
-
-    const kdsNoStation = await captureError(() =>
-      seedPairingCode(TENANT_A, null, "sha-kds-nostation", "Bad kds code"),
-    );
-    expect(pgErrorCode(kdsNoStation)).toBe("23514");
-
-    // Proof by deletion of the guard on this table too.
-    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
-      await tx.execute(
-        sql`alter table device_pairing_codes drop constraint device_pairing_codes_station_kind_ck`,
-      );
-      await tx.execute(sql`set local role app_user`);
-      const inserted = await tx.execute<{ id: string }>(
-        sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256, device_kind, station_id, label)
-            values (${TENANT_A}, ${LOCATION_A}, 'sha-hh-bad2', 'handheld', ${STATION_A}, 'Now allowed') returning id`,
-      );
-      expect(inserted.rows).toHaveLength(1);
-    });
-  });
-
-  it("devices: a till binds NO station (per-kind CHECK names only kds_station)", async () => {
-    // A till is a first-class till device that rings sales under its node's SIF (spec §16); like a
-    // handheld it binds NO kitchen station. The CHECK is written `(kind = 'kds_station') = (station
-    // IS NOT NULL)`, so EVERY non-kds_station kind (handheld AND till) must carry a NULL station —
-    // WITHOUT the SQL ever naming the 'till' literal (which would trip Postgres's "new enum value in
-    // the same transaction" restriction if the CHECK were rewritten alongside the ADD VALUE).
-    const withStation = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
-        tx.execute(
-          sql`insert into devices (tenant_id, location_id, device_kind, station_id, label, token_hash)
-              values (${TENANT_A}, ${LOCATION_A}, 'till', ${STATION_A}, 'Bad till', ${TOKEN_HASH})`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(withStation)).toBe("23514"); // check_violation
-
-    // A till WITHOUT a station succeeds — the sale-capable, station-less binding.
-    const ok = await asApp(TENANT_A, (tx) =>
-      tx.execute<{ id: string }>(
-        sql`insert into devices (tenant_id, location_id, device_kind, station_id, label, token_hash)
-            values (${TENANT_A}, ${LOCATION_A}, 'till', ${null}, 'Good till', ${TOKEN_HASH}) returning id`,
-      ),
-    );
-    expect(ok.rows).toHaveLength(1);
-  });
-
-  it("device_pairing_codes: a till binds NO station (per-kind CHECK names only kds_station)", async () => {
-    const withStation = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
-        tx.execute(
-          sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256, device_kind, station_id, label)
-              values (${TENANT_A}, ${LOCATION_A}, 'sha-till-bad', 'till', ${STATION_A}, 'Bad till code')`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(withStation)).toBe("23514"); // check_violation
-
-    const ok = await asApp(TENANT_A, (tx) =>
-      tx.execute<{ id: string }>(
-        sql`insert into device_pairing_codes (tenant_id, location_id, code_sha256, device_kind, station_id, label)
-            values (${TENANT_A}, ${LOCATION_A}, 'sha-till-ok', 'till', ${null}, 'Good till code') returning id`,
-      ),
-    );
-    expect(ok.rows).toHaveLength(1);
   });
 });

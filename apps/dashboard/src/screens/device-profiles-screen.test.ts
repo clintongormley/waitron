@@ -17,8 +17,9 @@ const profiles: DeviceProfile[] = [
     name: "Front counter",
     canvasId: "c1",
     capabilities: ["integrated-card-payment", "open-cash-drawer"],
+    formFactor: "till",
   },
-  { id: "p2", name: "Kitchen", canvasId: null, capabilities: [] },
+  { id: "p2", name: "Kitchen", canvasId: null, capabilities: [], formFactor: "kds" },
 ];
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
@@ -60,6 +61,14 @@ function toggle(el: DeviceProfilesScreen, testId: string, checked: boolean) {
 
 function selectCanvas(el: DeviceProfilesScreen, value: string) {
   const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=profile-canvas]")!;
+  select.value = value;
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function selectFormFactor(el: DeviceProfilesScreen, value: string) {
+  const select = el.shadowRoot!.querySelector<HTMLSelectElement>(
+    "[data-test=profile-form-factor]",
+  )!;
   select.value = value;
   select.dispatchEvent(new Event("change", { bubbles: true }));
 }
@@ -124,11 +133,14 @@ describe("device-profiles-screen list mode", () => {
     const el = await mount(api);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p1]")!.click();
     await flush(el);
-    // The shipped locale is es-ES, so the copy suffix is the Spanish " (copia)".
-    expect(api.createDeviceProfile).toHaveBeenCalledWith("Front counter (copia)", "c1", [
-      "integrated-card-payment",
-      "open-cash-drawer",
-    ]);
+    // The shipped locale is es-ES, so the copy suffix is the Spanish " (copia)". The copy carries the
+    // source profile's form factor unchanged.
+    expect(api.createDeviceProfile).toHaveBeenCalledWith(
+      "Front counter (copia)",
+      "c1",
+      ["integrated-card-payment", "open-cash-drawer"],
+      "till",
+    );
     expect(api.listDeviceProfiles).toHaveBeenCalledTimes(2);
   });
 });
@@ -146,13 +158,58 @@ describe("device-profiles-screen editor form", () => {
     await el.updateComplete;
     selectCanvas(el, "c2");
     await el.updateComplete;
+    selectFormFactor(el, "tablet-landscape");
+    await el.updateComplete;
     toggle(el, "cap-act-as-kds", true);
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
     await flush(el);
-    expect(api.createDeviceProfile).toHaveBeenCalledWith("Kitchen tablet", "c2", ["act-as-kds"]);
+    expect(api.createDeviceProfile).toHaveBeenCalledWith(
+      "Kitchen tablet",
+      "c2",
+      ["act-as-kds"],
+      "tablet-landscape",
+    );
     // Back in list mode after a successful save.
     expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
+  });
+
+  it("New profile defaults the form factor to the cash register (till) when unchanged", async () => {
+    const api = stubApi();
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await el.updateComplete;
+    change(el, "profile-name", "Counter");
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+    await flush(el);
+    expect(api.createDeviceProfile).toHaveBeenCalledWith("Counter", null, [], "till");
+  });
+
+  it("the form-factor picker offers the four form factors with their human labels", async () => {
+    const el = await mount(stubApi());
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await el.updateComplete;
+    const options = [
+      ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>(
+        "[data-test=profile-form-factor] option",
+      ),
+    ];
+    expect(options.map((o) => o.value)).toEqual([
+      "till",
+      "phone-portrait",
+      "tablet-landscape",
+      "kds",
+    ]);
+    // The shipped locale is es-ES; the four values map to their localised labels (the "till" value is
+    // the cash register — never the raw token).
+    const labels = options.map((o) => o.textContent!.trim());
+    expect(labels).toEqual([
+      "Caja registradora",
+      "Teléfono de mano",
+      "Tableta de mano",
+      "Pantalla de cocina",
+    ]);
   });
 
   it("Save refuses an empty name (banner shown, no write)", async () => {
@@ -189,6 +246,32 @@ describe("device-profiles-screen editor form", () => {
       "[data-test=cap-act-as-kds]",
     )!;
     expect(kdsSwitch.checked).toBe(false);
+    // The form-factor picker pre-selects the loaded profile's form factor (p1 is a till).
+    const formFactor = el.shadowRoot!.querySelector<HTMLSelectElement>(
+      "[data-test=profile-form-factor]",
+    )!;
+    expect(formFactor.value).toBe("till");
+  });
+
+  it("Edit pre-selects a non-default form factor and Save sends it via updateDeviceProfile", async () => {
+    const kdsProfile: DeviceProfile = { ...profiles[0], formFactor: "kds" };
+    const api = stubApi({ getDeviceProfile: vi.fn().mockResolvedValue(kdsProfile) });
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await flush(el);
+    const formFactor = el.shadowRoot!.querySelector<HTMLSelectElement>(
+      "[data-test=profile-form-factor]",
+    )!;
+    expect(formFactor.value).toBe("kds");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+    await flush(el);
+    expect(api.updateDeviceProfile).toHaveBeenCalledWith(
+      "p1",
+      "Front counter",
+      "c1",
+      ["integrated-card-payment", "open-cash-drawer"],
+      "kds",
+    );
   });
 
   it("Edit → toggling a capability off then Save calls updateDeviceProfile without it", async () => {
@@ -200,9 +283,13 @@ describe("device-profiles-screen editor form", () => {
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
     await flush(el);
-    expect(api.updateDeviceProfile).toHaveBeenCalledWith("p1", "Front counter", "c1", [
-      "open-cash-drawer",
-    ]);
+    expect(api.updateDeviceProfile).toHaveBeenCalledWith(
+      "p1",
+      "Front counter",
+      "c1",
+      ["open-cash-drawer"],
+      "till",
+    );
   });
 
   it("Edit → clearing the canvas select saves canvasId null (form-factor default)", async () => {
@@ -214,10 +301,13 @@ describe("device-profiles-screen editor form", () => {
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
     await flush(el);
-    expect(api.updateDeviceProfile).toHaveBeenCalledWith("p1", "Front counter", null, [
-      "integrated-card-payment",
-      "open-cash-drawer",
-    ]);
+    expect(api.updateDeviceProfile).toHaveBeenCalledWith(
+      "p1",
+      "Front counter",
+      null,
+      ["integrated-card-payment", "open-cash-drawer"],
+      "till",
+    );
   });
 
   it("Edit shows the error banner and stays in list mode when getDeviceProfile fails", async () => {

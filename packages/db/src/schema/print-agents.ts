@@ -8,7 +8,8 @@ import { locations, tenants } from "./tenants.js";
  * (`devices` — its own tables, its `hashSecret`/`verifySecret` scrypt token, its WebAuthn-challenge
  * single-use TTL pairing code), because a print agent is the same "enrol a trusted local box
  * centrally, revoke it centrally" problem — except it binds to PRINTERS (a `printers.agent_id`
- * composite FK points back at it), not to a station, so it carries no `station_id`/`device_kind`.
+ * composite FK points back at it), not to a station, so it carries no `station_id` (nor any
+ * device-kind binding — a device's kind is derived from its profile's form factor, not a column).
  *
  * Tenant + location scoped (spec §2a) — separate `tenant_id` and `location_id` FKs, both
  * `onDelete restrict`, the `shifts`/`devices` shape.

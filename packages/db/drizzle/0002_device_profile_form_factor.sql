@@ -1,0 +1,2 @@
+CREATE TYPE "public"."device_form_factor" AS ENUM('till', 'phone-portrait', 'tablet-landscape', 'kds');--> statement-breakpoint
+ALTER TABLE "device_profiles" ADD COLUMN "form_factor" "device_form_factor" NOT NULL;

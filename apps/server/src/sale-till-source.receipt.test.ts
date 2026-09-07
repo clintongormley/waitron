@@ -171,43 +171,53 @@ async function insertTill(cfg: TillConfig, locationId: string, name: string): Pr
   return till.rows[0]!.id;
 }
 
-/** Enrol a REAL `till`-kind device bound to `boundTillId`, and return the `waitron_device=<id>.<token>`
- *  cookie a booting till carries — the mint->redeem runs on the app role under the tenant (the
- *  production enrol path), so the scrypt hash verifies and `tryReadDevice` resolves a genuine binding.
- *  The sale route now resolves `till_id` from THIS device (`requireSaleTillId`). */
+/** Seed a `phone-portrait` (handheld) `device_profiles` row for the tenant — the sale-capable form
+ *  factor that binds an EXISTING register at enrol (Task 7), the register-under-test here. A per-call
+ *  counter keeps the tenant-unique name from colliding. */
+let profileCounter = 0;
+async function seedHandheldProfile(cfg: TillConfig): Promise<string> {
+  profileCounter += 1;
+  const { rows } = await suite.admin.execute<{ id: string }>(sql`
+    insert into device_profiles (tenant_id, name, form_factor)
+    values (${cfg.tenantId}, ${`Handheld ${profileCounter}`}, 'phone-portrait') returning id`);
+  return rows[0]!.id;
+}
+
+/** Enrol a REAL sale-capable device BOUND TO an existing register (`boundTillId`), and return the
+ *  `waitron_device=<id>.<token>` cookie a booting device carries — the mint->redeem runs on the app role
+ *  under the tenant (the production enrol path), so the scrypt hash verifies and `tryReadDevice` resolves
+ *  a genuine binding. Since Task 7 a `till` device auto-creates its OWN register, so binding a SPECIFIC
+ *  existing register is the handheld leg (`registerId`); the sale route resolves `till_id` from THIS
+ *  device (`requireSaleTillId`) either way. */
 async function enrolTillCookie(cfg: TillConfig, boundTillId: string): Promise<string> {
-  const { code } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
-    return generatePairingCode(tx, cfg, {
-      kind: "till",
-      stationId: null,
-      tillId: boundTillId,
-      label: "Counter till",
-    });
-  });
+  const profileId = await seedHandheldProfile(cfg);
   const dev = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-    return enrolDevice(tx, cfg, { code });
+    const { code } = await generatePairingCode(tx, cfg);
+    return enrolDevice(tx, cfg, {
+      code,
+      name: "Counter device",
+      profileId,
+      registerId: boundTillId,
+    });
   });
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
 
-/** Enrol a REAL `till`-kind device bound to `boundTillId` and return its raw `deviceId` (not a cookie)
- *  — the id the SP-C dev-override header (`x-waitron-dev-device`) carries in place of the cookie. Same
- *  genuine mint->redeem enrol path as {@link enrolTillCookie}. */
+/** Enrol a REAL device bound to `boundTillId` and return its raw `deviceId` (not a cookie) — the id the
+ *  SP-C dev-override header (`x-waitron-dev-device`) carries in place of the cookie. Same genuine
+ *  mint->redeem enrol path as {@link enrolTillCookie}. */
 async function enrolTillDeviceId(cfg: TillConfig, boundTillId: string): Promise<string> {
-  const { code } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
-    return generatePairingCode(tx, cfg, {
-      kind: "till",
-      stationId: null,
-      tillId: boundTillId,
-      label: "Dev-override till",
-    });
-  });
+  const profileId = await seedHandheldProfile(cfg);
   const dev = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-    return enrolDevice(tx, cfg, { code });
+    const { code } = await generatePairingCode(tx, cfg);
+    return enrolDevice(tx, cfg, {
+      code,
+      name: "Dev-override device",
+      profileId,
+      registerId: boundTillId,
+    });
   });
   return dev.deviceId;
 }
@@ -224,10 +234,14 @@ function apiDeps(cfg: TillConfig): TillApiDeps {
 }
 
 /** Log in through the HTTP surface and return the session cookie the route sets. */
-async function login(app: Hono, operatorId: string): Promise<string> {
+async function login(app: Hono, cfg: TillConfig, operatorId: string): Promise<string> {
+  // The login is DEVICE-GATED (§5/§6): carry an enrolled device cookie, as a sale does. This throwaway
+  // device binds to the venue's own register (`cfg.tillId`); the sale calls below carry their OWN
+  // device cookie bound to the specific till each case exercises.
+  const deviceCookie = await enrolTillCookie(cfg, cfg.tillId);
   const res = await app.request("/api/session", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", cookie: deviceCookie },
     body: JSON.stringify({ personId: operatorId, pin: "5555" }),
   });
   expect(res.status).toBe(200);
@@ -328,7 +342,7 @@ describe("H2 receipt: sale-time till_id resolves from the device, the chain does
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const sessionCookie = await login(app, operatorId);
+    const sessionCookie = await login(app, cfg, operatorId);
 
     // Sale 1 via a device bound to till X (the venue's own till).
     const deviceX = await enrolTillCookie(cfg, tillX);
@@ -391,7 +405,7 @@ describe("SP-C: a sale posted with the dev-override header files under THAT devi
     // override header live (byte-for-byte inert otherwise — the boot.test.ts fail-closed arm proves that).
     const app = new Hono();
     mountTillApi(app, { ...apiDeps(cfg), devMode: true }, noopLog);
-    const sessionCookie = await login(app, operatorId);
+    const sessionCookie = await login(app, cfg, operatorId);
 
     const deviceY = await enrolTillDeviceId(cfg, tillY);
     const res = await app.request("/api/sales", {

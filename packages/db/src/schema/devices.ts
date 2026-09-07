@@ -1,37 +1,14 @@
-import {
-  boolean,
-  pgEnum,
-  pgTable,
-  text,
-  timestamp,
-  unique,
-  uniqueIndex,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { boolean, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { locations, tenants } from "./tenants.js";
 
 /**
- * The KIND of device a `devices` row represents (device-identity-1, §2a). `kds_station` — an
- * always-on kitchen screen — binds to one kitchen station; `handheld` — a roving waiter phone that
- * takes tableside orders (handheld-tableside-ordering spec §2, §8a) — is location-wide and binds to
- * NO station; `till` — a first-class till device (SP-A.2 §16) — binds NO station either and rings
- * sales under its node's SIF. It is a pgEnum, not a text check, so adding a further kind (e.g. a
- * customer-facing display) is an ADDITIVE enum value later rather than a destructive migration
- * (spec §0, §9). Both `devices` and `device_pairing_codes` carry a column of this type, so
- * drizzle-kit emits `CREATE TYPE device_kind` once. The per-kind station rule (ONLY kds_station ⇒ a
- * station; every other kind ⇒ none) is a hand-written CHECK on both tables (drizzle-kit models no raw
- * CHECKs), written `(device_kind = 'kds_station') = (station_id IS NOT NULL)` so it names only
- * `kds_station` and no other kind's literal — a future station-binding kind must extend that clause.
- */
-export const deviceKind = pgEnum("device_kind", ["kds_station", "handheld", "till"]);
-
-/**
  * An always-on trusted DEVICE (device-identity-1) — a physical screen that enrols ONCE via a pairing
- * code and authenticates itself thereafter with an httpOnly cookie, with NO per-person login. Only
- * the `kds_station` kind is wired now: it binds to a single `kitchen_stations` row and may read and
- * bump only that station's queue (spec §1, §3d). Tenant + location scoped (spec §2a) — separate
- * `tenant_id` and `location_id` FKs, both `onDelete restrict`, the `shifts` shape; the station binding
- * narrows it further to one kitchen display within that venue.
+ * code and authenticates itself thereafter with an httpOnly cookie, with NO per-person login. A device
+ * is DEFINED by its `device_profile_id` (NOT NULL): the profile's form factor decides whether it binds
+ * a kitchen station (kds) or a register (every other form factor) — enforced by device_binding_rule_insert / _update,
+ * not a kind column. Tenant + location scoped (spec §2a) — separate `tenant_id` and `location_id` FKs,
+ * both `onDelete restrict`, the `shifts` shape; the station binding narrows a kds device further to one
+ * kitchen display within that venue.
  *
  * `token_hash` is the scrypt hash of the device token (`hashSecret`, packages/identity secret-hash.ts,
  * §2c): the plaintext lives ONLY in the cookie, never at rest. Revoke by flipping `active = false`
@@ -42,7 +19,7 @@ export const deviceKind = pgEnum("device_kind", ["kds_station", "handheld", "til
  * `station_id` is a BARE uuid: the tenant-consistent (tenant_id, station_id) → kitchen_stations
  * (tenant_id, id) composite FK is hand-written in the --custom migration (the KDS-1 idiom — a
  * `kitchen_stations` table, so its FK cannot be a one-arg `.references()`), exactly as
- * `ticket_items.station_id` is. NULLABLE so a future non-station kind carries no station; MATCH
+ * `ticket_items.station_id` is. NULLABLE so a non-kds device carries no station; MATCH
  * SIMPLE (the FK default) skips the check on a NULL station_id.
  */
 export const devices = pgTable(
@@ -63,21 +40,23 @@ export const devices = pgTable(
       .notNull()
       /* v8 ignore next */
       .references(() => locations.id, { onDelete: "restrict" }),
-    deviceKind: deviceKind("device_kind").notNull(),
-    // The kds_station binding. Bare column: the tenant-consistent (tenant_id, station_id) →
-    // kitchen_stations(tenant_id, id) FK is hand-written in the --custom migration. NULLABLE — a
-    // future non-station kind carries no station (MATCH SIMPLE skips the FK check on a NULL).
+    // The station binding, populated only for a kds-form-factor device. Bare column: the
+    // tenant-consistent (tenant_id, station_id) → kitchen_stations(tenant_id, id) FK is hand-written
+    // in the --custom migration. NULLABLE — a non-kds device carries no station (MATCH SIMPLE skips
+    // the FK check on a NULL); the binding rule is enforced by device_binding_rule_insert / _update through the
+    // profile's form factor, not a per-column NOT NULL.
     stationId: uuid("station_id"),
-    // The `tills` row this sale-capable device rings against (SP-A.2 §16.4). Populated for the
-    // sale-capable kinds (`till`, `handheld`), NULL for a `kds_station`. Bare uuid: the tenant-consistent
+    // The `tills` row this sale-capable device rings against (SP-A.2 §16.4). Populated for a
+    // non-kds (register-bound) form factor, NULL for a kds device. Bare uuid: the tenant-consistent
     // (tenant_id, till_id) → tills(tenant_id, id) composite FK is hand-written in the --custom migration
     // (a bare column carries no FK), the `station_id` idiom. MATCH SIMPLE skips the check on a NULL.
     tillId: uuid("till_id"),
     // The assigned reusable DEVICE PROFILE (device-profile design 2026-09-05 §5.1) — the binding bundle
-    // (name + canvas reference + capabilities) this device resolves against. Bare uuid, NULLABLE: the
-    // tenant-consistent (tenant_id, device_profile_id) → device_profiles(tenant_id, id) composite FK is
-    // hand-written in the --custom migration, the `station_id` idiom. MATCH SIMPLE skips the check on a NULL.
-    deviceProfileId: uuid("device_profile_id"),
+    // (name + canvas reference + capabilities) this device resolves against, and the row's FORM FACTOR:
+    // a device is now DEFINED by its profile, so this is NOT NULL. Bare uuid: the tenant-consistent
+    // (tenant_id, device_profile_id) → device_profiles(tenant_id, id) composite FK is hand-written in
+    // the --custom migration, the `station_id` idiom.
+    deviceProfileId: uuid("device_profile_id").notNull(),
     // Static hardware binding (SP-A.2 §16.3) — the per-device receipt printer (and its cash-drawer kick).
     // Bare uuid, NULLABLE: the tenant-consistent (tenant_id, receipt_printer_id) → printers(tenant_id, id)
     // composite FK is hand-written in the --custom migration. MATCH SIMPLE skips the check on a NULL.
@@ -115,11 +94,15 @@ export const devices = pgTable(
 );
 
 /**
- * A short-lived, single-use PAIRING CODE (device-identity-1, §2b). An admin mints one bound to a
- * station (the `device.manage` generate verb); the kitchen screen redeems it and becomes a `devices`
- * row. Modelled on the WebAuthn challenge (packages/identity passkey.ts): the TTL is computed in code
- * from `created_at` (there is deliberately no `expires_at` column), and redemption is a locking
- * `DELETE … RETURNING` that serialises concurrent redeems and consumes the code.
+ * A short-lived, single-use PAIRING CODE (device-identity-1, §2b). An admin mints one; the device
+ * redeems it and becomes a `devices` row. Modelled on the WebAuthn challenge (packages/identity
+ * passkey.ts): the TTL is computed in code from `created_at` (there is deliberately no `expires_at`
+ * column), and redemption is a locking `DELETE … RETURNING` that serialises concurrent redeems and
+ * consumes the code.
+ *
+ * The code carries NO binding columns: the enrolling device's profile (and everything the profile
+ * decides — form factor, station/register binding, hardware) is chosen at enrolment, not stamped on
+ * the code. The code is only the redeemable secret and its venue scope.
  *
  * That DELETE is why `app_user` holds DELETE here — NOVEL for this repo's tenant tables (the DELETE
  * precedent is 0039/0042) — and no UPDATE: a code is consumed, never edited. The grant
@@ -128,7 +111,6 @@ export const devices = pgTable(
  * `code_sha256` is the SHA-256 of a high-entropy pairing code (§2c), the deterministic lookup key
  * the redeeming device selects on (it sends only the code, no selector, so a per-row scrypt salt
  * cannot be used for lookup). The `(tenant_id, code_sha256)` index is that redemption path.
- * `station_id` is a BARE uuid whose composite FK is hand-written like `devices.station_id`.
  */
 export const devicePairingCodes = pgTable(
   "device_pairing_codes",
@@ -148,27 +130,6 @@ export const devicePairingCodes = pgTable(
     // scrypt hash: the redeeming device sends only the code, so lookup must be by a deterministic
     // digest. High entropy + single-use + a short TTL is what keeps that lookup safe.
     codeSha256: text("code_sha256").notNull(),
-    deviceKind: deviceKind("device_kind").notNull(),
-    // The station binding to stamp on the enrolled device. Bare column: composite FK hand-written.
-    stationId: uuid("station_id"),
-    // The bindings to stamp on the enrolled device, mirroring `devices` (SP-A.2 §16). Each is a bare
-    // uuid/text with a hand-written composite FK (or none), the `station_id` idiom; a NULL is skipped by
-    // MATCH SIMPLE. `till_id` — the tills row a sale-capable device rings against (§16.4); NULL for a
-    // kds_station. The hardware trio
-    // (receipt_printer_id / has_cash_drawer / card_provider / card_reader_id) — the static hardware
-    // binding (§16.3); credentials stay in the vault, never here.
-    tillId: uuid("till_id"),
-    // `device_profile_id` — the reusable device profile to stamp on the enrolled device (device-profile
-    // design 2026-09-05 §5.1). Bare uuid, NULLABLE: the tenant-consistent (tenant_id, device_profile_id)
-    // → device_profiles(tenant_id, id) composite FK is hand-written --custom, the `station_id` idiom; a
-    // NULL is skipped by MATCH SIMPLE.
-    deviceProfileId: uuid("device_profile_id"),
-    receiptPrinterId: uuid("receipt_printer_id"),
-    hasCashDrawer: boolean("has_cash_drawer").notNull().default(false),
-    cardProvider: text("card_provider").notNull().default("none"),
-    cardReaderId: text("card_reader_id"),
-    // The label to give the enrolled device.
-    label: text("label").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
       .notNull()
       .defaultNow(),

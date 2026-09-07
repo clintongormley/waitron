@@ -8,7 +8,7 @@ import {
   nodeId as brandNodeId,
   tenantId as brandTenantId,
 } from "@waitron/shared";
-import type { CapabilityFlag } from "@waitron/layouts";
+import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
 import type { SeedReport, WaitronModule } from "@waitron/module";
 import type { VenueAction } from "./venue-plan.js";
 
@@ -225,7 +225,7 @@ export async function applyVenue(
 async function seedDeviceProfiles(
   tx: Transaction,
   tenantId: string,
-  profiles: { name: string; capabilities: CapabilityFlag[] }[],
+  profiles: { name: string; formFactor: FormFactor; capabilities: CapabilityFlag[] }[],
 ): Promise<void> {
   // Find-or-create is NAME-based, so idempotency is scoped to a SAME-LOCALE, same-names re-provision: a
   // different-locale re-run would seed a second, differently-named set, and a tenant who renamed a
@@ -251,6 +251,7 @@ async function seedDeviceProfiles(
       managementSessionId: session.id,
       tenantId,
       name: profile.name,
+      formFactor: profile.formFactor,
       canvasId: null,
       capabilities: profile.capabilities,
     });

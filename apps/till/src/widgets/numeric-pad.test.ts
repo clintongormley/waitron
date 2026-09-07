@@ -92,8 +92,40 @@ describe("nextPinValue", () => {
 });
 
 describe("till-numeric-pad", () => {
+  // The visual key order, read straight off the rendered `[data-key]` sequence. A blank grid cell
+  // (pin mode's placeholder where the calculator layout carries `.`) has no `data-key`, so it never
+  // appears here.
+  const keyOrder = (el: TillNumericPad): (string | null)[] =>
+    [...el.shadowRoot!.querySelectorAll("[data-key]")].map((node) => node.getAttribute("data-key"));
+
   it("registers as a custom element", () => {
     expect(customElements.get("till-numeric-pad")).toBe(TillNumericPad);
+  });
+
+  it("renders keys in phone-dialpad order (1-2-3 on top) in pin mode", async () => {
+    const { el } = await mountWidget<TillNumericPad>("till-numeric-pad", {
+      value: "",
+      mode: "pin",
+    });
+    expect(keyOrder(el)).toEqual(["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "backspace"]);
+  });
+
+  it("renders keys in calculator order (7-8-9 on top) in decimal mode", async () => {
+    const { el } = await mountWidget<TillNumericPad>("till-numeric-pad", { value: "" });
+    expect(keyOrder(el)).toEqual([
+      "7",
+      "8",
+      "9",
+      "4",
+      "5",
+      "6",
+      "1",
+      "2",
+      "3",
+      ".",
+      "0",
+      "backspace",
+    ]);
   });
 
   it("renders a key for every digit, the decimal point and backspace", async () => {

@@ -21,6 +21,7 @@ const profiles: DeviceProfile[] = [
     name: "Front counter",
     canvasId: "c1",
     capabilities: ["integrated-card-payment"],
+    formFactor: "till",
   },
 ];
 

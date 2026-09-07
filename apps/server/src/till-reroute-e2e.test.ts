@@ -59,6 +59,9 @@ const SERIES_A = "44444444-4444-4444-8444-444444444444";
 const SERIES_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const PERSON = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const DEVICE_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+// A device is defined by its profile's form factor now (no device_kind column): a `till` profile means
+// the binding rule requires a register (till_id), not a station.
+const DEVICE_PROFILE = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 const DEVICE_TOKEN = "reroute-e2e-device-token";
 // The venue's one open tab, tagged with A's node id — the tab A had opened, seeded straight into B's
 // database (the state a replicated tab would be in; swap spec §4.3, live-service rows are copied, never
@@ -136,8 +139,10 @@ async function seedVenue(admin: Database): Promise<void> {
     values (${SERIES_B}, ${TENANT}, ${NODE_B}, 'B') on conflict do nothing`);
   await admin.execute(sql`insert into persons (id, tenant_id, display_name, pin_hash, role)
     values (${PERSON}, ${TENANT}, 'Cajera', ${hashPin("5555")}, 'staff') on conflict do nothing`);
-  await admin.execute(sql`insert into devices (id, tenant_id, location_id, device_kind, till_id, label, token_hash)
-    values (${DEVICE_ID}, ${TENANT}, ${LOCATION}, 'till', ${TILL}, 'Counter till', ${hashSecret(DEVICE_TOKEN)})
+  await admin.execute(sql`insert into device_profiles (id, tenant_id, name, form_factor, capabilities)
+    values (${DEVICE_PROFILE}, ${TENANT}, 'Counter', 'till', '[]'::jsonb) on conflict do nothing`);
+  await admin.execute(sql`insert into devices (id, tenant_id, location_id, device_profile_id, till_id, label, token_hash)
+    values (${DEVICE_ID}, ${TENANT}, ${LOCATION}, ${DEVICE_PROFILE}, ${TILL}, 'Counter till', ${hashSecret(DEVICE_TOKEN)})
     on conflict do nothing`);
 }
 
@@ -290,7 +295,12 @@ describe("till reroute — two instances, one venue (real Postgres)", () => {
       const meOnA = await get(portA, "/api/device/me", DEVICE_COOKIE_HEADER);
       expect(meOnA.status).toBe(200);
       expect((await meOnA.json()).deviceId).toBe(DEVICE_ID);
-      const loginA = await post(portA, "/api/session", { personId: PERSON, pin: "5555" });
+      const loginA = await post(
+        portA,
+        "/api/session",
+        { personId: PERSON, pin: "5555" },
+        DEVICE_COOKIE_HEADER,
+      );
       expect(loginA.status).toBe(200);
 
       // 4. A goes down — its listener closes, which a till sees as an unreachable box. FAILING CASE: a
@@ -321,7 +331,12 @@ describe("till reroute — two instances, one venue (real Postgres)", () => {
         // open tab — tagged with the DEAD node's id — is returned by the now venue-wide read. FAILING
         // CASE: the pre-§3.6 own-node filter would hide NODE_A's tab from B (whose own node is NODE_B).
         expect((await get(portB, "/api/device/me", DEVICE_COOKIE_HEADER)).status).toBe(200);
-        const loginB = await post(portB, "/api/session", { personId: PERSON, pin: "5555" });
+        const loginB = await post(
+          portB,
+          "/api/session",
+          { personId: PERSON, pin: "5555" },
+          DEVICE_COOKIE_HEADER,
+        );
         expect(loginB.status).toBe(200);
         const held = await get(portB, "/api/working-orders", cookieOf(loginB));
         expect(held.status).toBe(200);

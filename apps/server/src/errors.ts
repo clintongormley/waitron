@@ -1108,7 +1108,7 @@ declare module "@waitron/shared" {
      */
     "device.pairing_code_unavailable": Record<string, never>;
     /**
-     * A pairing code for a STATION-BINDING kind (`kds_station`, {@link kindRequiresStation}) was minted
+     * A pairing code for a STATION-BINDING kind (`kds_station`) was minted
      * with NO station — `generatePairingCode`'s `stationId` was `null` for a kind that requires one. This
      * is a VALIDATION failure on the mint, not a lookup miss: nothing was looked up, so there is no
      * caller-supplied station id to echo. Distinct from `station.not_found`, which `requireLiveStation`
@@ -1125,7 +1125,7 @@ declare module "@waitron/shared" {
      */
     "device.station_required": Record<string, never>;
     /**
-     * A pairing code for a SALE-CAPABLE kind (`till` or `handheld`, {@link kindRequiresTill}) was minted
+     * A pairing code for a SALE-CAPABLE kind (`till` or `handheld`) was minted
      * with NO `till_id`, OR a `kds_station` code was minted WITH one. The `tills` row a sale-capable
      * device rings against is the fiscal register-snapshot a later task stamps at sale time (SP-A.2
      * §16.4), so a `till`/`handheld` MUST name one and a `kds_station` (which rings no sale) must name
@@ -1134,15 +1134,45 @@ declare module "@waitron/shared" {
      *
      * NO params: the fault names the PROBLEM, not a value — the missing/forbidden till id carries
      * nothing non-secret worth echoing, the same no-param shape `device.station_required` uses. Grep
-     * `"device.` in this file for the family: `station_required` / `pairing_invalid` /
-     * `pairing_expired` / `pairing_rate_limited` / `pairing_code_unavailable` / `unauthorized` are the
-     * param-less device siblings, while `forbidden_station` / `not_found` echo an id — this one takes
-     * after the former. `device.*` names the DOMAIN CONCEPT (device pairing), never the throwing package
+     * `"device.` in this file for the family: `station_required` / `register_required` /
+     * `register_name_taken` / `pairing_invalid` / `pairing_expired` / `pairing_rate_limited` /
+     * `pairing_code_unavailable` / `unauthorized` are the param-less device siblings, while
+     * `forbidden_station` / `not_found` echo an id — this one takes after the former. `device.*` names the DOMAIN CONCEPT (device pairing), never the throwing package
      * (`tenant.not_found`'s note gives the rule). Mapped to HTTP 400 by `device-api.ts`'s local STATUS
      * map (a request that named the wrong bindings for the kind), not here — the route owns the status.
      * Never renamed once shipped.
      */
     "device.till_required": Record<string, never>;
+    /**
+     * A device enrolling under a REGISTER-BINDING profile (a `phone-portrait`/`tablet-landscape`
+     * handheld) named NO register. A handheld rings sales under its node's
+     * SIF and must name the `tills` row it files against, so `enrolDevice` refuses it before any write
+     * (a `till`-form-factor device does not reach this — it MINTS its own register). The twin of
+     * `device.station_required` on the other binding: a required binding was omitted at enrol.
+     *
+     * NO params: the fault names the PROBLEM, not a value — the missing register carries nothing
+     * non-secret worth echoing, the same no-param shape `device.station_required` uses. Distinct from
+     * `device.binding_invalid` (a register WAS named but matches no row of this venue, which echoes the
+     * FIELD). `device.*` names the DOMAIN CONCEPT (device enrolment), never the throwing package
+     * (`tenant.not_found`'s note gives the rule). Mapped to HTTP status by the enrol route (Task 8),
+     * not here. Never renamed once shipped.
+     */
+    "device.register_required": Record<string, never>;
+    /**
+     * A `till`-form-factor device's enrolment tried to auto-create its cash register under a name
+     * already used by another register at the same venue. `enrolDevice` names the register after the
+     * device and reject-not-suffixes the clash (the operator renames the device), so two
+     * indistinguishable registers can never exist at one location — the `tills_tenant_location_name_key`
+     * unique index (migration 0006) is the guard, and this is its 23505 translated to a clean domain
+     * code rather than a raw 500.
+     *
+     * NO params: a "rename the device" validation carries nothing non-secret worth echoing (the
+     * colliding name is the operator's own input), the same no-param shape `device.station_required`
+     * uses. `device.*` names the DOMAIN CONCEPT (device enrolment), never the throwing package or the
+     * `tills` table (`tenant.not_found`'s note gives the rule). Mapped to HTTP status by the enrol
+     * route (Task 8), not here. Never renamed once shipped.
+     */
+    "device.register_name_taken": Record<string, never>;
     /**
      * A pairing code named a binding id — a `till_id`, `receipt_printer_id` or `device_profile_id` —
      * that matches no row of THIS tenant (absent, or another tenant's, which the tenant-consistent
@@ -1167,12 +1197,13 @@ declare module "@waitron/shared" {
       field: "tillId" | "receiptPrinterId" | "deviceProfileId";
     };
     /**
-     * The fixed dev pairing code (`dev-pairing.ts`, devMode only) found none of the seeded starter
-     * `till` device profiles in the tenant, so it refused to enrol — a till without a profile carries no
-     * capabilities and the pay/drawer firewall would refuse it. A provisioning regression, not a request
-     * fault: mapped to HTTP 500 by `device-api.ts`'s local STATUS map. NO params: the names it looked
-     * for are our own constants (`DEFAULT_DEVICE_PROFILES`). `device.*` names the DOMAIN CONCEPT
-     * (device pairing), never the throwing package. Never renamed once shipped.
+     * DORMANT — currently unthrown and unmapped. Its only thrower was the dev-till mint (which
+     * pre-selected a seeded starter `till` profile), deleted when the enrol flow moved profile choice to
+     * the device: the two-step verify→enrol path now takes an explicit `profileId`, so a missing profile
+     * surfaces as `device_profile.not_found` (404) instead. Removed from `device-api.ts`'s STATUS map
+     * with its thrower, so it maps nowhere. Kept REGISTERED — codes are never removed once shipped
+     * (§3) — so a future consumer can revive it; `device.*` names the DOMAIN CONCEPT (device pairing),
+     * never the throwing package. Never renamed once shipped.
      */
     "device.profile_missing": Record<string, never>;
     /**

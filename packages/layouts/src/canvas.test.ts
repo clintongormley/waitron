@@ -1,6 +1,7 @@
 // packages/layouts/src/canvas.test.ts
 import { describe, expect, it } from "vitest";
-import { CARD_TYPES, CAPABILITY_FLAGS, FORM_FACTORS } from "./canvas.js";
+import type { DeviceKind, FormFactor } from "./canvas.js";
+import { CARD_TYPES, CAPABILITY_FLAGS, FORM_FACTORS, kindOfFormFactor } from "./canvas.js";
 
 const noDupes = (t: readonly string[]) => new Set(t).size === t.length;
 
@@ -19,4 +20,22 @@ describe("catalogue tuples", () => {
     for (const c of ["integrated-card-payment", "open-cash-drawer", "act-as-kds"])
       expect(CAPABILITY_FLAGS).toContain(c);
   });
+});
+
+describe("kindOfFormFactor", () => {
+  // Table over EVERY form factor (typed as Record<FormFactor, …>, so a new form factor fails to
+  // compile until it gets a row here) → the device kind it collapses to. Two form factors map to
+  // `handheld`; the mapping is many-to-one by design.
+  const expected: Record<FormFactor, DeviceKind> = {
+    till: "till",
+    kds: "kds_station",
+    "phone-portrait": "handheld",
+    "tablet-landscape": "handheld",
+  };
+
+  for (const ff of FORM_FACTORS) {
+    it(`maps ${ff} to ${expected[ff]}`, () => {
+      expect(kindOfFormFactor(ff)).toBe(expected[ff]);
+    });
+  }
 });

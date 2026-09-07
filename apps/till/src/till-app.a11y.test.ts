@@ -42,6 +42,16 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     getStationQueue: vi.fn().mockResolvedValue([]),
     advanceTicketItem: vi.fn().mockResolvedValue(undefined),
     logout: vi.fn().mockResolvedValue(undefined),
+    // Device front door (device-enrolment §3.1): boot as an enrolled `till` (→ the login screen) and not
+    // in dev mode (getDevDevices 404s), so these sweeps reach the login → counter surface as before.
+    getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    getDeviceIdentity: vi.fn().mockResolvedValue({
+      deviceId: "till-dev",
+      name: "Till 1",
+      formFactor: "till",
+      stationId: null,
+      tillId: "t1",
+    }),
     ...overrides,
   } as unknown as TillApi;
 }

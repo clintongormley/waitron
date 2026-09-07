@@ -1,5 +1,18 @@
-import { jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { jsonb, pgEnum, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants.js";
+
+/**
+ * The device form factor a profile targets — the sizing guardrail a canvas is authored against. The
+ * values MUST equal `FORM_FACTORS` in `packages/layouts/src/canvas.ts`; @waitron/layouts owns the
+ * type, this pgEnum is the storage. A pgEnum, not a text CHECK, matching the repo precedent
+ * (device_kind, working_order_status): adding a form factor is an `ALTER TYPE`, a deliberate change.
+ */
+export const deviceFormFactorEnum = pgEnum("device_form_factor", [
+  "till",
+  "phone-portrait",
+  "tablet-landscape",
+  "kds",
+]);
 
 /**
  * A reusable DEVICE PROFILE (design 2026-09-05 §5.1): the binding bundle a device uses — a name, a
@@ -24,6 +37,7 @@ export const deviceProfiles = pgTable(
       /* v8 ignore next */
       .references(() => tenants.id, { onDelete: "restrict" }),
     name: text("name").notNull(),
+    formFactor: deviceFormFactorEnum("form_factor").notNull(),
     canvasId: uuid("canvas_id"),
     capabilities: jsonb("capabilities").notNull().default([]),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })

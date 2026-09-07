@@ -32,6 +32,18 @@ export type OrderFlow = (typeof orderFlow.enumValues)[number];
 export type CardProvider = "none" | "stripe_terminal" | "stripe_on_device";
 
 /**
+ * The card-provider value domain — the SINGLE source both boot config validation (`loadTillConfig`
+ * below) and the per-device hardware PATCH (`device-api.ts`'s `requireEnum`) validate against, so the
+ * accepted set cannot drift between the two. `satisfies readonly CardProvider[]` binds it to the type:
+ * a member that is not a `CardProvider` — or a `CardProvider` missing from the list — fails to compile.
+ */
+export const CARD_PROVIDERS = [
+  "none",
+  "stripe_terminal",
+  "stripe_on_device",
+] as const satisfies readonly CardProvider[];
+
+/**
  * The deployed till's identity, resolved once at boot from the environment provisioning stamped it
  * with. The four fiscal ids are branded (a bare uuid string cannot be passed where one of these is
  * expected), and `locationId` rides alongside because the sale path needs it: `recordTillSale`
@@ -144,10 +156,8 @@ export function loadTillConfig(env: NodeJS.ProcessEnv): Omit<TillConfig, "orderF
   const cardProvider: CardProvider =
     rawProvider === undefined || rawProvider === ""
       ? "none"
-      : rawProvider === "stripe_terminal" ||
-          rawProvider === "stripe_on_device" ||
-          rawProvider === "none"
-        ? rawProvider
+      : (CARD_PROVIDERS as readonly string[]).includes(rawProvider)
+        ? (rawProvider as CardProvider)
         : (() => {
             throw new AppError("server.till_config_invalid", { key: "WAITRON_TILL_CARD_PROVIDER" });
           })();

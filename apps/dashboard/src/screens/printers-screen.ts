@@ -9,6 +9,7 @@ import "@waitron/ui/src/components/wt-card.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { drawerPolicyName, jobStatusName, printModeName, transportName } from "../i18n/domain.js";
+import { formatIsoMinute } from "../date-utils.js";
 import type {
   DashboardApi,
   DrawerOpenPolicy,
@@ -631,7 +632,7 @@ export class PrintersScreen extends LitElement {
    * a null instant (never seen / not yet delivered) shows the "Never" placeholder. */
   #timestamp(iso: string | null): string {
     if (iso === null) return t("printers.last_seen_never");
-    return `${iso.slice(0, 10)} ${iso.slice(11, 16)}`;
+    return formatIsoMinute(iso);
   }
 
   // ── Renderers ────────────────────────────────────────────────────────────────────────────────────
