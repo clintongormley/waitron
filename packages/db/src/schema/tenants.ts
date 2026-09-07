@@ -87,9 +87,9 @@ export const tenants = pgTable(
  * (spec §9 — a Barcelona venue may want Spanish, Catalan, or both).
  *
  * The order is fiscal, not presentational. Spec §9 requires a reprint or a
- * rectificativa issued a year later to reproduce the document the customer
+ * corrective invoice issued a year later to reproduce the document the customer
  * took, which is why `sales.invoice_locales` snapshots this list at issuance.
- * Which language leads is part of what the document said; a rectificativa
+ * Which language leads is part of what the document said; a corrective invoice
  * references an original that must be reproducible. Reordering a venue's
  * configuration must therefore never change how an already-issued receipt
  * reprints — hence a snapshot of an ordered value, not a lookup of a set.

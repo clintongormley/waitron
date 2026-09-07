@@ -300,7 +300,7 @@ describe("recordSale — the happy path", () => {
   it("returns the fiscal record reference the backend produced", async () => {
     // **Deviation from the brief.** `FiscalRecordRef` is `{ backend, recordId, state, issuedAt,
     // offsetMinutes, verificationUrl? }` — there is no `.hash`, `.sequence` or `.qrPayload` field
-    // on the real type (`packages/fiscal/src/backend.ts`); those describe chaining/huella
+    // on the real type (`packages/fiscal/src/backend.ts`); those describe chaining / the fiscal fingerprint
     // concepts that belong to a regime's own module, never the generic interface. Assertions
     // below are against the fields that actually exist.
     const backend = new FakeFiscalBackend(suite.db);
@@ -332,7 +332,7 @@ describe("recordSale — the happy path", () => {
     // Exercises `buildVatBreakdown`'s merge path (two lines contributing to the SAME rate's
     // base) rather than only ever having one line per rate. `FakeFiscalBackend` does not store
     // `vatBreakdown` at all, so this cannot assert on the merged entry's own shape — that is
-    // exactly what packages/fiscal-verifactu/src/write-path.e2e.test.ts's real Desglose
+    // exactly what packages/fiscal-verifactu/src/write-path.e2e.test.ts's real `Desglose`
     // assertions are for — but it does prove the grouping arithmetic runs without error and
     // still lands on the sale's own taxable total.
     const backend = new FakeFiscalBackend(suite.db);
@@ -368,10 +368,10 @@ describe("recordSale — the happy path", () => {
 
   it("stores the filed vatBreakdown on sales, equal to what the backend filed", async () => {
     // The single-source guarantee (spec 8a): the breakdown written to `sales.vat_breakdown` is the
-    // SAME variable filed into the hash-chained registro — never a second, recomputed one. Proven by
-    // filing a mixed-rate sale with a caller-supplied DIFFERENCE-METHOD breakdown whose 21% cuota
+    // SAME variable filed into the hash-chained record — never a second, recomputed one. Proven by
+    // filing a mixed-rate sale with a caller-supplied DIFFERENCE-METHOD breakdown whose 21% VAT amount
     // (1.74) is deliberately NOT `percentOf(base, rate)` (8.26 * 21% = 1.73), then reading BOTH the
-    // stored `sales.vat_breakdown` and the filed desglose (`FakeFiscalBackend.filedReceiptFor`,
+    // stored `sales.vat_breakdown` and the filed breakdown (`FakeFiscalBackend.filedReceiptFor`,
     // inverted from `fake_fiscal_records`) back and asserting they carry the same per-rate base and
     // tax. Were the sale insert to recompute from `lines` (or file any second breakdown), the stored
     // 21% tax would read 1.73 and this would fail — which is exactly what the mutation in this task's
@@ -417,7 +417,7 @@ describe("recordSale — the happy path", () => {
     const filed = await suite.db.transaction((tx) => backend.filedReceiptFor(tx, saleId));
 
     expect(sortByRate(saleRow!.vb)).toEqual(sortByRate(filed!.vatBreakdown));
-    // And it is the FILED difference-method cuota, not `percentOf(base, rate)`: 1.74, not 1.73.
+    // And it is the FILED difference-method VAT amount, not `percentOf(base, rate)`: 1.74, not 1.73.
     expect(saleRow!.vb.find((g) => g.rate === "21.00")?.tax).toBe("1.74");
   });
 });
@@ -805,7 +805,7 @@ describe("recordSale — numbering", () => {
           issuedAt: BASE.toISOString(),
           issuedOffsetMinutes: 60,
           total: "1.00",
-          // The filed per-rate desglose; `[]` — supplied so the insert reaches the
+          // The filed per-rate breakdown; `[]` — supplied so the insert reaches the
           // duplicate-invoice-number unique violation (23505) under test rather than tripping the
           // column's own NOT NULL (23502) first.
           vatBreakdown: [],
@@ -859,7 +859,7 @@ describe("recordSale — series validation", () => {
 
   it("rejects a rectificative series: an ordinary sale must not draw a corrective number", async () => {
     // The other direction of the §5 purpose guard. A corrective series (`purpose='rectificative'`)
-    // is reserved for rectificativas (RD 1619/2012 art. 6.1.a); an ordinary sale drawing from it
+    // is reserved for corrective invoices (RD 1619/2012 art. 6.1.a); an ordinary sale drawing from it
     // would consume a corrective number and break the mandated separation.
     const rectSeriesId = await seedRectificativeSeries(suite.db, tenantId, nodeId);
     await expect(
@@ -955,7 +955,7 @@ describe("recordSale — caller-supplied vatBreakdown and line category", () => 
 
   it("passes a supplied vatBreakdown to the backend verbatim", async () => {
     // The whole point of the catalogue slice: a caller (catalogue pricing's gross-inclusive
-    // difference method) hands recordSale the desglose it computed, and recordSale files it as-is
+    // difference method) hands recordSale the breakdown it computed, and recordSale files it as-is
     // rather than re-deriving one from `lines`. The supplied entry (base 7.25 + tax 0.72 = 7.97) is
     // deliberately NOT what `buildVatBreakdown` would derive from the single 7.25 line at 10%
     // (which would compute tax 0.73 = percentOf(7.25, 10.00)), so a code path that ignored the
@@ -1009,7 +1009,7 @@ describe("recordSale — caller-supplied vatBreakdown and line category", () => 
   });
 
   it("throws sale.total_mismatch when a supplied breakdown disagrees with total", async () => {
-    // The defence for an unrepairable record: a supplied desglose summing to 7.97 filed against a
+    // The defence for an unrepairable record: a supplied breakdown summing to 7.97 filed against a
     // declared total of 8.00 would chain a self-inconsistent record. Compared by value, so it fires
     // on the magnitude, not on scale. Refused at the very top of recordSale, before anything is
     // written.
@@ -1200,7 +1200,7 @@ describe("recordSale — modifier child lines (parent_line_id)", () => {
     // child's base is a taxable amount like any other line's, grouped by its own rate. Already true
     // via Task 4's `buildVatBreakdown`, which groups `input.lines` (parent AND child alike) by
     // `vatRate`; this pins it so a future change that dropped child lines from the breakdown would
-    // fail here. Read off the STORED `sales.vat_breakdown`, the queryable copy of the filed desglose
+    // fail here. Read off the STORED `sales.vat_breakdown`, the queryable copy of the filed breakdown
     // (spec 8a's single source).
     const { saleId } = await run(new FakeFiscalBackend(suite.db), {
       total: "6.71",

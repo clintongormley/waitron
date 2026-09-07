@@ -5,7 +5,7 @@ import type { Decimal, SaleId, TenantId, TillId } from "@waitron/shared";
 
 /**
  * A sale issued (invoice printed, chained, filed) but not yet paid — the answer to "what is owed?"
- * under invoice-first. `amountDue` is the printed `total` net of every rectificativa that corrects
+ * under invoice-first. `amountDue` is the printed `total` net of every corrective invoice that corrects
  * it; a "take a fiver off" shows here as 65.00 against a 70.00 total (design §3).
  */
 export interface OutstandingSale {
@@ -22,7 +22,7 @@ export interface OutstandingSale {
 }
 
 /**
- * Lists a tenant's outstanding sales: ordinary altas (corrects_sale_id NULL) that are neither an F3
+ * Lists a tenant's outstanding sales: ordinary sales (`corrects_sale_id` NULL) that are neither an F3
  * canje substitute (already paid via their tickets — AEAT "no cobrar dos veces"), settled, nor
  * voided. The outer query and every subquery filter by tenant. This is a plain read.
  */

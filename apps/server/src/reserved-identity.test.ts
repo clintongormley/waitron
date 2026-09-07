@@ -61,7 +61,7 @@ describe("establishReservedStandbyIdentity", () => {
         standby,
         nodeName: "cloud",
         filingModule: "verifactu",
-        taxModule: "iva",
+        taxModule: "vat",
         modules: ALL_MODULES,
         reserved: {
           modules: {
@@ -160,7 +160,7 @@ describe("establishReservedStandbyIdentity", () => {
           standby,
           nodeName: "cloud",
           filingModule: "verifactu",
-          taxModule: "iva",
+          taxModule: "vat",
           modules: ALL_MODULES,
           reserved: { modules: {}, series: [], endorsement: ENDORSEMENT },
         },
@@ -184,7 +184,7 @@ describe("establishReservedStandbyIdentity", () => {
           standby,
           nodeName: "cloud",
           filingModule: "verifactu",
-          taxModule: "iva",
+          taxModule: "vat",
           modules: ALL_MODULES,
           reserved: { endorsement: ENDORSEMENT } as unknown as ReservedIdentity,
         },

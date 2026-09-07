@@ -10,7 +10,7 @@ import { tenants } from "./tenants.js";
  * `fiscal_state` there — that column is written once at insert and never moves.
  * This is the same split the design already makes twice: immutable fact, and a
  * separate row recording what later happened to it. Keeping the projection in
- * packages/db rather than deriving it from the module's anulación registro is
+ * packages/db rather than deriving it from the module's annulment record is
  * what lets a Z-report answer "which sales were voided" without a
  * cross-boundary join per row.
  */
@@ -44,7 +44,7 @@ export const saleVoids = pgTable(
   (t) => [
     // The database is what makes double-voiding impossible. A SELECT-then-INSERT
     // check in application code is passed by both of two concurrent
-    // transactions, and the second one would chain a duplicate anulación.
+    // transactions, and the second one would chain a duplicate annulment.
     unique("sale_voids_sale_id_key").on(t.saleId),
     foreignKey({
       columns: [t.tenantId, t.saleId],

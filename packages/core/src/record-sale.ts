@@ -103,8 +103,8 @@ export interface RecordSaleInput {
    * `lines` would risk it silently disagreeing with what was actually charged. */
   total: string;
   lines: RecordSaleLine[];
-  /** The caller-supplied VAT desglose — e.g. `@waitron/catalogue`'s gross-inclusive
-   * difference-method breakdown (cuota = gross − base). When absent, `buildVatBreakdown(lines)`
+  /** The caller-supplied VAT breakdown — e.g. `@waitron/catalogue`'s gross-inclusive
+   * difference-method breakdown (VAT amount = gross − base). When absent, `buildVatBreakdown(lines)`
    * derives it as before, so existing callers are unaffected. When present it is filed VERBATIM as
    * the fiscal record's breakdown and asserted to agree with `total` at the top of `recordSale`
    * (`sale.total_mismatch`) — a defence for an unrepairable record (§5), never a re-derivation. */
@@ -165,7 +165,7 @@ export async function recordSale(
   backend: FiscalBackend,
   input: RecordSaleInput,
 ): Promise<{ saleId: SaleId; fiscal: FiscalRecordRef }> {
-  // A caller-supplied breakdown is filed VERBATIM as the fiscal record's desglose (below), so it
+  // A caller-supplied breakdown is filed VERBATIM as the fiscal record's breakdown (below), so it
   // must reconcile with the total it is filed against BEFORE anything is written — a breakdown that
   // disagrees would chain a self-inconsistent, unrepairable record (§5). Value comparison, never
   // lexical, so "7.97" reconciles regardless of scale. Only the supplied path can trip this: the
@@ -237,7 +237,7 @@ export async function recordSale(
   }
   // An ordinary sale must draw from a `purpose='standard'` series, never a corrective one — the
   // other half of the §5 separation `recordCorrection` enforces from its side. A corrective series
-  // exists to number rectificativas «en todo caso» (RD 1619/2012 art. 6.1.a); a normal sale drawing
+  // exists to number corrective invoices «en todo caso» (RD 1619/2012 art. 6.1.a); a normal sale drawing
   // from it would consume a corrective number and break the mandated split.
   if (series.purpose !== "standard") {
     throw new AppError("sale.series_wrong_purpose", {
@@ -276,7 +276,7 @@ export async function recordSale(
     pending.push({ error: now.warning, severity: "warning" });
   }
 
-  // The filed VAT desglose, resolved ONCE here so the SAME value feeds both the `sales` row below
+  // The filed VAT breakdown, resolved ONCE here so the SAME value feeds both the `sales` row below
   // and `backend.recordSale` further down (spec 8a's single-source rule): supplied verbatim when the
   // caller computed its own (already asserted to reconcile with `total` at the top of this function),
   // otherwise derived from `lines` exactly as before. Storing it on `sales.vat_breakdown` is a
@@ -341,7 +341,7 @@ export async function recordSale(
   // `parentLineNo` that names no line in this basket — it inserts NULL rather than a dangling
   // pointer, and the tenant-consistent self-FK would reject a fabricated id anyway. NONE of this
   // reaches `backend.recordSale`, which is handed only `total` + `vatBreakdown` below: `parent_line_id`
-  // is presentation/reporting metadata and is NEVER hashed (design §4; guarded by the huella-invariance
+  // is presentation/reporting metadata and is NEVER hashed (design §4; guarded by the `huella-invariance`
   // test in packages/fiscal-verifactu's write-path e2e).
   const lineIds = input.lines.map(() => randomUUID());
   const byLineNo = new Map(input.lines.map((line, i) => [line.lineNo, lineIds[i]!]));
@@ -409,7 +409,7 @@ export async function recordSale(
     descriptionOfOperation: location.operationDescription,
     total: decimal(input.total),
     // The SAME breakdown stored on `sales.vat_breakdown` above — one variable feeds both, so the
-    // stored copy and the filed desglose cannot diverge (spec 8a).
+    // stored copy and the filed breakdown cannot diverge (spec 8a).
     vatBreakdown,
     // Null for a simplified invoice, which is the ordinary case at a till (spec's own framing on
     // `FiscalBackend.recordSale`'s `SaleForFiscalRecord.counterparty`). This task does not wire

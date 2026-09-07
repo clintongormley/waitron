@@ -15,16 +15,16 @@ import {
 import { tenants } from "./tenants.js";
 
 /**
- * A received supplier invoice — a *factura recibida* — and its per-rate VAT breakdown, the input
+ * A received supplier invoice — a `factura recibida` — and its per-rate VAT breakdown, the input
  * (soportado / deducible) counterpart to the sales the POS issues. These are purely
- * commercial/accounting records: a factura recibida is issued by our SUPPLIER, not by us, so it gets
- * NO huella, NO `registros_facturacion` row, NO hash chain, and NO invoice number from our
+ * commercial/accounting records: a received invoice is issued by our SUPPLIER, not by us, so it gets
+ * NO fiscal fingerprint, NO `registros_facturacion` row, NO hash chain, and NO invoice number from our
  * `invoice_series` (spec §2, the fiscal boundary H2). Unlike the immutable `sales`/`registros` lane,
  * these are MUTABLE accounting records (fix a mis-keyed rate, correct a typo): the app role holds
  * UPDATE and DELETE, there is no append-only trigger and no chain.
  *
  * All identifiers are English (this package is scanned by the english-only guard); the Spanish fiscal
- * term for each concept is given in the doc comments. `tax` here is the *cuota* (the IVA soportado),
+ * term for each concept is given in the doc comments. `tax` here is the `cuota` (`IVA soportado`),
  * named `tax` for the same reason `sales.vat_breakdown` and `VatRateLine` do — `cuota` is the
  * fiscal module's declared vocabulary, forbidden here.
  */
@@ -41,14 +41,14 @@ export const purchaseRegime = pgEnum("purchase_regime", ["general", "equivalence
 
 /**
  * What a received-invoice VAT line was spent on, driving the 303 box split (spec §7):
- * - `ordinary` — *operaciones interiores corrientes* (casilla 28/29), the primary deli case.
+ * - `ordinary` — `operaciones interiores corrientes` (casilla 28/29), the primary deli case.
  * - `capital` — *bienes de inversión* (casilla 30/31).
  */
 export const purchaseVatKind = pgEnum("purchase_vat_kind", ["ordinary", "capital"]);
 
 /**
  * The received-invoice header (mutable). One row per supplier invoice we have received and entered
- * into the libro registro de facturas recibidas.
+ * into the `libro registro de facturas recibidas`.
  */
 export const purchaseInvoices = pgTable(
   "purchase_invoices",
@@ -63,9 +63,9 @@ export const purchaseInvoices = pgTable(
     supplierName: text("supplier_name").notNull(),
     // THE SUPPLIER'S invoice number, never a number from our `invoice_series`.
     supplierInvoiceNumber: text("supplier_invoice_number").notNull(),
-    // The supplier's *fecha de expedición*.
+    // The supplier's issue date.
     issuedOn: date("issued_on").notNull(),
-    // Our *fecha de recepción/registro* — this DRIVES the deduction period (spec §D3): input VAT is
+    // Our receipt/registration date — this DRIVES the deduction period (spec §D3): input VAT is
     // deductible in the period the invoice is received.
     receivedOn: date("received_on").notNull(),
     // Gross total, tenant currency (single currency per tenant — no currency column, spec §D7).
@@ -85,7 +85,7 @@ export const purchaseInvoices = pgTable(
     // Composite target for the tenant-consistent FK from `purchase_invoice_vat` (mirrors
     // `sales_tenant_id_key`): a VAT line cannot point at an invoice belonging to another tenant.
     unique("purchase_invoices_tenant_id_key").on(t.tenantId, t.id),
-    // Refuse entering the same supplier invoice twice — the libro-registro no-duplicate default. Keyed
+    // Refuse entering the same supplier invoice twice — the `libro-registro` no-duplicate default. Keyed
     // on (tenant, supplier, supplier's number). Whether a supplier may legitimately reuse a number
     // across YEARS (making this per-year rather than forever) is an asesor-fiscal question flagged in
     // spec §9; the conservative forever-unique default is chosen here.
@@ -105,13 +105,13 @@ export const purchaseInvoices = pgTable(
 );
 
 /**
- * The per-rate VAT desglose of a received invoice (mutable, one-to-many). Normalized rows rather than
- * a header jsonb so the deducible aggregate can `GROUP BY` in SQL exactly as the sales desglose does,
+ * The per-rate VAT breakdown of a received invoice (mutable, one-to-many). Normalized rows rather than
+ * a header jsonb so the deducible aggregate can `GROUP BY` in SQL exactly as the sales breakdown does,
  * and so one invoice can mix rates and kinds.
  *
- * `tax` (the *cuota*) is stored explicitly rather than derived: the supplier's invoice is the source
+ * `tax` (the `cuota`) is stored explicitly rather than derived: the supplier's invoice is the source
  * of truth and may round per line differently, so we file what they charged — the same "sum the filed
- * cuotas, never re-round" exactness rule the sales/output side follows.
+ * VAT amounts, never re-round" exactness rule the sales/output side follows.
  */
 export const purchaseInvoiceVat = pgTable(
   "purchase_invoice_vat",
@@ -123,7 +123,7 @@ export const purchaseInvoiceVat = pgTable(
     rate: numeric("rate", { precision: 5, scale: 2 }).notNull(),
     // Taxable base (base imponible).
     base: numeric("base", { precision: 12, scale: 2 }).notNull(),
-    // The VAT amount (cuota / IVA soportado) the supplier charged, filed verbatim.
+    // The VAT amount (`cuota` / `IVA soportado`) the supplier charged, filed verbatim.
     tax: numeric("tax", { precision: 12, scale: 2 }).notNull(),
     kind: purchaseVatKind("kind").notNull().default("ordinary"),
   },

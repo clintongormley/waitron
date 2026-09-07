@@ -15,7 +15,7 @@ import { locations, tenants } from "./tenants.js";
  * drizzle/0001_db_baseline_sql.sql), which carries no tenant/node scope. A future reader adding
  * active-active/failover must not add a `role` column here for the mirror/primary split — that
  * concept already has its flag. Deliberately regime-neutral, like `tills`: the Veri*Factu SIF
- * identity (NúmeroInstalación, IdSistemaInformatico) lives in the module-owned `registro_sif`
+ * identity (`NúmeroInstalación`, `IdSistemaInformatico`) lives in the module-owned `registro_sif`
  * table, which the node rekey re-keys from till to node (the SIF is the node — #33).
  *
  * `filing_module`/`tax_module` are nullable and stamped at provision time from the location's

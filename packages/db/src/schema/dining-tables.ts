@@ -15,7 +15,7 @@ import { locations, tenants } from "./tenants.js";
 
 /**
  * The rendered shape of a table on the FP-2 floor plan. Venue layout only — nowhere near the fiscal
- * huella — so it carries no Spanish vocabulary and needs no fiscal review.
+ * fingerprint — so it carries no Spanish vocabulary and needs no fiscal review.
  */
 export const floorTableShape = pgEnum("floor_table_shape", ["round", "square", "rect"]);
 

@@ -11,7 +11,7 @@ import "./errors.js";
  * time is what makes an unrepresentable value (e.g. `"staging"`, a stray `process.env.NODE_ENV`) a
  * `tsc` error instead of a runtime `deployment_environment_ck` violation (SQLSTATE 23514) discovered
  * only once `stampDeployment` has already run. Same defect class `packages/fiscal-verifactu`'s
- * `Entorno` (./registro-row.ts) closes one layer down.
+ * `Entorno` (`registro-row.ts`) closes one layer down.
  */
 export type DeploymentEnvironment = "production" | "preproduction";
 

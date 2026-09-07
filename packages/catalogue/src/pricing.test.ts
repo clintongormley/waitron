@@ -313,7 +313,7 @@ describe("priceLockedLines — files a locked line to the walk-up VAT breakdown"
 
   it("prices a weighed locked line from its stored gross unit, not line_total ÷ quantity", () => {
     // A weighed line where recovery by division would drift: gross unit 9.99/kg, qty 0.333 → gross
-    // 3.33. priceLockedLines takes the STORED gross unit, so base/tax match the add-time desglose.
+    // 3.33. priceLockedLines takes the STORED gross unit, so base/tax match the add-time VAT breakdown.
     const priced = priceLockedLines([
       {
         grossUnitPrice: "9.99",

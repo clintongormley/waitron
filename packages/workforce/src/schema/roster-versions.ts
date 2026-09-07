@@ -37,7 +37,7 @@ export const rosterVersionStatus = pgEnum("roster_version_status", [
 
 /**
  * A published (or draft) snapshot of a location's schedule for a date period — PLANNING data, NOT the
- * legal record. Unlike `time_entries` (the immutable registro de jornada), a roster version is
+ * legal record. Unlike `time_entries` (the immutable working-time record), a roster version is
  * ordinary mutable data: the app role holds SELECT, INSERT, UPDATE and DELETE
  * (drizzle/0001_workforce_baseline_sql.sql) — a draft is edited or discarded, a published version can be
  * re-stamped or removed. No append-only trigger and no hash chain: no Spanish statute requires a
@@ -56,7 +56,7 @@ export const rosterVersions = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     tenantId: uuid("tenant_id").notNull(),
-    /** The centro de trabajo this schedule covers. */
+    /** The workplace this schedule covers. */
     locationId: uuid("location_id").notNull(),
     /** First day of the scheduled period, inclusive. */
     periodStart: date("period_start").notNull(),
@@ -102,7 +102,7 @@ export const rosterVersions = pgTable(
     // FOR UPDATE lock it takes on the incumbent published row serialises the common case, but a
     // concurrent first-publish of two DIFFERENT drafts has no row to lock, so THIS index is what
     // guarantees the second cannot also leave a published row — it raises 23505, which publishRoster
-    // translates to roster.period_already_published. Like registro_sif_activo_uq (fiscal-verifactu),
+    // translates to roster.period_already_published. Like `registro_sif_activo_uq` (fiscal-verifactu),
     // it binds across the whole table, and
     // tenant_id is the leading column so it never collides across tenants.
     uniqueIndex("roster_versions_published_period_uq")

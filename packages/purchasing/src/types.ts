@@ -8,12 +8,12 @@ import type { Decimal } from "@waitron/shared";
 export type PurchaseRegime = "general" | "equivalence_surcharge";
 
 /**
- * What a VAT line was spent on (mirrors the `purchase_vat_kind` enum): `ordinary` = operaciones
- * corrientes (casilla 28/29); `capital` = bienes de inversión (casilla 30/31).
+ * What a VAT line was spent on (mirrors the `purchase_vat_kind` enum): `ordinary` = current
+ * operations (box 28/29); `capital` = investment goods (box 30/31).
  */
 export type PurchaseVatKind = "ordinary" | "capital";
 
-/** One per-rate VAT line of a received invoice. `tax` is the cuota (IVA soportado), filed verbatim. */
+/** One per-rate VAT line of a received invoice. `tax` is the VAT amount (input VAT), filed verbatim. */
 export interface PurchaseInvoiceLine {
   rate: Decimal;
   base: Decimal;

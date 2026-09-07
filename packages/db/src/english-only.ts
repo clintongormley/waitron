@@ -5,24 +5,27 @@ import { join } from "node:path";
 export const PACKAGES_ROOT = join(import.meta.dirname, "..", "..");
 
 /**
- * English throughout — identifiers and table/column names alike (spec §2). A package neither
- * listed here nor owning a module's declared `vocabulary` (`@waitron/module`'s `vocabularyOwners`,
- * read by the root suite) is never scanned — `packages/verifactu` (the AEAT library, no
- * descriptor of its own), `provisioning` and `tunnel` among them.
+ * English throughout — identifiers, table/column names AND comments alike (spec §2). A package
+ * neither listed here nor owning a module's declared `vocabulary` (`@waitron/module`'s
+ * `vocabularyOwners`, read by the root suite) is never scanned — `packages/verifactu` (the AEAT
+ * wire library, no descriptor of its own) and `reporting` (the Spanish modelo-303 form) among them.
+ * `apps/*` is out of scope by the composition-root decision recorded below.
  */
 export const GENERIC_PACKAGES = [
   "db",
+  "migrations",
   "core",
   "fiscal",
   "shared",
   "payments",
+  "payments-stripe",
   "scheduler",
   "credentials",
   "workforce",
-  "reporting",
   "identity",
   "catalogue",
   "sync",
+  "tunnel",
   "membership",
   "module",
   "layouts",
@@ -32,7 +35,20 @@ export const GENERIC_PACKAGES = [
   "diagnostics",
   "sync-enrolment",
   "composition",
+  "provisioning",
+  "ui",
 ] as const;
+
+/**
+ * Packages whose TEST files are excluded from the scan — a documented, production-only INTERIM, and
+ * the guard's ONLY test exemption. `provisioning`'s e2e/pg tests provision a real Veri*Factu venue
+ * and name the Spanish fiscal TABLES in SQL (`registros_facturacion`, `registro_sif`, `cadenas`),
+ * which cannot be renamed. Removal condition: run provisioning's tests against `fiscal-none` so they
+ * never touch the Spanish fiscal schema, then delete this set (design §6 step 5). Every other
+ * generic package keeps the "tests are scanned too" rule — a Spanish fixture name is exactly as
+ * wrong as a Spanish column.
+ */
+export const PRODUCTION_ONLY: ReadonlySet<string> = new Set(["provisioning"]);
 
 // -----------------------------------------------------------------------------------------------
 // Decision record: apps/* is OUT OF SCOPE for this guard. Prose, not another `as const` array,
@@ -159,18 +175,40 @@ export function readSource(file: string): string {
   return readFileSync(file, "utf8");
 }
 
-/** Replaces block comments with equivalent whitespace, preserving line numbers. */
-function blankBlockComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, " "));
+/**
+ * Blanks `«…»` guillemet quotes with equal-width whitespace, preserving newlines and line numbers.
+ * A verbatim regulatory quote is the source's own words (CLAUDE.md §1) and is left out of the scan.
+ * Run on the WHOLE source so a quote that wraps across lines — a citation split over a block comment
+ * or successive `//` lines, e.g. `core/record-correction.ts` — is blanked as one span.
+ */
+function blankGuillemets(source: string): string {
+  return source.replace(/«[^»]*»/g, (match) => match.replace(/[^\n]/g, " "));
 }
 
 /**
- * Drops a `//` comment. The `[^:]` guard keeps `https://…` in a string
- * literal from being mistaken for one — a URL is the one place a `//` appears
- * in code rather than before a comment.
+ * Blanks `` `…` `` backtick citations with equal-width whitespace. Applied ONLY to comment text: a
+ * backticked term cites a specific identifier, wire-protocol field or owned term (a quotation of a
+ * name), so it is exempt. It is NEVER applied to code — there a backtick opens a TEMPLATE LITERAL,
+ * and `` sql`… registros_facturacion` `` is the load-bearing case the guard exists to catch.
  */
-function dropLineComment(line: string): string {
-  return line.replace(/(^|[^:])\/\/.*$/, "$1");
+function blankBackticks(comment: string): string {
+  return comment.replace(/`[^`]*`/g, (match) => match.replace(/[^\n]/g, " "));
+}
+
+/** Blanks backtick citations inside every block comment; the rest of the comment prose, and all
+ * code, is left for the scan. */
+function scrubBlockComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, (block) => blankBackticks(block));
+}
+
+/**
+ * Keeps a line's code part unchanged and blanks backtick citations in its `//` comment tail. The
+ * `[^:]` guard keeps `https://…` in a string literal from being read as a comment — a URL is the
+ * one place a `//` appears in code rather than before a comment.
+ */
+function scrubLineComment(line: string): string {
+  const match = line.match(/^(.*?(?:^|[^:]))(\/\/.*)$/);
+  return match === null ? line : match[1] + blankBackticks(match[2]!);
 }
 
 /**
@@ -202,11 +240,12 @@ function tokenise(line: string): string[] {
  */
 export function findSpanish(source: string, words: ReadonlySet<string>): Violation[] {
   const violations: Violation[] = [];
-  const lines = blankBlockComments(source).split("\n");
-  lines.forEach((line, index) => {
-    for (const token of tokenise(dropLineComment(line))) {
+  const originalLines = source.split("\n");
+  const preparedLines = scrubBlockComments(blankGuillemets(source)).split("\n");
+  preparedLines.forEach((line, index) => {
+    for (const token of tokenise(scrubLineComment(line))) {
       if (words.has(token)) {
-        violations.push({ line: index + 1, word: token, text: line.trim() });
+        violations.push({ line: index + 1, word: token, text: originalLines[index]!.trim() });
       }
     }
   });
@@ -223,9 +262,11 @@ export function findSpanish(source: string, words: ReadonlySet<string>): Violati
 export function sourceFilesIn(packageName: string): string[] {
   const root = join(PACKAGES_ROOT, packageName, "src");
   if (!existsSync(root)) return [];
+  const productionOnly = PRODUCTION_ONLY.has(packageName);
   return readdirSync(root, { recursive: true, encoding: "utf8" })
     .filter((entry) => entry.endsWith(".ts"))
     .filter((entry) => !SELF.some((name) => entry.endsWith(name)))
+    .filter((entry) => !(productionOnly && entry.endsWith(".test.ts")))
     .map((entry) => join(root, entry))
     .sort();
 }

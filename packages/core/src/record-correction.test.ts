@@ -343,7 +343,7 @@ describe("recordCorrection — the corrective sale", () => {
     expect(row?.total).toBe("-14.41");
     expect(row?.correctsSaleId).toBe(originalId);
     expect(row?.fiscalState).toBe("recorded");
-    // Inherited from the original (spec §9: a rectificativa inherits the original list), never
+    // Inherited from the original (spec §9: a corrective invoice inherits the original list), never
     // supplied on the input.
     expect(row?.locale).toBe("es-ES");
     expect(row?.invoiceLocales).toEqual(["es-ES", "ca-ES"]);

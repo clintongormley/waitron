@@ -47,7 +47,7 @@ export interface AmendmentHashInput {
    * amendment reprints in venue time (#52). Hashed in its own right. */
   eventOffsetMinutes: number;
   /** The predecessor's `entry_hash` — null (hashed as empty) for the genesis entry, exactly as the
-   * fiscal huella hashes an empty predecessor for `PrimerRegistro`. */
+   * fiscal fingerprint hashes an empty predecessor for `PrimerRegistro`. */
   prevEntryHash: string | null;
 }
 
@@ -103,7 +103,7 @@ function canonicalString(input: AmendmentHashInput): string {
   ]);
 }
 
-/** SHA-256 over the UTF-8 canonical string, uppercase hex — the `computeHuella` shape from huella.ts;
+/** SHA-256 over the UTF-8 canonical string, uppercase hex — the `computeHuella` shape from `huella.ts`;
  * the uppercase-hex form the `order_amendments_entry_hash_ck` CHECK requires. */
 export function computeAmendmentHash(input: AmendmentHashInput): string {
   return createHash("sha256").update(canonicalString(input), "utf8").digest("hex").toUpperCase();

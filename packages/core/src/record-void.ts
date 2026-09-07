@@ -18,8 +18,8 @@ import { recordIncident } from "./incidents.js";
  * Once chained, records are never edited. Voiding a sale is not an UPDATE on `sales` (which has no
  * UPDATE privilege at all — `packages/db/src/schema/sales.ts`) and not an UPDATE on anything this
  * package owns either: the generic-layer projection of "this sale was voided" is an APPENDED row
- * in `sale_voids`, and the module's own anulación is an APPENDED record in its own chain, taking
- * the next `secuencia` in generation order — not a reset, and not the position of the alta it
+ * in `sale_voids`, and the module's own annulment is an APPENDED record in its own chain, taking
+ * the next `secuencia` in generation order — not a reset, and not the position of the sale record it
  * annuls (`FiscalBackend.recordVoid`'s own doc comment, `packages/fiscal/src/backend.ts`).
  *
  * The gate is INTRINSIC: this call itself demands `sale.void`, so a void cannot be performed
@@ -59,9 +59,9 @@ export async function recordVoid(
     override: authz.override,
   });
 
-  // Art. 7.i, exactly as for an alta (spec §4 steps 1-2 in `./record-sale.ts`): the duty is
-  // "before generating each new record", not "before each sale", and an anulación is a registro de
-  // facturación like any other. Nothing branches on `verification.ok` — a failed check records an
+  // Art. 7.i, exactly as for a sale record (spec §4 steps 1-2 in `./record-sale.ts`): the duty is
+  // "before generating each new record", not "before each sale", and an annulment is a fiscal record
+  // like any other. Nothing branches on `verification.ok` — a failed check records an
   // incident (below) and the void proceeds anyway, because a staff member correcting the very sale
   // an incident concerns must never be blocked by it («NUNCA debe interrumpirse»).
   //
@@ -95,8 +95,8 @@ export async function recordVoid(
         ]
       : [];
 
-  // No number is allocated. The anulación carries the ANNULLED invoice's own identity
-  // (IDFacturaAnulada), not an identity of its own — allocating here would burn a number for a
+  // No number is allocated. The annulment carries the ANNULLED invoice's own identity
+  // (`IDFacturaAnulada`), not an identity of its own — allocating here would burn a number for a
   // record with nowhere to put it, leaving a permanent series gap per void.
 
   // One reading, reused for both the void's own timestamp and any incident detected alongside it —
@@ -139,8 +139,8 @@ export async function recordVoid(
     throw error;
   }
 
-  // The module already holds the annulled invoice's identity in its own registro, keyed by
-  // sale_id. Passing NumSerieFactura/FechaExpedicionFactura back through here would put a fiscal
+  // The module already holds the annulled invoice's identity in its own fiscal record, keyed by
+  // sale_id. Passing `NumSerieFactura`/`FechaExpedicionFactura` back through here would put a fiscal
   // fact in the generic layer and give it two sources of truth.
   const fiscal = await backend.recordVoid(tx, saleId, reason);
 

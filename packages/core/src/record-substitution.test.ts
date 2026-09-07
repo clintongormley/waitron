@@ -85,7 +85,7 @@ const steadyClock: TrustedClock = fixedClock(() => ({
   anchorAgeSeconds: 0,
 }));
 
-/** The recipient every F3 must carry — a full invoice always names its destinatario (findings
+/** The recipient every F3 must carry — a full invoice always names its recipient (findings
  * §10.2). Neutral English-ish legal name; `test/` is out of english-only's scan (it walks `src/`
  * only), but a Spanish token here would still read as noise. */
 const RECIPIENT = { taxId: "B12345678", legalName: "Acme Corp SL", countryCode: "ES" };
@@ -214,7 +214,7 @@ describe("recordSubstitution — the substituted tickets (input guards)", () => 
   });
 
   it("rejects duplicate ids in the input list (defense-in-depth, never trusting the backend)", async () => {
-    // A repeated id would double an F3's FacturasSustituidas and its sale_substitutions rows.
+    // A repeated id would double an F3's `FacturasSustituidas` and its `sale_substitutions` rows.
     // Rejected HERE at the core layer, distinct from `sale.already_substituted` (a ticket substituted
     // by a PRIOR, committed F3) — the message names the distinct concept so a caller can tell them
     // apart.
@@ -329,7 +329,7 @@ describe("recordSubstitution — the series (node-ownership guards)", () => {
     });
     expect(await countRows("sale_substitutions")).toBe(0);
     const records = await backend.recordsFor(nodeId);
-    expect(records.map((r) => r.kind)).toEqual(["sale"]); // only the ticket's alta, no F3
+    expect(records.map((r) => r.kind)).toEqual(["sale"]); // only the ticket's sale record, no F3
   });
 
   it("rejects a RETIRED series: a restored box must never number from the series it was restored with", async () => {
@@ -360,7 +360,7 @@ describe("recordSubstitution — the F3 sale", () => {
 
     const [row] = await suite.db.select().from(sales).where(eq(sales.id, f3Id));
     expect(row?.total).toBe("14.41");
-    expect(row?.correctsSaleId).toBe(null); // an F3 is NOT a rectificativa — it corrects nothing
+    expect(row?.correctsSaleId).toBe(null); // an F3 is NOT a corrective invoice — it corrects nothing
     expect(row?.fiscalState).toBe("recorded");
     expect(row?.counterpartyTaxId).toBe("B12345678");
     expect(row?.counterpartyLegalName).toBe("Acme Corp SL");
@@ -471,7 +471,7 @@ describe("recordSubstitution — a mixed batch fails atomically", () => {
     // Nothing partial survived the rollback.
     expect(await countRows("sale_substitutions")).toBe(0);
     const records = await backend.recordsFor(nodeId);
-    expect(records.map((r) => r.kind)).toEqual(["sale"]); // only the ticket's own alta, no F3
+    expect(records.map((r) => r.kind)).toEqual(["sale"]); // only the ticket's own sale record, no F3
     const [series] = await suite.db
       .select({ n: invoiceSeries.nextNumber })
       .from(invoiceSeries)

@@ -26,26 +26,26 @@ import type { RecordSaleLine } from "./record-sale.js";
 export interface RecordCorrectionInput {
   tenantId: TenantId;
   /**
-   * The till this rectificativa rings at — an informational snapshot only (written to `sales.till_id`
+   * The till this corrective invoice rings at — an informational snapshot only (written to `sales.till_id`
    * and the fiscal record's `till_id`, and used for incidents). NOT checked against the series; see
    * `nodeId` below for the guard.
    */
   tillId: TillId;
   /**
-   * The node/SIF that ISSUES this rectificativa and whose chain it extends (node-id rekey,
+   * The node/SIF that ISSUES this corrective invoice and whose chain it extends (node-id rekey,
    * 2026-08-03: the SIF is the node, #33). Caller-supplied and used verbatim: checked against the
    * corrective SERIES (`sale.series_wrong_node`, step 2) but NOT against the original sale's own
-   * node — deliberately, not a gap. A rectificativa is a self-standing NEW invoice that references
-   * the original only by IDENTITY (`FacturasRectificadas` = NIF + serie&número + fecha — how AEAT
-   * links a rectificativa to what it corrects), from which we INFER that the issuing SIF is
+   * node — deliberately, not a gap. A corrective invoice is a self-standing NEW invoice that references
+   * the original only by IDENTITY (`FacturasRectificadas` = NIF + series & number + date — how AEAT
+   * links a corrective invoice to what it corrects), from which we INFER that the issuing SIF is
    * unconstrained by the original's. That inference is not merely theoretical: under active-active /
    * failover (#33) a venue runs MORE THAN ONE SIF (each node is its own SIF), so a correction
    * genuinely can land on a different node-SIF than the original. AEAT's developer FAQ (4-Dec-2025)
-   * confirms cross-SIF is lawful for the SIBLING correction records — an RF de subsanación or de
-   * anulación «se [podría] generar y conservar o remitir a la AEAT desde un SIF distinto al que
+   * confirms cross-SIF is lawful for the SIBLING correction records — a remedy or annulment record
+   * «se [podría] generar y conservar o remitir a la AEAT desde un SIF distinto al que
    * expidió la factura original» (same-SIF is merely the usual case). But the reach to a
-   * self-standing rectificativa is OURS, not the FAQ's words — it names only the subsanación/
-   * anulación records. The identity-linkage reading is sound, but UNVERIFIED for rectificativas
+   * self-standing corrective invoice is OURS, not the FAQ's words — it names only the remedy /
+   * annulment records. The identity-linkage reading is sound, but UNVERIFIED for corrective invoices
    * specifically, and to be confirmed with the asesor before a real cross-SIF caller is wired (F3).
    * (`recordVoid` pins to the original's node by its own choice, not a regime requirement.)
    */
@@ -69,7 +69,7 @@ export interface RecordCorrectionInput {
   /** The already-signed delta lines (negative for a reversal). Same shape as an ordinary sale's. */
   lines: RecordSaleLine[];
   /**
-   * Who authorises this rectificativa (spec §7). The gate is INTRINSIC — `recordCorrection` calls
+   * Who authorises this corrective invoice (spec §7). The gate is INTRINSIC — `recordCorrection` calls
    * `authorize` itself with permission `sale.rectify`, so a correction cannot be performed without a
    * credential `authorize` accepts (the operator's own role holds it, or a supervisor `override`
    * supplies a second person's PIN). The authorizer it returns is recorded on `sales.authorized_by`.
@@ -79,13 +79,13 @@ export interface RecordCorrectionInput {
 }
 
 /**
- * Records a corrective invoice (a credit note / rectificativa) for a prior sale, spec §4.2.
+ * Records a corrective invoice (a credit note) for a prior sale, spec §4.2.
  *
  * Structurally a hybrid of `./record-sale.ts` (it mints its OWN new number and writes its own sale
  * row) and `./record-void.ts` (it references an earlier sale rather than a working order). Unlike a
  * sale it settles NOTHING — the corrective is recorded unsettled and the customer refund is a
  * separate payments-layer action (decoupled refund, spec §4). Unlike a void it takes a number of
- * its own, because a correction is a fresh registro de alta pointing at the invoice it corrects, not
+ * its own, because a correction is a fresh `registro de alta` pointing at the invoice it corrects, not
  * an annulment of it.
  *
  * The gate is INTRINSIC: this call itself demands `sale.rectify`, so a correction cannot be
@@ -191,7 +191,7 @@ export async function recordCorrection(
     override: input.authz.override,
   });
 
-  // Step 3. Art. 7.i verification, exactly as for an alta. Nothing branches on `verification.ok` —
+  // Step 3. Art. 7.i verification, exactly as for a sale record. Nothing branches on `verification.ok` —
   // a failed check records ONE aggregated incident (below, once `saleId` exists) and the correction
   // is chained anyway. The table-wide `incidents_open_dedup` index holds at most one open incident
   // per (tenant, till, code, sale), so emitting one row per issue would collapse to a single row and
@@ -230,7 +230,7 @@ export async function recordCorrection(
   // persistent lock, so they do not affect that order.
   const invoiceNumber = await allocateInvoiceNumber(tx, input.seriesId);
 
-  // The corrective's VAT desglose, resolved ONCE so the SAME value feeds both the `sales` row below
+  // The corrective's VAT breakdown, resolved ONCE so the SAME value feeds both the `sales` row below
   // and `backend.recordCorrection` further down (spec 8a's single-source rule): storing it on
   // `sales.vat_breakdown` is a queryable copy of the already-filed data, never a second recompute.
   const vatBreakdown = buildVatBreakdown(input.lines);
@@ -257,8 +257,8 @@ export async function recordCorrection(
       correctsSaleId: input.correctsSaleId,
       // Recorded at INSERT because `sales` is append-only for the app role (no UPDATE grant), so
       // there is no later moment to attribute the correction — the same seam `sale_voids.voided_by`
-      // fills. Our own metadata; it never enters the fiscal registro's huella (it is on the sales
-      // row, not the registro).
+      // fills. Our own metadata; it never enters the fiscal record's fingerprint (it is on the sales
+      // row, not the fiscal record).
       authorizedBy: authorization.authorizedBy,
     })
     .returning({ id: sales.id });

@@ -37,7 +37,7 @@ export const shifts = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     tenantId: uuid("tenant_id").notNull(),
     personId: uuid("person_id").notNull(),
-    /** The centro de trabajo the shift is scheduled at. */
+    /** The workplace the shift is scheduled at. */
     locationId: uuid("location_id").notNull(),
     startsAt: timestamp("starts_at", { withTimezone: true, mode: "string" }).notNull(),
     startsOffsetMinutes: integer("starts_offset_minutes").notNull(),

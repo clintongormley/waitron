@@ -3,9 +3,9 @@ import type { OvertimeModel } from "./projection.js";
 /**
  * The regime-neutral work-time ruleset: the working-time parameters the projection and (D2.3) the
  * roster-guardrail engine measure against, as plain numbers with NO Spanish vocabulary and NO
- * hard-coded convenio figures.
+ * hard-coded collective-agreement figures.
  *
- * `packages/workforce` is generic and never imports `convenio_config` or names a convenio (the
+ * `packages/workforce` is generic and never imports `convenio_config` or names a collective agreement (the
  * english-only guard forbids the tokens anyway). `packages/workforce-es` resolves a `convenio_config`
  * row into this shape and passes it in — exactly as it already hands the generic `exportTimeRecord`
  * the projection's output. Every field maps to one `convenio_config` column whose DB default is the
@@ -33,7 +33,7 @@ export interface WorkTimeRuleset {
   compensationWindowDays: number | null;
   /** An explicit per-day target override, now HONOURED by `workSummary` (`dailyContractedTargetMinutes`
    * is used only as the fallback): when non-null it is the daily-accrual target directly; null falls
-   * back to the weekly ÷ `workingDaysPerWeek` derivation. A DEFAULT convenio_config row leaves it
+   * back to the weekly ÷ `workingDaysPerWeek` derivation. A DEFAULT `convenio_config` row leaves it
    * null, so the derivation still produces today's numbers. */
   dailyTargetMinutes: number | null;
   /** art. 34.1 average weekly cap (default 2400 = 40h). */
@@ -54,10 +54,10 @@ export interface WorkTimeRuleset {
   nightWindowStartMinute: number;
   /** art. 36 night-window end, minutes from local midnight (default 360 = 06:00). */
   nightWindowEndMinute: number;
-  /** plus de nocturnidad as a fraction, or null when the convenio has not set a provincial figure. */
+  /** Night-work premium as a fraction, or null when the collective agreement has not set a provincial figure. */
   nightPremiumPct: number | null;
-  /** plus de turno partido, a per-day amount in tenant currency, or null. */
+  /** Split-shift premium, a per-day amount in tenant currency, or null. */
   splitShiftPremium: number | null;
-  /** Whether turno-partido breaks count as worked time (convenio/interpretive, default false). */
+  /** Whether split-shift breaks count as worked time (collective-agreement/interpretive, default false). */
   breaksCountAsWorked: boolean;
 }

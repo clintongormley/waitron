@@ -35,7 +35,7 @@ export interface RecordSubstitutionInput {
   /**
    * The node/SIF that ISSUES this F3 and whose chain it extends (node-id rekey, 2026-08-03: the SIF
    * is the node, #33). Checked against the SERIES (`sale.series_wrong_node`, step 2) but NOT against
-   * the substituted tickets' own nodes — and, as for a rectificativa, that is correct rather than a
+   * the substituted tickets' own nodes — and, as for a corrective invoice, that is correct rather than a
    * gap: an F3 is a self-standing new full invoice that references the tickets only by IDENTITY
    * (`FacturasSustituidas`), so which SIF issues it is unconstrained (see `record-correction.ts`'s
    * `nodeId` doc for the same reasoning and its AEAT citation).
@@ -52,26 +52,26 @@ export interface RecordSubstitutionInput {
   seriesId: SeriesId;
   /**
    * The simplified (F2) tickets being exchanged for this one full invoice — one or many (the N:1
-   * fan-out a rectificativa's single `correctsSaleId` does not have). An unknown id is `sale.not_found`. Must be non-empty and free of duplicates (both caller
+   * fan-out a corrective invoice's single `correctsSaleId` does not have). An unknown id is `sale.not_found`. Must be non-empty and free of duplicates (both caller
    * preconditions, rejected in step 1 before any row is written); a ticket already exchanged by a
    * prior F3 is `sale.already_substituted`.
    */
   substitutedSaleIds: SaleId[];
   /**
-   * The recipient (destinatario) — REQUIRED, because a full invoice must always name it (findings
+   * The recipient — REQUIRED, because a full invoice must always name it (findings
    * §10.2, «siempre debe llevar el destinatario»). Written to the F3's `counterparty_*` columns and
    * passed NON-null into the fiscal record, where it becomes the record's `Destinatarios` block —
    * the one method whose `SaleForFiscalRecord.counterparty` is populated rather than null.
    */
   counterparty: Counterparty;
   /** The F3's OWN total — POSITIVE (an F3 restates the substituted operations; it is not a negative
-   * rectificativa). `corrects_sale_id` is NULL, so the ordinary `total >= 0` arm of `sales_total_ck`
+   * corrective invoice). `corrects_sale_id` is NULL, so the ordinary `total >= 0` arm of `sales_total_ck`
    * applies unchanged. */
   total: string;
   /** The F3's own (positive) lines — the aggregate of the substituted tickets. Same shape as an
    * ordinary sale's. */
   lines: RecordSaleLine[];
-  /** The F3's own locale + invoice-locale list, supplied by the caller (unlike a rectificativa,
+  /** The F3's own locale + invoice-locale list, supplied by the caller (unlike a corrective invoice,
    * which inherits the original's): an F3 is a fresh full invoice and its rendering locale is a
    * till-UI choice, not a property carried from any one substituted ticket. */
   locale: string;
@@ -80,11 +80,11 @@ export interface RecordSubstitutionInput {
 }
 
 /**
- * Records a *factura de canje* (AEAT `TipoFactura` F3) — a full invoice issued in SUBSTITUTION of
+ * Records a `factura de canje` (AEAT `TipoFactura` F3) — a full invoice issued in SUBSTITUTION of
  * one or more previously-issued simplified tickets (F2), naming the customer's tax details, at a
  * later request for a proper invoice (spec §3.3, findings §10.2).
  *
- * An F3 is emphatically NOT a rectificativa and issues no credit note: the substituted tickets are
+ * An F3 is emphatically NOT a corrective invoice and issues no credit note: the substituted tickets are
  * neither edited nor annulled — they stay recorded exactly once — and AEAT avoids double-counting
  * the amount because `TipoFactura = F3` plus the `FacturasSustituidas` block identifies the record
  * AS a substitution, not because anything is negated. So the F3 carries a POSITIVE total (its own),
@@ -93,7 +93,7 @@ export interface RecordSubstitutionInput {
  *
  * The customer already paid on the ticket(s); the F3 introduces no new charge («no cobrar dos
  * veces», findings §10.2). It is therefore recorded UNSETTLED with no tender and no settlement,
- * mirroring how a rectificativa is recorded unsettled.
+ * mirroring how a corrective invoice is recorded unsettled.
  *
  * No fiscal condition blocks it: a failed chain-integrity check records an incident and the F3
  * proceeds anyway, because a staff member issuing an invoice a customer is waiting for must never be
@@ -201,7 +201,7 @@ export async function recordSubstitution(
     });
   }
 
-  // Step 3. Art. 7.i verification, exactly as for an alta. Nothing branches on `verification.ok` — a
+  // Step 3. Art. 7.i verification, exactly as for a sale record. Nothing branches on `verification.ok` — a
   // failed check records ONE aggregated incident (below, once `saleId` exists) and the F3 is chained
   // anyway. The table-wide `incidents_open_dedup` index holds at most one open incident per (tenant,
   // till, code, sale), so emitting one row per issue would collapse to a single row and drop every
@@ -240,13 +240,13 @@ export async function recordSubstitution(
   // persistent lock.
   const invoiceNumber = await allocateInvoiceNumber(tx, input.seriesId);
 
-  // The F3's VAT desglose, resolved ONCE so the SAME value feeds both the `sales` row below and
+  // The F3's VAT breakdown, resolved ONCE so the SAME value feeds both the `sales` row below and
   // `backend.recordSubstitution` further down (spec 8a's single-source rule): storing it on
   // `sales.vat_breakdown` is a queryable copy of the already-filed data, never a second recompute.
   const vatBreakdown = buildVatBreakdown(input.lines);
 
   // Step 6. The F3 sale: a POSITIVE `total` (the ordinary `total >= 0` arm applies — `corrects_sale_id`
-  // stays NULL, an F3 is not a rectificativa), `fiscalState: "recorded"`, the recipient written to the
+  // stays NULL, an F3 is not a corrective invoice), `fiscalState: "recorded"`, the recipient written to the
   // three `counterparty_*` columns, and the caller-supplied `locale`/`invoiceLocales`. NO settlement
   // and NO tenders — the money was collected on the substituted tickets («no cobrar dos veces»).
   const [inserted] = await tx
@@ -345,8 +345,8 @@ export async function recordSubstitution(
   }
   /* v8 ignore stop */
 
-  // Step 7. Behind this one call the module builds the F3 registro — its own next `secuencia`, its
-  // own huella over the positive totals, `TipoFactura = F3`, the `FacturasSustituidas` block naming
+  // Step 7. Behind this one call the module builds the F3 fiscal record — its own next sequence number,
+  // its own fiscal fingerprint over the positive totals, `TipoFactura = F3`, the `FacturasSustituidas` block naming
   // each ticket's stored identity, and the `Destinatarios` block from `counterparty` — advances its
   // chain and inserts its pending-submission row, all on this transaction. `counterparty` is passed
   // NON-null: an F3 is the one path that carries a recipient. A ticket the module never recorded

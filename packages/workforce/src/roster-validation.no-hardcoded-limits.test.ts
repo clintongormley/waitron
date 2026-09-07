@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
  * packages/fiscal/src/no-hardcoded-margin.test.ts) applied to the roster-guardrail engine: EVERY
  * threshold it measures against is read from the caller-supplied `WorkTimeRuleset`, so NONE of the
  * ET-statutory default values may appear as a literal in the engine source. A baked-in limit would
- * silently ignore a convenio that tightened it — the exact defect this guard exists to prevent.
+ * silently ignore a collective agreement that tightened it — the exact defect this guard exists to prevent.
  *
  * Proved to bite by deletion: temporarily replacing a `ruleset.<field>` read with its statutory
  * default value (e.g. `540`) fails the matching assertion below. The structural constants the engine

@@ -5,7 +5,7 @@ import { timeEntries } from "./time-entries.js";
 
 /**
  * The tamper-evidence chain head — MUTABLE, unlike the `time_entries` it points at. One row per
- * (tenant, location): the *centro de trabajo* is the chain key, because the design (§5) chains one
+ * (tenant, location): the workplace is the chain key, because the design (§5) chains one
  * stream per workplace and the launch venue runs a SINGLE active writer per location (the ratified
  * 2026-08-02 decision — active-active cross-writer chaining is a later, additive enrolment, NOT this
  * slice). Row-locked with `FOR UPDATE` during an append, exactly as fiscal's `cadenas` is per

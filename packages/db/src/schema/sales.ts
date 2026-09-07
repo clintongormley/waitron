@@ -58,7 +58,7 @@ export const tenderMethod = pgEnum("tender_method", [
  *
  * locale and invoice_locales are snapshotted as at issuance (spec §9), so a
  * receipt reprinted a year later reads identically to the one the customer
- * took, and a rectificativa inherits the original list.
+ * took, and a corrective invoice inherits the original list.
  *
  * fiscal_backend and fiscal_state are strictly redundant with the module's own
  * tables and justified anyway (spec §6): they keep the foreign key pointing
@@ -67,7 +67,7 @@ export const tenderMethod = pgEnum("tender_method", [
  *
  * EVERY column here is written once, fiscal_state included. There is no
  * exemption from immutability anywhere in this table — the app role has no
- * UPDATE on it at all. Submission progress is not here; it is on envios.
+ * UPDATE on it at all. Submission progress is not here; it is on `envios`.
  */
 export const sales = pgTable(
   "sales",
@@ -105,8 +105,8 @@ export const sales = pgTable(
     issuedAt: timestamp("issued_at", { withTimezone: true, mode: "string" }).notNull(),
     issuedOffsetMinutes: integer("issued_offset_minutes").notNull(),
     total: numeric("total", { precision: 12, scale: 2 }).notNull(),
-    // The filed per-rate VAT desglose ({rate, base, tax}[]) — the SAME breakdown written into the
-    // hash-chained registro, stored here queryably for reporting. Written once at INSERT (sales is
+    // The filed per-rate VAT breakdown ({rate, base, tax}[]) — the SAME breakdown written into the
+    // hash-chained record, stored here queryably for reporting. Written once at INSERT (sales is
     // immutable); NOT a recompute. Reporting reads this for an exact VAT summary (spec 8a).
     vatBreakdown: jsonb("vat_breakdown")
       .$type<{ rate: string; base: string; tax: string }[]>()
@@ -116,7 +116,7 @@ export const sales = pgTable(
     fiscalBackend: text("fiscal_backend").notNull(),
     fiscalState: fiscalState("fiscal_state").notNull(),
     // The generic-layer projection of "this sale corrects that one" — set on a
-    // rectificativa, NULL on an ordinary sale. Justified exactly as `sale_voids`
+    // corrective invoice, NULL on an ordinary sale. Justified exactly as `sale_voids`
     // and `fiscal_state`/`fiscal_backend` are (see this table's own comment
     // above): core reads nothing fiscal from it, it exists so a
     // Z-report/receipt/till can answer "is this a correction, and of what?" with
@@ -125,9 +125,9 @@ export const sales = pgTable(
     // (pre-production, no deployed data), and immutable table-wide like every
     // other column here.
     correctsSaleId: uuid("corrects_sale_id"),
-    // The recipient (destinatario) of a full invoice — set on an F3 canje (and, later, an F1),
+    // The recipient (`destinatario`) of a full invoice — set on an F3 canje (and, later, an F1),
     // NULL on an ordinary F2 sale. Stored on the generic sales row, not only in the fiscal
-    // registro's `destinatarios`, for the same reason `corrects_sale_id`/`fiscal_state` are here
+    // record's `destinatarios`, for the same reason `corrects_sale_id`/`fiscal_state` are here
     // (see this table's own comment above): a full invoice's recipient is a reprint/Z-report fact,
     // and keeping it here answers "who was this invoiced to?" with no cross-boundary join. English
     // names, because `destinatario`/`destinatarios` are the fiscal module's declared vocabulary
@@ -165,11 +165,11 @@ export const sales = pgTable(
     unique("sales_tenant_id_key").on(t.tenantId, t.id),
     index("sales_tenant_issued_idx").on(t.tenantId, t.issuedAt),
     index("sales_fiscal_state_idx").on(t.tenantId, t.fiscalState),
-    // A rectificativa points at the sale it corrects, within its own tenant.
+    // A corrective invoice points at the sale it corrects, within its own tenant.
     // MATCH SIMPLE (the default) means a NULL `corrects_sale_id` satisfies the
     // FK, so ordinary sales are unaffected. NOT unique — unlike
     // `sale_voids_sale_id_key` (one void per sale), a sale may be corrected more
-    // than once by successive rectificativas; the plain index below is for the
+    // than once by successive corrective invoices; the plain index below is for the
     // lookup, not a uniqueness guard.
     foreignKey({
       columns: [t.tenantId, t.correctsSaleId],
@@ -195,9 +195,9 @@ export const sales = pgTable(
     // a UNIQUE, so unlimited walk-up sales (working_order_id NULL) coexist; only a retrieved order
     // filed twice collides. See the column comment above.
     unique("sales_working_order_id_key").on(t.tenantId, t.workingOrderId),
-    // `total >= 0` for an ordinary sale, but a rectificativa por diferencias
+    // `total >= 0` for an ordinary sale, but a `rectificativa por diferencias`
     // carries a NEGATIVE total (findings §10.2): `record-sale` passes `total`
-    // verbatim into the fiscal record's `ImporteTotal`, which the huella hashes,
+    // verbatim into the fiscal record's `ImporteTotal`, which the fiscal fingerprint hashes,
     // so this column must be allowed to hold that negative value. A corrective
     // (link set) may be negative; an ordinary sale (link NULL) may not.
     check("sales_total_ck", sql`${t.total} >= 0 or ${t.correctsSaleId} is not null`),
@@ -228,7 +228,7 @@ export const saleLines = pgTable(
     // The parent line this line modifies (ordering modifiers, Task 2) — a filed MODIFIER child line
     // points at the dish line it belongs to; a top-level line leaves it NULL. Presentation/reporting
     // metadata ONLY — the fiscal record is built from `total` + `vat_breakdown`, never from
-    // `sale_lines`, so this never reaches the huella (design §4). Bare NULLABLE uuid: the
+    // `sale_lines`, so this never reaches the fiscal fingerprint (design §4). Bare NULLABLE uuid: the
     // tenant-consistent self-FK (tenant_id, parent_line_id) → sale_lines(tenant_id, id) is
     // hand-written in the --custom migration (drizzle does not emit a self-referential composite FK —
     // the same split sales_corrects_fk uses), targeting sale_lines_tenant_id_key below. MATCH SIMPLE
@@ -320,10 +320,10 @@ export const saleSettlements = pgTable(
 
 /**
  * The N:1 substitution link for F3 canje: one row per (F3 sale, substituted simplified ticket)
- * pair (docs/superpowers/plans/2026-08-02-f3-canje.md §2.1). An F3 (factura de canje) issues a full
+ * pair (docs/superpowers/plans/2026-08-02-f3-canje.md §2.1). An F3 (`factura de canje`) issues a full
  * invoice in substitution of one or more previously-issued simplified tickets; this is the
  * generic-layer projection of that relationship, deliberately NOT `corrects_sale_id` reuse —
- * `corrects_sale_id` is 1:1 and means "corrects" (a rectificativa), canje is N:1 and means
+ * `corrects_sale_id` is 1:1 and means "corrects" (a corrective invoice), canje is N:1 and means
  * "substitutes".
  *
  * `unique(tenant_id, substituted_sale_id)` is the DB control for "a ticket is substituted at most

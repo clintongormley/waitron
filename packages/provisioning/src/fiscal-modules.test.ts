@@ -3,8 +3,8 @@ import { isAppError } from "@waitron/shared";
 import { FISCAL_TERRITORIES, resolveFiscalModules } from "./fiscal-modules.js";
 
 describe("resolveFiscalModules", () => {
-  it("resolves ES-common to Veri*Factu + IVA", () => {
-    expect(resolveFiscalModules("ES-common")).toEqual({ filing: "verifactu", tax: "iva" });
+  it("resolves ES-common to Veri*Factu + VAT", () => {
+    expect(resolveFiscalModules("ES-common")).toEqual({ filing: "verifactu", tax: "vat" });
   });
 
   it("resolves GB-vat to the no-regime filing module (records nothing)", () => {

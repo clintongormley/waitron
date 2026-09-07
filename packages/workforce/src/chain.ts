@@ -137,7 +137,7 @@ export async function lockChainHead(
  * false `hash_mismatch`). Mirrors the fiscal precedent: verifactu/src/format.ts's `formatDateTime`
  * always emits whole seconds, the single canonical form for both the hashed literal and its
  * reconstruction. `Math.floor` matches Postgres `date_trunc('second', …)` for the (always positive)
- * instants a registro de jornada records, and the DB CHECK `time_entries_event_at_second_ck`
+ * instants the working-time record captures, and the DB CHECK `time_entries_event_at_second_ck`
  * backstops it.
  */
 function truncateToWholeSecond(eventAt: string): string {

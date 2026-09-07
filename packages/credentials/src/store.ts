@@ -155,7 +155,7 @@ export async function putCredential(
         // The database clock, matching the column's own `defaultNow()` on the INSERT branch —
         // never the app clock (`new Date()`). Mixing the two would let host clock skew stamp an
         // update earlier than the original insert. Same idiom as
-        // packages/fiscal-verifactu/src/registro-sif.ts's `actualizadoEn: sql\`now()\``.
+        // `packages/fiscal-verifactu/src/registro-sif.ts`'s `actualizadoEn: sql\`now()\``.
         updatedAt: sql`now()`,
       },
     });

@@ -75,17 +75,19 @@ describe("configuration", () => {
   it("scopes itself to the generic packages, in this order", () => {
     expect([...GENERIC_PACKAGES]).toEqual([
       "db",
+      "migrations",
       "core",
       "fiscal",
       "shared",
       "payments",
+      "payments-stripe",
       "scheduler",
       "credentials",
       "workforce",
-      "reporting",
       "identity",
       "catalogue",
       "sync",
+      "tunnel",
       "membership",
       "module",
       "layouts",
@@ -95,7 +97,29 @@ describe("configuration", () => {
       "diagnostics",
       "sync-enrolment",
       "composition",
+      "provisioning",
+      "ui",
     ]);
+  });
+
+  it("does not scan the Spain-specific non-owner packages", () => {
+    // verifactu (the AEAT wire library) and reporting (the modelo-303 form) are Spanish by nature
+    // and unscanned by OMISSION — neither a generic package nor a vocabulary owner. Pinned so a
+    // future edit cannot silently re-add one to the generic set (the fiscal-modules.ts incident).
+    for (const spanish of ["verifactu", "reporting"]) {
+      expect(GENERIC_PACKAGES).not.toContain(spanish);
+    }
+  });
+
+  it("excludes provisioning's test files as a documented production-only interim", () => {
+    // Provisioning's e2e/pg tests provision a real Veri*Factu venue and name the Spanish fiscal
+    // TABLES in SQL, which cannot be renamed. Until those tests run against fiscal-none (spec §6
+    // step 5), only provisioning's production is scanned — the ONLY test exemption.
+    const files = sourceFilesIn("provisioning");
+    expect(files.length).toBeGreaterThan(0);
+    expect(files.some((f) => f.endsWith(".test.ts"))).toBe(false);
+    // Every other generic package keeps the "tests are scanned too" rule — db still lists its tests.
+    expect(sourceFilesIn("db").some((f) => f.endsWith(".test.ts"))).toBe(true);
   });
 
   it("derives the vocabulary owners from the descriptors, in ALL_MODULES order", () => {
@@ -250,18 +274,60 @@ describe("findSpanish", () => {
     expect(findSpanish('nif: text("nif").notNull(),', FORBIDDEN)).toEqual([]);
   });
 
-  it("ignores Spanish inside line and block comments", () => {
-    // Comments explaining the regime are legitimate and wanted; the constraint is on identifiers
-    // and table/column names.
-    expect(findSpanish("// mirrors AEAT's registro de alta and its huella", FIXTURE)).toEqual([]);
+  it("flags bare Spanish prose in a line comment", () => {
+    // The owner principle (spec §1a): generic code describes regime-neutral operations, so its
+    // comments must be English too. A bare Spanish word in a comment is the leak #258 slipped
+    // through (comments were never scanned).
+    expect(findSpanish("// the cadena head is per node", FIXTURE).map((v) => v.word)).toEqual([
+      "cadena",
+    ]);
+  });
+
+  it("flags bare Spanish prose in a block comment", () => {
     expect(
-      findSpanish("/*\n * The cadena head. Spanish stays in the module.\n */", FIXTURE),
-    ).toEqual([]);
+      findSpanish("/*\n * mirrors the huella chain shape\n */", FIXTURE).map((v) => v.word),
+    ).toEqual(["huella"]);
+  });
+
+  it("exempts a Spanish term quoted in guillemets in a comment", () => {
+    // «…» is a verbatim regulatory quote — the source's own words (CLAUDE.md §1). Left intact.
+    expect(findSpanish("// AEAT: «se conserva la cadena original»", FIXTURE)).toEqual([]);
+  });
+
+  it("exempts a Spanish term in a backtick citation in a comment", () => {
+    // A backticked term cites a specific identifier / wire field / owned term — a quotation of a
+    // name, left intact (spec §3). `cadena` here names the module's column.
+    expect(findSpanish("// the `cadena` row is owned by the fiscal module", FIXTURE)).toEqual([]);
+  });
+
+  it("exempts a multi-line guillemet quote spanning a block comment", () => {
+    // The quote wraps across lines (e.g. core/record-correction.ts), so quotation blanking runs on
+    // the whole source before the line split.
+    expect(findSpanish("/*\n * AEAT: «la cadena\n * y su huella»\n */", FIXTURE)).toEqual([]);
+  });
+
+  it("still flags a Spanish table name in a sql template literal in code", () => {
+    // The backtick exemption is COMMENT-ONLY. In code a backtick opens a TEMPLATE LITERAL, and a
+    // Spanish table name in `sql`…`` is the load-bearing case the guard exists to catch — it must
+    // NOT be exempted the way a backtick citation in a comment is.
+    expect(
+      findSpanish("await db.execute(sql`select from registros_facturacion`);", FIXTURE).map(
+        (v) => v.word,
+      ),
+    ).toEqual(["registros", "facturacion"]);
   });
 
   it("still flags code on a line that also carries a comment", () => {
     const found = findSpanish("const cadena = 1; // the chain head", FIXTURE);
     expect(found.map((v) => v.word)).toEqual(["cadena"]);
+  });
+
+  it("flags Spanish in BOTH the code and the comment on one line", () => {
+    // Comment prose is scanned now, so a line's code hit and its comment hit are both reported.
+    expect(findSpanish("const mesa = 1; // the mesa number", FIXTURE).map((v) => v.word)).toEqual([
+      "mesa",
+      "mesa",
+    ]);
   });
 
   it("scans with exactly the set it is handed — the base list alone knows no fiscal term", () => {

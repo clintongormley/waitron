@@ -113,7 +113,7 @@ describe("planVenue", () => {
       country: "ES",
       taxId: "B12345678",
     });
-    expect(node).toMatchObject({ filingModule: "verifactu", taxModule: "iva" });
+    expect(node).toMatchObject({ filingModule: "verifactu", taxModule: "vat" });
   });
 
   it("emits a standard series and a rectificative series with the requested codes", () => {

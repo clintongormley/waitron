@@ -43,7 +43,7 @@ export const workforceCorrectionStatus = pgEnum("workforce_correction_status", [
 ]);
 
 /**
- * The single append-only stream of clock events — the *registro de jornada* floor (art. 34.9).
+ * The single append-only stream of clock events — the working-time record floor (art. 34.9).
  *
  * IMMUTABLE, unlike `persons`/`employments`: the app role holds only SELECT, INSERT, and
  * UPDATE/DELETE/TRUNCATE are revoked and backstopped by triggers
@@ -67,7 +67,7 @@ export const timeEntries = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     tenantId: uuid("tenant_id").notNull(),
     personId: uuid("person_id").notNull(),
-    /** The centro de trabajo the event was captured at — the workplace the Inspección scopes to. */
+    /** The workplace the event was captured at — the site the Inspección scopes to. */
     locationId: uuid("location_id").notNull(),
     entryKind: workforceEntryKind("entry_kind").notNull(),
     /** The trusted event instant. `mode: "string"` keeps the offset out of the value the way

@@ -72,7 +72,7 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
     });
   }
 
-  // Due = the printed total, net of every rectificativa (folded into `sale.corrections` by the
+  // Due = the printed total, net of every corrective invoice (folded into `sale.corrections` by the
   // subquery above), plus tips — summed in the decimal domain, exactly as listOutstandingSales reads
   // its amountDue.
   const due = sumDecimals([

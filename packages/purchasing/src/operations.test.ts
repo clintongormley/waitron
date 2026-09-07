@@ -103,7 +103,7 @@ describe("purchase-invoice operations", () => {
   });
 
   it("stores the supplier's filed tax verbatim, not a recomputed base×rate", async () => {
-    // A difference-method supplier cuota: 20.99, not round(100 × 21%) = 21.00. We file what they
+    // A difference-method supplier VAT amount: 20.99, not round(100 × 21%) = 21.00. We file what they
     // charged (the exactness rule the sales/output side follows).
     const fetched = await asApp(async (tx) => {
       const c = await createPurchaseInvoice(tx, tenantId, {

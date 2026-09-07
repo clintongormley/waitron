@@ -36,7 +36,7 @@ export interface BasketItem {
  * unit price and the rate onto `working_order_lines` at add-time; `priceLockedLines` reprices from
  * exactly those columns, so a retrieved/parked order files the same figures whether it went
  * through re-price or file-from-lock. Deliberately the STORED gross unit and rate, never
- * `line_total ÷ quantity` — recovering a weighed line by division drifts off the add-time desglose.
+ * `line_total ÷ quantity` — recovering a weighed line by division drifts off the add-time VAT breakdown.
  */
 export interface LockedLine {
   /** The stored `working_order_lines.unit_price_gross` — GROSS (VAT-inclusive), per item or per kg. */
@@ -59,7 +59,7 @@ export interface LockedLine {
 
 // The standing Spanish VAT set. RECEIPT (Step 6): the four rates below were confirmed on 2026-08-05
 // against the primary Spanish tax-agency source (AEAT), page path
-// /Sede/iva/calculo-iva-repercutido-clientes/tipos-impositivos-iva.html on sede.agenciatributaria.gob.es
+// `/Sede/iva/calculo-iva-repercutido-clientes/tipos-impositivos-iva.html` on sede.agenciatributaria.gob.es
 // (host omitted from the URL literal to keep this generic package English-only; page last updated
 // 2026-06-02). The page gives a general rate of 21, reduced rates of 10 and 4, and a 0 rate for
 // certain operations — so general 21, reduced 10, super_reduced 4, zero 0. The resolver's shape is
@@ -247,7 +247,7 @@ export interface BasketItemWithOptions {
  * a dish ×3 with an option ×2 prices the option 6 times), its rate the option's `vatClass` override
  * or (when `null`) the dish's own rate, its descriptions the option's `name`, and its category the
  * parent's snapshot — so
- * the difference-method desglose and `total` include the option amounts with no separate arithmetic.
+ * the difference-method VAT breakdown and `total` include the option amounts with no separate arithmetic.
  * With every item's `options` empty this is line-for-line identical to `priceBasket`.
  */
 export function priceBasketWithOptions(items: readonly BasketItemWithOptions[]): PricedLines {

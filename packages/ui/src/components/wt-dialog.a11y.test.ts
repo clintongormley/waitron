@@ -14,7 +14,7 @@ describe.each(["light", "dark"] as const)("wt-dialog a11y (%s theme)", (theme) =
   // tree at all, so this state is the one that counts.
   test("open, with a heading", async () => {
     const el = (await mountThemed(
-      '<wt-dialog heading="Anular venta">Esto generará un registro rectificativo.</wt-dialog>',
+      '<wt-dialog heading="Void sale">This will create a corrective record.</wt-dialog>',
       theme,
     )) as Openable;
     el.open = true;
@@ -24,7 +24,7 @@ describe.each(["light", "dark"] as const)("wt-dialog a11y (%s theme)", (theme) =
 
   test("open, with a footer", async () => {
     const el = (await mountThemed(
-      '<wt-dialog heading="Anular venta">Cuerpo<wt-button slot="footer" variant="danger">Anular</wt-button></wt-dialog>',
+      '<wt-dialog heading="Void sale">Body<wt-button slot="footer" variant="danger">Void</wt-button></wt-dialog>',
       theme,
     )) as Openable;
     el.open = true;
@@ -37,7 +37,7 @@ describe.each(["light", "dark"] as const)("wt-dialog a11y (%s theme)", (theme) =
   // no accessible name at all.
   test("open, heading-less, named via aria-label", async () => {
     const el = (await mountThemed(
-      '<wt-dialog aria-label="Cerrar sesión">¿Seguro que quieres salir?</wt-dialog>',
+      '<wt-dialog aria-label="Log out">Are you sure you want to leave?</wt-dialog>',
       theme,
     )) as Openable;
     el.open = true;

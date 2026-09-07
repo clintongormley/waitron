@@ -14,7 +14,7 @@ import { paymentPolicy, paymentRefunds, payments } from "./schema/index.js";
  * reintroduces the exact drift class that commit was written to remove.
  *
  * Unlike `fiscal-verifactu`'s own `monetary-columns.test.ts` — where `cuota_total`/`importe_total`
- * are deliberately `text`, because the huella hashes those bytes verbatim — this package's amount
+ * are deliberately `text`, because the fiscal fingerprint hashes those bytes verbatim — this package's amount
  * columns have no hash-chain constraint, so `numeric(12, 2)` is the correct, exact-decimal type
  * here, not merely the default `payments.ts`/`payment-refunds.ts` happened to pick.
  */

@@ -464,6 +464,17 @@ screens, `apps/server/src/modules.ts` (the maps derived from that list), and the
 6. **De-triplicate the three alta builders — [owner]** in `fiscal-verifactu/src/backend.ts`
    (`recordSale` / `recordCorrection` / `recordSubstitution`; already under *Debt → Fiscal*): needs
    the huella-invariance re-run across all three.
+7. **Tax-model system (NEW, owner 2026-09-07).** Today the `tax` slot in provisioning's
+   territory→module registry (`ES-common → {filing:"verifactu", tax:"vat"}`) is an INERT label
+   stamped into `nodes.tax_module` — nothing calculates from it, branches on it, or names a receipt
+   from it. The owner's intended shape: the tax MODEL (VAT / GST — different calculation, different
+   receipt layout, inclusive-vs-exclusive pricing) is GENERIC and lives in `core` with helpers; the
+   fiscal module supplies the applicable RATES and the per-jurisdiction DISPLAY LABEL (`«IVA»` in
+   Spain, "VAT" in the UK — a locale property, NOT a model property: UK and ES are both the VAT
+   model). `verifactu` would just declare "model = VAT, rates = […], label = «IVA»". Prerequisite for
+   a non-ES venue that actually charges tax; `GB-vat` currently carries `tax:"none"` because no tax
+   module is wired for it yet. Surfaced while renaming `iva`→`vat` for the English-only guard
+   (`2026-09-07-english-only-generic-english-design.md` §4).
 
 **Coordination rules for the three sessions** (each paid for already, CLAUDE.md §2/§4):
 

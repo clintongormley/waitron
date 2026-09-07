@@ -51,7 +51,7 @@ export const bookings = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     tenantId: uuid("tenant_id").notNull(),
-    /** The centro de trabajo the reservation is for. */
+    /** The workplace the reservation is for. */
     locationId: uuid("location_id").notNull(),
     // Venue-local wall-clock date + time (§2b) — plain `date`/`time`, NOT an instant.
     bookingDate: date("booking_date").notNull(),

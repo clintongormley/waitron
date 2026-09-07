@@ -26,7 +26,7 @@
  * `packages/core`, `packages/fiscal` and `packages/fiscal-verifactu` do not exist yet in this
  * repo's history, so pre-declaring their codes here would mean the leaf package changes every
  * time a package built later adds a code — exactly the coupling this design exists to avoid. It
- * would also risk regime vocabulary (a future backend's "chain", "huella") arriving in the one
+ * would also risk regime vocabulary (a future backend's `chain`, `huella`) arriving in the one
  * package that must never carry it (spec §2). `packages/db` exists today and augments this
  * registry from its own source (`packages/db/src/errors.ts`) rather than having its codes
  * declared here on its behalf, for the same reason: the leaf does not get to know what its

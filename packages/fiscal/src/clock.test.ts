@@ -207,7 +207,7 @@ describe("UTC plus offset", () => {
   });
 
   it("does not read the device timezone", () => {
-    // A timezone change is one of the causes of a wall-clock jump, so deriving the huso from
+    // A timezone change is one of the causes of a wall-clock jump, so deriving the time zone from
     // Date.prototype.getTimezoneOffset() would let the very event we defend against rewrite a
     // fiscally meaningful field.
     const { clock } = makeClock();
