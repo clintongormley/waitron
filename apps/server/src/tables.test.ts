@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  CORE_MIGRATIONS,
   DEFAULT_TIME_ZONE,
   asAppUser,
   ticketItems,
@@ -10,6 +9,7 @@ import {
   workingOrderLines,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -49,7 +49,12 @@ import {
 import "./errors.js";
 
 const LOCALE = "es-ES";
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+// The whole manifest, not [core]: several tables here transitively need the sync module (bookings'
+// capture trigger EXECUTEs sync's `sync_capture()`), and `manifestSets()` is that whole ordered set.
+const suite = usePgliteDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 let db: Database;
 beforeAll(() => {
   db = suite.db;
@@ -682,184 +687,6 @@ describe("listTablesWithState — enRoute (en camino, KDS-3 §3c)", () => {
     await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1));
     row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ enRoute: 0, readyToServe: 1, pendingToServe: 1 });
-  });
-});
-
-// Bookings-1 Task 6 (reserved-on-floor, design §4): each table carries its NEXT imminent `booked`
-// reservation for TODAY (venue-local) at/after NOW (venue-local), or null. "Today"/"now" derive from
-// `locations.time_zone` at read time (§2b) — computed in JS, never in SQL — so the read takes an
-// injectable clock (the station-queue precedent) that a test pins for determinism. PGlite is enough:
-// the logic is a correlated read with no privilege/concurrency dimension.
-describe("listTablesWithState — nextReservation (reserved-on-floor)", () => {
-  // Insert a booking directly (as the app role) — the booking-api write verbs are a separate task; this
-  // read test only needs rows in the table. `booking_time` is a plain venue-local `time` (§2b).
-  async function insertBooking(
-    cfg: TillConfig,
-    fields: {
-      tableId: string | null;
-      date: string;
-      time: string;
-      partySize?: number;
-      name?: string;
-      status?: string;
-    },
-  ): Promise<void> {
-    await asApp(cfg, (tx) =>
-      tx.execute(sql`
-        insert into bookings
-          (tenant_id, location_id, table_id, booking_date, booking_time, party_size, contact_name, created_by, status)
-        values
-          (${cfg.tenantId}, ${cfg.locationId}, ${fields.tableId}, ${fields.date}, ${fields.time},
-           ${fields.partySize ?? 2}, ${fields.name ?? "Ana"}, ${randomUUID()}, ${fields.status ?? "booked"})
-      `),
-    );
-  }
-
-  // 2026-09-15T10:00:00Z → Madrid (CEST, UTC+2 in September) 12:00 on 2026-09-15.
-  const MADRID_NOON = new Date("2026-09-15T10:00:00Z");
-
-  it("surfaces the table's next booked reservation later today as HH:MM", async () => {
-    const cfg = await setupVenue();
-    const { id: tableId } = await asApp(cfg, (tx) =>
-      createTable(tx, cfg, { label: "7", capacity: 4 }),
-    );
-    await insertBooking(cfg, {
-      tableId,
-      date: "2026-09-15",
-      time: "14:00",
-      partySize: 5,
-      name: "Marta",
-    });
-
-    const row = (
-      await asApp(cfg, (tx) => listTablesWithState(tx, cfg, undefined, MADRID_NOON))
-    ).find((t) => t.id === tableId)!;
-    expect(row.nextReservation).toEqual({ time: "14:00" });
-  });
-
-  it("returns null when the table has no upcoming booked reservation", async () => {
-    const cfg = await setupVenue();
-    const { id: tableId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "8" }));
-    const row = (
-      await asApp(cfg, (tx) => listTablesWithState(tx, cfg, undefined, MADRID_NOON))
-    ).find((t) => t.id === tableId)!;
-    expect(row.nextReservation).toBeNull();
-  });
-
-  it("excludes past-time, non-booked-status, and other-day reservations", async () => {
-    const cfg = await setupVenue();
-    const { id: tableId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "9" }));
-    // Past-time today (now = 12:00): excluded.
-    await insertBooking(cfg, { tableId, date: "2026-09-15", time: "09:00" });
-    // Future today but not `booked`: each excluded.
-    await insertBooking(cfg, { tableId, date: "2026-09-15", time: "15:00", status: "seated" });
-    await insertBooking(cfg, { tableId, date: "2026-09-15", time: "16:00", status: "cancelled" });
-    await insertBooking(cfg, { tableId, date: "2026-09-15", time: "17:00", status: "no_show" });
-    await insertBooking(cfg, { tableId, date: "2026-09-15", time: "18:00", status: "completed" });
-    // Booked but a different day: excluded.
-    await insertBooking(cfg, { tableId, date: "2026-09-16", time: "13:00" });
-
-    const row = (
-      await asApp(cfg, (tx) => listTablesWithState(tx, cfg, undefined, MADRID_NOON))
-    ).find((t) => t.id === tableId)!;
-    expect(row.nextReservation).toBeNull();
-  });
-
-  it("returns the earliest of two future booked reservations", async () => {
-    const cfg = await setupVenue();
-    const { id: tableId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "10" }));
-    await insertBooking(cfg, { tableId, date: "2026-09-15", time: "20:00", name: "Later" });
-    await insertBooking(cfg, { tableId, date: "2026-09-15", time: "13:30", name: "Earlier" });
-
-    const row = (
-      await asApp(cfg, (tx) => listTablesWithState(tx, cfg, undefined, MADRID_NOON))
-    ).find((t) => t.id === tableId)!;
-    expect(row.nextReservation).toEqual({ time: "13:30" });
-  });
-
-  it("does not crash when locations.time_zone is an invalid IANA zone (falls back to the default)", async () => {
-    // `locations.time_zone` is free-text with NO CHECK constraint (schema: `.notNull()
-    // .default("Europe/Madrid")`), so a typo or a legacy value can be stored. `Intl.DateTimeFormat`
-    // throws `RangeError` on an unknown zone, which would turn the floor read (GET /api/tables/state)
-    // into a 500 — bad config must not take out the operational floor. The read falls back to the
-    // column's own default (Europe/Madrid), so with `MADRID_NOON` the 14:00 booking still surfaces.
-    const cfg = await setupVenue({ timeZone: "Not/AZone" });
-    const { id: tableId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "13" }));
-    await insertBooking(cfg, {
-      tableId,
-      date: "2026-09-15",
-      time: "14:00",
-      partySize: 3,
-      name: "Fallback",
-    });
-
-    const rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg, undefined, MADRID_NOON));
-    const row = rows.find((t) => t.id === tableId)!;
-    expect(row.nextReservation).toEqual({ time: "14:00" });
-  });
-
-  it("derives venue-local 'today' from locations.time_zone, not UTC (date boundary)", async () => {
-    // now = 2026-09-01T23:00:00Z. In Pacific/Kiritimati (UTC+14) that is 2026-09-02 13:00 — a DIFFERENT
-    // calendar day than the UTC 2026-09-01. A booking dated 2026-09-02 at 15:00 must surface (it is the
-    // venue's "today", after the venue's "now"); were the read using UTC it would look at 2026-09-01 and
-    // find nothing.
-    const cfg = await setupVenue({ timeZone: "Pacific/Kiritimati" });
-    const clock = new Date("2026-09-01T23:00:00Z");
-    const { id: tableId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "11" }));
-    await insertBooking(cfg, { tableId, date: "2026-09-02", time: "15:00", name: "Venue" });
-    // A booking on the UTC day (2026-09-01) must NOT surface — it is yesterday at the venue.
-    await insertBooking(cfg, { tableId, date: "2026-09-01", time: "23:30", name: "UtcDay" });
-
-    const row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg, undefined, clock))).find(
-      (t) => t.id === tableId,
-    )!;
-    expect(row.nextReservation).toEqual({ time: "15:00" });
-  });
-
-  it("derives venue-local 'now' from locations.time_zone (hour boundary)", async () => {
-    // Same instant/tz as above → venue now is 2026-09-02 13:00. A booking at 12:00 (before) is excluded;
-    // one at 14:00 (after) surfaces — proving the >= now filter uses the VENUE hour, not UTC's 23:00.
-    const cfg = await setupVenue({ timeZone: "Pacific/Kiritimati" });
-    const clock = new Date("2026-09-01T23:00:00Z");
-    const { id: tableId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "12" }));
-    await insertBooking(cfg, { tableId, date: "2026-09-02", time: "12:00", name: "Past" });
-    await insertBooking(cfg, { tableId, date: "2026-09-02", time: "14:00", name: "Future" });
-
-    const row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg, undefined, clock))).find(
-      (t) => t.id === tableId,
-    )!;
-    expect(row.nextReservation).toEqual({ time: "14:00" });
-  });
-
-  it("keeps a just-passed reservation on the floor within the grace window, drops it beyond", async () => {
-    // now = Madrid 12:00. RESERVATION_GRACE_MINUTES is 30, so the grace floor is 11:30. A booking at
-    // 11:45 (15 min past, within grace) STILL surfaces — the reserved cue is most useful when a guest is
-    // due or running late — while one at 11:15 (45 min past, beyond grace) is gone. Both are today +
-    // booked; only their time relative to the grace floor differs.
-    const cfg = await setupVenue();
-    const { id: withinId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "14" }));
-    const { id: beyondId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "15" }));
-    // The grace floor itself (11:30 = now − 30) must STILL surface: the filter is `>= graceFloor`
-    // (inclusive), so a `>=`→`>` regression would drop this exact-boundary booking and this pins it.
-    const { id: boundaryId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "16" }));
-    await insertBooking(cfg, { tableId: withinId, date: "2026-09-15", time: "11:45", name: "Due" });
-    await insertBooking(cfg, {
-      tableId: beyondId,
-      date: "2026-09-15",
-      time: "11:15",
-      name: "Gone",
-    });
-    await insertBooking(cfg, {
-      tableId: boundaryId,
-      date: "2026-09-15",
-      time: "11:30",
-      name: "Edge",
-    });
-
-    const rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg, undefined, MADRID_NOON));
-    expect(rows.find((t) => t.id === withinId)!.nextReservation).toEqual({ time: "11:45" });
-    expect(rows.find((t) => t.id === beyondId)!.nextReservation).toBeNull();
-    expect(rows.find((t) => t.id === boundaryId)!.nextReservation).toEqual({ time: "11:30" });
   });
 });
 

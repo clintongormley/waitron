@@ -5,8 +5,8 @@ import { authorizeManager } from "@waitron/identity";
 import type { DrainProgress } from "@waitron/sync";
 import type { KeyRing } from "@waitron/credentials";
 import { retireSelf } from "./retire.js";
-import { requireManagementSession } from "./management-session.js";
-import { createErrorBoundary } from "./error-boundary.js";
+import { requireManagementSession } from "@waitron/server-kit";
+import { createErrorBoundary } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 // No `./errors.js` side-effect import: this file throws no code of its own — the auth helpers and
 // `retireSelf` each carry their own registry import for the codes they raise (matching box-status.ts).

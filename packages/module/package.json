@@ -15,8 +15,10 @@
     "@waitron/db": "workspace:*",
     "@waitron/fiscal": "workspace:*",
     "@waitron/migrations": "workspace:*",
+    "@waitron/server-kit": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
+    "hono": "^4.6.0",
     "semver": "^7.7.0"
   },
   "devDependencies": {

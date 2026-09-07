@@ -65,15 +65,6 @@ export const PERMISSIONS = [
   // only the central-management surface (printing design §7). Codes/permissions are never renamed
   // once shipped.
   "printer.manage",
-  // Authoring restaurant reservations (booking CRUD + lifecycle: create/edit/cancel/no-show/complete,
-  // and seat-a-booking which opens a tab) from the management dashboard (@waitron/bookings). A
-  // domain-named RESERVATION permission on the commercial lane, distinct from staff admin
-  // (person.manage); granted to manager + admin, the same roles as the other management write gates,
-  // mirroring purchase.manage. No front-of-house role exists (only staff/supervisor/manager/admin, and
-  // no operational write permission below manager); if floor staff should take bookings, granting this
-  // lower is a later decision and a new pattern (spec §7). Codes/permissions are never renamed once
-  // shipped.
-  "booking.manage",
   // Authorizing a cash-drawer OPEN when a location's drawer_open_policy is 'gated' (@waitron/db
   // drawer_opens audit log). A domain-named CASH-ACCOUNTABILITY permission on the floor lane, NOT a
   // management-dashboard config gate — so it sits in the SUPERVISOR set beside sale.void/refund/
@@ -117,7 +108,6 @@ const MANAGER: ReadonlySet<Permission> = new Set([
   "report.export",
   "device.manage",
   "printer.manage",
-  "booking.manage",
   "diagnostics.view",
 ]);
 const ALL: ReadonlySet<Permission> = new Set(PERMISSIONS);
@@ -129,7 +119,61 @@ const ROLE_PERMISSIONS: Record<PersonRoleValue, ReadonlySet<Permission>> = {
   admin: ALL,
 };
 
-/** True if `role` may perform an action requiring `permission`. */
-export function roleHasPermission(role: PersonRoleValue, permission: Permission): boolean {
-  return ROLE_PERMISSIONS[role].has(permission);
+// Returns its argument unchanged, but only type-checks when the tuple lists EVERY `PersonRoleValue`.
+// It is the exhaustiveness tie for ROLE_LADDER below: a role added to `PersonRoleValue` but forgotten
+// in the tuple makes the argument's required type `never`, so the call fails to compile — a LOUD
+// error, not a silent mis-fold (an unlisted role would make `indexOf` return -1 and fold into
+// `["admin"]` alone). Both directions are caught: a tuple entry outside `PersonRoleValue` breaks the
+// `U extends readonly PersonRoleValue[]` bound.
+const arrayOfAll =
+  <T>() =>
+  <U extends readonly T[]>(array: U & ([T] extends [U[number]] ? unknown : never)): U =>
+    array;
+
+// staff < supervisor < manager < admin — identity OWNS the ladder. A module states only the floor a
+// permission is granted from (grantedFrom); the fold below spreads it to that role and every role
+// above. The one source of the ordering, reused by registerModulePermissions; tied exhaustively to
+// `PersonRoleValue` by `arrayOfAll` so it cannot silently diverge from the role enum.
+const ROLE_LADDER = arrayOfAll<PersonRoleValue>()([
+  "staff",
+  "supervisor",
+  "manager",
+  "admin",
+] as const);
+
+// Module-contributed permissions, folded into their roles at boot (registerModulePermissions). A
+// module's permission lives HERE, never in the static PERMISSIONS catalog; roleHasPermission consults
+// both. Mutable, populated once at startup before any route auth runs (apps/server/src/boot.ts);
+// re-registering the same permission simply overwrites its role set.
+const MODULE_PERMISSIONS = new Map<string, ReadonlySet<PersonRoleValue>>();
+
+/**
+ * Fold a module's contributed permissions into identity's role ladder. Each `{ permission,
+ * grantedFrom }` grants `permission` to `grantedFrom` and every role ABOVE it (the ladder stays
+ * identity's — the module names only the floor). Called ONCE at startup, before any route auth, over
+ * the composition root's assembled set; the static catalog names no module permission (spec §4.2).
+ */
+export function registerModulePermissions(
+  perms: readonly { permission: string; grantedFrom: PersonRoleValue }[],
+): void {
+  for (const { permission, grantedFrom } of perms) {
+    // indexOf never returns -1: `grantedFrom` is a PersonRoleValue and `arrayOfAll` above forces
+    // ROLE_LADDER to list every one, so the floor is always found and `slice` spreads to it and above.
+    const floor = ROLE_LADDER.indexOf(grantedFrom);
+    MODULE_PERMISSIONS.set(permission, new Set(ROLE_LADDER.slice(floor)));
+  }
+}
+
+/** True if `role` may perform an action requiring `permission`. `permission` widens past the closed
+ * core union so a module's own permission string is accepted (the boundary authorizeManager also
+ * widens to); a core permission resolves against the static map, a module permission against the
+ * registry above. */
+export function roleHasPermission(
+  role: PersonRoleValue,
+  permission: Permission | (string & {}),
+): boolean {
+  return (
+    (ROLE_PERMISSIONS[role] as ReadonlySet<string>).has(permission) ||
+    (MODULE_PERMISSIONS.get(permission)?.has(role) ?? false)
+  );
 }

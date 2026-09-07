@@ -11,7 +11,7 @@ import { assignCatalogueToLocation, listAvailableProducts } from "@waitron/catal
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
-import { MANAGEMENT_COOKIE } from "./management-session.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
 
 // Real Postgres, not PGlite: the route mechanics (body/id screens, upload) are already proven

@@ -39,7 +39,7 @@ import { startServer, type StartedServer } from "./boot.js";
 import { roleUrl } from "./testing/postgres.js";
 import type { Logger } from "./logger.js";
 import { realSleep } from "./loop.js";
-import { MANAGEMENT_COOKIE } from "./management-session.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountSyncApi } from "./sync-api.js";
 import { mountSetup } from "./setup-api.js";

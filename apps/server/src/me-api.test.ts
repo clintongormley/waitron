@@ -9,7 +9,7 @@ import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import { SUPPORTED_LOCALES } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mountMeApi } from "./me-api.js";
-import { MANAGEMENT_COOKIE } from "./management-session.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
 // PGlite, not real Postgres: the me routes are LOGIC (management session → verb → JSON) over mutable

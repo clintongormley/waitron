@@ -20,10 +20,10 @@ import {
 } from "@waitron/recipes";
 import type { DietaryOrigin, ProductAllergens } from "@waitron/catalogue";
 import { authorizeManager, type Permission } from "@waitron/identity";
-import { createErrorBoundary } from "./error-boundary.js";
-import { readJsonBody } from "./read-json-body.js";
-import { requireManagementSession } from "./management-session.js";
-import { requireBodyUuid, requireUuidParam } from "./request-screens.js";
+import { createErrorBoundary } from "@waitron/server-kit";
+import { readJsonBody } from "@waitron/server-kit";
+import { requireManagementSession } from "@waitron/server-kit";
+import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 
 /**

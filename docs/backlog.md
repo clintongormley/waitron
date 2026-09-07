@@ -504,7 +504,7 @@ screens, `apps/server/src/modules.ts` (the maps derived from that list), and the
 3. **Bookings as the first UI-bearing module** (own package, own tables, own dashboard screen):
    proves cards, permissions and i18n arriving with a module — fiscal never exercises them.
    **Decomposed SP1 → SP2** (owner 2026-09-07, full end-to-end module):
-   - **SP1 — server + data extraction (specced, next to plan+build).** `@waitron/bookings`: the tables
+   - **SP1 — server + data extraction (BUILT, in PR on `feat/module-bookings-sp1`).** `@waitron/bookings`: the tables
      leave the core migration set into their own set (a clean leaf — nothing in core references them);
      verbs + routes move in behind a typed `routes` seat `boot.ts` mounts generically; a `permissions`
      seat carries `booking.manage` out of `@waitron/identity` (identity keeps the role ladder); a

@@ -1,11 +1,87 @@
 import semver from "semver";
+import type { Hono } from "hono";
 import { AppError } from "@waitron/shared";
+import type { LocationId, TenantId } from "@waitron/shared";
+import type { Database, Transaction } from "@waitron/db";
+import type { Logger } from "@waitron/server-kit";
 import type { MigrationSet } from "@waitron/migrations";
 import type { EnrolledTable } from "@waitron/sync-enrolment";
 import type { FiscalContribution } from "@waitron/fiscal";
 import type { ModuleProvisioning } from "./provisioning.js";
 import type { RestoreHook } from "./restore.js";
 import "./errors.js";
+
+/**
+ * The core verbs a module's routes need but cannot import — a module never depends on `apps/server`.
+ * The module DECLARES this interface; boot SATISFIES it, binding the venue's full `TillConfig` into
+ * the closure (so the method takes only a per-request `tx`, never the config). The dependency points
+ * module → interface, core → implementation: no cycle. Today the sole verb is `openTab`
+ * (`apps/server/src/working-order.ts`), how a booking's `seat` reaches the tab verb.
+ */
+export interface CoreServices {
+  openTab(
+    tx: Transaction,
+    req: { tableId: string; lines?: { productId: string; quantity: string }[] },
+  ): Promise<{ tabId: string; orderNumber: number }>;
+}
+
+/**
+ * What a module's route handlers receive: the app `db`, the two `TillConfig` fields booking-shaped
+ * routes actually read (`tenantId`/`locationId`, as their branded types), and `core`. `nodeId`/
+ * `tillId` are read only INSIDE `core.openTab`, which boot binds, so they never enter `cfg`.
+ */
+export interface ModuleRouteContext {
+  db: Database;
+  cfg: { tenantId: TenantId; locationId: LocationId };
+  core: CoreServices;
+}
+
+/**
+ * A module's HTTP contribution: it mounts its routes on the shared Hono app. Boot iterates every
+ * ENABLED module's `routes` seat through one generic loop, so toggling a module off mounts nothing
+ * — no hand-written guard at the mount site (spec §4.1).
+ */
+export interface ModuleRoutes {
+  mount(app: Hono, ctx: ModuleRouteContext, log: Logger): void;
+}
+
+/**
+ * The four person roles, lowest-to-highest on identity's ladder. Written here rather than imported
+ * from `@waitron/identity` because the module CONTRACT package must not depend on a domain module
+ * (identity depends on this contract, never the reverse). This union must stay byte-identical to
+ * identity's `PersonRoleValue`; `@waitron/composition`'s `role-parity.ts` — the one package that
+ * imports both — asserts mutual assignability at compile time, so a divergence in EITHER direction is
+ * a type error.
+ */
+export type ModuleRole = "staff" | "supervisor" | "manager" | "admin";
+
+/**
+ * A permission a module contributes to identity's role ladder, and the LOWEST role that holds it.
+ * identity folds it into `grantedFrom` and every role ABOVE it on the ladder; the module states only
+ * the floor, never an explicit role list — the ladder stays identity's (spec §4.2).
+ */
+export type ModulePermission = { readonly permission: string; readonly grantedFrom: ModuleRole };
+
+/**
+ * A module supplies each table's next reservation time for core's floor read-model: given the tables
+ * being listed and the venue clock, the `reservedTime` per table. Core's `listTablesWithState` calls
+ * every ENABLED module's annotator and merges the result onto its rows, so the reserved-badge query
+ * (timezone read + grace window + the bookings scan) leaves core. Today the payload is one field and
+ * bookings is the one producer; a genuinely different annotation waits for a second producer to exist.
+ *
+ * The returned Map carries one entry PER input `tableId` (`reservedTime` null when the table has no
+ * imminent reservation), so the merge is a plain per-row lookup. `reservedTime` is the venue-local
+ * `HH:MM` the floor renders as "Reserved HH:MM", already normalised by the annotator. `cfg` is scoped
+ * to tenant AND location (a by-id/by-location read still scopes to the tenant — CLAUDE.md §3).
+ */
+export interface FloorAnnotator {
+  annotate(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+    now: Date,
+    tableIds: string[],
+  ): Promise<Map<string, { reservedTime: string | null }>>;
+}
 
 /** A reference to non-DB state a module owns, resolved to a path by the composition root. */
 export type NonDbSource = { readonly kind: "content-addressed-dir"; readonly source: string };
@@ -54,7 +130,11 @@ export interface WaitronModule {
    * by the root english-only suite, which unions every declaration with the guard's base list and
    * asserts the two are disjoint; no runtime consumer. Omit the seat rather than declare `[]`. */
   readonly vocabulary?: readonly string[];
-  readonly permissions?: readonly string[];
+  /** SP1 (bookings): the permissions this module contributes to identity's role ladder — each a
+   * permission string with the lowest role that holds it. The composition root assembles every
+   * module's seat and boot folds them in once (`registerModulePermissions`) before any route auth, so
+   * identity's central catalog names no module permission (spec §4.2). */
+  readonly permissions?: readonly ModulePermission[];
   readonly duties?: unknown; // cronjobs
   readonly theme?: unknown;
   /** What this module seeds per node at provisioning, and how it takes part in standing up a
@@ -62,7 +142,13 @@ export interface WaitronModule {
   readonly provisioning?: ModuleProvisioning;
   /** The module's contribution to the fiscal slot — `fiscalSlot` selects exactly one. */
   readonly fiscal?: FiscalContribution;
-  readonly routes?: unknown; // incremental
+  /** SP1 (bookings): the module's HTTP routes, mounted generically by boot over the enabled set.
+   * Incremental — bookings is the first `*-api.ts` migrated behind the seat (spec §4.1). */
+  readonly routes?: ModuleRoutes;
+  /** SP1 (bookings): the module's per-table annotation of core's floor read-model. `listTablesWithState`
+   * folds every ENABLED module's annotator onto its rows — bookings supplies the reserved-on-floor
+   * badge, so its timezone/grace/query concern leaves core (spec §4.3). */
+  readonly floorAnnotations?: FloorAnnotator;
   readonly backup?: ModuleBackupContribution; // The module's non-DB backup sources and restore hook.
 }
 

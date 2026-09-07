@@ -10,7 +10,7 @@ import { AppError, isAppError, tenantId as brandTenantId } from "@waitron/shared
 import type { DeploymentEnvironment } from "./config.js";
 import { readCredential } from "./credentials.js";
 import { stripeSecretKeyFrom } from "./stripe-account.js";
-import { codeOf } from "./error-code.js";
+import { codeOf } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 

@@ -7,7 +7,7 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import { enqueuePrintJob } from "@waitron/printing";
 import { mountPrintApi } from "./print-api.js";
-import { MANAGEMENT_COOKIE } from "./management-session.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 

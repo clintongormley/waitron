@@ -1,5 +1,5 @@
 import { startServer } from "./boot.js";
-import { codeOf } from "./error-code.js";
+import { codeOf } from "@waitron/server-kit";
 import { createLogger } from "./logger.js";
 import "./errors.js";
 

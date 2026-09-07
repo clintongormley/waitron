@@ -8,7 +8,7 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountReportApi } from "./report-api.js";
-import { MANAGEMENT_COOKIE } from "./management-session.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
 // Real Postgres, not PGlite: this suite refuses the modelo 303 export and the overview to a staff

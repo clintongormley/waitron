@@ -861,7 +861,7 @@ describe("startServer, against a real container as the deployment role", () => {
       // `0 === 0` pass without boot having migrated anything (CLAUDE.md §1) — except `fiscal-none`, which
       // ships NO migrations by design, so its version is legitimately 0.
       const sets = orderedMigrationSets(ALL_MODULES);
-      expect(sets).toHaveLength(10);
+      expect(sets).toHaveLength(11);
       for (const set of sets) {
         const expected = expectedSchemaVersion(set, migrationsRoot);
         if (set.name === "fiscal-none") expect(expected).toBe(0);

@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  CORE_MIGRATIONS,
   asAppUser,
   optionGroupItems,
   optionGroups,
@@ -13,6 +12,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -44,7 +44,12 @@ import {
 import "./errors.js";
 
 const LOCALE = "es-ES";
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+// The whole manifest (`manifestSets()`), applied in order — bookings' capture trigger EXECUTEs sync's
+// `sync_capture()`, so the set cannot be narrowed to one that omits sync.
+const suite = usePgliteDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 let db: Database;
 beforeAll(() => {
   db = suite.db;

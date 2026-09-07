@@ -2,7 +2,7 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { standingOf, type NodeStanding, type SignedMembershipDocument } from "@waitron/membership";
 import type { DeploymentEnvironment } from "./config.js";
-import { createErrorBoundary } from "./error-boundary.js";
+import { createErrorBoundary } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 
 export interface NodeApiDeps {

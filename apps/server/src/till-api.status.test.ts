@@ -2,11 +2,12 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -37,7 +38,9 @@ let STATUS_ID: string;
 let INACTIVE_STATUS_ID: string;
 
 const suite = usePgliteDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  // The whole manifest: bookings' capture trigger EXECUTEs sync's `sync_capture()`, so it cannot
+  // migrate on core+identity alone.
+  migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
     const tenantId = await seedTenant(db);

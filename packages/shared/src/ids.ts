@@ -36,6 +36,16 @@ export type FiscalRecordId = Branded<string, "FiscalRecordId">;
 // at all, and the trailing content then travels onward as part of a bind value.
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * Anchored UUID shape check, sharing the same `UUID_PATTERN` the branded-id constructors validate
+ * against. A value that is not a well-formed UUID, passed into a Postgres `uuid` column, raises
+ * `22P02 invalid input syntax for type uuid`; callers screen a cookie or request id through this
+ * first so a malformed value fails as a clean client fault before it reaches the database.
+ */
+export function isUuid(value: string): boolean {
+  return UUID_PATTERN.test(value);
+}
+
 function brandId<B extends string>(value: string, kind: B): Branded<string, B> {
   if (!UUID_PATTERN.test(value)) {
     throw new AppError("shared.invalid_id", { kind, value });

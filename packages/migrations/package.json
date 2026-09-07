@@ -26,6 +26,7 @@
     "@types/node": "^24.0.0",
     "@types/pg": "^8.20.0",
     "@vitest/coverage-v8": "^3.0.0",
+    "@waitron/bookings": "workspace:*",
     "@waitron/credentials": "workspace:*",
     "@waitron/fiscal-none": "workspace:*",
     "@waitron/fiscal-verifactu": "workspace:*",

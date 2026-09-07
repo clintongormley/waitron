@@ -5,9 +5,10 @@ import { ALL_SYNC_ENROLMENTS } from "./modules.js";
 
 // The behaviour-preserving oracle for the SP-2a inversion. Before the flip, this pinned the assembled
 // module set against `@waitron/sync`'s central `ENROLLED`; that constant is now deleted, so the frozen
-// snapshot below IS the oracle — a 28-table copy of the shared metadata the deleted
+// snapshot below IS the oracle — a copy of the shared metadata the deleted
 // `packages/sync/src/registry.test.ts` SPEC pinned (mode / conflictKey / watermarkColumn / captureOps /
-// fkRank / lane). The assembled `ALL_SYNC_ENROLMENTS` (`ALL_MODULES.flatMap(m => m.sync ?? [])`) must reproduce it exactly, so a
+// fkRank / lane), the 28 tables of the SP-3a set plus `bookings` (the first genuinely-toggleable
+// enrolling module, SP1). The assembled `ALL_SYNC_ENROLMENTS` (`ALL_MODULES.flatMap(m => m.sync ?? [])`) must reproduce it exactly, so a
 // per-package enrolment array that drifts fails HERE, in the composition root where the whole set is
 // visible. The per-table `columns` are asserted (derived, cannot drift) in each OWNING package's
 // enrolment.test.ts and are not re-pinned here.
@@ -67,15 +68,19 @@ const SPEC: Record<string, Shared> = {
   envios: { mode: "watermark-upsert", conflictKey: ["registro_id"], watermarkColumn: null, captureOps: ["insert", "update"], fkRank: 6, lane: "ordered" }, // prettier-ignore
   envio_flujo: { mode: "watermark-upsert", conflictKey: ["tenant_id"], watermarkColumn: null, captureOps: ["insert", "update"], fkRank: 2, lane: "ordered" }, // prettier-ignore
   acks: { mode: "watermark-upsert", conflictKey: ["registro_id"], watermarkColumn: null, captureOps: ["insert", "update", "delete"], fkRank: 6, lane: "ordered" }, // prettier-ignore
+  // Bookings (SP1) — the first genuinely-toggleable enrolling module. State-class runtime table: mutable,
+  // NO watermark, NO delete (a booking is cancelled, never removed). fkRank 3 — below its FK parents
+  // dining_tables (1) and working_orders (2).
+  bookings: { mode: "watermark-upsert", conflictKey: ["id"], watermarkColumn: null, captureOps: ["insert", "update"], fkRank: 3, lane: "ordered" }, // prettier-ignore
 };
 
 const assembled = ALL_SYNC_ENROLMENTS;
 const byName = new Map(assembled.map((e) => [e.table, e]));
 
-describe("the assembled module enrolment set reproduces the frozen 28-table snapshot (behaviour-preserving)", () => {
-  it("covers exactly the 28 snapshot tables, no duplicates", () => {
-    expect(assembled).toHaveLength(28);
-    expect(byName.size).toBe(28);
+describe("the assembled module enrolment set reproduces the frozen snapshot (behaviour-preserving)", () => {
+  it("covers exactly the 29 snapshot tables, no duplicates", () => {
+    expect(assembled).toHaveLength(29);
+    expect(byName.size).toBe(29);
     expect([...byName.keys()].sort()).toEqual(Object.keys(SPEC).sort());
   });
 
@@ -93,8 +98,8 @@ describe("the fast lane carries exactly payments and payment_refunds; the lanes 
   it("fast lane is exactly {payments, payment_refunds}", () => {
     expect(new Set(laneTables("fast"))).toEqual(new Set(["payments", "payment_refunds"]));
   });
-  it("ordered lane is the remaining twenty-six tables", () => {
-    expect(laneTables("ordered")).toHaveLength(26);
+  it("ordered lane is the remaining twenty-seven tables", () => {
+    expect(laneTables("ordered")).toHaveLength(27);
   });
   it("every table carries a lane, and the two lanes partition the set", () => {
     expect(laneTables("fast").length + laneTables("ordered").length).toBe(assembled.length);
@@ -164,6 +169,9 @@ describe("fkRank is a topological order — every parent ranks strictly before i
     ["registros_facturacion", "cadenas"],
     ["registros_facturacion", "envios"],
     ["registros_facturacion", "acks"],
+    // Bookings (SP1): its composite FKs point at dining_tables and working_orders, so both rank before it.
+    ["dining_tables", "bookings"],
+    ["working_orders", "bookings"],
   ];
   for (const [parent, child] of PARENT_CHILD) {
     it(`${parent}.fkRank < ${child}.fkRank`, () => {

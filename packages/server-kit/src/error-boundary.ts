@@ -3,6 +3,16 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { isAppError } from "@waitron/shared";
 import { codeOf } from "./error-code.js";
 import type { Logger } from "./logger.js";
+
+// The boundary reads `requestId` as an optional log-correlation field, so `c.get("requestId")` must
+// be typed. Co-declared here — identical to `apps/server`'s own request-id middleware
+// (`request-id.ts`), which SETS it — because both packages touch the key and neither imports the
+// other; the two identical declarations merge when `apps/server` compiles them together.
+declare module "hono" {
+  interface ContextVariableMap {
+    requestId: string;
+  }
+}
 // No `./errors.js` side-effect import: this file throws no code — it only re-emits a caught
 // AppError's own `.code` and returns the literal `server.internal`, so it registers nothing itself
 // (the call sites that DO throw codes carry that import).

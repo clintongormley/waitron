@@ -1,6 +1,6 @@
 import type { DrainResult } from "@waitron/fiscal";
 import type { RunRecord, TickResult } from "@waitron/scheduler";
-import { codeOf } from "./error-code.js";
+import { codeOf } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 
 /** This host's own label for the fiscal drainer. It has no `scheduled_runs` name because it is not

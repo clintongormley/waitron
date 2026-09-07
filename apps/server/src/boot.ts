@@ -15,6 +15,7 @@ import {
   type MirrorConnection,
 } from "@waitron/db";
 import { credentialTenants, loadKeyRing } from "@waitron/credentials";
+import { registerModulePermissions } from "@waitron/identity";
 import { runDue } from "@waitron/scheduler";
 import {
   StripeOnDeviceProvider,
@@ -24,8 +25,15 @@ import {
 import type { PaymentProvider } from "@waitron/payments";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules, fiscalSlot, orderedMigrationSets, reconcile } from "@waitron/module";
+import type { ModuleRouteContext } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { ALL_MODULES, ALL_SYNC_ENROLMENTS, MODULE_BY_TABLE } from "./modules.js";
+import {
+  ALL_MODULES,
+  ALL_MODULE_PERMISSIONS,
+  ALL_SYNC_ENROLMENTS,
+  enabledFloorAnnotators,
+  MODULE_BY_TABLE,
+} from "./modules.js";
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
 import { parseEnvFile } from "./env-file.js";
 import {
@@ -44,7 +52,7 @@ import type {
   PromoteDeps,
   PromotionResult,
 } from "./promote.js";
-import { codeOf } from "./error-code.js";
+import { codeOf } from "@waitron/server-kit";
 import { createLogger, type Logger } from "./logger.js";
 import { createRotatingFileSink, createLogReader, tee } from "./log-file.js";
 import { createVerbosityController } from "./verbosity.js";
@@ -77,7 +85,7 @@ import { mountNodeApi } from "./node-api.js";
 import { mountDeviceApi } from "./device-api.js";
 import { mountPrintApi } from "./print-api.js";
 import { mountManagementApi } from "./management-api.js";
-import { mountBookingsApi } from "./booking-api.js";
+import { openTab } from "./working-order.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
 import { mountReportApi } from "./report-api.js";
@@ -463,6 +471,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // built below (the logger writes to `<stateDir>/logs` by default). A boot with invalid config still
   // escapes here (§8) before any logger, pool or listener exists.
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_MEDIA_ROOT, DEFAULT_STATE_ROOT);
+  // Fold every module's permission seat into identity's role ladder ONCE, before any surface that
+  // gates on a management session is mounted below (in either mode). Pure and dependency-free (no DB,
+  // no config), so it runs at the very top of boot; `registerModulePermissions` overwrites on a
+  // repeat, so a re-boot in the same process (test harnesses) is harmless. After this, identity's
+  // catalog resolves module permissions like booking.manage that it no longer names itself.
+  registerModulePermissions(ALL_MODULE_PERMISSIONS);
   // The verbosity controller the diagnostics API raises and the logger reads at each call: request
   // logging (`http.request`, a `debug` line) is dropped by the default `info` threshold until an
   // operator raises it for a bounded window, then auto-reverts in memory (never across a restart).
@@ -1169,6 +1183,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       backend: makeFiscalBackend(setsToMigrate, filingModule, db, env),
       clock: systemClock(),
       cfg: till,
+      // The floor read's per-table annotators, from the ENABLED set (`setsToMigrate`) — a disabled
+      // module's table is not migrated, so its annotator must not run (modules.ts:enabledFloorAnnotators).
+      floorAnnotators: enabledFloorAnnotators(setsToMigrate),
       secureCookies,
       cardProvider,
       venueLocale,
@@ -1309,8 +1326,18 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // runs per request. This is the #91 fast-follow's capture surface, feeding the headless modelo
   // 303 IVA-deducible reporting.
   mountPurchasingApi(app, { db, cfg: { tenantId: till.tenantId } }, log);
-  // Mount booking routes with the venue configuration and shared authorization gate.
-  mountBookingsApi(app, { db, cfg: till }, log);
+  // Mount every ENABLED module's routes generically (SP1). `setsToMigrate` is the enabled module
+  // set on this trading branch (boot.ts:552), so a module toggled off mounts nothing — no
+  // hand-written guard at the mount site. `routeCtx` binds cfg to the two `TillConfig` fields a
+  // module route reads (`tenantId`/`locationId`); `core.openTab` closes over the FULL `till` HERE,
+  // so `nodeId`/`tillId` never enter the module's cfg. Bookings is the first `*-api.ts` behind the
+  // seat; the other `mount*Api` calls stay as they are.
+  const routeCtx: ModuleRouteContext = {
+    db,
+    cfg: { tenantId: till.tenantId, locationId: till.locationId },
+    core: { openTab: (tx, req) => openTab(tx, till, req) },
+  };
+  for (const m of setsToMigrate) m.routes?.mount(app, routeCtx, log);
   // The deployment holds one tenant per database. The dashboard's gated reporting surface on the
   // SAME app, the identical convention. Reuses the EXACT `db` and tenant (`till.tenantId`)
   // `mountPurchasingApi` above receives so the two cannot drift. `nodeId` here is `dataNodeId` —

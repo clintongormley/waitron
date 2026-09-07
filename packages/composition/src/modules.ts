@@ -7,6 +7,12 @@ import {
   FISCAL_SLOT,
   FISCAL_VOCABULARY,
 } from "@waitron/fiscal-verifactu";
+import {
+  BOOKINGS_ENROLMENT,
+  BOOKINGS_FLOOR_ANNOTATIONS,
+  BOOKINGS_PERMISSIONS,
+  BOOKINGS_ROUTES,
+} from "@waitron/bookings";
 import { IDENTITY_ENROLMENT } from "@waitron/identity";
 import type { WaitronModule } from "@waitron/module";
 import { PAYMENTS_ENROLMENT } from "@waitron/payments";
@@ -137,10 +143,10 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     backup: { restore: FISCAL_RESTORE },
   },
   {
-    // The no-regime fiscal-slot member, LAST (after `fiscal-verifactu`). It owns no tables (an empty
+    // The no-regime fiscal-slot member (after `fiscal-verifactu`). It owns no tables (an empty
     // migration set), enrols nothing and contributes only `fiscal` — the sale path records nothing and
-    // `drain` has no authority to reach. Listed last with a core-only dep so Kahn emits it last and
-    // `orderedMigrationSets(ALL_MODULES)` still equals `manifestSets()` (composition.test.ts pins it).
+    // `drain` has no authority to reach. A core-only dep, so Kahn emits it right after fiscal-verifactu
+    // and `orderedMigrationSets(ALL_MODULES)` still equals `manifestSets()` (composition.test.ts pins it).
     name: "fiscal-none",
     version: "0.0.0",
     tier: "provision-only",
@@ -151,5 +157,26 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       from: "../fiscal-none/drizzle",
     },
     fiscal: FISCAL_NONE_SLOT,
+  },
+  {
+    // Bookings — the first UI-bearing AND first genuinely-toggleable enrolling module (SP1: server +
+    // data). Listed LAST at its FINAL post-`sync` position: it FKs into `core` and installs a
+    // `sync_capture()` trigger owned by `sync`, so it requires both; a core-then-sync dep still lands
+    // here under Kahn's input-order tie-break. `sync` carries the state-class enrolment (its one
+    // `bookings` capture trigger); `routes` the seven booking routes boot mounts generically. The
+    // descriptor is the only place bookings is named.
+    name: "bookings",
+    version: "0.0.0",
+    tier: "toggleable",
+    requires: { core: "*", modules: { sync: "*" } },
+    migrations: {
+      name: "bookings",
+      table: "__drizzle_migrations_bookings",
+      from: "../bookings/drizzle",
+    },
+    sync: BOOKINGS_ENROLMENT,
+    routes: BOOKINGS_ROUTES,
+    permissions: BOOKINGS_PERMISSIONS,
+    floorAnnotations: BOOKINGS_FLOOR_ANNOTATIONS,
   },
 ];

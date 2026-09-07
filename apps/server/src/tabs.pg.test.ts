@@ -304,6 +304,45 @@ describe("openTab concurrency (one open tab per table; the per-table lock IS the
   });
 });
 
+describe("openTab tenant scope (a by-id table read must not cross tenants)", () => {
+  // Since RLS was dropped (#255) `withTenant` no longer isolates SELECTs, so a by-id read scopes to the
+  // tenant itself — the till-reroute S3 shape (CLAUDE.md §3). openTab reads `dining_tables` `FOR UPDATE`
+  // by id ALONE; under tenant B's scope that read reaches tenant A's row in a multi-tenant database.
+  //
+  // The discriminator isolates the READ (the leak the fix closes) from the composite-FK backstop on the
+  // later `tab_id` write: seed A's table INACTIVE, a state only A's own tenant may legitimately observe.
+  // VULNERABLE: B's read reaches A's row, sees `active = false`, and throws `table.inactive` — proof the
+  // read crossed the tenant boundary and leaked A's table state to B. FIXED: the read carries
+  // `tenant_id = cfg.tenantId`, A's row is invisible to B, and openTab throws `table.not_found`. Both are
+  // AppError codes, so a green is not a raw-error false pass. Real Postgres as `app_user` (rolsuper=f),
+  // NOT PGlite: PGlite runs every connection as superuser and serialises onto one backend, so a
+  // cross-tenant read there is a false pass (CLAUDE.md §4).
+  it("tenant B's openTab cannot read tenant A's table — table.not_found, not table.inactive", async () => {
+    const { cfg: cfgA } = await setupVenue();
+    const { cfg: cfgB, cafe: cafeB } = await setupVenue();
+    const tableA = await seedTable(cfgA, "Cross-tenant-A");
+    // Deactivate A's table as its OWNER (superuser admin): `active = false` is the state B must not see.
+    await suite.admin.execute(sql`update dining_tables set active = false where id = ${tableA}`);
+
+    let outcome: { resolved: boolean; code?: string } = { resolved: false };
+    await withTenant(suite.admin, cfgB.tenantId, async (tx) => {
+      await asAppUser(tx);
+      try {
+        await openTab(tx, cfgB, {
+          tableId: tableA,
+          lines: [{ productId: cafeB.id, quantity: "1" }],
+        });
+        outcome = { resolved: true };
+      } catch (error) {
+        outcome = { resolved: false, code: (error as { code?: string }).code };
+      }
+    });
+    // Fixed: the row is invisible to B → table.not_found. Vulnerable prints code "table.inactive"
+    // (B read A's row) or `undefined` (a raw error) — either way this fails.
+    expect(outcome).toEqual({ resolved: false, code: "table.not_found" });
+  });
+});
+
 describe("addTabRound concurrency (distinct line_no under load)", () => {
   const ROUNDS = 10;
   it("N backends appending one line each to ONE tab all land with distinct contiguous line_nos", async () => {

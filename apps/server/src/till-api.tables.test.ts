@@ -2,11 +2,12 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -32,9 +33,8 @@ import "./errors.js";
 // over the commercial table/tab verbs, which are LOGIC (no privilege or concurrency behaviour to
 // prove here). The table/tab verbs' own real-PG proofs (the FOR UPDATE tab lock, the composite FKs)
 // live in `tabs.pg.test.ts`, `move-merge.pg.test.ts` and packages/db's schema suites; they are not
-// re-proven at the HTTP layer. The schema
-// is CORE_MIGRATIONS (dining_tables + tab_id/delivery_table_id land in 0043/0044/0046) +
-// IDENTITY_MIGRATIONS (the sessions/persons the login path needs).
+// re-proven at the HTTP layer. The schema is the whole manifest: bookings' capture trigger EXECUTEs
+// sync's `sync_capture()`, so it cannot migrate on core+identity alone.
 let cfg: TillConfig;
 let ana: { id: string };
 // The one product seeded into the counter location's catalogue, so a tab can open with a real line
@@ -47,7 +47,7 @@ let productId: string;
 let seededZoneId: string;
 
 const suite = usePgliteDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
     const tenantId = await seedTenant(db);

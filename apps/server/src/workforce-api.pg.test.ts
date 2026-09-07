@@ -8,7 +8,7 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountWorkforceApi } from "./workforce-api.js";
-import { MANAGEMENT_COOKIE } from "./management-session.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 
 // Real Postgres, not PGlite: this suite proves the workforce write group's `schedule.manage` gate BY
 // DELETION, and that a decide lands `decided_by_person_id` through app_user's TABLE-level UPDATE grant

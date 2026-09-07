@@ -11,7 +11,7 @@ import type { LogEvent, LogReader } from "./log-file.js";
 import { ALL_MODULES } from "./modules.js";
 import { createVerbosityController } from "./verbosity.js";
 import { mountDiagnosticsApi } from "./diagnostics-api.js";
-import { MANAGEMENT_COOKIE } from "./management-session.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
 // Exercise diagnostics permission gates, verbosity and limit clamping through the real route.

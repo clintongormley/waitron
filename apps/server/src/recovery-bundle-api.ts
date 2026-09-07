@@ -5,9 +5,9 @@ import { authorizeManager } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { collectStateSecrets } from "./state-secrets.js";
 import { encryptBundle } from "./recovery-bundle.js";
-import { requireManagementSession } from "./management-session.js";
-import { createErrorBoundary } from "./error-boundary.js";
-import { readJsonBody } from "./read-json-body.js";
+import { requireManagementSession } from "@waitron/server-kit";
+import { createErrorBoundary } from "@waitron/server-kit";
+import { readJsonBody } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 

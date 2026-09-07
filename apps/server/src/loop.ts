@@ -1,6 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 import type { PassReport } from "./pass.js";
-import { codeOf } from "./error-code.js";
+import { codeOf } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 
 /**

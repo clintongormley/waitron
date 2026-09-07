@@ -93,6 +93,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.0
         version: 1.19.15(hono@4.12.32)
+      '@waitron/bookings':
+        specifier: workspace:*
+        version: link:../../packages/bookings
       '@waitron/catalogue':
         specifier: workspace:*
         version: link:../../packages/catalogue
@@ -153,6 +156,9 @@ importers:
       '@waitron/scheduler':
         specifier: workspace:*
         version: link:../../packages/scheduler
+      '@waitron/server-kit':
+        specifier: workspace:*
+        version: link:../../packages/server-kit
       '@waitron/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -328,6 +334,55 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/bookings:
+    dependencies:
+      '@waitron/db':
+        specifier: workspace:*
+        version: link:../db
+      '@waitron/identity':
+        specifier: workspace:*
+        version: link:../identity
+      '@waitron/module':
+        specifier: workspace:*
+        version: link:../module
+      '@waitron/server-kit':
+        specifier: workspace:*
+        version: link:../server-kit
+      '@waitron/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@waitron/sync-enrolment':
+        specifier: workspace:*
+        version: link:../sync-enrolment
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@electric-sql/pglite@0.5.4)(@types/pg@8.20.0)(pg@8.22.0)
+      hono:
+        specifier: ^4.6.0
+        version: 4.12.32
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.5.4
+        version: 0.5.4
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
+      '@vitest/coverage-v8':
+        specifier: ^3.0.0
+        version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
+      '@waitron/migrations':
+        specifier: workspace:*
+        version: link:../migrations
+      drizzle-kit:
+        specifier: ^0.31.10
+        version: 0.31.10
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.7(@types/node@24.13.3)(@vitest/browser@3.2.7)(tsx@4.23.1)(yaml@2.9.0)
+
   packages/catalogue:
     dependencies:
       '@waitron/core':
@@ -367,6 +422,9 @@ importers:
 
   packages/composition:
     dependencies:
+      '@waitron/bookings':
+        specifier: workspace:*
+        version: link:../bookings
       '@waitron/db':
         specifier: workspace:*
         version: link:../db
@@ -789,6 +847,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^3.0.0
         version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
+      '@waitron/bookings':
+        specifier: workspace:*
+        version: link:../bookings
       '@waitron/credentials':
         specifier: workspace:*
         version: link:../credentials
@@ -834,12 +895,18 @@ importers:
       '@waitron/migrations':
         specifier: workspace:*
         version: link:../migrations
+      '@waitron/server-kit':
+        specifier: workspace:*
+        version: link:../server-kit
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
       '@waitron/sync-enrolment':
         specifier: workspace:*
         version: link:../sync-enrolment
+      hono:
+        specifier: ^4.6.0
+        version: 4.12.32
       semver:
         specifier: ^7.7.0
         version: 7.8.5
@@ -1146,6 +1213,28 @@ importers:
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.7(@types/node@24.13.3)(@vitest/browser@3.2.7)(tsx@4.23.1)(yaml@2.9.0)
+
+  packages/server-kit:
+    dependencies:
+      '@waitron/shared':
+        specifier: workspace:*
+        version: link:../shared
+      hono:
+        specifier: ^4.6.0
+        version: 4.12.32
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
+      '@vitest/coverage-v8':
+        specifier: ^3.0.0
+        version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
       typescript:
         specifier: ^5.7.0
         version: 5.9.3

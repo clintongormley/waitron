@@ -12,6 +12,7 @@ import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { SCHEDULER_MIGRATIONS } from "@waitron/scheduler";
 import { CREDENTIALS_MIGRATIONS } from "@waitron/credentials";
 import { SYNC_MIGRATIONS } from "@waitron/sync";
+import { BOOKINGS_MIGRATIONS } from "@waitron/bookings";
 import { isAppError } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "./manifest.js";
 
@@ -34,6 +35,7 @@ describe("the migration manifest", () => {
       scheduler: SCHEDULER_MIGRATIONS.migrationsTable,
       credentials: CREDENTIALS_MIGRATIONS.migrationsTable,
       sync: SYNC_MIGRATIONS.migrationsTable,
+      bookings: BOOKINGS_MIGRATIONS.migrationsTable,
     });
   });
 

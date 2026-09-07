@@ -15,7 +15,7 @@ import {
   createEnrolRateLimiter,
   type EnrolRateLimiter,
 } from "./enrol-rate-limit.js";
-import { MANAGEMENT_COOKIE } from "./management-session.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
 // PGlite, not real Postgres: this suite proves the ROUTES — the request/response boundary, the body +

@@ -55,7 +55,6 @@ export { deviceProfiles } from "./schema/device-profiles.js";
 export { tenantThemes } from "./schema/tenant-themes.js";
 export { tenantReceipts } from "./schema/tenant-receipts.js";
 export { tableServiceStatuses } from "./schema/table-service-statuses.js";
-export { bookingStatus, bookings } from "./schema/bookings.js";
 export { workingOrderCounters } from "./schema/working-order-counters.js";
 export {
   fiscalState,

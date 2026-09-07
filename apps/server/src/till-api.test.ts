@@ -2,17 +2,12 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant, writeNodeMembership } from "@waitron/db";
+import { asAppUser, withTenant, writeNodeMembership } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import {
-  IDENTITY_MIGRATIONS,
-  createPinThrottle,
-  endSession,
-  hashPin,
-  loginWithPin,
-} from "@waitron/identity";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { createPinThrottle, endSession, hashPin, loginWithPin } from "@waitron/identity";
 import { DEFAULT_CANVASES, DEFAULT_RECEIPT } from "@waitron/layouts";
 import type { ReceiptConfig } from "@waitron/layouts";
 import {
@@ -45,7 +40,8 @@ import "./errors.js";
 
 // PGlite, not real Postgres: the session routes are LOGIC (login → cookie → logout), and the login
 // path runs through `withTenant` + `asAppUser` exactly as production does. Sessions/persons live in
-// identity, so the schema is CORE_MIGRATIONS + IDENTITY_MIGRATIONS. What `app_user` may do to those
+// identity; the schema is the whole manifest (bookings' capture trigger EXECUTEs sync's
+// `sync_capture()`, so it cannot migrate on core+identity alone). What `app_user` may do to those
 // tables is pinned by packages/fiscal-verifactu's privileges.expected.ts, not here.
 let cfg: TillConfig;
 let ana: { id: string };
@@ -74,7 +70,7 @@ let cervezaProduct: { id: string; catalogueId: string };
 let tillDeviceCookie: string;
 
 const suite = usePgliteDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
     const tenantId = await seedTenant(db);

@@ -10,7 +10,7 @@ import {
   type EnrolledTable,
   type SyncLane,
 } from "@waitron/sync";
-import { createErrorBoundary } from "./error-boundary.js";
+import { createErrorBoundary } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 // Loads @waitron/sync's error augmentation so this file may throw sync.node_unauthorized.
 import "@waitron/sync";

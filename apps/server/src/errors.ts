@@ -459,17 +459,8 @@ declare module "@waitron/shared" {
      */
     "order_prep.invalid_transition": { workingOrderId: string };
     /**
-     * The deployment holds one tenant per database. No such dining table for this tenant.
-     * `tableId` is a caller-supplied uuid the till already holds, not a secret — an id that
-     * matches nothing is unactionable if withheld (the rule `tenant.not_found`'s note gives).
-     * Qualified `tableId` to match the domain-record not_found family
-     * (`working_order.not_found`'s `workingOrderId`). `table.*` names the DOMAIN CONCEPT, never
-     * the throwing package (`tenant.not_found`'s note); destined for @waitron/tables if that
-     * package is ever extracted. An absent id in this database reports THIS one code. (A
-     * DEACTIVATED table is a different fact — `table.inactive` below — surfaced only where
-     * openTab needs it; CRUD operates on a deactivated row by id regardless.)
-     */
-    "table.not_found": { tableId: string };
+    // `table.not_found` is declared in @waitron/db's errors.ts (dining_tables is a core table with a
+    // cross-package thrower). Codes are never renamed, only relocated.
     /**
      * A dining table label already exists in this venue — the `(tenant_id, location_id, label)` unique
      * (`dining_tables_location_label_key`) rejected the insert/update. `label` is the operator-supplied
@@ -535,51 +526,8 @@ declare module "@waitron/shared" {
      * new tab).
      */
     "tab.already_open": { tableId: string };
-    /**
-     * The deployment holds one tenant per database. No such reservation for this tenant.
-     * `bookingId` is a caller-supplied uuid the dashboard already holds, not a secret — an id
-     * that matches nothing is unactionable if withheld (the rule `tenant.not_found`'s note
-     * gives). Qualified `bookingId` to match the domain-record not_found family
-     * (`table.not_found`'s `tableId`, `working_order.not_found`'s `workingOrderId`). `booking.*`
-     * names the DOMAIN CONCEPT (a restaurant reservation), never the throwing package (the rule
-     * `tenant.not_found`'s note gives); destined for @waitron/bookings if that package is ever
-     * extracted. An absent id in this database reports THIS one code. Mapped to 404 in the route
-     * layer (Task 5's booking-api.ts STATUS map). Never renamed once shipped.
-     */
-    "booking.not_found": { bookingId: string };
-    /**
-     * A reservation was created or edited with a party size that is not a positive integer — `party_size
-     * ≤ 0` (design §3a validates `partySize > 0`). The offending `partySize` is echoed: a headcount is
-     * not a secret and echoing it is what makes the error actionable, the same echo-the-offending-value
-     * shape `tab.transfer_quantity_invalid`'s `quantity` uses. `booking.*` names the DOMAIN CONCEPT, never
-     * the throwing package (`tenant.not_found`'s note gives the rule). A CLIENT request-shape fault (mapped
-     * to 400 in Task 5's route STATUS map), distinct from the state-conflict `booking.invalid_transition`
-     * (409). Never renamed once shipped.
-     */
-    "booking.invalid": { partySize: number };
-    /**
-     * A lifecycle verb (`cancel`/`no-show`/`complete`/`seat`) found the reservation is not in a
-     * state the move is legal from — e.g. a cancel of an already-`cancelled`/`completed` booking,
-     * or a seat of a booking that is not `booked` (design §3a). Carries the affected `bookingId`,
-     * NOT a from/to pair: this matches the house `*.invalid_transition` convention —
-     * `order_prep.invalid_transition` (`workingOrderId`) and `ticket.invalid_transition`
-     * (`ticketItemId`) both name the affected record's own qualified id, the fail-closed shape
-     * `working_order.not_open` uses for its own state machine. An absent id surfaces
-     * `booking.not_found` before this. `bookingId` is a caller-supplied uuid, not a secret.
-     * `booking.*` names the DOMAIN CONCEPT (`tenant.not_found`'s note gives the rule). Mapped to
-     * 409 (the booking's state forbids the move). Never renamed once shipped.
-     */
-    "booking.invalid_transition": { bookingId: string };
-    /**
-     * `seatBooking` could not resolve a table to seat the party at — neither a `tableId` was passed nor
-     * does the booking carry a `table_id` (design §3a step 2). No params: the seat request itself
-     * identifies the booking (the route path carries its id), and the refusal names no row to echo — the
-     * same no-row shape the `mirror.*` refusals use. `booking.*` names the DOMAIN CONCEPT, never the
-     * throwing package (`tenant.not_found`'s note gives the rule). A CLIENT request-shape fault (mapped to
-     * 400 in Task 5's route STATUS map): a table must be supplied, so the request is incomplete rather
-     * than in a forbidden state. Never renamed once shipped.
-     */
-    "booking.table_required": Record<string, never>;
+    // The four `booking.*` codes are declared in @waitron/bookings/src/errors.ts. Codes are never
+    // renamed, only relocated with their thrower.
     /**
      * The deployment holds one tenant per database. A tab verb found the working order it was
      * asked to modify is not an OPEN tab — it is not `open` (already settled/abandoned), no
@@ -920,44 +868,9 @@ declare module "@waitron/shared" {
      * `STATUS` note), so the mapping would hold either way. Never renamed once shipped.
      */
     "placement.invalid": { field: string };
-    /**
-     * A request to a gated server API surface carried a body/query whose SHAPE is wrong: a field
-     * absent (where it is required) or present with the wrong declared type — a malformed date, a
-     * non-string, a bad enum member. Originally the management-dashboard surface (the gated staff
-     * routes in `management-api.ts` — create, patch, reset-pin, set-password), it is now the generic
-     * request-shape code for EVERY gated API surface: `catalogue-api.ts`, `workforce-api.ts` and — via
-     * the shared screens in `request-screens.ts` (`requirePeriod`/`requireBodyUuid`/… , extracted so no
-     * two surfaces validate "subtly differently") — the till-session-gated staff schedule routes in
-     * `schedule-api.ts`. The `management.*` prefix names the request-shape DOMAIN CONCEPT the code was
-     * first minted for, kept because codes are never renamed once shipped; a malformed PATH `:id` is a
-     * separate concern carried by `shared.invalid_id` (the branded-id family). The routes divide by
-     * whether the field is required:
-     *  - create (`displayName`/`role`/`pin`), reset-pin (`pin`), set-password (`password`) screen
-     *    REQUIRED fields — absent OR non-string → 400.
-     *  - patch (`role`/`status`) screens OPTIONAL fields — an ABSENT field is a legitimate no-op
-     *    (the route answers 204), and only a field PRESENT with a non-string value is refused (400).
-     * Refused with HTTP 400 before any DB work — the request-shape counterpart of the credential
-     * codes those same routes surface (`pin.too_short`, `password.too_short`), which fire only once a
-     * well-formed value reaches the identity layer. This screen is typeof-only: a well-formed STRING
-     * that is out of range (a `role` naming no enum member, a `status` other than
-     * "active"/"suspended") is NOT caught here — it flows on to the identity layer (`role` → the
-     * `person_role` pgEnum, `status` → a silent no-op), a deliberately separate concern.
-     *
-     * `management.*` names the DOMAIN CONCEPT — a request to the management surface — not the package
-     * that throws it. `server.*` is reserved for facts about the PROCESS itself (its config, its
-     * listener, its shutdown); a malformed request body is a fact about the REQUEST, the rule
-     * `tenant.not_found`'s note above gives. It is a DELIBERATELY DISTINCT namespace from
-     * `@waitron/identity`'s `management_session.*`, which names the session LIFECYCLE
-     * (`required`/`expired`); this names the request SHAPE, a separate concern, so the two do not share
-     * a prefix even though both belong to the management dashboard.
-     *
-     * `field` carries a field NAME only — `"displayName|role|pin"` (create), `"pin"` (reset-pin),
-     * `"password"` (set-password), or `"role"`/`"status"` (patch) — and NEVER the value behind it. A
-     * PIN or a password is exactly the kind of secret a caller can mis-send, and it must not land in
-     * an error's params: the same no-leak discipline `server.till_config_missing` and
-     * `credentials.invalid_field` follow by echoing names, never values.
-     */
-    "management.request_invalid": { field: string };
+    // `management.request_invalid` is declared in `@waitron/server-kit` (`src/errors.ts`) with the
+    // request-shape screens that throw it, and reaches this program through their package barrel.
+    // Codes are never renamed once shipped.
     /**
      * A request to a device-authenticated route (a KDS station display, device-identity-1 §3c) carried
      * no usable device identity — the `waitron_device` cookie was absent, malformed (no `.` separator,

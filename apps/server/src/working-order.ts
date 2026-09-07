@@ -9,6 +9,7 @@ import {
   classifyBand,
   compareDecimal,
   decimal,
+  locationId as brandLocationId,
   MONEY_SCALE,
   multiplyDecimal,
   type SaleId,
@@ -25,7 +26,6 @@ import {
   appendOrderAmendment,
   asAppUser,
   categories,
-  DEFAULT_TIME_ZONE,
   diningTables,
   DONENESS,
   invoiceSeries,
@@ -64,11 +64,12 @@ import type {
   ProductAllergens,
 } from "@waitron/catalogue";
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
+import type { FloorAnnotator } from "@waitron/module";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { FloorTableShape } from "./tables.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import { enqueueCorrectionSlips, enqueueKitchenTickets } from "./kitchen-print.js";
-import { requireNullableString } from "./request-screens.js";
+import { requireNullableString } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
 
@@ -803,7 +804,10 @@ export async function openTab(
   const [table] = await tx
     .select({ active: diningTables.active, tabId: diningTables.tabId })
     .from(diningTables)
-    .where(eq(diningTables.id, req.tableId))
+    // Scope the by-id read to the tenant: since RLS was dropped (#255) `withTenant` no longer isolates
+    // SELECTs, so a by-id read is not the isolation boundary (CLAUDE.md §3, till-reroute S3). Without
+    // `tenant_id` this read reaches another tenant's row in a multi-tenant DB, leaking its state.
+    .where(and(eq(diningTables.id, req.tableId), eq(diningTables.tenantId, cfg.tenantId)))
     .for("update");
   if (table === undefined) {
     throw new AppError("table.not_found", { tableId: req.tableId });
@@ -3901,14 +3905,11 @@ export interface TableState {
   posY: number | null;
   shape: FloorTableShape | null;
   rotation: number | null;
-  /** The table's NEXT imminent `booked` reservation (Bookings-1 §4, reserved-on-floor) — the earliest
-   *  reservation for the venue's TODAY at or after the grace floor (the venue's current wall-clock rolled
-   *  back by `RESERVATION_GRACE_MINUTES`, so a due/late guest's badge lingers), or `null`. The floor
-   *  renders "Reserved HH:MM" from it. `time` is HH:MM (venue-local); "today"/"now" derive from
-   *  `locations.time_zone` at read time (§2b), computed in JS from the injected clock — never in SQL.
-   *  A non-optional `| null` sibling (like `status`/`posX`), unconditionally present.
-   *  Data-minimisation: only `time` is projected — the floor badge renders "Reserved HH:MM" and nothing
-   *  else, so the customer's `party_size`/`contact_name` are deliberately kept off every till device. */
+  /** The table's NEXT imminent `booked` reservation, or `null` — merged from every enabled module's
+   *  floor annotator (SP1: bookings' `BOOKINGS_FLOOR_ANNOTATIONS`, which owns the timezone read, grace
+   *  window and the bookings scan). The floor renders "Reserved HH:MM" from `time`. A non-optional
+   *  `| null` sibling (like `status`/`posX`), unconditionally present — `null` when no module annotates
+   *  the table (a disabled bookings module contributes no annotator, so it stays `null`). */
   nextReservation: { time: string } | null;
 }
 
@@ -3916,84 +3917,20 @@ export interface TableState {
  * Read active tables in the location with open-tab and pending-delivery occupancy.
  * An open tab takes precedence over a delivery; otherwise the table is free.
  * Pending deliveries must have kitchen items and remain uncollected and unabandoned.
+ *
+ * `annotators` are the ENABLED modules' floor annotators (boot passes `enabledFloorAnnotators`); each is
+ * called once with this read's table ids and the venue clock, and its per-table result is merged onto
+ * the rows (SP1: bookings' reserved-on-floor badge). Defaults to none, so a caller that does not care
+ * about module annotations (most occupancy tests) omits it and every table's `nextReservation` is `null`.
  */
-/** Resolve a stored IANA time zone, substituting the schema default for an unrecognised value.
- *  `locations.time_zone` is free-text with NO CHECK constraint (`.notNull().default("Europe/Madrid")`),
- *  so a typo or a legacy value can be anything. `Intl.DateTimeFormat({ timeZone })` throws `RangeError`
- *  on an unknown zone, which would turn the floor read (GET /api/tables/state) into a 500 — corrupt
- *  venue config must not take out the operational floor (house §5 spirit). A zone `Intl` rejects falls
- *  back to the column's own default rather than throwing. */
-function safeTimeZone(timeZone: string): string {
-  try {
-    // Constructing the formatter is what validates the zone; it throws RangeError for an unknown one.
-    new Intl.DateTimeFormat(undefined, { timeZone });
-    return timeZone;
-  } catch {
-    return DEFAULT_TIME_ZONE;
-  }
-}
-
-/** Venue-local wall-clock derived from an instant + IANA time zone, for the reserved-on-floor read
- *  (Bookings-1 §2b/§4). Computed in JS via `Intl` — never in SQL — so no offset is stored: a booking is
- *  a wall-clock intention, and "today"/"now" for the imminence check are the venue's local values at
- *  read time. Returns the local calendar date (`YYYY-MM-DD`) and time-of-day (`HH:MM`, 24-hour). */
-function venueWallClock(now: Date, timeZone: string): { date: string; time: string } {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(now);
-  const get = (type: Intl.DateTimeFormatPartTypes): string =>
-    parts.find((p) => p.type === type)!.value;
-  return {
-    date: `${get("year")}-${get("month")}-${get("day")}`,
-    time: `${get("hour")}:${get("minute")}`,
-  };
-}
-
-/** How long a `booked` reservation keeps surfacing on the floor AFTER its time (Bookings-1 §4,
- *  reserved-on-floor grace window). The floor cue is most useful exactly when a guest is due or running
- *  late, so the reserved badge lingers for this window past the booking time rather than vanishing on
- *  the minute. A sensible fixed default; a per-venue configurable value is a later slice — not built
- *  here. Only ever SUBTRACTED from the venue's local "now", clamped to the start of today (below), so it
- *  never widens the scan to yesterday. */
-const RESERVATION_GRACE_MINUTES = 30;
-
-/** The earliest booking time still surfaced on the floor: the venue-local "now" (`HH:MM`) rolled back by
- *  `RESERVATION_GRACE_MINUTES`, clamped to `"00:00"` so it never crosses to the previous day (the read
- *  only scans today, §4). Pure HH:MM minute-of-day arithmetic — no timezone math, that already happened
- *  in `venueWallClock`. */
-function reservationGraceFloor(venueNow: string): string {
-  const [h, m] = venueNow.split(":").map(Number);
-  const floorMinutes = Math.max(0, h * 60 + m - RESERVATION_GRACE_MINUTES);
-  const hh = String(Math.floor(floorMinutes / 60)).padStart(2, "0");
-  const mm = String(floorMinutes % 60).padStart(2, "0");
-  return `${hh}:${mm}`;
-}
-
 export async function listTablesWithState(
   tx: Transaction,
   cfg: TillConfig,
+  annotators: readonly FloorAnnotator[] = [],
   locationId?: string,
   now: Date = new Date(),
 ): Promise<TableState[]> {
   const loc = locationId ?? cfg.locationId;
-  // Compute the reservation date and time using the location's time zone, then
-  // bind those wall-clock values into the query. Missing locations use the default.
-  const tzRow = await tx.execute<{ time_zone: string }>(
-    sql`select time_zone from locations where id = ${loc}`,
-  );
-  // Use the default for a missing location and safeTimeZone for an invalid stored zone.
-  const timeZone = safeTimeZone(tzRow.rows[0]?.time_zone ?? DEFAULT_TIME_ZONE);
-  const { date: venueToday, time: venueNow } = venueWallClock(now, timeZone);
-  // Reserved-on-floor grace window (§4): surface reservations from `RESERVATION_GRACE_MINUTES` BEFORE
-  // the venue's now, so a due/late guest's badge lingers rather than vanishing on the minute. Clamped to
-  // "00:00" so the scan never reaches into yesterday (we bound to today's date below).
-  const graceFloor = reservationGraceFloor(venueNow);
   const result = await tx.execute<{
     id: string;
     label: string;
@@ -4022,12 +3959,10 @@ export async function listTablesWithState(
     pos_y: number | null;
     shape: FloorTableShape | null;
     rotation: number | null;
-    next_reservation_time: string | null;
   }>(sql`
     select
       dt.id, dt.label, dt.zone_id, dt.capacity,
       dt.pos_x, dt.pos_y, dt.shape, dt.rotation,
-      res.booking_time as next_reservation_time,
       tab.id as tab_id,
       coalesce(tab.line_count, 0)::int as tab_line_count,
       tab.tab_total,
@@ -4093,28 +4028,11 @@ export async function listTablesWithState(
     ) del on true
     left join table_service_statuses tss
       on tss.tenant_id = dt.tenant_id and tss.id = dt.status_id
-    -- Reserved-on-floor (Bookings-1 section 4): the table's NEXT still-booked reservation for the
-    -- venue's TODAY at/after the grace floor -- the venue's wall-clock rolled back by
-    -- RESERVATION_GRACE_MINUTES so a due/late guest's badge lingers. venueToday/graceFloor are computed
-    -- in JS from locations.time_zone (bound params below), so this sub-select does no timezone arithmetic.
-    -- Correlated to the BASE dining_tables dt on qualified outer columns (dt.tenant_id / dt.id) -- the
-    -- CLAUDE.md scalar-subquery trap is about BARE interpolated columns binding inward; these are
-    -- explicit dt.-qualified references, so they resolve to the outer table.
-    left join lateral (
-      select b.booking_time
-      from bookings b
-      where b.tenant_id = dt.tenant_id and b.table_id = dt.id
-        and b.status = 'booked'
-        and b.booking_date = ${venueToday}
-        and b.booking_time >= ${graceFloor}
-      order by b.booking_time asc
-      limit 1
-    ) res on true
     where dt.location_id = ${loc} and dt.active = true
     order by dt.label
   `);
 
-  return result.rows.map((r) => {
+  const states = result.rows.map((r) => {
     const hasOpenTab = r.tab_id !== null;
     const pendingDeliveries = Number(r.pending_deliveries);
     const state: TableState["state"] = hasOpenTab
@@ -4155,14 +4073,29 @@ export async function listTablesWithState(
       posY: r.pos_y,
       shape: r.shape,
       rotation: r.rotation,
-      // Reserved-on-floor (§4): the imminent booking, or null. The DB `time` arrives as `HH:MM:SS`;
-      // normalise to `HH:MM` at the presentation edge (controller ruling) so the floor reads "Reserved
-      // HH:MM" straight off it.
-      nextReservation:
-        r.next_reservation_time !== null ? { time: r.next_reservation_time.slice(0, 5) } : null,
+      // Merged from the module annotators below; `null` until one contributes a reservation.
+      nextReservation: null as { time: string } | null,
       ...(hasOpenTab
         ? { tabId: r.tab_id!, tabLineCount: Number(r.tab_line_count), tabTotal: r.tab_total! }
         : {}),
     };
   });
+
+  // Reserved-on-floor (§4): fold each ENABLED module's annotator onto the rows to fill `nextReservation`.
+  // Today bookings' `BOOKINGS_FLOOR_ANNOTATIONS` is the one producer — it owns the timezone read, grace
+  // window and the bookings scan; a `reservedTime` (venue-local `HH:MM`, already normalised) overwrites the
+  // row's `null`. `loc` is this read's location (already tenant-scoped by the caller); the annotator re-scopes
+  // its own query to (tenant, location) — a by-id read never trusts the UUID alone (CLAUDE.md §3).
+  if (annotators.length > 0) {
+    const tableIds = states.map((s) => s.id);
+    const annCfg = { tenantId: cfg.tenantId, locationId: brandLocationId(loc) };
+    for (const annotator of annotators) {
+      const annotations = await annotator.annotate(tx, annCfg, now, tableIds);
+      for (const s of states) {
+        const reserved = annotations.get(s.id)?.reservedTime ?? null;
+        if (reserved !== null) s.nextReservation = { time: reserved };
+      }
+    }
+  }
+  return states;
 }

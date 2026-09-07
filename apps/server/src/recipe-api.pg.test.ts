@@ -10,7 +10,7 @@ import { createCatalogue, createProduct } from "@waitron/catalogue";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountRecipeApi } from "./recipe-api.js";
-import { MANAGEMENT_COOKIE } from "./management-session.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 
 // Real Postgres, not PGlite: this suite proves the recipe-authoring write group's `recipe.manage` gate
 // BY DELETION against the real cluster, with every DB touch going through `withTenant` + `asAppUser`

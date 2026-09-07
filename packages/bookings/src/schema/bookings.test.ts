@@ -1,16 +1,41 @@
 import { sql } from "drizzle-orm";
+import { getTableConfig } from "drizzle-orm/pg-core";
 import { beforeAll, describe, expect, it } from "vitest";
-import type { Transaction } from "../client.js";
-import { captureError, pgErrorCode } from "../testing/errors.js";
-import { useTemplateDb } from "../testing/lifecycle.js";
-import { asAppUser } from "../testing/roles.js";
-import { withTenant } from "../tenancy.js";
+import {
+  asAppUser,
+  captureError,
+  pgErrorCode,
+  tenants,
+  withTenant,
+  type Transaction,
+} from "@waitron/db";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { bookings } from "./bookings.js";
-import { tenants } from "./tenants.js";
 
-// Real Postgres (a template clone), not PGlite: every write below runs as the non-owner
+// The Drizzle table definition itself (the `(t) => [...]` extraConfig): evaluated in JS, so it does not
+// need the container. Pins the two SINGLE-column FKs drizzle-kit emits (the composites are hand-written
+// in the custom migration, so they are NOT on the drizzle object), the composite-FK-target unique, the
+// two indexes and the party-size check — the shapes the migration proofs assert at the SQL level.
+describe("the bookings Drizzle table config", () => {
+  it("declares the two single-column FKs, the composite unique, two indexes and the party-size check", () => {
+    const config = getTableConfig(bookings);
+    expect(config.foreignKeys.map((fk) => fk.getName()).sort()).toEqual([
+      "bookings_location_fk",
+      "bookings_tenant_fk",
+    ]);
+    expect(config.uniqueConstraints.map((u) => u.name)).toEqual(["bookings_tenant_id_key"]);
+    expect(config.indexes.map((i) => i.config.name).sort()).toEqual([
+      "bookings_tenant_location_date_idx",
+      "bookings_tenant_table_status_date_time_idx",
+    ]);
+    expect(config.checks.map((c) => c.name)).toEqual(["bookings_party_size_ck"]);
+  });
+});
+
+// Real Postgres (a whole-manifest template clone), not PGlite: every write below runs as the non-owner
 // `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
-// cases retain the role switch so the reads and writes still exercise app_user grants.
+// cases retain the role switch so the reads and writes still exercise app_user grants. The `manifest`
+// template (not [core, bookings]) because bookings' capture trigger EXECUTEs sync's `sync_capture()`.
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
@@ -22,7 +47,7 @@ const TABLE_B = "bbbbbbbb-0000-4000-8000-000000000009";
 const CREATED_BY = "cccccccc-0000-4000-8000-000000000001";
 
 describe("bookings schema (staff reservations — columns, CHECK, composite FKs)", () => {
-  const suite = useTemplateDb({ template: "core" });
+  const suite = useTemplateDb({ template: "manifest" });
 
   beforeAll(async () => {
     await suite.admin.insert(tenants).values([

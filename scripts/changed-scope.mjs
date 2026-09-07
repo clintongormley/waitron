@@ -276,6 +276,7 @@ export const OWN_SHARD_PACKAGES = [
  * assertion fails — loudly, on the pull request, not silently.
  */
 export const LIGHT_A_PACKAGES = [
+  "@waitron/bookings",
   "@waitron/core",
   "@waitron/payments",
   "@waitron/provisioning",
@@ -289,6 +290,7 @@ export const LIGHT_A_PACKAGES = [
   "@waitron/migrations",
   "@waitron/fiscal",
   "@waitron/shared",
+  "@waitron/server-kit",
 ];
 
 export const LIGHT_B_PACKAGES = [

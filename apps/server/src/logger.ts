@@ -1,8 +1,9 @@
-export type LogLevel = "debug" | "info" | "warn" | "error";
+// `Logger`/`LogLevel` are shared with the module route layer, so the single home is @waitron/server-kit;
+// this process owns the concrete `LOG_LEVELS` + `createLogger`.
+import type { Logger, LogLevel } from "@waitron/server-kit";
+export type { Logger, LogLevel };
 
 export const LOG_LEVELS: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 };
-
-export type Logger = (level: LogLevel, event: string, fields?: Record<string, unknown>) => void;
 
 /**
  * One structured JSON line per event, on an injected sink so no test writes to a real stream and no

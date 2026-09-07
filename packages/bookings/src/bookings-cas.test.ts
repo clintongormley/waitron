@@ -1,23 +1,24 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, bookings, diningTables, withTenant } from "@waitron/db";
+import { asAppUser, diningTables, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
+import type { CoreServices } from "@waitron/module";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { bookings } from "./schema/bookings.js";
+import { fakeCore } from "./testing/fake-core.js";
 import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-  tenantId as brandTenantId,
-  tillId as brandTillId,
-} from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
-import { createTable } from "./tables.js";
-import { cancelBooking, createBooking, getBooking, seatBooking } from "./bookings.js";
+  cancelBooking,
+  createBooking,
+  getBooking,
+  seatBooking,
+  type BookingConfig,
+} from "./bookings.js";
 import "./errors.js";
 
-// Real PostgreSQL (a shared-container clone of the CORE template), NOT PGlite. `seatBooking`'s terminal
+// Real PostgreSQL (a shared-container clone of the whole-manifest template), NOT PGlite. `seatBooking`'s terminal
 // write is a compare-and-swap — `update … where id = ? and status = 'booked'`, throwing
 // `booking.invalid_transition` on an empty match — the concurrency backstop for the window between its
 // lock-free `getBooking` read (which sees `booked`) and this write. PGlite serialises every query onto
@@ -28,21 +29,31 @@ import "./errors.js";
 // DISTINCT backends. The shared-container globalSetup THROWS `dockerRequired` rather than skipping, so a
 // vanished suite fails loudly instead of reporting a green that proves nothing.
 const LOCALE = "es-ES";
-const suite = useTemplateDb({ template: "core" });
+const suite = useTemplateDb({ template: "manifest" });
 let db: Database;
 beforeAll(() => {
   db = suite.admin;
 });
 
-function asApp<T>(d: Database, cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+function asApp<T>(
+  d: Database,
+  cfg: BookingConfig,
+  fn: (tx: Transaction) => Promise<T>,
+): Promise<T> {
   return withTenant(d, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
 }
 
-/** A tenant + location + till + node, as a full `TillConfig` (seatBooking opens a real TS-1 tab). */
-async function setupVenue(): Promise<{ cfg: TillConfig; createdBy: string }> {
+/** A tenant + location + till + node. `seatBooking` opens a real TS-1 tab via `core.openTab`, so the
+ * seat cfg is a plain `BookingConfig` and the till + node the tab row needs are captured by `fakeCore`
+ * (its `SELECT … FOR UPDATE` on the table is what makes the two-backend race below stage). */
+async function setupVenue(): Promise<{
+  cfg: BookingConfig;
+  core: CoreServices;
+  createdBy: string;
+}> {
   const tenantId = await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description)
@@ -53,20 +64,19 @@ async function setupVenue(): Promise<{ cfg: TillConfig; createdBy: string }> {
     values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
   const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
   return {
-    cfg: {
-      tenantId: brandTenantId(tenantId),
-      tillId: brandTillId(till.rows[0]!.id),
-      nodeId: brandNodeId(nodeId),
-      seriesId: brandSeriesId(randomUUID()),
-      locationId: brandLocationId(locationId),
-      locale: LOCALE,
-      invoiceLocales: [LOCALE],
-      cardProvider: "none",
-      tipsEnabled: false,
-      orderFlow: "prepay",
-    },
+    cfg: { tenantId: brandTenantId(tenantId), locationId: brandLocationId(locationId) },
+    core: fakeCore({ tenantId, tillId: till.rows[0]!.id, nodeId }),
     createdBy: randomUUID(),
   };
+}
+
+/** Insert an ACTIVE dining table for the venue and return its id (createTable's raw equivalent — the
+ * verb lives in apps/server, which a module cannot import). */
+async function seedTable(cfg: BookingConfig, label: string): Promise<string> {
+  const row = await db.execute<{ id: string }>(sql`
+    insert into dining_tables (tenant_id, location_id, label, active)
+    values (${cfg.tenantId}, ${cfg.locationId}, ${label}, true) returning id`);
+  return row.rows[0]!.id;
 }
 
 /** The backend pid a connection is running on — used to poll for it becoming lock-blocked. */
@@ -93,7 +103,7 @@ async function waitUntilLockBlocked(pid: number): Promise<void> {
 }
 
 /** Count of `working_orders` for this tenant, read as the owner. */
-async function workingOrderCount(cfg: TillConfig): Promise<number> {
+async function workingOrderCount(cfg: BookingConfig): Promise<number> {
   const { rows } = await db.execute<{ n: number }>(
     sql`select count(*)::int as n from working_orders where tenant_id = ${cfg.tenantId}`,
   );
@@ -114,8 +124,8 @@ describe("seatBooking compare-and-swap guard (real Postgres, two backends)", () 
     // Proven by deletion: dropping `eq(bookings.status, "booked")` from seatBooking's terminal UPDATE
     // makes the CAS match the now-`cancelled` row, so connA SEATS it and this test's rejection fails
     // (and a tab survives). Verified 2026-08-31.
-    const { cfg, createdBy } = await setupVenue();
-    const { id: tableId } = await asApp(db, cfg, (tx) => createTable(tx, cfg, { label: "CAS-1" }));
+    const { cfg, core, createdBy } = await setupVenue();
+    const tableId = await seedTable(cfg, "CAS-1");
     const { id: bookingId } = await asApp(db, cfg, (tx) =>
       createBooking(tx, cfg, {
         bookingDate: "2026-08-20",
@@ -154,7 +164,7 @@ describe("seatBooking compare-and-swap guard (real Postgres, two backends)", () 
       });
 
       await lockHeld;
-      const seatA = asApp(connA, cfg, (tx) => seatBooking(tx, cfg, bookingId, {}));
+      const seatA = asApp(connA, cfg, (tx) => seatBooking(tx, cfg, bookingId, {}, core));
 
       const [seatRes] = await Promise.allSettled([seatA, connBWork]);
       await connBWork; // surface any connB failure
@@ -188,7 +198,7 @@ describe("seatBooking compare-and-swap guard (real Postgres, two backends)", () 
     // deterministic witness because a two-backend race, however carefully barriered, is the more fragile
     // of the two.
     const { cfg, createdBy } = await setupVenue();
-    const { id: tableId } = await asApp(db, cfg, (tx) => createTable(tx, cfg, { label: "CAS-2" }));
+    const tableId = await seedTable(cfg, "CAS-2");
     const { id: bookingId } = await asApp(db, cfg, (tx) =>
       createBooking(tx, cfg, {
         bookingDate: "2026-08-20",

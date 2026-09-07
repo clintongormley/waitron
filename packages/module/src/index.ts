@@ -1,5 +1,15 @@
 // The entire public surface of @waitron/module. Re-exports only — no logic here.
-export type { WaitronModule, NonDbSource, ModuleBackupContribution } from "./module.js";
+export type {
+  WaitronModule,
+  NonDbSource,
+  ModuleBackupContribution,
+  ModuleRoutes,
+  ModuleRouteContext,
+  ModuleRole,
+  ModulePermission,
+  FloorAnnotator,
+  CoreServices,
+} from "./module.js";
 export { orderedMigrationSets, packageDirOf } from "./module.js";
 export type { VocabularyOwner } from "./vocabulary.js";
 export { forbiddenVocabulary, vocabularyOwners } from "./vocabulary.js";

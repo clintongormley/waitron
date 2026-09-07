@@ -2,6 +2,7 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq } from "drizzle-orm";
 import { AppError, isAppError, SUPPORTED_LOCALES } from "@waitron/shared";
+import type { FloorAnnotator } from "@waitron/module";
 import { asAppUser, locations, readNodeMembership, tenants, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
@@ -21,8 +22,8 @@ import type { CanvasDef, CapabilityFlag } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
 import { routableServers } from "@waitron/membership";
-import { createErrorBoundary } from "./error-boundary.js";
-import { readJsonBody } from "./read-json-body.js";
+import { createErrorBoundary } from "@waitron/server-kit";
+import { readJsonBody } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import type { TillConfig } from "./till-config.js";
 import {
@@ -97,7 +98,7 @@ import {
   requireSaleTillId,
   tryReadDevice,
 } from "./device-session.js";
-import { requireUuidParam } from "./request-screens.js";
+import { requireUuidParam } from "@waitron/server-kit";
 // Side-effect only: loads errors.ts's augmentation for the host codes this file THROWS — the
 // `working_order.*` / `order_prep.*` it constructs via `requireUuidId` — under the "every file that
 // throws one of these imports ./errors.js" convention errors.ts states. (The sale/pay body id screens
@@ -118,6 +119,14 @@ export interface TillApiDeps {
   backend: FiscalBackend;
   clock: TrustedClock;
   cfg: TillConfig;
+  /**
+   * The ENABLED modules' floor annotators (SP1 bookings), folded onto `GET /api/tables/state`'s rows by
+   * `listTablesWithState` — bookings supplies the reserved-on-floor badge. Boot passes
+   * `enabledFloorAnnotators(setsToMigrate)`. OPTIONAL and defaulting to none, so every existing
+   * `TillApiDeps` construction (tests included) compiles unchanged and a till with no annotating module
+   * simply carries no `nextReservation`, exactly as `devMode` defaults fail-closed.
+   */
+  floorAnnotators?: readonly FloorAnnotator[];
   secureCookies: boolean;
   /**
    * The integrated card-payment provider `boot.ts` built for this till's tenant, or `undefined` when
@@ -1548,7 +1557,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const state = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
-        return listTablesWithState(tx, deps.cfg);
+        return listTablesWithState(tx, deps.cfg, deps.floorAnnotators ?? []);
       });
       return c.json(state);
     }),

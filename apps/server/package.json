@@ -38,6 +38,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.13.0",
+    "@waitron/bookings": "workspace:*",
     "@waitron/catalogue": "workspace:*",
     "@waitron/composition": "workspace:*",
     "@waitron/core": "workspace:*",
@@ -58,6 +59,7 @@
     "@waitron/recipes": "workspace:*",
     "@waitron/reporting": "workspace:*",
     "@waitron/scheduler": "workspace:*",
+    "@waitron/server-kit": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/sync": "workspace:*",
     "@waitron/tunnel": "workspace:*",

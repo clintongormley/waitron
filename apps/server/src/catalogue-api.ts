@@ -48,9 +48,9 @@ import {
   type VatClass,
 } from "@waitron/catalogue";
 import { authorizeManager, type Permission } from "@waitron/identity";
-import { createErrorBoundary } from "./error-boundary.js";
-import { readJsonBody } from "./read-json-body.js";
-import { requireManagementSession } from "./management-session.js";
+import { createErrorBoundary } from "@waitron/server-kit";
+import { readJsonBody } from "@waitron/server-kit";
+import { requireManagementSession } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
 
