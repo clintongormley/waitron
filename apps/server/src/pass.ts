@@ -115,18 +115,23 @@ export async function runPass(deps: PassDeps, now: Date): Promise<PassReport> {
   duties.push(
     await attempt(DRAIN_DUTY, now, deps.log, deps.monotonicMs, async () => {
       const result = await deps.drain(now);
-      let awaitingCert = false;
+      let sawMissingCert = false;
       for (const skipped of result.skipped) {
         // A tenant with due fiscal work this pass could not submit for is an unmet legal
         // obligation. It has no ledger row and no incident (`incidents.till_id` is NOT NULL and a
         // drain has no till), so this line is the only place it exists.
         deps.log("warn", "drain.tenant_skipped", skipped);
-        if (skipped.errorCode === AWAITING_CERT_ERROR) awaitingCert = true;
+        if (skipped.errorCode === AWAITING_CERT_ERROR) sawMissingCert = true;
       }
-      // A missing `fiscal.aeat` cert is the promoted-mirror "sell now, file later" state, distinct from
-      // a transient skip: `noteAwaitingCert` records it ONCE on box-status and in a single log line,
-      // alongside (not instead of) the per-pass `drain.tenant_skipped` trace above.
-      noteAwaitingCert(deps, awaitingCert);
+      // The awaiting-cert flag ONLY transitions on a pass that actually exercised the cert. A no-work
+      // pass (`tenantsWithWork === 0`) read no cert at all, so it leaves the flag UNCHANGED — clearing
+      // it there would emit `fiscal.certificate_available` when nothing arrived. A pass that DID have
+      // due work either skipped a tenant for the missing cert (→ set) or resolved the cert and drained
+      // (→ clear). `noteAwaitingCert` records the transition ONCE on box-status and in a single log
+      // line, alongside (not instead of) the per-pass `drain.tenant_skipped` trace above.
+      if (result.tenantsWithWork > 0) {
+        noteAwaitingCert(deps, sawMissingCert);
+      }
       deps.log("info", "drain.complete", {
         batchesSent: result.batchesSent,
         recordsSubmitted: result.recordsSubmitted,

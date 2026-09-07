@@ -21,6 +21,7 @@ describe("FISCAL_NONE_SLOT", () => {
     // and the whole point is that the none regime submits NOTHING on every counter.
     expect(result).toEqual({
       nextDueAt: null,
+      tenantsWithWork: 0,
       batchesSent: 0,
       recordsSubmitted: 0,
       recordsAccepted: 0,

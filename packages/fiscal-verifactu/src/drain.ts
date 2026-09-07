@@ -191,6 +191,10 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
   }
   const maxPorEnvio = deps.maxRegistrosPorEnvio ?? MAX_REGISTROS_POR_ENVIO;
   for (const tenantId of await tenantsWithWork(deps.db, now)) {
+    // Counted the moment this tenant is attempted, before `resolveClient` — a tenant skipped for a
+    // missing cert still HAD due work, and the awaiting-cert flag (pass.ts) must tell a no-work pass
+    // (this loop never runs) apart from one that exercised the cert and skipped.
+    result.tenantsWithWork += 1;
     try {
       const client = await deps.resolveClient(tenantId);
       await drainTenant(deps.db, client, tenantId, deps.environment, now, result, maxPorEnvio);
