@@ -770,7 +770,15 @@ export async function parkOrder(
         const [existing] = await tx
           .select({ orderNumber: workingOrders.orderNumber })
           .from(workingOrders)
-          .where(and(eq(workingOrders.id, req.id), eq(workingOrders.status, "open")));
+          // Tenant-scoped: without it, replaying a FOREIGN tenant's id (a 23505 id collision on the
+          // global `working_orders.id` PK) returned that tenant's order number (CLAUDE.md §3).
+          .where(
+            and(
+              eq(workingOrders.id, req.id),
+              eq(workingOrders.status, "open"),
+              eq(workingOrders.tenantId, cfg.tenantId),
+            ),
+          );
         // Not `open` (abandoned/settled/placed) — a pathological id reuse, not a replayable held order —
         // so re-throw the raw 23505 unchanged per the docstring's exception, never fabricating a result.
         if (existing === undefined) {
@@ -846,11 +854,13 @@ export async function openTab(
  * orders; lockOpenTab adds the table back-pointer check. Callers that also lock dining
  * tables acquire working-order locks first, matching the settlement path.
  */
-async function lockOpenTabRow(tx: Transaction, tabId: string): Promise<void> {
+async function lockOpenTabRow(tx: Transaction, tenantId: string, tabId: string): Promise<void> {
   const [row] = await tx
     .select({ status: workingOrders.status })
     .from(workingOrders)
-    .where(eq(workingOrders.id, tabId))
+    // Scoped to the tenant, not by id alone: since RLS was dropped (#255) a by-id read is not isolated,
+    // so a foreign tenant's globally-unique order id must read as absent here (CLAUDE.md §3).
+    .where(and(eq(workingOrders.id, tabId), eq(workingOrders.tenantId, tenantId)))
     .for("update");
   if (row?.status !== "open") {
     throw new AppError("tab.not_open", { tabId });
@@ -861,12 +871,14 @@ async function lockOpenTabRow(tx: Transaction, tabId: string): Promise<void> {
  * Lock the open working-order row and require a dining-table back-pointer.
  * The caller holds the lock through its line allocation or deletion until commit.
  */
-async function lockOpenTab(tx: Transaction, tabId: string): Promise<void> {
-  await lockOpenTabRow(tx, tabId);
+async function lockOpenTab(tx: Transaction, tenantId: string, tabId: string): Promise<void> {
+  await lockOpenTabRow(tx, tenantId, tabId);
   const [pointer] = await tx
     .select({ id: diningTables.id })
     .from(diningTables)
-    .where(eq(diningTables.tabId, tabId));
+    // Tenant-scoped like the row lock above — the back-pointer read must not reach another tenant's
+    // `dining_tables` row by `tab_id` alone (CLAUDE.md §3).
+    .where(and(eq(diningTables.tabId, tabId), eq(diningTables.tenantId, tenantId)));
   if (pointer === undefined) {
     throw new AppError("tab.not_open", { tabId });
   }
@@ -1144,7 +1156,7 @@ export async function sendLines(
   tabId: string,
   lineNos: number[],
 ): Promise<void> {
-  await lockOpenTab(tx, tabId);
+  await lockOpenTab(tx, cfg.tenantId, tabId);
   // Empty list ⇒ no line filter ⇒ every HELD line of the tab fires ("send all together"). A non-empty
   // list restricts the fire to the ticket items whose line is in the set. The subquery selects from
   // `working_order_lines` (its own FROM), so its bare `"id"` resolves inward and the outer
@@ -1197,7 +1209,7 @@ export async function recallLines(
   tabId: string,
   lineNos: number[],
 ): Promise<void> {
-  await lockOpenTab(tx, tabId);
+  await lockOpenTab(tx, cfg.tenantId, tabId);
   if (lineNos.length === 0) {
     return;
   }
@@ -1352,7 +1364,7 @@ export async function addTabRound(
     hold?: boolean;
   } & LineExtras)[],
 ): Promise<void> {
-  await lockOpenTab(tx, tabId);
+  await lockOpenTab(tx, cfg.tenantId, tabId);
   if (lines.length === 0) {
     throw new AppError("sale.empty_basket", {});
   }
@@ -1429,7 +1441,7 @@ export async function voidTabLine(
   tabId: string,
   lineNo: number,
 ): Promise<void> {
-  await lockOpenTab(tx, tabId);
+  await lockOpenTab(tx, cfg.tenantId, tabId);
   // FIX 2: a parent dish takes its modifiers with it (design §6). Resolve the named line's id first so
   // its child modifier lines (`parent_line_id = <that id>`) can be removed in the SAME delete — the
   // self-referential `working_order_lines_parent_fk` is NO ACTION (0080), checked at statement END, so
@@ -1506,7 +1518,7 @@ export async function setLineCourse(
   lineNo: number,
   courseId: string | null,
 ): Promise<void> {
-  await lockOpenTab(tx, tabId);
+  await lockOpenTab(tx, cfg.tenantId, tabId);
   if (courseId !== null) {
     await requireLiveCourse(tx, cfg, courseId);
   }
@@ -1562,11 +1574,12 @@ export async function setLineCourse(
  */
 async function setLineServed(
   tx: Transaction,
+  tenantId: string,
   tabId: string,
   lineNo: number,
   served: boolean,
 ): Promise<void> {
-  await lockOpenTab(tx, tabId);
+  await lockOpenTab(tx, tenantId, tabId);
   const updated = await tx
     .update(workingOrderLines)
     .set({ servedAt: served ? sql`now()` : null })
@@ -1583,11 +1596,11 @@ async function setLineServed(
  */
 export async function markLineServed(
   tx: Transaction,
-  _cfg: TillConfig,
+  cfg: TillConfig,
   tabId: string,
   lineNo: number,
 ): Promise<void> {
-  await setLineServed(tx, tabId, lineNo, true);
+  await setLineServed(tx, cfg.tenantId, tabId, lineNo, true);
 }
 
 /**
@@ -1597,11 +1610,11 @@ export async function markLineServed(
  */
 export async function unmarkLineServed(
   tx: Transaction,
-  _cfg: TillConfig,
+  cfg: TillConfig,
   tabId: string,
   lineNo: number,
 ): Promise<void> {
-  await setLineServed(tx, tabId, lineNo, false);
+  await setLineServed(tx, cfg.tenantId, tabId, lineNo, false);
 }
 
 /**
@@ -1741,11 +1754,12 @@ export async function moveTabLines(
  * single UNLOCKED status read: deliberately NOT `lockOpenTab`, which takes `FOR UPDATE` and checks a
  * `dining_tables` back-pointer both verbs intentionally avoid (see their docstrings).
  */
-async function assertTabOpen(tx: Transaction, tabId: string): Promise<void> {
+async function assertTabOpen(tx: Transaction, tenantId: string, tabId: string): Promise<void> {
   const [tab] = await tx
     .select({ status: workingOrders.status })
     .from(workingOrders)
-    .where(eq(workingOrders.id, tabId));
+    // Tenant-scoped: a foreign tenant's order id must read as absent, not as an open tab (CLAUDE.md §3).
+    .where(and(eq(workingOrders.id, tabId), eq(workingOrders.tenantId, tenantId)));
   if (tab === undefined || tab.status !== "open") {
     throw new AppError("tab.not_open", { tabId });
   }
@@ -1798,10 +1812,10 @@ export interface TabLine {
  */
 export async function readTabLines(
   tx: Transaction,
-  _cfg: TillConfig,
+  cfg: TillConfig,
   tabId: string,
 ): Promise<TabLine[]> {
-  await assertTabOpen(tx, tabId);
+  await assertTabOpen(tx, cfg.tenantId, tabId);
   // LEFT JOIN each line's kitchen ticket item (KDS-2) to carry its `fired_at` AND `state` (coursing
   // corrections, C1) — one item per line at most (`ticket_items` is UNIQUE on
   // `(tenant_id, working_order_line_id)`), so the join never multiplies rows. `course_id` is read from
@@ -1908,7 +1922,7 @@ export async function moveTab(
   tabId: string,
   toTableId: string,
 ): Promise<void> {
-  await assertTabOpen(tx, tabId);
+  await assertTabOpen(tx, cfg.tenantId, tabId);
 
   const involved = await tx
     .select({ id: diningTables.id, tabId: diningTables.tabId, active: diningTables.active })
@@ -1937,11 +1951,11 @@ export async function moveTab(
  */
 export async function joinTable(
   tx: Transaction,
-  _cfg: TillConfig,
+  cfg: TillConfig,
   tabId: string,
   tableId: string,
 ): Promise<void> {
-  await assertTabOpen(tx, tabId);
+  await assertTabOpen(tx, cfg.tenantId, tabId);
 
   const [table] = await tx
     .select({ id: diningTables.id, tabId: diningTables.tabId, active: diningTables.active })
@@ -2115,7 +2129,7 @@ export async function transferLines(
   // Acquire both working-order locks in ascending id order. lockOpenTab also
   // requires each order to be open and referenced by a dining table.
   for (const tabId of [fromTabId, toTabId].sort()) {
-    await lockOpenTab(tx, tabId);
+    await lockOpenTab(tx, cfg.tenantId, tabId);
   }
 
   // The origin and destination row locks are held; carry the items over (whole lines + partial splits).
@@ -2352,7 +2366,7 @@ export async function splitOffCheck(
   // increment together (`allocateOrderNumber` is a transactional UPSERT into `working_order_counters`,
   // `packages/db/src/allocate-order-number.ts` — a rolled-back allocation leaves no gap). The FOR UPDATE
   // also serialises a concurrent carve-off of the same tab (TS-3/TS-4 lock discipline).
-  await lockOpenTab(tx, fromTabId);
+  await lockOpenTab(tx, cfg.tenantId, fromTabId);
 
   // Mint + create the DETACHED check: a lineless `open` working order (createOpenOrder's empty-lines
   // guard, TS-1), with NO `dining_tables.tab_id` pointing at it. It inherits node/till from `cfg`.
@@ -2411,7 +2425,7 @@ export async function unjoinTable(
   // Lock the shared tab's working_orders row FIRST (see the docstring's lock-order note): it must be
   // OPEN — you cannot re-carve a settled/abandoned bill — else `tab.not_open`. Taking this BEFORE the
   // dining_tables lock is the deadlock-safe order the sale/settle path uses.
-  await lockOpenTabRow(tx, tabId);
+  await lockOpenTabRow(tx, cfg.tenantId, tabId);
 
   // Then lock the table row; it must currently be joined to THIS tab (else `table.not_joined` — an
   // absent/foreign table, a free table, or one joined to a DIFFERENT tab all read as tab_id ≠ tabId and

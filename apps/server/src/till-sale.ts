@@ -316,7 +316,10 @@ export async function payWorkingOrder(
         const [locked] = await tx
           .select({ status: workingOrders.status })
           .from(workingOrders)
-          .where(eq(workingOrders.id, req.id))
+          // Tenant-scoped: a by-id read is not isolated since RLS was dropped (#255), so a foreign
+          // tenant's order id must resolve as "no row" (walk-up) here, never as their open order
+          // (CLAUDE.md §3). Same-tenant pay is unchanged — the order is this tenant's.
+          .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)))
           .for("update");
 
         // Step 2. Already settled → idempotent replay. A retry whose first response was lost, or the
@@ -399,7 +402,8 @@ export async function payWorkingOrder(
       const [row] = await tx
         .select({ status: workingOrders.status })
         .from(workingOrders)
-        .where(eq(workingOrders.id, req.id));
+        // Tenant-scoped like the lock read above (CLAUDE.md §3).
+        .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)));
       /* v8 ignore start */
       if (row?.status !== "settled") {
         // A unique violation with no settled winner is not our idempotency case (e.g. a pay racing a
