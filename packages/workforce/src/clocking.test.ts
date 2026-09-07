@@ -227,7 +227,7 @@ describe("workSummary", () => {
   });
 
   it("sizes the daily target from a supplied working_days_per_week, not the 5-day default", async () => {
-    // The de-hard-coding, end to end through the backend. A 6-day convenio week makes the daily
+    // The de-hard-coding, end to end through the backend. A 6-day collective-agreement week makes the daily
     // target 2400 ÷ 6 = 400, so a 9h (540) day is 140 over it — where the 5-day `DEFAULT_RULESET`
     // gives 480 and 60. Passing the resolved WorkTimeRuleset's working_days_per_week is what changes
     // it.
@@ -246,11 +246,11 @@ describe("workSummary", () => {
   });
 
   it("uses an explicit dailyTargetMinutes override as the daily-accrual target, bypassing the weekly derivation", async () => {
-    // convenio_config.daily_target_minutes, once the asesor sets one, IS the per-day target — the
+    // `convenio_config.daily_target_minutes`, once the asesor sets one, IS the per-day target — the
     // weekly ÷ working-days derivation is bypassed. A 400-min override against a 9h (540) day is 140
     // over it, where the derived 2400 ÷ 5 = 480 target gives 60. Prove by deletion: drop the
     // `ruleset.dailyTargetMinutes ??` in workSummary and this reverts to 480/60. The NULL path (a
-    // DEFAULT convenio_config row → derivation, the 2700/2400/300 case) is pinned by the
+    // DEFAULT `convenio_config` row → derivation, the 2700/2400/300 case) is pinned by the
     // default-ruleset tests above, which carry `dailyTargetMinutes: null` and stay green.
     const p = await freshPerson("summary-daily-override");
     await seedEmployment(suite.db, { tenantId, personId: p, contractedMinutesPerWeek: 2400 });
@@ -267,7 +267,7 @@ describe("workSummary", () => {
   });
 
   it("selects the headline overtime model from the options, changing only the headline", async () => {
-    // Which model binds is convenio-driven (overtime_model). A 9h day then a 7h day is 60
+    // Which model binds is collective-agreement-driven (overtime_model). A 9h day then a 7h day is 60
     // daily-accrual but 0 period-net against a full-week baseline. Flipping the model must move ONLY
     // the headline `overtimeMinutes`; the two underlying figures are computed regardless and stay put.
     const p = await freshPerson("summary-model");

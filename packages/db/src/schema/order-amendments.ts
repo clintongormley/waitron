@@ -34,7 +34,7 @@ export const orderAmendmentKind = pgEnum("order_amendment_kind", [
  * The append-only, tamper-evident amendment log (art. 29.2.j LGT — the legal term lives only in
  * this comment; the table is English, design §4). IMMUTABLE like `sale_lines`/`time_entries`, NOT
  * the mutable `working_orders`: `REVOKE ALL` + `GRANT SELECT, INSERT` + reject_mutation + a
- * TRUNCATE-block (migration SQL). Tamper-evidence is a per-order huella-style hash of content plus
+ * TRUNCATE-block (migration SQL). Tamper-evidence is a per-order fiscal-fingerprint-style hash of content plus
  * the predecessor's hash (Decision 2): `entry_hash = SHA-256(content ‖ prev_entry_hash)`, with the
  * reason, actor and capturing till/node all INSIDE the hash (#52), and precedence tie-breaking on
  * the hashed `sequence_no` (#52). Local wall-clock (`event_at` + `event_offset_minutes`,
@@ -87,7 +87,7 @@ export const orderAmendments = pgTable(
       name: "order_amendments_node_fk",
     }).onDelete("restrict"),
     // THE backstop against two writers claiming one chain position (mirrors
-    // time_entries_chain_position_uq / registros_tenant_node_secuencia_uq).
+    // `time_entries_chain_position_uq` / `registros_tenant_node_secuencia_uq`).
     unique("order_amendments_chain_position_key").on(t.tenantId, t.workingOrderId, t.sequenceNo),
     index("order_amendments_order_idx").on(t.tenantId, t.workingOrderId),
     check("order_amendments_sequence_no_ck", sql`${t.sequenceNo} > 0`),

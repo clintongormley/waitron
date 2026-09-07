@@ -35,9 +35,9 @@ describe("the source glob itself", () => {
 
 /**
  * Blanks `/* ... *\/` block comments to equivalent whitespace (preserving line numbers) and drops
- * trailing `// ...` line comments, mirroring packages/db/src/english-only.ts's
- * `blankBlockComments`/`dropLineComment` helpers exactly, and packages/fiscal/src/
- * no-regime-vocabulary.test.ts's own `stripComments` verbatim: a legitimate mention of provider/SDK
+ * trailing `// ...` line comments, mirroring packages/fiscal/src/no-regime-vocabulary.test.ts's own
+ * `stripComments` verbatim (packages/db/src/english-only.ts no longer strips comments — since
+ * 2026-09-07 it scans comment prose and blanks only quotations): a legitimate mention of provider/SDK
  * vocabulary inside a COMMENT (`provider.ts`'s own doc comments cite "the terminal" when explaining
  * why no method takes a transaction handle across a network call) must not trip a vocabulary guard,
  * while the same word used as a real identifier must still fail it.

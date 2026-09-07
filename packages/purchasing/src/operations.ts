@@ -17,8 +17,8 @@ import type {
 } from "./types.js";
 
 /**
- * Received supplier invoices (facturas recibidas) and VAT lines share the caller's transaction.
- * This is the mutable commercial/accounting lane: no huella, chain or allocated invoice number.
+ * Received supplier invoices and VAT lines share the caller's transaction.
+ * This is the mutable commercial/accounting lane: no fiscal fingerprint, chain or allocated invoice number.
  * All SQL is built with Drizzle query builders — no string concatenation.
  */
 
@@ -107,7 +107,7 @@ function validateProportion(proportion: Decimal | undefined): void {
   }
 }
 
-/** At least one VAT line, each with a non-negative base and cuota and a rate in 0–100. */
+/** At least one VAT line, each with a non-negative base and VAT amount and a rate in 0–100. */
 function validateLines(lines: readonly PurchaseInvoiceLineInput[]): void {
   if (lines.length === 0) throw new AppError("purchase.invalid", { reason: "no_lines" });
   for (const line of lines) {
@@ -176,9 +176,9 @@ async function selectLines(tx: Transaction, invoiceId: string): Promise<Purchase
 
 /**
  * Insert a received invoice and its VAT lines in the caller's transaction. Validates the header's
- * prorrata seam and the lines (≥1 line, non-negative base/cuota, rate 0–100 → `purchase.invalid`)
+ * prorrata seam and the lines (≥1 line, non-negative base/VAT amount, rate 0–100 → `purchase.invalid`)
  * BEFORE any write; a collision on the `(tenant, supplier, supplier's number)` unique index becomes
- * `purchase.duplicate` (the libro-registro no-duplicate rule). `regime`/`deductibleProportion`/`kind`
+ * `purchase.duplicate` (the VAT record-book no-duplicate rule). `regime`/`deductibleProportion`/`kind`
  * omitted fall to their column defaults.
  */
 export async function createPurchaseInvoice(

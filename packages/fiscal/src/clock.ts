@@ -53,7 +53,7 @@ export interface TrustedClockOptions {
    * regulatory constant the first time somebody read it as one.
    */
   degradedAfterSeconds: number;
-  /** Resolves the huso for a given instant, e.g. through the venue's IANA zone. Defaults to the
+  /** Resolves the time zone for a given instant, e.g. through the venue's IANA zone. Defaults to the
    * offset recorded at anchor time — never to `Date.prototype.getTimezoneOffset()`, which
    * reports the DEVICE's zone and is precisely what a "timezone fix" changes. */
   resolveOffsetMinutes?: (instant: Date) => number;

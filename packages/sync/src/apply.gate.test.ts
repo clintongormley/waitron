@@ -940,7 +940,7 @@ describe("the commercial-lane apply loop", () => {
   it("throws sync.table_not_enrolled for a row naming a table the registry does not carry", async () => {
     // Also an H2 guard that a hash-chained / fiscal-adjacent table is not enrollable: order_amendments
     // (a SHA-256 chain, spec §2 defers it with the owner-reviewed lane), like the fiscal core's
-    // registros_facturacion (spec §1 defers the whole fiscal lane), has no apply statement here — so a
+    // `registros_facturacion` (spec §1 defers the whole fiscal lane), has no apply statement here — so a
     // row naming any unenrolled table is a hard error, never a silent skip. The table name in code is
     // the deliberately English-named order_amendments so @waitron/sync stays inside the english-only
     // guard (CLAUDE.md §3); the mechanism it exercises rejects every unenrolled table alike.

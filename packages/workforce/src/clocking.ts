@@ -47,14 +47,14 @@ export interface WorkSummaryQuery {
 }
 
 /**
- * The convenio-driven inputs `workSummary` reads — resolved from a `convenio_config` row by
+ * The collective-agreement-driven inputs `workSummary` reads — resolved from a `convenio_config` row by
  * `packages/workforce-es` and passed in (a full `WorkTimeRuleset` satisfies this subset). The single
  * source of their defaults is the `convenio_config` column defaults: a DEFAULT row resolves to
  * `working_days_per_week = 5` / `overtime_model = daily_accrual` / `daily_target_minutes = NULL`, and
  * that this reproduces today's numbers is pinned as a checked invariant by `packages/workforce-es`'s
  * `work-summary.test.ts` (a default row resolved through `resolveWorkTimeRuleset`), not asserted by a
  * comment the code does not enforce. `dailyTargetMinutes` is the one field with a code-side fallback
- * — a null column means "derive the per-day target from the weekly jornada ÷ `workingDaysPerWeek`"
+ * — a null column means "derive the per-day target from the weekly working time ÷ `workingDaysPerWeek`"
  * rather than a duplicated numeric default.
  */
 export interface WorkSummaryRuleset {
@@ -66,7 +66,7 @@ export interface WorkSummaryRuleset {
   overtimeModel: OvertimeModel;
   /** An explicit per-day target (`convenio_config.daily_target_minutes`). When non-null it IS the
    * daily-accrual target and the weekly ÷ `workingDaysPerWeek` derivation is bypassed; null falls
-   * back to that derivation. A DEFAULT convenio_config row leaves it null, so the derivation — and
+   * back to that derivation. A DEFAULT `convenio_config` row leaves it null, so the derivation — and
    * today's numbers — are unchanged. */
   dailyTargetMinutes: number | null;
 }
@@ -162,7 +162,7 @@ export interface AddShiftInput {
   tenantId: string;
   versionId: string;
   personId: string;
-  /** The centro de trabajo — should match the version's location (the screen uses the roster's). */
+  /** The workplace — should match the version's location (the screen uses the roster's). */
   locationId: string;
   startsAt: string;
   startsOffsetMinutes: number;
@@ -249,12 +249,12 @@ export class WorkforceBackend {
    * Worked minutes and overtime for a person over a pay period, computed from the `time_entries`
    * stream against the employment's contracted week. Returns BOTH overtime models (daily-accrual and
    * period-net) side by side plus the per-day breakdown, and selects the headline model from the
-   * supplied `ruleset.overtimeModel` (convenio_config-sourced) — which model BINDS for a given
-   * employment is still a convenio/asesor-laboral decision, carried on that row, not hard-coded here
-   * (see `summarisePeriod`). The period-net baseline scales the weekly jornada to the period length.
-   * The daily-accrual target is `ruleset.dailyTargetMinutes` when the convenio sets one, else the
-   * weekly jornada ÷ `ruleset.workingDaysPerWeek` derivation (`dailyContractedTargetMinutes`); a
-   * DEFAULT convenio_config row leaves `dailyTargetMinutes` null, so today's per-day figure stands.
+   * supplied `ruleset.overtimeModel` (`convenio_config`-sourced) — which model BINDS for a given
+   * employment is still a collective-agreement/asesor-laboral decision, carried on that row, not hard-coded here
+   * (see `summarisePeriod`). The period-net baseline scales the weekly working time to the period length.
+   * The daily-accrual target is `ruleset.dailyTargetMinutes` when the collective agreement sets one, else the
+   * weekly working time ÷ `ruleset.workingDaysPerWeek` derivation (`dailyContractedTargetMinutes`); a
+   * DEFAULT `convenio_config` row leaves `dailyTargetMinutes` null, so today's per-day figure stands.
    */
   async workSummary(
     tx: Transaction,
@@ -275,7 +275,7 @@ export class WorkforceBackend {
       query.period,
       {
         periodMinutes: Math.round((contractedPerWeek * periodDays) / 7),
-        // An explicit convenio per-day target wins; a null column falls back to the weekly derivation
+        // An explicit collective-agreement per-day target wins; a null column falls back to the weekly derivation
         // (`??` treats only null/undefined as "unset", so a 0 override — a CHECK would reject it — is
         // still honoured rather than silently re-derived).
         dailyTargetMinutes:
@@ -600,7 +600,7 @@ export class WorkforceBackend {
 
   /**
    * Reads one `roster_versions` row by id, or throws `roster.not_found`. The publish route reads a
-   * version's `locationId` off this before resolving its convenio ruleset.
+   * version's `locationId` off this before resolving its collective-agreement ruleset.
    */
   async getRosterVersion(
     tx: Transaction,
@@ -1098,7 +1098,7 @@ export class WorkforceBackend {
     // is fetched even when its UTC instant sits just outside it (max wall offset ±14h < 1 day); the
     // precise local-date filter is `summarisePeriod`'s. `event_at` is read through the timestamptz
     // column's mode:"string", normalised to a UTC ISO instant so the projection's `Date.parse` sees
-    // a string under either driver (node-postgres returns a Date, PGlite a string — registro-row.ts).
+    // a string under either driver (node-postgres returns a Date, PGlite a string — `registro-row.ts`).
     const windowStart = shiftDay(query.period.start, -1);
     const windowEnd = shiftDay(query.period.end, 1);
     // Corrections are fetched alongside base events (no `entry_kind` filter) so `projectWorkSessions`

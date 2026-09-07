@@ -264,7 +264,7 @@ export class FakeFiscalBackend implements FiscalBackend {
     // mirroring recordCorrection's single one extended to the N:1 fan-out: the list must name at
     // least one sale, and every sale it names must already have a fiscal record. The real backend
     // additionally asserts each replaced sale is a simplified ticket; this fake carries no
-    // tipo-de-factura information, so — like recordCorrection — it checks only existence.
+    // invoice-type information, so — like recordCorrection — it checks only existence.
     if (substitution.substitutedSaleIds.length === 0) {
       throw new Error("FakeFiscalBackend.recordSubstitution: substitutedSaleIds must not be empty");
     }

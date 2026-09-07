@@ -110,7 +110,7 @@ describe("projectWorkSessions", () => {
   });
 
   it("derives the LOCAL calendar date from the wall offset, not UTC", () => {
-    // 23:30Z at +60 is 00:30 the next day on the wall clock — the day the registro must record it
+    // 23:30Z at +60 is 00:30 the next day on the wall clock — the day the working-time record must file it
     // under (art. 34.9 is per-worker per-DAY, and the day is the worker's local day).
     const [session] = projectWorkSessions([
       entry("p1", "in", "2026-01-05T23:30:00Z", { offsetMinutes: 60 }),
@@ -360,7 +360,7 @@ describe("projectWorkSessions applies corrections (reprojection, latest-approved
 
 describe("dailyContractedTargetMinutes (a contracted daily target over N working days)", () => {
   it("divides the contracted week by the supplied working-days count", () => {
-    // 2400 min/week ÷ 5 working days = 480 (an 8h day). Five is D2's convenio_config default, no
+    // 2400 min/week ÷ 5 working days = 480 (an 8h day). Five is D2's `convenio_config` default, no
     // longer a module constant — it is passed in from the resolved WorkTimeRuleset.
     expect(dailyContractedTargetMinutes(2400, 5)).toBe(480);
   });
@@ -371,14 +371,14 @@ describe("dailyContractedTargetMinutes (a contracted daily target over N working
   });
 
   it("divides by the supplied working-days count, not a hard-coded 5", () => {
-    // 2400 ÷ 6 = 400. Proves working_days_per_week is a PARAMETER (D2 convenio_config), not the
+    // 2400 ÷ 6 = 400. Proves working_days_per_week is a PARAMETER (D2 `convenio_config`), not the
     // `DEFAULT_WORKING_DAYS_PER_WEEK = 5` module constant it replaced — a caller with a 6-day week
     // gets 400, not 480. This is the de-hard-coding teeth-test.
     expect(dailyContractedTargetMinutes(2400, 6)).toBe(400);
   });
 
   it("rejects a non-positive working-days count instead of returning Infinity/NaN", () => {
-    // Defence in depth: convenio_config's CHECK pins the denominator to 1..7, but this helper is on
+    // Defence in depth: `convenio_config`'s CHECK pins the denominator to 1..7, but this helper is on
     // the public barrel, so a 0/negative/NaN divisor throws rather than silently yielding Infinity
     // or NaN (which would corrupt the overtime target). One `> 0` guard covers all three.
     expect(() => dailyContractedTargetMinutes(2400, 0)).toThrow(/must be positive/);
@@ -428,7 +428,7 @@ describe("summarisePeriod (BOTH overtime models, side by side)", () => {
 
   it("diverges: a 9h day then a 7h day is 1h daily-accrual but 0 period-net (8h target)", () => {
     // THE teeth-test (ET art. 35 vs art. 34.2). Day 1 runs 60 over the 8h target; day 2 runs 60
-    // under it. Daily-accrual counts the day-1 hora extraordinaria and NEVER nets the day-2 short
+    // under it. Daily-accrual counts the day-1 overtime hour and NEVER nets the day-2 short
     // day against it → 60. Period-net (worked 960 vs a 960 baseline) lets them cancel → 0. The two
     // figures MUST disagree here, which is what proves both are computed rather than one aliasing the
     // other (CLAUDE.md §1: a test where the answers can't disagree measures nothing).
@@ -462,7 +462,7 @@ describe("summarisePeriod (BOTH overtime models, side by side)", () => {
   });
 
   it("aggregates a split shift's sessions into one day before the daily target applies", () => {
-    // Two 5h sessions on the SAME day (a turno partido) = 600 worked minutes that day, 120 over the
+    // Two 5h sessions on the SAME day (a split shift) = 600 worked minutes that day, 120 over the
     // 8h target. Computed per session it would be max(0, 300−480)=0 twice; the daily model must sum
     // the day first, so this proves the per-DAY aggregation, not per-session.
     const sessions = projectWorkSessions([
@@ -495,7 +495,7 @@ describe("summarisePeriod (BOTH overtime models, side by side)", () => {
 
   it("selects the headline figure via an explicit model parameter, defaulting to daily-accrual", () => {
     // The headline `overtimeMinutes` is a conservative DEFAULT (daily-accrual), never the authoritative
-    // figure — which model is binding is convenio-driven (an asesor-laboral decision). A caller may
+    // figure — which model is binding is collective-agreement-driven (an asesor-laboral decision). A caller may
     // pick period-net explicitly.
     const sessions = projectWorkSessions([
       entry("p1", "in", "2026-01-05T08:00:00Z"),

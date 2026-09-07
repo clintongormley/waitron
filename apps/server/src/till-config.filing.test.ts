@@ -23,7 +23,7 @@ beforeAll(async () => {
   const locationId = loc.rows[0]!.id;
   const s = await suite.db.execute<{ id: string }>(sql`
     insert into nodes (tenant_id, location_id, name, filing_module, tax_module)
-    values (${tenantId}, ${locationId}, 'stamped', 'verifactu', 'iva') returning id`);
+    values (${tenantId}, ${locationId}, 'stamped', 'verifactu', 'vat') returning id`);
   const b = await suite.db.execute<{ id: string }>(sql`
     insert into nodes (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'bare') returning id`);
   stamped = brandNodeId(s.rows[0]!.id);

@@ -20,7 +20,7 @@ export type FiscalState = "recorded" | "pending" | "acknowledged" | "rejected";
 export interface NodeRegistration {
   backend: string;
   nodeId: NodeId;
-  /** Opaque to the POS. A número de instalación, a device id, or nothing meaningful at all. */
+  /** Opaque to the POS. An installation number, a device id, or nothing meaningful at all. */
   registrationId: string;
   registeredAt: Date;
 }
@@ -58,7 +58,7 @@ export interface SaleForFiscalRecord {
   seriesId: SeriesId;
   seriesCode: string;
   invoiceNumber: number;
-  /** UTC. The offset travels beside it because the huso is fiscally meaningful, not display. */
+  /** UTC. The offset travels beside it because the time zone is fiscally meaningful, not display. */
   issuedAt: Date;
   offsetMinutes: number;
   descriptionOfOperation: string;
@@ -244,12 +244,12 @@ export interface FiscalBackend {
    * The reprint data for an ALREADY-FILED sale — the verification link a customer scans and the exact
    * VAT breakdown that was filed. For an idempotent replay (a lost-response pay retry that reprints
    * the ticket WITHOUT re-filing — park & retrieve, spec §3), this is the only way the replayed
-   * receipt can carry the regime's mandatory QR and the authoritative desglose: both live only on the
+   * receipt can carry the regime's mandatory QR and the authoritative VAT breakdown: both live only on the
    * regime's own immutable record, which the generic caller may not read across this boundary, and
    * `FiscalRecordRef` is minted at filing time and long gone by the time a retry arrives.
    *
    * Returns the figures EXACTLY as filed, never a recomputation: `vatBreakdown` is the stored
-   * difference-method desglose (tax = gross − base), which can diverge by up to a cent from a naive
+   * difference-method VAT breakdown (tax = gross − base), which can diverge by up to a cent from a naive
    * base×rate recompute over a multi-line same-rate group. A replayed legal receipt must show what was
    * filed, not a value that merely approximates it.
    *
@@ -271,7 +271,7 @@ export interface FiscalBackend {
   recordVoid(tx: Transaction, saleId: SaleId, reason: string): Promise<FiscalRecordRef>;
 
   /**
-   * Records a corrective fiscal record — a credit note, the rectificativa of a prior sale. Like
+   * Records a corrective fiscal record — a credit note, the corrective invoice of a prior sale. Like
    * `recordSale` it takes the transaction: atomicity between the corrective sale and its fiscal
    * record is the entire point, exactly as for a sale. `sale` is the corrective invoice's OWN data
    * — its own new number, its own (negative) total and breakdown — while `correction.correctsSaleId`

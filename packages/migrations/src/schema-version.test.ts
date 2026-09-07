@@ -79,7 +79,7 @@ describe("appliedSchemaVersion — input validation", () => {
     const error = await captureError(() =>
       appliedSchemaVersion(neverQueried, {
         name: "evil",
-        table: 'users"; drop table registros_facturacion --',
+        table: 'users"; drop table audit_log --',
         from: "x",
       }),
     );

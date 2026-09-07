@@ -21,12 +21,12 @@ test("opens when the open property is set", async () => {
 });
 
 test("renders the heading", async () => {
-  const el = await mount('<wt-dialog heading="Anular venta">body</wt-dialog>');
-  expect(el.shadowRoot!.querySelector("h2")?.textContent?.trim()).toBe("Anular venta");
+  const el = await mount('<wt-dialog heading="Void sale">body</wt-dialog>');
+  expect(el.shadowRoot!.querySelector("h2")?.textContent?.trim()).toBe("Void sale");
 });
 
 test("associates the heading with the dialog so it has an accessible name", async () => {
-  const el = await mount('<wt-dialog heading="Anular venta">body</wt-dialog>');
+  const el = await mount('<wt-dialog heading="Void sale">body</wt-dialog>');
   const dialog = el.shadowRoot!.querySelector("dialog") as HTMLDialogElement;
   const heading = el.shadowRoot!.querySelector("h2")!;
   expect(heading.id).not.toBe("");
@@ -47,15 +47,15 @@ test("declares an explicit dialog role, not just the native element's implicit o
   // aria-labelledby/aria-label from a dialog produced zero axe violations, even though the dialog
   // was left with no accessible name at all — see wt-dialog.a11y.test.ts and
   // docs/developers/design-system.md. Losing this attribute silently blinds that test.
-  const el = await mount('<wt-dialog heading="Anular venta">body</wt-dialog>');
+  const el = await mount('<wt-dialog heading="Void sale">body</wt-dialog>');
   const dialog = el.shadowRoot!.querySelector("dialog") as HTMLDialogElement;
   expect(dialog.getAttribute("role")).toBe("dialog");
 });
 
 test("falls back to a forwarded aria-label when there is no heading", async () => {
-  const el = await mount('<wt-dialog aria-label="Cerrar sesión">body</wt-dialog>');
+  const el = await mount('<wt-dialog aria-label="Log out">body</wt-dialog>');
   const dialog = el.shadowRoot!.querySelector("dialog") as HTMLDialogElement;
-  expect(dialog.getAttribute("aria-label")).toBe("Cerrar sesión");
+  expect(dialog.getAttribute("aria-label")).toBe("Log out");
   expect(dialog.hasAttribute("aria-labelledby")).toBe(false);
 });
 

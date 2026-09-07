@@ -61,7 +61,7 @@ export async function recordManualCardPayment(
  * Record a refund staff performed on the bank terminal, mirroring what happened there — a
  * `payment_refunds` row under the `manual` provider, advancing the payment to
  * `refunded`/`partially_refunded`. Reuses `recordRefund`, pinning the sentinel provider. Never
- * touches the fiscal record: reversing the SALE (a rectificativa) is a separate, deliberate action
+ * touches the fiscal record: reversing the SALE (a corrective invoice) is a separate, deliberate action
  * through the existing `recordVoid` path, not a side effect of this.
  */
 export async function recordManualRefund(

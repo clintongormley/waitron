@@ -81,7 +81,7 @@ function saleValues(overrides: Record<string, unknown> = {}) {
     issuedAt: AT,
     issuedOffsetMinutes: 120,
     total: "1.00",
-    // The filed per-rate desglose. `[]` here because these fixtures do not exercise
+    // The filed per-rate breakdown. `[]` here because these fixtures do not exercise
     // the breakdown — the column is just NOT NULL and must carry a valid jsonb array; the tests that
     // DO care about its content are record-sale.test.ts (the equality-to-filed proof) and the
     // information_schema column assertion below.
@@ -178,7 +178,7 @@ describeEachTarget("sales — the commercial record", (target) => {
   });
 
   it("rejects a duplicate invoice number within a series", async () => {
-    // findings §1: records are identified by issuer + serie&número + date, and
+    // findings §1: records are identified by issuer + series & number + date, and
     // AEAT returns error 3000 on a duplicate. The database refuses first.
     await recordCompleteSale(db);
     const error = await captureError(() => recordCompleteSale(db));
@@ -219,8 +219,8 @@ describeEachTarget("sales — the commercial record", (target) => {
   });
 
   it("stores vat_breakdown as a NOT NULL jsonb column", async () => {
-    // vat_breakdown: the filed per-rate desglose ({rate, base, tax}[]), a queryable copy of what the
-    // hash-chained registro carries, so reporting can compute an exact VAT summary without a
+    // vat_breakdown: the filed per-rate breakdown ({rate, base, tax}[]), a queryable copy of what the
+    // hash-chained record carries, so reporting can compute an exact VAT summary without a
     // cross-boundary join (spec 8a). NOT NULL is load-bearing — it is the forcing function that made
     // every sale-creating path populate it — so both the type AND the nullability are pinned here.
     const [meta] = await rows<{ data_type: string; is_nullable: string }>(
@@ -253,7 +253,7 @@ describeEachTarget("sales — the commercial record", (target) => {
           tenantId: TENANT_A,
           saleId: sale.id,
           lineNo: i + 1,
-          // Not "Línea"/"Línia": "linea" is on english-only.ts's guarded
+          // Not `Línea`/`Línia`: `linea` is on english-only.ts's guarded
           // Spanish wordlist (SPANISH_WORDS), so that literal fails this
           // package's own English-only build. "Café solo"/"Cafè sol" is the
           // placeholder description this file already uses elsewhere.
@@ -372,7 +372,7 @@ describeEachTarget("sales — locale snapshot", (target) => {
 
   it("does not change an existing sale when locations.invoice_locales changes", async () => {
     // Spec §9: a receipt reprinted a year later must read identically to the
-    // one the customer took, and rectificativas inherit the ORIGINAL list.
+    // one the customer took, and corrective invoices inherit the ORIGINAL list.
     // Reading through locations at print time would break both.
     const id = await recordCompleteSale(db);
     await db
@@ -627,7 +627,7 @@ describeEachTarget("sales — fiscal_state", (target) => {
   });
 
   it("holds no submission state, so there is nothing on it to advance", async () => {
-    // Spec §3 puts submission state on the envios sidecar precisely because it
+    // Spec §3 puts submission state on the `envios` sidecar precisely because it
     // mutates constantly and this table cannot be updated. A column named for
     // sending, acknowledging or retrying reappearing here is the regression
     // this test exists to catch — it would have to be mutable, and nothing
@@ -657,11 +657,11 @@ describeEachTarget("sales — fiscal_state", (target) => {
 });
 
 /**
- * The rectificativa link. `corrects_sale_id` is the generic-layer
+ * The corrective-invoice link. `corrects_sale_id` is the generic-layer
  * projection of "this sale corrects that one" — nullable, tenant-consistent FK back onto
  * `sales`, NOT unique (a sale may be corrected more than once), and it is what relaxes
- * `sales_total_ck` to permit the negative total a rectificativa por diferencias carries
- * (docs/superpowers/plans/2026-08-02-rectificativas.md §2.1).
+ * `sales_total_ck` to permit the negative total a `rectificativa por diferencias` carries
+ * (`docs/superpowers/plans/2026-08-02-rectificativas.md` §2.1).
  *
  * A corrective sale is written header-only here (no tenders): the refund is a separate
  * payments action and `tenders_amount_ck` (`amount > 0`) forbids a negative tender anyway,
@@ -721,8 +721,8 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
   }
 
   it("accepts a corrective sale carrying a negative total when the link is set", async () => {
-    // Load-bearing: record-sale passes `total` straight into the fiscal record's ImporteTotal,
-    // which the huella hashes, so `sales.total` must hold the negative value the corrective
+    // Load-bearing: record-sale passes `total` straight into the fiscal record's `ImporteTotal`,
+    // which the fiscal fingerprint hashes, so `sales.total` must hold the negative value the corrective
     // needs (findings §10.2, plan §2.1).
     //
     // PROVEN BY DELETION (manual, recorded in this task's report): with the migration's
@@ -767,7 +767,7 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
   });
 
   it("allows a sale to be corrected more than once", async () => {
-    // NOT unique, unlike sale_voids_sale_id_key: successive rectificativas against one sale are
+    // NOT unique, unlike sale_voids_sale_id_key: successive corrective invoices against one sale are
     // legitimate (plan §2.1). Two correctives pointing at the same original both land.
     await insertSale({ total: "-1.00", correctsSaleId: originalSaleId, invoiceNumber: 2 });
     const second = await insertSale({
@@ -817,7 +817,7 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
 /**
  * The sale_line → parent sale_line self-link (ordering modifiers, Task 2). `parent_line_id` is
  * presentation/reporting metadata ONLY — the fiscal record is built from `total` + `vat_breakdown`,
- * never from `sale_lines`, so this column never reaches the huella (design §4). A modifier files as
+ * never from `sale_lines`, so this column never reaches the fiscal fingerprint (design §4). A modifier files as
  * its own child line pointing at the dish line it belongs to; a top-level line leaves it NULL.
  *
  * The composite (tenant_id, parent_line_id) → sale_lines(tenant_id, id) FK keeps the link

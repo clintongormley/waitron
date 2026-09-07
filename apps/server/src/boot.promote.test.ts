@@ -429,7 +429,7 @@ async function seedMirrorIdentity(
       standby,
       nodeName: "cloud",
       filingModule: "verifactu",
-      taxModule: "iva",
+      taxModule: "vat",
       modules: ALL_MODULES,
       reserved: {
         modules: {

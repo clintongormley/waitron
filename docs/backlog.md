@@ -447,18 +447,22 @@ screens, `apps/server/src/modules.ts` (the maps derived from that list), and the
      declaration-merged into the regime package (§3 nuance, self-guarding, precedented). The Task-8
      provision-only gate keeps a synthetic-module test for the `provision_only_disabled` branch (no
      real non-fiscal provision-only module exists yet).
-   - **Follow-on (gated on this): English-only generic guard.** Owner principle (2026-09-07): Spanish
-     only in Spain-specific modules (verifactu, workforce-es, reporting=modelo-303); core/generic code
-     must be English — identifiers, strings AND comments. The guard today doesn't scan `provisioning`
-     at all (the guard-free zone `obligado` slipped through on #258, reverted #260) and strips
-     comments. Design + decisions (reporting→Spanish-specific, workforce→English, migrations→English,
-     `huella`→"fiscal fingerprint", relocate `fiscal-modules.ts`→`@waitron/composition`):
-     `docs/superpowers/specs/2026-09-07-english-only-generic-english-design.md`. **Was delayed behind
-     `fiscal-none` (LANDED #262) — now UNBLOCKED** (owner 2026-09-07): most of the ~428 core/db Spanish
-     was fiscal code that `fiscal-none` makes regime-agnostic / relocates to the verifactu module, so
-     re-measure against post-`fiscal-none` `main` before rewording. Two pieces are independent and
-     could go anytime: add `tunnel`+`payments-stripe` to the scan (already clean); relocate
-     `fiscal-modules.ts` so provisioning production is scannable.
+   - **Follow-on: English-only generic guard — IN FLIGHT (branch `generic-english-comments`).** Owner
+     principle (2026-09-07): Spanish only in Spain-specific modules (verifactu, workforce-es,
+     reporting=modelo-303); core/generic code must be English — identifiers, strings AND comments.
+     The guard now SCANS comments (was stripping them), leaving quotations intact (`«…»` regulatory
+     quotes + comment-scoped `` `…` `` citations); `provisioning`/`tunnel`/`payments-stripe`/`ui`/
+     `migrations`/`fiscal-none` added to the scanned set, `reporting` removed (it IS the modelo-303
+     form). The re-measurement corrected the design's premises: the identifier leak in generic
+     production was ~1 line (`fiscal-modules.ts`'s `tax:"iva"`), NOT a 428-token sweep, and the fiscal
+     code already sits behind the `@waitron/fiscal` seat — so nothing waited on Track C; the body of
+     the work was the comment rewrites (several hundred, concentrated in core/db/workforce).
+     `fiscal-modules.ts` was NOT relocated to `@waitron/composition`
+     (module-seams forbids provisioning importing it) — instead the inert tax-model slot value
+     `iva`→`vat` (see item 7). Design + decisions:
+     `docs/superpowers/specs/2026-09-07-english-only-generic-english-design.md`. Remaining follow-on
+     (out of scope of the branch): make provisioning's tests regime-agnostic against `fiscal-none` and
+     drop the production-only test exemption (spec §6 step 5).
 3. **Bookings as the first UI-bearing module** (own package, own tables, own dashboard screen):
    proves cards, permissions and i18n arriving with a module — fiscal never exercises them.
    **Decomposed SP1 → SP2** (owner 2026-09-07, full end-to-end module):
@@ -492,6 +496,18 @@ screens, `apps/server/src/modules.ts` (the maps derived from that list), and the
 6. **De-triplicate the three alta builders — [owner]** in `fiscal-verifactu/src/backend.ts`
    (`recordSale` / `recordCorrection` / `recordSubstitution`; already under *Debt → Fiscal*): needs
    the huella-invariance re-run across all three.
+7. **Tax-model system (NEW, owner 2026-09-07).** Today the `tax` slot in provisioning's
+   territory→module registry (`ES-common → {filing:"verifactu", tax:"vat"}`) is an INERT label
+   stamped into `nodes.tax_module` and copied verbatim during mirror adoption — but nothing BRANCHES
+   on it, calculates from it, or names a receipt from it (adoption copies the value; no logic depends
+   on which value it is). The owner's intended shape: the tax MODEL (VAT / GST — different calculation, different
+   receipt layout, inclusive-vs-exclusive pricing) is GENERIC and lives in `core` with helpers; the
+   fiscal module supplies the applicable RATES and the per-jurisdiction DISPLAY LABEL (`«IVA»` in
+   Spain, "VAT" in the UK — a locale property, NOT a model property: UK and ES are both the VAT
+   model). `verifactu` would just declare "model = VAT, rates = […], label = «IVA»". Prerequisite for
+   a non-ES venue that actually charges tax; `GB-vat` currently carries `tax:"none"` because no tax
+   module is wired for it yet. Surfaced while renaming `iva`→`vat` for the English-only guard
+   (`2026-09-07-english-only-generic-english-design.md` §4).
 
 **Coordination rules for the three sessions** (each paid for already, CLAUDE.md §2/§4):
 

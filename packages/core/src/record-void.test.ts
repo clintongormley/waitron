@@ -246,7 +246,7 @@ describe("recordVoid — nothing is ever edited", () => {
 
 describe("recordVoid — numbering", () => {
   it("allocates no invoice number", async () => {
-    // The anulación carries the ANNULLED invoice's identity (IDFacturaAnulada), not an identity of
+    // The annulment carries the ANNULLED invoice's identity (`IDFacturaAnulada`), not an identity of
     // its own. Allocating here would burn a number for a record with nowhere to put it, leaving a
     // permanent series gap per void.
     const backend = new FakeFiscalBackend(suite.db);
@@ -266,9 +266,9 @@ describe("recordVoid — numbering", () => {
   });
 
   it("permanently burns the annulled invoice number", async () => {
-    // Findings §7, via spec §7: after an anulación, resending an alta under the same number STILL
-    // returns AEAT error 3000 — record identity is IDEmisorFactura + NumSerieFactura +
-    // FechaExpedicionFactura, and annulling does not free the triple. It is the same rule that
+    // Findings §7, via spec §7: after an annulment, resending a sale record under the same number STILL
+    // returns AEAT error 3000 — record identity is `IDEmisorFactura` + `NumSerieFactura` +
+    // `FechaExpedicionFactura`, and annulling does not free the triple. It is the same rule that
     // forbids reusing a number for a test invoice.
     //
     // Enforced locally because the alternative is discovering it as a rejected record and a
@@ -300,7 +300,7 @@ describe("recordVoid — numbering", () => {
           issuedAt: BASE.toISOString(),
           issuedOffsetMinutes: 60,
           total: "1.00",
-          // The filed per-rate desglose; `[]` — supplied so the insert reaches the
+          // The filed per-rate breakdown; `[]` — supplied so the insert reaches the
           // duplicate-invoice-number unique violation (23505) under test rather than tripping the
           // column's own NOT NULL (23502) first.
           vatBreakdown: [],
@@ -333,7 +333,7 @@ describe("recordVoid — guards", () => {
   });
 
   it("chains nothing on a rejected second void", async () => {
-    // The unique violation must fire BEFORE the module builds and chains an anulación, or a
+    // The unique violation must fire BEFORE the module builds and chains an annulment, or a
     // rejected void still consumes chain work and the rollback has to unwind it. Ordering is what
     // this asserts, not just the outcome.
     //
@@ -478,7 +478,7 @@ describe("recordVoid — atomicity", () => {
     // uncovered, a future refactor that split those two writes across separate transactions would
     // pass every OTHER test in this file — none of them fails the fiscal step AFTER the projection
     // insert has already run — while producing a corrupt half-void in production: a `sale_voids`
-    // row appended with no anulación behind it.
+    // row appended with no annulment behind it.
     const fake = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(fake);
     const exploding = wrapBackend(fake, {
@@ -490,7 +490,7 @@ describe("recordVoid — atomicity", () => {
     await expect(voidSale(exploding, saleId)).rejects.toThrow("simulated fiscal backend outage");
 
     expect(await countRows("sale_voids")).toBe(0);
-    // No anulación either: the fake's own ledger must still show only the alta, never a void.
+    // No annulment either: the fake's own ledger must still show only the sale record, never a void.
     const records = await fake.recordsFor(nodeId);
     expect(records.map((r) => r.kind)).toEqual(["sale"]);
   });
@@ -498,7 +498,7 @@ describe("recordVoid — atomicity", () => {
 
 describe("recordVoid — no fiscal condition blocks a void", () => {
   it("completes the void when chain verification fails", async () => {
-    // Same rule as the sale path. An anulación is a registro de facturación like any other, so
+    // Same rule as the sale path. An annulment is a fiscal record like any other, so
     // art. 7.i applies to it — and so does «NUNCA debe interrumpirse». Blocking a void on a chain
     // error would leave staff unable to correct the very sale the incident concerns.
     //

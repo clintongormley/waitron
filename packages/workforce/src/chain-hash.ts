@@ -49,7 +49,7 @@ export interface EntryHashInput {
    * sets both to the same person. */
   correctionActorId: string | null;
   /** The predecessor's `entry_hash` — null (hashed as empty) for the genesis entry, exactly as the
-   * fiscal huella hashes an empty predecessor for `PrimerRegistro`. */
+   * fiscal fingerprint hashes an empty predecessor for `PrimerRegistro`. */
   prevEntryHash: string | null;
 }
 
@@ -109,7 +109,7 @@ function canonicalString(input: EntryHashInput): string {
   ]);
 }
 
-/** SHA-256 over the UTF-8 canonical string, uppercase hex — the `computeHuella` shape from huella.ts. */
+/** SHA-256 over the UTF-8 canonical string, uppercase hex — the `computeHuella` shape from `huella.ts`. */
 export function computeEntryHash(input: EntryHashInput): string {
   return createHash("sha256").update(canonicalString(input), "utf8").digest("hex").toUpperCase();
 }

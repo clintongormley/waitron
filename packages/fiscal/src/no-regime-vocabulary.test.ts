@@ -35,9 +35,11 @@ describe("the source glob itself", () => {
 
 /**
  * Blanks `/* ... *\/` block comments to equivalent whitespace (preserving line numbers) and drops
- * trailing `// ...` line comments, mirroring packages/db/src/english-only.ts's
- * `blankBlockComments`/`dropLineComment` helpers exactly — that file already solved the problem
- * this one has: a legitimate citation of the regime's own authority inside a COMMENT (`clock.ts`'s
+ * trailing `// ...` line comments. It STRIPS comments because its forbidden set is ENGLISH regime
+ * vocabulary a comment legitimately cites — unlike packages/db/src/english-only.ts, which since
+ * 2026-09-07 SCANS comment prose and blanks only quotations (Spanish must not appear in a generic
+ * comment at all, whereas the English word `chain` must be allowed to). The problem here: a
+ * legitimate citation of the regime's own authority inside a COMMENT (`clock.ts`'s
  * "AEAT appears to serve the value dynamically", explaining why `degradedAfterSeconds` has no
  * hardcoded default) must not trip a vocabulary guard, while the same word used as a real
  * identifier must still fail it. Before this function existed, the guard scanned raw file text

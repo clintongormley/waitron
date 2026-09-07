@@ -106,7 +106,7 @@ describe("working_orders state machine (enforce_transition)", () => {
 
   it("permits open → placed, placed → settled, and open → open (label edit)", async () => {
     const id = await open();
-    // open → open: a label edit keeps status open. 'Table 4' rather than the design's 'Mesa 4' —
+    // open → open: a label edit keeps status open. 'Table 4' rather than the design's `Mesa 4` —
     // `mesa` is in english-only.ts's SPANISH_WORDS, which scans string literals in this file too.
     await asApp((tx) =>
       tx.execute(sql`update working_orders set label = 'Table 4' where id = ${id}`),

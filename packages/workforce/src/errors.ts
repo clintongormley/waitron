@@ -34,7 +34,7 @@ declare module "@waitron/shared" {
      * losing the race to CREATE the chain head (SQLSTATE 23505 on `time_entries_chain_position_uq`)
      * — several tills at one location racing the very first append, the one window the head-row lock
      * cannot cover. `attendance.*`, NOT `chain.*`: `chain.*` is owned by packages/fiscal-verifactu
-     * for the fiscal encadenamiento (grepped — never renamed once shipped), and from the caller's
+     * for the fiscal chaining (grepped — never renamed once shipped), and from the caller's
      * side this is a fact about an attendance append that could not complete, not about the fiscal
      * chain. Keyed by `locationId` (the chain key) with the retry count, matching fiscal
      * `chain.append_contention`'s shape. */

@@ -373,7 +373,7 @@ async function mirror(): Promise<{
       standby,
       nodeName: "cloud",
       filingModule: "verifactu",
-      taxModule: "iva",
+      taxModule: "vat",
       modules: ALL_MODULES,
       reserved: {
         modules: { "fiscal-verifactu": { nif, idSistemaInformatico: "W1", numeroInstalacion: 7 } },

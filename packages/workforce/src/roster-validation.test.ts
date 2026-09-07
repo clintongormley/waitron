@@ -127,10 +127,10 @@ describe("validateRoster — inter-shift rest (art. 34.3)", () => {
   });
 
   it("does not flag a same-day split shift under a real inter-shift floor", () => {
-    // A turno partido — 12:00–16:00 then 20:00–24:00 — is ONE jornada with an intra-day break, NOT
-    // two jornadas 4h apart. art. 34.3's minimum rest is between working DAYS, so the 16:00→20:00
+    // A split shift — 12:00–16:00 then 20:00–24:00 — is ONE working day with an intra-day break, NOT
+    // two working days 4h apart. art. 34.3's minimum rest is between working DAYS, so the 16:00→20:00
     // gap must not raise rest_too_short even under the full 12h (720-min) floor. This is the case the
-    // former consecutive-pair logic got wrong (it hid because the turno tests set the floor to 0).
+    // former consecutive-pair logic got wrong (it hid because the split-shift tests set the floor to 0).
     const breaches = validateRoster(
       [
         shift("p1", "2026-01-05T12:00:00Z", "2026-01-05T16:00:00Z"),
@@ -142,7 +142,7 @@ describe("validateRoster — inter-shift rest (art. 34.3)", () => {
   });
 
   it("measures inter-workday rest from the LAST shift of one day to the FIRST of the next", () => {
-    // Day D is a split shift ending 24:00; day D+1 starts 06:00 → 6h inter-jornada rest, under 12h.
+    // Day D is a split shift ending 24:00; day D+1 starts 06:00 → 6h inter-workday rest, under 12h.
     // The breach must name the LATE shift (20:00–24:00) as the previous shift — proving the rest is
     // measured from the DAY'S last end, and the intra-day 16:00→20:00 gap is ignored.
     const breaches = validateRoster(
@@ -300,8 +300,8 @@ describe("validateRoster — max weekly minutes (art. 34.1)", () => {
 });
 
 describe("validateRoster — annual overtime cap (art. 35.2)", () => {
-  // Overtime accrues per day as the minutes beyond the ordinary daily maximum (art. 35.1: horas
-  // extraordinarias are those over the máximum ordinary jornada), summed across the roster.
+  // Overtime accrues per day as the minutes beyond the ordinary daily maximum (art. 35.1: overtime
+  // hours are those over the maximum ordinary working time), summed across the roster.
   const ruleset = makeRuleset({ annualOvertimeCapHours: 2, maxOrdinaryDailyMinutes: 540 });
 
   it("flags a person whose summed daily overtime exceeds the cap", () => {

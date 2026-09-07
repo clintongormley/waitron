@@ -85,7 +85,7 @@ describe("applyVenue", () => {
     // The node carries the resolved modules.
     const node = await suite.db.execute<{ filing_module: string; tax_module: string }>(sql`
       select filing_module, tax_module from nodes where id = ${result.nodeId}`);
-    expect(node.rows[0]).toEqual({ filing_module: "verifactu", tax_module: "iva" });
+    expect(node.rows[0]).toEqual({ filing_module: "verifactu", tax_module: "vat" });
 
     // registro_sif.nif came from the tenant's tax_id, never an argument. Read by NODE: the SIF row is
     // the fiscal module's seed's doing now, and `seeded` carries only its one-line report.
@@ -341,7 +341,7 @@ describe("applyVenue", () => {
         dayCutover: "06:00:00",
       },
       { kind: "create-till", name: "Caja 1" },
-      { kind: "create-node", name: "Mostrador", filingModule: "verifactu", taxModule: "iva" },
+      { kind: "create-node", name: "Mostrador", filingModule: "verifactu", taxModule: "vat" },
       { kind: "seed-module", module: "fiscal-verifactu", summary: "s" },
       { kind: "create-series", code: "A", purpose: "standard" },
       { kind: "create-series", code: "A", purpose: "rectificative" }, // same code ⇒ dropped
@@ -379,7 +379,7 @@ describe("applyVenue", () => {
         timeZone: "Europe/Madrid",
         dayCutover: "06:00:00",
       },
-      { kind: "create-node", name: "Mostrador", filingModule: "verifactu", taxModule: "iva" },
+      { kind: "create-node", name: "Mostrador", filingModule: "verifactu", taxModule: "vat" },
       { kind: "seed-module", module: "fiscal-verifactu", summary: "s" },
       { kind: "create-series", code: "A", purpose: "standard" },
     ];
@@ -445,7 +445,7 @@ describe("applyVenue", () => {
             kind: "create-node",
             name: "Mostrador",
             filingModule: "verifactu",
-            taxModule: "iva",
+            taxModule: "vat",
           } as VenueAction,
         ],
         message: "applyVenue: create-node before create-location",

@@ -17,7 +17,7 @@ const BOGUS_PRODUCT = "99999999-9999-4999-8999-999999999999";
 const AT = "2026-07-20T19:20:30+00:00";
 // Café solo / Cafè sol is this package's placeholder description (orders.test.ts, sales.test.ts):
 // the trigger checks description KEYS against the venue's invoice_locales, and these two literals
-// already pass english-only.ts's SPANISH_WORDS guard where "linea"/"venta" would not.
+// already pass english-only.ts's SPANISH_WORDS guard where `linea`/`venta` would not.
 const DESCRIPTIONS_A = JSON.stringify({ es: "Café solo", ca: "Cafè sol" });
 
 // Captured at seed time — the ids the raw inserts below need for tenant-consistent FKs.

@@ -18,7 +18,7 @@ import { seedVenue } from "../test/fixtures.js";
 
 /**
  * The end-to-end proof of the catalogue slice's central seam: catalogue data alone → the sale's
- * lines, `total` and VAT desglose. It seeds a venue and a catalogue, reads the sellable products
+ * lines, `total` and VAT breakdown. It seeds a venue and a catalogue, reads the sellable products
  * with `listAvailableProducts`, prices a basket with `priceBasket`, and hands the resulting
  * `{ lines, total, vatBreakdown }` straight to `@waitron/core`'s `recordSale`. Nothing here computes
  * a price or a breakdown by hand — every fiscal figure originates in the catalogue and flows through
@@ -46,7 +46,7 @@ const suite = usePgliteDb({
 
 /**
  * A `FakeFiscalBackend` that records the `SaleForFiscalRecord` its `recordSale` was last handed, so
- * the test can assert on the total and desglose that actually crossed the fiscal boundary.
+ * the test can assert on the total and breakdown that actually crossed the fiscal boundary.
  *
  * **Realisation of the brief's `fakeBackend.lastSale`.** The base `FakeFiscalBackend`
  * (`@waitron/fiscal/src/testing/fake-backend.js`) has no `lastSale` affordance and does not persist
@@ -137,7 +137,7 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
       });
     });
 
-    // The backend received the pricing's own `total` and desglose VERBATIM — recordSale filed the
+    // The backend received the pricing's own `total` and breakdown VERBATIM — recordSale filed the
     // supplied difference-method breakdown rather than re-deriving one from `lines`. (If recordSale
     // ignored the supplied breakdown and derived its own, the captured tax would be 0.73, not 0.72,
     // and this `toEqual` would fail — the RED this seam is proven against.)

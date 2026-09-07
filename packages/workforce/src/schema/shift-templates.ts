@@ -29,7 +29,7 @@ export const shiftTemplates = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     tenantId: uuid("tenant_id").notNull(),
-    /** The centro de trabajo the template's shifts are scheduled at. */
+    /** The workplace the template's shifts are scheduled at. */
     locationId: uuid("location_id").notNull(),
     /** A human label for the slot (e.g. "Evening bar"). */
     label: text("label").notNull(),

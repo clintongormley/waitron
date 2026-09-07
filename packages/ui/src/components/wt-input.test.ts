@@ -5,12 +5,12 @@ import "./wt-input.js";
 afterEach(cleanup);
 
 test("renders its label", async () => {
-  const el = await mount('<wt-input label="Peso"></wt-input>');
-  expect(el.shadowRoot!.querySelector("label")?.textContent?.trim()).toBe("Peso");
+  const el = await mount('<wt-input label="Weight"></wt-input>');
+  expect(el.shadowRoot!.querySelector("label")?.textContent?.trim()).toBe("Weight");
 });
 
 test("associates the label with the input so it has an accessible name", async () => {
-  const el = await mount('<wt-input label="Peso"></wt-input>');
+  const el = await mount('<wt-input label="Weight"></wt-input>');
   const label = el.shadowRoot!.querySelector("label")!;
   const input = el.shadowRoot!.querySelector("input")!;
   expect(input.id).not.toBe("");
@@ -18,8 +18,8 @@ test("associates the label with the input so it has an accessible name", async (
 });
 
 test("gives each instance a unique id so labels never collide", async () => {
-  const a = await mount('<wt-input label="Peso"></wt-input>');
-  const b = await mount('<wt-input label="Precio"></wt-input>');
+  const a = await mount('<wt-input label="Weight"></wt-input>');
+  const b = await mount('<wt-input label="Price"></wt-input>');
   const inputA = a.shadowRoot!.querySelector("input")!;
   const inputB = b.shadowRoot!.querySelector("input")!;
   expect(inputA.id).not.toBe(inputB.id);

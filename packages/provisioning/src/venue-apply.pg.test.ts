@@ -147,7 +147,7 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
     });
 
     expect(counts.rows[0]).toEqual({ tenants: 1, nodes: 1, series: 2, sif: 1 });
-    expect(node.rows[0]).toEqual({ filing_module: "verifactu", tax_module: "iva" });
+    expect(node.rows[0]).toEqual({ filing_module: "verifactu", tax_module: "vat" });
     // The SIF's nif came from the tenant's tax_id, read inside the transaction — never an argument.
     expect(sif.rows[0]?.nif).toBe("B12345678");
     // Exactly the three starter profiles, es-ES names (this venue's primary invoice locale), each with

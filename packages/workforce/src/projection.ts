@@ -10,19 +10,19 @@
  * against a real-role Postgres.
  *
  * Overtime has TWO lawful readings under Spanish labour law, and the code returns BOTH rather than
- * choosing (which one binds is convenio/contract-dependent — an asesor-laboral decision, not a code
+ * choosing (which one binds is collective-agreement/contract-dependent — an asesor-laboral decision, not a code
  * decision; see `summarisePeriod` and the plan's advisor items):
  *
  *   - **Daily-accrual** (the reasoning attributed to ET art. 35): a day worked over its ordinary
- *     target is an *hora extraordinaria* THAT DAY, and a shorter later day does not cancel it. So
+ *     target is an overtime hour THAT DAY, and a shorter later day does not cancel it. So
  *     overtime is `Σ over days of max(0, worked(day) − dailyTarget(day))`.
- *   - **Period-net** (the reasoning attributed to ET art. 34.2, *distribución irregular de la
- *     jornada*): hours may net out across days within a reference period — lawful only under a
- *     convenio or the default annual-jornada allowance. Overtime is `max(0, totalWorked −
+ *   - **Period-net** (the reasoning attributed to ET art. 34.2, «distribución irregular de la
+ *     jornada»): hours may net out across days within a reference period — lawful only under a
+ *     collective agreement or the default annual-working-time allowance. Overtime is `max(0, totalWorked −
  *     totalContracted)` over the period.
  *
  * These are legal-reasoning attributions to guide the model, NOT a legal opinion; the binding rule
- * for a given employment is convenio-driven (D2 / employment terms).
+ * for a given employment is collective-agreement-driven (D2 / employment terms).
  */
 
 /** The clock-event kinds a shift is built from, plus `correction` (Slice 3) — an append row that
@@ -88,11 +88,11 @@ export interface WorkSession {
 }
 
 /** One day's worked-vs-contracted line, exposed so any overtime rule — including future
- * convenio-specific ones — is DERIVABLE from the data rather than baked into this module. */
+ * collective-agreement-specific ones — is DERIVABLE from the data rather than baked into this module. */
 export interface DailyWorkTotal {
   /** The worker's LOCAL calendar day. */
   workDate: string;
-  /** All the day's sessions summed (a turno partido has more than one), so the daily target is
+  /** All the day's sessions summed (a split shift has more than one), so the daily target is
    * compared against the whole day, not each session. */
   workedMinutes: number;
   /** The day's ordinary target — a floor-scope default today (`dailyContractedTargetMinutes`). */
@@ -109,10 +109,10 @@ export type OvertimeModel = "daily-accrual" | "period-net";
  * a per-day floor-scope default), so they are supplied separately and may not be mutually
  * derivable. */
 export interface ContractedTerms {
-  /** The period-net baseline: ordinary jornada scaled across the whole pay period. */
+  /** The period-net baseline: ordinary working time scaled across the whole pay period. */
   periodMinutes: number;
   /** One ordinary day's target — the daily-accrual baseline. A documented default via
-   * `dailyContractedTargetMinutes`; D2 scheduling/convenio_config refines it per employment. */
+   * `dailyContractedTargetMinutes`; D2 scheduling/`convenio_config` refines it per employment. */
   dailyTargetMinutes: number;
 }
 
@@ -130,7 +130,7 @@ export interface PeriodSummary {
   /** `max(0, workedMinutes − contractedMinutes)` — the period-net model (art. 34.2). */
   periodNetOvertimeMinutes: number;
   /** The headline figure selected by `summarisePeriod`'s `headlineModel` parameter. NOT
-   * authoritative — the binding model is convenio-driven (asesor-laboral). */
+   * authoritative — the binding model is collective-agreement-driven (asesor-laboral). */
   overtimeMinutes: number;
   /** The per-day worked-vs-contracted lines, ascending by `workDate`. */
   days: DailyWorkTotal[];
@@ -155,8 +155,8 @@ function localDate(eventAt: string, offsetMinutes: number): string {
 /**
  * Renders an instant as its LOCAL wall-clock time with an explicit offset, e.g.
  * `2026-01-06T00:30:00+01:00` — the sibling of `localDate` for a full timestamp. The part before the
- * offset is the concrete local time a human reads (art. 34.9 requires "el horario concreto de inicio
- * y finalización"); the `±HH:MM` offset keeps the instant recoverable and disambiguates the DST
+ * offset is the concrete local time a human reads (art. 34.9 requires «el horario concreto de inicio
+ * y finalización»); the `±HH:MM` offset keeps the instant recoverable and disambiguates the DST
  * fall-back hour (the same wall-clock time appears once at +02:00 and once at +01:00).
  *
  * Computed as `instant + offsetMinutes`, read back as UTC — the offset is captured PER EVENT, so a
@@ -308,23 +308,23 @@ export function projectWorkSessions(entries: readonly TimeEntryRecord[]): WorkSe
 }
 
 /**
- * One ordinary day's contracted target, derived as the contracted weekly jornada divided by the
+ * One ordinary day's contracted target, derived as the contracted weekly working time divided by the
  * number of ordinary working days in the week.
  *
  * `workingDaysPerWeek` is now a PARAMETER, not a module constant: it comes from the resolved
  * `WorkTimeRuleset` (D2 `convenio_config.working_days_per_week`, default 5 — a Mon–Fri week — set on
  * the config row, no longer baked in here). The former `DEFAULT_WORKING_DAYS_PER_WEEK = 5` is now
- * that column's default, so a default config row reproduces the old value exactly; a convenio with a
+ * that column's default, so a default config row reproduces the old value exactly; a collective agreement with a
  * different working week gets a different target without a code change.
  *
- * Deliberately NOT hard-coded convenio numbers (that would misrepresent the law and trip the
+ * Deliberately NOT hard-coded collective-agreement numbers (that would misrepresent the law and trip the
  * english-only guard on Spanish labour tokens): only a division by a caller-supplied denominator.
  */
 export function dailyContractedTargetMinutes(
   contractedMinutesPerWeek: number,
   workingDaysPerWeek: number,
 ): number {
-  // Defence in depth: convenio_config's `working_days_per_week` CHECK already pins this to 1..7, but
+  // Defence in depth: `convenio_config`'s `working_days_per_week` CHECK already pins this to 1..7, but
   // this helper is on the public barrel, so a caller reaching it another way must not silently get
   // Infinity/NaN — a 0, negative, or NaN denominator would corrupt the overtime target. `> 0` rejects
   // all three at once (NaN > 0 is false). A plain Error, not a registered code: this is a
@@ -341,7 +341,7 @@ export function dailyContractedTargetMinutes(
  * Summarises a pay period, reporting BOTH overtime models plus the per-day breakdown.
  *
  * `dailyAccrualOvertimeMinutes` sums each day's `max(0, worked − dailyTarget)` (art. 35: a day's
- * excess is an hora extraordinaria that day, never nettable against a later short day).
+ * excess is an overtime hour that day, never nettable against a later short day).
  * `periodNetOvertimeMinutes` is `max(0, totalWorked − periodMinutes)` (art. 34.2 distribución
  * irregular: hours may net out across days within a reference period). Both clamp at zero — undertime
  * is a deficit, not negative overtime.
@@ -352,7 +352,7 @@ export function dailyContractedTargetMinutes(
  * day's overtime away. (That inequality can be crossed when `periodMinutes` is scaled independently
  * of the daily targets, e.g. a 5-day-equivalent weekly baseline against a worker who worked 7 days;
  * this is precisely why BOTH figures are returned and neither is stamped "official". Which model
- * binds for a given employment is convenio/contract-driven — an asesor-laboral decision.)
+ * binds for a given employment is collective-agreement/contract-driven — an asesor-laboral decision.)
  */
 export function summarisePeriod(
   sessions: readonly WorkSession[],

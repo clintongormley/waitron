@@ -6,9 +6,9 @@ import type { WorkTimeRuleset } from "./ruleset.js";
  * CLAUDE.md §4's "pick the lighter target" makes this direct/PGlite-free unit-tested, never against a
  * real-role Postgres.
  *
- * Every threshold is READ FROM the caller-supplied `WorkTimeRuleset` — NO convenio number is
+ * Every threshold is READ FROM the caller-supplied `WorkTimeRuleset` — NO collective-agreement number is
  * hard-coded (the `no-hardcoded-margin` discipline, proved by roster-validation.no-hardcoded-limits
- * .test.ts). The engine never imports `convenio_config` or names a convenio; `packages/workforce-es`
+ * .test.ts). The engine never imports `convenio_config` or names a collective agreement; `packages/workforce-es`
  * resolves a `convenio_config` row into a `WorkTimeRuleset` and passes it in (the Spain→generic
  * boundary, plan §3.3).
  *
@@ -46,9 +46,9 @@ export type RosterBreachKind =
   | "break_owed"
   | "night_work";
 
-/** Two of a person's consecutive JORNADAS (working days) are closer together than
+/** Two of a person's consecutive WORKING DAYS are closer together than
  * `minInterShiftRestMinutes` (art. 34.3, ≥12h between working days — NOT between same-day segments of
- * a turno partido). `previousShiftId` is the shift ending the earlier jornada, `shiftId` the shift
+ * a split shift). `previousShiftId` is the shift ending the earlier working day, `shiftId` the shift
  * opening the next; `restMinutes` is the gap between them and `requiredMinutes` the floor. */
 export interface RestTooShortBreach {
   kind: "rest_too_short";
@@ -60,7 +60,7 @@ export interface RestTooShortBreach {
 }
 
 /** A person's planned minutes on one local day exceed `maxOrdinaryDailyMinutes` (art. 34.3, ≤9h).
- * A turno partido's several shifts on the same local day are summed before the comparison. */
+ * A split shift's several shifts on the same local day are summed before the comparison. */
 export interface ExceedsDailyMaxBreach {
   kind: "exceeds_daily_max";
   personId: string;
@@ -117,7 +117,7 @@ export interface BreakOwedBreach {
 }
 
 /** A planned shift whose LOCAL wall time overlaps the night window (art. 36, default 22:00–06:00) —
- * trabajo nocturno, which may owe a nocturnidad premium and carries its own limits. `nightMinutes`
+ * night work, which may owe a night-work premium and carries its own limits. `nightMinutes`
  * is the overlap; the breach fires only when it is positive. */
 export interface NightWorkBreach {
   kind: "night_work";
@@ -208,7 +208,7 @@ function byPersonSortedByStart(shifts: readonly PlannedShift[]): Map<string, Pla
   return groups;
 }
 
-/** One jornada's boundary shifts: the earliest start and latest end among a person's shifts that
+/** One working day's boundary shifts: the earliest start and latest end among a person's shifts that
  * local day, with the shift ids that carry them. */
 interface Workday {
   firstStart: string;
@@ -218,13 +218,13 @@ interface Workday {
 }
 
 /**
- * art. 34.3: the minimum rest is between JORNADAS (working days), NOT between arbitrary consecutive
- * shifts — so a same-day turno partido (e.g. 12:00–16:00 then 20:00–24:00) is ONE jornada with an
- * intra-day break and must never raise `rest_too_short`. Each shift is assigned to a jornada by the
+ * art. 34.3: the minimum rest is between WORKING DAYS, NOT between arbitrary consecutive
+ * shifts — so a same-day split shift (e.g. 12:00–16:00 then 20:00–24:00) is ONE working day with an
+ * intra-day break and must never raise `rest_too_short`. Each shift is assigned to a working day by the
  * LOCAL date of its START (`localDate`); a shift crossing midnight therefore belongs to the day it
  * STARTS — the documented choice, so a 22:00→02:00 shift's rest is measured from 02:00 as that day's
- * last end. The rest measured is: end of a jornada's LAST shift → start of the next worked jornada's
- * FIRST shift (absolute instants; the intra-day gap between a jornada's own segments is ignored).
+ * last end. The rest measured is: end of a working day's LAST shift → start of the next worked working day's
+ * FIRST shift (absolute instants; the intra-day gap between a working day's own segments is ignored).
  * `< required` breaches; exactly the minimum is legal.
  */
 function checkInterShiftRest(
@@ -239,7 +239,7 @@ function checkInterShiftRest(
       const workday = workdays.get(day);
       if (workday === undefined) {
         // `byPerson` is pre-sorted ascending by start, so the FIRST shift seen for a day-key is that
-        // jornada's earliest start — `firstStart`/`firstShiftId` are therefore set once and never
+        // working day's earliest start — `firstStart`/`firstShiftId` are therefore set once and never
         // lowered. `lastEnd` still needs the max below: an earlier-starting shift may end later (a
         // long opening shift over a short evening one), so end order is not start order.
         workdays.set(day, {
@@ -327,7 +327,7 @@ function checkWeeklyMax(
 
 /** art. 35.2: a person's total planned overtime must not exceed `annualOvertimeCapHours`. Each day
  * accrues `max(0, plannedMinutes − maxOrdinaryDailyMinutes)` (art. 35.1: hours over the maximum
- * ordinary jornada); the per-person sum is compared against the cap in minutes. `> cap` breaches. */
+ * ordinary working time); the per-person sum is compared against the cap in minutes. `> cap` breaches. */
 function checkOvertimeCap(
   dayTotals: ReadonlyMap<string, Map<string, number>>,
   ruleset: WorkTimeRuleset,
