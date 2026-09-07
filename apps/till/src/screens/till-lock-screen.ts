@@ -179,6 +179,14 @@ export class TillLockScreen extends LitElement {
   @property({ attribute: false }) serverStatuses: ServerStatus[] = [];
 
   /**
+   * The URL of the server the till is currently ON (`ServerRouter.current`), so its row can read
+   * "On: <label>" (§4.4) rather than "<label>: <state>". Empty (the default) on a till with no router
+   * marks nothing — every row then renders as "<label>: <state>". Only a CURRENT server that is also
+   * `primary` is marked; a current-but-not-primary server (the waiting case) keeps its state row.
+   */
+  @property({ attribute: false }) serverCurrent = "";
+
+  /**
    * Whether the router is WAITING for a promotion (§4.4) — no server is accepting sales right now. Drives
    * the "waiting for the standby to be promoted" suffix on the status line. The healthy single-primary
    * till (see {@link #renderServers}) shows no line at all.
@@ -329,7 +337,12 @@ export class TillLockScreen extends LitElement {
     // unreachable box, a waiting promotion) shows the line.
     if (known.length === 0) return nothing;
     if (known.length === 1 && !this.serverWaiting && known[0]?.state === "primary") return nothing;
-    const row = (s: ServerStatus) => `${s.label}: ${t(`server.${s.state}` as StringKey)}`;
+    // The server the till is ON, when it is primary, reads "On: <label>" (§4.4); every other server —
+    // including the current one when it is not primary (the waiting case) — reads "<label>: <state>".
+    const row = (s: ServerStatus) =>
+      s.url === this.serverCurrent && s.state === "primary"
+        ? `${t("server.on")} ${s.label}`
+        : `${s.label}: ${t(`server.${s.state}` as StringKey)}`;
     return html`
       <p class="servers status" role="status" data-server-status>
         ${known.map(row).join(" · ")}${

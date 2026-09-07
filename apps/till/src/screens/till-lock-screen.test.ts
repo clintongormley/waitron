@@ -425,6 +425,27 @@ describe("till-lock-screen", () => {
     expect(again).toHaveBeenCalledTimes(1);
   });
 
+  it("marks the CURRENT server with On: <label> when it is primary; others stay label: state", async () => {
+    // F7 (spec §4.4 — "On: Box · Cloud: standby"): the server the till is ON reads `On: <label>` when it
+    // is primary; every other server keeps `<label>: <state>`. BEFORE the fix every row is `label: state`
+    // and the current one is never marked, so this fails on the missing `On: box.deli.test`.
+    const statuses: ServerStatus[] = [
+      { url: "https://box.deli.test", label: "box.deli.test", state: "primary", term: 2 },
+      { url: "https://cloud.deli.test", label: "cloud.deli.test", state: "standby", term: 1 },
+    ];
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi(),
+      serverStatuses: statuses,
+      serverCurrent: "https://box.deli.test",
+      serverWaiting: false,
+    });
+    await flush(el);
+    const line = el.shadowRoot!.querySelector("[data-server-status]")!.textContent!;
+    expect(line).toContain(`${t("server.on")} box.deli.test`); // "On: box.deli.test"
+    expect(line).not.toContain(`box.deli.test: ${t("server.primary")}`); // NOT the plain state row
+    expect(line).toContain(`cloud.deli.test: ${t("server.standby")}`); // the other server unmarked
+  });
+
   it("renders nothing when no servers are known (the default — a till with no router)", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
       api: stubApi(),

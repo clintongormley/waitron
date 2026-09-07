@@ -421,6 +421,7 @@ export const en = {
   // are DATA from the server (`GET /api/products` `menus[].name`, localised at seed time), not keys here.
   "menu.switcher": "Menu",
   // Server status (till-reroute §4.4)
+  "server.on": "On:",
   "server.unknown": "checking",
   "server.unreachable": "unreachable",
   "server.standby": "standby, not promoted",
@@ -678,6 +679,7 @@ export const es: Record<StringKey, string> = {
   "table.error": "No se pudo actualizar la mesa, inténtalo de nuevo",
   "boot.error": "No se pudo cargar la caja, recarga para reintentar",
   "menu.switcher": "Menú",
+  "server.on": "Activo:",
   "server.unknown": "comprobando",
   "server.unreachable": "sin conexión",
   "server.standby": "en espera, sin promover",
