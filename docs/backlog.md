@@ -427,10 +427,29 @@ All three decisions are now taken.
    mirror → human promotion → tills reroute to the promoted cloud → the venue sells and files. A
    second LOCAL box is post-MVP; when it comes, the same adopt path over the LAN with no relay is the
    candidate (wizard mode 4 wraps it).
-3. **Promotion runbook Slice 2** — the authenticated promote endpoint + break-glass mint + the real
-   runtime admin connection (the write today uses `migrationsDatabaseUrl`); then **re-admission** of a
-   rejoined, wiped-and-restored box as the standby (R3 follow-up (b)) and the resume-at-restore marker
-   (R3 follow-up (a)).
+3. **Promotion runbook Slice 2 — the authenticated endpoint + break-glass + real admin connection:
+   LANDED #272 (2026-09-07).** `POST /management-api/promote` (mounted both modes, spec §6),
+   two-path auth (admin login `node.promote` OR an offline break-glass secret — scrypt verifier on
+   `deployment.break_glass_verifier`, minted at adopt, surfaced once in the setup UI, never
+   stored/logged), and `WAITRON_ADMIN_DATABASE_URL` (all three owner-write sites route through it,
+   fail-closed to migrations→app). A promoted cloud **sells + chains on its own reserved SIF but does
+   NOT file** until cert-distribution lands — surfaced as `awaitingFiscalCertificate` on box-status,
+   never silent (owner decision 2026-09-07: sell-now-file-later). Break-glass is authorization only —
+   the 2026-08-29 runbook §4 "unlock the key ring" job is retired (dated pointer added). Design:
+   [`2026-09-07-promote-endpoint-slice-2-design.md`](superpowers/specs/2026-09-07-promote-endpoint-slice-2-design.md);
+   plan: [`2026-09-07-promote-endpoint-slice-2.md`](superpowers/plans/2026-09-07-promote-endpoint-slice-2.md).
+   Whole-branch run-it seat (Codex) caught a build break from a concurrent `@waitron/server-kit`
+   refactor the rebase surfaced, the setup UI dropping the secret, and an awaiting-cert flag that
+   cleared on a no-work drain pass — all fixed before land.
+   **STILL OWED (this item's "then", NOT built — separate slices):** **cert distribution to a
+   promoted mirror** (re-seal `fiscal.aeat` at adopt / ship in the bundle) — the named dependency
+   that unblocks **filing** on a promoted cloud; **re-admission** of a rejoined wiped-and-restored box
+   as the standby (R3 follow-up (b)); the **resume-at-restore marker** (R3 follow-up (a)); the
+   **worker-lifecycle manager** (promote-action Slice 3 — would make mirror promotion in-process, no
+   restart); a friendly **dashboard promote UI**; and an **a11y test** for the new break-glass secret
+   panel.
+4. **Cloud-only redundancy (MVP) — brainstorm** (a) one node on a managed/HA Postgres host vs (b) a
+   second cloud node on the built mirror mechanism. (a) needs an inventory of what the server keeps
 4. **Cloud-only redundancy (MVP) — brainstorm** (a) one node on a managed/HA Postgres host vs (b) a
    second cloud node on the built mirror mechanism. (a) needs an inventory of what the server keeps
    on local disk (`writeFileAtomic` env files, `mediaDir`, the box-secret vault, backup state) and a
@@ -1692,7 +1711,7 @@ vs gated on an unbuilt foundation or an external dependency:
   disjoint series now happens at cloud **adopt** (not a separate staging step), keyed to the standby's own
   dormant nodeId. What remains is **R3** activating it (switch the runtime node id, activate the SIF, start
   the primary-only workers on promotion) + the C2a promote action — see the membership arc above.
-- **Hard-gated (leave until the gate clears):** break-glass secret mint (→ Slice 2); the **restore
+- **Hard-gated (leave until the gate clears):** break-glass secret mint (DONE — promote Slice 2, #272); the **restore
   consumer** (backup regime BR-3 — clears R3 rejoin + promote Slice 4; BR-1 producer/encryption LANDED
   #226); real cloud hosting/relay (cloud-mirror follow-ups, the T1 relay — _2026-09-05: no relay; the
   box's WireGuard link to its own cloud instance, `2026-09-05-relay-decision.md`_ — **MVP-critical since
@@ -2039,10 +2058,13 @@ the re-gating of the singleton duties onto `isSingletonPrimary` (#168) are lande
 
 - **Promote-action remaining slices** (plan:
   `docs/superpowers/plans/2026-08-29-promote-action-slice-1-local-secondary.md`), each gated on an
-  unbuilt foundation: **Slice 2** — the authenticated endpoint + break-glass auth + the real runtime
-  admin connection (gated on the break-glass mint; the write today uses `migrationsDatabaseUrl`,
-  dev-correct only); **Slice 3** — mirror→primary + the worker-lifecycle manager that starts the
-  primary-only workers on an in-process promotion (gated on reserved-SIF staging); **Slice 4** — cold
+  unbuilt foundation: **Slice 2 — LANDED #272 (2026-09-07)**: the authenticated endpoint + break-glass
+  auth (mint + scrypt verify) + the real runtime admin connection (`WAITRON_ADMIN_DATABASE_URL`,
+  fail-closed); a promoted cloud sells-but-does-not-file until cert-distribution (Track B item 3
+  above). **Slice 3** — the worker-lifecycle manager that starts the
+  primary-only workers on an in-process promotion, removing Slice 2's restart (gated on reserved-SIF
+  staging — DONE via R2 #208); mirror→primary itself landed via the membership R3b arc + Slice 2's
+  endpoint; **Slice 4** — cold
   restore (mechanism landed with SP-3d #248; remaining: the operator surface, §2 of the
   [SP-3d spec](superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md): connection rebinding,
   advertised origin, an authenticated entry); **Slice 5** — rejoin-as-secondary + the conflict watcher (gated
