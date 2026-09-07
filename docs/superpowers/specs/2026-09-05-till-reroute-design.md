@@ -1,5 +1,14 @@
 # Till reroute — design (Track B item 1)
 
+> **Built 2026-09-07.** S1–S5 landed (server truth, CORS + tenant-domain cookie, venue-wide reads, the
+> till `ServerRouter`, till behaviour); S6 — the two-node real-PG e2e
+> (`apps/server/src/till-reroute-e2e.test.ts`) + the till-side router contract
+> (`apps/till/src/api/server-router.contract.test.ts`), both pinned to
+> `apps/till/src/api/__fixtures__/node-probe.json` — is on `feat/till-reroute-s6-e2e`, pending merge. **Still owed:** §3.4's same-site cookie browser
+> receipt (plan Task 10) — an interactive Chrome + mkcert + `/etc/hosts` probe the node-`fetch` e2e does
+> not substitute for; run it manually or fold it into item 2's real-cloud proof before relying on
+> cross-subdomain cookie delivery in production. PR numbers are recorded in `docs/backlog.md` → Track B.
+
 **Date:** 2026-09-05. **Status:** design, awaiting owner review; plan follows. **Track B item 1.**
 Rests on decision (i) ([`2026-09-05-till-reroute-route-decision.md`](2026-09-05-till-reroute-route-decision.md)),
 decision (ii) (no relay), decision (iii) (registers/devices) and Track A's swap spec
@@ -238,7 +247,8 @@ Names are the document's node labels where present, else the host. A "Check agai
   loses A (killed), sits in `waiting`; then B re-booted as primary → the router moves, login on B
   re-prompts, `listHeldOrders` on B returns the tab A had opened (venue-wide reads). Failing case
   stated per step.
-- **Manual receipt (plan task 1):** the same-site cookie probe of §3.4, two hosts under one parent.
+- **Manual receipt (plan Task 10, still owed — see the Built note above):** the same-site cookie probe
+  of §3.4, two hosts under one parent.
 - Guards: `errors-reachable` (new codes, if any, import the registry); coverage bars; the
   `english-only` guard is out of scope for `apps/*` (Spanish identifiers caught by review).
 
@@ -252,7 +262,7 @@ Names are the document's node labels where present, else the host. A "Check agai
 4. **S4 — till router:** `ServerRouter`, wrapper, persistence, boot order, probe loop.
 5. **S5 — till behaviour:** the move + PIN re-prompt, `sale.unconfirmed`, status line + "check
    again", i18n.
-6. **S6 — two-process e2e** (§6) and the backlog/design pointers.
+6. **S6 — two-node e2e** (§6) and the backlog/design pointers.
 
 ## 8. Interactions
 

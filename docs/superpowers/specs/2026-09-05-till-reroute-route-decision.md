@@ -122,7 +122,12 @@ is not on the Public Suffix List (it is ours to keep off it).
   §2.1) copies every table unless a module marks it local and names `tills`, `devices` and
   `device_profiles` in its `state` publication over the WireGuard link — so this requirement is met by
   that swap, not by an outbox enrolment; the reroute build sequences after the swap slice that ships
-  the state publication, and checks `canvases` is in it._
+  the state publication, and checks `canvases` is in it._ _Pointer, 2026-09-07:_ till reroute S1–S5
+  landed and S6 is pending merge BEFORE Track A's state publication (swap S2), so
+  `devices`/`working_orders` do NOT yet replicate; S6's two-node e2e
+  (`apps/server/src/till-reroute-e2e.test.ts`) seeds the shared device + identity on BOTH nodes and the
+  open tab directly on the standby (B) to stand in for the replication, and the real state-publication
+  path remains owed by Track A before a promoted node inherits them for real.
 - The device cookie takes a `Domain` attribute only when the host is under the configured tenant
   domain; host-only otherwise (`waitron.local`, loopback dev). The operator session cookie stays
   host-only — a switch re-prompts the PIN (v1; the portable signed token of distribution §4(ii)

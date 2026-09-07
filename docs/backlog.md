@@ -324,8 +324,9 @@ All three decisions are now taken.
    7–10) LANDED #257 (2026-09-06) — origin allow-list (single-flighted, evicted nodes excluded),
    `hono/cors` on `/api/*` + `/media/*` for venue origins only, device cookie scoped to
    `WAITRON_TENANT_DOMAIN`. OWED: plan Task 10's manual same-site cookie browser receipt (needs
-   `/etc/hosts` + mkcert + interactive Chrome; the `cookieDomainFor` logic is unit-proven, S6's e2e
-   covers the browser path) — run it or fold it into S6 before relying on cross-subdomain cookie
+   `/etc/hosts` + mkcert + interactive Chrome; the `cookieDomainFor` logic is unit-proven, but S6's
+   e2e uses a node `fetch` which does NOT enforce SameSite, so it does NOT cover the browser path) —
+   run it manually or fold it into item 2's real-cloud proof before relying on cross-subdomain cookie
    delivery in production. S3 (venue-wide till reads, plan Tasks 11–12) LANDED #259 (2026-09-07) — the
    six till/KDS reads dropped the own-node filter (a promoted node inherits the venue's open tabs) and
    each read carries its own `eq(tenantId, cfg.tenantId)` now that RLS is gone; the whole-branch run-it
@@ -353,9 +354,21 @@ All three decisions are now taken.
    was shown for a preliminary save that never reached the fiscal request. Both S4 deferrals resolved:
    `state-changed` change-detection landed; `TillServer.standing` KEPT deliberately (it is the
    `GET /api/till.servers` wire type the server sends, not dead — the router deciding via
-   `acceptingSales` does not retire the field). Next: S6 (the two-process e2e, plan Tasks 21–22 —
-   also carries the S1/S2 OWED same-site cookie browser receipt, and the landing backlog/spec
-   pointers):**
+   `acceptingSales` does not retire the field). S6 (the two-node e2e, plan Tasks 21–22) BUILT (this
+   branch): `apps/server/src/till-reroute-e2e.test.ts` boots A (primary) and B (mirror) as two
+   in-process `startServer` instances on two real-PG databases — one venue, two nodes — and proves
+   across the pair the `/api/node` postures a till routes
+   on (A `acceptingSales:true`, B `:false`), the read-only gate refusing a login on the standby
+   (`node.read_only`, no device group mounted), the seeded device cookie authenticating on the selling
+   node, boot-captured `acceptingSales` staying false on a mirror flipped to primary in the DB until it
+   RESTARTS (the control where a live read and the captured one differ), and the promoted B inheriting
+   the venue's open tab tagged with the DEAD node's id via the §3.6 venue-wide read;
+   `apps/till/src/api/server-router.contract.test.ts` replays the SAME `/api/node` bodies (the shared
+   `apps/till/src/api/__fixtures__/node-probe.json`) through `ServerRouter`, so the two sides pin to one
+   contract. **STILL OWED — plan Task 10's same-site cookie browser receipt:** it needs interactive
+   Chrome + mkcert + `/etc/hosts` and the node-`fetch` e2e does NOT substitute for it (a node fetch does
+   not enforce SameSite); run it manually or fold it into item 2's real-cloud proof before relying on
+   cross-subdomain cookie delivery in production. Pointers:**
    [`2026-09-05-till-reroute-design.md`](superpowers/specs/2026-09-05-till-reroute-design.md) — the
    till FOLLOWS THE PRIMARY (probe every server, obey `acceptingSales`; no manual switch — owner
    2026-09-05; a status line + "check again" instead), server list = the membership document's

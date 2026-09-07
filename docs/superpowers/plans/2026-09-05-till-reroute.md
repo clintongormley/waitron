@@ -1727,6 +1727,13 @@ and to `es`:
 
 ## Slice S6 — the two-process contract proof (branch `feat/till-reroute-s6-e2e`)
 
+> **As built, 2026-09-07:** the `.rls.test.ts` suffix this slice was written against is gone (RLS
+> dropped #255), so the landed files are `apps/server/src/till-reroute-e2e.test.ts` (copying
+> `boot.mirror.test.ts`'s scaffolding, not `boot.mirror.rls.test.ts`) and
+> `apps/till/src/api/server-router.contract.test.ts` with `apps/till/src/api/__fixtures__/node-probe.json`.
+> The two servers run as two in-process `startServer` instances on two databases (not two OS
+> processes); the device + identity are seeded on both nodes and the open tab directly on the standby.
+
 ### Task 21: `till-reroute-e2e.rls.test.ts`
 
 **Files:**
