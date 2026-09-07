@@ -388,7 +388,18 @@ All three decisions are now taken.
    re-published — nothing refreshes this node's own entry at boot — so the chart keeps the stale
    address forever, and a node that promotes while absent from the chart appends itself
    address-less (`nextStandings`), which `routableServers` drops, so no till is told to dial it.
-2. **The cloud standby, end to end (MVP)** — the box↔cloud-instance WireGuard link (relay DECIDED
+2. **The cloud standby, end to end (MVP) — PARKED/BLOCKED (owner decisions 2026-09-07).** Both
+   original build-halves left this item: **(a) transport waits on Track A steps 2–4** — item 2 does
+   NOT build WireGuard/native replication, it consumes them once Track A lands them (verified
+   2026-09-07: both are docs-only, zero code; the live mirror transport is still
+   outbox-pull-over-HTTP-over-`@waitron/tunnel`). **(b) per-tenant cloud provisioning is NOT this
+   repo** — it belongs to **Waitron Cloud**, a separate closed-source commercial service (not
+   started): the customer signs up, Waitron Cloud spawns the instance + sets up WireGuard and hands
+   back a URL + credentials; this repo's only job is to *talk to* a provisioned instance. **(c) the
+   run-it proof will be a two-host LOCAL simulation** (repeatable, no real cloud) when built. The
+   software failover arc is already proven in-process (till-reroute S6). **Do not restart until Track A
+   steps 2–4 land AND the Waitron↔Waitron-Cloud boundary contract is settled.** Original description,
+   kept for its receipts: the box↔cloud-instance WireGuard link (relay DECIDED
    2026-09-05: none; `@waitron/tunnel`, `WAITRON_TUNNEL_*` and the tunnel-aware dispatcher are
    deleted once the link carries replication, never before — the decisions-first line above), a
    per-tenant cloud instance provisioning path (the instance also forwards the box's remote name
