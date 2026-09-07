@@ -330,8 +330,20 @@ All three decisions are now taken.
    six till/KDS reads dropped the own-node filter (a promoted node inherits the venue's open tabs) and
    each read carries its own `eq(tenantId, cfg.tenantId)` now that RLS is gone; the whole-branch run-it
    seat reproduced a cross-tenant by-id leak (getHeldOrder/abandonHeldOrder keyed on the UUID alone),
-   fixed + a new CLAUDE.md §3 rule. Next: S4 (the till `ServerRouter`, plan Tasks 13+) in its own
-   worktree, then S5–S6:**
+   fixed + a new CLAUDE.md §3 rule. S4 (the till `ServerRouter`, plan Tasks 13–16) LANDED #261
+   (2026-09-07) — `ServerRouter` probes `GET /api/node` on every venue server each round and points
+   `current` at the one accepting sales (highest term; stays put if none, no failure count),
+   `withServerTarget` retargets relative `/api/…` paths, `TillInfo` carries `nodeId`+`servers`, the
+   composition wires the router innermost with an inert `router?` on `till-app` (events are S5). The
+   whole-branch run-it seat (Codex, node probes) falsified two real defects fixed before land: the
+   default `localStorage` acquisition threw before first paint (now guarded), and overlapping
+   `probeNow()` rounds could undo a newer move (now coalesced onto one round — reachable once S5's
+   "check again" runs beside the interval); it also caught a stale plan comment claiming the
+   diagnostics trail logs a rerouted request's real URL (it logs only the masked pathname). Next:
+   S5 (react to a move: PIN re-prompt, `sale.unconfirmed`, the lock-screen status line + "check
+   again") in its own worktree, then S6 (the two-process e2e). S5 deferrals recorded during S4:
+   `TillServer.standing` is unused by the router (its `setServers` decides), and `state-changed`
+   fires every round unconditionally (fold change-detection in with the check-again listener):**
    [`2026-09-05-till-reroute-design.md`](superpowers/specs/2026-09-05-till-reroute-design.md) — the
    till FOLLOWS THE PRIMARY (probe every server, obey `acceptingSales`; no manual switch — owner
    2026-09-05; a status line + "check again" instead), server list = the membership document's
