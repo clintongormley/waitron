@@ -22,9 +22,9 @@ import { venueModuleConfig } from "./provision.js";
 import "./errors.js";
 
 // The payoff proof of the fiscal-none branch, on REAL Postgres (Testcontainers), never PGlite:
-// PGlite runs every connection as a superuser (RLS bypassed), so a "no fiscal row was written"
-// reading there is weak — the fiscal tables carry FORCE ROW LEVEL SECURITY and the write path runs
-// as the non-superuser deployment role, exactly what a superuser cannot exercise (CLAUDE.md §4). A
+// PGlite runs every connection as a table-owning superuser, so its grants are not enforced (CLAUDE.md
+// §4) — a "no fiscal row was written" reading there proves less than the same reading with the write
+// path run as the actual non-superuser deployment role, bound by the grants it really holds. A
 // GB (`GB-vat`) venue selects the `fiscal-none` slot member end-to-end: the territory resolves to
 // filing `none`, `venueModuleConfig` enables `fiscal-none` and disables `fiscal-verifactu`, and the
 // slot hands back a `NoneBackend` that records NOTHING. Ringing a sale, a void, a correction and a
@@ -178,7 +178,7 @@ async function setupGbVenue(): Promise<GbVenue> {
 }
 
 /** Run `fn` as the non-superuser app role, tenant-scoped — the exact subject the trading write path
- *  runs under (FORCE RLS applies, no superuser bypass). Opens and closes its own connection. */
+ *  runs under (bound by `app_user`'s grants, no superuser bypass). Opens and closes its own connection. */
 async function asApp<T>(tenantId: TenantId, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
   try {

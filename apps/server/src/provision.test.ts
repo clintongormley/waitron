@@ -208,7 +208,10 @@ describe("provisionVenue", () => {
     const db = ownerDb();
     const request = { environment: "preproduction" as const, venue: venueRequest(nextNif()) };
 
-    await provisionVenue({ ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir }, request);
+    await provisionVenue(
+      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
+      request,
+    );
     const afterFirst = await fiscalCounts(db);
     expect(afterFirst).toEqual({ sif: 1, series: 2, nodes: 1, registros: 0 });
 
@@ -231,7 +234,7 @@ describe("provisionVenue", () => {
     // an occupied database is refused BEFORE stamping or applyVenue, exactly as the `venue` CLI does.
     const db = ownerDb();
     await provisionVenue(
-      { ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" },
+      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     );
     const afterFirst = await fiscalCounts(db);
@@ -242,7 +245,7 @@ describe("provisionVenue", () => {
 
     // A DIFFERENT business (a fresh NIF) against the SAME database is refused as a foreign tenant.
     const error = await provisionVenue(
-      { ownerDb: db, moduleConfig: ALL_ENABLED, database: "waitron" },
+      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     ).catch((e: unknown) => e);
     expect(isAppError(error)).toBe(true);
