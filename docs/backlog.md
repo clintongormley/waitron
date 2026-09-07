@@ -566,10 +566,21 @@ screens, `apps/server/src/modules.ts` (the maps derived from that list), and the
        timezone. `CoreServices` is one shared interface every module receives whole — when a 2nd core verb is
        needed (SP2+), prefer per-module narrow required-services interfaces. `floorAnnotations` is honestly
        single-purpose (`{reservedTime}`) today — genuinely generalize only when a 2nd annotator appears.
-   - **SP2 — dashboard module-UI seat (own spec, later).** The GENERAL, reusable mechanism (owner: general
-     now) by which a module contributes a dashboard screen + i18n bundle + nav + permission gate into the
-     browser bundle without importing the server package, migrating the existing screens onto it; proven by
-     moving the bookings screen/widget/strings. Gated on SP1 (the package it hangs off).
+   - **SP2 — dashboard module-UI seat — LANDED (2026-09-07).** The general, reusable browser-module seat: a
+     module ships a `DashboardContribution` from a `./dashboard` browser sub-path (screen + nav + i18n +
+     permission gate); a browser-safe `@waitron/dashboard-modules` registry lists them (the browser mirror of
+     `ALL_MODULES`); `apps/dashboard` mounts them generically and names no module. New `@waitron/dashboard-kit`
+     holds the i18n + code-message registries + the shared request primitive lifted out of the app; `getMe` now
+     returns the user's effective `permissions` + the enabled `modules`, gating each module's nav/screen
+     (enabled ∩ permitted); `permissionsForRole` added to `@waitron/identity`. Bookings proved it —
+     screen/widget/client/strings moved out, app runtime names bookings nowhere (grep receipt), URLs
+     byte-identical (wire-pin). Guarded by `scripts/dashboard-browser-purity.test.ts` (a `./dashboard` graph
+     reaches no server code, proven by deletion) + a Vite-build backstop. Spec + plan:
+     `docs/superpowers/{specs,plans}/2026-09-07-module-bookings-sp2-dashboard-ui-seat*.md`.
+     - **Follow-ons SP2 unblocks (deferred):** migrate the other ~22 core dashboard screens onto the seat
+       incrementally; migrate core screens off the coarse `requiresManager` role gate onto permission ids now
+       that `getMe` carries the permission set. CI: bookings' browser vitest runs in the shared `test-light-a`
+       shard (Chromium in a light bin) — confirm on the PR run; a dedicated dual-mode shard is the fallback.
 4. **Control plane brainstorm — NEW (owner-added 2026-09-05).** With one tenant per database and a
    dedicated cloud instance per tenant, the only multi-tenant service Waitron will run is a small
    control plane: accounts (a customer of ours, a concept the schema does not have — a tenant is a
