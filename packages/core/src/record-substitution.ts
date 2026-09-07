@@ -345,7 +345,7 @@ export async function recordSubstitution(
   }
   /* v8 ignore stop */
 
-  // Step 7. Behind this one call the module builds the F3 fiscal record — its own next `secuencia`,
+  // Step 7. Behind this one call the module builds the F3 fiscal record — its own next `sequence number`,
   // its own fiscal fingerprint over the positive totals, `TipoFactura = F3`, the `FacturasSustituidas` block naming
   // each ticket's stored identity, and the `Destinatarios` block from `counterparty` — advances its
   // chain and inserts its pending-submission row, all on this transaction. `counterparty` is passed

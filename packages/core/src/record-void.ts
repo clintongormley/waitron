@@ -19,7 +19,7 @@ import { recordIncident } from "./incidents.js";
  * UPDATE privilege at all — `packages/db/src/schema/sales.ts`) and not an UPDATE on anything this
  * package owns either: the generic-layer projection of "this sale was voided" is an APPENDED row
  * in `sale_voids`, and the module's own annulment is an APPENDED record in its own chain, taking
- * the next `secuencia` in generation order — not a reset, and not the position of the sale record it
+ * the next `sequence number` in generation order — not a reset, and not the position of the sale record it
  * annuls (`FiscalBackend.recordVoid`'s own doc comment, `packages/fiscal/src/backend.ts`).
  *
  * The gate is INTRINSIC: this call itself demands `sale.void`, so a void cannot be performed

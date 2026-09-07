@@ -215,9 +215,9 @@ describe("appendToChain under real contention", () => {
     // through two chains keyed by node_id, so their positions live in disjoint spaces and cannot
     // collide. Both nodes race for the same sequence_no VALUES (1, 2, 3 …) at one location — the
     // exact clash the old (tenant, location) position uq forced — and with node_id in that uq none
-    // of them contend. This is what the negative control in task-3-report.md proves: drop node_id
-    // from `time_entries_chain_position_uq` and this case FAILS, because the two nodes' equal
-    // sequence_no values then collide on (tenant, location, sequence_no).
+    // of them contend. This two-node case passes only because `node_id` is in
+    // `time_entries_chain_position_uq`: drop it and the two nodes' equal sequence_no values collide
+    // on (tenant, location, sequence_no).
     const nodeB = await seedNode(suite.admin, brandTenantId(tenantId), brandLocationId(locationId));
     const perNode = WRITERS / 2;
     const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
