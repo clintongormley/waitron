@@ -297,7 +297,12 @@ describe("runPass", () => {
                 tenantsWithWork: 1,
                 skipped: [{ tenantId: TENANT, errorCode: "credentials.missing" }],
               })
-            : drainResult({ nextDueAt: SOON, tenantsWithWork: 1, batchesSent: 1, recordsSubmitted: 1 }),
+            : drainResult({
+                nextDueAt: SOON,
+                tenantsWithWork: 1,
+                batchesSent: 1,
+                recordsSubmitted: 1,
+              }),
         ),
     });
     await runPass(d, NOW); // missing → flag true

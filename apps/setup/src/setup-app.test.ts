@@ -26,14 +26,12 @@ function stubApi(overrides: Partial<Record<keyof SetupApi, unknown>> = {}): Setu
       needs: ["venue"],
     } satisfies SetupStatus),
     provision: vi.fn().mockResolvedValue({ provisioned: true, tenantId: "t-1", restarting: true }),
-    adopt: vi
-      .fn()
-      .mockResolvedValue({
-        adopted: true,
-        tenantId: "t-1",
-        breakGlassSecret: "bg-default",
-        restarting: true,
-      }),
+    adopt: vi.fn().mockResolvedValue({
+      adopted: true,
+      tenantId: "t-1",
+      breakGlassSecret: "bg-default",
+      restarting: true,
+    }),
     ...overrides,
   } as unknown as SetupApi;
 }
@@ -609,17 +607,23 @@ describe("setup-app", () => {
   // capture (or the done-screen panel) and this flips red.
   it("surfaces the break-glass secret ONCE on the done screen after a successful adopt", async () => {
     const secret = "bg-secret-once-9f3a";
-    const adopt = vi
-      .fn()
-      .mockResolvedValue({ adopted: true, tenantId: "t-1", breakGlassSecret: secret, restarting: true });
+    const adopt = vi.fn().mockResolvedValue({
+      adopted: true,
+      tenantId: "t-1",
+      breakGlassSecret: secret,
+      restarting: true,
+    });
     const el = await mountSetupApp(stubApi({ adopt }));
     adoptRequest(el);
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
     // The value itself is rendered for the operator to copy.
     expect(await screenText(el, "done", "[data-test=break-glass-secret]")).toBe(secret);
-    // Alongside the "record it now, it won't be shown again" instruction.
-    const warning = (await screenText(el, "done", "[data-test=break-glass-warning]"))?.toLowerCase();
+    // Alongside the "record it now, it won't be shown again" instruction. Whitespace is collapsed
+    // because the rendered copy wraps across lines.
+    const warning = (await screenText(el, "done", "[data-test=break-glass-warning]"))
+      ?.toLowerCase()
+      .replace(/\s+/g, " ");
     expect(warning).toContain("will not be shown again");
   });
 

@@ -132,8 +132,8 @@ export class SetupDoneScreen extends LitElement {
             ? html`<div class="break-glass" data-test="break-glass">
                 <h2>Save your break-glass code now</h2>
                 <p class="break-glass-warning" data-test="break-glass-warning">
-                  Write this down and store it offline. It is shown once and will not be shown again.
-                  You need it to promote this box if the primary is unreachable.
+                  Write this down and store it offline. It is shown once and will not be shown
+                  again. You need it to promote this box if the primary is unreachable.
                 </p>
                 <code class="break-glass-secret" data-test="break-glass-secret"
                   >${this.breakGlassSecret}</code
