@@ -29,7 +29,7 @@ import {
 } from "@waitron/db";
 import { enrolPeer } from "@waitron/sync";
 import { endorseKey, type Endorsement } from "@waitron/membership";
-import type { KeyRing } from "@waitron/credentials";
+import { tryGetCredential, type KeyRing } from "@waitron/credentials";
 import type { AdoptResult, AdoptVenueRows } from "@waitron/provisioning";
 import { enabledModules, serializeModuleConfig } from "@waitron/module";
 import { caCertPath } from "./box-secrets.js";
@@ -80,6 +80,12 @@ export interface MirrorBundle {
    * consumer until S7 wires the tunnel and Track B item 2 proves it.
    */
   wireguardPublicKey?: string;
+  /**
+   * The venue's AEAT cert, present only when the primary holds a `fiscal.aeat` credential. The
+   * mirror seals it dormant under its break-glass secret at adopt (cert-distribution design §2.1);
+   * it is never itself a filing node from this alone.
+   */
+  aeatCert?: { pfxBase64: string; passphrase: string; certKind: string };
 }
 
 /**
@@ -131,6 +137,24 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
       invoiceSeries: await tx.select().from(invoiceSeries),
     }),
   );
+
+  // The venue's AEAT cert, read generically — never through the fiscal regime, which this file
+  // never imports (CLAUDE.md §3). Absent for a venue with no `fiscal.aeat` row (a still-dormant
+  // standby, or a `fiscal-none` deployment).
+  const aeatRow = await withTenant(deps.appDb, deps.designated.tenantId, (tx) =>
+    tryGetCredential(tx, deps.ring, {
+      tenantId: brandTenantId(deps.designated.tenantId),
+      purpose: "fiscal.aeat",
+    }),
+  );
+  const aeatCert =
+    aeatRow === null
+      ? undefined
+      : {
+          pfxBase64: aeatRow.pfxBase64,
+          passphrase: aeatRow.passphrase,
+          certKind: aeatRow.certKind,
+        };
 
   const environment = await readDeploymentEnvironment(deps.appDb);
   if (environment === null) throw new AppError("mirror.not_provisioned", {});
@@ -202,5 +226,6 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
     reservedIdentity: { ...reserved, endorsement },
     moduleOverrides: serializeModuleConfig(moduleConfig),
     wireguardPublicKey: deps.wireguardPublicKey,
+    aeatCert,
   };
 }
