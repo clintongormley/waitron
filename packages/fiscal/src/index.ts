@@ -15,6 +15,7 @@ export type {
   FiscalDutyDeps,
   FiscalDutyLog,
 } from "./contribution.js";
+export { emptyDrainResult } from "./backend.js";
 export type {
   AckState,
   Counterparty,

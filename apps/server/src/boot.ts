@@ -1925,7 +1925,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
                   ring,
                   environment: config.environment,
                   skipRetryMs: config.skipRetryMs,
-                  log: (l, e, f) => log(l, e, f),
+                  log,
                 },
                 at2,
               ),

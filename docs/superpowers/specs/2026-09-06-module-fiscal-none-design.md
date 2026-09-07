@@ -92,8 +92,9 @@ needs its own agreement guard.)
 
 **The territory registry gains one no-regime territory.** `resolveFiscalModules`
 (`packages/provisioning/src/fiscal-modules.ts`) adds a `GB-…` entry → `{ filing: "none", tax: "none" }`.
-`tax` is recorded on `nodes.tax_module` and has no consumer today (traced: only stamped, never read),
-so `"none"` is a placeholder, not a UK VAT decision. The territory string is country-prefixed
+`tax` is recorded on `nodes.tax_module` and is copied during mirror adoption (`apps/server/src/adopt.ts`,
+`reserved-identity.ts`) but is not used to CALCULATE tax anywhere today, so `"none"` is a placeholder,
+not a UK VAT decision. The territory string is country-prefixed
 (`venue-plan.ts` requires `fiscalTerritory` start with `<country>-`), so a UK venue is `country: "GB"`,
 `fiscalTerritory: "GB-…"`. The exact suffix is a naming detail settled in the plan.
 

@@ -7,14 +7,8 @@ import {
   type DeploymentEnvironment,
 } from "@waitron/db";
 import { assertPasswordLength, assertPinLength, hashPassword, hashPin } from "@waitron/identity";
-import {
-  enabledModules,
-  parseModuleConfig,
-  selectFiscalModule,
-  type ModuleConfig,
-  type WaitronModule,
-} from "@waitron/module";
-import { resolveFiscalModules } from "./fiscal-modules.js";
+import { enabledModules, type ModuleConfig, type WaitronModule } from "@waitron/module";
+import { venueFiscalSelection } from "./venue-fiscal.js";
 import { assertIdentifier } from "./identifiers.js";
 import { applyInstance, withDatabase, type TargetConnection } from "./instance-apply.js";
 import { describeAction, planInstance, type InstanceAction } from "./instance-plan.js";
@@ -471,16 +465,16 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
         passwordHash: hashPassword(adminPassword),
       },
     };
-    // Resolve the fiscal slot from the territory (authoritative, design §4): enable the module whose
-    // contribution id is `resolveFiscalModules(territory).filing`, disable every other slot member. The
-    // CLI has no operator `modules.json`, so the base is empty. `resolveFiscalModules` throws
-    // `fiscal.regime_not_implemented` for an unimplemented territory — the same code `planVenue` raises
-    // below (and before any admin connection). `modules` is the ENABLED subset, so a no-regime (`GB-…`)
-    // venue drops `fiscal-verifactu` and its SIF seed is never planned.
-    const fiscalConfig = selectFiscalModule(
+    // Resolve the fiscal slot from the territory (authoritative, design §4) through the shared
+    // `venueFiscalSelection` seam: it enables the module whose contribution id is the territory's
+    // `filing`, disables every other slot member, and throws `fiscal.regime_not_implemented` for an
+    // unimplemented territory — the same code `planVenue` raises below (and before any admin
+    // connection). The CLI has no operator `modules.json`, so the base is empty (the seam's default).
+    // `modules` is the ENABLED subset, so a no-regime (`GB-…`) venue drops `fiscal-verifactu` and its
+    // SIF seed is never planned.
+    const { config: fiscalConfig } = venueFiscalSelection(
       deps.modules,
-      resolveFiscalModules(request.location.fiscalTerritory).filing,
-      parseModuleConfig({}, deps.modules),
+      request.location.fiscalTerritory,
     );
     const modules = enabledModules(deps.modules, fiscalConfig);
 

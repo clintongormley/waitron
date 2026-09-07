@@ -943,7 +943,10 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
     `fiscal-none`, where an implementation with no transport makes that seat's shape obvious rather than
     guessed (spec §12). `scripts/module-seams.test.ts` (root project, reads text) pins the boundary and
     allowlists the deferred files WITH their reason, so the deferral is a ratchet: `fiscal-none` shrinks
-    the list, nothing grows it. Spec:
+    the list, nothing grows it. _(2026-09-07: discharged by fiscal-none — `boot.ts`'s `drain`,
+    `aeat-transport.ts`, `aeat-credential.ts`, the wizard's cert gate and `FiscalBackend.reconcile` are
+    all behind seats now; `apps/server` is regime-free and the `DEFERRED_RUNTIME_PASS` allowlist is
+    empty.)_ Spec:
     [sp-3c](superpowers/specs/2026-09-05-module-sp3c-gated-provisioning-design.md); plan:
     [sp-3c plan](superpowers/plans/2026-09-05-module-sp3c-gated-provisioning.md).
     - *Left behind, not gaps (recorded at land):* (a) **a `provisionTestVenue(db, overrides)` helper

@@ -6,7 +6,7 @@ import {
   deriveTenantId,
   planVenue,
   readTenantIdentities,
-  resolveFiscalModules,
+  venueFiscalSelection,
   type VenueRequest,
   type VenueResult,
 } from "@waitron/provisioning";
@@ -15,7 +15,6 @@ import {
   disabledProvisionOnly,
   enabledModules,
   fiscalSlot,
-  selectFiscalModule,
   type ModuleConfig,
 } from "@waitron/module";
 import { ALL_MODULES } from "./modules.js";
@@ -25,17 +24,15 @@ import "./errors.js";
 /**
  * The ModuleConfig a venue provisions and boots under: the operator `base` with the fiscal slot forced
  * onto the module the venue's TERRITORY selects (the territory is authoritative for the slot — §4 of
- * the fiscal-none design). `resolveFiscalModules(territory).filing` returns a contribution `id`;
- * `selectFiscalModule` enables the descriptor carrying it and disables every other slot member, so the
- * config `provisionVenue` receives already resolves to exactly one fiscal module. Throws
- * `fiscal.regime_not_implemented` for an unimplemented territory — the same code `planVenue` raises,
- * only earlier (both before any mint). The composition roots (boot's provision binding, the CLI) call
- * this; `provisionVenue` itself never re-derives, so its slot check still refuses a caller that hands
- * it an unresolved config (the synthetic two-member tests).
+ * the fiscal-none design). Delegates to `venueFiscalSelection` — the ONE seam that derives both the
+ * territory's `ModuleConfig` and its fiscal contribution — and keeps only the config half: this is the
+ * boot-facing helper, `ALL_MODULES` is its module set, and `provisionVenue` never re-derives, so its
+ * slot check still refuses a caller that hands it an unresolved config (the synthetic two-member
+ * tests). Throws `fiscal.regime_not_implemented` for an unimplemented territory — the same code
+ * `planVenue` raises, only earlier (both before any mint).
  */
 export function venueModuleConfig(base: ModuleConfig, fiscalTerritory: string): ModuleConfig {
-  const filing = resolveFiscalModules(fiscalTerritory).filing;
-  return selectFiscalModule(ALL_MODULES, filing, base);
+  return venueFiscalSelection(ALL_MODULES, fiscalTerritory, base).config;
 }
 
 export interface ProvisionRequest {

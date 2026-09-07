@@ -1,7 +1,7 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { VenueRequest, VenueResult } from "@waitron/provisioning";
-import { resolveFiscalModules } from "@waitron/provisioning";
+import { venueFiscalSelection } from "@waitron/provisioning";
 import { ALL_MODULES } from "@waitron/composition";
 import { hashPassword, hashPin, normalizeAndValidateEmail } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
@@ -371,14 +371,13 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         const environment: DeploymentEnvironment = mode === "live" ? "production" : "preproduction";
 
         // Resolve the fiscal regime the REQUEST's territory picks (the box's enabled set is not yet
-        // written at setup), and reach its provision-time secret only through the `provisioningSecret`
-        // seat — the host holds the opaque blob and the vault ring but not the regime's shape, so it
-        // imports no regime package. `resolveFiscalModules` throws `fiscal.regime_not_implemented` for
-        // an unimplemented territory, the SAME code `planVenue` would raise inside `provision`, only
-        // earlier (both before any mint). A regime with no `provisioningSecret` seat (e.g. a
-        // files-nothing regime) leaves `expected` false.
-        const filing = resolveFiscalModules(venue.location.fiscalTerritory).filing;
-        const contribution = ALL_MODULES.find((m) => m.fiscal?.id === filing)?.fiscal;
+        // written at setup) through the shared `venueFiscalSelection` seam, and reach its provision-time
+        // secret only through the `provisioningSecret` seat — the host holds the opaque blob and the
+        // vault ring but not the regime's shape, so it imports no regime package. The seam throws
+        // `fiscal.regime_not_implemented` for an unimplemented territory, the SAME code `planVenue`
+        // would raise inside `provision`, only earlier (both before any mint). A regime with no
+        // `provisioningSecret` seat (e.g. a files-nothing regime) leaves `expected` false.
+        const { contribution } = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
         const secret = contribution?.provisioningSecret;
         const expected = secret?.required(environment) ?? false;
         const present = body.aeatCert !== undefined;

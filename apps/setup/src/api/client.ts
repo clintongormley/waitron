@@ -70,7 +70,7 @@ export interface LocationDraft {
 /**
  * The AEAT certificate, collected only for a live ES-common venue. `pfxBase64` is the PFX bundle as
  * canonical base64 (the browser reads the uploaded file to base64); `certKind` is the credential type
- * (`isCertKind`-checked server-side, `packages/fiscal-verifactu/src/provisioning-secret.ts`). OPTIONAL on the request — the
+ * (`isCertKind`-checked server-side, `packages/fiscal-verifactu/src/aeat-transport.ts`). OPTIONAL on the request — the
  * key is OMITTED entirely (never sent as `null`) when no certificate is supplied.
  */
 export interface AeatCertDraft {

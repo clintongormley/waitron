@@ -148,6 +148,24 @@ export interface DrainResult {
 }
 
 /**
+ * A fresh empty `DrainResult` — every counter zero, no next due time, nothing skipped. The no-regime
+ * regime returns it wholesale (it has no authority to contact), and `drain`'s own pass seeds its
+ * result from it. A FUNCTION, not a shared constant, because a caller mutates the object it gets back
+ * (`drain` accumulates counts into its seed), so each call must own a fresh `skipped` array.
+ */
+export function emptyDrainResult(): DrainResult {
+  return {
+    nextDueAt: null,
+    batchesSent: 0,
+    recordsSubmitted: 0,
+    recordsAccepted: 0,
+    recordsHalted: 0,
+    incidentsRaised: 0,
+    skipped: [],
+  };
+}
+
+/**
  * How this POS classifies what a regime reports back about a submission — plan 3b's own settled
  * classification, independent of whatever raw code a particular regime uses for the same idea.
  * `"accepted_with_errors"` still counts as accepted, mirroring `DrainResult.recordsAccepted`'s

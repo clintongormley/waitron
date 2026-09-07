@@ -34,7 +34,8 @@ const REGISTRY: Record<string, FiscalModules> = {
   // mutates it today, so this is guard-only — no behaviour change.
   "ES-common": Object.freeze({ filing: "verifactu", tax: "iva" }),
   // A no-regime territory: `filing: "none"` selects the `fiscal-none` slot member (records nothing).
-  // `tax: "none"` is a placeholder — `nodes.tax_module` is stamped but has no consumer today (traced) —
+  // `tax: "none"` is a placeholder — `nodes.tax_module` is stamped and COPIED during mirror adoption
+  // (apps/server/src/adopt.ts, reserved-identity.ts) but is not used to CALCULATE tax anywhere today —
   // not a UK VAT decision. The string is country-prefixed (`venue-plan.ts` requires `fiscalTerritory`
   // start with `<country>-`), so a UK venue is `country: "GB"`, `fiscalTerritory: "GB-vat"`.
   "GB-vat": Object.freeze({ filing: "none", tax: "none" }),

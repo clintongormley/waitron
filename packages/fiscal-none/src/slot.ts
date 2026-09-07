@@ -1,4 +1,4 @@
-import type { FiscalContribution } from "@waitron/fiscal";
+import { emptyDrainResult, type FiscalContribution } from "@waitron/fiscal";
 import { NoneBackend } from "./backend.js";
 
 /**
@@ -18,13 +18,5 @@ import { NoneBackend } from "./backend.js";
 export const FISCAL_NONE_SLOT: FiscalContribution = {
   id: "none",
   makeBackend: () => new NoneBackend(),
-  drain: async () => ({
-    nextDueAt: null,
-    batchesSent: 0,
-    recordsSubmitted: 0,
-    recordsAccepted: 0,
-    recordsHalted: 0,
-    incidentsRaised: 0,
-    skipped: [],
-  }),
+  drain: async () => emptyDrainResult(),
 };
