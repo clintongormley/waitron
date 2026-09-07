@@ -8,6 +8,8 @@ import { manifestSets } from "@waitron/migrations";
 import { verifyPassword, verifyPin } from "@waitron/identity";
 import { runCli } from "./cli.js";
 import type { CliDeps } from "./cli.js";
+import { withRole } from "./identifiers.js";
+import { withDatabase } from "./instance-apply.js";
 import type { InstanceState, RoleFacts } from "./instance-state.js";
 import type { VenueAction } from "./venue-plan.js";
 import type { VenueApplyDeps, VenueResult } from "./venue-apply.js";
@@ -15,6 +17,9 @@ import { deriveTenantId } from "./tenant-id.js";
 
 const DATABASE = "waitron_demo";
 const ADMIN_URI = "postgres://admin:adminsecret@db.example:5432/postgres";
+/** The connection every command opens to the target database: re-pointed at `waitron_demo` and
+ * carrying the role option so the session runs AS `waitron_migrator`, the table owner. */
+const TARGET_URI = withRole(withDatabase(ADMIN_URI, DATABASE), "waitron_migrator");
 
 /** What the injected `applyVenue` hands back — the ids and seed reports `venue` prints in its result
  * summary. */
@@ -103,12 +108,20 @@ function facts(overrides: Partial<RoleFacts> = {}): RoleFacts {
     createRole: false,
     superuser: false,
     memberOf: ["app_user"],
+    adminCanSetRole: true,
     ...overrides,
   };
 }
 
 function stateOf(overrides: Partial<InstanceState> = {}): InstanceState {
-  return { database: DATABASE, databaseExists: false, roles: {}, inside: null, ...overrides };
+  return {
+    database: DATABASE,
+    databaseExists: false,
+    databaseOwner: null,
+    roles: {},
+    inside: null,
+    ...overrides,
+  };
 }
 
 /** Nothing exists: no database, no roles. The first-provision case. */
@@ -119,6 +132,7 @@ const BLANK = stateOf();
  * regardless, because `planInstance` no longer gates on journal presence. */
 const PROVISIONED = stateOf({
   databaseExists: true,
+  databaseOwner: "waitron_migrator",
   roles: {
     waitron_migrator: facts({ createRole: true }),
     waitron_app: facts(),
@@ -158,6 +172,7 @@ function harness(
     modules?: readonly WaitronModule[];
     readEnvironment?: () => Promise<DeploymentEnvironment | null>;
     readTenants?: () => Promise<{ country: string; taxId: string }[]>;
+    connect?: (uri: string) => Promise<Database>;
   } = {},
 ): Harness {
   const lines: string[] = [];
@@ -169,7 +184,7 @@ function harness(
   let closes = 0;
 
   const db = { close: async () => void (closes += 1) } as unknown as Database;
-  const connect = vi.fn(async () => db);
+  const connect = vi.fn(options.connect ?? (async () => db));
   const readState = vi.fn(options.readState ?? (async () => options.state ?? BLANK));
   const apply = vi.fn(options.apply ?? (async () => {}));
   // The two venue seams, injected exactly like `readState`/`apply`: their real implementations need
@@ -665,6 +680,7 @@ describe("runCli instance", () => {
     // fixture or the summary's branch for it is never rendered.
     const drifted = stateOf({
       databaseExists: true,
+      databaseOwner: "waitron_migrator",
       roles: {
         ...PROVISIONED.roles,
         waitron_app: facts({ memberOf: [] }),
@@ -698,9 +714,7 @@ describe("runCli instance", () => {
       existing.deps,
     );
     expect(existing.connect).toHaveBeenCalledTimes(2);
-    expect(existing.connect).toHaveBeenLastCalledWith(
-      "postgres://admin:adminsecret@db.example:5432/waitron_demo",
-    );
+    expect(existing.connect).toHaveBeenLastCalledWith(TARGET_URI);
     // Both connections closed, whichever way the run ended.
     expect(existing.closes()).toBe(2);
   });
@@ -769,6 +783,7 @@ describe("runCli instance", () => {
     // operator to drop a role whose password this tool never generated and whose owner still uses it.
     const drifted = stateOf({
       databaseExists: true,
+      databaseOwner: "waitron_migrator",
       roles: {
         waitron_migrator: facts({ createRole: true }),
       },
@@ -816,9 +831,7 @@ describe("runCli instance", () => {
       ),
     ).toBe(0);
     expect(opened).toBeDefined();
-    expect(h.connect).toHaveBeenCalledWith(
-      "postgres://admin:adminsecret@db.example:5432/waitron_demo",
-    );
+    expect(h.connect).toHaveBeenCalledWith(TARGET_URI);
   });
 
   it("opens the target database ONCE on a re-run, not once per consumer", async () => {
@@ -846,10 +859,7 @@ describe("runCli instance", () => {
       ),
     ).toBe(0);
 
-    expect(h.connect.mock.calls.map((call) => call[0])).toEqual([
-      ADMIN_URI,
-      "postgres://admin:adminsecret@db.example:5432/waitron_demo",
-    ]);
+    expect(h.connect.mock.calls.map((call) => call[0])).toEqual([ADMIN_URI, TARGET_URI]);
     // And both are closed exactly once — `release` is a no-op precisely because `withState`'s
     // `finally` is the single place either handle dies. A version that closed in both would run
     // this to 3 and, against a real `pg` pool, throw.
@@ -875,10 +885,7 @@ describe("runCli instance", () => {
       ),
     ).toBe(0);
 
-    expect(h.connect.mock.calls.map((call) => call[0])).toEqual([
-      ADMIN_URI,
-      "postgres://admin:adminsecret@db.example:5432/waitron_demo",
-    ]);
+    expect(h.connect.mock.calls.map((call) => call[0])).toEqual([ADMIN_URI, TARGET_URI]);
     expect(h.closes()).toBe(2);
   });
 
@@ -944,6 +951,40 @@ describe("runCli instance", () => {
     );
   });
 
+  it("maps a SET-ROLE failure at the target connect to role_unusable, not state_unreadable", async () => {
+    // A second admin that did not create the migrator holds no SET-membership on it, so the
+    // role-option connect to the target fails at session start. The plain-admin probe already read
+    // `adminCanSetRole: false`, so the failure is named as the SET-ROLE gap (I1) — the operator
+    // learns to be granted the migrator with SET, not to hunt a missing database.
+    const unsettable = stateOf({
+      databaseExists: true,
+      databaseOwner: "waitron_migrator",
+      roles: {
+        waitron_migrator: facts({ createRole: true, adminCanSetRole: false }),
+        waitron_app: facts(),
+      },
+      inside: { migratedSets: manifestSets().map((s) => s.name), stamp: "preproduction" },
+    });
+    const h = harness({
+      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
+      state: unsettable,
+      connect: async (uri) => {
+        if (uri === TARGET_URI) {
+          throw Object.assign(new Error('permission denied to set role "waitron_migrator"'), {
+            code: "42501",
+          });
+        }
+        return { close: async () => {} } as unknown as Database;
+      },
+    });
+    expect(await runCli(["status", "--database", DATABASE], h.deps)).toBe(1);
+    const printed = h.lines.join("\n");
+    expect(printed).toContain("provisioning.role_unusable");
+    expect(printed).toContain('"role":"waitron_migrator"');
+    expect(printed).toContain('"missing":["SET ROLE"]');
+    expect(printed).not.toContain("state_unreadable");
+  });
+
   it("reports a refused CONNECT, not only a refused read", async () => {
     // 28P01 is `invalid_password`, and it arrives at `connect` — `pg` authenticates when the pool
     // hands out its first connection, not at the first query. Verified through the built bundle
@@ -990,6 +1031,7 @@ describe("runCli instance", () => {
     const h = harness({
       state: stateOf({
         databaseExists: true,
+        databaseOwner: "waitron_migrator",
         roles: { waitron_migrator: facts({ superuser: true }) },
         inside: { migratedSets: manifestSets().map((set) => set.name), stamp: "preproduction" },
       }),
@@ -1080,9 +1122,9 @@ describe("runCli venue", () => {
     // `withVenueState` re-points the admin URI at the target database and hands THAT connection to
     // the apply. Every insert must reach that database through the same connection.
     expect(h.connect).toHaveBeenCalledTimes(1);
-    expect(h.connect).toHaveBeenCalledWith(
-      "postgres://admin:adminsecret@db.example:5432/waitron_demo",
-    );
+    // `venue` opens the target AS the migrator (the role option), because `applyVenue` inserts as the
+    // table owner and a plain admin connection cannot CREATE TABLE in a migrator-owned database.
+    expect(h.connect).toHaveBeenCalledWith(TARGET_URI);
     expect(applyDeps.db).toBe(await h.connect.mock.results[0].value);
     // The same (fiscal-slot-resolved) module list the plan was built from reaches the apply, so a
     // seed-module action always names a module the runner holds. The fake MODULES carries no fiscal-slot

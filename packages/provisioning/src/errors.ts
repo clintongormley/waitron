@@ -347,6 +347,22 @@ declare module "@waitron/shared" {
       memberOf: string;
       sqlState: string | null;
     };
+    /** A database `instance` would migrate is owned by a role other than `waitron_migrator`. Refused
+     * rather than adopted: native logical replication needs the publication-creating role
+     * (`waitron_migrator`) to own every published table, so `instance` creates the database `OWNER
+     * waitron_migrator` and migrates AS that role (a session `SET ROLE` over the admin's
+     * credentials). A pre-existing database owned by someone else cannot be made to satisfy that by
+     * granting — ownership is fixed at CREATE (owner decision 2026-09-07, never `REASSIGN OWNED`) —
+     * so the developer drops it and re-runs (`wa-wt reset`; nothing is deployed, CLAUDE.md §3).
+     *
+     * Raised in TWO places for the same fact: the pure planner refuses an existing wrongly-owned
+     * database before spending an action, and `verifyGrants` (instance-apply.ts) reads
+     * `pg_database.datdba` back after apply and refuses if the owner is not the migrator — ownership
+     * is a FACT (`datdba`), not a `has_*` privilege, so the §3 recursive-closure false positive does
+     * not apply. `provisioning.*` because it is a fact about standing a deployment up; `database` is
+     * operator-typed configuration and `owner` is a role NAME read from the catalog — neither is a
+     * secret. */
+    "provisioning.database_not_owned": { database: string; owner: string | null };
     /** The instance is not set up for native logical replication. `missing` lists each unmet
      * precondition in words (`wal_level is not logical`, `replication role missing`,
      * `migrator lacks pg_create_subscription`, …) — the box image / operator runs the bootstrap

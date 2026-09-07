@@ -2,10 +2,15 @@ import { sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { stampDeployment, type Database } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { quoteIdent, quoteLiteral } from "./identifiers.js";
+import { quoteIdent, quoteLiteral, withRole } from "./identifiers.js";
 import { sqlStateOf } from "./sql-state.js";
 import { describeAction, type InstanceAction } from "./instance-plan.js";
+import { INSTANCE_ROLES } from "./instance-state.js";
 import "./errors.js";
+
+/** The table OWNER, and the role every session after `create-database` runs as (via the role option
+ * on the target connection). `INSTANCE_ROLES[0]` by construction. */
+const MIGRATOR = INSTANCE_ROLES[0];
 
 /**
  * A connection to the TARGET database, together with the one call that gives it back.
@@ -66,7 +71,15 @@ export async function applyInstance(
     for (const action of actions) {
       switch (action.kind) {
         case "create-database":
-          await deps.admin.execute(sql.raw(`create database ${quoteIdent(action.database)}`));
+          // `OWNER waitron_migrator`: the migrator owns the database and therefore every table the
+          // migration creates in it (it runs AS the migrator, below), which is what native logical
+          // replication's `CREATE PUBLICATION … FOR TABLE` requires. `CREATE DATABASE` is a utility
+          // statement that will not bind, so the owner is quoted, not parameterised.
+          await deps.admin.execute(
+            sql.raw(
+              `create database ${quoteIdent(action.database)} owner ${quoteIdent(action.owner)}`,
+            ),
+          );
           break;
         case "create-role": {
           const attributes = ["login", ...(action.createRole ? ["createrole"] : [])].join(" ");
@@ -83,12 +96,26 @@ export async function applyInstance(
           // already passes a hand-written password down this path. `CREATE ROLE` is a utility
           // statement and takes no bind parameters, so building the literal is the only option and
           // escaping it is the whole defence.
+          const createRoleSql = `create role ${quoteIdent(action.role)} ${attributes} password ${quoteLiteral(action.password)}${memberships}`;
           try {
-            await deps.admin.execute(
-              sql.raw(
-                `create role ${quoteIdent(action.role)} ${attributes} password ${quoteLiteral(action.password)}${memberships}`,
-              ),
-            );
+            if (action.role === MIGRATOR) {
+              // The migrator is created by the ADMIN, in ONE transaction with
+              // `createrole_self_grant = 'set'` — the GUC is session-scoped, and a pooled,
+              // un-transacted `SET` lands on a different backend than the `CREATE ROLE`, so the admin
+              // would get no SET-membership on the role it just made and could not later migrate AS
+              // it (C3/probe A). `CREATE ROLE` is legal inside a transaction block (unlike `CREATE
+              // DATABASE`), so the two share one.
+              await deps.admin.transaction(async (tx) => {
+                await tx.execute(sql.raw(`set local createrole_self_grant = 'set'`));
+                await tx.execute(sql.raw(createRoleSql));
+              });
+            } else {
+              // Every OTHER role is created BY the migrator, inside its own database (the target
+              // connection carries `options=-c role=waitron_migrator`), so the new role is
+              // migrator-created and the migrator holds ADMIN OPTION on its `IN ROLE` memberships.
+              target ??= await deps.openTarget();
+              await target.db.execute(sql.raw(createRoleSql));
+            }
           } catch (error) {
             // The statement above embeds the generated password in its literal text, and BOTH
             // Drizzle's own wrapped failure (`Failed query: create role ... password '<generated>'
@@ -120,19 +147,15 @@ export async function applyInstance(
         }
         case "grant-membership":
           try {
-            await deps.admin.execute(
+            // Run AS the migrator on the TARGET connection: the migrator created app_user (the
+            // migration ran as it) and is the only role holding ADMIN OPTION on it, so it is the
+            // grantor. Caught for DIAGNOSABILITY — this statement embeds nothing sensitive — so a
+            // grantor without ADMIN OPTION (42501) surfaces as a code rather than a raw driver error.
+            target ??= await deps.openTarget();
+            await target.db.execute(
               sql.raw(`grant ${quoteIdent(action.memberOf)} to ${quoteIdent(action.role)}`),
             );
           } catch (error) {
-            // Caught for DIAGNOSABILITY, not for secrecy — unlike `create-role` above, this
-            // statement embeds nothing sensitive. Without it the driver's own error escaped
-            // `applyInstance` raw, and the likeliest one is not a bug in this tool: an admin
-            // holding `login createdb createrole` that did NOT itself create `app_user` holds no
-            // ADMIN OPTION on it, and PostgreSQL refuses with `permission denied to grant role
-            // "app_user"`. Verified against a real `postgres:18-alpine` container, not reasoned
-            // about — see `instance-apply.pg.test.ts`'s "refuses a membership grant the admin
-            // holds no ADMIN OPTION for", which pins the 42501 this branch reports. The remedy is
-            // in `packages/provisioning/README.md`.
             throw new AppError("provisioning.membership_grant_failed", {
               role: action.role,
               memberOf: action.memberOf,
@@ -140,37 +163,18 @@ export async function applyInstance(
             });
           }
           break;
-        case "grant-database-create":
-          await deps.admin.execute(
-            sql.raw(
-              `grant create on database ${quoteIdent(action.database)} to ${quoteIdent(action.role)}`,
-            ),
-          );
-          break;
-        case "grant-schema-create": {
-          // Schema-level grants are inside the target database, not the admin's own — `public`
-          // is per-database. This is the first action that needs the target connection, and on a
-          // first provision it is also the first moment one can exist.
-          target ??= await deps.openTarget();
-          const option = action.withGrantOption ? " with grant option" : "";
-          await target.db.execute(
-            sql.raw(`grant create on schema public to ${quoteIdent(action.role)}${option}`),
-          );
-          break;
-        }
         case "migrate":
-          // Migrate with the admin connection string so the generated migrator password is not
-          // used to open another connection. On a first provision
-          // that admin just created the database and owns it; the deployment logins
-          // are created only after the migrations create their app_user membership target.
-          // Re-running against a database owned by another admin requires explicit grants.
+          // Migrate AS the migrator, via the session role option on the admin's own connection
+          // string (`withRole`) — the admin's credentials, the migrator's identity — so every table
+          // the migration creates is owned by `waitron_migrator`, which native logical replication
+          // requires. No migrator PASSWORD is used (a re-run has none): probe A confirmed the admin
+          // that created the migrator with `createrole_self_grant = 'set'` can `SET ROLE` to it.
           //
-          // The database name comes from `deps`, NOT from a `create-database` action in the list:
-          // on a re-run that action is absent (the database already exists) while `migrate` can
-          // still be present, so deriving it from the actions would fail exactly when the tool is
-          // being used idempotently.
+          // The database name comes from `deps`, NOT from a `create-database` action in the list: on
+          // a re-run that action is absent while `migrate` is present, so deriving it from the
+          // actions would fail exactly when the tool is used idempotently.
           await applyMigrations(
-            withDatabase(deps.adminUri, deps.database),
+            withRole(withDatabase(deps.adminUri, deps.database), MIGRATOR),
             migrationOptionsFor(manifestSets(), deps.migrationsRoot),
           );
           break;
@@ -184,9 +188,9 @@ export async function applyInstance(
       }
     }
 
-    // Every statement above "succeeded". That is not the same as every privilege being present —
-    // see `verifyGrants`.
-    target = await verifyGrants(actions, deps, target);
+    // Every statement above "succeeded". That is not the same as the migrator actually owning the
+    // database, nor a membership actually landing — see `verifyGrants`.
+    await verifyGrants(actions, deps);
   } finally {
     // Exactly once, and only if something above acquired one. Whether that CLOSES the handle is
     // the provider's decision — see `TargetConnection`.
@@ -195,90 +199,41 @@ export async function applyInstance(
 }
 
 /**
- * Reads the ACLs back and refuses if a grant did not actually take.
+ * Confirms, after a plan runs, that the migrator OWNS the database and that every membership grant
+ * actually landed.
  *
- * **Why this exists.** An object-privilege `GRANT` that grants nothing is not always an error. When
- * the grantor holds SOME privilege on the object but no grant option, PostgreSQL answers with a
- * WARNING: the command tag is still `GRANT`, and the driver resolves. Reproduced on
- * `postgres:18-alpine` (PostgreSQL 18.4) — a non-owning `login createdb createrole` admin ran
- * `grant create on database acl_db to r_app` and got
- * `WARNING: no privileges were granted for "acl_db"` followed by the tag `GRANT`, with no `r_app`
- * entry in `datacl` afterwards. That is the ordinary shape here rather than an exotic one: `PUBLIC`
- * holds `CONNECT` on every database by default, so an admin is in the warning case unless someone
- * has revoked it (with `revoke all on database acl_db from public` first, the same statement
- * instead raised `ERROR: 42501: permission denied for database acl_db`). Two quieter variants exist
- * — a partly-grantable list warns `not all privileges were granted` while still landing the
- * grantable part, and `GRANT ALL PRIVILEGES` in that same situation emits no diagnostic at all.
- * Without this check, `instance` reports success and leaves a deployment whose migrator cannot
- * migrate at the next boot.
+ * **The ownership check is the whole point of the swap.** Native logical replication needs
+ * `waitron_migrator` to own every published table; this tool arranges that by creating the database
+ * `OWNER waitron_migrator` and migrating AS the migrator. Read `pg_database.datdba` back rather than
+ * trusting those statements ran: a database that ends up owned by anyone else is exactly the failure
+ * this catches (`provisioning.database_not_owned`). Ownership is a FACT — `datdba`, one row, no
+ * closure to walk — unlike a `has_*` privilege, so the recursive-closure false positive
+ * `instance-plan.ts` records against reading grants back does not apply. Keyed on the plan carrying
+ * `migrate`, which every real plan does (a create-database is always followed by one) — so a
+ * synthetic grant-only plan reads nothing, and the database, which may not be readable until it is
+ * migrated, is not probed before it exists.
  *
- * **Why it reads the ACL DIRECTLY rather than calling `has_database_privilege`.** The objection
- * `instance-plan.ts` records against reading grants back is specifically about FALSE POSITIVES via
- * the recursive closure: `has_*_privilege` answers for everything the role can reach, so a role
- * holding CREATE only through a group reads as satisfied when the direct grant is absent —
- * measured on the same image, `has_database_privilege('r_direct','acl_db2','CREATE')` was `t` while
- * `aclexplode(datacl)` held zero entries naming `r_direct`. An ACL entry has no closure to walk:
- * `pg_database.datacl` and `pg_namespace.nspacl` list the grants that were literally made, and
- * nothing else. That is the whole reason, and it is a claim about the CLOSURE, not about the grant
- * option — `has_database_privilege(…, 'CREATE WITH GRANT OPTION')`, `has_table_privilege`,
- * `has_schema_privilege` and `pg_has_role(…, 'MEMBER WITH ADMIN OPTION')` all report the option
- * correctly, and an earlier version of this comment wrongly said they could not.
+ * **The membership check is belt-and-braces.** A role-membership `GRANT` without ADMIN OPTION
+ * genuinely ERRORS (42501, pinned in `instance-apply.pg.test.ts`), so `grant-membership` already
+ * fails loudly in the main loop; this catches a revoke racing the run. `provisioning.grant_ineffective`
+ * names each absent membership in the plan-summary words (`describeAction`), the same code and the
+ * same class of value it always carried.
  *
- * **The membership check is belt-and-braces, and the object checks are not.** A role-membership
- * `GRANT` without ADMIN OPTION genuinely ERRORS (42501, pinned in `instance-apply.pg.test.ts`), so
- * `grant-membership` already fails loudly. Only the object-privilege grants have the silent path.
- * The membership is verified anyway because a revoke racing this run would otherwise pass unnoticed,
- * but it is not the reason this function exists.
- *
- * Returns the target connection so the caller releases anything this function acquired — that is
- * what keeps `applyInstance`'s single `release()` matched to its single `openTarget()`. Today the
- * returned handle is always the one it was GIVEN, never a fresh acquisition, and the previous
- * version of this sentence claimed otherwise ("this may be the first thing to need one, on a plan
- * whose only actions are database-level grants"). It cannot be: database-level verification reads
- * `pg_database` over `deps.admin`, and the only branch that wants a target is guarded by
- * `schemaGrants.length > 0`, which implies the main loop's own `grant-schema-create` case already
- * acquired one. The `??=` below is therefore unreachable today and is kept only because TypeScript
- * cannot see that invariant — not because a caller is expected to hit it.
+ * Reads everything over `deps.admin` — `pg_database` and `pg_auth_members` are cluster-global — so it
+ * opens no target and the release contract stays `applyInstance`'s single `openTarget`/`release`.
  */
-async function verifyGrants(
-  actions: readonly InstanceAction[],
-  deps: ApplyDeps,
-  open: TargetConnection | null,
-): Promise<TargetConnection | null> {
-  let target = open;
+async function verifyGrants(actions: readonly InstanceAction[], deps: ApplyDeps): Promise<void> {
+  if (actions.some((action) => action.kind === "migrate")) {
+    const rows = await deps.admin.execute<{ owner: string | null }>(
+      sql`select pg_get_userbyid(datdba) as owner from pg_database where datname = ${deps.database}`,
+    );
+    const owner = rows.rows[0]?.owner ?? null;
+    if (owner !== MIGRATOR) {
+      throw new AppError("provisioning.database_not_owned", { database: deps.database, owner });
+    }
+  }
+
   const missing: string[] = [];
-
-  const databaseGrants = actions.filter((action) => action.kind === "grant-database-create");
-  if (databaseGrants.length > 0) {
-    // `coalesce`: `datacl` is NULL on a database nobody has granted anything on, which is a
-    // perfectly ordinary state and not an error to read.
-    const rows = await deps.admin.execute<{ acl: string[] }>(
-      sql`select coalesce(datacl::text[], '{}'::text[]) as acl
-          from pg_database where datname = ${deps.database}`,
-    );
-    const acl = rows.rows[0]?.acl ?? [];
-    for (const action of databaseGrants) {
-      if (!aclHas(acl, action.role, "C", false)) {
-        missing.push(describeAction(action));
-      }
-    }
-  }
-
-  const schemaGrants = actions.filter((action) => action.kind === "grant-schema-create");
-  if (schemaGrants.length > 0) {
-    target ??= await deps.openTarget();
-    const rows = await target.db.execute<{ acl: string[] }>(
-      sql`select coalesce(nspacl::text[], '{}'::text[]) as acl
-          from pg_namespace where nspname = 'public'`,
-    );
-    const acl = rows.rows[0]?.acl ?? [];
-    for (const action of schemaGrants) {
-      if (!aclHas(acl, action.role, "C", action.withGrantOption)) {
-        missing.push(describeAction(action));
-      }
-    }
-  }
-
   for (const action of actions) {
     if (action.kind !== "grant-membership") continue;
     const rows = await deps.admin.execute<{ present: boolean }>(
@@ -297,39 +252,6 @@ async function verifyGrants(
   if (missing.length > 0) {
     throw new AppError("provisioning.grant_ineffective", { database: deps.database, missing });
   }
-  return target;
-}
-
-/**
- * Whether an ACL array carries `privilege` for `role`, directly.
- *
- * An ACL item is `<grantee>=<privileges>/<grantor>` — e.g. `r_mig=C/owner_a`, and with WITH GRANT
- * OPTION the privileges read `C*` instead of `C` (grantor `pg_database_owner` for `public`). Both
- * were read off a real container. A `*` immediately after a privilege letter is that option;
- * `instance-apply.pg.test.ts` already pins the same encoding for `nspacl`.
- *
- * A grantee of PUBLIC has an EMPTY left-hand side (`=Tc/owner_a`), so matching on `${role}=` cannot
- * collide with it. Role names here are `^[a-z][a-z0-9_]{0,62}$` (identifiers.ts), which PostgreSQL
- * never quotes in an ACL, so no unquoting pass is needed.
- *
- * EVERY matching entry is examined, not the first. One grantee gets one entry PER GRANTOR, and this
- * function returned a false NEGATIVE while it used `find`: read off a real container, `owner_a`
- * granting CONNECT to `r_y` and then `r_mig` granting CREATE produced
- * `{…,r_y=c/owner_a,r_y=C/r_mig}`, and inspecting only `r_y=c/owner_a` reported CREATE missing
- * while `has_database_privilege('r_y','acl_db','CREATE')` was `t`. That is a spurious refusal of a
- * working deployment — worse than the silent gap this check exists to close, by this function's own
- * justification. A second grantor arises exactly where `README.md` says it does: WITH GRANT OPTION
- * delegation, the same path that lets a non-owning admin issue these grants at all.
- */
-function aclHas(acl: readonly string[], role: string, privilege: string, grantOption: boolean) {
-  return acl
-    .filter((item) => item.startsWith(`${role}=`))
-    .some((entry) => {
-      const granted = entry.slice(role.length + 1).split("/")[0] ?? "";
-      const at = granted.indexOf(privilege);
-      if (at === -1) return false;
-      return !grantOption || granted[at + 1] === "*";
-    });
 }
 
 /**

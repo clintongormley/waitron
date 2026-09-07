@@ -37,6 +37,35 @@ export function quoteIdent(value: string): string {
 export { quoteLiteral } from "@waitron/shared";
 
 /**
+ * The same connection string, made to open its session AS `role` — a libpq `options=-c role=<role>`
+ * on the URI, which every session started from it runs under. This is how `instance` migrates and
+ * does its post-migrate role work AS `waitron_migrator` over the ADMIN's own credentials, so every
+ * table it creates is migrator-owned (probe A): the admin holds SET-membership on the migrator it
+ * created, and the session role is that migrator.
+ *
+ * `role` is validated with the identifier grammar rather than quoted, the §3 rule for a value that
+ * ends up embedded in a connection string rather than bound. `assertIdentifier` already refuses a
+ * space, a quote or anything else libpq would mis-split, so no escaping pass is needed — and the
+ * grammar is exactly the one `INSTANCE_ROLES` are drawn from.
+ *
+ * A URI that already carries an `options` parameter is REFUSED, not merged: this tool composes every
+ * URI it hands here (`withDatabase` of the admin string), and none of them carries `options`, so a
+ * pre-existing one is a programmer error. Merging two libpq option strings correctly is not
+ * attempted.
+ */
+export function withRole(uri: string, role: string): string {
+  assertIdentifier("role", role);
+  const u = new URL(uri);
+  if (u.searchParams.has("options")) {
+    throw new Error(
+      "withRole: refusing to merge into a URI that already carries an options parameter",
+    );
+  }
+  u.searchParams.set("options", `-c role=${role}`);
+  return u.toString();
+}
+
+/**
  * A generated role password. Never operator-supplied — base64url's alphabet is `[A-Za-z0-9_-]`,
  * which contains no quote, no backslash and nothing a URL would re-encode, so the same string is
  * safe in a `CREATE ROLE … PASSWORD '…'` literal (which `quoteLiteral` now escapes regardless) and
