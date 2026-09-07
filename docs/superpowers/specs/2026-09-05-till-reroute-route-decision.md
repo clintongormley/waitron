@@ -123,7 +123,7 @@ is not on the Public Suffix List (it is ours to keep off it).
   `device_profiles` in its `state` publication over the WireGuard link — so this requirement is met by
   that swap, not by an outbox enrolment; the reroute build sequences after the swap slice that ships
   the state publication, and checks `canvases` is in it._ _Pointer, 2026-09-07:_ till reroute S1–S5
-  landed and S6 is pending merge BEFORE Track A's state publication (swap S2), so
+  and S6 (#265) landed BEFORE Track A's state publication (swap S2), so
   `devices`/`working_orders` do NOT yet replicate; S6's two-node e2e
   (`apps/server/src/till-reroute-e2e.test.ts`) seeds the shared device + identity on BOTH nodes and the
   open tab directly on the standby (B) to stand in for the replication, and the real state-publication

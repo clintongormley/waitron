@@ -354,9 +354,10 @@ All three decisions are now taken.
    was shown for a preliminary save that never reached the fiscal request. Both S4 deferrals resolved:
    `state-changed` change-detection landed; `TillServer.standing` KEPT deliberately (it is the
    `GET /api/till.servers` wire type the server sends, not dead — the router deciding via
-   `acceptingSales` does not retire the field). S6 (the two-node e2e, plan Tasks 21–22) BUILT (this
-   branch): `apps/server/src/till-reroute-e2e.test.ts` boots A (primary) and B (mirror) as two
-   in-process `startServer` instances on two real-PG databases — one venue, two nodes — and proves
+   `acceptingSales` does not retire the field). S6 (the two-node e2e, plan Tasks 21–22) LANDED #265
+   (2026-09-07) — till reroute S1–S6 all landed: `apps/server/src/till-reroute-e2e.test.ts` boots A
+   (primary) and B (mirror) as two in-process `startServer` instances on two real-PG databases — one
+   venue, two nodes — and proves
    across the pair the `/api/node` postures a till routes
    on (A `acceptingSales:true`, B `:false`), the read-only gate refusing a login on the standby
    (`node.read_only`, no device group mounted), the seeded device cookie authenticating on the selling

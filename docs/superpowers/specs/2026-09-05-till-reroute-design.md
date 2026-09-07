@@ -4,7 +4,7 @@
 > till `ServerRouter`, till behaviour); S6 — the two-node real-PG e2e
 > (`apps/server/src/till-reroute-e2e.test.ts`) + the till-side router contract
 > (`apps/till/src/api/server-router.contract.test.ts`), both pinned to
-> `apps/till/src/api/__fixtures__/node-probe.json` — is on `feat/till-reroute-s6-e2e`, pending merge. **Still owed:** §3.4's same-site cookie browser
+> `apps/till/src/api/__fixtures__/node-probe.json` — LANDED #265 (2026-09-07). **Still owed:** §3.4's same-site cookie browser
 > receipt (plan Task 10) — an interactive Chrome + mkcert + `/etc/hosts` probe the node-`fetch` e2e does
 > not substitute for; run it manually or fold it into item 2's real-cloud proof before relying on
 > cross-subdomain cookie delivery in production. PR numbers are recorded in `docs/backlog.md` → Track B.
