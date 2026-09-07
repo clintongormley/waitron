@@ -1484,7 +1484,7 @@ const fetchImpl = createInstrumentedFetch(withDevDeviceHeader(withServerTarget(f
 router.start();
 ```
 
-and pass `.router=${router}` to `<till-app>` (the `?dev` chooser keeps a plain `new TillApi("", fetchImpl)`). Import `ServerRouter`, `withServerTarget` from `./api/server-router.js`. Update the file's header comment: the router sits BELOW the dev header and the instrumentation so a moved request is logged with its real URL.
+and pass `.router=${router}` to `<till-app>` (the `?dev` chooser keeps a plain `new TillApi("", fetchImpl)`). Import `ServerRouter`, `withServerTarget` from `./api/server-router.js`. Update the file's header comment: the router sits INNERMOST (below the dev header and the instrumentation), so a rerouted request is NOT logged with its real URL — instrumentation sees the pre-rewrite relative path and the trail keeps only the masked pathname; which server answered is not visible in the log.
 
 - [ ] **Step 2:** `pnpm --filter @waitron/till typecheck` — `router` is not yet a property of `TillApp` → add it in S5's Task 17; for S4, declare the property now in `till-app.ts` (`@property({ attribute: false }) router?: ServerRouter;`) with no behaviour, so the slice typechecks. Commit `feat(till): compose the ServerRouter into the app's fetch chain (till-reroute §4.1)`. Gate (`pnpm --filter @waitron/till test:coverage`), `/finish-branch`.
 
