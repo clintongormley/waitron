@@ -34,11 +34,43 @@ export class SetupDoneScreen extends LitElement {
       :host {
         display: block;
       }
+      .break-glass {
+        margin: 1rem 0;
+        padding: 1rem;
+        border: 2px solid var(--wt-color-warning, #b45309);
+        border-radius: 0.5rem;
+      }
+      .break-glass h2 {
+        margin-top: 0;
+        font-size: 1rem;
+      }
+      .break-glass-warning {
+        font-weight: 600;
+      }
+      .break-glass-secret {
+        display: block;
+        margin-top: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 1.1rem;
+        word-break: break-all;
+        user-select: all;
+        background: var(--wt-color-surface-sunken, #f1f5f9);
+        border-radius: 0.375rem;
+      }
     `,
   ];
 
   /** The HTTP face of the box, injected by the shell. Used only to poll `getStatus` for the reconnect. */
   @property({ attribute: false }) api!: SetupApi;
+
+  /**
+   * The break-glass secret the adopt path minted (mirror path only), passed by the shell from the
+   * adopt 200. Shown ONCE here — the adopt response carries it a single time and the server never logs
+   * or re-issues it (spec §4.2), so this screen is the operator's only chance to record it.
+   * `undefined` on the primary provision path, which mints no secret and shows no panel.
+   */
+  @property({ attribute: false }) breakGlassSecret?: string;
 
   /** How to reload into the till once trading mode is up. Injectable so a test can assert it without
    * navigating the runner; the default is the real page reload (a bound native, not authored code). */
@@ -95,6 +127,20 @@ export class SetupDoneScreen extends LitElement {
       <wt-card>
         <h1>Setup complete</h1>
         <p>The box is restarting into trading mode.</p>
+        ${
+          this.breakGlassSecret !== undefined
+            ? html`<div class="break-glass" data-test="break-glass">
+                <h2>Save your break-glass code now</h2>
+                <p class="break-glass-warning" data-test="break-glass-warning">
+                  Write this down and store it offline. It is shown once and will not be shown again.
+                  You need it to promote this box if the primary is unreachable.
+                </p>
+                <code class="break-glass-secret" data-test="break-glass-secret"
+                  >${this.breakGlassSecret}</code
+                >
+              </div>`
+            : null
+        }
         ${
           this.ready
             ? html`<div class="actions">
