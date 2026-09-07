@@ -83,6 +83,12 @@ type CoreScreen =
   | "device-profiles"
   | "diagnostics";
 
+/** A destination the shell can show: a core face, or an active module's own screen id. The `& {}` keeps
+ * the `CoreScreen` literal autocomplete while still admitting any module id string — the one spelling
+ * used everywhere a screen id is passed, rather than the weaker `CoreScreen | string` (which collapses
+ * to `string`, dropping the literal hints). */
+type ScreenId = CoreScreen | (string & {});
+
 /** The viewport width at/below which the sidebar becomes the off-canvas drawer (Task 12). Kept as a
  * single source so the JS `matchMedia` query and the CSS `@media` block below cannot drift — a media
  * query cannot read a `--custom-property`, so the breakpoint is a literal in both places, and `48rem`
@@ -91,7 +97,7 @@ const DRAWER_BREAKPOINT = "(max-width: 48rem)";
 
 /** One nav entry: the face it switches to, the i18n key for its label, and whether it is manager-gated
  * (`requiresManager` hides it from a `supervisor` session — `#nav()` filters on it before mapping). */
-type NavItem = { screen: CoreScreen | string; labelKey: StringKey; requiresManager?: boolean };
+type NavItem = { screen: ScreenId; labelKey: StringKey; requiresManager?: boolean };
 /** One sidebar group: a stable `id` (a module contribution names one as its `screen.group`), an optional
  * header label (the pinned first group has none) and its items. */
 type NavGroup = { id: NavGroupId; headerKey?: StringKey; items: NavItem[] };
@@ -295,14 +301,21 @@ export class DashboardApp extends LitElement {
   /** Which screen is showing. Defaults to `login`, so a cold load never flashes a logged-in face
    * before the probe confirms a session (see the class doc). A CoreScreen literal or an active module's
    * screen id (`string`); the `& {}` keeps the literal autocomplete while admitting any module id. */
-  @state() private screen: CoreScreen | (string & {}) = "login";
+  @state() private screen: ScreenId = "login";
 
-  /** The active module contributions for this session (Task 3: every bundled module; Task 4 gates on
-   * `me.modules` + permissions). Populated once by {@link #activate} when a session resolves. */
-  #activeContributions: DashboardContribution[] = [];
-  /** Each active contribution's mounted screen handle, keyed by its screen id — the generic mount path
-   * `#renderScreen` and `#permittedScreen` consult before the core switch. */
-  #activeScreens = new Map<string, DashboardScreenHandle>();
+  /** Each active module's mounted screen, keyed by its screen id: the contribution (its nav placement +
+   * permission) alongside the handle (its rendered screen). This is the ENABLED set — `me.modules` gates
+   * it, the per-permission gate is layered on in `#navGroups`. The generic mount path `#renderScreen`
+   * and the route gate `#permittedScreen` consult it before the core switch. Rebuilt on every
+   * {@link #activate}, so a re-probe/re-login reconciles a module the server has since disabled. */
+  #activeScreens = new Map<
+    string,
+    { contribution: DashboardContribution; handle: DashboardScreenHandle }
+  >();
+  /** The active-and-PERMITTED module contributions grouped by nav-group id, each group pre-sorted by
+   * `order`. Built once per {@link #activate} so `#nav` does a single `Map.get` per group rather than
+   * filtering the whole active set and sorting it on every render, for every group. */
+  #navGroups = new Map<NavGroupId, DashboardContribution[]>();
 
   /** The signed-in person's EFFECTIVE permission set from the WHOAMI probe (`me.permissions`). The two
    * module gates read it: `#nav` shows a module's item only when this set holds its `requiresPermission`,
@@ -461,16 +474,20 @@ export class DashboardApp extends LitElement {
   }
 
   /**
-   * Activate the bundled module contributions whose `module` is in `enabled` — ONCE per session. For
-   * each: register its localised strings into the shared catalogue, remember it, and mount its screen
-   * handle (built with this app's request). A contribution naming a nav group id the app does not know
-   * is a wiring error, so it THROWS rather than silently dropping the screen. `enabled` is the session's
-   * `me.modules`; the per-permission gate is layered on top in `#nav`/`#permittedScreen`, so a module can
-   * be active here yet hidden there.
+   * (Re)build the active module set from `enabled` (the session's `me.modules`). RECONCILES rather than
+   * activating once-ever: `#applyMe` calls this on every probe/login, so a module disabled server-side
+   * since the last session stops showing — the maps are cleared and rebuilt from scratch each time
+   * (`registerCatalogue` is idempotent, so re-registering an already-known catalogue is harmless). For
+   * each enabled module: register its strings, mount its screen handle (built with this app's request),
+   * and — when the session HOLDS its `requiresPermission` — file it into its nav group. A contribution
+   * naming a nav group id the app does not know is a wiring error, so it THROWS rather than silently
+   * dropping the screen. The per-permission gate lives here (in `#navGroups`) and in `#permittedScreen`,
+   * so a module can be active (enabled) yet absent from the nav.
    */
   #activate(enabled: readonly string[]): void {
-    if (this.#activeContributions.length) return; // once per session
     const knownGroups = new Set<NavGroupId>(NAV_GROUPS.map((g) => g.id));
+    this.#activeScreens.clear();
+    this.#navGroups.clear();
     for (const c of DASHBOARD_MODULES) {
       if (!enabled.includes(c.module)) continue;
       if (!knownGroups.has(c.screen.group))
@@ -478,9 +495,18 @@ export class DashboardApp extends LitElement {
           `dashboard module "${c.module}" names unknown nav group "${c.screen.group}"`,
         );
       registerCatalogue(c.strings);
-      this.#activeContributions.push(c);
-      this.#activeScreens.set(c.screen.id, c.create({ request: this.request }));
+      this.#activeScreens.set(c.screen.id, {
+        contribution: c,
+        handle: c.create({ request: this.request }),
+      });
+      if (this.#sessionPermissions.includes(c.screen.requiresPermission)) {
+        const group = this.#navGroups.get(c.screen.group) ?? [];
+        group.push(c);
+        this.#navGroups.set(c.screen.group, group);
+      }
     }
+    for (const list of this.#navGroups.values())
+      list.sort((a, b) => (a.screen.order ?? 0) - (b.screen.order ?? 0));
   }
 
   /**
@@ -634,7 +660,7 @@ export class DashboardApp extends LitElement {
   /** Switch to a nav face AND close the drawer (Task 12). One handler for every nav item so navigating
    * on a narrow screen dismisses the off-canvas drawer in the same tap; on desktop the `drawerOpen`
    * flip is inert (the drawer is never shown there). Keeps the `screen` set the nav has always done. */
-  #selectScreen(screen: CoreScreen | (string & {})): void {
+  #selectScreen(screen: ScreenId): void {
     diag.record("info", "nav", { screen });
     this.screen = this.#permittedScreen(screen);
     this.#writeScreenUrl(this.screen);
@@ -645,7 +671,7 @@ export class DashboardApp extends LitElement {
    * nav items (gated by role), or an ACTIVE module's screen id whose `requiresPermission` the session
    * holds. A module that is enabled (active) but whose permission the person lacks is denied here, just
    * as it is hidden from the nav — the two gates agree. */
-  #permittedScreen(requested: string | null): CoreScreen | (string & {}) {
+  #permittedScreen(requested: string | null): ScreenId {
     if (this.sessionRole === "staff") return "my-schedule";
     const item = NAV_GROUPS.flatMap((group) => group.items).find(
       (entry) => entry.screen === requested,
@@ -655,9 +681,12 @@ export class DashboardApp extends LitElement {
       (!item.requiresManager || this.sessionRole === "manager" || this.sessionRole === "admin")
     )
       return item.screen;
-    if (requested !== null && this.#activeScreens.has(requested)) {
-      const contribution = this.#activeContributions.find((c) => c.screen.id === requested);
-      if (contribution && this.#sessionPermissions.includes(contribution.screen.requiresPermission))
+    if (requested !== null) {
+      const active = this.#activeScreens.get(requested);
+      if (
+        active &&
+        this.#sessionPermissions.includes(active.contribution.screen.requiresPermission)
+      )
         return requested;
     }
     return "overview";
@@ -665,7 +694,7 @@ export class DashboardApp extends LitElement {
 
   readonly #url = new UrlStateController(this, () => this.#onHistory(), dashboardPath);
 
-  #writeScreenUrl(screen: CoreScreen | (string & {}), replace = false): void {
+  #writeScreenUrl(screen: ScreenId, replace = false): void {
     this.#url.write({ dashboard: screen }, replace);
   }
 
@@ -716,24 +745,17 @@ export class DashboardApp extends LitElement {
                     >${t(item.labelKey)}</wt-button
                   >`,
               )}
-            ${this.#activeContributions
-              .filter(
-                (c) =>
-                  c.screen.group === group.id &&
-                  this.#sessionPermissions.includes(c.screen.requiresPermission),
-              )
-              .sort((a, b) => (a.screen.order ?? 0) - (b.screen.order ?? 0))
-              .map(
-                (c) =>
-                  html`<wt-button
-                    class="nav-item"
-                    variant=${this.screen === c.screen.id ? "primary" : "secondary"}
-                    aria-current=${this.screen === c.screen.id ? "page" : nothing}
-                    data-test="nav-${c.screen.id}"
-                    @click=${() => this.#selectScreen(c.screen.id)}
-                    >${tKit(c.screen.navLabelKey)}</wt-button
-                  >`,
-              )}
+            ${(this.#navGroups.get(group.id) ?? []).map(
+              (c) =>
+                html`<wt-button
+                  class="nav-item"
+                  variant=${this.screen === c.screen.id ? "primary" : "secondary"}
+                  aria-current=${this.screen === c.screen.id ? "page" : nothing}
+                  data-test="nav-${c.screen.id}"
+                  @click=${() => this.#selectScreen(c.screen.id)}
+                  >${tKit(c.screen.navLabelKey)}</wt-button
+                >`,
+            )}
           `,
         )}
       </nav>
@@ -749,7 +771,7 @@ export class DashboardApp extends LitElement {
   #renderScreen(): TemplateResult {
     // An active module owns its own screen — paint it before the core switch.
     const mod = this.#activeScreens.get(this.screen);
-    if (mod) return mod.render();
+    if (mod) return mod.handle.render();
     switch (this.screen) {
       case "my-schedule":
         return html`<dashboard-my-schedule-screen

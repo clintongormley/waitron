@@ -252,9 +252,14 @@ const sidebarNav = (el: DashboardApp) => el.shadowRoot!.querySelector("nav[aria-
 const navItem = (el: DashboardApp, screen: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test="nav-${screen}"]`);
 
-/** The nineteen manager faces the grouped sidebar switches between (for a manager/admin session —
- * `diagnostics` is manager-gated), every one keeping its `data-test` id. Order is the sidebar's render
- * order (pinned overview+sales, then Menu / Service / Team / Purchasing / Configuration). */
+/** The faces the grouped sidebar switches between for a manager/admin session (`diagnostics` is
+ * manager-gated), every one keeping its `data-test` id — used to assert each item is present and to
+ * pin the count. Eighteen are CORE faces; `bookings` is the bookings MODULE face, always enabled by
+ * this suite's default stub (`modules: ["bookings"]` + `booking.manage`), so it is folded into the
+ * fixture. A module face renders AFTER its group's core items, so `bookings` sorts to the END of the
+ * Service group (after kitchen), which this order mirrors — pinned overview+sales, then Menu /
+ * Service (+ the bookings module face) / Team / Purchasing / Configuration. The membership test below
+ * asserts presence and count, not order. */
 const NAV_SCREENS = [
   "overview",
   "sales",
@@ -262,9 +267,9 @@ const NAV_SCREENS = [
   "location-menus",
   "recipe",
   "floor",
-  "bookings",
   "statuses",
   "kitchen",
+  "bookings",
   "staff",
   "roster",
   "approvals",
@@ -888,6 +893,46 @@ describe("dashboard-app", () => {
     navItem(el, "bookings")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("dashboard-bookings-screen")).not.toBeNull();
+  });
+
+  // Module activation RECONCILES per session, it is not once-ever: a second /me (a re-probe or re-login)
+  // whose `modules` set no longer enables a module must stop showing it, even though a tab stayed open.
+  // A run-it probe falsified the once-ever early-return — `modules: []` on a second session still
+  // permitted bookings. Proof-by-deletion: restoring the `if (this.#activeScreens.size) return` guard to
+  // #activate makes the post-re-login assertions go red (the module lingers).
+  it("reconciles the active module set on a re-login — a now-disabled module stops showing", async () => {
+    const session1 = {
+      personId: "p1",
+      role: "manager",
+      locale: null,
+      venueLocale: "es-ES",
+      permissions: ["booking.manage"],
+      modules: ["bookings"],
+    };
+    // Second session: SAME person and permission, but bookings is no longer enabled server-side.
+    const session2 = { ...session1, modules: [] as string[] };
+    const getMe = vi.fn().mockResolvedValueOnce(session1).mockResolvedValue(session2);
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ getMe }),
+      request: stubRequest,
+    });
+    await flush(el);
+    // First session: bookings enabled + permitted → its nav shows and it routes.
+    expect(navItem(el, "bookings")).not.toBeNull();
+    navItem(el, "bookings")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-bookings-screen")).not.toBeNull();
+
+    // Re-login on the SAME element: logout drops to login, the login screen's `logged-in` re-probes,
+    // and the second /me disables bookings. The active set must be rebuilt from it, not left once-ever.
+    logoutBtn(el)!.click();
+    await flush(el);
+    emitLoggedIn(login(el)!);
+    await flush(el);
+
+    expect(navItem(el, "bookings")).toBeNull();
+    expect(el.shadowRoot!.querySelector("dashboard-bookings-screen")).toBeNull();
+    expect(overview(el)).toBeTruthy();
   });
 
   // A contribution naming a nav group the app does not know is a WIRING ERROR — #activate THROWS rather
