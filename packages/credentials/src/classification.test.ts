@@ -33,4 +33,10 @@ describe("CREDENTIALS_CLASSIFICATION", () => {
     expect([...created].filter((t) => !classified.has(t)).sort()).toEqual([]);
     expect([...classified].filter((t) => !created.has(t)).sort()).toEqual([]);
   });
+  it("classifies tenant_credentials local, not state — a box-key-sealed row cannot be replicated", () => {
+    // A row sealed under one node's vault key is undecryptable on any other node, so it must never
+    // cross to a standby by replication (cert-distribution design §2.4).
+    const entry = CREDENTIALS_CLASSIFICATION.find((c) => c.table === "tenant_credentials");
+    expect(entry?.class).toBe("local");
+  });
 });
