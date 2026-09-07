@@ -1,5 +1,7 @@
 import { page } from "@vitest/browser/context";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { html } from "lit";
+import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { DashboardApp } from "./dashboard-app.js";
 import { diag } from "./diagnostics.js";
@@ -47,7 +49,13 @@ function stubDrawerMatchMedia(): { set: (narrow: boolean) => void; restore: () =
   };
 }
 import { currentLocale, setLocale, t } from "./i18n/t.js";
+import type { DashboardRequest } from "@waitron/dashboard-kit";
 import type { DashboardApi, PersonSummary } from "./api/client.js";
+
+/** A stub of the module request primitive: every module screen reads through it on connect. Resolves an
+ * empty array for the reads the bundled bookings screen makes (listTables + the day's bookings), so
+ * mounting it in the generic-mount test leaves no stray rejection. */
+const stubRequest: DashboardRequest = async () => [] as never;
 
 const people: PersonSummary[] = [
   {
@@ -125,10 +133,10 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     // The purchases screen the nav mounts loads this on connect; resolve it so navigating to it leaves
     // no stray rejection.
     listPurchaseInvoices: vi.fn().mockResolvedValue([]),
-    // The bookings screen the nav mounts loads both on connect (listTables for the form picker + seat
-    // prompt, then the day's bookings); resolve them so navigating to it leaves no stray rejection.
+    // The floor-plan screen the nav mounts loads this on connect; resolve it so navigating to it leaves
+    // no stray rejection. (The bookings screen is a MODULE now — it loads through the injected `.request`,
+    // not this api — so its reads are stubbed by `stubRequest`, not here.)
     listTables: vi.fn().mockResolvedValue([]),
-    listBookings: vi.fn().mockResolvedValue([]),
     // The devices screen the nav mounts loads this on connect (listStations is already stubbed above);
     // resolve it so navigating to it leaves no stray rejection.
     listDevices: vi.fn().mockResolvedValue([]),
@@ -727,6 +735,63 @@ describe("dashboard-app", () => {
     // …and every one of the nineteen manager faces is present by its stable data-test id.
     for (const s of NAV_SCREENS) expect(navItem(el, s)).toBeTruthy();
     expect(NAV_SCREENS).toHaveLength(19);
+  });
+
+  // The module-UI seam (SP2 Task 3): a BUNDLED module's screen and nav are mounted GENERICALLY from the
+  // registry, not hand-wired. `bookings` is now a module contribution (its screen + widget live in
+  // @waitron/bookings/dashboard, reached only via @waitron/dashboard-modules); here it is active with no
+  // gate, so a non-staff session shows its nav item and routing to it renders <dashboard-bookings-screen>
+  // through the generic path. Proof-by-deletion: dropping the `#activeScreens.get(this.screen)` lookup in
+  // #renderScreen (or the module-items append in #nav) makes the respective assertion below go red.
+  it("renders a bundled module's screen and nav via the generic path", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+      request: stubRequest,
+    });
+    await flush(el);
+    // The module's nav item shows (in its declared `service` group), by its stable data-test id…
+    expect(navItem(el, "bookings")).toBeTruthy();
+    // …and routing to it mounts the module's own screen element through the generic mount path.
+    navItem(el, "bookings")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-bookings-screen")).not.toBeNull();
+  });
+
+  // A contribution naming a nav group the app does not know is a WIRING ERROR — #activate THROWS rather
+  // than silently skipping the screen. The throw fires in #applyMe, inside #probeSession's total catch,
+  // so it surfaces as the app dropping the otherwise-valid MANAGER session to login (nothing mounts).
+  // That distinguishes throw from a silent `continue`: a silent skip would let the manager through to
+  // overview. Driven by monkey-patching the shared registry array for this one mount (restored in a
+  // finally), so the guard is exercised without a second fixture module.
+  it("refuses to mount when a contribution names an unknown nav group (throws in #activate)", async () => {
+    const bad = {
+      module: "bookings",
+      screen: {
+        id: "bookings",
+        navLabelKey: "nav.bookings",
+        group: "nowhere",
+        requiresPermission: "x",
+      },
+      strings: { en: {}, es: {} },
+      create: () => ({ render: () => html`` }),
+    };
+    const list = DASHBOARD_MODULES as unknown as unknown[];
+    const original = [...list];
+    list.length = 0;
+    list.push(bad);
+    try {
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+        request: stubRequest,
+      });
+      await flush(el);
+      // A silent skip would have landed this manager on overview; the throw dropped it to login.
+      expect(login(el)).toBeTruthy();
+      expect(overview(el)).toBeNull();
+    } finally {
+      list.length = 0;
+      list.push(...original);
+    }
   });
 
   // The diagnostics nav is manager-gated (`requiresManager: true`, Task 15): a `supervisor` session

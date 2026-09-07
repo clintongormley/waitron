@@ -53,6 +53,9 @@ importers:
       '@waitron/dashboard-kit':
         specifier: workspace:*
         version: link:../../packages/dashboard-kit
+      '@waitron/dashboard-modules':
+        specifier: workspace:*
+        version: link:../../packages/dashboard-modules
       '@waitron/diagnostics':
         specifier: workspace:*
         version: link:../../packages/diagnostics
@@ -582,6 +585,31 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^3.0.0
         version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.7(@types/node@24.13.3)(@vitest/browser@3.2.7)(tsx@4.23.1)(yaml@2.9.0)
+
+  packages/dashboard-modules:
+    dependencies:
+      '@waitron/bookings':
+        specifier: workspace:*
+        version: link:../bookings
+      '@waitron/dashboard-kit':
+        specifier: workspace:*
+        version: link:../dashboard-kit
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
+      '@vitest/coverage-v8':
+        specifier: ^3.0.0
+        version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
+      '@waitron/composition':
+        specifier: workspace:*
+        version: link:../composition
       typescript:
         specifier: ^5.7.0
         version: 5.9.3

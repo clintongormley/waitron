@@ -14,9 +14,9 @@ import { describe, expect, it } from "vitest";
  * would count, and a dynamic `import("…")` would not. Stated, not papered over — the shape it protects
  * is a static import a bundler follows.
  *
- * SUBPATHS grows as UI modules land. `@waitron/dashboard-modules` (the app-side registry) does not exist
- * until Task 3, so the kit-package check below is scoped to `dashboard-kit` alone for now and widens to
- * both when that package lands.
+ * SUBPATHS grows as UI modules land. The package-dependency check below covers both browser-bundled
+ * infrastructure packages: `dashboard-kit` (shared helpers) and `dashboard-modules` (the app-side
+ * registry the app imports to mount modules).
  */
 const REPO = join(import.meta.dirname, "..");
 const FORBIDDEN = ["@waitron/db", "hono", "pg", "drizzle-orm", "node:"];
@@ -62,9 +62,13 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
     });
   }
 
-  it("the kit package declares no server dependency", () => {
-    // Scoped to dashboard-kit for now; @waitron/dashboard-modules lands in Task 3 and widens this.
-    for (const pkg of ["dashboard-kit"]) {
+  it("the kit and registry packages declare no server dependency", () => {
+    // The browser-bundled infrastructure packages: the kit (shared helpers) and the registry
+    // (@waitron/dashboard-modules, which the app imports to mount modules) must both stay free of a
+    // direct server dependency. The registry's `@waitron/bookings` dep is the whole module package, but
+    // the app imports only its browser `./dashboard` sub-path; a direct server specifier here (db/hono/
+    // pg/drizzle/node:) is what this forbids.
+    for (const pkg of ["dashboard-kit", "dashboard-modules"]) {
       const m = JSON.parse(readFileSync(join(REPO, `packages/${pkg}/package.json`), "utf8")) as {
         dependencies?: Record<string, string>;
       };

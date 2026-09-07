@@ -1223,6 +1223,7 @@ jobs:
           set -- "$@" --filter "!@waitron/fiscal"
           set -- "$@" --filter "!@waitron/shared"
           set -- "$@" --filter "!@waitron/server-kit"
+          set -- "$@" --filter "!@waitron/dashboard-modules"
 
           pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage

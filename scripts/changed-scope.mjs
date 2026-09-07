@@ -291,6 +291,7 @@ export const LIGHT_A_PACKAGES = [
   "@waitron/fiscal",
   "@waitron/shared",
   "@waitron/server-kit",
+  "@waitron/dashboard-modules",
 ];
 
 export const LIGHT_B_PACKAGES = [

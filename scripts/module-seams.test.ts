@@ -98,6 +98,39 @@ describe("apps/server imports the Spanish regime only from the deferred runtime 
   });
 });
 
+/**
+ * The dashboard module-UI seam (bookings SP2): the admin app reaches a UI module only TRANSITIVELY,
+ * through `@waitron/dashboard-modules` (the browser-safe registry). So no file under `apps/dashboard/src`
+ * imports the composition list, the module contract, or a UI module package directly. `@waitron/bookings`
+ * is forbidden as a bare PREFIX (the `imports()` helper matches `from "<pkg>`), which also catches the
+ * browser sub-path `@waitron/bookings/dashboard` — the app must import NEITHER; the registry, a different
+ * specifier (`@waitron/dashboard-modules`), is the only path in. The app imports none of these today.
+ */
+const APP_FORBIDDEN = ["@waitron/composition", "@waitron/module", "@waitron/bookings"];
+
+describe("apps/dashboard reaches UI modules only via the registry, never a module or the composition list", () => {
+  const files = sourceFiles(join(REPO_ROOT, "apps/dashboard/src"));
+  it("scans the app (not vacuous)", () => {
+    expect(files.some((f) => f.endsWith("dashboard-app.ts"))).toBe(true);
+  });
+  it.each(files.map((f) => [relative(REPO_ROOT, f), f]))("%s", (rel, file) => {
+    expect(imports(file, APP_FORBIDDEN)).toEqual([]);
+  });
+  it("finds a planted module/subpath import (positive control), and does NOT flag the registry", () => {
+    const dir = mkdtempSync(join(tmpdir(), "module-seams-"));
+    try {
+      const bad = join(dir, "bad.ts");
+      writeFileSync(bad, 'import { BOOKINGS_DASHBOARD } from "@waitron/bookings/dashboard";\n');
+      expect(imports(bad, APP_FORBIDDEN)).toEqual(["@waitron/bookings"]);
+      const good = join(dir, "good.ts");
+      writeFileSync(good, 'import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";\n');
+      expect(imports(good, APP_FORBIDDEN)).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("the detector itself", () => {
   it("finds a regime import in a synthetic source (positive control)", () => {
     const dir = mkdtempSync(join(tmpdir(), "module-seams-"));
