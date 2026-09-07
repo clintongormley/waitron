@@ -5,7 +5,8 @@ import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { appendToChain, type TimeEntryAppend } from "./chain.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 
 const WRITERS = 20;
@@ -17,11 +18,13 @@ const pg = usePgliteDb({
 let tenantId: string;
 let personId: string;
 let locationId: string;
+let nodeId: string;
 
 beforeEach(async () => {
   tenantId = await seedTenant(pg.db);
   personId = await seedPerson(pg.db, tenantId);
   locationId = await seedLocation(pg.db, tenantId);
+  nodeId = await seedNode(pg.db, brandTenantId(tenantId), brandLocationId(locationId));
 });
 
 function inputAt(at: string): TimeEntryAppend {
@@ -53,8 +56,7 @@ describe("PGlite cannot test lock contention", () => {
         pg.db.transaction((tx) =>
           appendToChain(
             tx,
-            tenantId,
-            locationId,
+            { tenantId, nodeId, locationId },
             inputAt(`2026-01-05T06:${String(i).padStart(2, "0")}:00Z`),
           ),
         ),

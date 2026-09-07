@@ -45,8 +45,8 @@ export type {
   PersonAbsenceRow,
   SwapDirection,
 } from "./schedule-reads.js";
-export { appendToChain, isUniqueViolation, lockChainHead } from "./chain.js";
-export type { ChainHead, TimeEntryAppend } from "./chain.js";
+export { appendToChain, isUniqueViolation, lockChainHead, readChain } from "./chain.js";
+export type { ChainHead, ChainKey, TimeEntryAppend } from "./chain.js";
 export { computeEntryHash, verifyChain } from "./chain-hash.js";
 export type { ChainVerification, EntryHashInput, VerifiableEntry } from "./chain-hash.js";
 export { WorkforceBackend } from "./clocking.js";

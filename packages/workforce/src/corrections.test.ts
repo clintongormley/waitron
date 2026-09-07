@@ -1,8 +1,12 @@
 import { CORE_MIGRATIONS, captureError, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
-import { AppError } from "@waitron/shared";
+import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import {
+  AppError,
+  locationId as brandLocationId,
+  tenantId as brandTenantId,
+} from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
@@ -18,17 +22,19 @@ const backend = new WorkforceBackend();
 
 let tenantId: string;
 let locationId: string;
+let nodeId: string;
 
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     tenantId = await seedTenant(db);
     locationId = await seedLocation(db, tenantId);
+    nodeId = await seedNode(db, brandTenantId(tenantId), brandLocationId(locationId));
   },
 });
 
 function event(personId: string, at: string): ClockEventInput {
-  return { tenantId, personId, locationId, at, offsetMinutes: 0 };
+  return { tenantId, nodeId, personId, locationId, at, offsetMinutes: 0 };
 }
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -80,6 +86,7 @@ describe("requestCorrection", () => {
     await run((tx) =>
       backend.requestCorrection(tx, {
         tenantId,
+        nodeId,
         correctsEntryId: outEntryId,
         at: "2026-01-05T18:00:00Z",
         offsetMinutes: 0,
@@ -93,7 +100,7 @@ describe("requestCorrection", () => {
       correction_status: string | null;
     }>(sql`
       select entry_kind, correction_status from time_entries
-      where person_id = ${personId} order by ingest_seq`);
+      where person_id = ${personId} order by recorded_at, sequence_no`);
     expect(rows.rows.map((r) => [r.entry_kind, r.correction_status])).toEqual([
       ["in", null],
       ["out", null],
@@ -109,6 +116,7 @@ describe("requestCorrection", () => {
       run((tx) =>
         backend.requestCorrection(tx, {
           tenantId,
+          nodeId,
           correctsEntryId: crypto.randomUUID(),
           at: "2026-01-05T18:00:00Z",
           offsetMinutes: 0,
@@ -128,6 +136,7 @@ describe("approveCorrection", () => {
     const correctionId = await run((tx) =>
       backend.requestCorrection(tx, {
         tenantId,
+        nodeId,
         correctsEntryId: outEntryId,
         at: "2026-01-05T18:00:00Z",
         offsetMinutes: 0,
@@ -136,7 +145,7 @@ describe("approveCorrection", () => {
       }),
     );
     await run((tx) =>
-      backend.approveCorrection(tx, { tenantId, correctionId, approverPersonId: sup }),
+      backend.approveCorrection(tx, { tenantId, nodeId, correctionId, approverPersonId: sup }),
     );
 
     // Reprojected: the corrected 18:00 end makes it a 9h day.
@@ -155,6 +164,7 @@ describe("approveCorrection", () => {
     const correctionId = await run((tx) =>
       backend.requestCorrection(tx, {
         tenantId,
+        nodeId,
         correctsEntryId: outEntryId,
         at: "2026-01-05T18:00:00Z",
         offsetMinutes: 0,
@@ -167,6 +177,7 @@ describe("approveCorrection", () => {
       run((tx) =>
         backend.approveCorrection(tx, {
           tenantId,
+          nodeId,
           correctionId,
           approverPersonId: personId,
         }),
@@ -183,6 +194,7 @@ describe("approveCorrection", () => {
       run((tx) =>
         backend.approveCorrection(tx, {
           tenantId,
+          nodeId,
           correctionId: crypto.randomUUID(),
           approverPersonId: sup,
         }),
@@ -197,6 +209,7 @@ describe("approveCorrection", () => {
     const correctionId = await run((tx) =>
       backend.requestCorrection(tx, {
         tenantId,
+        nodeId,
         correctsEntryId: outEntryId,
         at: "2026-01-05T18:00:00Z",
         offsetMinutes: 0,
@@ -207,14 +220,16 @@ describe("approveCorrection", () => {
     // First approval takes effect (the request row stays `requested` — approval is a second append,
     // never a mutation, so the id passed the second time still names a `requested` row).
     await run((tx) =>
-      backend.approveCorrection(tx, { tenantId, correctionId, approverPersonId: sup }),
+      backend.approveCorrection(tx, { tenantId, nodeId, correctionId, approverPersonId: sup }),
     );
     // Second approval of the SAME request is refused: the target already carries an approved
     // correction, so re-approving would append a duplicate `approved` row (the request→approve-once
     // invariant). Restricting the lookup to `requested` would NOT catch this — the request is still
     // `requested` — so the guard is on the target's existing approval.
     const code = await codeOfRejection(() =>
-      run((tx) => backend.approveCorrection(tx, { tenantId, correctionId, approverPersonId: sup })),
+      run((tx) =>
+        backend.approveCorrection(tx, { tenantId, nodeId, correctionId, approverPersonId: sup }),
+      ),
     );
     expect(code).toBe("correction.not_pending");
     // Exactly ONE approved correction row exists — the refused approval appended nothing.

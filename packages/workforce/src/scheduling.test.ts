@@ -1,8 +1,12 @@
 import { CORE_MIGRATIONS, captureError, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
-import { AppError } from "@waitron/shared";
+import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import {
+  AppError,
+  locationId as brandLocationId,
+  tenantId as brandTenantId,
+} from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { WorkforceBackend } from "./clocking.js";
@@ -610,8 +614,10 @@ describe("getPlannedVsActual", () => {
     inAt: string,
     outAt: string,
   ): Promise<void> {
+    const node = await seedNode(suite.db, brandTenantId(tenantId), brandLocationId(loc));
     await insertTimeEntry(suite.db, {
       tenantId,
+      nodeId: node,
       personId: person,
       locationId: loc,
       entryKind: "in",
@@ -619,6 +625,7 @@ describe("getPlannedVsActual", () => {
     });
     await insertTimeEntry(suite.db, {
       tenantId,
+      nodeId: node,
       personId: person,
       locationId: loc,
       entryKind: "out",

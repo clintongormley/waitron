@@ -39,25 +39,23 @@ export interface TimeEntryRecord {
   entryId: string;
   personId: string;
   locationId: string;
+  /** The node whose chain this entry belongs to (`node_id`) — part of the chain key and, with
+   * `recordedAt`, the cross-node correction tie-break (Task 2). */
+  nodeId: string;
   entryKind: WorkforceEntryKind;
   /** The trusted event instant (`event_at`), an ISO-8601 timestamptz string. On a `correction` this
-   * is the CORRECTED value (the new clock time), not a creation time — creation order is `ingestSeq`. */
+   * is the CORRECTED value (the new clock time), not a recording time — that is `recordedAt`. */
   eventAt: string;
+  /** The recording node's clock at append (`recorded_at`), an ISO-8601 timestamptz string. Hashed and
+   * monotonic per chain (spec §4.1); the cross-node correction tie-break reads it (Task 2). */
+  recordedAt: string;
   /** The wall-clock offset in minutes (`event_offset_minutes`), for deriving the local calendar day. */
   offsetMinutes: number;
-  /** Append/ingest order (`ingest_seq`) — the meaningful creation order of the stream (design §5:
-   * "project by timestamp, chain by ingest"). NOT the correction tie-break: `ingest_seq` is a
-   * `GENERATED ALWAYS AS IDENTITY` column that the tamper-evidence hash does NOT cover (chain-hash.ts
-   * `canonicalString` hashes `sequence_no`, never `ingest_seq`), so a party past the immutability
-   * floor could swap two rows' `ingest_seq` and flip which correction is effective while
-   * `verifyChain` still returns ok. Correction precedence therefore keys off `sequenceNo` (below). */
-  ingestSeq: number;
-  /** The 1-based tamper-evident chain position (`sequence_no`) within this (tenant, location) chain.
-   * Monotonic in append order — the SAME order `ingestSeq` encodes — but, unlike `ingest_seq`, it is
-   * hashed (chain-hash.ts) AND contiguity-checked by `verifyChain`, so it cannot be reordered
+  /** The 1-based tamper-evident chain position (`sequence_no`) within this (tenant, node, location)
+   * chain — hashed (chain-hash.ts) AND contiguity-checked by `verifyChain`, so it cannot be reordered
    * undetected. `applyCorrections` breaks ties between two approved corrections of one target on this
-   * field specifically, closing the gap where `ingest_seq` could be reordered to flip the effective
-   * corrected time. */
+   * field (Task 1 keeps today's rule; Task 2 makes it the cross-node `(recordedAt, nodeId, sequenceNo)`
+   * order). */
   sequenceNo: number;
   /** On a `correction`, the entry it supersedes (a base event or an earlier correction). Null/absent
    * on a base event. */
@@ -219,15 +217,13 @@ function groupByPerson(entries: readonly TimeEntryRecord[]): Map<string, TimeEnt
  * the approved corrections that target it, latest-correction-wins by highest `sequenceNo`, following
  * a chain when a correction is itself corrected (design §5).
  *
- * The tie-break is `sequenceNo`, NOT `ingestSeq`, even though both encode the same append order:
- * `sequence_no` is the position the tamper-evidence hash commits to and `verifyChain` checks for
- * contiguity (chain-hash.ts), whereas `ingest_seq` is a `GENERATED ALWAYS AS IDENTITY` column
- * outside the hash. Keying precedence off the unhashed column would let a party past the immutability
- * floor swap two approved corrections' `ingest_seq` and silently flip which corrected time is
- * effective while the chain still verified; keying off `sequence_no` makes that reorder
- * tamper-evident. All corrections of one target share that target's location (appendCorrection copies
- * `locationId` from the target), so they ride ONE (tenant, location) chain and their `sequence_no`s
- * are comparable.
+ * The tie-break is `sequenceNo` — the position the tamper-evidence hash commits to and `verifyChain`
+ * checks for contiguity (chain-hash.ts) — so a reorder of two approved corrections is tamper-evident.
+ * This is Task 1's within-chain rule; Task 2 generalises it to the cross-node
+ * `(recordedAt, nodeId, sequenceNo)` order, which reduces to this when `recorded_at` is monotonic and
+ * `node_id` constant (spec §4.2). All corrections of one target share that target's location, but a
+ * correction is chained under its OWN recording node, so two nodes' approved corrections of one target
+ * can sit in different chains — the reason Task 2's order exists.
  *
  * Only `approved` corrections are followed; a `requested` one is retained in history but pending, so
  * it is invisible here. The walk needs no cycle guard: a correction can only be inserted after the

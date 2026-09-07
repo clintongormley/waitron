@@ -14,10 +14,15 @@ import { createHash } from "node:crypto";
 
 /** The content of one time entry that the chain hash commits to, plus the predecessor's hash. */
 export interface EntryHashInput {
-  /** The entry's 1-based position within its (tenant, location) chain. */
+  /** The entry's 1-based position within its (tenant, node, location) chain. */
   sequenceNo: number;
   personId: string;
   locationId: string;
+  /** The chain-key node. Hashed (immediately after `locationId`) so a party past the immutability
+   * floor cannot re-point a row at another node's chain undetected — the reasoning that hashes
+   * `capturedByTillId`. This chain's digest is ours to define, so hashing the key does not offend
+   * CLAUDE.md §5 (which fixes the FISCAL digest to AEAT's fields). */
+  nodeId: string;
   entryKind: string;
   /** The trusted event instant, an ISO-8601 timestamptz string, ALREADY TRUNCATED to whole seconds
    * by chain.ts's `attemptAppend` before it reaches here. Hashed as the INSTANT (epoch ms), not the
@@ -29,6 +34,11 @@ export interface EntryHashInput {
    * single write choke point, backstopped by the `time_entries_event_at_second_ck` CHECK, is what
    * keeps the stored column, the committed hash and the read-back one identical representation. */
   eventAt: string;
+  /** The recording node's clock at append, an ISO-8601 timestamptz string, ALREADY TRUNCATED to
+   * whole seconds by chain.ts's `attemptAppend`. Hashed as the INSTANT (epoch ms) immediately after
+   * `eventAt`, so the cross-node correction tie-break value cannot be reordered undetected. Whole
+   * seconds for the same read-back reason `eventAt` documents. */
+  recordedAt: string;
   eventOffsetMinutes: number;
   recordedByPersonId: string;
   /** The till that captured the event, when one did — null for a manually recorded entry. Capture
@@ -80,20 +90,25 @@ function joinFields(fields: ReadonlyArray<readonly [string, string]>): string {
 
 /**
  * The canonical string for one entry — the exact bytes SHA-256 digests. The field ORDER is free (no
- * chain data exists yet, so nothing is bound to a prior layout) but FIXED and documented: capture
- * attribution (`RecordedByPersonId`, `CapturedByTillId`) together, then the correction group
- * (`CorrectsEntryId`, `CorrectionReason`, `CorrectionStatus`, `CorrectionActorId`) together, and
- * `PrevEntryHash` last so the chain link reads at the end. Changing this order changes every digest,
- * so it must not move once real chains exist.
+ * chain data exists yet, so nothing is bound to a prior layout) but FIXED and documented: the chain
+ * key (`NodeId` right after `LocationId`), the two instants together (`RecordedAtMs` right after
+ * `EventAtMs`), capture attribution (`RecordedByPersonId`, `CapturedByTillId`) together, then the
+ * correction group (`CorrectsEntryId`, `CorrectionReason`, `CorrectionStatus`, `CorrectionActorId`)
+ * together, and `PrevEntryHash` last so the chain link reads at the end. Changing this order changes
+ * every digest, so it must not move once real chains exist.
  */
 function canonicalString(input: EntryHashInput): string {
   return joinFields([
     ["SequenceNo", String(input.sequenceNo)],
     ["PersonId", input.personId],
     ["LocationId", input.locationId],
+    // The chain-key node, right after the location — see `nodeId`.
+    ["NodeId", input.nodeId],
     ["EntryKind", input.entryKind],
     // The event as an absolute instant (epoch ms), never its wall-clock string — see `eventAt`.
     ["EventAtMs", String(Date.parse(input.eventAt))],
+    // The recording instant (epoch ms), right after the event instant — see `recordedAt`.
+    ["RecordedAtMs", String(Date.parse(input.recordedAt))],
     ["EventOffsetMinutes", String(input.eventOffsetMinutes)],
     // Who recorded the event, and which till captured it — capture provenance, hashed so neither can
     // be re-pointed undetected (the till is not itself an art. 34.9 field; see `capturedByTillId`).

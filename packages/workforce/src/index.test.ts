@@ -35,6 +35,7 @@ describe("the public surface", () => {
         "appendToChain",
         "isUniqueViolation",
         "lockChainHead",
+        "readChain",
         "computeEntryHash",
         "verifyChain",
         "WorkforceBackend",
@@ -72,7 +73,7 @@ describe("employments constraint declarations (forces the lazy extraConfig callb
 });
 
 describe("time_entries constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares time_entries' five foreign keys and the offset check", () => {
+  it("declares time_entries' six foreign keys and the offset/second checks", () => {
     const config = getTableConfig(api.timeEntries);
 
     const fkNames = config.foreignKeys.map((fk) => fk.getName());
@@ -83,6 +84,8 @@ describe("time_entries constraint declarations (forces the lazy extraConfig call
         "time_entries_location_fk",
         "time_entries_captured_by_till_fk",
         "time_entries_recorded_by_person_fk",
+        // The per-node rekey: the chain-key node FK.
+        "time_entries_node_fk",
         // Slice 3: the self-referential correction target and the correction actor.
         "time_entries_corrects_entry_fk",
         "time_entries_correction_actor_fk",
@@ -99,10 +102,13 @@ describe("time_entries constraint declarations (forces the lazy extraConfig call
     expect(checkNames).toContain("time_entries_chaining_ck");
     // Slice 4 defence-in-depth: event_at must carry no sub-second component (whole-branch review).
     expect(checkNames).toContain("time_entries_event_at_second_ck");
+    // The per-node rekey: recorded_at carries the same whole-second defence.
+    expect(checkNames).toContain("time_entries_recorded_at_second_ck");
 
-    // `ingest_seq` is GENERATED ALWAYS AS IDENTITY — the app cannot forge the append order.
-    const ingest = config.columns.find((c) => c.name === "ingest_seq");
-    expect(ingest?.generatedIdentity?.type).toBe("always");
+    // The non-replicating `ingest_seq` identity column is gone — its jobs moved to `recorded_at`.
+    expect(config.columns.map((c) => c.name)).not.toContain("ingest_seq");
+    expect(config.columns.map((c) => c.name)).toContain("node_id");
+    expect(config.columns.map((c) => c.name)).toContain("recorded_at");
   });
 });
 
@@ -110,16 +116,17 @@ describe("workforce_chains constraint declarations (forces the lazy extraConfig 
   it("declares the chain head's composite key, foreign keys and pointer check", () => {
     const config = getTableConfig(api.workforceChains);
 
-    // The PK is the composite (tenant_id, location_id) in extraConfig — asserting it forces the
-    // lazy callback to run.
+    // The PK is the composite (tenant_id, node_id, location_id) in extraConfig — asserting it forces
+    // the lazy callback to run.
     expect(config.primaryKeys.map((pk) => pk.getName())).toContain(
-      "workforce_chains_tenant_id_location_id_pk",
+      "workforce_chains_tenant_id_node_id_location_id_pk",
     );
 
     const fkNames = config.foreignKeys.map((fk) => fk.getName());
     expect(fkNames).toEqual(
       expect.arrayContaining([
         "workforce_chains_tenant_id_tenants_id_fk",
+        "workforce_chains_node_id_nodes_id_fk",
         "workforce_chains_location_id_locations_id_fk",
         "workforce_chains_last_entry_id_time_entries_id_fk",
       ]),

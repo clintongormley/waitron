@@ -11,33 +11,39 @@ import {
 let seq = 0;
 
 /** A terse builder so a test reads as a sequence of clock events, not a wall of object literals.
- * `entryId`/`ingestSeq`/`sequenceNo` auto-increment (all off the same counter, so they agree in
- * append order by default — normal operation) and callers only spell them out when a correction
- * needs a specific row or when a test deliberately makes the two orderings DISAGREE. */
+ * `entryId`/`sequenceNo` auto-increment off the same counter, so they agree in append order by
+ * default; `recordedAt` defaults to ascend with `sequenceNo` (the monotonic-per-chain invariant),
+ * `nodeId` to a single node. Callers spell any of them out for a specific correction row or a
+ * cross-node case (Task 2). */
 function entry(
   personId: string,
   entryKind: WorkforceEntryKind,
   eventAt: string,
   opts: {
     locationId?: string;
+    nodeId?: string;
     offsetMinutes?: number;
     entryId?: string;
-    ingestSeq?: number;
+    recordedAt?: string;
     sequenceNo?: number;
     correctsEntryId?: string;
     correctionStatus?: "requested" | "approved";
   } = {},
 ): TimeEntryRecord {
   seq += 1;
+  const sequenceNo = opts.sequenceNo ?? seq;
   return {
     entryId: opts.entryId ?? `e${seq}`,
     personId,
     locationId: opts.locationId ?? "loc-1",
+    nodeId: opts.nodeId ?? "node-1",
     entryKind,
     eventAt,
+    recordedAt:
+      opts.recordedAt ??
+      new Date(Date.parse("2026-01-01T00:00:00Z") + sequenceNo * 1000).toISOString(),
     offsetMinutes: opts.offsetMinutes ?? 0,
-    ingestSeq: opts.ingestSeq ?? seq,
-    sequenceNo: opts.sequenceNo ?? seq,
+    sequenceNo,
     correctsEntryId: opts.correctsEntryId,
     correctionStatus: opts.correctionStatus,
   };
@@ -244,18 +250,16 @@ describe("projectWorkSessions applies corrections (reprojection, latest-approved
     // (ingestSeq ascends with sequenceNo); the disagree test below is what pins the tie-break to
     // sequenceNo specifically.
     const [session] = projectWorkSessions([
-      entry("p1", "in", "2026-01-05T09:00:00Z", { ingestSeq: 1, sequenceNo: 1 }),
-      entry("p1", "out", "2026-01-05T17:00:00Z", { entryId: "out-1", ingestSeq: 2, sequenceNo: 2 }),
+      entry("p1", "in", "2026-01-05T09:00:00Z", { sequenceNo: 1 }),
+      entry("p1", "out", "2026-01-05T17:00:00Z", { entryId: "out-1", sequenceNo: 2 }),
       entry("p1", "correction", "2026-01-05T18:00:00Z", {
         entryId: "corr-1",
-        ingestSeq: 10,
         sequenceNo: 3,
         correctsEntryId: "out-1",
         correctionStatus: "approved",
       }),
       entry("p1", "correction", "2026-01-05T18:30:00Z", {
         entryId: "corr-2",
-        ingestSeq: 20,
         sequenceNo: 4,
         correctsEntryId: "out-1",
         correctionStatus: "approved",
@@ -276,18 +280,16 @@ describe("projectWorkSessions applies corrections (reprojection, latest-approved
     // genuinely disagree, this measures which field the tie-break uses (CLAUDE.md §1: a test whose
     // two answers cannot differ measures nothing).
     const [session] = projectWorkSessions([
-      entry("p1", "in", "2026-01-05T09:00:00Z", { ingestSeq: 1, sequenceNo: 1 }),
-      entry("p1", "out", "2026-01-05T17:00:00Z", { entryId: "out-1", ingestSeq: 2, sequenceNo: 2 }),
+      entry("p1", "in", "2026-01-05T09:00:00Z", { sequenceNo: 1 }),
+      entry("p1", "out", "2026-01-05T17:00:00Z", { entryId: "out-1", sequenceNo: 2 }),
       entry("p1", "correction", "2026-01-05T18:00:00Z", {
         entryId: "corr-high-ingest",
-        ingestSeq: 20,
         sequenceNo: 3,
         correctsEntryId: "out-1",
         correctionStatus: "approved",
       }),
       entry("p1", "correction", "2026-01-05T18:30:00Z", {
         entryId: "corr-high-sequence",
-        ingestSeq: 10,
         sequenceNo: 4,
         correctsEntryId: "out-1",
         correctionStatus: "approved",
@@ -300,17 +302,15 @@ describe("projectWorkSessions applies corrections (reprojection, latest-approved
     // A correction is itself immutable and superseded by another (design §5). corr-2 corrects
     // corr-1 corrects the original out, so the effective end is corr-2's 18:45.
     const [session] = projectWorkSessions([
-      entry("p1", "in", "2026-01-05T09:00:00Z", { ingestSeq: 1 }),
-      entry("p1", "out", "2026-01-05T17:00:00Z", { entryId: "out-1", ingestSeq: 2 }),
+      entry("p1", "in", "2026-01-05T09:00:00Z", {}),
+      entry("p1", "out", "2026-01-05T17:00:00Z", { entryId: "out-1" }),
       entry("p1", "correction", "2026-01-05T18:00:00Z", {
         entryId: "corr-1",
-        ingestSeq: 10,
         correctsEntryId: "out-1",
         correctionStatus: "approved",
       }),
       entry("p1", "correction", "2026-01-05T18:45:00Z", {
         entryId: "corr-2",
-        ingestSeq: 20,
         correctsEntryId: "corr-1",
         correctionStatus: "approved",
       }),

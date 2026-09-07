@@ -20,8 +20,9 @@ const OWNED = [
 ];
 
 /** Every core table this package's schema files import to declare foreign keys. None of these may
- * ever appear in this package's generated SQL. */
-const CORE = ["tenants", "locations", "tills"];
+ * ever appear in this package's generated SQL. `nodes` joined the list with the per-node chain
+ * rekey — referenced by `time_entries`/`workforce_chains`, owned by @waitron/db. */
+const CORE = ["tenants", "locations", "tills", "nodes"];
 
 const drizzleDir = fileURLToPath(new URL("../drizzle", import.meta.url));
 
