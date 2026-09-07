@@ -168,7 +168,7 @@ describe("moveTabLines — subset", () => {
     const tabB = await openTabWith(cfg, tableBId, [{ productId: aguaId, quantity: "3" }]);
 
     // Move ONLY line 1 (café) from A to B.
-    await asApp(cfg, (tx) => moveTabLines(tx, tabA, tabB, [1]));
+    await asApp(cfg, (tx) => moveTabLines(tx, cfg, tabA, tabB, [1]));
 
     const a = await linesOf(tabA);
     const b = await linesOf(tabB);

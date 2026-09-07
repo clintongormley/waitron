@@ -28,7 +28,7 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { addTabRound, moveTab, openTab, parkOrder } from "./working-order.js";
+import { addTabRound, mergeTabs, moveTab, openTab, parkOrder } from "./working-order.js";
 import { payWorkingOrder, recordTillSale } from "./till-sale.js";
 import "./errors.js";
 
@@ -435,6 +435,31 @@ describe("cross-tenant isolation — tab/pay by-id reads (§3)", () => {
     );
     expect(rows[0]!.status).toBe("open");
     expect(rows[0]!.label).toBe("B held");
+  });
+
+  it("mergeTabs against a FOREIGN tenant's tabs throws tab.not_open, never merges/abandons them", async () => {
+    const { cfg: cfgA } = await setupVenue();
+    const { cfg: cfgB, cafe: cafeB } = await setupVenue();
+    const bInto = await openTabFor(cfgB, cafeB, "B-into");
+    const bFrom = await openTabFor(cfgB, cafeB, "B-from");
+
+    // mergeTabs reads `working_orders`/`dining_tables` by id in its OWN queries (not via the helpers).
+    // Before the fix, tenant A merged B's tabs and ABANDONED B's source across the boundary — the empty
+    // source has no composite-FK backstop (the run-it review reproduced exactly this). Scoped, A's read
+    // misses → tab.not_open, before any write.
+    await expect(
+      withTenant(suite.admin, cfgA.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return mergeTabs(tx, cfgA, bInto, bFrom, { freeSourceTable: true });
+      }),
+    ).rejects.toMatchObject({ code: "tab.not_open" });
+
+    // Both of B's tabs are still OPEN — neither merged nor abandoned across the tenant boundary.
+    const { rows } = await suite.admin.execute<{ status: string }>(
+      sql`select status from working_orders where id in (${bInto}, ${bFrom})`,
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.status === "open")).toBe(true);
   });
 });
 

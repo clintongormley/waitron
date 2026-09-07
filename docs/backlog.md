@@ -606,19 +606,23 @@ screens, `apps/server/src/modules.ts` (the maps derived from that list), and the
        the pre-check now scopes `eq(diningTables.tenantId, cfg.tenantId)`, so another tenant's real table id
        reads as absent (clean `table.not_found`, not a raw 23503); real-PG two-tenant regression in
        `tabs.pg.test.ts`. **§3 by-id read-leak FAMILY — FIXED 2026-09-08 (branch
-       `fix/tab-pay-by-id-tenant-scope`),** same class as the fixed `getHeldOrder` leak: the three internal
-       helpers now scope to the tenant — `lockOpenTabRow`/`lockOpenTab` (threaded `tenantId`, reached by the
-       tab verbs `sendLines`/`recallLines`/`addTabRound`/`voidTabLine`/`setLineCourse`/`markLineServed`/
-       `unmarkLineServed`/`transferLines`/`splitOffCheck`/`unjoinTable`) and `assertTabOpen` (reached by
-       `moveTab`/`joinTable`/`readTabLines`) — plus `parkOrder`'s replay read and `payWorkingOrder`'s two
-       by-id reads (`till-sale.ts`). Real-PG cross-tenant regressions in `tabs.pg.test.ts` for the three
-       families with an observable discriminator (a tab verb via `lockOpenTab`; `moveTab` via `assertTabOpen`;
-       `parkOrder`'s replay, which had RETURNED the other tenant's order number — the RED proof). The
-       `payWorkingOrder` reads are scoped defensively: their disclosure is to control flow only (downstream
-       `readSettledTicket`/sales reads already scope by tenant), so there is no observable final-state
-       discriminator to probe. **Still open (SEPARATE class, scope next):** request-supplied TABLE-id reads —
-       `moveTab`/`joinTable`'s `toTableId`, `assertTableAvailable`, `freeTablesCoveredBy` — the
-       deliveryTableId/openTab shape, a table id from the request rather than an order/tab id. **Floor perf —
+       `fix/tab-pay-by-id-tenant-scope`),** same class as the fixed `getHeldOrder` leak. Three helpers now take
+       `cfg` (NOT a bare `tenantId` — two adjacent `string` params invited the very transposition this fights;
+       simplify lens) and scope by it: `lockOpenTabRow`/`lockOpenTab` (tab verbs `sendLines`/`recallLines`/
+       `addTabRound`/`voidTabLine`/`setLineCourse`/`markLineServed`/`unmarkLineServed`/`transferLines`/
+       `splitOffCheck`/`unjoinTable`) and `assertTabOpen` (`moveTab`/`joinTable`/`readTabLines`). Also scoped:
+       `mergeTabs`'s own reads + abandon and `moveTabLines`'s read (threaded `cfg`) — the run-it seat RAN a
+       probe showing tenant A merged AND abandoned B's tabs; `parkOrder`'s replay read; and ALL eleven
+       `payWorkingOrder`/collect/integrated by-id reads in `till-sale.ts` (the same lock+replay shape). Real-PG
+       cross-tenant regressions in `tabs.pg.test.ts` for the four families with an observable discriminator (a
+       tab verb via `lockOpenTab`; `moveTab` via `assertTabOpen`; `mergeTabs`; `parkOrder`'s replay, which had
+       RETURNED the other tenant's order number — the RED proof). The `payWorkingOrder`/collect reads are
+       scoped defensively: with the lock read scoped a foreign id never reaches the retrieved-order reader, and
+       downstream `readSettledTicket`/sales reads already scope by tenant, so there is no observable
+       final-state discriminator to probe. **Still open (SEPARATE classes, scope next):** (i) request-supplied
+       TABLE-id reads — `moveTab`/`joinTable`'s `toTableId`, `assertTableAvailable` — the deliveryTableId/openTab
+       shape (a table id from the request, not an order/tab id); (ii) `ticket_items` by-id reads/updates in
+       `bumpCourseReady`/`advanceTicketItem`/`advanceTicket` (still `_cfg`, unscoped — a KDS §3 class). **Floor perf —
        FIXED 2026-09-08 (branch `perf/floor-datetimeformat-memoize`):** `floor.ts` memoizes its per-timezone
        `Intl.DateTimeFormat` (was building two per poll); the per-poll `locations.time_zone` DB read is left
        as-is (staleness out of scope). `CoreServices` is one shared interface every module receives whole — when a 2nd core verb is
