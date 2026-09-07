@@ -16,7 +16,13 @@ export const REPLICATION_ROLE = "waitron_repl";
  * image's `postgresql.conf`; the readiness check verifies all three regardless of who set them.
  *
  * Statement 0 embeds the replication PASSWORD. The whole array is SECRET: run it over a superuser
- * connection, never log it — as `instance-apply.ts` treats `CREATE ROLE`. */
+ * connection, never log it — as `instance-apply.ts` treats `CREATE ROLE`. That connection MUST be
+ * to the TARGET database: the array mixes CLUSTER-GLOBAL statements (`CREATE ROLE`, the
+ * `pg_create_subscription` grant, `ALTER SYSTEM`) with SCHEMA-LOCAL ones (`GRANT … ON ALL TABLES IN
+ * SCHEMA public`, `ALTER DEFAULT PRIVILEGES … IN SCHEMA public`), which land in whichever database
+ * the connection happens to be on. `readReplicationReadiness` verifies the per-database default
+ * privilege landed, so a bootstrap run against the wrong database on the same cluster is caught
+ * rather than going green. */
 export function replicationBootstrapStatements(password: string): string[] {
   const repl = quoteIdent(REPLICATION_ROLE);
   const migrator = quoteIdent(INSTANCE_ROLES[0]);

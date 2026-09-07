@@ -13,6 +13,7 @@ const READY: ReplicationReadiness = {
   maxSlotWalKeepSizeBounded: true,
   replicationRolePresent: true,
   migratorCanCreateSubscription: true,
+  replicationHasDefaultSelect: true,
 };
 const READY_ROW = {
   wal_level: "logical",
@@ -20,6 +21,7 @@ const READY_ROW = {
   slot_bounded: true,
   repl_present: true,
   migrator_can_subscribe: true,
+  repl_default_select: true,
 };
 function fakeDb(row: Record<string, unknown>) {
   return { execute: async () => ({ rows: [row] }) } as never;
@@ -45,17 +47,32 @@ describe("replicationReadinessGaps", () => {
     expect(replicationReadinessGaps({ ...READY, migratorCanCreateSubscription: false })).toContain(
       "migrator lacks pg_create_subscription",
     );
+    expect(replicationReadinessGaps({ ...READY, replicationHasDefaultSelect: false })).toContain(
+      "replication role has no default SELECT grant in this database (bootstrap not applied here?)",
+    );
+  });
+  it("does not report the per-database gap when the default grant is present", () => {
+    expect(replicationReadinessGaps(READY)).not.toContain(
+      "replication role has no default SELECT grant in this database (bootstrap not applied here?)",
+    );
   });
 });
 
 describe("readReplicationReadiness maps the row", () => {
-  it("reads the five facts", async () => {
+  it("reads the six facts", async () => {
     expect(await readReplicationReadiness(fakeDb(READY_ROW))).toEqual(READY);
     expect(
       await readReplicationReadiness(fakeDb({ ...READY_ROW, track: "off", slot_bounded: false })),
     ).toMatchObject({
       trackCommitTimestamp: false,
       maxSlotWalKeepSizeBounded: false,
+    });
+  });
+  it("reads the per-database default-SELECT fact independently of the cluster-global ones", async () => {
+    expect(
+      await readReplicationReadiness(fakeDb({ ...READY_ROW, repl_default_select: false })),
+    ).toMatchObject({
+      replicationHasDefaultSelect: false,
     });
   });
 });
