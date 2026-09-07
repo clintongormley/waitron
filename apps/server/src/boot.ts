@@ -101,6 +101,7 @@ import { mountScheduleApi } from "./schedule-api.js";
 import { mountMeApi } from "./me-api.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
+import { mountFiscalCertApi } from "./fiscal-cert-api.js";
 import { mountMedia } from "./media-api.js";
 import { assertBuiltApp, mountSpa } from "./spa-api.js";
 import { mountSetup } from "./setup-api.js";
@@ -2053,6 +2054,38 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // Mount the operator's failover trigger on BOTH modes (spec §6), before the SPA catch-alls. The
   // read-only gate exempts this POST (above), so a mirror AND a fenced node reach the handler.
   mountPromoteApi(app, { appDb: db, tenantId: config.till.tenantId, run: promoteRun }, log);
+
+  // The AEAT cert management endpoints (cert-distribution §3): `/unlock` (break-glass unlock of the
+  // dormant standby copy) and the install/replace POST (admin-authorized, the renewal path). Mounted
+  // on the SAME management surface as the promote endpoint but WITHOUT a read-only-gate exemption, so a
+  // mirror refuses both with `node.read_only` — only a primary serves them. The cert seat
+  // (`validate`/`seal`) is the ENABLED fiscal contribution's `provisioningSecret` — the SAME seat the
+  // setup provision path reaches — so boot names no regime package (`scripts/module-seams.test.ts`).
+  // A regime that files nothing (`fiscal-none`) carries no `provisioningSecret`; installing a cert is
+  // then a request-shape fault, so the wiring refuses it with `setup.request_invalid` before opening a
+  // pool. The two owner writes (seal live, delete corrupt) borrow the SAME per-call `withOwnerDb` the
+  // promote path uses — a trading box keeps only the app pool open.
+  const certSeat = enabledFiscal.provisioningSecret;
+  mountFiscalCertApi(
+    app,
+    {
+      appDb: db,
+      ring,
+      tenantId: config.till.tenantId,
+      withOwnerDb: (fn) => withOwnerDb((deps) => fn(deps.ownerDb)),
+      validateFreshCert: (raw) => {
+        if (certSeat === undefined)
+          throw new AppError("setup.request_invalid", { field: "aeatCert" });
+        certSeat.validate(raw);
+      },
+      sealFreshCert: (tenantId, raw) => {
+        if (certSeat === undefined)
+          throw new AppError("setup.request_invalid", { field: "aeatCert" });
+        return withOwnerDb((deps) => certSeat.seal({ db: deps.ownerDb, ring }, tenantId, raw));
+      },
+    },
+    log,
+  );
 
   // Serve the built front-ends SAME-ORIGIN (slice 1a), mounted LAST — after every API route AND the
   // optional sync block above — so the till's root catch-all cannot shadow `/api`, `/management-api`,
