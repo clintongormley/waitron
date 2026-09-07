@@ -39,25 +39,23 @@ export interface TimeEntryRecord {
   entryId: string;
   personId: string;
   locationId: string;
+  /** The node whose chain this entry belongs to (`node_id`) — part of the chain key and the second
+   * key of the cross-node correction order (`applyCorrections`). */
+  nodeId: string;
   entryKind: WorkforceEntryKind;
   /** The trusted event instant (`event_at`), an ISO-8601 timestamptz string. On a `correction` this
-   * is the CORRECTED value (the new clock time), not a creation time — creation order is `ingestSeq`. */
+   * is the CORRECTED value (the new clock time), not a recording time — that is `recordedAt`. */
   eventAt: string;
+  /** The recording node's clock at append (`recorded_at`), an ISO-8601 timestamptz string. Hashed and
+   * monotonic per chain (spec §4.1); the first key of the cross-node correction order
+   * (`applyCorrections`). */
+  recordedAt: string;
   /** The wall-clock offset in minutes (`event_offset_minutes`), for deriving the local calendar day. */
   offsetMinutes: number;
-  /** Append/ingest order (`ingest_seq`) — the meaningful creation order of the stream (design §5:
-   * "project by timestamp, chain by ingest"). NOT the correction tie-break: `ingest_seq` is a
-   * `GENERATED ALWAYS AS IDENTITY` column that the tamper-evidence hash does NOT cover (chain-hash.ts
-   * `canonicalString` hashes `sequence_no`, never `ingest_seq`), so a party past the immutability
-   * floor could swap two rows' `ingest_seq` and flip which correction is effective while
-   * `verifyChain` still returns ok. Correction precedence therefore keys off `sequenceNo` (below). */
-  ingestSeq: number;
-  /** The 1-based tamper-evident chain position (`sequence_no`) within this (tenant, location) chain.
-   * Monotonic in append order — the SAME order `ingestSeq` encodes — but, unlike `ingest_seq`, it is
-   * hashed (chain-hash.ts) AND contiguity-checked by `verifyChain`, so it cannot be reordered
-   * undetected. `applyCorrections` breaks ties between two approved corrections of one target on this
-   * field specifically, closing the gap where `ingest_seq` could be reordered to flip the effective
-   * corrected time. */
+  /** The 1-based tamper-evident chain position (`sequence_no`) within this (tenant, node, location)
+   * chain — hashed (chain-hash.ts) AND contiguity-checked by `verifyChain`, so it cannot be reordered
+   * undetected. The last key of the cross-node correction order (`applyCorrections`), decisive only
+   * within a single chain once `recordedAt` and `nodeId` tie. */
   sequenceNo: number;
   /** On a `correction`, the entry it supersedes (a base event or an earlier correction). Null/absent
    * on a base event. */
@@ -211,23 +209,33 @@ function groupByPerson(entries: readonly TimeEntryRecord[]): Map<string, TimeEnt
 }
 
 /**
+ * True when `a` is the later of two approved corrections under the total order
+ * `(recordedAt, nodeId, sequenceNo)` (spec §4.2). A single tuple compare, NOT a "same-node →
+ * sequenceNo, else recordedAt" special case — that is not transitive across three entries spanning
+ * two chains, so it could pick different winners depending on comparison order. Within one chain
+ * `recordedAt` is monotonic and `nodeId` constant (spec §4.1), so this reduces to the old
+ * greatest-`sequenceNo` rule and the single-node tests still hold.
+ */
+function laterThan(a: TimeEntryRecord, b: TimeEntryRecord): boolean {
+  if (a.recordedAt !== b.recordedAt) return a.recordedAt > b.recordedAt;
+  if (a.nodeId !== b.nodeId) return a.nodeId > b.nodeId;
+  return a.sequenceNo > b.sequenceNo;
+}
+
+/**
  * The effective (corrected) timestamp and offset for one base event, and the base events with their
  * corrections applied.
  *
  * A correction never mutates a stored row — it is an append that carries a new timestamp and points
  * at the entry it supersedes (`correctsEntryId`). Reprojection resolves each base event by walking
- * the approved corrections that target it, latest-correction-wins by highest `sequenceNo`, following
- * a chain when a correction is itself corrected (design §5).
+ * the approved corrections that target it, latest-correction-wins by the total order `laterThan`
+ * commits to, following a chain when a correction is itself corrected (design §5).
  *
- * The tie-break is `sequenceNo`, NOT `ingestSeq`, even though both encode the same append order:
- * `sequence_no` is the position the tamper-evidence hash commits to and `verifyChain` checks for
- * contiguity (chain-hash.ts), whereas `ingest_seq` is a `GENERATED ALWAYS AS IDENTITY` column
- * outside the hash. Keying precedence off the unhashed column would let a party past the immutability
- * floor swap two approved corrections' `ingest_seq` and silently flip which corrected time is
- * effective while the chain still verified; keying off `sequence_no` makes that reorder
- * tamper-evident. All corrections of one target share that target's location (appendCorrection copies
- * `locationId` from the target), so they ride ONE (tenant, location) chain and their `sequence_no`s
- * are comparable.
+ * All corrections of one target share that target's location, but a correction is chained under its
+ * OWN recording node, so two nodes' approved corrections of one target can sit in different chains —
+ * the reason the winner is ordered across chains by `(recordedAt, nodeId, sequenceNo)` rather than by
+ * `sequenceNo` alone (spec §4.2). `sequenceNo` remains the within-chain position the tamper-evidence
+ * hash commits to, so a reorder within a chain is still tamper-evident.
  *
  * Only `approved` corrections are followed; a `requested` one is retained in history but pending, so
  * it is invisible here. The walk needs no cycle guard: a correction can only be inserted after the
@@ -240,7 +248,7 @@ function applyCorrections(entries: readonly TimeEntryRecord[]): TimeEntryRecord[
     if (e.entryKind !== "correction" || e.correctionStatus !== "approved") continue;
     if (e.correctsEntryId === undefined || e.correctsEntryId === null) continue;
     const current = latestApprovedByTarget.get(e.correctsEntryId);
-    if (current === undefined || e.sequenceNo > current.sequenceNo) {
+    if (current === undefined || laterThan(e, current)) {
       latestApprovedByTarget.set(e.correctsEntryId, e);
     }
   }

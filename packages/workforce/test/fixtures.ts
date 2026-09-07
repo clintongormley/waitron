@@ -246,6 +246,7 @@ export async function insertTimeEntry(
   tx: Database | Transaction,
   params: {
     tenantId: string;
+    nodeId: string;
     personId: string;
     locationId: string;
     entryKind?: WorkforceEntryKind;
@@ -254,12 +255,16 @@ export async function insertTimeEntry(
   },
 ): Promise<void> {
   await tx.transaction((inner) =>
-    appendToChain(inner, params.tenantId, params.locationId, {
-      personId: params.personId,
-      entryKind: params.entryKind ?? "in",
-      eventAt: params.eventAt ?? "2026-01-05T09:00:00Z",
-      eventOffsetMinutes: params.offsetMinutes ?? 0,
-      recordedByPersonId: params.personId,
-    }),
+    appendToChain(
+      inner,
+      { tenantId: params.tenantId, nodeId: params.nodeId, locationId: params.locationId },
+      {
+        personId: params.personId,
+        entryKind: params.entryKind ?? "in",
+        eventAt: params.eventAt ?? "2026-01-05T09:00:00Z",
+        eventOffsetMinutes: params.offsetMinutes ?? 0,
+        recordedByPersonId: params.personId,
+      },
+    ),
   );
 }

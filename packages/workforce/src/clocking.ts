@@ -29,6 +29,9 @@ import "./errors.js";
  * offset, supplied by the caller (as `recordSale` is handed `issuedAt`), never read here. */
 export interface ClockEventInput {
   tenantId: string;
+  /** The node recording the event — its chain the entry is appended to (spec §2.1). Supplied per
+   * call the way `recordSale` takes `input.nodeId`. */
+  nodeId: string;
   personId: string;
   locationId: string;
   at: string;
@@ -74,6 +77,9 @@ export interface WorkSummaryRuleset {
 /** A request to correct an entry's timestamp — an append, never an edit of the target. */
 export interface CorrectionRequestInput {
   tenantId: string;
+  /** The node recording the correction — its chain the correction is appended to (spec §3.3). A
+   * correction rides its RECORDING node's chain, which need not be the target's node. */
+  nodeId: string;
   /** The entry whose timestamp is wrong (a base clock event, or an earlier correction). */
   correctsEntryId: string;
   /** The corrected event instant and its wall offset — what the entry SHOULD have been. */
@@ -90,6 +96,8 @@ export interface CorrectionRequestInput {
 /** A supervisor's approval of a requested correction — the second append that gives it effect. */
 export interface CorrectionApprovalInput {
   tenantId: string;
+  /** The node recording the approval — its chain the approval is appended to (spec §3.3). */
+  nodeId: string;
   /** The `requested` correction to approve. */
   correctionId: string;
   /** Who is approving — must hold a supervisor/manager/admin role. */
@@ -397,10 +405,11 @@ export class WorkforceBackend {
         entryId: timeEntries.id,
         personId: timeEntries.personId,
         locationId: timeEntries.locationId,
+        nodeId: timeEntries.nodeId,
         entryKind: timeEntries.entryKind,
         eventAt: sql<string>`to_char(${timeEntries.eventAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
+        recordedAt: sql<string>`to_char(${timeEntries.recordedAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
         offsetMinutes: timeEntries.eventOffsetMinutes,
-        ingestSeq: timeEntries.ingestSeq,
         sequenceNo: timeEntries.sequenceNo,
         correctsEntryId: timeEntries.correctsEntryId,
         correctionStatus: timeEntries.correctionStatus,
@@ -430,6 +439,7 @@ export class WorkforceBackend {
     const target = await this.entryById(tx, input.tenantId, input.correctsEntryId);
     return this.appendCorrection(tx, {
       tenantId: input.tenantId,
+      nodeId: input.nodeId,
       personId: target.personId,
       locationId: target.locationId,
       correctsEntryId: input.correctsEntryId,
@@ -477,6 +487,7 @@ export class WorkforceBackend {
     }
     return this.appendCorrection(tx, {
       tenantId: input.tenantId,
+      nodeId: input.nodeId,
       personId: request.personId,
       locationId: request.locationId,
       // The ORIGINAL entry, not the request row: the projection walks approved corrections from base
@@ -515,7 +526,7 @@ export class WorkforceBackend {
    * WHY `FOR NO KEY UPDATE` AND NOT `FOR UPDATE` — the lock modes are NOT interchangeable here, and
    * `FOR UPDATE` reintroduces a deadlock this exact clause was added to avoid. The lock ORDER is not
    * uniform across the write paths: this clock path takes the `persons` lock BEFORE `appendToChain`'s
-   * per-location `workforce_chains` head lock, but the CORRECTION paths (`requestCorrection` /
+   * per-(node, location) `workforce_chains` head lock, but the CORRECTION paths (`requestCorrection` /
    * `approveCorrection` → `appendCorrection` → `appendToChain`) do NOT call this — they lock the chain
    * head FIRST and then, on the `time_entries` INSERT, implicitly take `FOR KEY SHARE` on the
    * referenced `persons` rows via the FKs (`time_entries_person_fk`, `_recorded_by_person_fk`,
@@ -921,7 +932,7 @@ export class WorkforceBackend {
     const { rows } = await tx.execute<{ entry_kind: LiveEntryKind }>(sql`
       select entry_kind from time_entries
       where tenant_id = ${tenantId} and person_id = ${personId} and entry_kind <> 'correction'
-      order by event_at desc, ingest_seq desc
+      order by event_at desc, recorded_at desc, node_id desc, sequence_no desc
       limit 1`);
     const last = rows[0];
     return last === undefined ? "out" : STATE_AFTER[last.entry_kind];
@@ -932,17 +943,21 @@ export class WorkforceBackend {
     input: ClockEventInput,
     entryKind: WorkforceEntryKind,
   ): Promise<void> {
-    // Every clock event is appended to its location's tamper-evidence chain (Slice 4) under a row
-    // lock on the chain head — the single-writer path (design §5). The hash and chain position are
-    // computed there, never supplied here.
-    await appendToChain(tx, input.tenantId, input.locationId, {
-      personId: input.personId,
-      entryKind,
-      eventAt: input.at,
-      eventOffsetMinutes: input.offsetMinutes,
-      recordedByPersonId: input.recordedByPersonId ?? input.personId,
-      capturedByTillId: input.tillId ?? null,
-    });
+    // Every clock event is appended to its (node, location) tamper-evidence chain (Slice 4) under a
+    // row lock on the chain head — the single-writer path (design §5). The hash, chain position and
+    // recorded_at are computed there, never supplied here.
+    await appendToChain(
+      tx,
+      { tenantId: input.tenantId, nodeId: input.nodeId, locationId: input.locationId },
+      {
+        personId: input.personId,
+        entryKind,
+        eventAt: input.at,
+        eventOffsetMinutes: input.offsetMinutes,
+        recordedByPersonId: input.recordedByPersonId ?? input.personId,
+        capturedByTillId: input.tillId ?? null,
+      },
+    );
   }
 
   /** The person and location of an entry, or `correction.target_not_found` if it does not exist. */
@@ -1039,6 +1054,7 @@ export class WorkforceBackend {
     tx: Transaction,
     params: {
       tenantId: string;
+      nodeId: string;
       personId: string;
       locationId: string;
       correctsEntryId: string;
@@ -1058,18 +1074,22 @@ export class WorkforceBackend {
     // one that reorders or deletes rows. The actor is written to BOTH `recorded_by_person_id` (the
     // operator) and `correction_actor_id` (the accountable actor), and both are hashed, so the actor
     // no longer rides only on the coincidence that the two are the same person here.
-    const { id } = await appendToChain(tx, params.tenantId, params.locationId, {
-      personId: params.personId,
-      entryKind: "correction",
-      eventAt: params.at,
-      eventOffsetMinutes: params.offsetMinutes,
-      recordedByPersonId: params.actorPersonId,
-      capturedByTillId: params.tillId,
-      correctsEntryId: params.correctsEntryId,
-      correctionReason: params.reason,
-      correctionStatus: params.status,
-      correctionActorId: params.actorPersonId,
-    });
+    const { id } = await appendToChain(
+      tx,
+      { tenantId: params.tenantId, nodeId: params.nodeId, locationId: params.locationId },
+      {
+        personId: params.personId,
+        entryKind: "correction",
+        eventAt: params.at,
+        eventOffsetMinutes: params.offsetMinutes,
+        recordedByPersonId: params.actorPersonId,
+        capturedByTillId: params.tillId,
+        correctsEntryId: params.correctsEntryId,
+        correctionReason: params.reason,
+        correctionStatus: params.status,
+        correctionActorId: params.actorPersonId,
+      },
+    );
     return id;
   }
 
@@ -1110,10 +1130,11 @@ export class WorkforceBackend {
         entryId: timeEntries.id,
         personId: timeEntries.personId,
         locationId: timeEntries.locationId,
+        nodeId: timeEntries.nodeId,
         entryKind: timeEntries.entryKind,
         eventAt: sql<string>`to_char(${timeEntries.eventAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
+        recordedAt: sql<string>`to_char(${timeEntries.recordedAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
         offsetMinutes: timeEntries.eventOffsetMinutes,
-        ingestSeq: timeEntries.ingestSeq,
         sequenceNo: timeEntries.sequenceNo,
         correctsEntryId: timeEntries.correctsEntryId,
         correctionStatus: timeEntries.correctionStatus,

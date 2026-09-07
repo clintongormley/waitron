@@ -1,8 +1,12 @@
 import { CORE_MIGRATIONS, captureError, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
-import { AppError } from "@waitron/shared";
+import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import {
+  AppError,
+  locationId as brandLocationId,
+  tenantId as brandTenantId,
+} from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
@@ -24,12 +28,14 @@ const DEFAULT_RULESET = {
 
 let tenantId: string;
 let locationId: string;
+let nodeId: string;
 
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     tenantId = await seedTenant(db);
     locationId = await seedLocation(db, tenantId);
+    nodeId = await seedNode(db, brandTenantId(tenantId), brandLocationId(locationId));
   },
 });
 
@@ -39,7 +45,7 @@ async function freshPerson(name: string): Promise<string> {
 }
 
 function event(personId: string, at: string): ClockEventInput {
-  return { tenantId, personId, locationId, at, offsetMinutes: 0 };
+  return { tenantId, nodeId, personId, locationId, at, offsetMinutes: 0 };
 }
 
 /** Runs a backend call inside a tenant transaction, the shape a till caller uses. */
@@ -76,7 +82,7 @@ describe("clock state machine", () => {
     await run((tx) => backend.clockIn(tx, event(p, "2026-01-05T09:00:00Z")));
     await run((tx) => backend.clockOut(tx, event(p, "2026-01-05T17:00:00Z")));
     const rows = await suite.db.execute<{ entry_kind: string }>(
-      sql`select entry_kind from time_entries where person_id = ${p} order by ingest_seq`,
+      sql`select entry_kind from time_entries where person_id = ${p} order by recorded_at, sequence_no`,
     );
     expect(rows.rows.map((r) => r.entry_kind)).toEqual(["in", "out"]);
   });
@@ -95,7 +101,7 @@ describe("clock state machine", () => {
     await run((tx) => backend.breakStart(tx, event(p, "2026-01-05T13:00:00Z")));
     await run((tx) => backend.breakEnd(tx, event(p, "2026-01-05T13:30:00Z")));
     const rows = await suite.db.execute<{ entry_kind: string }>(
-      sql`select entry_kind from time_entries where person_id = ${p} order by ingest_seq`,
+      sql`select entry_kind from time_entries where person_id = ${p} order by recorded_at, sequence_no`,
     );
     expect(rows.rows.map((r) => r.entry_kind)).toEqual(["in", "break_start", "break_end"]);
   });
@@ -133,6 +139,7 @@ describe("clock state machine", () => {
     await run((tx) =>
       backend.clockIn(tx, {
         tenantId,
+        nodeId,
         personId: p,
         locationId,
         at: "2026-01-05T09:00:00Z",

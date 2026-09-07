@@ -1337,7 +1337,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // tenant (till.tenantId); no fiscal backend, clock, card provider or media store — these routes
   // touch only roster_versions / shifts / convenio_config / locations. Routes only; the
   // schedule.manage gate runs per request.
-  mountWorkforceApi(app, { db, cfg: { tenantId: till.tenantId } }, log);
+  mountWorkforceApi(app, { db, cfg: { tenantId: till.tenantId, nodeId: till.nodeId } }, log);
   // The STAFF-FACING half of the schedule surface on the SAME app — the till-session-gated request
   // routes (view my shifts/swaps/absences, request a swap or absence, accept a swap offered to me),
   // the counterpart to mountWorkforceApi's manager approval half. Same minimal deps (db + this venue's

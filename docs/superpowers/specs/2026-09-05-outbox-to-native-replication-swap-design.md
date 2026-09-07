@@ -23,7 +23,7 @@ Two things the brainstorm did not reach were decided on review the same day: **(
 rows the box wrote in its final seconds (open tabs, kitchen progress, print jobs) are treated like
 settings — copied to a standby, never drained back — because by the time the box returns the new
 primary's live state is the real one (§4.3, owner: "correct"); and **(5)** the working-time record's
-chain, keyed per location today, is rekeyed **per node** like the fiscal chain, so each server keeps
+chain, keyed per location today (per location at the time; rekeyed per (node, location) — built 2026-09-07, §4.4), is rekeyed **per node** like the fiscal chain, so each server keeps
 its own clock-in chain (§4.4, owner: "I'm ok with that").
 
 ## 1. What changes, in one paragraph
@@ -233,6 +233,13 @@ are links in its own chain and slot in beside the cloud's. **Prerequisite for S3
 brainstorm and PR. What remains for the labour advisor is presentation only: whether the exported
 registro de jornada for a location may be shown as two chains. Until the rekey lands, `time_entries`
 is the drain-stall shape named in §4.2.
+
+> **2026-09-07 — built** (branch `feat/workforce-chain-per-node-rekey`). The rekey is done: the
+> chain key is now (`tenant`, `node`, `location`) — `node_id` was ADDED to the position key, not
+> substituted for `location_id`. A cold-restored box CONTINUES its chain from the backup's head (no
+> reset, no restore hook). A genuine fork with a surviving copy is no longer a silent clash; it
+> surfaces as the `multiple_unique_conflicts` drain stall §4.2 already handles. So `time_entries` is
+> no longer the drain-stall shape this section named — the S3/S4 prerequisite is discharged.
 
 ## 5. Schema upgrades
 

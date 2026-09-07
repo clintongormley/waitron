@@ -1,8 +1,12 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { pgErrorCode, withTenant } from "@waitron/db";
-import { AppError } from "@waitron/shared";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import {
+  AppError,
+  locationId as brandLocationId,
+  tenantId as brandTenantId,
+} from "@waitron/shared";
+import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
 import { insertTimeEntry, seedLocation, seedPerson } from "../test/fixtures.js";
@@ -18,7 +22,7 @@ import { insertTimeEntry, seedLocation, seedPerson } from "../test/fixtures.js";
  *
  * The bug (whole-branch review): each of `clockIn`/`clockOut`/`breakStart`/`breakEnd` reads the
  * worker's current shift state with an UNLOCKED select and then appends. `appendToChain` serialises
- * per LOCATION (the `workforce_chains` head lock) but nothing serialises per PERSON across the
+ * per (node, location) (the `workforce_chains` head lock) but nothing serialises per PERSON across the
  * read→append, so two concurrent same-person clock-ins can both observe "out" and both append an
  * `in`. `projectWorkSessions` then overwrites the first open shift with the second (projection.ts:287
  * `case "in": open = { start: e }`), so worked time is computed from the SECOND `in` — undercounting
@@ -39,6 +43,7 @@ let tenantId: string;
 let personId: string;
 let otherPersonId: string;
 let locationId: string;
+let nodeId: string;
 
 // A FRESH tenant per test: time_entries' block-truncate trigger makes the table un-wipeable even by
 // its owner (chain.concurrency.test.ts's reasoning), so each test mints new rows in a new tenant.
@@ -47,10 +52,11 @@ beforeEach(async () => {
   personId = await seedPerson(suite.admin, tenantId, "Ana");
   otherPersonId = await seedPerson(suite.admin, tenantId, "Ben");
   locationId = await seedLocation(suite.admin, tenantId);
+  nodeId = await seedNode(suite.admin, brandTenantId(tenantId), brandLocationId(locationId));
 });
 
 function event(at: string): ClockEventInput {
-  return { tenantId, personId, locationId, at, offsetMinutes: 0 };
+  return { tenantId, nodeId, personId, locationId, at, offsetMinutes: 0 };
 }
 
 /** Classifies a racer's outcome for an `.toEqual` assertion: a domain rejection reports its AppError
@@ -88,6 +94,7 @@ async function attemptCorrection(
     await withTenant(db, tenantId, (tx) =>
       backend.requestCorrection(tx, {
         tenantId,
+        nodeId,
         correctsEntryId,
         at: "2026-01-05T07:59:00Z",
         offsetMinutes: 0,
@@ -107,6 +114,7 @@ async function attemptCorrection(
 async function seedCompletedShift(): Promise<string> {
   await insertTimeEntry(suite.admin, {
     tenantId,
+    nodeId,
     personId,
     locationId,
     entryKind: "in",
@@ -114,6 +122,7 @@ async function seedCompletedShift(): Promise<string> {
   });
   await insertTimeEntry(suite.admin, {
     tenantId,
+    nodeId,
     personId,
     locationId,
     entryKind: "out",
@@ -177,6 +186,7 @@ describe("clockIn serialises per person under real contention", () => {
     // lock while `personId`'s own live state stays "out" (currentState filters by person_id).
     await insertTimeEntry(suite.admin, {
       tenantId,
+      nodeId,
       personId: otherPersonId,
       locationId,
       eventAt: "2026-01-05T05:00:00Z",

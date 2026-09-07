@@ -30,7 +30,10 @@ import type { Logger } from "./logger.js";
 
 export interface WorkforceApiDeps {
   db: Database;
-  cfg: { tenantId: string };
+  // `nodeId` is this node's origin id — the chain a clock event or correction would be appended
+  // under (spec §3.3). No clock-in HTTP route exists yet (only tests call `clockIn`/`clockOut`), so
+  // it is plumbed here ahead of that route rather than read by any handler below.
+  cfg: { tenantId: string; nodeId: string };
 }
 
 /** The permissions gating the workforce routes — referenced through these constants, never an inline

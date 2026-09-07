@@ -99,7 +99,13 @@ async function setupVenue(): Promise<Venue> {
 
 function mountApp(tenantId: string): Hono {
   const app = new Hono();
-  mountWorkforceApi(app, { db: suite.admin, cfg: { tenantId } }, noopLog);
+  // A placeholder nodeId: no route here appends a clock event (only roster/swap/absence), so it is
+  // plumbed into cfg but never reaches the chain.
+  mountWorkforceApi(
+    app,
+    { db: suite.admin, cfg: { tenantId, nodeId: "00000000-0000-4000-8000-000000000000" } },
+    noopLog,
+  );
   return app;
 }
 

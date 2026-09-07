@@ -1,5 +1,5 @@
 {
-  "id": "a051a415-9ec5-470d-9303-50b758a5db85",
+  "id": "6d3fd57e-8b0a-4cab-9962-98b67d561fc6",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1240,6 +1240,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "node_id": {
+          "name": "node_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
         "entry_kind": {
           "name": "entry_kind",
           "type": "workforce_entry_kind",
@@ -1271,22 +1277,11 @@
           "primaryKey": false,
           "notNull": true
         },
-        "ingest_seq": {
-          "name": "ingest_seq",
-          "type": "bigint",
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "time_entries_ingest_seq_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
+          "notNull": true
         },
         "corrects_entry_id": {
           "name": "corrects_entry_id",
@@ -1406,6 +1401,12 @@
               "nulls": "last"
             },
             {
+              "expression": "node_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
               "expression": "location_id",
               "isExpression": false,
               "asc": true,
@@ -1490,6 +1491,19 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
+        "time_entries_node_fk": {
+          "name": "time_entries_node_fk",
+          "tableFrom": "time_entries",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "node_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
         "time_entries_corrects_entry_fk": {
           "name": "time_entries_corrects_entry_fk",
           "tableFrom": "time_entries",
@@ -1544,6 +1558,10 @@
         "time_entries_event_at_second_ck": {
           "name": "time_entries_event_at_second_ck",
           "value": "date_trunc('second', \"time_entries\".\"event_at\") = \"time_entries\".\"event_at\""
+        },
+        "time_entries_recorded_at_second_ck": {
+          "name": "time_entries_recorded_at_second_ck",
+          "value": "date_trunc('second', \"time_entries\".\"recorded_at\") = \"time_entries\".\"recorded_at\""
         }
       },
       "isRLSEnabled": false
@@ -1554,6 +1572,12 @@
       "columns": {
         "tenant_id": {
           "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "node_id": {
+          "name": "node_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -1583,6 +1607,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "last_recorded_at": {
+          "name": "last_recorded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "updated_at": {
           "name": "updated_at",
           "type": "timestamp with time zone",
@@ -1599,6 +1629,19 @@
           "tableTo": "tenants",
           "columnsFrom": [
             "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workforce_chains_node_id_nodes_id_fk": {
+          "name": "workforce_chains_node_id_nodes_id_fk",
+          "tableFrom": "workforce_chains",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "node_id"
           ],
           "columnsTo": [
             "id"
@@ -1634,10 +1677,11 @@
         }
       },
       "compositePrimaryKeys": {
-        "workforce_chains_tenant_id_location_id_pk": {
-          "name": "workforce_chains_tenant_id_location_id_pk",
+        "workforce_chains_tenant_id_node_id_location_id_pk": {
+          "name": "workforce_chains_tenant_id_node_id_location_id_pk",
           "columns": [
             "tenant_id",
+            "node_id",
             "location_id"
           ]
         }
@@ -1647,7 +1691,7 @@
       "checkConstraints": {
         "workforce_chains_pointer_ck": {
           "name": "workforce_chains_pointer_ck",
-          "value": "(\"workforce_chains\".\"last_entry_id\" is null) = (\"workforce_chains\".\"last_entry_hash\" is null)"
+          "value": "(\"workforce_chains\".\"last_entry_id\" is null) = (\"workforce_chains\".\"last_entry_hash\" is null)\n          and (\"workforce_chains\".\"last_entry_id\" is null) = (\"workforce_chains\".\"last_recorded_at\" is null)"
         }
       },
       "isRLSEnabled": false

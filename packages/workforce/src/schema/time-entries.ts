@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
 import {
-  bigint,
   boolean,
   check,
   foreignKey,
@@ -13,7 +12,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { locations, tenants, tills } from "@waitron/db";
+import { locations, nodes, tenants, tills } from "@waitron/db";
 import { persons } from "@waitron/identity";
 
 /**
@@ -53,13 +52,10 @@ export const workforceCorrectionStatus = pgEnum("workforce_correction_status", [
  * (which has a privilege system) rather than SQLite (which does not).
  *
  * `event_at` + `event_offset_minutes` are the trusted event timestamp and its wall offset (the
- * `sales.issued_at`/`issued_offset_minutes` pattern). `ingest_seq` is the append/ingest ORDER,
- * assigned by the database on insert — the projection sorts shifts by `event_at`, while the ingest
- * order is what the Slice-4 hash chain commits to (design §5: "project by timestamp, chain by
- * ingest"). A `GENERATED ALWAYS AS IDENTITY` column, not an app-supplied value: the app that may
- * only INSERT cannot forge or reorder the ingest sequence, which is exactly the property an
- * append-only ledger needs, and an identity column needs no separate sequence grant for the
- * SELECT/INSERT-only role.
+ * `sales.issued_at`/`issued_offset_minutes` pattern). `recorded_at` is the recording node's own clock
+ * at append (whole seconds, hashed), stamped by `appendToChain` and never by the device — it orders
+ * corrections across nodes and replaces the non-replicating `ingest_seq` the chain never covered
+ * (spec §2.2). `sequence_no` is the chain position the tamper-evidence hash commits to.
  */
 export const timeEntries = pgTable(
   "time_entries",
@@ -69,6 +65,10 @@ export const timeEntries = pgTable(
     personId: uuid("person_id").notNull(),
     /** The workplace the event was captured at — the site the Inspección scopes to. */
     locationId: uuid("location_id").notNull(),
+    /** The node whose chain this entry belongs to — stamped by the append, never by the device. Part
+     * of the chain key (tenant, node, location) so a promoted cloud and a returning box each keep
+     * their own chain (spec §2.1). */
+    nodeId: uuid("node_id").notNull(),
     entryKind: workforceEntryKind("entry_kind").notNull(),
     /** The trusted event instant. `mode: "string"` keeps the offset out of the value the way
      * `sales.issued_at` does; the wall offset rides alongside in `event_offset_minutes`. */
@@ -79,8 +79,10 @@ export const timeEntries = pgTable(
     /** Who recorded the event. For a self-service clock-in this equals `person_id`; a supervisor
      * recording on someone's behalf differs, which is the attribution art. 34.9 requires. */
     recordedByPersonId: uuid("recorded_by_person_id").notNull(),
-    /** Append/ingest order, assigned by the database. See the table doc comment. */
-    ingestSeq: bigint("ingest_seq", { mode: "number" }).generatedAlwaysAsIdentity(),
+    /** The recording node's clock at append, whole seconds. Stamped by `appendToChain` (never a
+     * device input like `event_at`), hashed, and clamped monotonic per chain against the head's
+     * `last_recorded_at` (spec §4.1). See the table doc comment. */
+    recordedAt: timestamp("recorded_at", { withTimezone: true, mode: "string" }).notNull(),
     /** The entry this row corrects — a base clock event, or an earlier correction (a correction is
      * itself immutable and is superseded by another). Null on a base event, non-null on a
      * `correction`. Self-referential FK; the projection follows it to resolve the effective value. */
@@ -97,15 +99,15 @@ export const timeEntries = pgTable(
     correctionActorId: uuid("correction_actor_id"),
     // Slice 4 — the tamper-evidence hash chain (design §5). Assigned by `appendToChain`
     // (../chain.ts) under a row lock on `workforce_chains`, never by the device: one chain per
-    // (tenant, location), single active writer. IMMUTABLE like the rest of the row — the existing
+    // (tenant, node, location), one active writer per chain. IMMUTABLE like the rest of the row — the existing
     // REVOKE + `reject_mutation` trigger (drizzle/0001_workforce_baseline_sql.sql) already covers these
     // new columns, since they are written once at INSERT and the app holds no UPDATE.
     /** This entry's own hash — `computeEntryHash(content ‖ prev_entry_hash)`, uppercase hex. */
     entryHash: text("entry_hash").notNull(),
     /** The predecessor's `entry_hash`; null on the genesis entry (hashed as empty). */
     prevEntryHash: text("prev_entry_hash"),
-    /** The 1-based position within this (tenant, location) chain — `workforce_chains.sequence_no`
-     * advanced by one. Contiguous and ours, never derived from `ingest_seq` (which is global). */
+    /** The 1-based position within this (tenant, node, location) chain — `workforce_chains.sequence_no`
+     * advanced by one. Contiguous and ours, and the position the tamper-evidence hash commits to. */
     sequenceNo: integer("sequence_no").notNull(),
     /** The genesis marker: exactly the first entry of a chain. NOT the mutable "current head" — that
      * is `workforce_chains.last_entry_id`. Named for the fiscal precedent's `primer_registro` shape
@@ -141,6 +143,13 @@ export const timeEntries = pgTable(
       foreignColumns: [persons.id],
       name: "time_entries_recorded_by_person_fk",
     }).onDelete("restrict"),
+    // The chain-key node. restrict, like every FK here — a node with entries must never be deleted
+    // out from under its chain.
+    foreignKey({
+      columns: [t.nodeId],
+      foreignColumns: [nodes.id],
+      name: "time_entries_node_fk",
+    }).onDelete("restrict"),
     // Self-referential: a correction points at the entry it supersedes. restrict, like every other
     // FK here — the target of a correction must never be deleted out from under it.
     foreignKey({
@@ -175,9 +184,15 @@ export const timeEntries = pgTable(
     ),
     // THE backstop against two writers claiming one chain position — a real risk when several tills
     // at one location clock in the same instant. On real Postgres a naive read-then-write loses the
-    // race here; the loser retries under `appendToChain`'s savepoint (../chain.ts). Mirrors fiscal's
-    // `registros_tenant_node_secuencia_uq`.
-    uniqueIndex("time_entries_chain_position_uq").on(t.tenantId, t.locationId, t.sequenceNo),
+    // race here; the loser retries under `appendToChain`'s savepoint (../chain.ts). Keyed on the
+    // full chain key (tenant, node, location), so two nodes at one location never collide across a
+    // promotion. Mirrors fiscal's `registros_tenant_node_secuencia_uq`.
+    uniqueIndex("time_entries_chain_position_uq").on(
+      t.tenantId,
+      t.nodeId,
+      t.locationId,
+      t.sequenceNo,
+    ),
     // The stored hash is uppercase SHA-256 hex (../chain-hash.ts). Mirrors `registros_huella_ck`.
     check("time_entries_entry_hash_ck", sql`${t.entryHash} ~ '^[0-9A-F]{64}$'`),
     check("time_entries_sequence_no_ck", sql`${t.sequenceNo} > 0`),
@@ -198,6 +213,14 @@ export const timeEntries = pgTable(
     check(
       "time_entries_event_at_second_ck",
       sql`date_trunc('second', ${t.eventAt}) = ${t.eventAt}`,
+    ),
+    // Same whole-second defence for `recorded_at`: it is hashed as the instant and read back at second
+    // precision (`to_char(… 'HH24:MI:SS')`), so a stored sub-second component would recompute to a
+    // different hash. `appendToChain` truncates at the write choke point; this CHECK backstops it,
+    // mirroring `time_entries_event_at_second_ck`.
+    check(
+      "time_entries_recorded_at_second_ck",
+      sql`date_trunc('second', ${t.recordedAt}) = ${t.recordedAt}`,
     ),
   ],
 );

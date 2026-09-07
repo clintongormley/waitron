@@ -12,8 +12,10 @@ function content(over: Partial<EntryHashInput> = {}): EntryHashInput {
     sequenceNo: 1,
     personId: "11111111-1111-4111-8111-111111111111",
     locationId: "22222222-2222-4222-8222-222222222222",
+    nodeId: "99999999-9999-4999-8999-999999999999",
     entryKind: "in",
     eventAt: "2026-01-05T09:00:00Z",
+    recordedAt: "2026-01-05T09:00:00Z",
     eventOffsetMinutes: 0,
     recordedByPersonId: "11111111-1111-4111-8111-111111111111",
     capturedByTillId: null,
@@ -71,8 +73,10 @@ describe("computeEntryHash", () => {
     ["sequenceNo", { sequenceNo: 2 }],
     ["personId", { personId: "33333333-3333-4333-8333-333333333333" }],
     ["locationId", { locationId: "44444444-4444-4444-8444-444444444444" }],
+    ["nodeId", { nodeId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }],
     ["entryKind", { entryKind: "out" }],
     ["eventAt", { eventAt: "2026-01-05T09:00:01Z" }],
+    ["recordedAt", { recordedAt: "2026-01-05T09:00:05Z" }],
     ["eventOffsetMinutes", { eventOffsetMinutes: 60 }],
     ["recordedByPersonId", { recordedByPersonId: "55555555-5555-4555-8555-555555555555" }],
     ["capturedByTillId", { capturedByTillId: "77777777-7777-4777-8777-777777777777" }],
@@ -86,6 +90,29 @@ describe("computeEntryHash", () => {
       expect(computeEntryHash(content(over))).not.toBe(computeEntryHash(content()));
     },
   );
+
+  it("hashes node_id and recorded_at, and detects a re-pointed node", () => {
+    const base: EntryHashInput = {
+      sequenceNo: 1,
+      personId: "p1",
+      locationId: "L1",
+      nodeId: "N1",
+      entryKind: "in",
+      eventAt: "2026-09-07T08:00:00.000Z",
+      recordedAt: "2026-09-07T08:00:01.000Z",
+      eventOffsetMinutes: 120,
+      recordedByPersonId: "p1",
+      capturedByTillId: null,
+      correctsEntryId: null,
+      correctionReason: null,
+      correctionStatus: null,
+      correctionActorId: null,
+      prevEntryHash: null,
+    };
+    const h1 = computeEntryHash(base);
+    expect(computeEntryHash({ ...base, nodeId: "N2" })).not.toBe(h1);
+    expect(computeEntryHash({ ...base, recordedAt: "2026-09-07T09:00:00.000Z" })).not.toBe(h1);
+  });
 
   it("commits to the event instant, not its string form — the same instant hashes identically", () => {
     // `09:00Z` and `10:00+01:00` are the same instant; the hash is over the instant (epoch ms), so a

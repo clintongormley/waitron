@@ -2,9 +2,10 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { captureError, pgErrorCode } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
-import { appendToChain, type TimeEntryAppend } from "./chain.js";
-import { verifyChain, type VerifiableEntry } from "./chain-hash.js";
+import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { appendToChain, readChain, type ChainKey, type TimeEntryAppend } from "./chain.js";
+import { verifyChain } from "./chain-hash.js";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 
 const WRITERS = 20;
@@ -23,6 +24,7 @@ const suite = useTemplateDb({ template: "core_identity_workforce" });
 let tenantId: string;
 let personId: string;
 let locationId: string;
+let nodeId: string;
 
 // A FRESH tenant per test: time_entries' block-truncate trigger makes the table un-wipeable even by
 // its owner, so each test mints new rows in a new tenant rather than cleaning up. Everything below is
@@ -31,7 +33,13 @@ beforeEach(async () => {
   tenantId = await seedTenant(suite.admin);
   personId = await seedPerson(suite.admin, tenantId);
   locationId = await seedLocation(suite.admin, tenantId);
+  nodeId = await seedNode(suite.admin, brandTenantId(tenantId), brandLocationId(locationId));
 });
+
+/** The chain key for this suite's default (tenant, node, location). */
+function key(location = locationId, node = nodeId): ChainKey {
+  return { tenantId, nodeId: node, locationId: location };
+}
 
 function inputAt(at: string): TimeEntryAppend {
   return {
@@ -46,49 +54,6 @@ function inputAt(at: string): TimeEntryAppend {
 /** N distinct instants, one per concurrent writer. */
 function instant(i: number): string {
   return `2026-01-05T${String(6 + Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}:00Z`;
-}
-
-async function readChain(location: string): Promise<VerifiableEntry[]> {
-  const { rows } = await suite.admin.execute<{
-    sequence_no: number;
-    person_id: string;
-    location_id: string;
-    entry_kind: string;
-    event_at: string;
-    event_offset_minutes: number;
-    recorded_by_person_id: string;
-    captured_by_till_id: string | null;
-    corrects_entry_id: string | null;
-    correction_reason: string | null;
-    correction_status: string | null;
-    correction_actor_id: string | null;
-    prev_entry_hash: string | null;
-    entry_hash: string;
-    is_first_entry: boolean;
-  }>(sql`
-    select sequence_no, person_id, location_id, entry_kind,
-      to_char(event_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as event_at,
-      event_offset_minutes, recorded_by_person_id, captured_by_till_id, corrects_entry_id,
-      correction_reason, correction_status, correction_actor_id,
-      prev_entry_hash, entry_hash, is_first_entry
-    from time_entries where location_id = ${location} order by sequence_no`);
-  return rows.map((r) => ({
-    sequenceNo: r.sequence_no,
-    personId: r.person_id,
-    locationId: r.location_id,
-    entryKind: r.entry_kind,
-    eventAt: r.event_at,
-    eventOffsetMinutes: r.event_offset_minutes,
-    recordedByPersonId: r.recorded_by_person_id,
-    capturedByTillId: r.captured_by_till_id,
-    correctsEntryId: r.corrects_entry_id,
-    correctionReason: r.correction_reason,
-    correctionStatus: r.correction_status,
-    correctionActorId: r.correction_actor_id,
-    prevEntryHash: r.prev_entry_hash,
-    entryHash: r.entry_hash,
-    isFirstEntry: r.is_first_entry,
-  }));
 }
 
 describe("appendToChain under real contention", () => {
@@ -114,9 +79,7 @@ describe("appendToChain under real contention", () => {
     const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
     try {
       const results = await Promise.all(
-        dbs.map((db, i) =>
-          db.transaction((tx) => appendToChain(tx, tenantId, locationId, inputAt(instant(i)))),
-        ),
+        dbs.map((db, i) => db.transaction((tx) => appendToChain(tx, key(), inputAt(instant(i))))),
       );
       // A naive read-then-write loses this race (fiscal measured 3 of 20 surviving). Anything below
       // 20 is that failure, not a flake.
@@ -133,11 +96,9 @@ describe("appendToChain under real contention", () => {
     const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
     try {
       await Promise.all(
-        dbs.map((db, i) =>
-          db.transaction((tx) => appendToChain(tx, tenantId, locationId, inputAt(instant(i)))),
-        ),
+        dbs.map((db, i) => db.transaction((tx) => appendToChain(tx, key(), inputAt(instant(i))))),
       );
-      const chain = await readChain(locationId);
+      const chain = await readChain(suite.admin, key());
       expect(chain.map((e) => e.sequenceNo)).toEqual(
         Array.from({ length: WRITERS }, (_, i) => i + 1),
       );
@@ -150,11 +111,9 @@ describe("appendToChain under real contention", () => {
     const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
     try {
       await Promise.all(
-        dbs.map((db, i) =>
-          db.transaction((tx) => appendToChain(tx, tenantId, locationId, inputAt(instant(i)))),
-        ),
+        dbs.map((db, i) => db.transaction((tx) => appendToChain(tx, key(), inputAt(instant(i))))),
       );
-      const chain = await readChain(locationId);
+      const chain = await readChain(suite.admin, key());
       expect(chain[0]?.isFirstEntry).toBe(true);
       // Walk the WHOLE chain, not just the ends — a single crossed pair in the middle is exactly
       // what a lost race produces.
@@ -178,7 +137,7 @@ describe("appendToChain under real contention", () => {
     try {
       // Create the head first — there must be a row to lock.
       await suite.admin.transaction((tx) =>
-        appendToChain(tx, tenantId, locationId, inputAt("2026-01-05T06:00:00Z")),
+        appendToChain(tx, key(), inputAt("2026-01-05T06:00:00Z")),
       );
 
       const held = new Promise<void>((resolve) => (release = resolve));
@@ -196,7 +155,7 @@ describe("appendToChain under real contention", () => {
       const error = await captureError(() =>
         waiter.transaction(async (tx) => {
           await tx.execute(sql`set local lock_timeout = '250ms'`);
-          return appendToChain(tx, tenantId, locationId, inputAt("2026-01-05T07:00:00Z"));
+          return appendToChain(tx, key(), inputAt("2026-01-05T07:00:00Z"));
         }),
       );
       expect(pgErrorCode(error)).toBe("55P03"); // lock_not_available
@@ -209,16 +168,21 @@ describe("appendToChain under real contention", () => {
   });
 
   it("does not block an appender on a different location", async () => {
-    // Per-location parallelism is the reason the lock is on a row rather than a global key: a busy
+    // Per-(node, location) parallelism is the reason the lock is on a row rather than a global key: a busy
     // location must never stall a quiet one.
     const otherLocation = await seedLocation(suite.admin, tenantId);
+    const otherNode = await seedNode(
+      suite.admin,
+      brandTenantId(tenantId),
+      brandLocationId(otherLocation),
+    );
     const holder = await suite.pg.connect();
     const writer = await suite.pg.connect();
     let release: () => void = () => {};
     let holding: Promise<unknown> | undefined;
     try {
       await suite.admin.transaction((tx) =>
-        appendToChain(tx, tenantId, locationId, inputAt("2026-01-05T06:00:00Z")),
+        appendToChain(tx, key(), inputAt("2026-01-05T06:00:00Z")),
       );
 
       const held = new Promise<void>((resolve) => (release = resolve));
@@ -235,7 +199,7 @@ describe("appendToChain under real contention", () => {
 
       const result = await writer.transaction(async (tx) => {
         await tx.execute(sql`set local lock_timeout = '250ms'`);
-        return appendToChain(tx, tenantId, otherLocation, inputAt("2026-01-05T06:00:00Z"));
+        return appendToChain(tx, key(otherLocation, otherNode), inputAt("2026-01-05T06:00:00Z"));
       });
       expect(result.sequenceNo).toBe(1);
     } finally {
@@ -243,6 +207,44 @@ describe("appendToChain under real contention", () => {
       if (holding) await holding.catch(() => {});
       await holder.close();
       await writer.close();
+    }
+  });
+
+  it("never contends between two nodes on the SAME location — independent heads", async () => {
+    // The rekey's whole point (spec §2.1): a promoted cloud and a returning box write ONE location
+    // through two chains keyed by node_id, so their positions live in disjoint spaces and cannot
+    // collide. Both nodes race for the same sequence_no VALUES (1, 2, 3 …) at one location — the
+    // exact clash the old (tenant, location) position uq forced — and with node_id in that uq none
+    // of them contend. This two-node case passes only because `node_id` is in
+    // `time_entries_chain_position_uq`: drop it and the two nodes' equal sequence_no values collide
+    // on (tenant, location, sequence_no).
+    const nodeB = await seedNode(suite.admin, brandTenantId(tenantId), brandLocationId(locationId));
+    const perNode = WRITERS / 2;
+    const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
+    try {
+      // Interleave A and B so the two nodes genuinely race, each producing sequence_no 1..perNode.
+      await Promise.all(
+        dbs.map((db, i) => {
+          const node = i % 2 === 0 ? nodeId : nodeB;
+          return db.transaction((tx) =>
+            appendToChain(tx, key(locationId, node), inputAt(instant(i))),
+          );
+        }),
+      );
+      const chainA = await readChain(suite.admin, key(locationId, nodeId));
+      const chainB = await readChain(suite.admin, key(locationId, nodeB));
+      const expectedPositions = Array.from({ length: perNode }, (_, i) => i + 1);
+      // Two heads, two contiguous position spaces from 1, each independently verifiable.
+      expect(chainA.map((e) => e.sequenceNo)).toEqual(expectedPositions);
+      expect(chainB.map((e) => e.sequenceNo)).toEqual(expectedPositions);
+      expect(verifyChain(chainA)).toEqual({ ok: true });
+      expect(verifyChain(chainB)).toEqual({ ok: true });
+      // Nothing was lost or forked: every append survived, split across the two chains.
+      const { rows } = await suite.admin.execute<{ count: number }>(sql`
+        select count(*)::int as count from time_entries where location_id = ${locationId}`);
+      expect(rows[0]?.count).toBe(WRITERS);
+    } finally {
+      await Promise.all(dbs.map((db) => db.close()));
     }
   });
 });

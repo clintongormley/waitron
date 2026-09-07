@@ -1,11 +1,19 @@
 import { CORE_MIGRATIONS, captureError, pgErrorCode, pgErrorMessage } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { appendToChain, isUniqueViolation, lockChainHead, type TimeEntryAppend } from "./chain.js";
-import { verifyChain, type VerifiableEntry } from "./chain-hash.js";
+import {
+  appendToChain,
+  isUniqueViolation,
+  lockChainHead,
+  readChain,
+  type ChainKey,
+  type TimeEntryAppend,
+} from "./chain.js";
+import { verifyChain } from "./chain-hash.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
@@ -25,12 +33,19 @@ const pg = usePgliteDb({
 let tenantId: string;
 let personId: string;
 let locationId: string;
+let nodeId: string;
 
 beforeEach(async () => {
   tenantId = await seedTenant(pg.db);
   personId = await seedPerson(pg.db, tenantId);
   locationId = await seedLocation(pg.db, tenantId);
+  nodeId = await seedNode(pg.db, brandTenantId(tenantId), brandLocationId(locationId));
 });
+
+/** The chain key for this suite's default (tenant, node, location). */
+function key(location = locationId, node = nodeId): ChainKey {
+  return { tenantId, nodeId: node, locationId: location };
+}
 
 /** A base `in` clock event's append input at a given instant. */
 function inputAt(at: string): TimeEntryAppend {
@@ -43,6 +58,11 @@ function inputAt(at: string): TimeEntryAppend {
   };
 }
 
+/** A default base `in` clock event, for tests that do not care about the instant. */
+function clockEvent(): TimeEntryAppend {
+  return inputAt("2026-01-05T09:00:00Z");
+}
+
 /** Seeds a till at a location so a captured event can attribute to it. Returns its id. */
 async function seedTill(location: string): Promise<string> {
   const { rows } = await pg.db.execute<{ id: string }>(sql`
@@ -51,58 +71,13 @@ async function seedTill(location: string): Promise<string> {
   return rows[0]!.id;
 }
 
-/** Reads a location's whole chain back as verifiable rows, ordered by chain position. */
-async function readChain(location: string): Promise<VerifiableEntry[]> {
-  const { rows } = await pg.db.execute<{
-    sequence_no: number;
-    person_id: string;
-    location_id: string;
-    entry_kind: string;
-    event_at: string;
-    event_offset_minutes: number;
-    recorded_by_person_id: string;
-    captured_by_till_id: string | null;
-    corrects_entry_id: string | null;
-    correction_reason: string | null;
-    correction_status: string | null;
-    correction_actor_id: string | null;
-    prev_entry_hash: string | null;
-    entry_hash: string;
-    is_first_entry: boolean;
-  }>(sql`
-    select sequence_no, person_id, location_id, entry_kind,
-      to_char(event_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as event_at,
-      event_offset_minutes, recorded_by_person_id, captured_by_till_id, corrects_entry_id,
-      correction_reason, correction_status, correction_actor_id,
-      prev_entry_hash, entry_hash, is_first_entry
-    from time_entries where tenant_id = ${tenantId} and location_id = ${location}
-    order by sequence_no`);
-  return rows.map((r) => ({
-    sequenceNo: r.sequence_no,
-    personId: r.person_id,
-    locationId: r.location_id,
-    entryKind: r.entry_kind,
-    eventAt: r.event_at,
-    eventOffsetMinutes: r.event_offset_minutes,
-    recordedByPersonId: r.recorded_by_person_id,
-    capturedByTillId: r.captured_by_till_id,
-    correctsEntryId: r.corrects_entry_id,
-    correctionReason: r.correction_reason,
-    correctionStatus: r.correction_status,
-    correctionActorId: r.correction_actor_id,
-    prevEntryHash: r.prev_entry_hash,
-    entryHash: r.entry_hash,
-    isFirstEntry: r.is_first_entry,
-  }));
-}
-
 describe("appendToChain", () => {
   it("assigns sequence_no 1 and genesis shape to the first entry", async () => {
     const result = await pg.db.transaction((tx) =>
-      appendToChain(tx, tenantId, locationId, inputAt("2026-01-05T09:00:00Z")),
+      appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")),
     );
     expect(result.sequenceNo).toBe(1);
-    const [first] = await readChain(locationId);
+    const [first] = await readChain(pg.db, key());
     expect(first?.isFirstEntry).toBe(true);
     expect(first?.prevEntryHash).toBeNull();
     expect(first?.entryHash).toMatch(/^[0-9A-F]{64}$/);
@@ -110,13 +85,9 @@ describe("appendToChain", () => {
   });
 
   it("chains the second entry to the first via prev_entry_hash", async () => {
-    await pg.db.transaction((tx) =>
-      appendToChain(tx, tenantId, locationId, inputAt("2026-01-05T09:00:00Z")),
-    );
-    await pg.db.transaction((tx) =>
-      appendToChain(tx, tenantId, locationId, inputAt("2026-01-05T17:00:00Z")),
-    );
-    const [first, second] = await readChain(locationId);
+    await pg.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")));
+    await pg.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T17:00:00Z")));
+    const [first, second] = await readChain(pg.db, key());
     expect(second?.sequenceNo).toBe(2);
     expect(second?.isFirstEntry).toBe(false);
     expect(second?.prevEntryHash).toBe(first?.entryHash);
@@ -124,40 +95,90 @@ describe("appendToChain", () => {
 
   it("advances the chain head to the entry just written", async () => {
     const { id, entryHash } = await pg.db.transaction((tx) =>
-      appendToChain(tx, tenantId, locationId, inputAt("2026-01-05T09:00:00Z")),
+      appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")),
     );
     const { rows } = await pg.db.execute<{
       sequence_no: number;
       last_entry_id: string;
       last_entry_hash: string;
+      last_recorded_at: string | null;
     }>(sql`
-      select sequence_no, last_entry_id, last_entry_hash from workforce_chains
-      where tenant_id = ${tenantId} and location_id = ${locationId}`);
-    expect(rows[0]).toEqual({ sequence_no: 1, last_entry_id: id, last_entry_hash: entryHash });
+      select sequence_no, last_entry_id, last_entry_hash, last_recorded_at from workforce_chains
+      where tenant_id = ${tenantId} and node_id = ${nodeId} and location_id = ${locationId}`);
+    expect(rows[0]).toMatchObject({
+      sequence_no: 1,
+      last_entry_id: id,
+      last_entry_hash: entryHash,
+    });
+    // The high-water mark is set once the chain has an entry (spec §4.1).
+    expect(rows[0]!.last_recorded_at).not.toBeNull();
   });
 
-  it("keeps a separate, independent chain per location", async () => {
+  it("keeps a separate, independent chain per (node, location)", async () => {
     const otherLocation = await seedLocation(pg.db, tenantId);
-    await pg.db.transaction((tx) =>
-      appendToChain(tx, tenantId, locationId, inputAt("2026-01-05T09:00:00Z")),
+    const otherNode = await seedNode(
+      pg.db,
+      brandTenantId(tenantId),
+      brandLocationId(otherLocation),
     );
+    await pg.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")));
     await pg.db.transaction((tx) =>
-      appendToChain(tx, tenantId, otherLocation, inputAt("2026-01-05T09:00:00Z")),
+      appendToChain(tx, key(otherLocation, otherNode), inputAt("2026-01-05T09:00:00Z")),
     );
-    // Each location's first entry is its own genesis at position 1 — the chain key is the location.
-    expect((await readChain(locationId)).map((e) => e.sequenceNo)).toEqual([1]);
-    const other = await readChain(otherLocation);
+    // Each location's first entry is its own genesis at position 1 — the chain key includes the location.
+    expect((await readChain(pg.db, key())).map((e) => e.sequenceNo)).toEqual([1]);
+    const other = await readChain(pg.db, key(otherLocation, otherNode));
     expect(other.map((e) => e.sequenceNo)).toEqual([1]);
     expect(other[0]?.isFirstEntry).toBe(true);
   });
 
+  it("keeps one chain per (node, location); two nodes at one location do not collide", async () => {
+    // A location's chain is written by two nodes across a promotion (spec §2.1); their entries take
+    // the same sequence_no values but ride different chains, so they never clash on the position uq.
+    const nodeB = await seedNode(pg.db, brandTenantId(tenantId), brandLocationId(locationId));
+    const k1 = key(locationId, nodeId);
+    const k2 = key(locationId, nodeB);
+    await pg.db.transaction((tx) => appendToChain(tx, k1, clockEvent()));
+    await pg.db.transaction((tx) => appendToChain(tx, k1, clockEvent()));
+    await pg.db.transaction((tx) => appendToChain(tx, k2, clockEvent()));
+    expect((await readChain(pg.db, k1)).map((e) => e.sequenceNo)).toEqual([1, 2]);
+    expect((await readChain(pg.db, k2)).map((e) => e.sequenceNo)).toEqual([1]);
+    expect(verifyChain(await readChain(pg.db, k1))).toEqual({ ok: true });
+    expect(verifyChain(await readChain(pg.db, k2))).toEqual({ ok: true });
+  });
+
+  it("keeps recorded_at non-decreasing per chain when the clock steps backward", async () => {
+    // The monotonic clamp (spec §4.1), proven by deletion: replace `Math.max(nowMs, …)` with `nowMs`
+    // in attemptAppend and the second row's recorded_at goes BACKWARD, so `verifyChain` still holds
+    // (the stored hash recomputes) but the `>=` assertion fails.
+    const k = key();
+    let t = Date.parse("2026-09-07T08:00:05.000Z");
+    const clock = () => new Date(t);
+    await pg.db.transaction((tx) => appendToChain(tx, k, clockEvent(), clock));
+    t = Date.parse("2026-09-07T08:00:02.000Z"); // steps BACK
+    await pg.db.transaction((tx) => appendToChain(tx, k, clockEvent(), clock));
+    const rows = await readChain(pg.db, k);
+    expect(rows[1]!.recordedAt >= rows[0]!.recordedAt).toBe(true);
+    expect(verifyChain(rows)).toEqual({ ok: true });
+  });
+
+  it("stamps recorded_at as a whole second from the injected clock", async () => {
+    // recorded_at is the injected clock, truncated to a whole second and fed to BOTH the hash and the
+    // stored column — so the chain re-verifies even from a millisecond-precision clock.
+    const clock = () => new Date(Date.parse("2026-09-07T08:00:05.678Z"));
+    await pg.db.transaction((tx) => appendToChain(tx, key(), clockEvent(), clock));
+    const [row] = await readChain(pg.db, key());
+    expect(row?.recordedAt).toBe("2026-09-07T08:00:05Z");
+    expect(verifyChain(await readChain(pg.db, key()))).toEqual({ ok: true });
+  });
+
   it("produces a chain that re-verifies end to end", async () => {
     for (const at of ["2026-01-05T09:00:00Z", "2026-01-05T13:00:00Z", "2026-01-05T17:00:00Z"]) {
-      await pg.db.transaction((tx) => appendToChain(tx, tenantId, locationId, inputAt(at)));
+      await pg.db.transaction((tx) => appendToChain(tx, key(), inputAt(at)));
     }
-    // The read-back rows recompute to their stored hashes — the eventAt round-trip through the
-    // timestamptz column and back matches what was hashed at insert.
-    expect(verifyChain(await readChain(locationId))).toEqual({ ok: true });
+    // The read-back rows recompute to their stored hashes — the eventAt/recordedAt round-trip through
+    // the timestamptz columns and back matches what was hashed at insert.
+    expect(verifyChain(await readChain(pg.db, key()))).toEqual({ ok: true });
   });
 
   it("re-verifies an event_at that carries a sub-second fraction", async () => {
@@ -167,10 +188,8 @@ describe("appendToChain", () => {
     // data — a false tamper alarm on ~999/1000 of real timestamps. Truncating to whole seconds ONCE
     // at the write choke point makes the stored column, the committed hash and the read-back one
     // identical representation, so the chain re-verifies.
-    await pg.db.transaction((tx) =>
-      appendToChain(tx, tenantId, locationId, inputAt("2026-01-05T09:00:00.123Z")),
-    );
-    expect(verifyChain(await readChain(locationId))).toEqual({ ok: true });
+    await pg.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00.123Z")));
+    expect(verifyChain(await readChain(pg.db, key()))).toEqual({ ok: true });
   });
 
   it("rejects a raw insert whose event_at carries a sub-second fraction (defence-in-depth CHECK)", async () => {
@@ -180,30 +199,43 @@ describe("appendToChain", () => {
     const error = await captureError(() =>
       pg.db.execute(sql`
         insert into time_entries (
-          tenant_id, person_id, location_id, entry_kind, event_at, event_offset_minutes,
-          recorded_by_person_id, entry_hash, sequence_no, is_first_entry
+          tenant_id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
         ) values (
-          ${tenantId}, ${personId}, ${locationId}, 'in', '2026-01-05T09:00:00.123Z', 0,
-          ${personId}, ${"0".repeat(64)}, 1, true)`),
+          ${tenantId}, ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00.123Z', 0,
+          ${personId}, '2026-01-05T09:00:00Z', ${"0".repeat(64)}, 1, true)`),
     );
     expect(pgErrorCode(error)).toBe("23514");
     expect(pgErrorMessage(error)).toContain("time_entries_event_at_second_ck");
   });
 
-  it("rejects a second entry claiming an occupied chain position", async () => {
-    await pg.db.transaction((tx) =>
-      appendToChain(tx, tenantId, locationId, inputAt("2026-01-05T09:00:00Z")),
-    );
-    // Bypasses appendToChain: the unique index is the backstop and must hold against a writer that
-    // never took the head lock. Position 1 is already occupied.
+  it("rejects a raw insert whose recorded_at carries a sub-second fraction (defence-in-depth CHECK)", async () => {
+    // The recorded_at twin of the check above — the same whole-second backstop for the new column.
     const error = await captureError(() =>
       pg.db.execute(sql`
         insert into time_entries (
-          tenant_id, person_id, location_id, entry_kind, event_at, event_offset_minutes,
-          recorded_by_person_id, entry_hash, sequence_no, is_first_entry
+          tenant_id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
         ) values (
-          ${tenantId}, ${personId}, ${locationId}, 'out', '2026-01-05T18:00:00Z', 0,
-          ${personId}, ${"0".repeat(64)}, 1, true)`),
+          ${tenantId}, ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00Z', 0,
+          ${personId}, '2026-01-05T09:00:00.123Z', ${"0".repeat(64)}, 1, true)`),
+    );
+    expect(pgErrorCode(error)).toBe("23514");
+    expect(pgErrorMessage(error)).toContain("time_entries_recorded_at_second_ck");
+  });
+
+  it("rejects a second entry claiming an occupied chain position", async () => {
+    await pg.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")));
+    // Bypasses appendToChain: the unique index is the backstop and must hold against a writer that
+    // never took the head lock. Position 1 is already occupied on this (node, location).
+    const error = await captureError(() =>
+      pg.db.execute(sql`
+        insert into time_entries (
+          tenant_id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
+        ) values (
+          ${tenantId}, ${personId}, ${locationId}, ${nodeId}, 'out', '2026-01-05T18:00:00Z', 0,
+          ${personId}, '2026-01-05T18:00:00Z', ${"0".repeat(64)}, 1, true)`),
     );
     expect(pgErrorCode(error)).toBe("23505");
   });
@@ -215,18 +247,18 @@ describe("appendToChain", () => {
     // recognise. Mirrors fiscal chain.test.ts's equivalent.
     await pg.db.execute(sql`
       insert into time_entries (
-        tenant_id, person_id, location_id, entry_kind, event_at, event_offset_minutes,
-        recorded_by_person_id, entry_hash, sequence_no, is_first_entry
+        tenant_id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+        recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
       ) values (
-        ${tenantId}, ${personId}, ${locationId}, 'in', '2026-01-05T08:00:00Z', 0,
-        ${personId}, ${"1".repeat(64)}, 1, true)`);
+        ${tenantId}, ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T08:00:00Z', 0,
+        ${personId}, '2026-01-05T08:00:00Z', ${"1".repeat(64)}, 1, true)`);
 
     const error = await pg.db
-      .transaction((tx) => appendToChain(tx, tenantId, locationId, inputAt("2026-01-05T09:00:00Z")))
+      .transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")))
       .catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe("attendance.append_contention");
-    expect((error as AppError).params).toEqual({ tenantId, locationId, attempts: 3 });
+    expect((error as AppError).params).toEqual({ tenantId, nodeId, locationId, attempts: 3 });
   });
 
   it("surfaces exhausted retries as a structured AppError, never a bare string", async () => {
@@ -236,27 +268,21 @@ describe("appendToChain", () => {
     const alwaysCollides = {
       transaction: () => Promise.reject(Object.assign(new Error("dup"), { code: "23505" })),
     } as never;
-    const error = await appendToChain(
-      alwaysCollides,
-      tenantId,
-      locationId,
-      inputAt("2026-01-05T09:00:00Z"),
-    ).catch((caught: unknown) => caught);
+    const error = await appendToChain(alwaysCollides, key(), inputAt("2026-01-05T09:00:00Z")).catch(
+      (caught: unknown) => caught,
+    );
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe("attendance.append_contention");
-    expect((error as AppError).params).toEqual({ tenantId, locationId, attempts: 3 });
+    expect((error as AppError).params).toEqual({ tenantId, nodeId, locationId, attempts: 3 });
   });
 
   it("does not retry an error that is not a chain collision", async () => {
     const alwaysFk = {
       transaction: () => Promise.reject(Object.assign(new Error("fk"), { code: "23503" })),
     } as never;
-    const error = await appendToChain(
-      alwaysFk,
-      tenantId,
-      locationId,
-      inputAt("2026-01-05T09:00:00Z"),
-    ).catch((caught: unknown) => caught);
+    const error = await appendToChain(alwaysFk, key(), inputAt("2026-01-05T09:00:00Z")).catch(
+      (caught: unknown) => caught,
+    );
     expect(error).not.toBeInstanceOf(AppError);
     expect(error).toMatchObject({ code: "23503" });
   });
@@ -271,9 +297,9 @@ describe("appendToChain commits the correction and capture content to the hash",
   // trigger) would leave behind by UPDATE-ing a column but being unable to recompute the chain.
 
   /** A base `in` captured by a till, then a correction carrying reason + actor, read back as a chain. */
-  async function chainWithCorrection(tillId: string): Promise<VerifiableEntry[]> {
+  async function chainWithCorrection(tillId: string) {
     const base = await pg.db.transaction((tx) =>
-      appendToChain(tx, tenantId, locationId, {
+      appendToChain(tx, key(), {
         personId,
         entryKind: "in",
         eventAt: "2026-01-05T09:00:00Z",
@@ -283,7 +309,7 @@ describe("appendToChain commits the correction and capture content to the hash",
       }),
     );
     await pg.db.transaction((tx) =>
-      appendToChain(tx, tenantId, locationId, {
+      appendToChain(tx, key(), {
         personId,
         entryKind: "correction",
         eventAt: "2026-01-05T18:00:00Z",
@@ -295,7 +321,7 @@ describe("appendToChain commits the correction and capture content to the hash",
         correctionActorId: personId,
       }),
     );
-    return readChain(locationId);
+    return readChain(pg.db, key());
   }
 
   it("re-verifies a till + reason + actor round-trip untampered (the negative control)", async () => {
@@ -331,26 +357,30 @@ describe("appendToChain commits the correction and capture content to the hash",
 });
 
 describe("lockChainHead", () => {
-  it("creates the chain head row from scratch when a location has none yet", async () => {
-    const head = await pg.db.transaction((tx) => lockChainHead(tx, tenantId, locationId));
-    expect(head).toEqual({ sequenceNo: 0, lastEntryId: null, lastEntryHash: null });
+  it("creates the chain head row from scratch when a (node, location) has none yet", async () => {
+    const head = await pg.db.transaction((tx) => lockChainHead(tx, key()));
+    expect(head).toEqual({
+      sequenceNo: 0,
+      lastEntryId: null,
+      lastEntryHash: null,
+      lastRecordedAt: null,
+    });
     const { rows } = await pg.db.execute<{ count: number }>(sql`
       select count(*)::int as count from workforce_chains
-      where tenant_id = ${tenantId} and location_id = ${locationId}`);
+      where tenant_id = ${tenantId} and node_id = ${nodeId} and location_id = ${locationId}`);
     expect(rows[0]?.count).toBe(1);
   });
 
   it("locks the existing head rather than creating a second one", async () => {
-    await pg.db.transaction((tx) =>
-      appendToChain(tx, tenantId, locationId, inputAt("2026-01-05T09:00:00Z")),
-    );
-    const head = await pg.db.transaction((tx) => lockChainHead(tx, tenantId, locationId));
+    await pg.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")));
+    const head = await pg.db.transaction((tx) => lockChainHead(tx, key()));
     expect(head.sequenceNo).toBe(1);
     expect(head.lastEntryId).not.toBeNull();
     expect(head.lastEntryHash).not.toBeNull();
+    expect(head.lastRecordedAt).not.toBeNull();
     const { rows } = await pg.db.execute<{ count: number }>(sql`
       select count(*)::int as count from workforce_chains
-      where tenant_id = ${tenantId} and location_id = ${locationId}`);
+      where tenant_id = ${tenantId} and node_id = ${nodeId} and location_id = ${locationId}`);
     expect(rows[0]?.count).toBe(1);
   });
 });

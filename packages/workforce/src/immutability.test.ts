@@ -1,7 +1,8 @@
 import { asAppUser, captureError, pgErrorCode, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { insertTimeEntry, seedLocation, seedPerson } from "../test/fixtures.js";
@@ -14,13 +15,14 @@ import { insertTimeEntry, seedLocation, seedPerson } from "../test/fixtures.js";
 // package globalSetup boots.
 const suite = useTemplateDb({ template: "core_identity_workforce" });
 
-let ctx: { tenantId: string; personId: string; locationId: string };
+let ctx: { tenantId: string; nodeId: string; personId: string; locationId: string };
 
 beforeAll(async () => {
   const tenantId = await seedTenant(suite.admin);
   const locationId = await seedLocation(suite.admin, tenantId);
+  const nodeId = await seedNode(suite.admin, brandTenantId(tenantId), brandLocationId(locationId));
   const personId = await seedPerson(suite.admin, tenantId);
-  ctx = { tenantId, personId, locationId };
+  ctx = { tenantId, nodeId, personId, locationId };
 });
 
 /** Runs `fn` inside a tenant transaction, downgraded to the non-owner application role. */
@@ -35,9 +37,8 @@ class RollbackSignal extends Error {}
 
 describe("time_entries is immutable, as the app role", () => {
   it("permits INSERT", async () => {
-    // The successful insert checks GENERATED ALWAYS AS IDENTITY ingest_seq without a separate
-    // sequence grant for the INSERT-only app role. A table privilege matrix cannot check that.
-    // It also controls the rejection cases: this role can insert a valid row.
+    // The control for the rejection cases below: the app role CAN insert a valid row (node_id and
+    // recorded_at included), so a later 42501/WT001 is the floor firing, not a missing grant.
     await expect(asApp((tx) => insertTimeEntry(tx, ctx))).resolves.toBeUndefined();
   });
 
@@ -91,17 +92,23 @@ describe("time_entries is immutable, as the app role", () => {
     });
   });
 
-  it("rejects rewriting a chain column even when UPDATE is granted (Slice-4 columns are immutable too)", async () => {
+  it("rejects rewriting a chain column even when UPDATE is granted (chain columns are immutable too)", async () => {
     // The deliverable's "confirm, don't re-add DDL": the append-only trigger and the REVOKE already
-    // cover the whole row, so the new entry_hash/prev_entry_hash/sequence_no/is_first_entry columns
-    // inherit immutability with no extra DDL. Grant UPDATE (rolled back), then watch the trigger
-    // still reject a rewrite of entry_hash. Deleting the trigger from 0001 fails this.
+    // cover the whole row, so the chain columns — entry_hash/prev_entry_hash/sequence_no/is_first_entry
+    // and the per-node rekey's node_id/recorded_at — inherit immutability with no extra DDL. Grant
+    // UPDATE (rolled back), then watch the trigger still reject a rewrite of each. Deleting the
+    // trigger from 0001 fails this.
     await withTenant(suite.admin, ctx.tenantId, async (tx) => {
       await tx.execute(sql`grant update on time_entries to app_user`);
       await tx.execute(sql`set local role app_user`);
       await insertTimeEntry(tx, ctx);
+      // One statement rewriting all three chain columns — the trigger fires on the row UPDATE
+      // regardless of which columns it touches, and a first error would abort the transaction, so a
+      // single UPDATE covering node_id/recorded_at/entry_hash is the way to assert all three.
       const error = await captureError(() =>
-        tx.execute(sql`update time_entries set entry_hash = ${"0".repeat(64)}`),
+        tx.execute(sql`
+          update time_entries set entry_hash = ${"0".repeat(64)},
+            node_id = ${ctx.nodeId}, recorded_at = '2026-01-05T10:00:00Z'`),
       );
       expect(pgErrorCode(error)).toBe("WT001");
       throw new RollbackSignal();

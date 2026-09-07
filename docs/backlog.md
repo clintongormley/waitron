@@ -232,8 +232,9 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    `max_slot_wal_keep_size` (a dead standby otherwise fills the primary's disk — the one failure that
    would stop sales). Also: `FOR ALL TABLES` is superuser-only, so each module publishes an explicit
    table list; additive DDL is subscriber-first and the missing-column stall is loud and self-heals;
-   `time_entries.ingest_seq` does not replicate; one superuser provisioning step for the `REPLICATION`
-   role. **Cross-track (Track C):** module SP-2b's schema-version gate (LANDED #230) rests on
+   `time_entries.ingest_seq` does not replicate — DISCHARGED 2026-09-07 by the working-time per-node
+   rekey, which drops `ingest_seq` (its ordering role moved to the hashed `recorded_at`); one
+   superuser provisioning step for the `REPLICATION` role. **Cross-track (Track C):** module SP-2b's schema-version gate (LANDED #230) rests on
    "deliberate rejection of native logical replication"; item 4's spec retires it (its §5).
 3. **Drop FORCE RLS + the multi-role set, squash the migrations, delete the outbox — STEP 1
    LANDED #255 (2026-09-06); steps 2–5 pending owner review:**
@@ -248,7 +249,11 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    guards + two-node fixture; (3) provisioning of publications/subscriptions + the WireGuard key;
    (4) promotion/return on `pg_replication_slots` + the outbox deleted [owner]; (5) status, alarms,
    the standby-first migration check, the link on the box image (with Track B item 2). The
-   working-time chain's per-node rekey sits between 2 and 4.
+   working-time chain's per-node rekey sits between 2 and 4 — **BUILT, in PR** (branch
+   `feat/workforce-chain-per-node-rekey`): `workforce_chains`/`time_entries` rekeyed to
+   (`tenant`, `node`, `location`), a cold-restored box continues its chain (no reset, no hook), and a
+   fork surfaces as the `multiple_unique_conflicts` drain stall the swap already handles — so the
+   S3/S4 prerequisite is discharged (swap design §4.4).
 
    **Step 1 LANDED (#255).** Per-module baselines, FORCE RLS and the seven helper roles gone,
    the `*.rls.test.ts` suites replaced by per-module grant suites and `privileges.test.ts`, and

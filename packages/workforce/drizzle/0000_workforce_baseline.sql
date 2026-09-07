@@ -115,12 +115,13 @@ CREATE TABLE "time_entries" (
 	"tenant_id" uuid NOT NULL,
 	"person_id" uuid NOT NULL,
 	"location_id" uuid NOT NULL,
+	"node_id" uuid NOT NULL,
 	"entry_kind" "workforce_entry_kind" NOT NULL,
 	"event_at" timestamp with time zone NOT NULL,
 	"event_offset_minutes" integer NOT NULL,
 	"captured_by_till_id" uuid,
 	"recorded_by_person_id" uuid NOT NULL,
-	"ingest_seq" bigint GENERATED ALWAYS AS IDENTITY (sequence name "time_entries_ingest_seq_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
+	"recorded_at" timestamp with time zone NOT NULL,
 	"corrects_entry_id" uuid,
 	"correction_reason" text,
 	"correction_status" "workforce_correction_status",
@@ -138,18 +139,22 @@ CREATE TABLE "time_entries" (
 	CONSTRAINT "time_entries_sequence_no_ck" CHECK ("time_entries"."sequence_no" > 0),
 	CONSTRAINT "time_entries_chaining_ck" CHECK (("time_entries"."is_first_entry" and "time_entries"."prev_entry_hash" is null)
           or (not "time_entries"."is_first_entry" and "time_entries"."prev_entry_hash" is not null)),
-	CONSTRAINT "time_entries_event_at_second_ck" CHECK (date_trunc('second', "time_entries"."event_at") = "time_entries"."event_at")
+	CONSTRAINT "time_entries_event_at_second_ck" CHECK (date_trunc('second', "time_entries"."event_at") = "time_entries"."event_at"),
+	CONSTRAINT "time_entries_recorded_at_second_ck" CHECK (date_trunc('second', "time_entries"."recorded_at") = "time_entries"."recorded_at")
 );
 --> statement-breakpoint
 CREATE TABLE "workforce_chains" (
 	"tenant_id" uuid NOT NULL,
+	"node_id" uuid NOT NULL,
 	"location_id" uuid NOT NULL,
 	"sequence_no" integer DEFAULT 0 NOT NULL,
 	"last_entry_id" uuid,
 	"last_entry_hash" text,
+	"last_recorded_at" timestamp with time zone,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "workforce_chains_tenant_id_location_id_pk" PRIMARY KEY("tenant_id","location_id"),
-	CONSTRAINT "workforce_chains_pointer_ck" CHECK (("workforce_chains"."last_entry_id" is null) = ("workforce_chains"."last_entry_hash" is null))
+	CONSTRAINT "workforce_chains_tenant_id_node_id_location_id_pk" PRIMARY KEY("tenant_id","node_id","location_id"),
+	CONSTRAINT "workforce_chains_pointer_ck" CHECK (("workforce_chains"."last_entry_id" is null) = ("workforce_chains"."last_entry_hash" is null)
+          and ("workforce_chains"."last_entry_id" is null) = ("workforce_chains"."last_recorded_at" is null))
 );
 --> statement-breakpoint
 ALTER TABLE "absences" ADD CONSTRAINT "absences_tenant_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
@@ -179,9 +184,11 @@ ALTER TABLE "time_entries" ADD CONSTRAINT "time_entries_person_fk" FOREIGN KEY (
 ALTER TABLE "time_entries" ADD CONSTRAINT "time_entries_location_fk" FOREIGN KEY ("location_id") REFERENCES "public"."locations"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "time_entries" ADD CONSTRAINT "time_entries_captured_by_till_fk" FOREIGN KEY ("captured_by_till_id") REFERENCES "public"."tills"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "time_entries" ADD CONSTRAINT "time_entries_recorded_by_person_fk" FOREIGN KEY ("recorded_by_person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "time_entries" ADD CONSTRAINT "time_entries_node_fk" FOREIGN KEY ("node_id") REFERENCES "public"."nodes"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "time_entries" ADD CONSTRAINT "time_entries_corrects_entry_fk" FOREIGN KEY ("corrects_entry_id") REFERENCES "public"."time_entries"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "time_entries" ADD CONSTRAINT "time_entries_correction_actor_fk" FOREIGN KEY ("correction_actor_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workforce_chains" ADD CONSTRAINT "workforce_chains_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "workforce_chains" ADD CONSTRAINT "workforce_chains_node_id_nodes_id_fk" FOREIGN KEY ("node_id") REFERENCES "public"."nodes"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workforce_chains" ADD CONSTRAINT "workforce_chains_location_id_locations_id_fk" FOREIGN KEY ("location_id") REFERENCES "public"."locations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workforce_chains" ADD CONSTRAINT "workforce_chains_last_entry_id_time_entries_id_fk" FOREIGN KEY ("last_entry_id") REFERENCES "public"."time_entries"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "absences_tenant_id_idx" ON "absences" USING btree ("tenant_id");--> statement-breakpoint
@@ -203,4 +210,4 @@ CREATE INDEX "shifts_roster_version_idx" ON "shifts" USING btree ("roster_versio
 CREATE INDEX "time_entries_tenant_id_idx" ON "time_entries" USING btree ("tenant_id");--> statement-breakpoint
 CREATE INDEX "time_entries_tenant_person_event_idx" ON "time_entries" USING btree ("tenant_id","person_id","event_at");--> statement-breakpoint
 CREATE INDEX "time_entries_corrects_entry_idx" ON "time_entries" USING btree ("corrects_entry_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "time_entries_chain_position_uq" ON "time_entries" USING btree ("tenant_id","location_id","sequence_no");
+CREATE UNIQUE INDEX "time_entries_chain_position_uq" ON "time_entries" USING btree ("tenant_id","node_id","location_id","sequence_no");
