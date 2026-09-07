@@ -170,6 +170,18 @@ export class TillApp extends LitElement {
         font-weight: var(--wt-font-weight-bold);
         text-align: center;
       }
+
+      /* The compact waiting-for-promotion banner (till-reroute §4.4), muted so it informs without the
+         alarm weight of the danger .error banner above. */
+      .banner {
+        margin: 0 0 var(--wt-space-3);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text-muted);
+        text-align: center;
+      }
     `,
   ];
 
@@ -2393,6 +2405,15 @@ export class TillApp extends LitElement {
         @menu-selected=${(e: CustomEvent<{ id: string }>) => this.#onMenuSelected(e)}
       >
         ${this.errorKey ? html`<p class="error" role="alert">${t(this.errorKey)}</p>` : nothing}
+        <!-- The waiting-for-promotion banner (till-reroute §4.4). On the shell surface (an operator
+             mid-shift), the lock-screen's own status line is not visible, so the shell surfaces the same
+             server.waiting_promotion copy compactly here while the router reports no server is accepting
+             sales. Gated on the shell surface so it never double-renders beside the lock screen's own line. -->
+        ${
+          this.#inShell() && (this.router?.waiting ?? false)
+            ? html`<p class="banner" role="status">${t("server.waiting_promotion")}</p>`
+            : nothing
+        }
         <!-- The reusable supervisor-override dialog (cash-drawer-authorization §5), present only while an
              override is in flight. It takes the eligible authorizers + the retry error as PROPS and emits
              override-confirm/override-cancel (wired on the app wrapper above) — the app owns the request. -->
@@ -2451,6 +2472,9 @@ export class TillApp extends LitElement {
                   html`<till-lock-screen
                     .api=${this.api}
                     .deviceEnrolled=${this.handheldMode || this.deviceMode || this.tillEnrolled}
+                    .serverStatuses=${this.router?.statuses() ?? []}
+                    .serverWaiting=${this.router?.waiting ?? false}
+                    @check-again=${() => void this.router?.probeNow()}
                   ></till-lock-screen>`,
                 )
         }
