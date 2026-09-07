@@ -140,15 +140,19 @@ node the operator cannot get a shell on. This slice's break-glass secret is net-
   node). It is **shown to the operator exactly once, in the connect-screen response that drives the
   adopt** (a plan detail — pin the surface at implementation; the raw secret must not be logged), to
   store offline; the raw secret is never persisted.
-- **Store a verifier, not the secret.** Persist only an **argon2id** hash on a new owner-written,
-  app-readable `deployment.break_glass_verifier` column (`deployment` is the singleton the promote
-  already owns; a one-way hash is safe for the app pool to read, and 192-bit entropy makes an offline
-  guess against the hash infeasible). Alternative considered: a sealed vault entry — rejected because a
-  verifier needs integrity, not confidentiality, and a column keeps it beside the state the promote
-  transaction already touches.
-- **Verify** with a constant-time argon2id compare of the presented secret against the stored
-  verifier. Wrong or absent secret → refuse before any state change (error code in the `promotion.*`
-  family, e.g. `promotion.break_glass_invalid` — grep siblings at implementation).
+- **Store a verifier, not the secret.** Persist only a **scrypt** hash — via the repo's existing
+  `hashSecret` / `verifySecret` helpers ([`packages/identity/src/secret-hash.ts`](../../../packages/identity/src/secret-hash.ts),
+  format `scrypt$<salt>$<key>`; the repo deliberately uses scrypt over argon2/bcrypt to avoid a
+  native module) — on a new owner-written, app-readable `deployment.break_glass_verifier` column
+  (`deployment` is the singleton the promote already owns, a hand-written custom migration —
+  [`schema/deployment.ts`](../../../packages/db/src/schema/deployment.ts), not in the drizzle barrel;
+  a one-way hash is safe for the app pool to read, and 192-bit entropy makes an offline guess against
+  the hash infeasible). Alternative considered: a sealed vault entry — rejected because a verifier
+  needs integrity, not confidentiality, and a column keeps it beside the state the promote transaction
+  already touches.
+- **Verify** with `verifySecret` (constant-time, from the same helper) against the stored verifier.
+  Wrong or absent secret → refuse before any state change (error code in the `promotion.*` family,
+  e.g. `promotion.break_glass_invalid` — grep siblings at implementation).
 - **Rotation.** Re-running the mint overwrites the verifier, invalidating the previous secret; that is
   the rotation story for Slice 2 (a full custody/rotation ceremony stays the 2026-08-29 §9 open item).
   The mint primitive is exposed as a small operator command so a lost secret can be replaced without
@@ -237,7 +241,7 @@ migrator ([`apps/server/README.md`](../../../apps/server/README.md), and the def
 - **`registros_facturacion` immutability** untouched. This slice writes `deployment` +
   `node_membership` + `trading.env` (the promote), plus `deployment.break_glass_verifier` (at mint)
   and a `management_sessions` row per manager-login call — no fiscal record.
-- **Auth boundary.** The break-glass verifier is a one-way argon2id hash; the raw secret is never
+- **Auth boundary.** The break-glass verifier is a one-way scrypt hash; the raw secret is never
   persisted and is shown once. The admin DB connection is short-lived and used only for the owner
   write.
 
@@ -261,7 +265,7 @@ migrator ([`apps/server/README.md`](../../../apps/server/README.md), and the def
 - **Fence attestation still required** through the endpoint (`promotion.fence_not_attested` without it,
   node unchanged).
 - **Break-glass secret handling:** the right secret authorizes; a wrong one is refused; the raw secret
-  never appears in the DB (only the argon2id verifier); re-minting invalidates the previous secret.
+  never appears in the DB (only the scrypt verifier); re-minting invalidates the previous secret.
 - **The admin connection:** with `WAITRON_ADMIN_DATABASE_URL` set to a non-owner role the owner write
   fails closed (`42501`), never a silent no-op; unset falls back to the migrations URL.
 
