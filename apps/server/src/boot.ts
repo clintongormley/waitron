@@ -45,7 +45,11 @@ import {
 } from "./config.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
-import { promoteLocalSecondaryToPrimary, promoteMirrorToPrimary } from "./promote.js";
+import {
+  assertNotFenced,
+  promoteLocalSecondaryToPrimary,
+  promoteMirrorToPrimary,
+} from "./promote.js";
 import type {
   FenceAttestation,
   MirrorPromotionResult,
@@ -94,6 +98,7 @@ import { mountWorkforceApi } from "./workforce-api.js";
 import { mountScheduleApi } from "./schedule-api.js";
 import { mountMeApi } from "./me-api.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
+import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
 import { mountMedia } from "./media-api.js";
 import { assertBuiltApp, mountSpa } from "./spa-api.js";
 import { mountSetup } from "./setup-api.js";
@@ -1007,7 +1012,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         // Cursor and retirement writes use their own authentication gates.
         (c) =>
           (c.req.method === "POST" && c.req.path === "/sync-api/cursor") ||
-          (fenced && c.req.method === "POST" && c.req.path === "/api/box/retire"),
+          (fenced && c.req.method === "POST" && c.req.path === "/api/box/retire") ||
+          // The promote trigger is exempt UNCONDITIONALLY, so an authorized POST reaches the handler on
+          // a mirror AND on a fenced node — the latter to return the precise `promotion.node_fenced`
+          // rather than a generic gate 403 (Task 7 `promoteRun`). On an unfenced primary the gate is
+          // not mounted at all (`fencedOrMirror` false), so no exemption is needed there.
+          (c.req.method === "POST" && c.req.path === "/management-api/promote"),
       ),
     );
   }
@@ -1891,6 +1901,91 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     );
   }
 
+  // The short-lived owner pool both the in-process promotes and the promote ENDPOINT open from the
+  // table-OWNER admin connection (the same open/close pattern the boot-time `stampProbe` uses) rather
+  // than holding one open — a trading box keeps only the app pool — handing the promote the shared
+  // `PromoteDeps`. `config.adminDatabaseUrl` is `WAITRON_ADMIN_DATABASE_URL` when set, else the
+  // migrations URL, else the app URL: so a role-split appliance that misconfigures it opens the
+  // LEAST-privileged connection and the owner write hits a role with no UPDATE on `deployment`, throwing
+  // 42501 — fails CLOSED, never a silent no-op. In dev/CI the URL is the superuser.
+  const withOwnerDb = async <T>(run: (deps: PromoteDeps) => Promise<T>): Promise<T> => {
+    const ownerDb = await createPostgresDb(config.adminDatabaseUrl);
+    try {
+      return await run({
+        appDb: db,
+        ownerDb,
+        holders,
+        log,
+        ring,
+        tenantId: till.tenantId,
+        nodeId: till.nodeId,
+      });
+    } finally {
+      await ownerDb.close();
+    }
+  };
+
+  // The mirror→primary promote, shared by the in-process `StartedServer.promoteMirrorToPrimary`
+  // (boot.promote.test.ts) and the HTTP endpoint's `promoteRun` below. It corrects `trading.env` to the
+  // cloud's OWN reserved standard series (spec §4.3) BEFORE the point-of-no-return (inert on a
+  // still-read-only mirror), runs the PONR owner transaction, and restarts into `mode=primary` on a real
+  // promote — an already-primary re-run is an idempotent no-op that skips the restart. Only a mirror
+  // changes its selling series + `deployment.mode` on promotion, so this path exists only in mirror mode.
+  const promoteMirrorRun = (attestation: FenceAttestation): Promise<MirrorPromotionResult> =>
+    withOwnerDb(async (deps) => {
+      const result = await promoteMirrorToPrimary(
+        {
+          ...deps,
+          // The promoted primary numbers under its OWN reserved standard series, not the primary's inert
+          // `till.seriesId` that adopt wrote; every other value is re-emitted unchanged from the running
+          // config. Called BEFORE the PONR (inert on a still-read-only mirror), so a PROCESS crash can
+          // never leave the box primary on the primary's series (power-loss residual documented on
+          // `MirrorPromoteDeps.persistTradingEnv`).
+          persistTradingEnv: async (seriesId) => {
+            const next: TradingConfig = {
+              tenantId: till.tenantId,
+              tillId: till.tillId,
+              nodeId: till.nodeId,
+              seriesId,
+              locationId: till.locationId,
+              databaseUrl: config.databaseUrl,
+              migrationsDatabaseUrl: config.migrationsDatabaseUrl,
+              syncDatabaseUrl: config.syncDatabaseUrl,
+              environment: config.environment,
+            };
+            await writeTradingEnv(config.stateDir, next);
+          },
+        },
+        attestation,
+      );
+      if (!result.alreadyPrimary) {
+        // Restart into `mode=primary` on the NEXT tick so the in-process caller's result is returned
+        // first (the supervisor loop that reboots the box is out of process; `requestRestart` is only
+        // wired in the setup branch, so the inline `process.kill` form is used here).
+        setTimeout(() => process.kill(process.pid, "SIGTERM"), 0);
+      }
+      return result;
+    });
+
+  // The promote ENDPOINT's delegate (both modes, spec §6). On a mirror → the real restart-into-primary
+  // promote (`promoteMirrorRun`), reporting `restarting` from its `alreadyPrimary`. On a non-mirror
+  // (primary or fenced) → an informative read-only status: a node its OWN held document marks fenced
+  // throws `promotion.node_fenced` (the endpoint maps it to 409), an unfenced primary is already-primary.
+  // NEVER calls `promoteLocalSecondaryToPrimary` (shelved active-active, spec §2).
+  const promoteRun = async (attestation: FenceAttestation): Promise<PromoteRunResult> => {
+    if (isMirror) {
+      const result = await promoteMirrorRun(attestation);
+      return { alreadyPrimary: result.alreadyPrimary, restarting: !result.alreadyPrimary };
+    }
+    const held = await readNodeMembership(db);
+    assertNotFenced(held, till.nodeId); // throws promotion.node_fenced on a fenced (primary, secondary) node
+    return { alreadyPrimary: true, restarting: false };
+  };
+
+  // Mount the operator's failover trigger on BOTH modes (spec §6), before the SPA catch-alls. The
+  // read-only gate exempts this POST (above), so a mirror AND a fenced node reach the handler.
+  mountPromoteApi(app, { appDb: db, tenantId: config.till.tenantId, run: promoteRun }, log);
+
   // Serve the built front-ends SAME-ORIGIN (slice 1a), mounted LAST — after every API route AND the
   // optional sync block above — so the till's root catch-all cannot shadow `/api`, `/management-api`,
   // `/media`, `/health` or the sync routes (`mountSpa`'s "call me after every API route" contract).
@@ -1999,30 +2094,6 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // `startListening` has bound the socket — so no boot-failure path can leak the UDP :5353 socket (an
   // earlier throw never started it). Both modes advertise; stopped in makeStartedServer's close() below.
   const mdns = startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: listBoxIpv4, log });
-  // Both in-process promotes open a short-lived owner pool from the table-OWNER admin connection (the
-  // same open/close pattern the boot-time `stampProbe` above uses) rather than holding one open — a
-  // trading box keeps only the app pool — and hand the promote the same `PromoteDeps`. This factors
-  // that shell so each branch supplies only its promote call + any post-processing.
-  // `config.adminDatabaseUrl` is `WAITRON_ADMIN_DATABASE_URL` when set, else the migrations URL, else
-  // the app URL: so a role-split appliance that misconfigures it opens the LEAST-privileged connection
-  // and the owner write hits a role with no UPDATE on `deployment`, throwing 42501 — fails CLOSED,
-  // never a silent no-op. In dev/CI the URL is the superuser, where the promote is exercised.
-  const withOwnerDb = async <T>(run: (deps: PromoteDeps) => Promise<T>): Promise<T> => {
-    const ownerDb = await createPostgresDb(config.adminDatabaseUrl);
-    try {
-      return await run({
-        appDb: db,
-        ownerDb,
-        holders,
-        log,
-        ring,
-        tenantId: till.tenantId,
-        nodeId: till.nodeId,
-      });
-    } finally {
-      await ownerDb.close();
-    }
-  };
   return makeStartedServer(
     server,
     health,
@@ -2082,52 +2153,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     mdns,
     // Which in-process promote this box exposes is decided ONCE at boot by the deployment mode (captured
     // in `isMirror`), so a mirror surfaces `promoteMirrorToPrimary` and a local secondary
-    // `promoteLocalSecondaryToPrimary` — never both. Both open the owner pool + build `PromoteDeps` via
-    // the shared `withOwnerDb` above; only the mirror path corrects `trading.env` and restarts, because
-    // only a mirror changes its selling series + `deployment.mode` on promotion.
+    // `promoteLocalSecondaryToPrimary` — never both. The mirror path (`promoteMirrorRun`, defined above,
+    // also the endpoint's mirror delegate) corrects `trading.env` and restarts; the local-secondary path
+    // does not. Both build `PromoteDeps` via the shared `withOwnerDb`.
     isMirror
-      ? {
-          kind: "mirror" as const,
-          run: (attestation: FenceAttestation) =>
-            withOwnerDb(async (deps) => {
-              const result = await promoteMirrorToPrimary(
-                {
-                  ...deps,
-                  // Correct `trading.env`: the promoted primary numbers under its OWN reserved standard
-                  // series, not the primary's inert `till.seriesId` that adopt wrote (spec §4.3). Every
-                  // OTHER value is re-emitted unchanged from the running config — `syncDatabaseUrl`
-                  // included (harmless on a primary that no longer pulls). The promote calls this BEFORE
-                  // its point-of-no-return (inert on a still-read-only mirror), so a PROCESS crash can
-                  // never leave the box primary on the primary's series (power-loss residual documented on
-                  // `MirrorPromoteDeps.persistTradingEnv`).
-                  persistTradingEnv: async (seriesId) => {
-                    const next: TradingConfig = {
-                      tenantId: till.tenantId,
-                      tillId: till.tillId,
-                      nodeId: till.nodeId,
-                      seriesId,
-                      locationId: till.locationId,
-                      databaseUrl: config.databaseUrl,
-                      migrationsDatabaseUrl: config.migrationsDatabaseUrl,
-                      syncDatabaseUrl: config.syncDatabaseUrl,
-                      environment: config.environment,
-                    };
-                    await writeTradingEnv(config.stateDir, next);
-                  },
-                },
-                attestation,
-              );
-              if (!result.alreadyPrimary) {
-                // Restart into `mode=primary` — the same persist-then-restart transition provision/adopt
-                // use (trading.env is already corrected, before the PONR). Fire on the NEXT tick so the
-                // in-process caller's result is returned first (the supervisor loop that reboots the box is
-                // out of process; `requestRestart` is only wired in the setup branch, so the inline
-                // `process.kill` form is used here).
-                setTimeout(() => process.kill(process.pid, "SIGTERM"), 0);
-              }
-              return result;
-            }),
-        }
+      ? { kind: "mirror" as const, run: promoteMirrorRun }
       : {
           kind: "local-secondary" as const,
           run: (attestation: FenceAttestation) =>
