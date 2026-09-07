@@ -209,4 +209,42 @@ describe("appendToChain under real contention", () => {
       await writer.close();
     }
   });
+
+  it("never contends between two nodes on the SAME location — independent heads", async () => {
+    // The rekey's whole point (spec §2.1): a promoted cloud and a returning box write ONE location
+    // through two chains keyed by node_id, so their positions live in disjoint spaces and cannot
+    // collide. Both nodes race for the same sequence_no VALUES (1, 2, 3 …) at one location — the
+    // exact clash the old (tenant, location) position uq forced — and with node_id in that uq none
+    // of them contend. This is what the negative control in task-3-report.md proves: drop node_id
+    // from `time_entries_chain_position_uq` and this case FAILS, because the two nodes' equal
+    // sequence_no values then collide on (tenant, location, sequence_no).
+    const nodeB = await seedNode(suite.admin, brandTenantId(tenantId), brandLocationId(locationId));
+    const perNode = WRITERS / 2;
+    const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
+    try {
+      // Interleave A and B so the two nodes genuinely race, each producing sequence_no 1..perNode.
+      await Promise.all(
+        dbs.map((db, i) => {
+          const node = i % 2 === 0 ? nodeId : nodeB;
+          return db.transaction((tx) =>
+            appendToChain(tx, key(locationId, node), inputAt(instant(i))),
+          );
+        }),
+      );
+      const chainA = await readChain(suite.admin, key(locationId, nodeId));
+      const chainB = await readChain(suite.admin, key(locationId, nodeB));
+      const expectedPositions = Array.from({ length: perNode }, (_, i) => i + 1);
+      // Two heads, two contiguous position spaces from 1, each independently verifiable.
+      expect(chainA.map((e) => e.sequenceNo)).toEqual(expectedPositions);
+      expect(chainB.map((e) => e.sequenceNo)).toEqual(expectedPositions);
+      expect(verifyChain(chainA)).toEqual({ ok: true });
+      expect(verifyChain(chainB)).toEqual({ ok: true });
+      // Nothing was lost or forked: every append survived, split across the two chains.
+      const { rows } = await suite.admin.execute<{ count: number }>(sql`
+        select count(*)::int as count from time_entries where location_id = ${locationId}`);
+      expect(rows[0]?.count).toBe(WRITERS);
+    } finally {
+      await Promise.all(dbs.map((db) => db.close()));
+    }
+  });
 });
