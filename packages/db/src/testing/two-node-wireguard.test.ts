@@ -1,10 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   execOrThrow,
+  startRealWireguardNode,
   startTwoNodeWireguardCluster,
+  type NodePlan,
   type StartedNetwork,
   type StartedWireguardNode,
   type TwoNodeWireguardCluster,
+  type WireguardContainer,
   type WireguardReplNode,
 } from "./two-node-wireguard.js";
 import { dockerAvailable } from "./harness.js";
@@ -19,7 +22,7 @@ describe("startTwoNodeWireguardCluster setup-failure cleanup", () => {
     tunnelHost: plan.tunnelHost,
     run: async () => {},
     query: async () => [],
-    exec: async () => ({ exitCode: 0, output: "" }),
+    execInContainer: async () => ({ exitCode: 0, output: "" }),
   });
   const fakeNetwork = (stopped: string[]): StartedNetwork =>
     ({
@@ -111,13 +114,35 @@ describe("execOrThrow", () => {
   });
 });
 
+describe("startRealWireguardNode", () => {
+  it("stops its container when WireGuard bring-up fails, so it does not leak", async () => {
+    // The container has come up, but a bring-up step fails (here the first `apk add`). It must be
+    // stopped before the error propagates — otherwise it survives until `pnpm reap`. Reproduces the
+    // gap the run-it review found: the seam tests above cover the CLUSTER's teardown, not this.
+    let stops = 0;
+    const container: WireguardContainer = {
+      getConnectionUri: () => "postgres://unused/db",
+      exec: async () => ({ exitCode: 1, output: "temporary failure resolving" }),
+      stop: async () => {
+        stops += 1;
+      },
+    };
+    const plan: NodePlan = { alias: "node-a", tunnelHost: "10.99.0.1" };
+    await expect(
+      startRealWireguardNode({} as StartedNetwork, plan, async () => container),
+    ).rejects.toThrow("apk add");
+    expect(stops).toBe(1);
+  });
+});
+
 // Real-Docker smoke test for the WireGuard two-node fixture: two `postgres:18-alpine` nodes joined
 // by an encrypted WireGuard tunnel, standing in for a box and its cloud twin across an untrusted
 // network. The tunnel addresses (10.99.0.x) live ONLY on each node's `wg0` interface, so a
 // connection that lands on a peer's `tunnelHost` proves the traffic crossed the tunnel — the Docker
-// network alias would be a different address entirely. The mechanism is written up in
-// `docs/superpowers/specs/2026-09-05-native-replication-post-rls-prototype-findings.md`; this fixture
-// is the local stand-in for the box↔cloud link the cloud standby runs over.
+// network alias would be a different address entirely. This fixture is the local stand-in for the
+// box↔cloud link the cloud standby runs over (the replication that rides it is written up in
+// `docs/superpowers/specs/2026-09-05-native-replication-post-rls-prototype-findings.md`, which used
+// plain TCP; the encrypted WireGuard transport is what this fixture adds).
 describe.runIf(dockerAvailable())("two-node WireGuard fixture", () => {
   let cluster: TwoNodeWireguardCluster;
 
@@ -129,11 +154,16 @@ describe.runIf(dockerAvailable())("two-node WireGuard fixture", () => {
     await cluster?.stop();
   });
 
-  it("boots both nodes with wal_level=logical", async () => {
+  it("boots with wal_level=logical, and run() executes statements query() reads back", async () => {
     for (const node of [cluster.nodeA, cluster.nodeB]) {
-      await node.run("SELECT 1");
-      const [row] = await node.query<{ wal_level: string }>("SHOW wal_level");
-      expect(row!.wal_level).toBe("logical");
+      const [wal] = await node.query<{ wal_level: string }>("SHOW wal_level");
+      expect(wal!.wal_level).toBe("logical");
+      // run() must have an observable effect: if it were a no-op the SELECT below would find no
+      // table and throw (the gap the run-it review found — a no-op run() had passed every test).
+      await node.run("CREATE TABLE run_probe (v int)");
+      await node.run("INSERT INTO run_probe VALUES (42)");
+      const [row] = await node.query<{ v: number }>("SELECT v FROM run_probe");
+      expect(row!.v).toBe(42);
     }
   });
 
@@ -144,7 +174,7 @@ describe.runIf(dockerAvailable())("two-node WireGuard fixture", () => {
     const conninfo =
       `host=${cluster.nodeA.tunnelHost} port=5432 user=${a.username} ` +
       `password=${a.password} dbname=${a.pathname.slice(1)} connect_timeout=5`;
-    const { exitCode, output } = await cluster.nodeB.exec([
+    const { exitCode, output } = await cluster.nodeB.execInContainer([
       "psql",
       conninfo,
       "-tAc",
@@ -157,7 +187,7 @@ describe.runIf(dockerAvailable())("two-node WireGuard fixture", () => {
   it("establishes a real WireGuard handshake between the nodes", async () => {
     // After the query above crossed the tunnel, node A must show a completed handshake with B — the
     // proof it is genuinely WireGuard (an encrypted session), not a leak through the Docker network.
-    const { exitCode, output } = await cluster.nodeA.exec([
+    const { exitCode, output } = await cluster.nodeA.execInContainer([
       "wg",
       "show",
       "wg0",

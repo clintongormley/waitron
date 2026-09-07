@@ -32,8 +32,10 @@ export interface WireguardReplNode extends ReplNode {
   /** The WireGuard tunnel address a PEER dials this node by — the point of the fixture: a peer
    * reaches it only across the encrypted link, never the trusted Docker network. */
   tunnelHost: string;
-  /** Run one command INSIDE this node's container (a tunnel probe, or `wg show` for diagnostics). */
-  exec(command: string[]): Promise<{ exitCode: number; output: string }>;
+  /** Run one command INSIDE this node's container — a container-level escape hatch for a tunnel
+   * probe (an in-container `psql`) or `wg show`, distinct from `run`/`query`, which reach the node
+   * from THIS process over the published port. */
+  execInContainer(command: string[]): Promise<{ exitCode: number; output: string }>;
 }
 
 export interface TwoNodeWireguardCluster {
@@ -88,17 +90,19 @@ const NODE_A: NodePlan = { alias: "node-a", tunnelHost: "10.99.0.1" };
 const NODE_B: NodePlan = { alias: "node-b", tunnelHost: "10.99.0.2" };
 const TUNNEL_PREFIX = 24;
 
-/** The one method {@link execOrThrow} needs — the real `StartedPostgreSqlContainer` satisfies it, and
- * a test can supply a fake that returns a non-zero exit to drive the failure branch. */
-export interface ContainerExec {
+/** The methods the fixture drives a node's container through. The real `StartedPostgreSqlContainer`
+ * satisfies it; a test supplies a fake to drive the setup-failure branch without Docker. */
+export interface WireguardContainer {
+  getConnectionUri(): string;
   exec(command: string[]): Promise<{ exitCode: number; output: string }>;
+  stop(): Promise<unknown>;
 }
 
 /** Exec a command in the container and return `{ exitCode, output }`; throw loudly on a non-zero
  * exit, so a setup step that failed (a missing package, an `ip`/`wg` error) surfaces here rather
  * than as a mysterious connection failure later. */
 export async function execOrThrow(
-  container: ContainerExec,
+  container: Pick<WireguardContainer, "exec">,
   command: string[],
 ): Promise<{ exitCode: number; output: string }> {
   const result = await container.exec(command);
@@ -110,96 +114,112 @@ export async function execOrThrow(
   return { exitCode: result.exitCode, output: result.output };
 }
 
-async function startRealWireguardNode(
+/** Boot a `postgres:18-alpine` container with the one extra capability kernel WireGuard needs
+ * (NET_ADMIN — no privileged container, no `/dev/net/tun`, verified on this image) and logical WAL.
+ * The default the `startContainer` seam uses; a test injects a fake in its place. */
+async function startPostgresWireguardContainer(
   network: StartedNetwork,
   plan: NodePlan,
+): Promise<WireguardContainer> {
+  return (
+    new PostgreSqlContainer(POSTGRES_IMAGE)
+      // Same reaper marker as startPostgresContainer: an interrupted Ryuk-off run leaves this for
+      // `pnpm reap`, which removes ONLY containers carrying this label.
+      .withLabels({ "com.waitron.reapable": "true" })
+      .withNetwork(network)
+      .withNetworkAliases(plan.alias)
+      .withAddedCapabilities("NET_ADMIN")
+      .withCommand(LOGICAL_REPLICATION_COMMAND)
+      .start()
+  );
+}
+
+export async function startRealWireguardNode(
+  network: StartedNetwork,
+  plan: NodePlan,
+  startContainer: (
+    network: StartedNetwork,
+    plan: NodePlan,
+  ) => Promise<WireguardContainer> = startPostgresWireguardContainer,
 ): Promise<StartedWireguardNode> {
-  const container = await new PostgreSqlContainer(POSTGRES_IMAGE)
-    // Same reaper marker as startPostgresContainer: an interrupted Ryuk-off run leaves this for
-    // `pnpm reap`, which removes ONLY containers carrying this label.
-    .withLabels({ "com.waitron.reapable": "true" })
-    .withNetwork(network)
-    .withNetworkAliases(plan.alias)
-    // Kernel WireGuard needs NET_ADMIN to create and configure `wg0`; nothing more (no privileged
-    // container, no `/dev/net/tun`) — the kernel module path, verified on this image.
-    .withAddedCapabilities("NET_ADMIN")
-    .withCommand(LOGICAL_REPLICATION_COMMAND)
-    .start();
+  const container = await startContainer(network, plan);
+  // The container is up; any failure below (a failed `apk`/`wg`/`ip`, a client that will not connect)
+  // must stop it, or it leaks until `pnpm reap` — so the whole bring-up is guarded.
+  try {
+    // Bring up wg0 so the node is tunnel-ready the moment both keys exist and the peer step runs. The
+    // private key is generated straight INTO a file and never read back into an argv — `wg pubkey`
+    // and `wg set private-key` both read it from the file. The image is Alpine, so `apk add` installs
+    // the tools at runtime.
+    await execOrThrow(container, ["apk", "add", "--no-cache", "wireguard-tools", "iproute2"]);
+    await execOrThrow(container, ["sh", "-c", "wg genkey > /etc/wg.key && chmod 600 /etc/wg.key"]);
+    const publicKey = (
+      await execOrThrow(container, ["sh", "-c", "wg pubkey < /etc/wg.key"])
+    ).output.trim();
+    await execOrThrow(container, ["ip", "link", "add", "wg0", "type", "wireguard"]);
+    await execOrThrow(container, [
+      "wg",
+      "set",
+      "wg0",
+      "private-key",
+      "/etc/wg.key",
+      "listen-port",
+      String(WG_PORT),
+    ]);
+    await execOrThrow(container, [
+      "ip",
+      "address",
+      "add",
+      `${plan.tunnelHost}/${TUNNEL_PREFIX}`,
+      "dev",
+      "wg0",
+    ]);
+    await execOrThrow(container, ["ip", "link", "set", "wg0", "up"]);
 
-  // Bring up wg0 before returning, so the node is tunnel-ready the moment both keys exist and the
-  // peer step runs. The private key is a machine-generated base64 value (safe to single-quote — the
-  // charset holds no quote), written to a file because `wg set private-key` takes a PATH, keeping the
-  // key out of the persistent interface config's argv. The image is Alpine, so `apk add` installs the
-  // tools at runtime.
-  await execOrThrow(container, ["apk", "add", "--no-cache", "wireguard-tools", "iproute2"]);
-  const privateKey = (await execOrThrow(container, ["wg", "genkey"])).output.trim();
-  const publicKey = (
-    await execOrThrow(container, ["sh", "-c", `printf %s '${privateKey}' | wg pubkey`])
-  ).output.trim();
-  await execOrThrow(container, [
-    "sh",
-    "-c",
-    `printf %s '${privateKey}' > /etc/wg.key && chmod 600 /etc/wg.key`,
-  ]);
-  await execOrThrow(container, ["ip", "link", "add", "wg0", "type", "wireguard"]);
-  await execOrThrow(container, [
-    "wg",
-    "set",
-    "wg0",
-    "private-key",
-    "/etc/wg.key",
-    "listen-port",
-    String(WG_PORT),
-  ]);
-  await execOrThrow(container, [
-    "ip",
-    "address",
-    "add",
-    `${plan.tunnelHost}/${TUNNEL_PREFIX}`,
-    "dev",
-    "wg0",
-  ]);
-  await execOrThrow(container, ["ip", "link", "set", "wg0", "up"]);
-
-  const uri = container.getConnectionUri();
-  const client = new pg.Client({ connectionString: uri });
-  await client.connect();
-  const node: WireguardReplNode = {
-    uri,
-    networkHost: plan.alias,
-    tunnelHost: plan.tunnelHost,
-    run: async (sql) => {
-      await client.query(sql);
-    },
-    query: async <T>(sql: string) => (await client.query(sql)).rows as T[],
-    exec: (command) =>
-      container.exec(command).then((r) => ({ exitCode: r.exitCode, output: r.output })),
-  };
-  return {
-    node,
-    publicKey,
-    configurePeer: async (peer) => {
-      await execOrThrow(container, [
-        "wg",
-        "set",
-        "wg0",
-        "peer",
-        peer.publicKey,
-        "allowed-ips",
-        `${peer.tunnelHost}/32`,
-        "endpoint",
-        peer.endpoint,
-        "persistent-keepalive",
-        "25",
-      ]);
-    },
-    stop: async () => {
-      // Best-effort on the client, the same reason the sibling fixture swallows its close: a client
-      // already dead must not strand the container.stop() that follows.
-      await client.end().catch(() => {});
-      await container.stop();
-    },
-  };
+    const uri = container.getConnectionUri();
+    const client = new pg.Client({ connectionString: uri });
+    await client.connect();
+    const node: WireguardReplNode = {
+      uri,
+      networkHost: plan.alias,
+      tunnelHost: plan.tunnelHost,
+      run: async (sql) => {
+        await client.query(sql);
+      },
+      query: async <T>(sql: string) => (await client.query(sql)).rows as T[],
+      execInContainer: (command) =>
+        container.exec(command).then((r) => ({ exitCode: r.exitCode, output: r.output })),
+    };
+    return {
+      node,
+      publicKey,
+      configurePeer: async (peer) => {
+        await execOrThrow(container, [
+          "wg",
+          "set",
+          "wg0",
+          "peer",
+          peer.publicKey,
+          "allowed-ips",
+          `${peer.tunnelHost}/32`,
+          "endpoint",
+          peer.endpoint,
+          "persistent-keepalive",
+          "25",
+        ]);
+      },
+      stop: async () => {
+        // Best-effort on the client, the same reason the sibling fixture swallows its close: a client
+        // already dead must not strand the container.stop() that follows.
+        await client.end().catch(() => {});
+        await container.stop();
+      },
+    };
+  } catch (error) {
+    // Bring-up failed after the container came up — stop it so it does not leak, then surface the
+    // real cause.
+    await container.stop().catch(() => {});
+    throw error;
+  }
 }
 
 export async function startTwoNodeWireguardCluster(

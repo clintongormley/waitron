@@ -276,7 +276,10 @@ The primary kept selling with the standby dead (CLAUDE.md §5's rule held at the
 
 - Nothing ran under concurrency or the app's real transaction shapes; inserts were `psql` batches.
 - The replication connection was plain TCP on a Docker network — no TLS, no relay/tunnel (Track B
-  item 2 / Track C item 5 decide the transport).
+  item 2 / Track C item 5 decide the transport). _2026-09-08: a local WireGuard transport now exists
+  for testing — `@waitron/db/testing/two-node-wireguard.ts` + `sync`'s `replication-over-tunnel.pg.test`
+  run this same native replication across a real kernel-WireGuard tunnel; still not TLS, and not the
+  live path._
 - DDL beyond `ADD COLUMN` / `DROP COLUMN` was not exercised; neither were partitioned tables (there
   are none) nor large objects (none).
 - The chain itself was not verified — rows were realistic in shape and the `huella` values were
