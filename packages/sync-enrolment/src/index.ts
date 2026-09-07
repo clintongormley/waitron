@@ -7,3 +7,9 @@ export {
   type SyncLane,
   type SyncMode,
 } from "./enrolment.js";
+export {
+  classify,
+  tablesForPublication,
+  type ClassifiedTable,
+  type TableClass,
+} from "./classification.js";
