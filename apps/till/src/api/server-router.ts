@@ -46,12 +46,11 @@ export class ServerRouter extends EventTarget {
   #servers: Tracked[];
   #current: string;
   #waiting = false;
-  /** The render-relevant state at the last `state-changed` from a probe ROUND, as a JSON signature over
-   * `{ statuses(), waiting, current }` — the exact inputs `till-app`'s lock-screen repaint reads. A round
-   * dispatches only when its signature differs from this, so a steady 5 s round drives no repaint (§4.1,
-   * S4 deferral D2). The initial `""` never equals a real round's signature, so the FIRST round (unknown →
-   * known) always dispatches. `setServers` keeps its own unconditional dispatch and does not update this —
-   * a stale-but-equal signature there simply means the next round's compare still fires correctly. */
+  /** The render-relevant state at the last `state-changed`, as a JSON signature over
+   * `{ statuses(), waiting, current }` — the exact inputs `till-app`'s lock-screen repaint reads. BOTH a
+   * probe round and `setServers` dispatch through `#emitStateChanged`, which updates this, so it always
+   * tracks the last RENDERED state and the two paths can never disagree. The initial `""` never equals a
+   * real signature, so the first change always dispatches. */
   #stateSignature = "";
   #inFlight = 0;
   #round: Promise<void> | undefined;
@@ -92,7 +91,7 @@ export class ServerRouter extends EventTarget {
   setServers(list: ServerEntry[]): void {
     this.#servers = this.#merge(list);
     this.#save(list);
-    this.dispatchEvent(new Event("state-changed"));
+    this.#emitStateChanged();
   }
 
   start(): void {
@@ -134,18 +133,22 @@ export class ServerRouter extends EventTarget {
       const best = yes.reduce((a, b) => ((b.term ?? -1) > (a.term ?? -1) ? b : a));
       if (best.url !== this.#current) this.#move(best.url);
     }
-    // Dispatch only on a real change to what the app renders (§4.1, S4 deferral D2): compare a signature
-    // over the exact render inputs and skip the event when a steady round changed nothing visible, so the
-    // lock-screen repaint is not driven every 5 s. `#move` above already fired `server-changed` on a move.
+    // `#move` above already fired `server-changed` on a move; the render repaint is `#emitStateChanged`.
+    this.#emitStateChanged();
+  }
+
+  /** Dispatch `state-changed` iff the rendered state actually changed (§4.1, S4 deferral D2): the ONE
+   * gate both a probe round and `setServers` flow through, so a steady 5 s round drives no repaint and a
+   * `setServers` repaint can never leave a stale signature a later round would mistake for no-change. */
+  #emitStateChanged(): void {
     const signature = JSON.stringify({
       statuses: this.statuses(),
       waiting: this.#waiting,
       current: this.#current,
     });
-    if (signature !== this.#stateSignature) {
-      this.#stateSignature = signature;
-      this.dispatchEvent(new Event("state-changed"));
-    }
+    if (signature === this.#stateSignature) return;
+    this.#stateSignature = signature;
+    this.dispatchEvent(new Event("state-changed"));
   }
 
   #move(to: string): void {
