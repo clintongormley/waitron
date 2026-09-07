@@ -57,7 +57,12 @@ import type {
   PromoteDeps,
   PromotionResult,
 } from "./promote.js";
-import { deleteDormantCert, sealLiveCertTx, unwrapDormantCert } from "./fiscal-cert.js";
+import {
+  deleteDormantCert,
+  readCertStatus,
+  sealLiveCertTx,
+  unwrapDormantCert,
+} from "./fiscal-cert.js";
 import { codeOf } from "@waitron/server-kit";
 import { createLogger, type Logger } from "./logger.js";
 import { createRotatingFileSink, createLogReader, tee } from "./log-file.js";
@@ -1811,6 +1816,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       readSingletonRole: () => holders.singletonRole.current,
       // The awaiting-cert cell the fiscal pass writes below — same holder, read live per request.
       readAwaitingFiscalCertificate: () => awaitingFiscalCert.current,
+      // The AEAT cert's existence status (live/dormant/none), tenant-scoped — distinct from the
+      // awaiting-cert cell above, which tracks a promoted mirror's sell-now-file-later state.
+      readFiscalCertificate: () =>
+        withTenant(db, till.tenantId, (tx) => readCertStatus(tx, ring, till.tenantId)),
     },
     log,
   );

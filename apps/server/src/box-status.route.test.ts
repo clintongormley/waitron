@@ -137,6 +137,7 @@ function buildApp(
       readMode: () => "primary",
       readSingletonRole: () => "primary",
       readAwaitingFiscalCertificate: () => false,
+      readFiscalCertificate: () => Promise.resolve("none"),
     },
     () => {},
   );

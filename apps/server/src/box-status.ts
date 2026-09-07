@@ -41,6 +41,13 @@ export type BoxStatus = {
    * (a non-primary runs no drain, so the cell never leaves its `false` default).
    */
   awaitingFiscalCertificate: boolean;
+  /**
+   * The AEAT filing cert's presence — DISTINCT from `cert` above (the server's own TLS leaf).
+   * `"live"`: sealed and ready to file. `"dormant"`: a standby copy is present but wrapped under a
+   * break-glass secret (dashboard shows "present your break-glass secret to unlock"). `"none"`: no
+   * cert row at all (dashboard shows "install a certificate").
+   */
+  fiscalCertificate: "live" | "dormant" | "none";
   chain: ChainHeight;
   singletonRole: SingletonRole;
   replication:
@@ -75,6 +82,9 @@ export type BoxStatusReaders = {
   /** The awaiting-fiscal-certificate cell read (pass.ts's `AwaitingCertStatus`). Always present — it is
    * an in-process boolean, never an off-vs-on slot — read synchronously like `duties`. */
   awaitingFiscalCertificate: () => boolean;
+  /** Reads the AEAT cert's existence status (`fiscal-cert.ts`'s `readCertStatus`) — always present,
+   * like `awaitingFiscalCertificate`, never an off-vs-on slot. */
+  fiscalCertificate: () => Promise<"live" | "dormant" | "none">;
   chain: () => Promise<ChainHeight>;
   singletonRole: () => Promise<SingletonRole>;
   replicationLag: (() => Promise<SubscriberLag[]>) | undefined;
@@ -85,11 +95,12 @@ export type BoxStatusReaders = {
 };
 
 export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxStatus> {
-  const [mode, time, chain, singletonRole] = await Promise.all([
+  const [mode, time, chain, singletonRole, fiscalCertificate] = await Promise.all([
     readers.mode(),
     readers.time(),
     readers.chain(),
     readers.singletonRole(),
+    readers.fiscalCertificate(),
   ]);
 
   let cert: BoxStatus["cert"] = { available: false };
@@ -156,6 +167,7 @@ export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxSt
     time,
     cert,
     awaitingFiscalCertificate: readers.awaitingFiscalCertificate(),
+    fiscalCertificate,
     chain,
     singletonRole,
     replication,
@@ -183,6 +195,8 @@ export type BoxStatusDeps = {
    * the same live holder, so box-status tracks a promoted mirror's "sell now, file later" state without
    * a DB read. */
   readAwaitingFiscalCertificate: () => boolean;
+  /** Reads the AEAT cert's existence status, tenant-scoped (`fiscal-cert.ts`'s `readCertStatus`). */
+  readFiscalCertificate: () => Promise<"live" | "dormant" | "none">;
 };
 
 /**
@@ -246,6 +260,7 @@ export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): 
         time: () => checkTimeHealth(),
         cert: certPath === undefined ? undefined : () => readCertExpiry(certPath, deps.now()),
         awaitingFiscalCertificate: () => deps.readAwaitingFiscalCertificate(),
+        fiscalCertificate: deps.readFiscalCertificate,
         chain: async () => chain,
         replicationLag: deps.readReplicationLag,
         disposal: deps.readDisposal,
