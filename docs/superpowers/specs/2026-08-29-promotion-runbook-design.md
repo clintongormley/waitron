@@ -170,6 +170,11 @@ promote is refused by the latch.
 
 ## 4. Authority and trigger: remote-first, local fallback, one break-glass secret
 
+> **2026-09-07 update:** break-glass no longer unlocks the key ring — see
+> [promote-endpoint-slice-2-design.md](2026-09-07-promote-endpoint-slice-2-design.md) §4.2/§4.3.
+> It is purely authorization now; a promoted cloud sells but does not file until cert-distribution
+> lands. The "both jobs" framing below (and §5's "unlock the key ring" steps) is superseded.
+
 The "at the box, offline" constraint belongs to the physical fence of the **old** node (§6), not to the
 promote action on the **new** node — a different machine. Promotion is therefore location-independent
 (#33 §8 already says role resolution is), and:
