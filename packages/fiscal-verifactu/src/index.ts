@@ -51,3 +51,4 @@ export {
   restoreFiscal,
 } from "./restore.js";
 export { liveSeriesBases, MAX_BASE_CODE_LENGTH, stripOwnSuffixes } from "./reserved-series.js";
+export { FISCAL_CLASSIFICATION } from "./classification.js";

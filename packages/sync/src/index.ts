@@ -66,6 +66,8 @@ export type { RecordSubscriberCursorArgs } from "./cursor-report.js";
 export { authenticatePeer, enrolPeer, listPeers, revokePeer } from "./peers.js";
 export type { EnrolPeerInput, PeerSummary } from "./peers.js";
 
+export { SYNC_CLASSIFICATION } from "./classification.js";
+
 // Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable from
 // this package's own public barrel, per the reachability rule in packages/shared/src/errors.ts.
 // See errors.reachability.test.ts.

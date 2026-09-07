@@ -73,3 +73,4 @@ export type {
   SettlementRecord,
   SettlementReportSource,
 } from "./reconcile.js";
+export { PAYMENTS_CLASSIFICATION } from "./classification.js";

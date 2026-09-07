@@ -38,6 +38,8 @@ export {
 } from "./store.js";
 export type { CredentialMeta, CredentialRef, RotationResult } from "./store.js";
 
+export { CREDENTIALS_CLASSIFICATION } from "./classification.js";
+
 // Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable
 // from this package's own public barrel, per the reachability rule in packages/shared/src/errors.ts.
 // See errors.reachability.test.ts.
