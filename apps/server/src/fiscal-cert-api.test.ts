@@ -18,7 +18,8 @@ import {
 } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
-import { loadKeyRing } from "@waitron/credentials";
+import { getCredential, loadKeyRing } from "@waitron/credentials";
+import { tenantId as brandTenantId } from "@waitron/shared";
 import type {
   Endorsement,
   MembershipDocumentBody,
@@ -31,7 +32,12 @@ import { ALL_MODULES } from "./modules.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 import { sealMirrorToken } from "./mirror-token.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
-import { readCertStatus, storeDormantCert, type AeatCertMaterial } from "./fiscal-cert.js";
+import {
+  readCertStatus,
+  sealLiveCertTx,
+  storeDormantCert,
+  type AeatCertMaterial,
+} from "./fiscal-cert.js";
 import { roleUrl } from "./testing/postgres.js";
 
 // Cert-distribution Task 10: the two management-API endpoints for the AEAT certificate —
@@ -43,6 +49,12 @@ import { roleUrl } from "./testing/postgres.js";
 // pool (verifyBreakGlass, the admin-login authorize, the dormant unwrap SELECT) and the owner pool
 // (the live-cert seal / corrupt-dormant delete), and the mirror boot performs owner-role deployment
 // writes — all false passes on PGlite (every PGlite connection is a superuser).
+//
+// DELIBERATELY UNTESTED here: boot's `certSeat === undefined` (fiscal-none) branch, which refuses an
+// install with `setup.request_invalid`. Every boot in this suite disables `fiscal-none` (the fiscal
+// slot resolves to Veri*Factu, which DOES carry a `provisioningSecret`), so exercising the empty-seat
+// branch would need a whole second regime configuration for one guard clause. The guard is a thin
+// defensive refuse; the regime-selection wiring it depends on is covered by the module suites.
 
 // `undici`'s fetch is mocked to REJECT so no background pull/tunnel dial reaches a real host; Node's
 // own global `fetch` still serves the endpoint requests below (boot.promote-endpoint.test.ts idiom).
@@ -101,6 +113,13 @@ const MANAGER_PW = "manager-password-here";
 // A valid AEAT cert: `certKind ∈ {sello, representante}`, a non-empty base64 `pfxBase64` ("QQ==" = "A"),
 // a non-empty passphrase (packages/fiscal-verifactu/src/provisioning-secret.ts validateAeatCert).
 const VALID_CERT: AeatCertMaterial = { pfxBase64: "QQ==", passphrase: "pfx-pw", certKind: "sello" };
+// A DISTINCT valid cert (different bytes AND certKind) seeded as the pre-existing live cert, so a later
+// install with `VALID_CERT` can be proven to have REPLACED it rather than merely left it in place.
+const OLD_LIVE_CERT: AeatCertMaterial = {
+  pfxBase64: "Qk9C",
+  passphrase: "old-pfx-pw",
+  certKind: "representante",
+};
 // A malformed cert — `certKind` outside the set — that `validate` refuses with `setup.request_invalid`.
 const MALFORMED_CERT = { pfxBase64: "QQ==", passphrase: "pfx-pw", certKind: "bogus" };
 
@@ -245,6 +264,14 @@ async function certStatus(admin: Database, tenantId: string): Promise<"live" | "
   return withTenant(admin, tenantId, (tx) => readCertStatus(tx, RING, tenantId));
 }
 
+/** Decrypt and return the live `fiscal.aeat` cert content, so a test can assert WHICH cert is sealed
+ * (status "live" alone cannot distinguish a replaced cert from an untouched one). */
+async function readLiveCert(admin: Database, tenantId: string): Promise<Record<string, string>> {
+  return withTenant(admin, tenantId, (tx) =>
+    getCredential(tx, RING, { tenantId: brandTenantId(tenantId), purpose: "fiscal.aeat" }),
+  );
+}
+
 beforeAll(async () => {
   const fromSource = migrationOptionsFor(manifestSets(), null);
   migrationsRoot = await mkdtemp(join(tmpdir(), "waitron-cert-api-migrations-"));
@@ -370,12 +397,19 @@ describe("fiscal-certificate endpoints (real Postgres): unlock + install/replace
     try {
       await poll(async () => server.health.lastPassAt ?? undefined);
 
-      // Admin login + a valid cert → 200, live cert sealed. Seed a pre-existing live cert first to prove
-      // this OVERWRITES (the renewal path) rather than refusing an already-configured venue.
+      // Admin login + a valid cert → 200. Seed a REAL live `fiscal.aeat` cert first (a DISTINCT one),
+      // then install a DIFFERENT cert, to prove this REPLACES the existing live cert (the renewal path
+      // this endpoint doubles as) rather than merely leaving an already-configured venue's cert in place.
+      // Status "live" alone cannot show replacement, so assert the sealed CONTENT is the newly-installed
+      // cert, not the seeded one.
       await clearCerts(suite.admin, tenant);
       await withTenant(suite.admin, tenant, (tx) =>
-        storeDormantCert(tx, RING, tenant, VALID_CERT, "seed-for-overwrite"),
+        sealLiveCertTx(tx, RING, tenant, OLD_LIVE_CERT),
       );
+      expect(await readLiveCert(suite.admin, tenant)).toMatchObject({
+        certKind: OLD_LIVE_CERT.certKind,
+        pfxBase64: OLD_LIVE_CERT.pfxBase64,
+      });
       const install = await postJson(base, INSTALL, {
         personId: ADMIN_ID,
         password: ADMIN_PW,
@@ -383,9 +417,16 @@ describe("fiscal-certificate endpoints (real Postgres): unlock + install/replace
       });
       expect(install.status).toBe(200);
       expect(await certStatus(suite.admin, tenant)).toBe("live");
+      // The live cert is now the INSTALLED one, byte-for-byte — the seeded cert was replaced.
+      expect(await readLiveCert(suite.admin, tenant)).toEqual({
+        pfxBase64: VALID_CERT.pfxBase64,
+        passphrase: VALID_CERT.passphrase,
+        certKind: VALID_CERT.certKind,
+      });
 
-      // A malformed cert (bad certKind) → 400 setup.request_invalid and NOTHING re-sealed: the live row
-      // sealed above is unchanged (still present), proving the malformed body sealed nothing new.
+      // A malformed cert (bad certKind) → 400 setup.request_invalid and NOTHING re-sealed: the live cert
+      // installed above is unchanged, proving the malformed body sealed nothing new — asserted on the
+      // CONTENT, not just the "live" status, so a silent overwrite with garbage could not pass.
       const bad = await postJson(base, INSTALL, {
         personId: ADMIN_ID,
         password: ADMIN_PW,
@@ -393,7 +434,11 @@ describe("fiscal-certificate endpoints (real Postgres): unlock + install/replace
       });
       expect(bad.status).toBe(400);
       expect((await bad.json()).error.code).toBe("setup.request_invalid");
-      expect(await certStatus(suite.admin, tenant)).toBe("live");
+      expect(await readLiveCert(suite.admin, tenant)).toEqual({
+        pfxBase64: VALID_CERT.pfxBase64,
+        passphrase: VALID_CERT.passphrase,
+        certKind: VALID_CERT.certKind,
+      });
 
       // A non-admin (manager) authenticates but lacks fiscal.configure → 403 authorization.not_permitted,
       // and no cert is sealed on that path.
