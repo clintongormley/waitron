@@ -2,6 +2,7 @@ import { page } from "@vitest/browser/context";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
+import { ServerRouter } from "./api/server-router.js";
 import { diag } from "./diagnostics.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
@@ -5574,3 +5575,64 @@ it.each(["station", "expo", "schedule"])(
     expect(el.shadowRoot!.querySelector('[slot="drill"]')).toBeNull();
   },
 );
+
+// The venue's servers (till-reroute §4.1). Mirrors the un-exported helpers in server-router.test.ts —
+// redefined locally rather than exported from there (they are private test fixtures).
+const BOX = "https://box.deli.test";
+const CLOUD = "https://cloud.deli.test";
+
+/** A fetch that always fails at the network level — the router here is used only as an EventTarget
+ * (the app subscribes to its `server-changed`), never probed, so no /api/node answer is needed. */
+function probeFetch(): typeof fetch {
+  return vi.fn(async () => {
+    throw new TypeError("Failed to fetch");
+  }) as unknown as typeof fetch;
+}
+
+function memoryStorage(): Pick<Storage, "getItem" | "setItem"> {
+  const data = new Map<string, string>();
+  return { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v) };
+}
+
+describe("till-app follows a server move (till-reroute §4.3)", () => {
+  it("on server-changed: drops the operator, locks with server.switched, and re-boots against the new target", async () => {
+    const router = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(),
+      storage: memoryStorage(),
+    });
+    const api = stubApi(); // getTill resolves the shared `till` fixture; getDeviceIdentity rejects (not a device)
+    const { el } = await mountWidget<TillApp>("till-app", { api, router });
+    const c = await toCounter(el); // the suite's existing login helper (logs in "Ana" = p1)
+    // The half-built order the till holds when the box dies — it must survive the move (kept in memory).
+    c.store.addProduct(cafe, "2");
+    await el.updateComplete;
+    expect((el as unknown as { operatorPersonId: string }).operatorPersonId).not.toBe("");
+
+    router.dispatchEvent(new CustomEvent("server-changed", { detail: { from: BOX, to: CLOUD } }));
+    await flush(el);
+
+    expect((el as unknown as { screen: string }).screen).toBe("lock");
+    expect((el as unknown as { operatorPersonId: string }).operatorPersonId).toBe("");
+    expect(el.shadowRoot!.textContent).toContain(t("server.switched"));
+    // Exactly two getTill: the initial boot + the one re-boot the move triggers. A doubled subscription
+    // (a handler registered in both connectedCallback and willUpdate) would re-boot twice — this pins it.
+    expect(api.getTill).toHaveBeenCalledTimes(2);
+    // The working order is KEPT across the move (only the operator session is dropped, §4.3).
+    expect(c.store.lines).toHaveLength(1);
+  });
+
+  it("feeds the boot payload's servers to the router", async () => {
+    const router = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(),
+      storage: memoryStorage(),
+    });
+    const setServers = vi.spyOn(router, "setServers");
+    const servers = [{ nodeId: "c", url: CLOUD, standing: "serving-secondary" as const }];
+    const api = stubApi({ getTill: vi.fn().mockResolvedValue({ ...till, servers }) });
+    const { el } = await mountWidget<TillApp>("till-app", { api, router });
+    await flush(el);
+    expect(setServers).toHaveBeenCalledWith(servers);
+  });
+});

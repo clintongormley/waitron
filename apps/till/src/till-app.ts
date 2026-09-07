@@ -181,6 +181,57 @@ export class TillApp extends LitElement {
    * events. Undefined in tests that do not inject one. */
   @property({ attribute: false }) router?: ServerRouter;
 
+  /** The router this app is currently subscribed to, or undefined when subscribed to none. The subscribe
+   * point is idempotent ({@link #subscribeRouter}): `router` is a `@property` set AFTER `connectedCallback`
+   * in some mounts, so both `connectedCallback` and `willUpdate` try to subscribe — a doubled
+   * `server-changed` would re-boot twice, so this tracks the live subscription and re-subscribes only on a
+   * genuine change. */
+  #subscribedRouter?: ServerRouter;
+
+  /**
+   * The venue moved to another server (till-reroute §4.3). The login session was a row on the server we
+   * just left, so drop the operator LOCALLY, lock, say why (`server.switched`), and re-run the boot
+   * against the new target (`#boot` → getTill, device probe). The working order stays in memory — only
+   * the operator session is dropped — and the held-orders list on the new target shows the replicated
+   * state.
+   */
+  readonly #onServerChanged = (event: Event): void => {
+    const { to } = (event as CustomEvent<{ from: string; to: string }>).detail;
+    diag.record("info", "nav", { screen: "server.switched", to });
+    this.operatorPersonId = "";
+    this.operatorName = "";
+    this.canEdit = false;
+    this.errorKey = "server.switched";
+    this.#setScreen("lock");
+    void this.#boot();
+  };
+
+  /** A router state change (a probe round, a `setServers`) — repaint so the status line (§4.4) reflects it. */
+  readonly #onServerState = (): void => this.requestUpdate();
+
+  /** Point the app's router subscription at the CURRENT {@link router}, idempotently: a no-op when already
+   * subscribed to it, otherwise detach from the previous one and attach to the new. */
+  #subscribeRouter(): void {
+    if (this.#subscribedRouter === this.router) return;
+    this.#subscribedRouter?.removeEventListener("server-changed", this.#onServerChanged);
+    this.#subscribedRouter?.removeEventListener("state-changed", this.#onServerState);
+    this.router?.addEventListener("server-changed", this.#onServerChanged);
+    this.router?.addEventListener("state-changed", this.#onServerState);
+    this.#subscribedRouter = this.router;
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#subscribeRouter();
+  }
+
+  override disconnectedCallback(): void {
+    this.#subscribedRouter?.removeEventListener("server-changed", this.#onServerChanged);
+    this.#subscribedRouter?.removeEventListener("state-changed", this.#onServerState);
+    this.#subscribedRouter = undefined;
+    super.disconnectedCallback();
+  }
+
   /** The one basket the whole flow shares. A stable reference (widgets subscribe to it directly). */
   readonly #store = new WorkingOrderStore();
 
@@ -605,6 +656,10 @@ export class TillApp extends LitElement {
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("canvas") || changed.has("handheldMode"))
       this.#affordanceList = this.#affordances();
+    // `router` is set by property, in some mounts AFTER `connectedCallback` — re-subscribe here so the
+    // move handler reaches a router assigned post-connect. Idempotent: {@link #subscribeRouter} no-ops
+    // when the subscription already points at the current router.
+    if (changed.has("router")) this.#subscribeRouter();
   }
 
   /**
@@ -630,6 +685,9 @@ export class TillApp extends LitElement {
       // resolves after the app was torn down must not repaint a live sibling's locale. The state writes
       // below need no such guard — Lit never paints a detached element.
       if (!this.isConnected) return;
+      // Feed the boot payload's server list to the router (till-reroute §4.1) so it probes the venue's
+      // routable servers, not just this page's origin. A no-op when no router is injected (tests).
+      this.router?.setServers(till.servers);
       // Apply the venue default ONLY when no operator has logged in yet. On a slow link the lock screen's
       // `getStaff` + a human PIN entry can complete a login while this `getTill` is still in flight;
       // `#onLoggedIn` then applies the operator's preferred locale SYNCHRONOUSLY (`resolveActiveLocale`)
