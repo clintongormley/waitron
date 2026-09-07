@@ -339,11 +339,23 @@ All three decisions are now taken.
    default `localStorage` acquisition threw before first paint (now guarded), and overlapping
    `probeNow()` rounds could undo a newer move (now coalesced onto one round — reachable once S5's
    "check again" runs beside the interval); it also caught a stale plan comment claiming the
-   diagnostics trail logs a rerouted request's real URL (it logs only the masked pathname). Next:
-   S5 (react to a move: PIN re-prompt, `sale.unconfirmed`, the lock-screen status line + "check
-   again") in its own worktree, then S6 (the two-process e2e). S5 deferrals recorded during S4:
-   `TillServer.standing` is unused by the router (its `setServers` decides), and `state-changed`
-   fires every round unconditionally (fold change-detection in with the check-again listener):**
+   diagnostics trail logs a rerouted request's real URL (it logs only the masked pathname). S5 (till
+   behaviour, plan Tasks 17–20) LANDED #264 (2026-09-07) — on a `server-changed` the till drops the
+   operator, locks (`server.switched`) and re-boots against the new target with the working order kept
+   in memory; a network-level failure (`TypeError`/`AbortError`, never a server `{code}`) of a FISCAL
+   request shows `sale.unconfirmed`, scoped so a failure of the preliminary order save keeps the plain
+   `sale.error`/`place.error`; a lock-screen `role="status"` line (`On: <current>` + `<label>: <state>`
+   per server) with "Check again" → `probeNow()`, plus a shell-header waiting banner; the router now
+   dispatches `state-changed` only on a real change (one signature-gated `#emitStateChanged` shared by
+   `setServers` and the probe round). The whole-branch Codex run-it seat reproduced two correctness
+   defects fixed before land: `setServers` didn't sync the change-detection signature, so a
+   remove/re-add-then-same-probe could freeze the status display on `unknown`; and `sale.unconfirmed`
+   was shown for a preliminary save that never reached the fiscal request. Both S4 deferrals resolved:
+   `state-changed` change-detection landed; `TillServer.standing` KEPT deliberately (it is the
+   `GET /api/till.servers` wire type the server sends, not dead — the router deciding via
+   `acceptingSales` does not retire the field). Next: S6 (the two-process e2e, plan Tasks 21–22 —
+   also carries the S1/S2 OWED same-site cookie browser receipt, and the landing backlog/spec
+   pointers):**
    [`2026-09-05-till-reroute-design.md`](superpowers/specs/2026-09-05-till-reroute-design.md) — the
    till FOLLOWS THE PRIMARY (probe every server, obey `acceptingSales`; no manual switch — owner
    2026-09-05; a status line + "check again" instead), server list = the membership document's
