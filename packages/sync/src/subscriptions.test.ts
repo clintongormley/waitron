@@ -6,9 +6,14 @@ import {
   createSubscription,
   createSubscriptionStatement,
   disableSubscription,
+  dropReplicationSlot,
   dropSubscription,
+  dropSubscriptionDetached,
   enableSubscription,
+  refreshSubscription,
+  refreshSubscriptionStatement,
   setSubscriptionPublications,
+  setSubscriptionPublicationsStatement,
   skipSubscription,
 } from "./subscriptions.js";
 
@@ -85,8 +90,10 @@ describe("the maintenance verbs run the right ALTER/DROP", () => {
     expect(calls[0]).toBe('ALTER SUBSCRIPTION "waitron_sub_a" ENABLE');
     expect(calls[1]).toBe('ALTER SUBSCRIPTION "waitron_sub_a" DISABLE');
     expect(calls[2]).toBe('DROP SUBSCRIPTION IF EXISTS "waitron_sub_a"');
+    // Narrowing carries WITH (refresh = false): probe C — a mid-drain refresh would drop the tables
+    // the narrowed publication no longer names and lose their un-applied WAL.
     expect(calls[3]).toBe(
-      'ALTER SUBSCRIPTION "waitron_sub_a" SET PUBLICATION "waitron_production_ledger"',
+      'ALTER SUBSCRIPTION "waitron_sub_a" SET PUBLICATION "waitron_production_ledger" WITH (refresh = false)',
     );
     expect(calls[4]).toBe("ALTER SUBSCRIPTION \"waitron_sub_a\" SKIP (lsn = '0/328F738')");
   });
@@ -95,6 +102,80 @@ describe("the maintenance verbs run the right ALTER/DROP", () => {
     const { db } = fakeDb();
     await expect(enableSubscription(db, 'bad"; drop')).rejects.toThrow();
     await expect(skipSubscription(db, "waitron_sub_a", "not-an-lsn")).rejects.toThrow();
+  });
+});
+
+describe("setSubscriptionPublicationsStatement", () => {
+  it("ends WITH (refresh = false) so the narrowed drain does not refresh (probe C)", () => {
+    expect(
+      setSubscriptionPublicationsStatement("waitron_sub_a", ["waitron_production_ledger"]),
+    ).toBe(
+      'ALTER SUBSCRIPTION "waitron_sub_a" SET PUBLICATION "waitron_production_ledger" WITH (refresh = false)',
+    );
+  });
+});
+
+describe("refreshSubscription", () => {
+  it("builds and runs REFRESH PUBLICATION", async () => {
+    expect(refreshSubscriptionStatement("waitron_sub_a")).toBe(
+      'ALTER SUBSCRIPTION "waitron_sub_a" REFRESH PUBLICATION',
+    );
+    const { db, calls } = fakeDb();
+    await refreshSubscription(db, "waitron_sub_a");
+    expect(calls).toEqual(['ALTER SUBSCRIPTION "waitron_sub_a" REFRESH PUBLICATION']);
+  });
+  it("refuses a bad subscription name", async () => {
+    const { db } = fakeDb();
+    await expect(refreshSubscription(db, 'bad"; drop')).rejects.toThrow();
+  });
+});
+
+describe("dropSubscriptionDetached", () => {
+  it("disables, clears the slot reference, then drops — the remote slot is already gone", async () => {
+    // For a subscription whose publisher-side slot has vanished (the peer was wiped): DROP alone would
+    // try to drop the slot on a dead connection and hang, so the slot reference is cleared first.
+    const { db, calls } = fakeDb();
+    await dropSubscriptionDetached(db, "waitron_sub_a");
+    expect(calls).toEqual([
+      'ALTER SUBSCRIPTION "waitron_sub_a" DISABLE',
+      'ALTER SUBSCRIPTION "waitron_sub_a" SET (slot_name = NONE)',
+      'DROP SUBSCRIPTION IF EXISTS "waitron_sub_a"',
+    ]);
+  });
+  it("refuses a bad subscription name", async () => {
+    const { db } = fakeDb();
+    await expect(dropSubscriptionDetached(db, 'bad"; drop')).rejects.toThrow();
+  });
+});
+
+describe("dropReplicationSlot", () => {
+  it("refuses a slot name that is not a bare identifier (a wiring bug, refused loudly)", async () => {
+    const db = { execute: async () => ({ rows: [] }) } as unknown as Database;
+    await expect(dropReplicationSlot(db, 'bad"; drop')).rejects.toThrow();
+  });
+  it("runs pg_drop_replication_slot with the slot BOUND (never concatenated), no SET ROLE", async () => {
+    let captured: { queryChunks: { value: unknown }[] } | undefined;
+    const db = {
+      execute: async (q: { queryChunks: { value: unknown }[] }) => {
+        captured = q;
+        return { rows: [] };
+      },
+    } as unknown as Database;
+    await expect(dropReplicationSlot(db, "waitron_sub_a")).resolves.toBeUndefined();
+    const staticText = (captured?.queryChunks ?? [])
+      .map((c) => (Array.isArray(c.value) ? c.value.join("") : ""))
+      .join("");
+    expect(staticText).toContain("pg_drop_replication_slot");
+    // The slot name is NOT in the static text: it travels as a bound parameter.
+    expect(staticText).not.toContain("waitron_sub_a");
+    // The slot value is embedded as its own non-StringChunk chunk (drizzle turns it into a bound `$n`
+    // at execution — proven end to end in the pg suite, where it drops a real slot BY NAME).
+    const params = (captured?.queryChunks ?? [])
+      .filter((c) => !Array.isArray(c.value))
+      .map((c) => String(c));
+    expect(params).toContain("waitron_sub_a");
+    // No SET ROLE: the caller authenticated as waitron_repl (Ruling I3).
+    expect(staticText).not.toContain("SET ROLE");
   });
 });
 

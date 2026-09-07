@@ -83,7 +83,16 @@ export function setSubscriptionPublicationsStatement(
   name: string,
   publications: readonly string[],
 ): string {
-  return `ALTER SUBSCRIPTION ${quoted(name)} SET PUBLICATION ${publications.map(quoted).join(", ")}`;
+  // WITH (refresh = false): probe C — narrowing to the drain-window publication mid-drain must NOT
+  // refresh, or Postgres drops the tables the narrowed set no longer names and loses their un-applied
+  // WAL. The caller refreshes explicitly (refreshSubscription) only when it means to.
+  return (
+    `ALTER SUBSCRIPTION ${quoted(name)} SET PUBLICATION ${publications.map(quoted).join(", ")} ` +
+    `WITH (refresh = false)`
+  );
+}
+export function refreshSubscriptionStatement(name: string): string {
+  return `ALTER SUBSCRIPTION ${quoted(name)} REFRESH PUBLICATION`;
 }
 export function skipSubscriptionStatement(name: string, lsn: string): string {
   if (!/^[0-9A-F]+\/[0-9A-F]+$/i.test(lsn)) throw new Error(`not an LSN: ${JSON.stringify(lsn)}`);
@@ -110,4 +119,27 @@ export async function setSubscriptionPublications(
 /** The operator SKIP over a refused transaction (spec §6). `lsn` is validated to the LSN shape. */
 export async function skipSubscription(db: Database, name: string, lsn: string): Promise<void> {
   await db.execute(sql.raw(skipSubscriptionStatement(name, lsn)));
+}
+/** Refresh a subscription's table set from its publications — the deliberate counterpart to the
+ * `refresh = false` narrowing, called only when the caller means to pick up added/removed tables. */
+export async function refreshSubscription(db: Database, name: string): Promise<void> {
+  await db.execute(sql.raw(refreshSubscriptionStatement(name)));
+}
+/** Drop a subscription whose publisher-side slot is ALREADY GONE (the peer was wiped). A plain DROP
+ * would try to drop the slot over a dead connection and hang, so the slot reference is cleared first:
+ * DISABLE, `SET (slot_name = NONE)`, then DROP. The now-orphaned slot (if the peer still lived) is
+ * reclaimed separately by `dropReplicationSlot` / the DROP DATABASE wipe (Ruling I3). */
+export async function dropSubscriptionDetached(db: Database, name: string): Promise<void> {
+  await db.execute(sql.raw(disableSubscriptionStatement(name)));
+  await db.execute(sql.raw(`ALTER SUBSCRIPTION ${quoted(name)} SET (slot_name = NONE)`));
+  await db.execute(sql.raw(dropSubscriptionStatement(name)));
+}
+/** Drop a publisher-side replication slot. `db` MUST be a connection the caller authenticated AS a
+ * REPLICATION role (`waitron_repl`): there is NO `SET ROLE` and NO migrator→`waitron_repl` grant
+ * (Ruling I3 — the §3 "never widen a grant"). No step-4 caller — this is step-5 orphaned-slot
+ * reclamation and the operator SKIP runbook. The slot identifier is validated (a wiring bug is
+ * refused loudly), then bound as a parameter to `pg_drop_replication_slot`. */
+export async function dropReplicationSlot(db: Database, slot: string): Promise<void> {
+  quoted(slot); // validate-and-throw; the value itself travels bound, below.
+  await db.execute(sql`select pg_drop_replication_slot(${slot})`);
 }

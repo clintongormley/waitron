@@ -61,5 +61,10 @@ declare module "@waitron/shared" {
      * `provisioning.role_creation_failed` keeps for `CREATE ROLE`). Five `[0-9A-Z]` cannot be the
      * password. */
     "sync.subscription_failed": { sqlState: string | null };
+    /** A subscription names a publication the publisher does not hold, so its initial copy silently
+     * never happens — `check_publications` only WARNs at CREATE (probe C). Raised where a caller has
+     * verified the publisher's set and refuses the wiring rather than let the copy no-op.
+     * `subscription` is that subscription's name — a schema identifier, never row content. */
+    "sync.publication_missing": { subscription: string };
   }
 }

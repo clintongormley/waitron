@@ -4,7 +4,17 @@ import { createPostgresDb, type Database } from "@waitron/db";
 import { POSTGRES_IMAGE, roleUrl } from "@waitron/db/testing/postgres.js";
 import type { StartedNetwork } from "@waitron/db/testing/two-node.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { replicationBootstrapStatements, withDatabase } from "@waitron/provisioning";
+import {
+  REPLICATION_ROLE,
+  replicationBootstrapStatements,
+  withDatabase,
+} from "@waitron/provisioning";
+
+// Re-exported here so Task 3's fiscal fidelity suite imports `REPLICATION_ROLE` and
+// `provisionAndBootstrapNode` from `@waitron/sync/testing/replication-node.js` without a
+// fiscal→provisioning package edge (I8): this testing barrel already depends on `@waitron/provisioning`,
+// the fiscal package does not.
+export { REPLICATION_ROLE };
 
 /**
  * One PostgreSQL node provisioned the shape native logical replication requires: the migrator
