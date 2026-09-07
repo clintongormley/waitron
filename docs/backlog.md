@@ -602,7 +602,7 @@ screens, `apps/server/src/modules.ts` (the maps derived from that list), and the
        All now scope `cfg.tenantId` (§3, the till-reroute S3 class); real-PG regression tests added.
      - **Deferred follow-ons (none on the sale path):** `createOpenOrder`'s `deliveryTableId` existence check
        read `dining_tables` by id alone — SAME §3 read-leak class (fail-closed-on-WRITE via composite FK does
-       not close the read leak). **FIXED 2026-09-08** (branch `fix/open-order-delivery-table-tenant-scope`):
+       not close the read leak). **FIXED 2026-09-08 (#276)**:
        the pre-check now scopes `eq(diningTables.tenantId, cfg.tenantId)`, so another tenant's real table id
        reads as absent (clean `table.not_found`, not a raw 23503); real-PG two-tenant regression in
        `tabs.pg.test.ts`. **NEW leads found while there (code-traced, NOT yet run — verify by two-tenant
