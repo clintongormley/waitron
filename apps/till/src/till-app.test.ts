@@ -2,6 +2,7 @@ import { page } from "@vitest/browser/context";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
+import { ServerRouter } from "./api/server-router.js";
 import { diag } from "./diagnostics.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
@@ -1583,6 +1584,57 @@ describe("till-app", () => {
     const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
     expect(banner.textContent).toContain(t("sale.error"));
     expect(el.shadowRoot!.textContent).not.toContain("server.internal"); // never leaks the raw code
+  });
+
+  it("shows sale.unconfirmed, basket kept, when the sale request got no answer", async () => {
+    // A `recordSale` whose `fetch` rejects at the NETWORK level (a TypeError — the host never answered)
+    // is not the same as a server that refused with a `{ code }` (till-reroute §4.3): the operator must
+    // check whether the sale went through before retrying, so the banner is `sale.unconfirmed`, not the
+    // free-to-retry `sale.error`. Basket kept, still on the counter.
+    const recordSale = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({ recordSale });
+    const c = await toCounter(el);
+    const store = c.store;
+    store.addProduct(cafe, "1");
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    expect(ticket(el)).toBeNull();
+    expect(counter(el)).not.toBeNull(); // still on the counter
+    expect(store.lines).toHaveLength(1); // basket kept
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("sale.unconfirmed"));
+  });
+
+  it("confirm-payment: a PRELIMINARY-save network failure shows sale.error, not sale.unconfirmed", async () => {
+    // F2 (run-it reviewer, §4.3): `sale.unconfirmed` means "the sale may have filed — check before
+    // retrying". A network failure of the PRE-PAY `#syncIfDirty` save is not that: no fiscal request was
+    // ever made, nothing filed, safe to retry — so it must be the plain `sale.error`. Retrieve + edit so
+    // `#syncIfDirty` actually calls the API, then reject that call at the network level; `recordSale` is
+    // never reached. BEFORE the fix this mislabels as `sale.unconfirmed`.
+    const updateWorkingOrder = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const recordSale = vi.fn().mockResolvedValue(saleResult);
+    const { el } = await mountApp({ updateWorkingOrder, recordSale });
+    const c = await toCounter(el);
+    const store = c.store;
+
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    store.addProduct(cafe, "1"); // edit → dirty → the pre-pay sync is attempted
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    expect(recordSale).not.toHaveBeenCalled(); // the failed save short-circuits before any fiscal call
+    expect(ticket(el)).toBeNull();
+    expect(counter(el)).not.toBeNull();
+    expect(store.lines).toHaveLength(2); // basket kept
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("sale.error"));
+    expect(banner.textContent).not.toContain(t("sale.unconfirmed"));
   });
 
   it("walk-up pay retry: a re-tapped confirm sends the SAME store id (idempotent replay, never two ids)", async () => {
@@ -3293,6 +3345,46 @@ describe("till-app", () => {
       expect(el.shadowRoot!.textContent).not.toContain("server.internal"); // never leaks the raw code
     });
 
+    it("a PRELIMINARY-save network failure shows sale.error, not sale.unconfirmed (pay never reached)", async () => {
+      // F2 (§4.3): the pre-pay `#syncIfDirty` save network-fails, so the integrated `pay` is never
+      // called — nothing filed, safe to retry — so this is `sale.error`, not `sale.unconfirmed`.
+      const updateWorkingOrder = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+      const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
+      const { el } = await mountApp({ updateWorkingOrder, pay });
+      const c = await toCounter(el);
+      const store = c.store;
+
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await flush(el);
+      store.addProduct(cafe, "1"); // edit → dirty → the pre-pay sync is attempted
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      expect(pay).not.toHaveBeenCalled();
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("sale.error"));
+      expect(banner.textContent).not.toContain(t("sale.unconfirmed"));
+    });
+
+    it("the integrated pay itself network-failing shows sale.unconfirmed (the fiscal request was reached)", async () => {
+      // The other side of F2: once `pay` IS called, a network failure of THAT request is
+      // `sale.unconfirmed` — the charge may have captured and filed, so a human checks before retrying.
+      const pay = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+      const { el } = await mountApp({ pay });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      expect(pay).toHaveBeenCalled();
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("sale.unconfirmed"));
+    });
+
     it("single-flight: a second collect-card while pay is pending fires exactly once", async () => {
       // Same double-file safety as confirm-payment's single-flight test (CLAUDE.md §5): the first pay
       // never resolves, so a second collect-card dispatched in that window (double-tap / laggy link)
@@ -3645,6 +3737,53 @@ describe("till-app", () => {
       expect(el.shadowRoot!.textContent).not.toContain("working_order.rejected");
     });
 
+    it("place: a fresh-basket park network failure shows place.error, not sale.unconfirmed", async () => {
+      // F2 (§4.3): `parkOrder` is the preliminary save on a fresh basket; a network failure of it means
+      // the `placeOrder` fiscal request was never made, so this is the free-to-retry `place.error`, not
+      // the "did it file?" `sale.unconfirmed`. `placeOrder` is never reached. BEFORE the fix this
+      // mislabels as `sale.unconfirmed`.
+      const parkOrder = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        parkOrder,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "place-order");
+      await flush(el);
+
+      expect(currentApi.placeOrder).not.toHaveBeenCalled();
+      expect(tenderPay(el).stage).toBe("order"); // never advanced
+      expect(c.store.lines).toHaveLength(1); // basket kept
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("place.error"));
+      expect(banner.textContent).not.toContain(t("sale.unconfirmed"));
+    });
+
+    it("place: the placeOrder fiscal request network-failing shows sale.unconfirmed (the request was reached)", async () => {
+      // The other side of F2: park succeeded and `placeOrder` IS called, so a network failure of THAT
+      // request is `sale.unconfirmed` — the placement / deferred invoice may have filed (§4.3).
+      const placeOrder = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        placeOrder,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "place-order");
+      await flush(el);
+
+      expect(currentApi.parkOrder).toHaveBeenCalled();
+      expect(placeOrder).toHaveBeenCalled();
+      expect(tenderPay(el).stage).toBe("order"); // never advanced — the place failed
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("sale.unconfirmed"));
+    });
+
     it("place single-flight: a second place-order while the first is pending places EXACTLY ONCE", async () => {
       const parkOrder = vi.fn(() => new Promise(() => {})); // never resolves
       const { el } = await mountApp({
@@ -3707,6 +3846,31 @@ describe("till-app", () => {
       const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
       expect(banner.textContent).toContain(t("sale.error"));
       expect(el.shadowRoot!.textContent).not.toContain("working_order.not_placed");
+    });
+
+    it("collect-order: a NETWORK failure (no answer) shows sale.unconfirmed, basket kept", async () => {
+      // Collect is a terminal fiscal-file moment (Mode T files immediate, Mode I settles the deferred
+      // invoice), so a `collectOrder` whose `fetch` got no answer has the same "did it file?" ambiguity
+      // as `#onConfirmPayment` (till-reroute §4.3): `sale.unconfirmed`, not the free-to-retry
+      // `sale.error`. The `{ code }` refusal path stays `sale.error` (the test above).
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        collectOrder: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "place-order");
+      await flush(el);
+
+      emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
+      await flush(el);
+
+      expect(ticket(el)).toBeNull();
+      expect(counter(el)).not.toBeNull();
+      expect(tenderPay(el).stage).toBe("collect"); // still awaiting collection, basket kept
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("sale.unconfirmed"));
     });
 
     it("collect single-flight: a second collect-order while the first is pending collects EXACTLY ONCE", async () => {
@@ -5574,3 +5738,89 @@ it.each(["station", "expo", "schedule"])(
     expect(el.shadowRoot!.querySelector('[slot="drill"]')).toBeNull();
   },
 );
+
+// The venue's servers (till-reroute §4.1). Mirrors the un-exported helpers in server-router.test.ts —
+// redefined locally rather than exported from there (they are private test fixtures).
+const BOX = "https://box.deli.test";
+const CLOUD = "https://cloud.deli.test";
+
+/** A fetch that always fails at the network level — the router here is used only as an EventTarget
+ * (the app subscribes to its `server-changed`), never probed, so no /api/node answer is needed. */
+function probeFetch(): typeof fetch {
+  return vi.fn(async () => {
+    throw new TypeError("Failed to fetch");
+  }) as unknown as typeof fetch;
+}
+
+function memoryStorage(): Pick<Storage, "getItem" | "setItem"> {
+  const data = new Map<string, string>();
+  return { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v) };
+}
+
+describe("till-app follows a server move (till-reroute §4.3)", () => {
+  it("on server-changed: drops the operator, locks with server.switched, and re-boots against the new target", async () => {
+    const router = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(),
+      storage: memoryStorage(),
+    });
+    const api = stubApi(); // getTill resolves the shared `till` fixture; getDeviceIdentity rejects (not a device)
+    const { el } = await mountWidget<TillApp>("till-app", { api, router });
+    const c = await toCounter(el); // the suite's existing login helper (logs in "Ana" = p1)
+    // The half-built order the till holds when the box dies — it must survive the move (kept in memory).
+    c.store.addProduct(cafe, "2");
+    await el.updateComplete;
+    expect((el as unknown as { operatorPersonId: string }).operatorPersonId).not.toBe("");
+
+    router.dispatchEvent(new CustomEvent("server-changed", { detail: { from: BOX, to: CLOUD } }));
+    await flush(el);
+
+    expect((el as unknown as { screen: string }).screen).toBe("lock");
+    expect((el as unknown as { operatorPersonId: string }).operatorPersonId).toBe("");
+    expect(el.shadowRoot!.textContent).toContain(t("server.switched"));
+    // Exactly two getTill: the initial boot + the one re-boot the move triggers. A doubled subscription
+    // (a handler registered in both connectedCallback and willUpdate) would re-boot twice — this pins it.
+    expect(api.getTill).toHaveBeenCalledTimes(2);
+    // The working order is KEPT across the move (only the operator session is dropped, §4.3).
+    expect(c.store.lines).toHaveLength(1);
+  });
+
+  it("feeds the boot payload's servers to the router", async () => {
+    const router = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(),
+      storage: memoryStorage(),
+    });
+    const setServers = vi.spyOn(router, "setServers");
+    const servers = [{ nodeId: "c", url: CLOUD, standing: "serving-secondary" as const }];
+    const api = stubApi({ getTill: vi.fn().mockResolvedValue({ ...till, servers }) });
+    const { el } = await mountWidget<TillApp>("till-app", { api, router });
+    await flush(el);
+    expect(setServers).toHaveBeenCalledWith(servers);
+  });
+
+  it("shows the waiting-for-promotion banner in the shell while the router waits (§4.4)", async () => {
+    // On the shell surface (an operator mid-shift) the lock-screen's own status line is not visible, so
+    // `till-app` surfaces `server.waiting_promotion` in its own `role="status"` banner while the router
+    // reports no server is accepting sales. Two-sided: absent before a probe leaves the router waiting,
+    // present after.
+    const router = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(), // every server is down → a round finds no primary → waiting
+      storage: memoryStorage(),
+    });
+    const api = stubApi();
+    const { el } = await mountWidget<TillApp>("till-app", { api, router });
+    await toCounter(el); // in the shell (logged in on the counter)
+    const banner = () => el.shadowRoot!.querySelector<HTMLElement>(".banner[role='status']");
+    // Not waiting yet (no probe has run) → no banner.
+    expect(router.waiting).toBe(false);
+    expect(banner()).toBeNull();
+    // A probe round with every server unreachable leaves the router waiting for a promotion; the
+    // `state-changed` it dispatches repaints the app, which now shows the banner.
+    await router.probeNow();
+    await flush(el);
+    expect(router.waiting).toBe(true);
+    expect(banner()!.textContent).toContain(t("server.waiting_promotion"));
+  });
+});

@@ -46,6 +46,12 @@ export class ServerRouter extends EventTarget {
   #servers: Tracked[];
   #current: string;
   #waiting = false;
+  /** The render-relevant state at the last `state-changed`, as a JSON signature over
+   * `{ statuses(), waiting, current }` — the exact inputs `till-app`'s lock-screen repaint reads. BOTH a
+   * probe round and `setServers` dispatch through `#emitStateChanged`, which updates this, so it always
+   * tracks the last RENDERED state and the two paths can never disagree. The initial `""` never equals a
+   * real signature, so the first change always dispatches. */
+  #stateSignature = "";
   #inFlight = 0;
   #round: Promise<void> | undefined;
   #timer: ReturnType<typeof setInterval> | undefined;
@@ -85,7 +91,7 @@ export class ServerRouter extends EventTarget {
   setServers(list: ServerEntry[]): void {
     this.#servers = this.#merge(list);
     this.#save(list);
-    this.dispatchEvent(new Event("state-changed"));
+    this.#emitStateChanged();
   }
 
   start(): void {
@@ -127,6 +133,21 @@ export class ServerRouter extends EventTarget {
       const best = yes.reduce((a, b) => ((b.term ?? -1) > (a.term ?? -1) ? b : a));
       if (best.url !== this.#current) this.#move(best.url);
     }
+    // `#move` above already fired `server-changed` on a move; the render repaint is `#emitStateChanged`.
+    this.#emitStateChanged();
+  }
+
+  /** Dispatch `state-changed` iff the rendered state actually changed (§4.1, S4 deferral D2): the ONE
+   * gate both a probe round and `setServers` flow through, so a steady 5 s round drives no repaint and a
+   * `setServers` repaint can never leave a stale signature a later round would mistake for no-change. */
+  #emitStateChanged(): void {
+    const signature = JSON.stringify({
+      statuses: this.statuses(),
+      waiting: this.#waiting,
+      current: this.#current,
+    });
+    if (signature === this.#stateSignature) return;
+    this.#stateSignature = signature;
     this.dispatchEvent(new Event("state-changed"));
   }
 

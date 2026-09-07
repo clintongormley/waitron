@@ -230,6 +230,65 @@ describe("ServerRouter", () => {
     expect(r3.statuses().map((s) => s.url)).toEqual([BOX]);
     expect(() => r3.setServers([{ url: CLOUD }])).not.toThrow();
   });
+
+  // Change-detection (till-reroute §4.1, S4 deferral D2): a probe round dispatches `state-changed` only
+  // when the render-relevant state actually changed since the last dispatch, so the app's lock-screen
+  // repaint is not driven every 5 s in the steady state. BEFORE the fix, `#runRound` dispatched
+  // unconditionally, so the second identical round would fire a second event (this test would see 2, not
+  // 1) — that is the failing case this proves.
+  it("dispatches state-changed only when the render-relevant state changes, not every steady round", async () => {
+    const table: Record<string, Answer> = {
+      [BOX]: { acceptingSales: true, term: 1, nodeId: "b" },
+      [CLOUD]: { acceptingSales: false, term: 1, nodeId: "c" },
+    };
+    const r = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(table),
+      storage: memoryStorage(),
+    });
+    r.setServers([{ url: BOX }, { url: CLOUD }]); // setServers goes through the same signature gate
+    const changed = vi.fn();
+    r.addEventListener("state-changed", changed); // attach AFTER setServers, so we count only rounds
+    // First round settles the state (unknown → known): a genuine change, so it dispatches.
+    await r.probeNow();
+    expect(changed).toHaveBeenCalledTimes(1);
+    // A second round with identical probe results changes nothing visible — it must NOT re-dispatch.
+    await r.probeNow();
+    expect(changed).toHaveBeenCalledTimes(1);
+    // A round whose results DO change (the cloud's term moves) is a real change — it dispatches again.
+    table[CLOUD] = { acceptingSales: false, term: 5, nodeId: "c" };
+    await r.probeNow();
+    expect(changed).toHaveBeenCalledTimes(2);
+  });
+
+  // Stale-signature freeze (run-it reviewer, §4.1): `setServers` and a probe ROUND must share ONE
+  // signature gate, or a repaint the round happens to undo silently freezes the display. Remove a
+  // probed server and re-add it as `unknown` (a genuine repaint), then a round that returns the SAME
+  // answer it gave before the removal: if the gate compared only against the last ROUND's signature,
+  // the round would equal the STALE value and skip its dispatch — the display stuck on `unknown` while
+  // the server is really `standby`. Unifying the gate through `#emitStateChanged` (which `setServers`
+  // updates too) makes the round's genuine change dispatch. BEFORE the fix `changed` is 0 here.
+  it("re-dispatches state-changed after a setServers repaint that a repeating round undoes", async () => {
+    const table: Record<string, Answer> = {
+      [BOX]: { acceptingSales: true, term: 1, nodeId: "b" },
+      [CLOUD]: { acceptingSales: false, term: 1, nodeId: "c" },
+    };
+    const r = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(table),
+      storage: memoryStorage(),
+    });
+    r.setServers([{ url: BOX }, { url: CLOUD }]);
+    await r.probeNow(); // round 1: box primary, cloud standby — the signature settles here
+    r.setServers([{ url: BOX }]); // drop cloud
+    r.setServers([{ url: BOX }, { url: CLOUD }]); // re-add it, repainting cloud to `unknown`
+    expect(r.statuses().find((s) => s.url === CLOUD)?.state).toBe("unknown");
+    const changed = vi.fn();
+    r.addEventListener("state-changed", changed); // count only the final round
+    await r.probeNow(); // round 2: cloud → standby again — a real change from the repainted `unknown`
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(r.statuses().find((s) => s.url === CLOUD)?.state).toBe("standby");
+  });
 });
 
 describe("withServerTarget", () => {

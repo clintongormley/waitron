@@ -3,6 +3,7 @@ import { t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillLockScreen } from "./till-lock-screen.js";
 import type { StaffMember, TillApi } from "../api/client.js";
+import type { ServerStatus } from "../api/server-router.js";
 
 const ana: StaffMember = { personId: "p1", displayName: "Ana" };
 const ben: StaffMember = { personId: "p2", displayName: "Ben" };
@@ -396,6 +397,75 @@ describe("till-lock-screen", () => {
     expect(query(el, "[data-setup-till]")).toBeNull();
     // The roster login is untouched — an enrolled handheld's waiter still picks their name and PINs in.
     expect(el.shadowRoot!.querySelectorAll("wt-button.operator-button")).toHaveLength(2);
+  });
+
+  // Server status line (till-reroute §4.4): the roster view carries one row per known server with its
+  // localised state, a waiting-promotion suffix, and a "check again" control that dispatches
+  // `check-again` (till-app turns it into `router.probeNow()`).
+  it("renders one row per server with its state, and a check-again button", async () => {
+    const statuses: ServerStatus[] = [
+      { url: "https://box.deli.test", label: "box.deli.test", state: "unreachable", term: null },
+      { url: "https://cloud.deli.test", label: "cloud.deli.test", state: "standby", term: 2 },
+    ];
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi(),
+      serverStatuses: statuses,
+      serverWaiting: true,
+    });
+    await flush(el);
+    const line = el.shadowRoot!.querySelector("[data-server-status]")!.textContent!;
+    expect(line).toContain("box.deli.test");
+    expect(line).toContain(t("server.unreachable"));
+    expect(line).toContain("cloud.deli.test");
+    expect(line).toContain(t("server.standby"));
+    expect(line).toContain(t("server.waiting_promotion"));
+    const again = vi.fn();
+    el.addEventListener("check-again", again);
+    (el.shadowRoot!.querySelector("[data-check-again]") as HTMLElement).click();
+    expect(again).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks the CURRENT server with On: <label> when it is primary; others stay label: state", async () => {
+    // F7 (spec §4.4 — "On: Box · Cloud: standby"): the server the till is ON reads `On: <label>` when it
+    // is primary; every other server keeps `<label>: <state>`. BEFORE the fix every row is `label: state`
+    // and the current one is never marked, so this fails on the missing `On: box.deli.test`.
+    const statuses: ServerStatus[] = [
+      { url: "https://box.deli.test", label: "box.deli.test", state: "primary", term: 2 },
+      { url: "https://cloud.deli.test", label: "cloud.deli.test", state: "standby", term: 1 },
+    ];
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi(),
+      serverStatuses: statuses,
+      serverCurrent: "https://box.deli.test",
+      serverWaiting: false,
+    });
+    await flush(el);
+    const line = el.shadowRoot!.querySelector("[data-server-status]")!.textContent!;
+    expect(line).toContain(`${t("server.on")} box.deli.test`); // "On: box.deli.test"
+    expect(line).not.toContain(`box.deli.test: ${t("server.primary")}`); // NOT the plain state row
+    expect(line).toContain(`cloud.deli.test: ${t("server.standby")}`); // the other server unmarked
+  });
+
+  it("renders nothing when no servers are known (the default — a till with no router)", async () => {
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi(),
+      serverStatuses: [],
+      serverWaiting: false,
+    });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-server-status]")).toBeNull();
+  });
+
+  it("renders nothing when only the page's own server is known and it is primary", async () => {
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi(),
+      serverStatuses: [
+        { url: "https://box.deli.test", label: "box.deli.test", state: "primary", term: 1 },
+      ],
+      serverWaiting: false,
+    });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-server-status]")).toBeNull();
   });
 
   it("keeps ALL THREE device-setup affordances on a FRESH (unenrolled) browser so first enrolment works", async () => {

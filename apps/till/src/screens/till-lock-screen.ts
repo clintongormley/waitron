@@ -6,6 +6,7 @@ import type { StringKey } from "../i18n/strings.js";
 import "../widgets/numeric-pad.js";
 import "../widgets/language-chooser.js";
 import type { StaffMember, TillApi } from "../api/client.js";
+import type { ServerStatus } from "../api/server-router.js";
 
 /**
  * The `logged-in` event payload: the server-confirmed `personId`, the operator's `displayName`, and
@@ -78,6 +79,16 @@ export class TillLockScreen extends LitElement {
       .status {
         margin: 0;
         color: var(--wt-color-text-muted);
+      }
+
+      /* The server status line (till-reroute §4.4) — set off below the roster, muted like the other
+         status copy, with the "check again" control spaced off the states it follows. */
+      .servers {
+        margin-top: var(--wt-space-4);
+      }
+
+      .servers wt-button {
+        margin-left: var(--wt-space-2);
       }
 
       .roster {
@@ -158,6 +169,29 @@ export class TillLockScreen extends LitElement {
    * still shows all three (device / handheld / till) so a first-time enrolment works.
    */
   @property({ type: Boolean }) deviceEnrolled = false;
+
+  /**
+   * The venue's known servers and each one's probed state (till-reroute §4.4), from `ServerRouter.statuses()`.
+   * Rendered as a one-line status under the roster so the operator can see WHY a till is not selling — the
+   * box unreachable, a standby not yet promoted — rather than a silent failure. Empty (the default) on a
+   * till with no router (tests, a single-server dev box) renders nothing.
+   */
+  @property({ attribute: false }) serverStatuses: ServerStatus[] = [];
+
+  /**
+   * The URL of the server the till is currently ON (`ServerRouter.current`), so its row can read
+   * "On: <label>" (§4.4) rather than "<label>: <state>". Empty (the default) on a till with no router
+   * marks nothing — every row then renders as "<label>: <state>". Only a CURRENT server that is also
+   * `primary` is marked; a current-but-not-primary server (the waiting case) keeps its state row.
+   */
+  @property({ attribute: false }) serverCurrent = "";
+
+  /**
+   * Whether the router is WAITING for a promotion (§4.4) — no server is accepting sales right now. Drives
+   * the "waiting for the standby to be promoted" suffix on the status line. The healthy single-primary
+   * till (see {@link #renderServers}) shows no line at all.
+   */
+  @property({ type: Boolean }) serverWaiting = false;
 
   /** The roster: `undefined` while the fetch is in flight, then the (possibly empty) list. */
   @state() private staff?: StaffMember[];
@@ -284,6 +318,45 @@ export class TillLockScreen extends LitElement {
               `
         }
       </div>
+      ${this.#renderServers()}
+    `;
+  }
+
+  /**
+   * The venue's server status line (till-reroute §4.4): one `label: state` row per known server joined by
+   * " · ", a waiting-promotion suffix while no server accepts sales, and a "check again" control that
+   * dispatches `check-again` (the app turns it into `router.probeNow()`). Rendered nothing for a HEALTHY
+   * single-server till — the only known server is the page's own and it is primary — so a normal counter
+   * shows no status chrome; every other shape (a second server, an unreachable box, a waiting promotion)
+   * shows the line. `role="status"` so a screen reader announces a state change without stealing focus.
+   */
+  #renderServers() {
+    const known = this.serverStatuses;
+    // No line for a till with no known servers (no router), nor for the healthy single-server till whose
+    // only server is its own page origin and it is primary. Every other shape (a second server, an
+    // unreachable box, a waiting promotion) shows the line.
+    if (known.length === 0) return nothing;
+    if (known.length === 1 && !this.serverWaiting && known[0]?.state === "primary") return nothing;
+    // The server the till is ON, when it is primary, reads "On: <label>" (§4.4); every other server —
+    // including the current one when it is not primary (the waiting case) — reads "<label>: <state>".
+    const row = (s: ServerStatus) =>
+      s.url === this.serverCurrent && s.state === "primary"
+        ? `${t("server.on")} ${s.label}`
+        : `${s.label}: ${t(`server.${s.state}` as StringKey)}`;
+    return html`
+      <p class="servers status" role="status" data-server-status>
+        ${known.map(row).join(" · ")}${
+          this.serverWaiting ? html` — ${t("server.waiting_promotion")}` : nothing
+        }
+        <wt-button
+          variant="secondary"
+          data-check-again
+          @click=${() =>
+            this.dispatchEvent(new CustomEvent("check-again", { bubbles: true, composed: true }))}
+        >
+          ${t("server.check_again")}
+        </wt-button>
+      </p>
     `;
   }
 
