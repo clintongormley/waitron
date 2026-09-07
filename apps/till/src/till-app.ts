@@ -208,8 +208,11 @@ export class TillApp extends LitElement {
    * state.
    */
   readonly #onServerChanged = (event: Event): void => {
-    const { to } = (event as CustomEvent<{ from: string; to: string }>).detail;
-    diag.record("info", "nav", { screen: "server.switched", to });
+    const { from, to } = (event as CustomEvent<{ from: string; to: string }>).detail;
+    // The "which server we moved to" breadcrumb, under its OWN event kind — never a second `nav` event:
+    // `#setScreen("lock")` below is the nav record, and a `nav` here would both duplicate it and mislabel
+    // `screen` with a non-`Screen` value.
+    diag.record("info", "server-switch", { from, to });
     this.operatorPersonId = "";
     this.operatorName = "";
     this.canEdit = false;
@@ -225,11 +228,17 @@ export class TillApp extends LitElement {
    * subscribed to it, otherwise detach from the previous one and attach to the new. */
   #subscribeRouter(): void {
     if (this.#subscribedRouter === this.router) return;
-    this.#subscribedRouter?.removeEventListener("server-changed", this.#onServerChanged);
-    this.#subscribedRouter?.removeEventListener("state-changed", this.#onServerState);
+    this.#detach();
     this.router?.addEventListener("server-changed", this.#onServerChanged);
     this.router?.addEventListener("state-changed", this.#onServerState);
     this.#subscribedRouter = this.router;
+  }
+
+  /** Drop both router listeners and forget the subscription — shared by re-subscribe and teardown. */
+  #detach(): void {
+    this.#subscribedRouter?.removeEventListener("server-changed", this.#onServerChanged);
+    this.#subscribedRouter?.removeEventListener("state-changed", this.#onServerState);
+    this.#subscribedRouter = undefined;
   }
 
   override connectedCallback(): void {
@@ -238,9 +247,7 @@ export class TillApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
-    this.#subscribedRouter?.removeEventListener("server-changed", this.#onServerChanged);
-    this.#subscribedRouter?.removeEventListener("state-changed", this.#onServerState);
-    this.#subscribedRouter = undefined;
+    this.#detach();
     super.disconnectedCallback();
   }
 
@@ -956,6 +963,10 @@ export class TillApp extends LitElement {
     const lines = this.#currentSaleLines();
     const label = this.#store.label;
     this.errorKey = undefined;
+    // Only a network failure of the FISCAL request (`recordSale`) is `sale.unconfirmed`: the sale may
+    // have filed, so a human must check. A network failure of the preliminary `#syncIfDirty` save is
+    // `sale.error` — nothing was filed, safe to retry (§4.3). This flips true right before the fiscal call.
+    let reachedFiscal = false;
     try {
       // Re-lock an EDITED retrieved order before paying: the server's retrieved-order pay path files
       // from the STORED lock and IGNORES `req.lines`, so an edit made after retrieve would be SILENTLY
@@ -964,6 +975,7 @@ export class TillApp extends LitElement {
       // walk-up and an UNEDITED retrieved order both skip it, so the no-edit path files the stored lock,
       // and an already-settled order falls through to `recordSale`'s settled REPLAY below.
       await this.#syncIfDirty(id, lines, label);
+      reachedFiscal = true;
       this.result = await this.api.recordSale(lines, tender, id);
       this.#showTicket();
       // A settled PARKED order must drop off the cross-till held list immediately — mirror the
@@ -973,12 +985,13 @@ export class TillApp extends LitElement {
       // simply re-reads an unchanged list. Self-heals even if it fails — a retrieve of the settled
       // order 404s → `held.stale` → refresh — and cannot double-file (pay is idempotent, spec §3).
       await this.#refreshHeldOrders();
-    } catch (err) {
+    } catch (error) {
       // A rejected {code} must not lose the sale in progress: stay on the counter, basket intact, and
-      // surface a generic, non-fatal message — never the raw domain code. A NETWORK failure (no answer)
-      // is `sale.unconfirmed` instead — the sale may have filed, so a human checks before retrying
-      // (till-reroute §4.3).
-      this.errorKey = isNetworkFailure(err) ? "sale.unconfirmed" : "sale.error";
+      // surface a generic, non-fatal message — never the raw domain code. A NETWORK failure of the FISCAL
+      // request is `sale.unconfirmed` — the sale may have filed, so a human checks before retrying
+      // (§4.3); a network failure of the preliminary `#syncIfDirty` save filed nothing, so it stays the
+      // free-to-retry `sale.error`.
+      this.errorKey = reachedFiscal && isNetworkFailure(error) ? "sale.unconfirmed" : "sale.error";
     } finally {
       // Re-enable Pay whichever way the sale settled: on success the counter is already gone (screen
       // is now `ticket`), on rejection the operator is back on the counter and may retry.
@@ -1004,9 +1017,11 @@ export class TillApp extends LitElement {
    *    simply STAY on the counter with the basket intact and record the outcome in {@link cardOutcome}
    *    for Task 9's widget to render retry / switch-tender (cash or manual card is one tap away) /
    *    wait — never an error banner; this is not a fault.
-   *  - a THROWN fault (a genuine server error, incl. the recovery-window corruption 500 — Task 5) falls
-   *    to the `catch`, exactly like `#onConfirmPayment`: the generic `sale.error`, basket intact, never
-   *    the raw code.
+   *  - a THROWN fault falls to the `catch`, exactly like `#onConfirmPayment`: a NETWORK failure of the
+   *    fiscal `pay` (no answer) is `sale.unconfirmed` (the charge may have captured and filed — a human
+   *    checks); a server `{ code }` fault (incl. the recovery-window corruption 500 — Task 5) is the
+   *    generic `sale.error`. A network failure of the preliminary `#syncIfDirty` save filed nothing and
+   *    stays `sale.error`. Basket intact, never the raw code.
    */
   async #onCollectCard(event: Event): Promise<void> {
     if (this.submitting) return;
@@ -1017,8 +1032,13 @@ export class TillApp extends LitElement {
     const label = this.#store.label;
     this.errorKey = undefined;
     this.cardOutcome = undefined;
+    // Only a network failure of the FISCAL request (`pay`) is `sale.unconfirmed`; a network failure of
+    // the preliminary `#syncIfDirty` save filed nothing and stays `sale.error` (§4.3). Flips true right
+    // before the fiscal call.
+    let reachedFiscal = false;
     try {
       await this.#syncIfDirty(id, lines, label);
+      reachedFiscal = true;
       const out: PayOutcome = await this.api.pay({
         id,
         lines,
@@ -1032,10 +1052,11 @@ export class TillApp extends LitElement {
       } else {
         this.cardOutcome = out.outcome;
       }
-    } catch (err) {
-      // A NETWORK failure (no answer) is `sale.unconfirmed` — the sale may have filed, so a human
-      // checks before retrying (till-reroute §4.3); a server `{ code }` stays the generic `sale.error`.
-      this.errorKey = isNetworkFailure(err) ? "sale.unconfirmed" : "sale.error";
+    } catch (error) {
+      // A NETWORK failure of the fiscal `pay` (no answer) is `sale.unconfirmed` — the charge may have
+      // captured and filed, so a human checks before retrying (§4.3); a server `{ code }`, or a network
+      // failure of the preliminary save (nothing filed), stays the free-to-retry `sale.error`.
+      this.errorKey = reachedFiscal && isNetworkFailure(error) ? "sale.unconfirmed" : "sale.error";
     } finally {
       this.submitting = false;
     }
@@ -1129,6 +1150,10 @@ export class TillApp extends LitElement {
     const lines = this.#currentSaleLines();
     const label = this.#store.label;
     this.errorKey = undefined;
+    // Only a network failure of the FISCAL request (`placeOrder`) is `sale.unconfirmed`: the deferred
+    // invoice may have filed, so a human checks. A network failure of the preliminary save (`#syncIfDirty`
+    // for a retrieved order, `parkOrder` for a fresh basket) filed nothing and stays `place.error` (§4.3).
+    let reachedFiscal = false;
     try {
       if (this.#store.persisted) {
         // A RETRIEVED order already exists server-side — sync it (only if EDITED, via `#syncIfDirty`)
@@ -1141,16 +1166,17 @@ export class TillApp extends LitElement {
         await this.api.parkOrder({ id, lines, label });
         this.#store.markPersisted();
       }
+      reachedFiscal = true;
       await this.api.placeOrder(id);
       this.stage = "collect";
       await this.#refreshStationQueue();
-    } catch (err) {
+    } catch (error) {
       // A rejected {code} must not lose the order in progress: stay on the counter, basket (and its
       // `"order"` stage) intact, and surface a generic, non-fatal message — never the raw domain code.
-      // A NETWORK failure (no answer) is `sale.unconfirmed` — the placement/deferred invoice may have
-      // filed, so a human checks before retrying (till-reroute §4.3); a server refusal keeps
-      // `place.error`.
-      this.errorKey = isNetworkFailure(err) ? "sale.unconfirmed" : "place.error";
+      // A NETWORK failure of the FISCAL `placeOrder` is `sale.unconfirmed` — the placement / deferred
+      // invoice may have filed, so a human checks before retrying (§4.3); a server refusal, or a network
+      // failure of the preliminary save (nothing filed), keeps `place.error`.
+      this.errorKey = reachedFiscal && isNetworkFailure(error) ? "sale.unconfirmed" : "place.error";
     } finally {
       this.placing = false;
     }
@@ -1176,11 +1202,11 @@ export class TillApp extends LitElement {
     try {
       this.result = await this.api.collectOrder(id, tender);
       this.#showTicket();
-    } catch (err) {
+    } catch (error) {
       // Collect is a terminal fiscal-file moment (Mode T files immediate, Mode I settles the deferred
-      // invoice), so a NETWORK failure (no answer) is `sale.unconfirmed` — the collect may have filed,
-      // a human checks before retrying (till-reroute §4.3); a server `{ code }` stays `sale.error`.
-      this.errorKey = isNetworkFailure(err) ? "sale.unconfirmed" : "sale.error";
+      // invoice) with no preliminary save, so a NETWORK failure (no answer) is `sale.unconfirmed` — the
+      // collect may have filed, a human checks before retrying (§4.3); a server `{ code }` stays `sale.error`.
+      this.errorKey = isNetworkFailure(error) ? "sale.unconfirmed" : "sale.error";
     } finally {
       this.submitting = false;
     }
@@ -1967,10 +1993,11 @@ export class TillApp extends LitElement {
     try {
       this.result = await this.api.recordSale([], tender, id);
       this.#showTicket();
-    } catch (err) {
-      // A NETWORK failure (no answer) is `sale.unconfirmed` — the tab sale may have filed, so a human
-      // checks before retrying (till-reroute §4.3); a server `{ code }` stays the generic `sale.error`.
-      this.errorKey = isNetworkFailure(err) ? "sale.unconfirmed" : "sale.error";
+    } catch (error) {
+      // No preliminary save here (this deliberately skips `#syncIfDirty` — see the header), so a NETWORK
+      // failure (no answer) is `sale.unconfirmed` — the tab sale may have filed, so a human checks before
+      // retrying (§4.3); a server `{ code }` stays the generic `sale.error`.
+      this.errorKey = isNetworkFailure(error) ? "sale.unconfirmed" : "sale.error";
     } finally {
       this.submitting = false;
     }
@@ -2473,6 +2500,7 @@ export class TillApp extends LitElement {
                     .api=${this.api}
                     .deviceEnrolled=${this.handheldMode || this.deviceMode || this.tillEnrolled}
                     .serverStatuses=${this.router?.statuses() ?? []}
+                    .serverCurrent=${this.router?.current ?? ""}
                     .serverWaiting=${this.router?.waiting ?? false}
                     @check-again=${() => void this.router?.probeNow()}
                   ></till-lock-screen>`,

@@ -1608,6 +1608,35 @@ describe("till-app", () => {
     expect(banner.textContent).toContain(t("sale.unconfirmed"));
   });
 
+  it("confirm-payment: a PRELIMINARY-save network failure shows sale.error, not sale.unconfirmed", async () => {
+    // F2 (run-it reviewer, §4.3): `sale.unconfirmed` means "the sale may have filed — check before
+    // retrying". A network failure of the PRE-PAY `#syncIfDirty` save is not that: no fiscal request was
+    // ever made, nothing filed, safe to retry — so it must be the plain `sale.error`. Retrieve + edit so
+    // `#syncIfDirty` actually calls the API, then reject that call at the network level; `recordSale` is
+    // never reached. BEFORE the fix this mislabels as `sale.unconfirmed`.
+    const updateWorkingOrder = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const recordSale = vi.fn().mockResolvedValue(saleResult);
+    const { el } = await mountApp({ updateWorkingOrder, recordSale });
+    const c = await toCounter(el);
+    const store = c.store;
+
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    store.addProduct(cafe, "1"); // edit → dirty → the pre-pay sync is attempted
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    expect(recordSale).not.toHaveBeenCalled(); // the failed save short-circuits before any fiscal call
+    expect(ticket(el)).toBeNull();
+    expect(counter(el)).not.toBeNull();
+    expect(store.lines).toHaveLength(2); // basket kept
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("sale.error"));
+    expect(banner.textContent).not.toContain(t("sale.unconfirmed"));
+  });
+
   it("walk-up pay retry: a re-tapped confirm sends the SAME store id (idempotent replay, never two ids)", async () => {
     // A lost pay response then an operator re-tap must replay against the same working-order id, not
     // mint a second one — otherwise a second POST /api/sales files a second chained fiscal record
@@ -3316,6 +3345,46 @@ describe("till-app", () => {
       expect(el.shadowRoot!.textContent).not.toContain("server.internal"); // never leaks the raw code
     });
 
+    it("a PRELIMINARY-save network failure shows sale.error, not sale.unconfirmed (pay never reached)", async () => {
+      // F2 (§4.3): the pre-pay `#syncIfDirty` save network-fails, so the integrated `pay` is never
+      // called — nothing filed, safe to retry — so this is `sale.error`, not `sale.unconfirmed`.
+      const updateWorkingOrder = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+      const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
+      const { el } = await mountApp({ updateWorkingOrder, pay });
+      const c = await toCounter(el);
+      const store = c.store;
+
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await flush(el);
+      store.addProduct(cafe, "1"); // edit → dirty → the pre-pay sync is attempted
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      expect(pay).not.toHaveBeenCalled();
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("sale.error"));
+      expect(banner.textContent).not.toContain(t("sale.unconfirmed"));
+    });
+
+    it("the integrated pay itself network-failing shows sale.unconfirmed (the fiscal request was reached)", async () => {
+      // The other side of F2: once `pay` IS called, a network failure of THAT request is
+      // `sale.unconfirmed` — the charge may have captured and filed, so a human checks before retrying.
+      const pay = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+      const { el } = await mountApp({ pay });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      expect(pay).toHaveBeenCalled();
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("sale.unconfirmed"));
+    });
+
     it("single-flight: a second collect-card while pay is pending fires exactly once", async () => {
       // Same double-file safety as confirm-payment's single-flight test (CLAUDE.md §5): the first pay
       // never resolves, so a second collect-card dispatched in that window (double-tap / laggy link)
@@ -3666,6 +3735,53 @@ describe("till-app", () => {
       const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
       expect(banner.textContent).toContain(t("place.error"));
       expect(el.shadowRoot!.textContent).not.toContain("working_order.rejected");
+    });
+
+    it("place: a fresh-basket park network failure shows place.error, not sale.unconfirmed", async () => {
+      // F2 (§4.3): `parkOrder` is the preliminary save on a fresh basket; a network failure of it means
+      // the `placeOrder` fiscal request was never made, so this is the free-to-retry `place.error`, not
+      // the "did it file?" `sale.unconfirmed`. `placeOrder` is never reached. BEFORE the fix this
+      // mislabels as `sale.unconfirmed`.
+      const parkOrder = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        parkOrder,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "place-order");
+      await flush(el);
+
+      expect(currentApi.placeOrder).not.toHaveBeenCalled();
+      expect(tenderPay(el).stage).toBe("order"); // never advanced
+      expect(c.store.lines).toHaveLength(1); // basket kept
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("place.error"));
+      expect(banner.textContent).not.toContain(t("sale.unconfirmed"));
+    });
+
+    it("place: the placeOrder fiscal request network-failing shows sale.unconfirmed (the request was reached)", async () => {
+      // The other side of F2: park succeeded and `placeOrder` IS called, so a network failure of THAT
+      // request is `sale.unconfirmed` — the placement / deferred invoice may have filed (§4.3).
+      const placeOrder = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        placeOrder,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "place-order");
+      await flush(el);
+
+      expect(currentApi.parkOrder).toHaveBeenCalled();
+      expect(placeOrder).toHaveBeenCalled();
+      expect(tenderPay(el).stage).toBe("order"); // never advanced — the place failed
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("sale.unconfirmed"));
     });
 
     it("place single-flight: a second place-order while the first is pending places EXACTLY ONCE", async () => {
