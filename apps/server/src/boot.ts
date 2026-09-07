@@ -31,6 +31,7 @@ import {
   ALL_MODULES,
   ALL_MODULE_PERMISSIONS,
   ALL_SYNC_ENROLMENTS,
+  enabledFloorAnnotators,
   MODULE_BY_TABLE,
 } from "./modules.js";
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
@@ -1182,6 +1183,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       backend: makeFiscalBackend(setsToMigrate, filingModule, db, env),
       clock: systemClock(),
       cfg: till,
+      // The floor read's per-table annotators, from the ENABLED set (`setsToMigrate`) — a disabled
+      // module's table is not migrated, so its annotator must not run (modules.ts:enabledFloorAnnotators).
+      floorAnnotators: enabledFloorAnnotators(setsToMigrate),
       secureCookies,
       cardProvider,
       venueLocale,

@@ -7,7 +7,12 @@ import {
   FISCAL_SLOT,
   FISCAL_VOCABULARY,
 } from "@waitron/fiscal-verifactu";
-import { BOOKINGS_ENROLMENT, BOOKINGS_PERMISSIONS, BOOKINGS_ROUTES } from "@waitron/bookings";
+import {
+  BOOKINGS_ENROLMENT,
+  BOOKINGS_FLOOR_ANNOTATIONS,
+  BOOKINGS_PERMISSIONS,
+  BOOKINGS_ROUTES,
+} from "@waitron/bookings";
 import { IDENTITY_ENROLMENT } from "@waitron/identity";
 import type { WaitronModule } from "@waitron/module";
 import { PAYMENTS_ENROLMENT } from "@waitron/payments";
@@ -172,5 +177,6 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     sync: BOOKINGS_ENROLMENT,
     routes: BOOKINGS_ROUTES,
     permissions: BOOKINGS_PERMISSIONS,
+    floorAnnotations: BOOKINGS_FLOOR_ANNOTATIONS,
   },
 ];

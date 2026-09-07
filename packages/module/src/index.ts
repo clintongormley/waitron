@@ -7,6 +7,7 @@ export type {
   ModuleRouteContext,
   ModuleRole,
   ModulePermission,
+  FloorAnnotator,
   CoreServices,
 } from "./module.js";
 export { orderedMigrationSets, packageDirOf } from "./module.js";

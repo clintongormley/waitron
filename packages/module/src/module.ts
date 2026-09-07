@@ -67,6 +67,26 @@ export type ModuleRole = "staff" | "supervisor" | "manager" | "admin";
  */
 export type ModulePermission = { readonly permission: string; readonly grantedFrom: ModuleRole };
 
+/**
+ * A module's contribution to the floor read-model (SP1 bookings, reserved-on-floor): given the tables
+ * being listed and the venue clock, the extra per-table annotation the module owns. Core's
+ * `listTablesWithState` calls every ENABLED module's annotator and merges the result onto its rows, so
+ * the reserved-badge query (timezone read + grace window + the bookings scan) leaves core.
+ *
+ * The returned Map carries one entry PER input `tableId` (`reservedTime` null when the table has no
+ * imminent reservation), so the merge is a plain per-row lookup. `reservedTime` is the venue-local
+ * `HH:MM` the floor renders as "Reserved HH:MM", already normalised by the annotator. `cfg` is scoped
+ * to tenant AND location (a by-id/by-location read still scopes to the tenant — CLAUDE.md §3).
+ */
+export interface FloorAnnotator {
+  annotate(
+    tx: Transaction,
+    cfg: { tenantId: TenantId; locationId: LocationId },
+    now: Date,
+    tableIds: string[],
+  ): Promise<Map<string, { reservedTime: string | null }>>;
+}
+
 /** A reference to non-DB state a module owns, resolved to a path by the composition root. */
 export type NonDbSource = { readonly kind: "content-addressed-dir"; readonly source: string };
 
@@ -129,6 +149,10 @@ export interface WaitronModule {
   /** SP1 (bookings): the module's HTTP routes, mounted generically by boot over the enabled set.
    * Incremental — bookings is the first `*-api.ts` migrated behind the seat (spec §4.1). */
   readonly routes?: ModuleRoutes;
+  /** SP1 (bookings): the module's per-table annotation of core's floor read-model. `listTablesWithState`
+   * folds every ENABLED module's annotator onto its rows — bookings supplies the reserved-on-floor
+   * badge, so its timezone/grace/query concern leaves core (spec §4.3). */
+  readonly floorAnnotations?: FloorAnnotator;
   readonly backup?: ModuleBackupContribution; // The module's non-DB backup sources and restore hook.
 }
 

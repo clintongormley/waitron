@@ -44,8 +44,8 @@ import {
 import "./errors.js";
 
 const LOCALE = "es-ES";
-// listTablesWithState's reserved-on-floor sub-select reads the `bookings` table (now a module). The
-// whole manifest, not [core, bookings]: bookings' capture trigger EXECUTEs sync's `sync_capture()`.
+// The whole manifest (`manifestSets()`), applied in order — bookings' capture trigger EXECUTEs sync's
+// `sync_capture()`, so the set cannot be narrowed to one that omits sync.
 const suite = usePgliteDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
