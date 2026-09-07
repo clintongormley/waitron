@@ -75,6 +75,9 @@ export const PERMISSIONS = [
   // Minting a cloud-mirror bundle (sync cloud-mirror C2b) — hands out a data-access sync token, so
   // admin-only. Not in SUPERVISOR/MANAGER; reaches `admin` via ALL.
   "mirror.create",
+  // Promoting a node to primary (authenticated mirror→primary promotion) — an operator-triggered
+  // control action, so admin-only. Not in SUPERVISOR/MANAGER; reaches `admin` via ALL.
+  "node.promote",
   // view recent logs + toggle diagnostic verbosity; manager + admin
   "diagnostics.view",
 ] as const;

@@ -25,7 +25,7 @@ describe("roleHasPermission", () => {
     // ...SUPERVISOR spread would otherwise pass on the two specific assertions above while silently
     // losing sale.refund/discount/rectify. mirror.create is admin-only (hands out a data-access sync
     // token) and is asserted false for manager in its own test below.
-    const ADMIN_ONLY: ReadonlySet<Permission> = new Set(["mirror.create"]);
+    const ADMIN_ONLY: ReadonlySet<Permission> = new Set(["mirror.create", "node.promote"]);
     for (const p of PERMISSIONS) {
       expect(roleHasPermission("manager", p)).toBe(!ADMIN_ONLY.has(p));
     }
@@ -171,6 +171,16 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("admin", "diagnostics.view")).toBe(true);
     expect(roleHasPermission("staff", "diagnostics.view")).toBe(false);
     expect(roleHasPermission("supervisor", "diagnostics.view")).toBe(false);
+  });
+  it("grants node.promote to admin only (authenticated mirror→primary promotion)", () => {
+    // Promoting a node to primary is an operator-triggered, admin-only action — reached via ALL and
+    // NEVER placed in the SUPERVISOR/MANAGER sets, mirroring mirror.create's admin-only scope.
+    expect(PERMISSIONS).toContain("node.promote");
+    expect(roleHasPermission("admin", "node.promote")).toBe(true);
+    expect(roleHasPermission("admin", "mirror.create")).toBe(true);
+    expect(roleHasPermission("manager", "node.promote")).toBe(false);
+    expect(roleHasPermission("supervisor", "node.promote")).toBe(false);
+    expect(roleHasPermission("staff", "node.promote")).toBe(false);
   });
   it("grants mirror.create to admin only (sync cloud-mirror C2b bundle minting)", () => {
     // Minting a cloud-mirror bundle hands out a data-access sync token, so it is admin-only — reached via
