@@ -393,6 +393,7 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
                 skipped: [],
                 nextDueAt: null,
               }),
+            awaitingCert: { current: false },
             monotonicMs: () => performance.now(),
             log: () => {},
           },

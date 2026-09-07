@@ -114,6 +114,7 @@ function buildApp(
       readConfigConflicts: undefined,
       readMode: () => "primary",
       readSingletonRole: () => "primary",
+      readAwaitingFiscalCertificate: () => false,
     },
     () => {},
   );

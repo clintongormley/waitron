@@ -128,6 +128,7 @@ function buildApp(tenantId: string, nodeId: string, now: Date): Hono {
       readConfigConflicts: undefined,
       readMode: () => "primary",
       readSingletonRole: () => "primary",
+      readAwaitingFiscalCertificate: () => false,
     },
     () => {},
   );

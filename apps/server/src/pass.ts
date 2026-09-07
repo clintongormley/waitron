@@ -71,9 +71,32 @@ export interface PassReport {
   nextDueAt: Date | null;
 }
 
+/**
+ * The one credential the fiscal drain reads is `fiscal.aeat` (the regime's `resolveClient` reads only
+ * that purpose — `packages/fiscal-verifactu/src/aeat-transport.ts`), so a `credentials.missing` skip
+ * from the drain is ALWAYS a missing AEAT signing certificate, never any other secret. That is the
+ * expected state of a promoted cloud mirror: it sells and chains locally but cannot FILE until the
+ * cert-distribution slice puts `fiscal.aeat` on it.
+ */
+const AWAITING_CERT_ERROR = "credentials.missing";
+
+/**
+ * A one-field live cell — the same holder pattern the deployment axes use — set true while the last
+ * drain pass skipped a tenant for a missing `fiscal.aeat` credential. `runPass` writes it; box-status
+ * reads it (`awaitingFiscalCertificate`). Shared by reference so a flip is observed with no restart.
+ */
+export interface AwaitingCertStatus {
+  current: boolean;
+}
+
 export interface PassDeps {
   drain: (now: Date) => Promise<DrainResult>;
   reconcile: (now: Date) => Promise<TickResult>;
+  /**
+   * The awaiting-fiscal-certificate cell (above). The drain contains a missing cert as a per-tenant
+   * skip, not a throw, so this is set from `DrainResult.skipped`, not `attempt`'s catch branch.
+   */
+  awaitingCert: AwaitingCertStatus;
   /**
    * A MONOTONIC millisecond clock — `performance.now` in `boot.ts`, injected here so the suite
    * asserts exact durations. Deliberately not the wall-clock `now` this function already receives:
@@ -92,12 +115,18 @@ export async function runPass(deps: PassDeps, now: Date): Promise<PassReport> {
   duties.push(
     await attempt(DRAIN_DUTY, now, deps.log, deps.monotonicMs, async () => {
       const result = await deps.drain(now);
+      let awaitingCert = false;
       for (const skipped of result.skipped) {
         // A tenant with due fiscal work this pass could not submit for is an unmet legal
         // obligation. It has no ledger row and no incident (`incidents.till_id` is NOT NULL and a
         // drain has no till), so this line is the only place it exists.
         deps.log("warn", "drain.tenant_skipped", skipped);
+        if (skipped.errorCode === AWAITING_CERT_ERROR) awaitingCert = true;
       }
+      // A missing `fiscal.aeat` cert is the promoted-mirror "sell now, file later" state, distinct from
+      // a transient skip: `noteAwaitingCert` records it ONCE on box-status and in a single log line,
+      // alongside (not instead of) the per-pass `drain.tenant_skipped` trace above.
+      noteAwaitingCert(deps, awaitingCert);
       deps.log("info", "drain.complete", {
         batchesSent: result.batchesSent,
         recordsSubmitted: result.recordsSubmitted,
@@ -217,6 +246,24 @@ async function attempt(
       nextDueAt: now,
       durationMs: Math.round(monotonicMs() - startedAt),
     };
+  }
+}
+
+/**
+ * Records whether this pass is awaiting the fiscal certificate, logging ONLY on a transition. The
+ * holder IS the "once" guard: an unchanged state logs nothing, so a promoted mirror with no cert logs
+ * `fiscal.awaiting_certificate` a single time and then stays quiet pass after pass, however long the
+ * cert-distribution slice takes. When the cert finally arrives the drain stops skipping, this clears
+ * to false and logs `fiscal.certificate_available` once — and a later loss would log the warning
+ * again, one line per episode.
+ */
+function noteAwaitingCert(deps: PassDeps, awaiting: boolean): void {
+  if (awaiting === deps.awaitingCert.current) return;
+  deps.awaitingCert.current = awaiting;
+  if (awaiting) {
+    deps.log("warn", "fiscal.awaiting_certificate", {});
+  } else {
+    deps.log("info", "fiscal.certificate_available", {});
   }
 }
 

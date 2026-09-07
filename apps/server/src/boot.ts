@@ -964,6 +964,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     axes = await readDeploymentAxes(db);
   }
   const holders = createDeploymentHolders(axes.mode, axes.singletonRole);
+  // The awaiting-fiscal-certificate cell (pass.ts's `AwaitingCertStatus`), shared by reference between
+  // the fiscal pass that WRITES it and the box-status read that surfaces it. A promoted cloud mirror
+  // sells and chains locally but has no `fiscal.aeat` cert until the cert-distribution slice lands, so
+  // its drain skips filing and flips this true — box-status then shows `awaitingFiscalCertificate`.
+  const awaitingFiscalCert = { current: false };
   const isMirror = holders.mode.current === "mirror";
   // The boot-time read-only posture, shared by the two mount decisions below (mount the read-only gate;
   // do NOT mount the operational device/print surface) so they cannot drift out of De Morgan sync. A
@@ -1786,6 +1791,8 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // The live singleton role (primary/secondary), read per-request from the same holder the
       // duty loop reads — box-status now shows BOTH deployment axes (mode + singleton_role, #158).
       readSingletonRole: () => holders.singletonRole.current,
+      // The awaiting-cert cell the fiscal pass writes below — same holder, read live per request.
+      readAwaitingFiscalCertificate: () => awaitingFiscalCert.current,
     },
     log,
   );
@@ -2069,6 +2076,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
                 await credentialTenants(db, "payments.stripe"),
                 at2,
               ),
+            awaitingCert: awaitingFiscalCert,
             monotonicMs: () => performance.now(),
             log,
           },

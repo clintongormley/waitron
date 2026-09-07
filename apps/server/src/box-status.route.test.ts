@@ -136,6 +136,7 @@ function buildApp(
       readConfigConflicts: () => readConfigConflictCount(conflictsReaderDb!),
       readMode: () => "primary",
       readSingletonRole: () => "primary",
+      readAwaitingFiscalCertificate: () => false,
     },
     () => {},
   );

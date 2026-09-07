@@ -7,6 +7,7 @@ const base: BoxStatusReaders = {
   environment: "preproduction",
   time: async () => ({ synced: true, source: "timedatectl", warn: false }),
   cert: () => Promise.resolve({ notAfter: "2030-01-01T00:00:00.000Z", daysRemaining: 30 }),
+  awaitingFiscalCertificate: () => false,
   chain: async () => ({ height: 7, lastAt: "2026-08-29T10:00:00.000Z" }),
   replicationLag: undefined,
   disposal: undefined,
@@ -24,6 +25,7 @@ describe("collectBoxStatus", () => {
       environment: "preproduction",
       time: { synced: true, source: "timedatectl", warn: false },
       cert: { available: true, notAfter: "2030-01-01T00:00:00.000Z", daysRemaining: 30 },
+      awaitingFiscalCertificate: false,
       chain: { height: 7, lastAt: "2026-08-29T10:00:00.000Z" },
       replication: { configured: false },
       disposal: { applicable: false },
@@ -36,6 +38,11 @@ describe("collectBoxStatus", () => {
   it("passes singletonRole through from its reader", async () => {
     const status = await collectBoxStatus({ ...base, singletonRole: async () => "secondary" });
     expect(status.singletonRole).toBe("secondary");
+  });
+
+  it("surfaces awaitingFiscalCertificate from its reader (a promoted mirror with no fiscal.aeat cert)", async () => {
+    const status = await collectBoxStatus({ ...base, awaitingFiscalCertificate: () => true });
+    expect(status.awaitingFiscalCertificate).toBe(true);
   });
 
   it("reports cert unavailable when no cert reader is configured", async () => {
