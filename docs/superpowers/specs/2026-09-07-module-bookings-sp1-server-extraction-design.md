@@ -84,9 +84,9 @@ hardcoded list gains it with the reason in the commit (CLAUDE.md §2).
 `packages/bookings/src/schema/bookings.ts`. `@waitron/db`'s barrel drops the re-export
 (`packages/db/src/schema/index.ts:36`). Nothing in core references the booking tables — verified: the
 only occurrence of `booking` in `packages/db/src/schema/*.ts` outside `bookings.ts` is that barrel line
-— so the schema graph stays acyclic and `bookings` is a clean leaf whose FKs all point INTO core
-(`bookings_table_fk` → `dining_tables`, `bookings_tab_fk` → `working_orders`, `bookings_tenant_fk` →
-`tenants`).
+— so the schema graph stays acyclic and `bookings` is a clean leaf whose four FKs all point INTO core
+(`bookings_tenant_fk` → `tenants`, `bookings_location_fk` → `locations`, `bookings_table_fk` →
+`dining_tables`, `bookings_tab_fk` → `working_orders`).
 
 ### 3.2 Migrations
 
@@ -98,7 +98,7 @@ rebase). Pre-production: no DROP migration, no backfill (CLAUDE.md §3).
   `REVOKE ALL … / GRANT SELECT, INSERT, UPDATE ON "bookings" TO app_user` (`:564-566`) and the
   `bookings_table_fk` / `bookings_tab_fk` constraints (`:568-573`).
 - **The module's pair gains them.** `packages/bookings/drizzle/0000_bookings_baseline.sql` (the table,
-  its three FKs, the `party_size` check, the `tenant_id` unique) + `0001_bookings_baseline_sql.sql`
+  its four FKs, the `party_size` check, the `tenant_id` unique) + `0001_bookings_baseline_sql.sql`
   (the `app_user` grants — `SELECT, INSERT, UPDATE`, never widened; and the `sync_capture` trigger,
   §3.4). The custom `_sql` file is snapshot-less, so the triggers/grants are hand-pasted (CLAUDE.md §3).
 - **Manifest + composition.** `packages/migrations/migrations.manifest.json` gains
@@ -124,7 +124,7 @@ it depends on:
 }
 ```
 
-`requires.core` covers the three FKs; `requires.modules.sync` covers the `sync_capture` trigger's SPI
+`requires.core` covers the four FKs; `requires.modules.sync` covers the `sync_capture` trigger's SPI
 call. `scripts/module-graph-honesty.test.ts` cross-checks both edge kinds against the emitted SQL — the
 same shape the `sync` and `payments`-dependent modules already carry (`modules.ts:120/127`).
 
@@ -322,7 +322,7 @@ Every root guard must pass with **no allowlist growth**:
 ## 8. Testing — each a run, not a read (CLAUDE.md §1/§4)
 
 - **Migration split, real PG (container).** Apply both baselines in `orderedMigrationSets` order; assert
-  `bookings` exists with its three FKs and `app_user` holds EXACTLY `SELECT, INSERT, UPDATE` — read the
+  `bookings` exists with its four FKs and `app_user` holds EXACTLY `SELECT, INSERT, UPDATE` — read the
   ACL back (`has_table_privilege` + the relacl, per the grant lesson CLAUDE.md §3), not just "the GRANT
   succeeded". Assert core applied ALONE leaves no `bookings` relation. `privileges.expected.ts`'s
   booking rows move to the module's privilege suite.
