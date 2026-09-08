@@ -626,6 +626,33 @@ export interface DeviceProfile {
   formFactor: FormFactor;
 }
 
+/**
+ * One `GET /management-api/join-requests` row — a device (or print agent) waiting to be let in
+ * (device-join-and-accept design §1.2). It carries NO verification number, deliberately and
+ * structurally: the server's projection has no such field, so the list cannot show the answer beside
+ * the question. The three numbers to choose between come from {@link DashboardApi.joinChallenge}, and
+ * only once a row is opened. `createdAt` is an ISO-8601 instant; `label` is the name the joiner asked
+ * for, which is attacker-chosen text and is rendered as text, never as markup. Mirrors
+ * `listPendingJoinRequests` (`apps/server/src/join-requests.ts`); NOT imported from `apps/server` (the
+ * #70 bundle rule the shapes above follow).
+ */
+export interface JoinRequestRow {
+  id: string;
+  kind: "device" | "print_agent";
+  label: string;
+  createdAt: string;
+}
+
+/** `GET /management-api/pairing-mode` — the venue-wide window that admits knocks. `openUntil` is the
+ * ISO instant it lapses (null while shut), and `refusedRecently` counts the knocks the SHUT window
+ * turned away in the last ten minutes (`REFUSED_WINDOW_MS`, `apps/server/src/pairing-mode.ts`) — an
+ * in-memory count on the primary, so it resets on a restart or a promotion. */
+export interface PairingModeState {
+  open: boolean;
+  openUntil: string | null;
+  refusedRecently: number;
+}
+
 /** The venue's KDS fire-control mode (`locations.fire_control`) — `waiter` = the tab surfaces the
  * per-course fire; `kitchen` = the station display surfaces it; `expo` (KDS-3) = the expo/pass display
  * surfaces it. Mirrors the server's `FireControl`. */
@@ -1738,10 +1765,10 @@ export class DashboardApi {
   }
 
   // ── Devices (always-on station enrolment, device-identity-1) ─────────────────────────────────────
-  // The three verbs the Devices screen drives, all device.manage-gated server-side. `listDevices` reads
-  // the enrolled devices (newest first); `createDeviceCode` mints a single-use pairing code returned
-  // ONCE (201, never re-fetchable); `revokeDevice` deactivates a device (an empty 204). Paths/bodies
-  // against apps/server/src/device-api.ts.
+  // The verbs the Devices screen drives against apps/server/src/device-api.ts, all device.manage-gated
+  // server-side. `listDevices` reads the enrolled devices (newest first); `revokeDevice` deactivates a
+  // device (an empty 204). A device is created by ACCEPTING a join request, not by minting a code —
+  // see the join-request verbs below.
 
   /** `GET /management-api/devices` — this tenant's enrolled devices, newest-enrolled first (the server's
    * order; the screen does not re-sort). Each carries its bound station, active flag and last-seen time. */
@@ -1749,13 +1776,68 @@ export class DashboardApi {
     return this.#request<DeviceRow[]>("/management-api/devices", "GET");
   }
 
-  /** `POST /management-api/device-codes` — mint a single-use ENROLMENT KEY, returning the plaintext code
-   * ONCE (201). The code is never re-readable (like a passkey challenge handle). It is now a BARE bearer
-   * token with NO body: the device describes itself (form factor, station/register binding, profile) when
-   * it redeems the code and enrols, and its per-device hardware is set afterwards through
-   * {@link patchDeviceHardware}. */
-  createDeviceCode(): Promise<{ code: string }> {
-    return this.#request<{ code: string }>("/management-api/device-codes", "POST");
+  // ── Pairing mode + join requests (device-join-and-accept) ────────────────────────────────────────
+  // The seven verbs the Devices screen's join half drives (apps/server/src/join-api.ts). The window
+  // routes and the device accept are `device.manage`-gated; list, challenge and deny take their
+  // permission from the row's KIND, so this same set serves the printers screen's agent queue.
+
+  /** `GET /management-api/pairing-mode` — the venue-wide window (design §1.1). */
+  pairingMode(): Promise<PairingModeState> {
+    return this.#request<PairingModeState>("/management-api/pairing-mode", "GET");
+  }
+
+  /** `POST /management-api/pairing-mode` — open the window, or move an open one's lapse to a fresh
+   * window from now (the route is idempotent, so Extend and Open are the same call). */
+  openPairingMode(): Promise<{ openUntil: string }> {
+    return this.#request<{ openUntil: string }>("/management-api/pairing-mode", "POST");
+  }
+
+  /** `DELETE /management-api/pairing-mode` — shut the window (an empty 204). Requests already pending
+   * stay pending and are still acceptable: the window admits an ask, it does not hold one open. */
+  closePairingMode(): Promise<void> {
+    return this.#request<void>("/management-api/pairing-mode", "DELETE");
+  }
+
+  /** `GET /management-api/join-requests?kind=` — one surface's pending queue. The rows carry NO
+   * verification number (see {@link JoinRequestRow}); the list must never show the answer beside the
+   * question, so nothing here fetches a challenge. */
+  joinRequests(kind: "device" | "print_agent"): Promise<JoinRequestRow[]> {
+    return this.#request<JoinRequestRow[]>(`/management-api/join-requests?kind=${kind}`, "GET");
+  }
+
+  /** `GET /management-api/join-requests/:id/challenge` — three two-digit numbers, shuffled, one of them
+   * this request's. The server does not say which, and the set is fixed at join, so calling twice
+   * teaches nothing. */
+  joinChallenge(id: string): Promise<{ choices: string[] }> {
+    return this.#request<{ choices: string[] }>(
+      `/management-api/join-requests/${id}/challenge`,
+      "GET",
+    );
+  }
+
+  /** `POST /management-api/join-requests/:id/deny` — delete the request (an empty 204). */
+  denyJoinRequest(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/join-requests/${id}/deny`, "POST");
+  }
+
+  /**
+   * `POST /management-api/device-join-requests/:id/accept` — approve a device's ask with the number the
+   * admin tapped, the profile they chose and the binding its form factor calls for (a `kds` profile
+   * takes `stationId`, a handheld `registerId`, a till neither — the register is created server-side).
+   *
+   * A WRONG `choice` is not a rejected submission: the server has already deleted the request by the
+   * time it answers `device.join_mismatch`, so that code is TERMINAL for this row (design §1.2) and the
+   * caller must refresh rather than offer a second attempt.
+   */
+  acceptDeviceJoinRequest(
+    id: string,
+    input: { choice: string; profileId: string; stationId?: string; registerId?: string },
+  ): Promise<{ deviceId: string; name: string; formFactor: FormFactor }> {
+    return this.#request<{ deviceId: string; name: string; formFactor: FormFactor }>(
+      `/management-api/device-join-requests/${id}/accept`,
+      "POST",
+      input,
+    );
   }
 
   /** `GET /management-api/canvases` — this tenant's canvases (`till.configure`-gated server-side;

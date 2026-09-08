@@ -1580,12 +1580,12 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
   });
 });
 
-describe("DashboardApi — devices (device-identity-1)", () => {
-  // The three verbs the Devices screen drives (device-identity-1's /management-api/devices,
-  // /management-api/device-codes and /management-api/devices/:id/revoke routes, device.manage-gated).
-  // GET decodes the device list (newest-enrolled first, server-ordered), POST returns the one-time code
-  // (201), the revoke POST resolves undefined on an empty 204. Paths/bodies asserted against
-  // apps/server/src/device-api.ts.
+describe("DashboardApi — devices, pairing mode and join requests", () => {
+  // The verbs the Devices screen drives: the enrolled-device list and revoke (device-identity-1's
+  // /management-api/devices routes, device.manage-gated), and the join half — the pairing window plus
+  // the pending queue, its challenge, deny and the device accept (device-join-and-accept). Paths and
+  // bodies asserted against apps/server/src/device-api.ts and apps/server/src/join-api.ts. A device is
+  // created by ACCEPTING a request now: there is no code to mint, and no /management-api/device-codes.
 
   const rows = [
     {
@@ -1620,17 +1620,6 @@ describe("DashboardApi — devices (device-identity-1)", () => {
     });
   });
 
-  it("createDeviceCode POSTs with NO body and returns the one-time enrolment key (201)", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ code: "ABCD2345" }, true, 201));
-    const api = new DashboardApi("", fetchImpl);
-    // The code is a bare token now — the device describes itself at enrolment, so the mint carries no body.
-    expect(await api.createDeviceCode()).toEqual({ code: "ABCD2345" });
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/device-codes", {
-      method: "POST",
-      credentials: "include",
-    });
-  });
-
   it("revokeDevice POSTs the device's revoke route and resolves undefined on an empty 204", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
@@ -1641,12 +1630,111 @@ describe("DashboardApi — devices (device-identity-1)", () => {
     });
   });
 
-  it("createDeviceCode rejects with { code } on a non-2xx", async () => {
+  // ── Pairing mode + join requests (device-join-and-accept) ──────────────────────────────────────
+
+  it("pairingMode GETs the window's state", async () => {
+    const state = { open: true, openUntil: "2026-09-08T10:15:00.000Z", refusedRecently: 2 };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(state));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.pairingMode()).toEqual(state);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/pairing-mode", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("openPairingMode POSTs with NO body and returns the new lapse", async () => {
     const fetchImpl = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ error: { code: "server.internal" } }, false, 500));
+      .mockResolvedValue(jsonResponse({ openUntil: "2026-09-08T10:15:00.000Z" }));
     const api = new DashboardApi("", fetchImpl);
-    await expect(api.createDeviceCode()).rejects.toMatchObject({ code: "server.internal" });
+    // Open and Extend are the SAME call: the route moves an open window's lapse rather than adding one.
+    expect(await api.openPairingMode()).toEqual({ openUntil: "2026-09-08T10:15:00.000Z" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/pairing-mode", {
+      method: "POST",
+      credentials: "include",
+    });
+  });
+
+  it("closePairingMode DELETEs and resolves undefined on an empty 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.closePairingMode()).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/pairing-mode", {
+      method: "DELETE",
+      credentials: "include",
+    });
+  });
+
+  it("joinRequests GETs the asked-for kind's queue, and the rows carry no number", async () => {
+    const rows = [
+      { id: "j1", kind: "device", label: "Pantalla pase", createdAt: "2026-09-08T10:00:00.000Z" },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
+    const api = new DashboardApi("", fetchImpl);
+    const got = await api.joinRequests("device");
+    expect(got).toEqual(rows);
+    // The row's OWN shape is the guarantee (design §1.2 rule 1) — not a search of rendered markup.
+    expect(Object.keys(got[0]!)).toEqual(["id", "kind", "label", "createdAt"]);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/join-requests?kind=device", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("joinRequests asks for the print_agent queue by kind", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse([]));
+    const api = new DashboardApi("", fetchImpl);
+    await api.joinRequests("print_agent");
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/join-requests?kind=print_agent", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("joinChallenge GETs the row's three shuffled numbers", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ choices: ["12", "47", "83"] }));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.joinChallenge("j1")).toEqual({ choices: ["12", "47", "83"] });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/join-requests/j1/challenge", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("denyJoinRequest POSTs the deny route and resolves undefined on an empty 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.denyJoinRequest("j1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/join-requests/j1/deny", {
+      method: "POST",
+      credentials: "include",
+    });
+  });
+
+  it("acceptDeviceJoinRequest POSTs the tapped number with the profile and binding", async () => {
+    const accepted = { deviceId: "j1", name: "Pantalla pase", formFactor: "kds" };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(accepted));
+    const api = new DashboardApi("", fetchImpl);
+    expect(
+      await api.acceptDeviceJoinRequest("j1", { choice: "47", profileId: "dp1", stationId: "s1" }),
+    ).toEqual(accepted);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/device-join-requests/j1/accept", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ choice: "47", profileId: "dp1", stationId: "s1" }),
+    });
+  });
+
+  it("acceptDeviceJoinRequest rejects with device.join_mismatch when the number was wrong", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "device.join_mismatch" } }, false, 400));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(
+      api.acceptDeviceJoinRequest("j1", { choice: "12", profileId: "dp1", stationId: "s1" }),
+    ).rejects.toMatchObject({ code: "device.join_mismatch" });
   });
 
   it("revokeDevice rejects with { code } on a non-2xx (device not found)", async () => {
