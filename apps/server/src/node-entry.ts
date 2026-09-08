@@ -1,4 +1,4 @@
-import { existsSync, realpathSync } from "node:fs";
+import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
@@ -22,6 +22,7 @@ import {
 import { recoveryApp } from "./recovery-surface.js";
 import { installShutdownHandlers } from "./run-server.js";
 import { buildServeOptions, type TlsFiles } from "./tls.js";
+import { mintedBoxLeaf } from "./box-secrets.js";
 import "./errors.js";
 
 /** The one database a node owns, matching the URLs `ensureInstance` writes into `instance.env`. */
@@ -80,20 +81,13 @@ export async function waitForPostgres(url: string, deps: WaitDeps): Promise<void
 }
 
 /**
- * The box's own leaf, or `undefined` when it has never minted one.
- *
- * `server.key` is `ensureBoxSecrets`'s own presence sentinel (`box-secrets.ts`), and both halves are
- * checked because `buildServeOptions` reads both and a half-written pair would throw inside the one
- * serve call the recovery path has. A box that has never completed a setup boot has no certificate
- * to present, so the page falls back to plain HTTP on the same port — the honest limit spec §9.3
- * states rather than leaving implicit, and the alternative (refusing to serve) hands the operator
- * nothing at all.
+ * The box's own leaf for the recovery page, or `undefined` when it has never minted one — the same
+ * `mintedBoxLeaf` fallback the setup branch and the trading branches use, so all three present the
+ * one leaf an already-trusting phone accepts. Kept as a named re-export because spec §9.3's "recovery
+ * falls back to plain HTTP" limit is a fact about THIS surface, and `serveRecovery` below reads it.
  */
 export function recoveryTlsFiles(stateDir: string): TlsFiles | undefined {
-  const certFile = join(stateDir, "tls", "server.crt");
-  const keyFile = join(stateDir, "tls", "server.key");
-  if (!existsSync(certFile) || !existsSync(keyFile)) return undefined;
-  return { certFile, keyFile };
+  return mintedBoxLeaf(stateDir);
 }
 
 export interface RecoveryServeOptions {

@@ -1,10 +1,12 @@
 import { mkdir, access } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { generateKeyRing, type GeneratedKeyRing } from "@waitron/provisioning";
 import { listBoxIpv4 } from "./box-reach.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { writeFileAtomic } from "./fs-atomic.js";
 import { formatEnvFile } from "./env-file.js";
+import type { TlsFiles } from "./tls.js";
 
 /**
  * The three TLS file paths `node:https` needs to serve setup-mode HTTPS from the box's self-signed
@@ -26,6 +28,23 @@ export interface BoxTlsFiles {
  */
 export function caCertPath(stateDir: string): string {
   return join(stateDir, "tls", "ca.crt");
+}
+
+/**
+ * The box's own minted leaf (`<stateDir>/tls/server.{crt,key}`), or `undefined` when it has never
+ * completed a setup boot. The ONE source of truth for the leaf-path convention, shared by every
+ * serve site that falls back to it: the recovery page (`node-entry.ts`) AND the trading branches
+ * (`boot.ts`), which must present the same leaf setup already serves so an already-trusting phone or
+ * till reaches the box over HTTPS with no new trust step. `server.key` is `ensureBoxSecrets`'s own
+ * presence sentinel (written last of the quartet); both halves are checked because `buildServeOptions`
+ * reads both and a half-written pair would throw inside the one serve call. A leaf-less box falls back
+ * to plain HTTP, the honest limit — refusing to serve would hand the operator nothing.
+ */
+export function mintedBoxLeaf(stateDir: string): TlsFiles | undefined {
+  const certFile = join(stateDir, "tls", "server.crt");
+  const keyFile = join(stateDir, "tls", "server.key");
+  if (!existsSync(certFile) || !existsSync(keyFile)) return undefined;
+  return { certFile, keyFile };
 }
 
 export interface EnsureBoxSecretsDeps {

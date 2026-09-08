@@ -116,7 +116,7 @@ import { readPendingAdoption, runFinishAdoption } from "./finish-adoption.js";
 import { mountDiscovery } from "./discovery-api.js";
 import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
 import { listBoxIpv4 } from "./box-reach.js";
-import { ensureBoxSecrets } from "./box-secrets.js";
+import { ensureBoxSecrets, mintedBoxLeaf } from "./box-secrets.js";
 import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
@@ -978,7 +978,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     finishWorker.catch((err) =>
       log("error", "adoption.worker_rejected", { errorCode: codeOf(err) }),
     );
-    const server = startListening(config, app, now, log);
+    // Trading serves the box's OWN minted leaf, exactly as the setup branch and the recovery page do:
+    // an operator `WAITRON_TLS_*` (`config.tls`) still wins, and a leaf-less box keeps plain HTTP. A
+    // box never sets `WAITRON_TLS_*`, so without this fallback the adoption-pending listener spoke
+    // plain HTTP and every already-trusting phone/till hit a TLS handshake error after setup.
+    const tls = config.tls ?? mintedBoxLeaf(config.stateDir);
+    const server = startListening({ ...config, tls }, app, now, log);
     const mdns = startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: boxAddresses, log });
     return makeStartedServer(
       server,
@@ -1982,8 +1987,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
 
   // Bind the HTTP listener and wire the listen-failure handler — the serve step shared by both boot
   // modes (see `startListening`). Mounted here, LAST, after every trading route and the optional sync
-  // block and SPA mounts above, so the app is complete before it binds.
-  const server = startListening(config, app, now, log);
+  // block and SPA mounts above, so the app is complete before it binds. The box serves its OWN minted
+  // leaf here (`mintedBoxLeaf`), so trading is HTTPS like setup and recovery; an operator `WAITRON_TLS_*`
+  // (`config.tls`) still wins, and a leaf-less box keeps plain HTTP.
+  const tls = config.tls ?? mintedBoxLeaf(config.stateDir);
+  const server = startListening({ ...config, tls }, app, now, log);
 
   const controller = new AbortController();
   const loop = runLoop({

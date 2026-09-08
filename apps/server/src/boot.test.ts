@@ -54,6 +54,7 @@ import { DRAIN_DUTY } from "./pass.js";
 import { roleUrl } from "./testing/postgres.js";
 import { mintMtlsMaterial } from "./testing/tls.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { ensureBoxSecrets } from "./box-secrets.js";
 import { loadTillConfig } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -784,6 +785,56 @@ describe("startServer, against a real container as the deployment role", () => {
       await expect(fetch(`https://127.0.0.1:${port}/health`, afterClose.via)).rejects.toThrow();
     } finally {
       await afterClose.close();
+    }
+  }, 60_000);
+
+  it("boots in trading mode over HTTPS from the box's minted leaf and refuses plain HTTP", async () => {
+    // The run-it phone proof caught this: a provisioned box served the SETUP surface over HTTPS but
+    // then dropped to plain HTTP once it entered trading, so an already-trusting phone/till got an
+    // EPROTO handshake error and the box looked dead. The two trading `startListening` sites did not
+    // fall back to the minted leaf the way the setup branch and the recovery page already do; a box
+    // never sets `WAITRON_TLS_*`, so `config.tls` was unset and the listener spoke plain HTTP.
+    //
+    // A trading state dir carrying a REAL minted leaf (the shape a box has after one setup boot):
+    // `ensureBoxSecrets` mints the tls/ quartet exactly as the setup branch does, and the same dir
+    // carries the `modules.json` every trading boot in this suite needs (fiscal-none disabled).
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-trading-tls-"));
+    await writeFile(
+      join(stateDir, "modules.json"),
+      JSON.stringify({ modules: { "fiscal-none": false } }),
+    );
+    await ensureBoxSecrets({
+      stateDir,
+      hostnames: ["waitron.local", "localhost"],
+      now: () => new Date(),
+    });
+    const server = await startServer({
+      ...KEY_ENV,
+      // Override the shared TRADING_STATE_DIR with this box's own dir — the one holding the leaf.
+      WAITRON_STATE_DIR: stateDir,
+      DATABASE_URL: databaseUrl,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "preproduction",
+    });
+    // Trust the CA the box minted, so its self-signed leaf verifies on a loopback dial (the leaf
+    // carries 127.0.0.1 as an iPAddress SAN unconditionally — `ensureBoxSecrets`).
+    const ca = await readFile(join(stateDir, "tls", "ca.crt"));
+    const { via, close } = httpsVia(ca);
+    try {
+      // An HTTPS dial to a trading route succeeds — proof the trading listener now speaks TLS with
+      // the box's own leaf, not plain HTTP. `fetchHealthOk` polls through the transient-503 window.
+      const health = await fetchHealthOk(`https://127.0.0.1:${port}/health`, via);
+      expect(health.status).toBe(200);
+
+      // The control: a plain-HTTP dial to the SAME port is torn down mid-handshake, because the
+      // listener speaks TLS now. This is the regression the phone proof hit, inverted.
+      await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow();
+    } finally {
+      await server.close();
+      await close();
+      await rm(stateDir, { recursive: true, force: true });
     }
   }, 60_000);
 
