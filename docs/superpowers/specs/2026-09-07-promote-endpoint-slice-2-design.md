@@ -192,6 +192,15 @@ on the box. So on a promoted cloud's first drain tick, `getCredential(..., "fisc
   `credentials.missing` for `fiscal.aeat`; the passing assertion is that selling and local chaining
   work and the awaiting-cert state is surfaced. (This is also §8's e2e.)
 
+> **Landed 2026-09-07 — cert-distribution now fills this gap. See
+> [`2026-09-07-fiscal-cert-distribution-design.md`](2026-09-07-fiscal-cert-distribution-design.md).**
+> The deferred unlock job is built: adopt double-wraps the venue's `fiscal.aeat` cert (vault ring +
+> break-glass) into a dormant `fiscal.aeat.dormant` copy, and a break-glass promote re-seals it live
+> inside the point-of-no-return transaction, so a promoted standby with the secret now **files** as well
+> as sells. Break-glass in Slice 2 was "purely authorization"; from this branch the SAME secret also
+> unlocks the cert. A promote without the secret (or with an unusable dormant copy) still sells and
+> surfaces the awaiting-cert state, exactly as this section describes.
+
 ## 5. The real runtime admin DB connection
 
 Today the owner write borrows `config.migrationsDatabaseUrl` via `withOwnerDb`

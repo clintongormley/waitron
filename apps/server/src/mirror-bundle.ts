@@ -94,7 +94,8 @@ export interface MirrorBundle {
  * `app_user` holds the reads and writes each enabled module's `provisioning.standby.reserve`
  * needs (for fiscal, SELECT/INSERT/UPDATE on `contadores_instalacion`/`registro_sif`/`cadenas`,
  * `packages/fiscal-verifactu/drizzle/0001_fiscal_baseline_sql.sql`, and SELECT on
- * `invoice_series`), so no broader connection is used (CLAUDE.md §3: never widen a grant). `ring`
+ * `invoice_series`), and SELECT on `tenant_credentials` (reading the venue's `fiscal.aeat` cert into
+ * the bundle), so no broader connection is used (CLAUDE.md §3: never widen a grant). `ring`
  * unseals the primary's identity PRIVATE key (`readNodeIdentityKey`, as `app_user`) to sign the
  * standby's endorsement; `standby` is the node the primary vouches for. `designated` are the five
  * ids the till was provisioned with (`config.till.*`); `stateDir` locates the box CA;
