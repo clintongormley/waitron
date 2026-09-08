@@ -115,8 +115,9 @@ const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
  *    (the ONE 409 of the set), `device_profile.not_found`, `station.not_found`,
  *    `device.join_mismatch` (a wrong number, 400) and `join_request.not_found` (404).
  *    `device.binding_invalid` is the exception: this surface throws it too, from the
- *    assign-device-profile and hardware routes' composite-FK 23503 translation, as well as reaching it
- *    through accept's `requireLiveRegister`.
+ *    assign-device-profile and hardware routes' composite-FK 23503 translation. The accept route
+ *    raises it as well, through `requireLiveRegister` (`device.ts`), which is why it is the one code
+ *    of this group both surfaces answer.
  *    `device.till_required` is not thrown here either (it is the SALE-path guard, device-session.ts) but
  *    is mapped to the SAME 400 till-api.ts gives it. `device.not_found` is this surface's own (the
  *    manager-facing revoke/reassign of an absent device id, 404).

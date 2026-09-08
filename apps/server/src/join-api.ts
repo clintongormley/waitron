@@ -271,26 +271,37 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = c.req.param("id");
-      // Read via `readJsonBody` (empty/malformed/`null` → `{}`, never an opaque 500), then screen each
-      // field to its column shape. `choice` is a plain string, not a two-digit screen: the verb
-      // compares it against the row's own number, and a value of any other shape is simply wrong —
-      // which must DENY the request, not be argued about in the route.
+      // PARSED out here, SCREENED inside the gate. Parsing awaits the request stream, so doing it
+      // under `withTenant` would hold a pool connection across a network read; screening is pure and
+      // belongs after `authorizeManager`, so this route refuses an unauthorised caller 403 before it
+      // says anything about their id or body — the ordering `gatedByRowKind` documents, applied here
+      // too so the file's two by-id paths do not disagree. Throwing from inside the transaction is
+      // safe HERE, unlike the mismatch below: nothing has been written when a screen fires.
+      // `readJsonBody` coerces an empty/malformed/`null` body to `{}` (never an opaque 500).
       const body = await readJsonBody<{
         choice?: unknown;
         profileId?: unknown;
         stationId?: unknown;
         registerId?: unknown;
       }>(c);
-      const choice = requireString(body.choice, "choice");
-      const profileId = requireBodyUuid(body.profileId, "profileId");
-      const stationId = optionalBodyUuid(body.stationId, "stationId");
-      const registerId = optionalBodyUuid(body.registerId, "registerId");
-      // A malformed id names no request — refused as a clean 404 before it reaches a bare-uuid
-      // comparison, exactly as an unknown one is.
-      if (!isUuid(id)) throw new AppError("join_request.not_found", {});
-      const result = await gated(sessionId, "device.manage", (tx) =>
-        acceptDeviceJoinRequest(tx, deps.cfg, id, { choice, profileId, stationId, registerId }),
-      );
+      const result = await gated(sessionId, "device.manage", (tx) => {
+        // `choice` is a plain string, not a two-digit screen: the verb compares it against the row's
+        // own number, and a value of any other shape is simply wrong — which must DENY the request,
+        // not be argued about in the route.
+        const choice = requireString(body.choice, "choice");
+        const profileId = requireBodyUuid(body.profileId, "profileId");
+        const stationId = optionalBodyUuid(body.stationId, "stationId");
+        const registerId = optionalBodyUuid(body.registerId, "registerId");
+        // A malformed id names no request — refused before it reaches a bare-uuid comparison (which
+        // would `22P02` → an opaque 500), exactly as an unknown one is.
+        if (!isUuid(id)) throw new AppError("join_request.not_found", {});
+        return acceptDeviceJoinRequest(tx, deps.cfg, id, {
+          choice,
+          profileId,
+          stationId,
+          registerId,
+        });
+      });
       // THE MISMATCH IS THROWN AFTER THE TRANSACTION, NEVER INSIDE IT. `withTenant` IS the transaction
       // (`packages/db/src/tenancy.ts:15`), so an AppError raised inside it rolls the consuming delete
       // back into existence and a wrong tap becomes an unlimited retry — the exact opposite of the

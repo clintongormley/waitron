@@ -438,7 +438,8 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
       label: "Pantalla Cocina",
       numbers: () => 42,
     });
-    const wrong = made.verificationNumber === "07" ? "08" : "07";
+    // `numbers: () => 42` pins the real number, so "07" is wrong by construction.
+    const wrong = "07";
     const res = await send(
       app,
       "POST",
@@ -566,7 +567,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     expect(await pendingCount(venue.cfg)).toBe(1);
   });
 
-  it("screens the body before any DB work", async () => {
+  it("screens the body, and refuses the request before any of it is acted on", async () => {
     const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
     const made = await knock(venue, { kind: "device", label: "Bar till" });
@@ -651,6 +652,27 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     });
     expect(res.status).toBe(404);
     expect((await errorOf(res)).code).toBe("join_request.not_found");
+  });
+
+  it("gates BEFORE it screens — an unauthorised caller learns nothing about its own input", async () => {
+    const venue = await setupVenue(suite.admin);
+    const app = mountApp(venue.cfg);
+    const live = await knock(venue, { kind: "device", label: "Bar till" });
+    // Live id, unknown id, malformed id and a malformed BODY all answer 403 to a staff session. The
+    // deny route's sibling test pins the same property for the shared paths; pinning it here too is
+    // what keeps the file's two by-id orderings from drifting apart.
+    const cases: { path: string; body: unknown }[] = [
+      { path: live.joinId, body: { choice: live.verificationNumber, profileId: randomUUID() } },
+      { path: randomUUID(), body: { choice: "42", profileId: randomUUID() } },
+      { path: "nope", body: { choice: "42", profileId: randomUUID() } },
+      { path: live.joinId, body: {} },
+    ].map((c) => ({ path: `/management-api/device-join-requests/${c.path}/accept`, body: c.body }));
+    for (const { path, body } of cases) {
+      const res = await send(app, "POST", path, { cookie: venue.staffCookie, body });
+      expect(res.status).toBe(403);
+      expect((await errorOf(res)).code).toBe("authorization.not_permitted");
+    }
+    expect(await pendingCount(venue.cfg)).toBe(1);
   });
 });
 
