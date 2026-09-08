@@ -378,6 +378,15 @@ unchanged, so no new H2 receipt
    kind derives from its profile's `form_factor`; a `till`-form-factor enrol auto-creates its own
    register; `tills(tenant_id, location_id, name)` is unique per venue; the shift session is keyed to
    the device's register; a per-(device, person) PIN throttle (`pin.throttled`).
+   - **Next slice — enrolment by pairing mode + numeric match** (design approved 2026-09-08,
+     [`2026-09-08-device-join-and-accept-design.md`](superpowers/specs/2026-09-08-device-join-and-accept-design.md),
+     which supersedes §2 of the design above). The pairing code goes: the admin opens a venue-wide
+     fifteen-minute *pairing mode*, the device asks to join carrying only a name and shows a two-digit
+     number, and the admin taps the matching one of three in the dashboard and picks the profile and
+     binding there. `device_pairing_codes` → `device_join_requests`; enrolment moves from an
+     unauthenticated route to a `device.manage` session (it writes — a till enrol creates a register);
+     `dev-pairing.ts` and the `DEMO` code die, with devMode auto-accepting. Shares its mechanism with
+     the print agent (Track H item 1) — one window, one gesture, both surfaces.
    - *Follow-ups (pre-production edges, not blocking):* (a) the dev `?dev` chooser rows show
      `label · kind`, not `name · profile · register` (`GET /api/dev/devices` returns only ids + kind);
      (b) **owner copy decision:** the Spanish form-factor label differs across two pickers
@@ -584,6 +593,20 @@ vocabulary #240 · SP-3c gated provisioning + `@waitron/composition` #245 · SP-
 The demo Phase-0/Phase-1 Tier-A/B/C build is finished (git history); what remains is the open
 follow-ons and the still-greenfield product features, ranked beneath Tracks 1 and 2. Landed
 sub-projects and their state are in *What's built*; the open detail is under *Open threads*.
+
+**Dashboard (cross-cutting):**
+
+- **A notification surface for the dashboard (owner-raised 2026-09-08) — nothing exists today.** The
+  dashboard has no way to tell a manager that something happened while they were not looking at the
+  screen it happened on. First concrete consumer: "2 devices tried to join in the last 10 minutes"
+  when pairing mode is shut
+  ([join-and-accept §3.3](superpowers/specs/2026-09-08-device-join-and-accept-design.md)), which
+  otherwise renders inline beside the toggle and is invisible from anywhere else. Other obvious
+  feeders once it exists: a stalled fiscal outbox or AEAT rejection, a print agent that has stopped
+  pulling, a stuck print job past its lease, a failed backup, a standby that has fallen behind, a
+  low-stock or purchase-order event. Wants a decision on scope before it is designed — a transient
+  toast versus a persisted, per-person read/unread inbox, whether it replicates (a `state` table) or
+  is this node's alone (`local`), and whether anything ever pushes rather than polls.
 
 **Ordering / menu (SP18):**
 
@@ -902,7 +925,11 @@ cash-drawer, and cash-drawer authorization consumers landed. Specs/plans under
 exists yet** — that is Track H item 1
 ([2026-09-08-print-agent-process-design.md](superpowers/specs/2026-09-08-print-agent-process-design.md),
 approved 2026-09-08), which also replaces pairing-code enrolment with join-and-accept and moves the
-transports into a db-free `@waitron/print-agent`. Item 2 is the virtual PDF printer + `print_jobs`
+transports into a db-free `@waitron/print-agent`. **Its §2.3 enrolment was amended 2026-09-08 before
+implementation** by
+[2026-09-08-device-join-and-accept-design.md](superpowers/specs/2026-09-08-device-join-and-accept-design.md)
+§7 — a two-digit number matched out of three, gated on the shared pairing window; read that before
+implementing this. Item 2 is the virtual PDF printer + `print_jobs`
 retention (nothing deletes a job today). **Remaining after those:**
 
 - **Cloud-poll transports** — Star CloudPRNT (`printing-cloud-poll-transport*`) and Epson Server Direct

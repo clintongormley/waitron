@@ -8,6 +8,14 @@
 standalone container. Follow-ons: the virtual PDF printer (Track H item 2), the un-pin of IP printers
 from one agent (failover-printing §4a, Track H item 3).
 
+> **Amended 2026-09-08, before implementation** — §2.3's enrolment is superseded by
+> [2026-09-08-device-join-and-accept-design.md](2026-09-08-device-join-and-accept-design.md) §7,
+> which extends join-and-accept to devices and makes one mechanism serve both surfaces. In short:
+> the verification code becomes a two-digit number the admin picks out of three (the pending list no
+> longer returns it), `join` is gated on a venue-wide fifteen-minute pairing window, and pending
+> agents are recommended to move to their own `local` table. Read §7 there before implementing §2.3
+> here.
+
 ## 1. What this delivers
 
 Today the server side of printing is complete — enrolment, auth, the outbox, the claim lease, the
