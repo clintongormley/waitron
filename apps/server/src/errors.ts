@@ -189,6 +189,24 @@ declare module "@waitron/shared" {
      */
     "provisioning.replication_bootstrap_failed": { sqlState: string | null };
     /**
+     * The cluster never accepted a connection within the entrypoint's bounded wait
+     * (`waitForPostgres`, `node-entry.ts`) — the container's database is down, still starting, or
+     * reachable at a different address.
+     *
+     * `attempts` is the only param, and the driver's caught value is deliberately dropped: a `pg`
+     * connection failure's `.message` can embed the host and the connection string it was built
+     * from, and this code's whole audience is the recovery page, which renders it to an
+     * unauthenticated operator. The same withholding `provisioning.replication_bootstrap_failed`
+     * above and `server.shutdown_failed` both apply to their own caught values.
+     *
+     * `provisioning.*`, not `server.*`, though it is thrown from this host: the DOMAIN CONCEPT is
+     * the cluster this node provisions, and `server.*` is reserved for facts about the process
+     * itself (CLAUDE.md §3) — the classification
+     * `provisioning.replication_bootstrap_failed` above records for the same reason. Never renamed
+     * once shipped.
+     */
+    "provisioning.database_unreachable": { attempts: number };
+    /**
      * This host is configured for one environment and the database belongs to another. Thrown
      * before migrations run, so nothing is written.
      *
