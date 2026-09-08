@@ -25,8 +25,15 @@
 > 3. `POST /print-api/agent/join` is gated on a **venue-wide fifteen-minute pairing window** held in
 >    memory on the primary (`agent.pairing_closed`); a refused agent retries with backoff, which is
 >    distinct from denied (Tasks 4, 6, 7, 8).
-> 4. Recommended and pending the owner's call: pending agents move to `print_agent_join_requests`
->    (`local`), which retires both the `active`-flag overload and `agent.pending` (Tasks 5, 6, 7).
+> 4. **Decided by the owner 2026-09-08:** pending agents leave `print_agents` for a **shared, generic
+>    `join_requests` table** (`local`, a `kind` of `device` \| `print_agent`) that serves both
+>    surfaces — not a `print_agent_join_requests` of its own. It drops `print_agent_pairing_codes`,
+>    and retires both the `active`-flag overload and `agent.pending` (Tasks 5, 6, 7).
+>
+> **This slice goes first and carries the shared mechanism** (spec §12): the generic table, pairing
+> mode and its dashboard control, the challenge and decoy rule, deny, and the pending-token resolver
+> are built here, generically, from the first commit — the device slice then only adds its own screen
+> and accept route. Build nothing agent-specific that a later slice would have to generalise.
 >
 > Tasks 1, 3, 9 and 11 are unaffected. Regenerate the rest from the amended spec before executing.
 

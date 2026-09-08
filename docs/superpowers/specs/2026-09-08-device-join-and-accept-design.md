@@ -103,8 +103,9 @@ Three rules carry the weight the code's entropy used to:
 3. **No decoy equals any other pending request's real number, across both surfaces in the tenant.**
    Without this, two devices joining at once can be honestly ambiguous, and that ambiguity is exactly
    what an attacker would arrange: knock at the same moment as a real device and hope its number
-   appears among your decoys. With a cap of ten pending rows per surface, at most twenty of the
-   hundred values are real, so decoys always have room.
+   appears among your decoys. Because both surfaces share one table (§4) this is one read rather than
+   a union two implementations have to keep in step. With a cap of ten pending rows per surface, at
+   most twenty of the hundred values are real, so decoys always have room.
 
 **A wrong tap denies the request; it is not a retry.** This is what makes one-in-three acceptable: a
 blind guesser gets a single one-in-three attempt per knock, and knocks are rate limited, capped, and
@@ -185,30 +186,44 @@ exist yet — see `docs/backlog.md` → *Product work still open*.
 
 ## 4. Data
 
-**`device_pairing_codes` is dropped.** **`device_join_requests` replaces it**, taking the same
-classification slot — `local`, "this node's pending device join requests; not copied". Pre-production,
-so this is a drop and recreate with no backfill (CLAUDE.md §3). It is a core-set table because it is
-the enrolment mechanism for the core device model rather than any module's; the commit says so.
+**Both pairing-code tables are dropped — `device_pairing_codes` and `print_agent_pairing_codes` —
+and ONE `join_requests` table replaces them**, taking their classification slot: `local`, "this
+node's pending join requests; not copied". Pre-production, so this is a drop and recreate with no
+backfill (CLAUDE.md §3). It is a core-set table because it is the enrolment mechanism for two core
+models rather than any module's; the commit says so.
+
+One table rather than one per surface (owner decision 2026-09-08). Both surfaces need the same
+columns — `print_agents` already carries `tenant_id`, `location_id`, `name` and `token_hash`, the
+device request's whole shape — and both are core-set, so nothing is being coupled that was
+independent. What it buys: §1.2's cross-surface decoy rule becomes the natural read instead of a
+union, and one TTL sweep, one cap, one rate limiter, one pending-token resolver and one grants block
+serve both.
 
 | column | notes |
 | --- | --- |
-| `id`, `tenant_id`, `location_id` | as `device_pairing_codes` had them |
-| `label` | the name the device asked for |
-| `token_hash` | minted at join; copied to `devices` at accept, so the device's cookie survives approval |
+| `id`, `tenant_id`, `location_id` | as `device_pairing_codes` had them; `NOT NULL` for both kinds |
+| `kind` | a `join_request_kind` pgEnum, `device` \| `print_agent` — what an accepted request becomes |
+| `label` | the name that was asked for (an agent accept writes it to `print_agents.name`) |
+| `token_hash` | minted at join; copied to the real row at accept, so the joiner's token survives approval |
 | `verification_number` | the two-digit number, `text` |
 | `created_at` | TTL is fifteen minutes, filtered on read and swept opportunistically at join and accept, as the pairing code's TTL was |
+
+The cap of ten pending rows is per `(tenant, kind)`, so ten agents mid-install cannot lock devices
+out. If printing ever leaves the core for a module, the `print_agent` enum value goes with it — a
+one-line consequence worth knowing, not a reason to keep two tables while both models are core.
 
 `location_id` is stamped from `cfg.locationId` — the node's own venue — exactly as
 `generatePairingCode` stamped it (`apps/server/src/device.ts:171`), so the device still asks nothing
 about which venue it is joining. Devices already enrolled are untouched: this changes how a row is
 created, not what a row is.
 
-**A pending request is not a `devices` row**, which is where this design departs from the print
-agent's shape, deliberately. `devices` carries the station-XOR-register constraint trigger from #269
-§1.3, and a request whose binding has not been chosen yet cannot satisfy it. Keeping requests in
-their own table means `devices` continues to hold only real, fully bound, approved devices; accept
-inserts the row and deletes the request in one transaction, and `active`/revoke semantics are
-untouched.
+**A pending request is never a row in `devices` or `print_agents`.** For devices that is forced:
+`devices` carries the station-XOR-register constraint trigger from #269 §1.3, and a request whose
+binding has not been chosen yet cannot satisfy it. For agents it is chosen, and it is what retires
+the `active`-flag overload the print-agent spec carried ("a denied row is a revoked row that was
+never approved"). Both real tables now hold only real, approved rows; accept inserts one and deletes
+the request in a single transaction, deny just deletes, and `active`/revoke keep the one meaning they
+had.
 
 ---
 
@@ -218,10 +233,10 @@ untouched.
 | --- | --- | --- |
 | `POST /api/device/join` `{name}` | none; window-gated (`device.pairing_closed`), rate limited (`device.join_rate_limited`), capped at ten pending (`device.join_full`) | inserts the request, mints the number and token; sets the inert cookie; returns `{ joinId, verificationNumber }` |
 | `GET /api/device/join/status` | the inert device cookie | `pending` \| `approved` \| `not_approved` |
-| `GET /management-api/device-join-requests` | `device.manage` | pending rows: `{ id, label, createdAt }` — **never the number** |
-| `GET /management-api/device-join-requests/:id/challenge` | `device.manage` | three shuffled numbers per §1.2 |
-| `POST /management-api/device-join-requests/:id/accept` | `device.manage` | `{ choice, profileId, stationId?, registerId? }`; a wrong `choice` deletes the request and returns `device.join_mismatch`; a right one inserts the `devices` row (register auto-created for a till) and deletes the request, in one `withTenant` transaction |
-| `POST /management-api/device-join-requests/:id/deny` | `device.manage` | deletes the request |
+| `GET /management-api/join-requests?kind=` | the kind's own permission | pending rows: `{ id, kind, label, createdAt }` — **never the number** |
+| `GET /management-api/join-requests/:id/challenge` | the row's kind's permission | three shuffled numbers per §1.2 |
+| `POST /management-api/join-requests/:id/deny` | the row's kind's permission | deletes the request |
+| `POST /management-api/device-join-requests/:id/accept` | `device.manage` | `{ choice, profileId, stationId?, registerId? }`; a wrong `choice` deletes the request and returns `device.join_mismatch`; a right one inserts the `devices` row (register auto-created for a till) and deletes the request, in one `withTenant` transaction. Refuses a `print_agent` row with 404 |
 | `GET/POST/DELETE /management-api/pairing-mode` | `device.manage` | read / open-or-extend / close; the read carries `refusedRecently` |
 | `POST /management-api/device-codes` | — | **deleted** |
 | `POST /api/device/enrol/verify` | — | **deleted** |
@@ -232,8 +247,14 @@ the existing property that a flood on an unauthenticated route draws no connecti
 (`apps/server/src/device-api.ts:260`'s handler comment; CLAUDE.md §5, nothing external may block a
 sale).
 
-`mountPairingModeApi` is its own small mount in `boot.ts` rather than living inside either surface's
-API, because neither owns it.
+**Everything that is the mechanism is shared; the only per-surface route is accept** — because
+accept is the one step where the two differ, in what an approved request becomes (a bound `devices`
+row, or a `print_agents` row). List, challenge and deny take their permission from the row's `kind`:
+`device.manage` for a device, `printer.manage` for an agent. Each accept route filters on `kind` and
+404s otherwise, so a `printer.manage` holder cannot turn a device's request into an agent.
+
+`mountPairingModeApi` and the shared join-request routes are their own small mount in `boot.ts`
+rather than living inside either surface's API, because neither owns them.
 
 ---
 
@@ -273,16 +294,17 @@ than rework:
    switch on pairing mode in the dashboard" — distinct from denied, which still stops until the
    process is restarted. This includes the agent on the server's own box: it needs no address typed,
    but it still asks and is still accepted.
-3. **Recommended, for symmetry:** pending agents move to `print_agent_join_requests` (`local`), the
-   twin of §4's table, and denial deletes the row. That retires the `active`-flag overload the
-   current spec carries ("a denied row is a revoked row that was never approved"), leaves
-   `print_agents` holding only real agents, and retires `agent.pending` — an agent polls its own
-   status route exactly as a device does, instead of learning it is unapproved from a 403 on the job
-   pull. If this is declined, the two surfaces still share the
-   flow, the window, the gesture and the vocabulary, and differ only in storage.
+3. **Pending agents move out of `print_agents`** (owner decision 2026-09-08) into the **shared**
+   `join_requests` table of §4 — one table for both surfaces, not one each, and it is that change
+   which drops `print_agent_pairing_codes`. Denial deletes the row, which retires the `active`-flag
+   overload the current spec carries ("a denied row is a revoked row that was never approved") and
+   retires `agent.pending` with it: an agent polls its own status route exactly as a device does,
+   instead of learning it is unapproved from a 403 on the job pull.
+4. Accepting an agent uses the shared list / challenge / deny routes of §5 plus its own accept route,
+   which takes `{ choice }` and nothing else.
 
-The decoy-distinctness rule of §1.2 spans **both** tables' pending rows, so an agent request and a
-device request can never show colliding numbers.
+The decoy-distinctness rule of §1.2 reads that one table, so an agent request and a device request
+can never show colliding numbers.
 
 ---
 
@@ -301,7 +323,8 @@ behaviour, CLAUDE.md §1).
 
 ## 9. Deleted
 
-`device_pairing_codes` (table, classification line, schema, its unique lookup index);
+`device_pairing_codes` and `print_agent_pairing_codes` (tables, classification lines, schemas, their
+unique lookup indexes);
 `generatePairingCode`, `verifyPairingCode`, `isDevPairingCode` and `apps/server/src/dev-pairing.ts`;
 `readEnrolCatalogue` in its unauthenticated form (its reads move behind the accept dialog's
 management session); the dashboard's generate-code form; the three routes in §5; the four error codes
@@ -338,6 +361,8 @@ Stated plainly, because the alternative is a claim that outruns the code (CLAUDE
 - **The window fails closed** on a fresh holder, and closing mid-window refuses immediately (a
   controllable clock; no sleeping).
 - **Accept is one transaction** — a device insert that throws rolls back the auto-created register.
+- **Kind filtering** — the device accept route 404s on a `print_agent` request and vice versa, and
+  the shared list/challenge/deny routes demand the row's own kind's permission.
 - **Tenant scoping on every by-id route** (accept, deny, challenge): a request scoped to tenant A
   reads and writes zero of tenant B's rows (CLAUDE.md §3, the till-reroute S3 receipt). Real
   Postgres, as `app_user` with `rolsuper = f` — reading did not catch that class last time; running a
@@ -353,7 +378,33 @@ Stated plainly, because the alternative is a claim that outruns the code (CLAUDE
 
 ---
 
-## 12. Non-goals
+## 12. Sequencing
+
+Two slices, and the print agent goes **first**, carrying the shared mechanism with it — the
+`join_requests` table, pairing mode and its dashboard control, the challenge and the decoy rule, deny,
+and the pending-token resolver. The device slice then only adds what is genuinely device-shaped: its
+one screen, its accept route, and the deletion of the pairing code.
+
+Three reasons, in order of weight:
+
+1. **The agent is the simpler consumer.** Its accept takes `{ choice }` and inserts one row. The
+   device's accept resolves a profile to a form factor, demands a station or a register, auto-creates
+   a register for a till, and must satisfy #269's XOR trigger. Building the shared parts against the
+   easy consumer and proving them there is cheaper than the other order.
+2. **It is a capability gap, not a polish.** No print agent process exists, so nothing prints
+   end to end. Device enrolment works today; this makes it better. `docs/backlog.md` ranks it that
+   way already.
+3. **That work is in flight** — the plan exists and is being revised — while the device change is not
+   started.
+
+What the order costs: the mechanism could get shaped around agents and need bending for devices. The
+one-table decision of §4 is the guard. The agent slice builds a **generic `join_requests`**, generic
+routes and a venue-wide window from the first commit — never a `print_agent_join_requests` that a
+later slice has to generalise. If that is not what the print-agent plan says, the plan is wrong.
+
+---
+
+## 13. Non-goals
 
 - No per-IP rate limiting; the limiter stays per-process, as it is today.
 - No record of refused knocks beyond an in-memory counter — persisting them would hand an attacker
