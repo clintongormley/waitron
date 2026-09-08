@@ -605,8 +605,8 @@ screens, `apps/server/src/modules.ts` (the maps derived from that list), and the
        not close the read leak). **FIXED 2026-09-08 (#276)**:
        the pre-check now scopes `eq(diningTables.tenantId, cfg.tenantId)`, so another tenant's real table id
        reads as absent (clean `table.not_found`, not a raw 23503); real-PG two-tenant regression in
-       `tabs.pg.test.ts`. **§3 by-id read-leak FAMILY — FIXED 2026-09-08 (branch
-       `fix/tab-pay-by-id-tenant-scope`),** same class as the fixed `getHeldOrder` leak. Three helpers now take
+       `tabs.pg.test.ts`. **§3 by-id read-leak FAMILY — FIXED 2026-09-08 (#278),** same class as the fixed
+       `getHeldOrder` leak. Three helpers now take
        `cfg` (NOT a bare `tenantId` — two adjacent `string` params invited the very transposition this fights;
        simplify lens) and scope by it: `lockOpenTabRow`/`lockOpenTab` (tab verbs `sendLines`/`recallLines`/
        `addTabRound`/`voidTabLine`/`setLineCourse`/`markLineServed`/`unmarkLineServed`/`transferLines`/
@@ -623,7 +623,7 @@ screens, `apps/server/src/modules.ts` (the maps derived from that list), and the
        TABLE-id reads — `moveTab`/`joinTable`'s `toTableId`, `assertTableAvailable` — the deliveryTableId/openTab
        shape (a table id from the request, not an order/tab id); (ii) `ticket_items` by-id reads/updates in
        `bumpCourseReady`/`advanceTicketItem`/`advanceTicket` (still `_cfg`, unscoped — a KDS §3 class). **Floor perf —
-       FIXED 2026-09-08 (branch `perf/floor-datetimeformat-memoize`):** `floor.ts` memoizes its per-timezone
+       FIXED 2026-09-08 (#277):** `floor.ts` memoizes its per-timezone
        `Intl.DateTimeFormat` (was building two per poll); the per-poll `locations.time_zone` DB read is left
        as-is (staleness out of scope). `CoreServices` is one shared interface every module receives whole — when a 2nd core verb is
        needed (SP2+), prefer per-module narrow required-services interfaces. `floorAnnotations` is honestly
