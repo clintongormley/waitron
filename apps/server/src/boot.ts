@@ -393,6 +393,23 @@ function startListening(
   return server;
 }
 
+/** Bind a TRADING listener over the box's OWN minted leaf: an operator `WAITRON_TLS_*` (`config.tls`)
+ * still wins, and a leaf-less box keeps plain HTTP. A box never sets `WAITRON_TLS_*`, so without this
+ * fallback a trading listener would speak plain HTTP and every already-trusting phone/till would hit
+ * a TLS handshake error after setup. ONE home for the two trading binds (adoption-pending and the
+ * main trading listener), so a future third cannot silently drift back to plain HTTP the way one of
+ * these two once did. The SETUP bind is deliberately not routed through here — it mints its leaf a
+ * different way (from the `ensured` secrets it already holds). */
+function startTradingListener(
+  config: ServerConfig,
+  app: Hono,
+  now: () => Date,
+  log: Logger,
+): ReturnType<typeof serve> {
+  const tls = config.tls ?? mintedBoxLeaf(config.stateDir);
+  return startListening({ ...config, tls }, app, now, log);
+}
+
 /**
  * The `StartedServer` BOTH modes return, with the shared `close()` sequence written once. `close()`
  * is idempotent and always drains the connection pools, whatever the teardown does first — the
@@ -978,12 +995,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     finishWorker.catch((err) =>
       log("error", "adoption.worker_rejected", { errorCode: codeOf(err) }),
     );
-    // Trading serves the box's OWN minted leaf, exactly as the setup branch and the recovery page do:
-    // an operator `WAITRON_TLS_*` (`config.tls`) still wins, and a leaf-less box keeps plain HTTP. A
-    // box never sets `WAITRON_TLS_*`, so without this fallback the adoption-pending listener spoke
-    // plain HTTP and every already-trusting phone/till hit a TLS handshake error after setup.
-    const tls = config.tls ?? mintedBoxLeaf(config.stateDir);
-    const server = startListening({ ...config, tls }, app, now, log);
+    // The adoption-pending listener serves trading, so it takes the box's own minted leaf via the
+    // shared fallback (see `startTradingListener`) — without it this bind spoke plain HTTP and every
+    // already-trusting phone/till hit a TLS handshake error after setup.
+    const server = startTradingListener(config, app, now, log);
     const mdns = startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: boxAddresses, log });
     return makeStartedServer(
       server,
@@ -1987,11 +2002,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
 
   // Bind the HTTP listener and wire the listen-failure handler — the serve step shared by both boot
   // modes (see `startListening`). Mounted here, LAST, after every trading route and the optional sync
-  // block and SPA mounts above, so the app is complete before it binds. The box serves its OWN minted
-  // leaf here (`mintedBoxLeaf`), so trading is HTTPS like setup and recovery; an operator `WAITRON_TLS_*`
-  // (`config.tls`) still wins, and a leaf-less box keeps plain HTTP.
-  const tls = config.tls ?? mintedBoxLeaf(config.stateDir);
-  const server = startListening({ ...config, tls }, app, now, log);
+  // block and SPA mounts above, so the app is complete before it binds. Trading serves the box's OWN
+  // minted leaf via the shared fallback (see `startTradingListener`), HTTPS like setup and recovery.
+  const server = startTradingListener(config, app, now, log);
 
   const controller = new AbortController();
   const loop = runLoop({
