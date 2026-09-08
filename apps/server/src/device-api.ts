@@ -310,8 +310,9 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   app.get("/api/device/station", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
-      // A `kds_station` device is ALWAYS station-bound: enrolDevice required its station and
-      // `requireLiveStation` confirmed it live at enrol. But `requireDevice` authenticates ANY active
+      // A `kds_station` device is ALWAYS station-bound: accepting one required its station and
+      // `requireLiveStation` confirmed it live (`resolveDeviceBinding`). But `requireDevice`
+      // authenticates ANY active
       // device regardless of kind, and a `handheld` binds to NO station (`kindOfFormFactor` maps it to
       // `handheld`, not `kds_station`), so a handheld cookie now REACHES this
       // branch. It throws `device.unauthorized` (401) — the honest "this device has no station queue",

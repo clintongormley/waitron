@@ -96,8 +96,7 @@ const DEVICE_PROFILE_FK = "devices_device_profile_fk";
  *     never be mislabelled. The name is the only 23503 a client value can trip here;
  *   - a `devices_device_profile_fk` violation (a delete of a profile a live device still references, ON
  *     DELETE RESTRICT, SQLSTATE 23001) → `device_profile.in_use` — a clean 409 rather than a raw 500.
- *     Matched on the constraint NAME so an unrelated RESTRICT is re-thrown untouched. (A pairing code
- *     no longer references a profile — migration 0003 dropped its `device_profile_id`.)
+ *     Matched on the constraint NAME so an unrelated RESTRICT is re-thrown untouched.
  * The 23503/23001 detection uses `@waitron/db`'s `pgErrorConstraint` (a cause-chain walk), the same
  * mechanism `@waitron/printing`'s `printers.ts` uses, not a top-level `.code` read. Exported for the
  * crafted-error unit test (`device-profile-store.test.ts`), NOT from the package barrel — the same

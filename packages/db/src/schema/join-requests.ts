@@ -25,8 +25,8 @@ export const joinRequests = pgTable(
       .notNull()
       /* v8 ignore next */
       .references(() => tenants.id, { onDelete: "restrict" }),
-    // The venue the joiner belongs to — stamped from the node's own `cfg.locationId`, exactly as
-    // `generatePairingCode` stamped it, so a joiner still asks nothing about which venue it is joining.
+    // The venue the joiner belongs to — stamped from the node's own `cfg.locationId`, never asked for,
+    // so a joiner says nothing about which venue it is joining.
     locationId: uuid("location_id")
       .notNull()
       /* v8 ignore next */

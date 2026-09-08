@@ -44,7 +44,7 @@ declare module "@waitron/shared" {
      * print-agent enrol surface shares the enrol rate-limit MECHANISM with device enrolment but answers
      * in its OWN namespace: the shared limiter throws the device-namespaced code and the print enrol
      * route translates it to THIS one, so a single enrolment flow never answers across two namespaces
-     * (device enrolment keeps `device.pairing_rate_limited`). Codes name the domain concept and are
+     * (device enrolment keeps `device.join_rate_limited`). Codes name the domain concept and are
      * never renamed once shipped (CLAUDE.md §1/§3). */
     "agent.pairing_rate_limited": Record<string, never>;
   }

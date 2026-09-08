@@ -977,10 +977,13 @@ declare module "@waitron/shared" {
      */
     "device.station_required": Record<string, never>;
     /**
-     * A SALE-CAPABLE device (`till` or `handheld`) reached the sale path with NO `till_id`. The `tills`
-     * row a sale-capable device rings against is the fiscal register snapshot stamped at sale time
-     * (SP-A.2 §16.4), so a device that cannot name one cannot ring. The sale-path twin of the enrol-time
-     * binding gate `device.station_required`.
+     * A device whose binding carries no `till_id` reached a path that requires one — `requireSaleTillId`
+     * on the sale routes (the guard lives in `device-session.ts`) and the roster-login guard in
+     * `till-api.ts`; both are `till-api.ts` routes. What actually trips it is a NON-sale-capable binding
+     * on a till-only path, in practice a `kds_station`: every sale-capable form factor holds a non-null
+     * `till_id` by the `device_binding_rule` trigger (migration 0004, whose non-kds arm RAISEs on a null
+     * `till_id`), so the sale-capable case the code's NAME suggests is unrepresentable. A SETUP
+     * precondition surfaced before any fiscal write, not a per-sale block (CLAUDE.md §5).
      *
      * NO params: the fault names the PROBLEM, not a value — the missing till id carries
      * nothing non-secret worth echoing, the same no-param shape `device.station_required` uses. Grep
@@ -988,8 +991,9 @@ declare module "@waitron/shared" {
      * `register_name_taken` / `pairing_closed` / `join_full` / `join_rate_limited` / `join_mismatch` /
      * `unauthorized` are the param-less device siblings, while
      * `forbidden_station` / `not_found` echo an id — this one takes after the former. `device.*` names the DOMAIN CONCEPT (an enrolled device), never the throwing package
-     * (`tenant.not_found`'s note gives the rule). Mapped to HTTP 400 by `device-api.ts`'s local STATUS
-     * map, not here — the route owns the status.
+     * (`tenant.not_found`'s note gives the rule). Mapped to 400 by BOTH surfaces' local STATUS maps —
+     * `till-api.ts`, which answers it, and `device-api.ts`, which maps it without throwing it so the
+     * code has one status everywhere — not here; the routes own the status.
      * Never renamed once shipped.
      */
     "device.till_required": Record<string, never>;
