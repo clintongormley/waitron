@@ -239,7 +239,7 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    "deliberate rejection of native logical replication"; item 4's spec retires it (its §5).
 3. **Drop FORCE RLS + the multi-role set, squash the migrations, delete the outbox — STEP 1
    LANDED #255 (2026-09-06), STEP 2 LANDED #271 (2026-09-07), STEP 3 LANDED #274 (2026-09-07), STEP 4
-   in PR (`feat/outbox-swap-s4-s5`, the owner-signature PR); step 5 pending:**
+   LANDED #280 (2026-09-08, the owner-signature PR); step 5 pending:**
    [drop-rls-squash-and-outbox-deletion-design](superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md).
    Owner decisions: all at once (item 4's swap slices are steps 2–5 of this chain, since nothing is
    deployed); ONE owner signature, on step 4 (where fiscal rows first flow natively and `ENABLE
@@ -258,7 +258,7 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    reset, no hook), and a fork surfaces as the `multiple_unique_conflicts` drain stall the swap
    already handles — so the S3/S4 prerequisite is discharged (swap design §4.4).
 
-   **Step 4 in PR (2026-09-08) — swap S4 + S5, the ONE owner signature (fiscal rows first flow
+   **Step 4 LANDED #280 (2026-09-08) — swap S4 + S5, the ONE owner signature (fiscal rows first flow
    natively, `ENABLE ALWAYS` first matters):** promotion/return now run on `pg_replication_slots` and
    the application outbox is deleted. Landed: the fence-LSN drain watermark
    (`confirmed_flush_lsn >= deployment.fence_lsn && !active`, monotone where the raw
