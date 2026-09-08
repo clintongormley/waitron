@@ -57,6 +57,10 @@ that packages, starts, supervises or prepares it. Four gaps, each checked agains
   with no operator step.
 - **Shipping: both.** A local `docker build` for speed and the run-it proof, and a CI job that
   builds and pushes to GHCR so the path a real box uses is exercised on every merge.
+- **A box that will not boot must be recoverable without a shell.** The entrypoint keeps an
+  escalation counter and degrades in two steps — safe mode (optional modules off, still selling),
+  then a recovery page it serves itself (§9). Only the supervisor half is built here; the actions
+  an operator takes from that page are the recovery spec's.
 - **Plug in and go.** The restaurant never types anything on the box. Docker's restart policy
   restores the containers on every boot; the ONE-TIME preparation (`prepare.sh`) is non-interactive
   and idempotent so the bootable installer (next spec) can run it unattended. The phone is the
@@ -77,7 +81,7 @@ server's esbuild list.
 **Runtime stage** (`node:26-slim`) copies only the build outputs into `/app` — `server.js`,
 `node-entry.js`, the bins, `drizzle/`, `package.json` (the `{"type":"module"}` marker
 `bundle-smoke` asserts) and the three web apps under `/app/web/{till,dashboard,setup}`. Two
-installs, each measured rather than assumed (§12):
+installs, each measured rather than assumed (§13):
 
 - **`postgresql-client-18`, from the PGDG apt repo — NOT Debian's own.** `node:26-slim` is Debian 13
   (trixie), whose base repos carry `postgresql-client-17` only, and `pg_dump` 17 REFUSES an 18
@@ -98,7 +102,7 @@ installs, each measured rather than assumed (§12):
 
 Creates a `waitron` system user (fixed uid, §4); `USER waitron`.
 `ENTRYPOINT ["node", "/app/node-entry.js"]`. No `CMD` arguments: the four CLIs are run by naming
-their file (§9).
+their file (§10).
 
 Fixed environment in the image (never operator-set): `WAITRON_STATE_DIR=/var/lib/waitron/state`,
 `WAITRON_LOG_DIR=/var/lib/waitron/logs`, `WAITRON_MEDIA_DIR=/var/lib/waitron/media`,
@@ -137,7 +141,7 @@ MUST pre-create and `chown` all four `/var/lib/waitron/*` mount points to `waitr
 volume inherits the ownership of the image path it is mounted over, so a pre-created, chowned path
 comes up owned by the app (`10001`, writable), while a path the image never created comes up
 `root:root` and the non-root process cannot write to it at all (`Permission denied`) — measured
-both ways, §12. A volume added later without its `mkdir`+`chown` in the image is therefore a boot
+both ways, §13. A volume added later without its `mkdir`+`chown` in the image is therefore a boot
 failure, not a warning. `state` files are 0600 already (`box-secrets.ts`).
 
 ## 5. The entrypoint — `apps/server/src/node-entry.ts`
@@ -164,7 +168,7 @@ start, in order:
    survive — they are cluster-level — the database is dropped `WITH (FORCE)` by `rejoin`) therefore
    gets exactly one `create-database` action and nothing else. **Interaction with `waitron-rejoin`
    and `waitron-restore` is a plan task:** both run against a STOPPED server (`docker compose run`,
-   §9), and their own database creation must agree with this step's — read `bin-rejoin.ts` and
+   §10), and their own database creation must agree with this step's — read `bin-rejoin.ts` and
    `bin-restore.ts` before writing this; if they create the database themselves the entrypoint
    must find it and stop, never race.
 3. **Load the env files** into the process environment: `instance.env`, then `secrets.env`, then
@@ -176,10 +180,16 @@ start, in order:
    holds superuser credentials; its owner connection is the migrator via
    `WAITRON_ADMIN_DATABASE_URL`, which the entrypoint sets to `instance.env`'s migrator URL — the
    role that owns the tables, as `boot.ts`'s setup branch documents.
-4. **Start the server** through the one start/shutdown routine `bin.ts` uses today, lifted into a
+4. **Read the escalation level** from `<stateDir>/recovery.json` (§9) and act on it: normal or
+   safe mode start the server (safe mode with the `toggleable` modules overlaid off); recovery mode
+   serves the recovery page instead and never starts it.
+5. **Start the server** through the one start/shutdown routine `bin.ts` uses today, lifted into a
    shared `runServer(env)` (`apps/server/src/run-server.ts`) so `bin.ts` and `node-entry.ts` hold no
-   second copy of the signal handling. A restart the server requests (`SIGTERM` to itself → exit 0)
-   is a real reboot under `restart: unless-stopped` (§8).
+   second copy of the signal handling. `runServer` reports one extra signal the entrypoint needs —
+   that the boot STAYED UP (§9.2) — so a failure counter can be cleared honestly. A restart the
+   server requests (`SIGTERM` to itself → exit 0) is a real reboot under `restart: unless-stopped`
+   (§8); a boot that THROWS increments the counter and exits non-zero, and Docker restarts it into
+   the next level.
 
 The dev path is untouched: `dev-server.mjs` still sources the files itself and runs `bin.ts`;
 `docker-compose.yml` stays the dev Postgres.
@@ -205,7 +215,7 @@ discovery), and the mDNS responder's `getAddresses`. `config.ts` parses it (each
 IPv4, none loopback, empty string = unset per the file's `isUnset` rule; a bad entry is
 `server.config_invalid` with `variable: "WAITRON_BOX_ADDRESSES"`). Unset, today's behaviour is
 byte-for-byte unchanged. This is what a bridge/cloud compose sets — and what the Mac proof sets
-(§10), since Docker Desktop's `--network host` places the container on the Linux VM's network
+(§11), since Docker Desktop's `--network host` places the container on the Linux VM's network
 (`192.168.65.x`, measured 2026-09-08 with `docker run --rm --network host alpine ip -4 addr`), not
 on the Mac's LAN.
 
@@ -261,7 +271,7 @@ Non-interactive and idempotent — every step is a no-op when already done:
 2. `systemctl enable --now docker` so the daemon starts on boot;
 3. copy `compose.yml` + `.env.example` to `/opt/waitron/` if absent; generate `.env` if absent
    (§7);
-4. `docker compose pull` (the image is public on GHCR, §9) and `docker compose up -d`;
+4. `docker compose pull` (the image is public on GHCR, §10) and `docker compose up -d`;
 5. print — and, when `/dev/tty1` is writable, show on the console — the banner
    `Waitron is ready — open https://waitron.local on your phone` with a QR of that URL
    (`qrencode -t ANSIUTF8`, installed alongside), preceded by `Installing…` while steps 1–4 run.
@@ -271,13 +281,90 @@ the setup page (the mDNS responder starts inside `startServer`), so "open it on 
 doesn't load, wait a minute" is the whole instruction. LEDs, beeps and anything hardware-specific
 are explicitly not built — Waitron does not control the box.
 
-## 9. Shipping, updating, operating
+## 9. Recovery when boot fails — the supervisor half
+
+**Why this belongs here and not in the recovery spec.** The entrypoint is the only thing that
+outlives a server that will not start, so it is the only thing that can serve a page to an operator
+with no shell. It is being written fresh in §5; the escalation state it keeps shapes its structure,
+and retrofitting that is dear. The *actions* an operator takes from that page — restore from
+backup, roll back the image, undo the last module change — are the recovery spec's, not this one's.
+
+**The failure mode this exists for.** Today a module is compiled into the image
+(`ALL_MODULES` is a static import), so a box is bricked by a bad UPDATE, not a bad plugin. That
+changes: modules become installable at runtime (owner, 2026-09-08 — choose Spain and the Veri\*Factu
+module is downloaded; enable QR-at-table ordering, restart; remove it later, restart). Install →
+restart → will-not-boot then becomes a ROUTINE path rather than a rare one, and the most valuable
+recovery action becomes *undo the last module change and restart*. This section's state is shaped
+for that world even though this spec cannot yet test against a real bad module.
+
+### 9.1 Two degraded levels, not one
+
+They differ in whether the venue can still SELL, which is the only distinction that matters:
+
+| level | what runs | can it sell? | for |
+| --- | --- | --- | --- |
+| **safe mode** | the server, with every `toggleable` module off — `core` + the fiscal slot only | **yes** | a broken optional module (QR ordering, bookings) |
+| **recovery mode** | no server; the entrypoint serves a recovery page | **no** | core, the fiscal module, or a migration failing |
+
+Safe mode keeps the fiscal module ON deliberately. If fiscal is what is broken, safe mode fails
+too and the box escalates to recovery mode — which is correct, and is the one direction that must
+never be softened: a box that cannot hash-chain locally must refuse to sell rather than sell
+unfiled. A bricked box is recoverable; a hole in the invoice series is not (CLAUDE.md §5). This is
+also why "load the failed module's siblings and carry on" is only ever applied to `toggleable`
+modules — the tier the parser already refuses to let `modules.json` disable for `mandatory` is the
+same dial.
+
+### 9.2 The escalation, and what resets it
+
+`<stateDir>/recovery.json` (0600, `writeFileAtomic`) holds the consecutive-failure count, the level
+in force, and the last failure's error code + timestamp — in the state volume, so it survives the
+container restart that Docker performs and is per-node, never replicated.
+
+Normal → **safe mode** after 3 consecutive failed boots → **recovery mode** after 3 more. The
+entrypoint increments the count BEFORE calling `runServer` and clears it only on a boot that
+STAYS UP: a server that reaches its first healthy `/health` (trading) or `/setup-api/status`
+(setup) **and then runs for 120 s**. Clearing on "started" alone would be a measurement where both
+answers look alike (CLAUDE.md §1) — a module that throws five seconds in would reset the counter on
+every attempt and the box would restart-loop forever, never escalating. `runServer` exposing that
+one "stayed up" signal is the only new coupling between the entrypoint and the server.
+
+Safe mode is expressed as an OVERLAY, never a write to `modules.json`: boot intersects the
+operator's parsed `ModuleConfig` with "mandatory + provision-only" for that boot only. The
+operator's file is untouched, so leaving safe mode restores exactly what they had — the reason
+this is not implemented by editing their config.
+
+Safe mode is never silent: the server logs `boot.safe_mode` with the disabled set, and box-status
+carries it so the dashboard can show a banner. Designing that banner is the recovery spec's.
+
+### 9.3 What the recovery page serves (this spec's minimum)
+
+A small HTTP surface from the entrypoint, on the same port, presented with the box's existing CA +
+leaf out of the state volume, so the operator's already-trusted phone reaches it at the same URL
+with no new trust step. It states plainly what failed (the level, the consecutive count, the last
+error code, the last 200 log lines) and offers exactly two actions: **retry a normal boot** and
+**boot in safe mode**. Both are a counter write plus an exit, letting Docker's restart policy do
+the restart.
+
+Deliberately NOT here — the recovery spec designs them, and each needs its own thinking: restore
+from a backup over the web (`waitron-restore` exists but is shell-only); rolling back to the
+previous image (the running container cannot pull its own replacement — this likely needs the
+Docker socket or a second always-up container, which is a real security decision); undoing the
+last module change (needs the installable-module mechanism to exist first); and what to do about a
+migration that half-applied, which no restart can fix.
+
+**The honest limit of this hook:** it recovers a box whose SERVER will not boot. It cannot recover
+one whose ENTRYPOINT will not run — a corrupt image or a bad entrypoint change. That case still
+needs a shell, or the bootable USB re-install of the next spec. Keeping the entrypoint small and
+rarely-changed is what makes that limit acceptable; a second always-up recovery container would
+close it, at the cost of the "two containers" shape, and is the recovery spec's call.
+
+## 10. Shipping, updating, operating
 
 **Local:** `pnpm build:image` at the root runs `docker build -f deploy/Dockerfile -t waitron:dev .`.
 This is what the run-it proof uses and what a developer iterates on.
 
 **CI (`image` job in `ci.yml`, gated like every code job):** on every code PR, `docker buildx
-build` with GHA layer caching, then a compose smoke against fresh volumes in the runner (§10). On a
+build` with GHA layer caching, then a compose smoke against fresh volumes in the runner (§11). On a
 push to `main` it also logs into GHCR with `GITHUB_TOKEN` and pushes
 `ghcr.io/<owner>/waitron:main`, `:sha-<short>` and, for a `v*` tag, `:<version>`; the manifest is
 `linux/amd64,linux/arm64` on pushes (QEMU for arm64, so a small ARM box works) and amd64-only on
@@ -294,7 +381,7 @@ which need it STOPPED, use `docker compose stop app && docker compose run --rm a
 then `up -d` — written in `deploy/README.md`. The entrypoint is bypassed by naming the file, so a
 CLI never re-runs the bootstrap.
 
-## 10. Testing and the run-it proof
+## 11. Testing and the run-it proof
 
 **Unit + real Postgres (`apps/server`, `describeEachTarget` where the harness fits):**
 
@@ -310,6 +397,12 @@ CLI never re-runs the bootstrap.
   override reaches the SANs and the reach URLs.
 - `run-server.test.ts`: `bin.ts`'s lifted start/shutdown routine keeps its two behaviours (exit 0
   on a clean close, `server.shutdown_failed` + exit 1 otherwise).
+- `recovery-escalation.test.ts` (§9): three failed boots → safe mode; three more → recovery mode; a
+  boot that stays up past the threshold resets to normal; a boot that starts and THEN throws inside
+  the threshold does NOT reset — proven by deleting the stayed-up condition and watching the box
+  never escalate (the negative control the §9.2 reasoning rests on). Safe mode overlays the
+  `toggleable` modules off and leaves `modules.json` byte-identical; the fiscal slot stays enabled
+  in safe mode.
 
 **CI smoke (the `image` job):** build → `docker compose -f deploy/compose.yml --env-file <generated>
 up -d --wait` against a throwaway project name → assert `GET https://127.0.0.1/setup-api/status` is
@@ -327,7 +420,12 @@ added to this file with a date. What the FAILING case prints is stated before ea
 (CLAUDE.md §1): e.g. a bridge-shaped SAN list shows `172.` in `openssl x509 -text`; the override
 working shows the LAN IP there and nothing else.
 
-## 11. Out of scope, named
+## 12. Out of scope, named
+
+The recovery spec (the immediate follow-on to this one): restore-from-backup over the web, image
+rollback, undoing the last module change, per-module fault isolation at mount, the safe-mode
+banner, and what to do about a half-applied migration. Runtime-installable modules themselves (the
+signed-bundle distribution mechanism) — §9 is shaped for that world but does not build it.
 
 The wizard's four-mode chooser (modes 1–2 next); backup destinations (mirror → S3 → Drive); images
 into Postgres (deletes the `media` volume); the HTTP landing page on port 80 + the name-constrained
@@ -337,7 +435,7 @@ file is written when Waitron Cloud starts); the bootable USB installer (next spe
 internet, unattended updates for a box we did not sell, AP-mode WiFi onboarding); the appliance
 OS image; a slimmer image.
 
-## 12. Provenance
+## 13. Provenance
 
 | claim | source | checked |
 | --- | --- | --- |
@@ -350,6 +448,6 @@ OS image; a slimmer image.
 | `node:26-slim` is Debian 13 (trixie); its base repos carry `postgresql-client-17`, not 18 | `docker run --rm node:26-slim` → `VERSION_CODENAME=trixie`; `apt-cache policy postgresql-client-18` empty, `apt-cache search '^postgresql-client'` lists 17 | measured 2026-09-08 |
 | `pg_dump` 17 refuses an 18 server; PGDG's 18 client succeeds against the same server | against `postgres:18-alpine` (server 18.6): pg_dump 17.11 → `aborting because of server version mismatch / server version: 18.6; pg_dump version: 17.11`, exit 1. Control, same server, PGDG pg_dump 18.6 → dump succeeded | measured 2026-09-08, both directions |
 | PGDG `trixie-pgdg` supplies `postgresql-client-18` on this base | `apt-cache policy` after adding the repo → `Candidate: 18.6-1.pgdg13+2` | measured 2026-09-08 |
-| Non-root bind to 443 fails under HOST networking and succeeds under bridge; `setcap` fixes host | same image, non-root: bridge → `listening on 443` (`ip_unprivileged_port_start` = 0); `--network host` → `FAILED EACCES` (host namespace = 1024); with `setcap cap_net_bind_service=+ep` on `/usr/local/bin/node` → `listening on 443` in host mode AND bridge, `getcap` shows `cap_net_bind_service=ep` | measured 2026-09-08, three-way with controls. Taken in Docker Desktop's Linux VM — 1024 is the kernel default, to be re-confirmed on the real Linux box at §10's host-network proof |
+| Non-root bind to 443 fails under HOST networking and succeeds under bridge; `setcap` fixes host | same image, non-root: bridge → `listening on 443` (`ip_unprivileged_port_start` = 0); `--network host` → `FAILED EACCES` (host namespace = 1024); with `setcap cap_net_bind_service=+ep` on `/usr/local/bin/node` → `listening on 443` in host mode AND bridge, `getcap` shows `cap_net_bind_service=ep` | measured 2026-09-08, three-way with controls. Taken in Docker Desktop's Linux VM — 1024 is the kernel default, to be re-confirmed on the real Linux box at §11's host-network proof |
 | A fresh named volume inherits the image path's ownership; an un-chowned path comes up root-owned and unwritable | image pre-creates + chowns `/var/lib/waitron/state` to uid 10001 → mounted volume `ls -ldn` shows `10001`, `touch` succeeds. Control, path not pre-created → `0 0`, `touch: Permission denied` | measured 2026-09-08, both directions |
 | `pg_dump` runs as a separate process from the app | `apps/server/src/backup-sweep.ts` header | read 2026-09-08 |
