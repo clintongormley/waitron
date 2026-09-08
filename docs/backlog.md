@@ -387,9 +387,9 @@ unchanged, so no new H2 receipt
      unauthenticated route to a `device.manage` session (it writes — a till enrol creates a register);
      `dev-pairing.ts` and the `DEMO` code die, with devMode auto-accepting. **Both pairing-code tables
      become ONE generic `join_requests` table** (`local`, a `kind` of `device` | `print_agent`) shared
-     with the print agent — one window, one gesture, one table, both surfaces. **Sequenced second:**
-     Track H item 1 goes first and builds the shared mechanism (spec §12), leaving this slice its own
-     screen and accept route.
+     with the print agent — one window, one gesture, one table, both surfaces. **Sequenced FIRST**
+     (owner, 2026-09-08): this slice builds the shared mechanism generically, against the harder
+     consumer, and Track H item 1 lands a second consumer on top (spec §12).
    - *Follow-ups (pre-production edges, not blocking):* (a) the dev `?dev` chooser rows show
      `label · kind`, not `name · profile · register` (`GET /api/dev/devices` returns only ids + kind);
      (b) **owner copy decision:** the Spanish form-factor label differs across two pickers
@@ -932,9 +932,10 @@ transports into a db-free `@waitron/print-agent`. **Its §2.3 enrolment was amen
 implementation** by
 [2026-09-08-device-join-and-accept-design.md](superpowers/specs/2026-09-08-device-join-and-accept-design.md)
 §7 — a two-digit number matched out of three, gated on a shared venue-wide pairing window, with
-pending agents in a generic `join_requests` table rather than in `print_agents`. **This slice carries
-the shared mechanism for both surfaces** and so goes before the device slice; read the amendment
-before implementing, and note the plan's own banner names the seven tasks it reaches. Item 2 is the virtual PDF printer + `print_jobs`
+pending agents in a generic `join_requests` table rather than in `print_agents`. **This slice is
+PAUSED until the device slice lands** (owner, 2026-09-08), because that slice builds the shared
+mechanism: Tasks 5-8 are blocked until then, while Tasks 1, 3 and 9 — the package scaffold, the
+router, the container host — are independent. The plan's banner carries the detail. Item 2 is the virtual PDF printer + `print_jobs`
 retention (nothing deletes a job today). **Remaining after those:**
 
 - **Cloud-poll transports** — Star CloudPRNT (`printing-cloud-poll-transport*`) and Epson Server Direct

@@ -30,12 +30,16 @@
 >    surfaces — not a `print_agent_join_requests` of its own. It drops `print_agent_pairing_codes`,
 >    and retires both the `active`-flag overload and `agent.pending` (Tasks 5, 6, 7).
 >
-> **This slice goes first and carries the shared mechanism** (spec §12): the generic table, pairing
-> mode and its dashboard control, the challenge and decoy rule, deny, and the pending-token resolver
-> are built here, generically, from the first commit — the device slice then only adds its own screen
-> and accept route. Build nothing agent-specific that a later slice would have to generalise.
+> **This slice now goes SECOND and lands on top of the device slice** (owner decision 2026-09-08,
+> spec §12; the print-agent effort is paused until that lands). The shared mechanism — the generic
+> `join_requests` table, pairing mode and its dashboard control, the challenge and decoy rule, deny,
+> the pending-token resolver — is built by the device slice, against the harder consumer, and this
+> slice adds a second consumer to it.
 >
-> Tasks 1, 3, 9 and 11 are unaffected. Regenerate the rest from the amended spec before executing.
+> **Tasks 5, 6, 7 and 8 are BLOCKED** until then: they consume a table, a window and routes that do
+> not exist yet. **Tasks 1, 3 and 9 are independent** — the package scaffold, the follow-the-primary
+> router, the container host — and are unaffected by any of this. Tasks 2, 4, 10 and 11 need
+> regenerating against the amended spec once the mechanism exists.
 
 ## Global Constraints
 

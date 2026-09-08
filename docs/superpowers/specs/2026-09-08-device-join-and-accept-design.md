@@ -380,27 +380,27 @@ Stated plainly, because the alternative is a claim that outruns the code (CLAUDE
 
 ## 12. Sequencing
 
-Two slices, and the print agent goes **first**, carrying the shared mechanism with it — the
-`join_requests` table, pairing mode and its dashboard control, the challenge and the decoy rule, deny,
-and the pending-token resolver. The device slice then only adds what is genuinely device-shaped: its
-one screen, its accept route, and the deletion of the pairing code.
+Two slices, and the **device slice goes first** (owner decision 2026-09-08), carrying the shared
+mechanism with it — the `join_requests` table, pairing mode and its dashboard control, the challenge
+and the decoy rule, deny, and the pending-token resolver. The print agent slice then lands on top,
+adding only its own accept route and the agent-side client work.
 
-Three reasons, in order of weight:
+The trade this order takes, stated both ways so a later reader does not have to reconstruct it:
 
-1. **The agent is the simpler consumer.** Its accept takes `{ choice }` and inserts one row. The
-   device's accept resolves a profile to a form factor, demands a station or a register, auto-creates
-   a register for a till, and must satisfy #269's XOR trigger. Building the shared parts against the
-   easy consumer and proving them there is cheaper than the other order.
-2. **It is a capability gap, not a polish.** No print agent process exists, so nothing prints
-   end to end. Device enrolment works today; this makes it better. `docs/backlog.md` ranks it that
-   way already.
-3. **That work is in flight** — the plan exists and is being revised — while the device change is not
-   started.
+- **What it buys.** The mechanism is built against the *harder* consumer. A device's accept resolves
+  a profile to a form factor, demands a station or a register, auto-creates a register for a till, and
+  must satisfy #269's XOR trigger; an agent's takes `{ choice }` and inserts one row. Anything the
+  shared parts get wrong surfaces immediately rather than when the second consumer arrives, which is
+  the failure the one-table decision of §4 exists to prevent and this order removes outright.
+- **What it costs.** The device slice is the larger of the two, and the print agent slice is now
+  **blocked on it** rather than merely amended — Tasks 5, 6, 7 and 8 of
+  [its plan](../plans/2026-09-08-print-agent-process.md) consume a table, a window and routes that do
+  not exist until this lands. Its Tasks 1, 3 and 9 (the package scaffold, the router, the container
+  host) are independent and can proceed in parallel.
 
-What the order costs: the mechanism could get shaped around agents and need bending for devices. The
-one-table decision of §4 is the guard. The agent slice builds a **generic `join_requests`**, generic
-routes and a venue-wide window from the first commit — never a `print_agent_join_requests` that a
-later slice has to generalise. If that is not what the print-agent plan says, the plan is wrong.
+The device slice therefore builds **generic** names from the first commit — `join_requests`, not
+`device_join_requests`; a venue-wide window, not a devices-screen toggle — so the agent slice adds a
+consumer rather than generalising anything.
 
 ---
 
