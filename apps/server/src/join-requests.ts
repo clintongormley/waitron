@@ -11,17 +11,25 @@ import type { TillConfig } from "./till-config.js";
 /** Both surfaces' pending joins live in one table; this is which one a row is for. */
 export type JoinRequestKind = "device" | "print_agent";
 
-/** A request lapses after this long — the same fifteen minutes the pairing code had, and the same as
- * the pairing window, so a knock cannot outlive the window that admitted it by more than one window. */
+/** A request lapses after this long — the same fifteen minutes as the pairing window, so a knock
+ * cannot outlive the window that admitted it by more than one window. */
 export const JOIN_TTL_MS = 15 * 60 * 1000;
 
 /** Pending rows per (tenant, kind). Ten is enough for the largest install anyone runs at once, and it
  * bounds both the admin's attention and the numbers the decoy rule must avoid. */
 export const PENDING_CAP = 10;
 
+/** Advisory-lock namespace (the first arg of the two-int `pg_advisory_xact_lock`) for per-tenant join
+ * allocation. A fixed small integer, distinct from every other advisory-lock namespace in the repo
+ * (`packages/migrations/src/apply.ts` holds the migration lock in the SEPARATE one-int space); the
+ * second arg is `hashtext(tenantId)`, so distinct tenants take distinct locks. A `hashtext` collision
+ * between two tenant ids would only over-serialise them — a harmless wait, never a wrong lock — so the
+ * hash's cross-version stability the migration lock avoids does not matter here. */
+const JOIN_ALLOC_LOCK_NAMESPACE = 4_915_071;
+
 /** Delete this tenant's lapsed requests. Called at the head of every verb that reads or counts them, so
- * a lapsed row never occupies the cap, never blocks a number, and never appears in the pending list —
- * the same opportunistic sweep the pairing code's TTL used, rather than a background job. */
+ * a lapsed row never occupies the cap, never blocks a number, and never appears in the pending list.
+ * Swept opportunistically at read, not by a background job. */
 async function sweepLapsed(tx: Transaction, cfg: TillConfig): Promise<void> {
   await tx
     .delete(joinRequests)
@@ -56,6 +64,21 @@ function twoDigits(n: number): string {
   return String(n).padStart(2, "0");
 }
 
+/**
+ * Mint a pending join request: one real number and two decoys, obeying the cross-surface exclusion
+ * (design §1.2 rule 3) and the per-(tenant, kind) cap.
+ *
+ * INVARIANT: number allocation and the cap are serialised per TENANT (across BOTH kinds). A
+ * transaction-scoped advisory lock on the tenant is taken FIRST, so the whole sweep → count →
+ * pendingNumbers → pick → insert sequence is atomic against other creators in the same tenant. WHY:
+ * two concurrent creators otherwise cannot see each other's uncommitted rows, so both pick off a
+ * stale reserved-set — one's real can collide with the other's (rule 3, the guarantee the one-in-three
+ * guess rate rests on), and both can pass a count of 9 and insert to 11 (bypassing the cap and the
+ * decoy budget). The key is the TENANT, not (tenant, kind): the exclusion and the ≤20-pending budget
+ * span both `device` and `print_agent`. `pg_advisory_xact_lock` releases at commit/rollback and blocks
+ * until acquired, so the second creator waits for the first to commit, then reads its row. It is
+ * PUBLIC-executable, so `app_user` (the route's role) may call it.
+ */
 export async function createJoinRequest(
   tx: Transaction,
   cfg: TillConfig,
@@ -67,6 +90,9 @@ export async function createJoinRequest(
     numbers?: () => number;
   },
 ): Promise<{ joinId: string; verificationNumber: string; token: string }> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(${JOIN_ALLOC_LOCK_NAMESPACE}, hashtext(${cfg.tenantId}))`,
+  );
   await sweepLapsed(tx, cfg);
 
   const [{ count }] = await tx

@@ -187,6 +187,144 @@ describe("createJoinRequest", () => {
   });
 });
 
+describe("createJoinRequest — per-tenant serialization of number allocation and the cap", () => {
+  // Two REAL backends racing one tenant's number allocation. Without the transaction-scoped advisory
+  // lock, both creators read the reserved-set and the pending count BEFORE either commits, so both pick
+  // off a stale snapshot: two reals collide (rule 3), and the cap is bypassed (9 → 11).
+  //
+  // The race is made DETERMINISTIC without relying on scheduling luck: the WAITER (`a`) holds its
+  // transaction open after its own insert until the SIGNALLER (`b`) has passed its reads — `b`'s
+  // injected `numbers()` fires the signal, and that callback runs only AFTER `pendingNumbers`/`count`.
+  // So `b` always reads while `a` is still uncommitted (the stale snapshot the bug needs), regardless
+  // of which backend the OS schedules first. Under the FIX, `b` blocks on the advisory lock and never
+  // reaches `numbers()`, so the signal never fires; the waiter falls through on a timeout instead of
+  // deadlocking, then `b` proceeds against a FRESH snapshot.
+  function deferred(): { promise: Promise<void>; resolve: () => void } {
+    let resolve!: () => void;
+    const promise = new Promise<void>((r) => (resolve = r));
+    return { promise, resolve };
+  }
+  function withTimeout(p: Promise<void>, ms: number): Promise<void> {
+    return Promise.race([p, new Promise<void>((r) => setTimeout(r, ms))]);
+  }
+
+  it("two overlapping creations never mint the same real number, across BOTH kinds (rule 3)", async () => {
+    const venue = await setupVenue(suite.admin);
+    const a = await suite.pg.connect();
+    const b = await suite.pg.connect();
+    const bRead = deferred();
+    try {
+      // Waiter: forced to 50, holds its committed-but-uncommitted row open until `b` has read.
+      const waiter = withTenant(a, venue.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        const made = await createJoinRequest(tx, venue.cfg, {
+          kind: "device",
+          label: "waiter",
+          numbers: () => 50,
+        });
+        await withTimeout(bRead.promise, 1500);
+        return made;
+      });
+      // Signaller: a walk starting at 50 that fires the read-signal on its first pick attempt (which
+      // runs after pendingNumbers). Under the bug it reads an empty reserved-set and takes 50 too;
+      // under the fix it reads 50-is-taken and walks on to the first free value.
+      const signaller = withTenant(b, venue.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        let k = 50;
+        return createJoinRequest(tx, venue.cfg, {
+          kind: "print_agent",
+          label: "signaller",
+          numbers: () => {
+            bRead.resolve();
+            const v = k;
+            k = (k + 1) % 100;
+            return v;
+          },
+        });
+      });
+      await Promise.allSettled([waiter, signaller]);
+
+      // Read back EVERY committed request in this tenant and assert the cross-surface exclusion.
+      const { rows } = await suite.admin.execute<{ real: string; decoys: string[] }>(sql`
+        select verification_number as real, decoy_numbers as decoys from join_requests
+        where tenant_id = ${venue.cfg.tenantId}
+      `);
+      const reals = rows.map((r) => r.real);
+      // No two committed requests share a real number (the 50/50 collision the bug produces).
+      expect(new Set(reals).size).toBe(reals.length);
+      // No committed decoy equals any OTHER committed request's real number, either kind (rule 3).
+      const realSet = new Set(reals);
+      for (const r of rows) {
+        for (const d of r.decoys) {
+          if (d !== r.real) expect(realSet.has(d)).toBe(false);
+        }
+      }
+    } finally {
+      bRead.resolve();
+      await a.close();
+      await b.close();
+    }
+  });
+
+  it("nine pending plus two overlapping creations never exceed the cap; the loser gets device.join_full", async () => {
+    const venue = await setupVenue(suite.admin);
+    // Seed nine pending (tenant, device) directly — one shy of the cap. Reals 01..09, empty decoys.
+    await suite.admin.execute(sql`
+      insert into join_requests (tenant_id, location_id, kind, label, token_hash, verification_number, decoy_numbers)
+      select ${venue.cfg.tenantId}, ${venue.cfg.locationId}, 'device'::join_request_kind,
+             'seed ' || n, 'x', lpad(n::text, 2, '0'), '{}'::text[]
+      from generate_series(1, 9) as n
+    `);
+    const a = await suite.pg.connect();
+    const b = await suite.pg.connect();
+    const bRead = deferred();
+    try {
+      // Waiter takes the tenth slot (real 50) and holds open until `b` has counted.
+      const waiter = withTenant(a, venue.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        const made = await createJoinRequest(tx, venue.cfg, {
+          kind: "device",
+          label: "tenth",
+          numbers: () => 50,
+        });
+        await withTimeout(bRead.promise, 1500);
+        return made;
+      });
+      // Signaller wants the eleventh. Under the bug it counts 9 (< cap), inserts, and the tenant holds
+      // 11; under the fix it blocks on the lock, then counts 10 and throws BEFORE reaching numbers().
+      const signaller = withTenant(b, venue.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return createJoinRequest(tx, venue.cfg, {
+          kind: "device",
+          label: "eleventh",
+          numbers: () => {
+            bRead.resolve();
+            return 60;
+          },
+        });
+      });
+      const outcomes = await Promise.allSettled([waiter, signaller]);
+
+      const { rows } = await suite.admin.execute<{ n: number }>(sql`
+        select count(*)::int as n from join_requests
+        where tenant_id = ${venue.cfg.tenantId} and kind = 'device'
+      `);
+      expect(rows[0]!.n).toBeLessThanOrEqual(PENDING_CAP);
+      // Exactly one of the two overlapping creators is refused (which backend wins the lock is not
+      // asserted), and the refusal is the clean domain code — never two silent inserts past the cap.
+      const rejected = outcomes.filter((o) => o.status === "rejected");
+      expect(rejected).toHaveLength(1);
+      expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({
+        code: "device.join_full",
+      });
+    } finally {
+      bRead.resolve();
+      await a.close();
+      await b.close();
+    }
+  });
+});
+
 describe("readJoinStatus", () => {
   it("is pending for a live request with the right token", async () => {
     const venue = await setupVenue(suite.admin);
