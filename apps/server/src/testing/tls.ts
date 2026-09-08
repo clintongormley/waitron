@@ -176,14 +176,19 @@ export async function startMtlsServer(
     req.on("data", (chunk: Buffer) => chunks.push(chunk));
     req.on("end", () => {
       const body = Buffer.concat(chunks).toString("utf8");
-      void Promise.resolve(typeof respondWith === "function" ? respondWith(body) : respondWith)
+      // The responder is invoked INSIDE the `.then` callback, never eagerly as an argument to
+      // `Promise.resolve(...)`: a SYNCHRONOUS throw would otherwise escape before `.catch` was attached
+      // and crash the process (an uncaught exception, exit 7) instead of answering 500. Deferring the
+      // call routes a sync throw and an async rejection through the SAME `.catch`.
+      void Promise.resolve()
+        .then(() => (typeof respondWith === "function" ? respondWith(body) : respondWith))
         .then((xml) => {
           res.writeHead(200, { "Content-Type": "text/xml; charset=utf-8" });
           res.end(xml);
         })
         .catch(() => {
-          // A responder that throws is a test-fixture bug; answer 500 so the client's submit fails
-          // loudly rather than hanging the socket open to the vitest timeout.
+          // A responder that throws (synchronously or async) is a test-fixture bug; answer 500 so the
+          // client's submit fails loudly rather than hanging the socket open to the vitest timeout.
           res.writeHead(500);
           res.end();
         });

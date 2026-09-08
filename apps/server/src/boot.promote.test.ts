@@ -116,6 +116,16 @@ const PROMOTE_RING = loadKeyRing({
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 
+// A ring with DIFFERENT key bytes but the SAME version (1) as PROMOTE_RING. A dormant row sealed under
+// it carries keyVersion 1, so `unwrapDormantCert`'s OUTER `tryGetCredential` selects PROMOTE_RING's v1
+// key (the wrong bytes), GCM authentication fails, and it throws `credentials.decrypt_failed` — an
+// outer vault-ring/system fault, distinct from a corrupt INNER break-glass envelope. Used to prove that
+// fault does not abort a break-glass promote.
+const WRONG_VAULT_RING = loadKeyRing({
+  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
+  WAITRON_CREDENTIALS_KEY_VERSION: "1",
+});
+
 /**
  * Seed the boot till's tenant + location + node as the container superuser, so boot's
  * `readOrderFlow` / `readVenueLocale` reads resolve — the same minimal identity boot.test.ts's
@@ -566,7 +576,11 @@ let certSeed: { nodeId: string; standardSeriesId: string };
 
 /** Seals a dormant `fiscal.aeat.dormant` row for the mirror tenant, wrapped under `secret`, and returns
  * the material so the caller can assert the live copy round-trips. */
-async function seedDormantCert(admin: Database, secret: string): Promise<AeatCertMaterial> {
+async function seedDormantCert(
+  admin: Database,
+  secret: string,
+  ring: typeof PROMOTE_RING = PROMOTE_RING,
+): Promise<AeatCertMaterial> {
   const tls = mintMtlsMaterial();
   const cert: AeatCertMaterial = {
     pfxBase64: tls.clientPfx.toString("base64"),
@@ -574,7 +588,7 @@ async function seedDormantCert(admin: Database, secret: string): Promise<AeatCer
     certKind: "representante",
   };
   await withTenant(admin, MIRROR_TENANT_ID, (tx) =>
-    storeDormantCert(tx, PROMOTE_RING, MIRROR_TENANT_ID, cert, secret),
+    storeDormantCert(tx, ring, MIRROR_TENANT_ID, cert, secret),
   );
   return cert;
 }
@@ -610,9 +624,7 @@ async function resetToMirror(admin: Database, nodeId: string): Promise<void> {
 
 /** The live/dormant/none status of the mirror tenant's AEAT cert, read via the superuser connection. */
 async function certStatus(admin: Database): Promise<"live" | "dormant" | "none"> {
-  return withTenant(admin, MIRROR_TENANT_ID, (tx) =>
-    readCertStatus(tx, PROMOTE_RING, MIRROR_TENANT_ID),
-  );
+  return withTenant(admin, MIRROR_TENANT_ID, (tx) => readCertStatus(tx, MIRROR_TENANT_ID));
 }
 
 /** Reads and decrypts the sealed live `fiscal.aeat` cert under the box ring. */
@@ -743,6 +755,49 @@ describe("promote (real Postgres): break-glass certificate unlock at promotion",
       );
       expect(failed.length).toBeGreaterThanOrEqual(1);
       expect(failed[0]!.tenantId).toBe(MIRROR_TENANT_ID);
+    } finally {
+      await server.close();
+      killSpy.mockRestore();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("promotes and LEAVES the dormant row when the outer vault ring cannot open it (recoverable fault, not corrupt)", async () => {
+    await resetToMirror(certSuite.admin, certSeed.nodeId);
+    // Seal the dormant row's OUTER vault under a DIFFERENT ring than the node runs. The break-glass
+    // secret is CORRECT, but the credentials ring cannot open the row at all, so `unwrapDormantCert`'s
+    // outer `tryGetCredential` THROWS `credentials.decrypt_failed` — a vault/system fault, not a corrupt
+    // envelope. Nothing external may block a failover (CLAUDE.md §5), so the promote must still succeed.
+    await seedDormantCert(certSuite.admin, GOOD_BREAK_GLASS, WRONG_VAULT_RING);
+    expect(await certStatus(certSuite.admin)).toBe("dormant");
+
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-cert-unlock-vault-"));
+    const server = await startCertMirror(certSeed.nodeId, stateDir).catch(async (err: unknown) => {
+      await rm(stateDir, { recursive: true, force: true });
+      throw err;
+    });
+    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
+    try {
+      // The promote SUCCEEDS despite the undecryptable dormant row.
+      const result = await server.promoteMirrorToPrimary!(
+        { oldNodeNeutralised: true },
+        { breakGlass: GOOD_BREAK_GLASS },
+      );
+      expect(result).toEqual({ alreadyPrimary: false, seriesId: certSeed.standardSeriesId });
+      expect(await readSingletonRole(certSuite.admin)).toBe("primary");
+
+      // No live cert was sealed AND — unlike the corrupt-envelope case — the dormant row is LEFT IN
+      // PLACE for a later ring fix/rotation to recover, so status stays "dormant", never "none".
+      expect(await certStatus(certSuite.admin)).toBe("dormant");
+
+      // A DISTINCT failure was logged, marked a vault-ring fault rather than a corrupt cert.
+      await delay(50);
+      const failed = readLogEvents(stateDir).filter(
+        (e) => e.event === "fiscal.certificate_unlock_failed",
+      );
+      expect(failed.length).toBeGreaterThanOrEqual(1);
+      expect(failed[0]!.tenantId).toBe(MIRROR_TENANT_ID);
+      expect(failed[0]!.reason).toBe("vault_unreadable");
     } finally {
       await server.close();
       killSpy.mockRestore();

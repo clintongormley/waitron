@@ -261,7 +261,7 @@ async function clearCerts(admin: Database, tenantId: string): Promise<void> {
 }
 
 async function certStatus(admin: Database, tenantId: string): Promise<"live" | "dormant" | "none"> {
-  return withTenant(admin, tenantId, (tx) => readCertStatus(tx, RING, tenantId));
+  return withTenant(admin, tenantId, (tx) => readCertStatus(tx, tenantId));
 }
 
 /** Decrypt and return the live `fiscal.aeat` cert content, so a test can assert WHICH cert is sealed

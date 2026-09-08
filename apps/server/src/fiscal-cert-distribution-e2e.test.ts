@@ -303,7 +303,7 @@ async function seedSaleVenue(admin: Database): Promise<void> {
 }
 
 async function certStatus(admin: Database): Promise<"live" | "dormant" | "none"> {
-  return withTenant(admin, MIRROR_TENANT_ID, (tx) => readCertStatus(tx, RING, MIRROR_TENANT_ID));
+  return withTenant(admin, MIRROR_TENANT_ID, (tx) => readCertStatus(tx, MIRROR_TENANT_ID));
 }
 
 /** Does the tenant hold a live `fiscal.aeat` row at all (independent of `readCertStatus`, so an

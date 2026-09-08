@@ -39,9 +39,7 @@ describe("fiscal-cert core (real PG)", () => {
   it("stores a dormant copy and reads status dormant", async () => {
     const tenantId = await seedTenant(suite.admin);
     await withTenant(probe, tenantId, (tx) => storeDormantCert(tx, ring, tenantId, CERT, BG));
-    expect(await withTenant(probe, tenantId, (tx) => readCertStatus(tx, ring, tenantId))).toBe(
-      "dormant",
-    );
+    expect(await withTenant(probe, tenantId, (tx) => readCertStatus(tx, tenantId))).toBe("dormant");
   });
 
   it("unwraps the dormant copy with the right secret", async () => {
@@ -75,8 +73,6 @@ describe("fiscal-cert core (real PG)", () => {
     await withTenant(probe, tenantId, (tx) => storeDormantCert(tx, ring, tenantId, CERT, BG));
     await withTenant(probe, tenantId, (tx) => sealLiveCertTx(tx, ring, tenantId, CERT));
     await withTenant(probe, tenantId, (tx) => deleteDormantCert(tx, tenantId));
-    expect(await withTenant(probe, tenantId, (tx) => readCertStatus(tx, ring, tenantId))).toBe(
-      "live",
-    );
+    expect(await withTenant(probe, tenantId, (tx) => readCertStatus(tx, tenantId))).toBe("live");
   });
 });

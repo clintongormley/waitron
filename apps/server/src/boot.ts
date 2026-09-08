@@ -1848,7 +1848,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // The AEAT cert's existence status (live/dormant/none), tenant-scoped — distinct from the
       // awaiting-cert cell above, which tracks a promoted mirror's sell-now-file-later state.
       readFiscalCertificate: () =>
-        withTenant(db, till.tenantId, (tx) => readCertStatus(tx, ring, till.tenantId)),
+        withTenant(db, till.tenantId, (tx) => readCertStatus(tx, till.tenantId)),
     },
     log,
   );
@@ -2002,24 +2002,47 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // Break-glass unlock of the dormant AEAT cert (Task 9, cert-distribution §3.1). The ~128 MiB
       // scrypt open runs HERE, BEFORE the point-of-no-return — on material it becomes `sealLiveCert`,
       // whose only work (a `putCredential`) runs INSIDE the PONR owner transaction so "became primary"
-      // and "holds the filing cert" commit together. A corrupt dormant (a secret that will not open the
-      // envelope) never blocks failover: the row is deleted and the promote proceeds with no live cert.
+      // and "holds the filing cert" commit together. NEITHER cert failure mode blocks a failover
+      // (CLAUDE.md §5 — nothing external may block a sale/failover): a corrupt INNER envelope (a
+      // break-glass secret that will not open it) deletes the unusable row and promotes with no live
+      // cert; an OUTER vault-ring throw (the row's ciphertext will not decrypt under this node's
+      // credentials ring — `credentials.decrypt_failed`) is a system fault, not proof of corruption, so
+      // it LEAVES the dormant row in place (a later ring fix/rotation may recover it) and promotes with
+      // no live cert. Either way `awaitingFiscalCertificate` becomes true and the operator installs by
+      // hand via `/management-api/fiscal-certificate`.
       let sealLiveCert: MirrorPromoteDeps["sealLiveCert"];
       if (ctx.breakGlass !== undefined) {
         const breakGlass = ctx.breakGlass;
-        const material = await withTenant(db, till.tenantId, (tx) =>
-          unwrapDormantCert(tx, ring, till.tenantId, breakGlass),
-        );
-        if (material === "corrupt") {
-          // Delete the corrupt dormant row via the REAL owner handle (`withOwnerDb` hands a
-          // `PromoteDeps` with `.ownerDb`, not a bare tx). A separate owner transaction, deliberately
-          // outside the PONR — the promote must succeed even when the cert cannot be unlocked.
-          await withOwnerDb((ownerDeps) =>
-            withTenant(ownerDeps.ownerDb, till.tenantId, (tx) =>
-              deleteDormantCert(tx, till.tenantId),
-            ),
+        let material: Awaited<ReturnType<typeof unwrapDormantCert>>;
+        try {
+          material = await withTenant(db, till.tenantId, (tx) =>
+            unwrapDormantCert(tx, ring, till.tenantId, breakGlass),
           );
-          log("warn", "fiscal.certificate_unlock_failed", { tenantId: till.tenantId });
+        } catch (error) {
+          // The OUTER vault-ring open threw: the dormant row cannot be READ at all (not a corrupt
+          // cert). Log it as a distinct vault-unreadable fault, leave the row untouched, and fall
+          // through with `material = "absent"` so the promote proceeds with no live cert. Only THIS
+          // node's own DB/ring is involved, so a genuine bug still surfaces — in the log, not as a
+          // blocked failover.
+          log("warn", "fiscal.certificate_unlock_failed", {
+            tenantId: till.tenantId,
+            reason: "vault_unreadable",
+            errorCode: codeOf(error),
+          });
+          material = "absent";
+        }
+        if (material === "corrupt") {
+          // Delete the corrupt dormant row on the ALREADY-OPEN outer owner handle (`deps.ownerDb`), in
+          // its own owner transaction OUTSIDE the PONR — the promote must succeed even when the cert
+          // cannot be unlocked. An inner-envelope corruption is proof the copy is unusable, so it is
+          // cleared here (unlike the vault-unreadable case above, which is recoverable and kept).
+          await withTenant(deps.ownerDb, till.tenantId, (tx) =>
+            deleteDormantCert(tx, till.tenantId),
+          );
+          log("warn", "fiscal.certificate_unlock_failed", {
+            tenantId: till.tenantId,
+            reason: "corrupt",
+          });
         } else if (material !== "absent") {
           sealLiveCert = (tx) => sealLiveCertTx(tx, ring, till.tenantId, material);
           log("info", "fiscal.certificate_unlocked", { tenantId: till.tenantId });

@@ -546,7 +546,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
 
     expect(
       await withTenant(mirrorApp, designated.tenantId, (tx) =>
-        readCertStatus(tx, RING, designated.tenantId),
+        readCertStatus(tx, designated.tenantId),
       ),
     ).toBe("dormant");
     expect(
@@ -591,7 +591,7 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
 
     expect(
       await withTenant(mirrorApp, designated.tenantId, (tx) =>
-        readCertStatus(tx, RING, designated.tenantId),
+        readCertStatus(tx, designated.tenantId),
       ),
     ).toBe("none");
   });

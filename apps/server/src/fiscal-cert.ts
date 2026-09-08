@@ -110,7 +110,6 @@ export async function deleteDormantCert(tx: Transaction, tenantId: string): Prom
  */
 export async function readCertStatus(
   tx: Transaction,
-  _ring: KeyRing,
   tenantId: string,
 ): Promise<"live" | "dormant" | "none"> {
   const rows = await tx
