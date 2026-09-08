@@ -29,8 +29,10 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "json-summary"],
-      // `src/bin.ts` — the process entry point: a bare `await startServer(process.env)` plus a
-      // signal-handler latch, exercised only by a manual end-to-end boot, not by anything hermetic.
+      // `src/bin.ts` — the process entry point: a bare `await startServer(process.env)` plus the
+      // wiring call into `run-server.ts`, exercised only by a manual end-to-end boot, not by
+      // anything hermetic. `run-server.ts`'s own shutdown logic is unit-tested and stays counted;
+      // only its `DEFAULT_DEPS` (the real process bindings) carry their own `v8 ignore` there.
       // `scripts/**` and `src/testing/**` are build/test tooling, not this package's own behaviour.
       //
       // `src/boot.ts` is deliberately NOT here: a branch that is genuinely unreachable through

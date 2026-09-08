@@ -9,12 +9,14 @@ export interface ShutdownDeps {
   now: () => Date;
 }
 
+/* v8 ignore start -- the real process bindings; every test supplies its own `deps` instead */
 const DEFAULT_DEPS: ShutdownDeps = {
   on: (signal, handler) => void process.once(signal, handler),
   write: (line, done) => void process.stdout.write(line, done),
   exit: (code) => process.exit(code),
   now: () => new Date(),
 };
+/* v8 ignore stop */
 
 /**
  * Stop the server once on the first SIGTERM/SIGINT, then exit — the routine `bin.ts` and
@@ -28,6 +30,10 @@ const DEFAULT_DEPS: ShutdownDeps = {
  * systemd) `process.stdout.write` is asynchronous and exiting immediately truncates the one line
  * explaining the failure. The log carries `codeOf`'s classification rather than the caught value —
  * a `pg` pool `end()` rejection can embed the connection string it was built from.
+ *
+ * A THIRD signal, of either name, is not caught by anything here: both `once` listeners have
+ * already fired and removed themselves, so it falls through to Node's default action and kills the
+ * process immediately, mid-shutdown, with the pool undrained. Accepted gap, not a covered case.
  */
 export function installShutdownHandlers(
   server: { close(): Promise<void> },
