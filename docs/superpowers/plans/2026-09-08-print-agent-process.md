@@ -1800,7 +1800,7 @@ Expected: FAIL (typecheck/import errors on `joinAgent`, the routes 404).
 
 In `print-api.ts`:
 
-- Imports: replace `enrolAgent, generateAgentCode` with `acceptAgent, denyAgent, joinAgent`; add `import { routableServers, type SignedMembershipDocument } from "@waitron/membership";`; add `isNull, not, and` to the drizzle import as needed.
+- Imports: replace `enrolAgent, generateAgentCode` with `acceptAgent, denyAgent, joinAgent`; add `import { routableServers, type SignedMembershipDocument } from "@waitron/membership";`; add `isNotNull, or` to the drizzle import.
 - `PrintApiDeps.cfg` gains `nodeId: string`; add `readMembership: () => Promise<SignedMembershipDocument | null>` with the doc: `/** The held membership document — the server list the pull reply carries (till-reroute §3.2). Injected because `node_membership` is a whole-DB singleton outside any `withTenant`. */`
 - `enrolLimiter` default: `createEnrolRateLimiter({ code: "agent.join_rate_limited" })`; update its comment.
 - `STATUS`: delete the three `agent.pairing_*` rows; add `"agent.pending": 403, "agent.join_full": 409, "agent.join_rate_limited": 429`. Update the doc block's first bullet accordingly.
@@ -1840,8 +1840,9 @@ In `print-api.ts`:
 - Delete the `/management-api/print-agents/codes` route. In the list route add `approvedAt: printAgents.approvedAt, joinCode: printAgents.joinCode` to the projection and a where clause that hides denied rows:
 
 ```ts
-          // A denied request is a revoked row that was never approved — not an agent, so not listed.
-          .where(and(eq(printAgents.tenantId, deps.cfg.tenantId), not(and(isNull(printAgents.approvedAt), eq(printAgents.active, false))!)))
+          // A denied request is a revoked row that was never approved — not an agent, so not listed:
+          // show what is approved (active or revoked) or still pending (active, unapproved).
+          .where(and(eq(printAgents.tenantId, deps.cfg.tenantId), or(isNotNull(printAgents.approvedAt), eq(printAgents.active, true))))
 ```
 
 - Add after the list route:
