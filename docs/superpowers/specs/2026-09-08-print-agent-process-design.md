@@ -30,8 +30,8 @@ Owner decisions taken in this brainstorm (2026-09-08):
   printer's agent is the one on the box it is plugged into; the server is the queue.
 - **When the server rejects its token the agent stays up and says so** — it never exits into a restart
   loop; a restart asks to join again.
-- **The one thing the agent listens on is a local setup/status page**, on the box's loopback only,
-  carrying no jobs and no secrets. The server link stays outbound-only (cloud rule 5).
+- **The one thing the agent listens on is a setup/status page**, on the venue LAN, carrying no jobs
+  and no secrets. The server link stays outbound-only (cloud rule 5).
 
 ## 2. The pieces
 
@@ -95,9 +95,10 @@ nothing secret.
   otherwise from `<state-dir>/config.json`, which the setup page writes. Env wins over the file, so a
   compose-supplied address is never overridden by the page. The token lives in `<state-dir>/token`,
   mode 0600, written atomically. Every value can come from the environment or a file (cloud rule 4).
-- The setup/status page: a small Hono app bound inside the container and published to the box's
-  `127.0.0.1:9110` only (the compose/`docker run` line does that; the page itself trusts nothing about
-  its caller and shows nothing secret). Unconfigured: one required field, *server address*, one
+- The setup/status page: a small Hono app on port 9110, published on the venue LAN by default (owner,
+  2026-09-08: the person reading it is usually at the dashboard, not at the printer's box). It trusts
+  nothing about its caller and shows nothing secret; a venue that wants it loopback-only changes the
+  publish line to `127.0.0.1:9110:9110`. Unconfigured: one required field, *server address*, one
   optional, *name*; Save. Joining/pending: "Waiting for approval in the dashboard — verification code
   **ABCD**". Running: the server it follows, last job time, last error. Unauthorized: "This agent was
   revoked — restart it to ask to join again."
@@ -144,13 +145,13 @@ their routes — nothing is shipped, so no deprecation sibling is needed; the co
 screen and its strings/client): the generate-code form becomes **"Print agents waiting to join"** —
 name, verification code, Accept, Deny (Deny behind the same two-step confirm as Revoke). The enrolled
 list shows only approved rows. Below the pending list, the one line a non-techie needs: "On the
-computer the printer is plugged into, open `http://localhost:9110` and enter this server address:
+computer the printer is plugged into (or from here, at `http://<that computer>:9110`), enter this server address:
 `<the dashboard's own origin>`."
 
 ## 3. Joining — the operator's view
 
 1. Start the agent. On the server's own box it already knows the address (compose); anywhere else,
-   open `http://localhost:9110` on that box and type the address the dashboard shows.
+   open `http://<that box>:9110` from any machine on the LAN and type the address the dashboard shows.
 2. The agent calls `join`, saves the token, and shows "Waiting for approval — code ABCD".
 3. In the dashboard, the agent appears under *waiting to join* with the same code. Accept.
 4. Within one poll the agent is running. Assign printers to it in the dashboard as today.
@@ -200,8 +201,10 @@ the lease. Nothing to reconcile on the agent.
 - The verification code is a 4-character Crockford string: enough for an admin to tell two names apart
   on a small LAN, not a secret, not a credential. It is shown in the dashboard and on the agent's page
   and nowhere else.
-- The setup page is published to the box's loopback. A venue that wants it on the LAN changes the
-  publish line; the page still carries no secret and no job.
+- The setup page is on the venue LAN, unauthenticated: anyone on the LAN can read the agent's phase
+  and set its server address while it is unconfigured. It carries no secret and no job, and a wrong
+  address only makes the agent knock on a door the admin never opens. A venue that wants it
+  loopback-only changes the publish line.
 
 ## 6. Testing
 
