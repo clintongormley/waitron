@@ -91,4 +91,5 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "local",
     "this node's pending print-agent pairings; not copied",
   ),
+  classify("join_requests", "local", "this node's pending joins, device and agent; not copied"),
 ];

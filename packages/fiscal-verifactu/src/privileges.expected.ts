@@ -36,6 +36,7 @@ export const PRIVILEGES: Record<string, string> = {
   incidents: "SI",
   ingredients: "SIU",
   invoice_series: "SI",
+  join_requests: "SID",
   kitchen_courses: "SIU",
   kitchen_stations: "SIU",
   location_catalogues: "SID",

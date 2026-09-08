@@ -29,6 +29,7 @@ export { kitchenStations } from "./schema/kitchen-stations.js";
 export { kitchenCourses } from "./schema/kitchen-courses.js";
 export { ticketItems, ticketState } from "./schema/ticket-items.js";
 export { devicePairingCodes, devices } from "./schema/devices.js";
+export { joinRequestKind, joinRequests } from "./schema/join-requests.js";
 export { printAgentPairingCodes, printAgents } from "./schema/print-agents.js";
 export { printTicketScope, printTransport, printers } from "./schema/printers.js";
 export { printJobStatus, printJobs } from "./schema/print-jobs.js";
