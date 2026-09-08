@@ -57,10 +57,10 @@ that packages, starts, supervises or prepares it. Four gaps, each checked agains
   with no operator step.
 - **Shipping: both.** A local `docker build` for speed and the run-it proof, and a CI job that
   builds and pushes to GHCR so the path a real box uses is exercised on every merge.
-- **A box that will not boot must be recoverable without a shell.** The entrypoint keeps an
-  escalation counter and degrades in two steps — safe mode (optional modules off, still selling),
-  then a recovery page it serves itself (§9). Only the supervisor half is built here; the actions
-  an operator takes from that page are the recovery spec's.
+- **A box that will not boot must be recoverable without a shell.** The entrypoint keeps a
+  consecutive-failure counter and, past a threshold, serves a recovery page itself instead of
+  starting the server (§9). Only the supervisor half is built here; the actions an operator takes
+  from that page — and any DEGRADED-but-trading mode — are the recovery spec's.
 - **Plug in and go.** The restaurant never types anything on the box. Docker's restart policy
   restores the containers on every boot; the ONE-TIME preparation (`prepare.sh`) is non-interactive
   and idempotent so the bootable installer (next spec) can run it unattended. The phone is the
@@ -159,11 +159,30 @@ start, in order:
    shape and the CLI's stay one code path. Two constraints make this safe, and both are load-
    bearing:
 
-   **It must never stamp, and never migrate.** `planInstance` emits `stamp` and `migrate` actions;
-   the entrypoint applies neither, keeping only `create-database`, `create-role` and
-   `grant-membership`. Migrating is already `boot.ts`'s job (`applyMigrations` runs unconditionally
-   before the mode branch), so applying it here would just run it twice. Stamping is the dangerous
-   one: `stampDeployment` is PERMANENT and one-way — a second stamp that disagrees throws
+   **It must never stamp. It migrates ONLY to unblock a virgin cluster.** `planInstance` emits
+   both a `stamp` and a `migrate` action. The entrypoint never applies `stamp`; it applies `migrate`
+   **only when the cluster has no `app_user` role**, and otherwise filters it out along with
+   `stamp`.
+
+   That condition is not a nicety — it is forced from both sides. `app_user` is created by the CORE
+   MIGRATION (`packages/db/drizzle/0001_db_baseline_sql.sql`: `CREATE ROLE app_user NOLOGIN`), and
+   `planInstance` emits `migrate` BEFORE the `grant-membership waitron_migrator → app_user` and the
+   `create-role waitron_app … IN ROLE app_user` that depend on it. Filtering `migrate` unconditionally
+   therefore makes a blank box fail every boot with `role "app_user" does not exist` — it would never
+   provision at all. But applying it unconditionally is wrong too: `applyInstance`'s migrate case runs
+   `manifestSets()`, the FULL manifest, so it would migrate modules the operator has disabled, which
+   `boot.ts`'s trading branch deliberately does not (it migrates `enabledModules` only, keeping a
+   soft-disabled module's data without applying its new migrations).
+
+   Gating on `app_user`'s existence resolves both: a virgin cluster migrates once, here, which is
+   the same full-schema migration setup mode would run anyway (`setup-migrates-all`, and there is no
+   `modules.json` yet); every later start leaves migrations entirely to `boot.ts` and its filter. A
+   wiped-and-rejoined box keeps its cluster-global roles, so it takes the later path. `app_user` is
+   the honest condition because it is precisely the thing the remaining actions depend on — narrower
+   and more checkable than "has anything been migrated", whose journal-watermark ambiguity
+   `instance-plan.ts` records as having caused a real bug.
+
+   Stamping is the dangerous one: `stampDeployment` is PERMANENT and one-way — a second stamp that disagrees throws
    `deployment.already_stamped` — and the environment is not known before the operator chooses it
    in the wizard. An entrypoint that stamped `preproduction` on first boot would make the box
    permanently unable to be provisioned as PRODUCTION (the wizard's own
@@ -205,9 +224,11 @@ start, in order:
    holds superuser credentials; its owner connection is the migrator via
    `WAITRON_ADMIN_DATABASE_URL`, which the entrypoint sets to `instance.env`'s migrator URL — the
    role that owns the tables, as `boot.ts`'s setup branch documents.
-4. **Read the escalation level** from `<stateDir>/recovery.json` (§9) and act on it: normal or
-   safe mode start the server (safe mode with the `toggleable` modules overlaid off); recovery mode
-   serves the recovery page instead and never starts it.
+4. **Read the escalation level** from `<stateDir>/recovery.json` (§9) and act on it. This happens
+   FIRST, before step 1's wait and step 2's bootstrap — a database-side failure is exactly what puts
+   a box in recovery, so ordering the decision after them would make the page unreachable in most of
+   the cases it exists for. At the recovery level the entrypoint serves the page and never starts
+   the server; otherwise it proceeds through steps 1–3 and starts it.
 5. **Start the server** through the one start/shutdown routine `bin.ts` uses today, lifted into a
    shared `runServer(env)` (`apps/server/src/run-server.ts`) so `bin.ts` and `node-entry.ts` hold no
    second copy of the signal handling. `runServer` reports one extra signal the entrypoint needs —
@@ -314,74 +335,88 @@ with no shell. It is being written fresh in §5; the escalation state it keeps s
 and retrofitting that is dear. The *actions* an operator takes from that page — restore from
 backup, roll back the image, undo the last module change — are the recovery spec's, not this one's.
 
-**The failure mode this exists for.** Today a module is compiled into the image
-(`ALL_MODULES` is a static import), so a box is bricked by a bad UPDATE, not a bad plugin. That
-changes: modules become installable at runtime (owner, 2026-09-08 — choose Spain and the Veri\*Factu
-module is downloaded; enable QR-at-table ordering, restart; remove it later, restart). Install →
-restart → will-not-boot then becomes a ROUTINE path rather than a rare one, and the most valuable
-recovery action becomes *undo the last module change and restart*. This section's state is shaped
-for that world even though this spec cannot yet test against a real bad module.
+**The failure mode this exists for.** Today a module is compiled into the image (`ALL_MODULES` is a
+static import), so a box is bricked by a bad UPDATE, not a bad plugin. That changes: modules become
+installable at runtime (owner, 2026-09-08 — choose Spain and the Veri\*Factu module is downloaded;
+enable QR-at-table ordering, restart; remove it later, restart). Install → restart → will-not-boot
+then becomes a ROUTINE path rather than a rare one, and the most valuable recovery action becomes
+*undo the last module change and restart*. This section's state is shaped for that world even though
+this spec cannot yet test against a real bad module.
 
-### 9.1 Two degraded levels, not one
+### 9.1 One degraded level, not two — and why safe mode is NOT built here
 
-They differ in whether the venue can still SELL, which is the only distinction that matters:
+The obvious design is a middle level: keep trading with the broken optional module switched off.
+**It cannot be built on the tiers that exist, and shipping it anyway would be worse than shipping
+nothing.** Every module but `core` and the two fiscal ones is `toggleable`
+(`packages/composition/src/modules.ts`), and that set includes `identity` (persons, sessions, PIN
+login, `authorize()`), `credentials` (the vault holding the AEAT certificate and the Stripe keys)
+and `payments`. A "safe mode" that disabled every `toggleable` module would leave a box that cannot
+log anyone in, cannot take a card and cannot unseal its certificate — it could not sell, which is
+the one thing such a mode exists to preserve. `toggleable` means "an operator may choose not to have
+this domain at provisioning time", never "a till still works without it".
 
-| level | what runs | can it sell? | for |
-| --- | --- | --- | --- |
-| **safe mode** | the server, with every `toggleable` module off — `core` + the fiscal slot only | **yes** | a broken optional module (QR ordering, bookings) |
-| **recovery mode** | no server; the entrypoint serves a recovery page | **no** | core, the fiscal module, or a migration failing |
+Building it properly needs a new fact each module declares — whether a till can sell without it —
+which is a change to the module CONTRACT (`packages/module`, `packages/composition`) and therefore
+Track C's files, not Track P's. It is handed to the recovery spec with that constraint stated.
+So this spec ships exactly one degraded level:
 
-Safe mode keeps the fiscal module ON deliberately. If fiscal is what is broken, safe mode fails
-too and the box escalates to recovery mode — which is correct, and is the one direction that must
-never be softened: a box that cannot hash-chain locally must refuse to sell rather than sell
-unfiled. A bricked box is recoverable; a hole in the invoice series is not (CLAUDE.md §5). This is
-also why "load the failed module's siblings and carry on" is only ever applied to `toggleable`
-modules — the tier the parser already refuses to let `modules.json` disable for `mandatory` is the
-same dial.
+| level | what runs | can it sell? |
+| --- | --- | --- |
+| **normal** | the server | yes |
+| **recovery** | no server; the entrypoint serves a recovery page | no |
+
+The fiscal direction is unchanged and is the one that must never be softened: a box that cannot
+hash-chain a sale locally must REFUSE to sell rather than sell unfiled. A bricked box is
+recoverable; a hole in the invoice series is not (CLAUDE.md §5). Recovery mode satisfies that
+trivially by running no server at all.
 
 ### 9.2 The escalation, and what resets it
 
-`<stateDir>/recovery.json` (0600, `writeFileAtomic`) holds the consecutive-failure count, the level
-in force, and the last failure's error code + timestamp — in the state volume, so it survives the
-container restart that Docker performs and is per-node, never replicated.
+`<stateDir>/recovery.json` (0600, `writeFileAtomic`) holds the consecutive-failure count and the
+last failure's error code + timestamp — in the state volume, so it survives the container restart
+Docker performs, and per-node, never replicated. The level is always DERIVED from the count on
+read, never trusted from the file, so a hand-edited value cannot pin a box into recovery.
 
-Normal → **safe mode** after 3 consecutive failed boots → **recovery mode** after 3 more. The
-entrypoint increments the count BEFORE calling `runServer` and clears it only on a boot that
-STAYS UP: a server that reaches its first healthy `/health` (trading) or `/setup-api/status`
-(setup) **and then runs for 120 s**. Clearing on "started" alone would be a measurement where both
-answers look alike (CLAUDE.md §1) — a module that throws five seconds in would reset the counter on
-every attempt and the box would restart-loop forever, never escalating. `runServer` exposing that
-one "stayed up" signal is the only new coupling between the entrypoint and the server.
+Normal → **recovery** after 3 consecutive failed boots. The entrypoint increments the count
+**before** starting the server, not in a failure handler: a boot that HANGS never throws, and a
+counter written only on a caught error would leave such a box restart-looping forever without ever
+escalating. It clears the count only on a boot that STAYS UP — `startServer` resolved (migrations
+applied, pools open, listener bound) and the process then survived 120 s. Clearing on "started"
+alone would be a measurement where both answers look alike (CLAUDE.md §1): a module throwing five
+seconds in would reset the counter on every attempt, and the box would never escalate.
 
-Safe mode is expressed as an OVERLAY, never a write to `modules.json`: boot intersects the
-operator's parsed `ModuleConfig` with "mandatory + provision-only" for that boot only. The
-operator's file is untouched, so leaving safe mode restores exactly what they had — the reason
-this is not implemented by editing their config.
+`startServer` resolving is deliberately the signal, rather than a healthy `/health` probe:
+`/health` is 503 on a setup box by design (§8), so a health-gated reset would treat every
+unprovisioned box as a failing one and drive a perfectly good new box into recovery mode.
 
-Safe mode is never silent: the server logs `boot.safe_mode` with the disabled set, and box-status
-carries it so the dashboard can show a banner. Designing that banner is the recovery spec's.
+### 9.3 What the recovery page serves
 
-### 9.3 What the recovery page serves (this spec's minimum)
+**It is served before anything else can fail.** The entrypoint reads `recovery.json` — which needs
+only the state volume — and decides FIRST, before waiting for Postgres and before the instance
+bootstrap. Ordering it after those would make the page unreachable in most of the cases it exists
+for, since a database-side failure is exactly what puts a box here.
 
-A small HTTP surface from the entrypoint, on the same port, presented with the box's existing CA +
-leaf out of the state volume, so the operator's already-trusted phone reaches it at the same URL
-with no new trust step. It states plainly what failed (the level, the consecutive count, the last
-error code, the last 200 log lines) and offers exactly two actions: **retry a normal boot** and
-**boot in safe mode**. Both are a counter write plus an exit, letting Docker's restart policy do
-the restart.
+A small HTTP surface on the same port, presented with the box's existing CA + leaf from the state
+volume (`ensureBoxSecrets` has already minted them by the time a box can be in this state), so the
+operator's already-trusted phone reaches it at the same URL with no new trust step. It states what
+failed (the consecutive count, the last error code, the last 200 log lines) and offers one action:
+**retry a normal boot** — a counter reset plus an exit, letting Docker's restart policy do the
+restart.
 
-Deliberately NOT here — the recovery spec designs them, and each needs its own thinking: restore
-from a backup over the web (`waitron-restore` exists but is shell-only); rolling back to the
-previous image (the running container cannot pull its own replacement — this likely needs the
-Docker socket or a second always-up container, which is a real security decision); undoing the
-last module change (needs the installable-module mechanism to exist first); and what to do about a
-migration that half-applied, which no restart can fix.
+Deliberately NOT here — the recovery spec designs each, and each needs its own thinking: a
+degraded-but-trading mode (§9.1's module-contract change); restore from a backup over the web
+(`waitron-restore` exists but is shell-only); rolling back to the previous image (the running
+container cannot pull its own replacement — this likely needs the Docker socket or a second
+always-up container, a real security decision); undoing the last module change (needs the
+installable-module mechanism to exist first); and what to do about a migration that half-applied,
+which no restart can fix.
 
 **The honest limit of this hook:** it recovers a box whose SERVER will not boot. It cannot recover
-one whose ENTRYPOINT will not run — a corrupt image or a bad entrypoint change. That case still
-needs a shell, or the bootable USB re-install of the next spec. Keeping the entrypoint small and
-rarely-changed is what makes that limit acceptable; a second always-up recovery container would
-close it, at the cost of the "two containers" shape, and is the recovery spec's call.
+one whose ENTRYPOINT will not run — a corrupt image or a bad entrypoint change — nor one whose
+state volume has no minted certificate yet (a box that has never completed a single setup boot has
+nothing to serve the page WITH; it falls back to plain HTTP on the same port, stated here rather
+than left implicit). Those cases still need a shell or the bootable USB re-install of the next
+spec. Keeping the entrypoint small and rarely-changed is what makes the limit acceptable.
 
 ## 10. Shipping, updating, operating
 
@@ -400,11 +435,16 @@ job would skip the image build for a Dockerfile change (CLAUDE.md §2).
 release tags exist. Unattended updates are the installer spec's question (a box we did not sell
 still needs them).
 
-**Operating:** the four CLIs run from the image. Ones that need the server RUNNING use
-`docker compose exec app node /app/bin-break-glass.js …`; `waitron-restore` and `waitron-rejoin`,
-which need it STOPPED, use `docker compose stop app && docker compose run --rm app node /app/bin-restore.js …`
-then `up -d` — written in `deploy/README.md`. The entrypoint is bypassed by naming the file, so a
-CLI never re-runs the bootstrap.
+**Operating:** the four CLIs run from the image, and HOW the entrypoint is bypassed differs by
+command — a distinction `deploy/README.md` must state, because getting it wrong re-runs the
+bootstrap in the middle of a cold restore:
+
+- `docker compose exec` IGNORES the image's `ENTRYPOINT`, so a command that needs the server
+  RUNNING is simply `docker compose exec app node /app/bin-break-glass.js …`.
+- `docker compose run` APPENDS its arguments to the entrypoint rather than replacing it, so the two
+  commands that need the server STOPPED must override it explicitly:
+  `docker compose stop app && docker compose run --rm --entrypoint node app /app/bin-restore.js …`,
+  then `up -d`. The same `--entrypoint` applies to any `docker run` against this image.
 
 ## 11. Testing and the run-it proof
 
@@ -422,12 +462,13 @@ CLI never re-runs the bootstrap.
   override reaches the SANs and the reach URLs.
 - `run-server.test.ts`: `bin.ts`'s lifted start/shutdown routine keeps its two behaviours (exit 0
   on a clean close, `server.shutdown_failed` + exit 1 otherwise).
-- `recovery-escalation.test.ts` (§9): three failed boots → safe mode; three more → recovery mode; a
-  boot that stays up past the threshold resets to normal; a boot that starts and THEN throws inside
-  the threshold does NOT reset — proven by deleting the stayed-up condition and watching the box
-  never escalate (the negative control the §9.2 reasoning rests on). Safe mode overlays the
-  `toggleable` modules off and leaves `modules.json` byte-identical; the fiscal slot stays enabled
-  in safe mode.
+- `recovery-escalation.test.ts` (§9): three consecutive failed boots reach recovery mode; a boot
+  that stays up past the threshold resets to normal; a boot that starts and THEN throws inside the
+  threshold does NOT reset — proven by deleting the stayed-up condition and watching the box never
+  escalate (the negative control §9.2's reasoning rests on). The counter is written BEFORE the
+  server starts, proven by a hanging boot that never throws and must still escalate — the case a
+  catch-only counter loses. The recovery decision is proven to precede the Postgres wait by a test
+  whose `waitForPostgres` throws: the page is still served.
 
 **CI smoke (the `image` job):** build → `docker compose -f deploy/compose.yml --env-file <generated>
 up -d --wait` against a throwaway project name → assert `GET https://127.0.0.1/setup-api/status` is
@@ -447,9 +488,10 @@ working shows the LAN IP there and nothing else.
 
 ## 12. Out of scope, named
 
-The recovery spec (the immediate follow-on to this one): restore-from-backup over the web, image
-rollback, undoing the last module change, per-module fault isolation at mount, the safe-mode
-banner, and what to do about a half-applied migration. Runtime-installable modules themselves (the
+The recovery spec (the immediate follow-on to this one): a degraded-but-trading mode and the
+module-contract field it needs (§9.1 — Track C's files), restore-from-backup over the web, image
+rollback, undoing the last module change, per-module fault isolation at mount, and what to do about
+a half-applied migration. Runtime-installable modules themselves (the
 signed-bundle distribution mechanism) — §9 is shaped for that world but does not build it.
 
 The wizard's four-mode chooser (modes 1–2 next); backup destinations (mirror → S3 → Drive); images
@@ -475,4 +517,8 @@ OS image; a slimmer image.
 | PGDG `trixie-pgdg` supplies `postgresql-client-18` on this base | `apt-cache policy` after adding the repo → `Candidate: 18.6-1.pgdg13+2` | measured 2026-09-08 |
 | Non-root bind to 443 fails under HOST networking and succeeds under bridge; `setcap` fixes host | same image, non-root: bridge → `listening on 443` (`ip_unprivileged_port_start` = 0); `--network host` → `FAILED EACCES` (host namespace = 1024); with `setcap cap_net_bind_service=+ep` on `/usr/local/bin/node` → `listening on 443` in host mode AND bridge, `getcap` shows `cap_net_bind_service=ep` | measured 2026-09-08, three-way with controls. Taken in Docker Desktop's Linux VM — 1024 is the kernel default, to be re-confirmed on the real Linux box at §11's host-network proof |
 | A fresh named volume inherits the image path's ownership; an un-chowned path comes up root-owned and unwritable | image pre-creates + chowns `/var/lib/waitron/state` to uid 10001 → mounted volume `ls -ldn` shows `10001`, `touch` succeeds. Control, path not pre-created → `0 0`, `touch: Permission denied` | measured 2026-09-08, both directions |
+| `app_user` is created by the CORE MIGRATION, and `planInstance` emits `migrate` before the actions that need it | `packages/db/drizzle/0001_db_baseline_sql.sql:4` (`CREATE ROLE app_user NOLOGIN`); `packages/provisioning/src/instance-plan.ts` emits `migrate`, then `grant-membership … app_user`, then `create-role waitron_app … IN ROLE app_user` | read 2026-09-08 (plan review) |
+| `applyInstance`'s migrate case runs the FULL manifest, not an enabled subset | `packages/provisioning/src/instance-apply.ts` — `applyMigrations(withRole(…), migrationOptionsFor(manifestSets(), …))` | read 2026-09-08 |
+| Every module but `core` and the two fiscal ones is `toggleable`, `identity`/`credentials`/`payments` included | `packages/composition/src/modules.ts` — tiers listed per module | read 2026-09-08 (why §9.1 builds no safe mode) |
+| `docker compose exec` ignores an image ENTRYPOINT; `docker compose run` appends to it | Docker CLI reference for `run`/`exec`; `--entrypoint` is the documented override | to be re-quoted from the live page when `deploy/README.md` is written |
 | `pg_dump` runs as a separate process from the app | `apps/server/src/backup-sweep.ts` header | read 2026-09-08 |
