@@ -186,11 +186,15 @@ exist yet — see `docs/backlog.md` → *Product work still open*.
 
 ## 4. Data
 
-**Both pairing-code tables are dropped — `device_pairing_codes` and `print_agent_pairing_codes` —
-and ONE `join_requests` table replaces them**, taking their classification slot: `local`, "this
-node's pending join requests; not copied". Pre-production, so this is a drop and recreate with no
-backfill (CLAUDE.md §3). It is a core-set table because it is the enrolment mechanism for two core
-models rather than any module's; the commit says so.
+**ONE `join_requests` table replaces both pairing-code tables** — `local`, "this node's pending join
+requests; not copied". Pre-production, so this is a drop and recreate with no backfill
+(CLAUDE.md §3). It is a core-set table because it is the enrolment mechanism for two core models
+rather than any module's; the commit says so.
+
+**Each slice drops its own pairing table.** This slice creates `join_requests` and drops
+`device_pairing_codes`; `print_agent_pairing_codes` stays until the agent slice adopts the mechanism,
+because the agent enrol route that reads it ships today and that slice is paused (§12). Dropping it
+here would break a working route for no gain.
 
 One table rather than one per surface (owner decision 2026-09-08). Both surfaces need the same
 columns — `print_agents` already carries `tenant_id`, `location_id`, `name` and `token_hash`, the
@@ -211,6 +215,25 @@ serve both.
 The cap of ten pending rows is per `(tenant, kind)`, so ten agents mid-install cannot lock devices
 out. If printing ever leaves the core for a module, the `print_agent` enum value goes with it — a
 one-line consequence worth knowing, not a reason to keep two tables while both models are core.
+
+### 4.1 This is the repository's first dropped table, and two guards assume that never happens
+
+Verified by grep on 2026-09-08: **no `DROP TABLE` appears in any migration** under `packages/*/drizzle`,
+and neither classification guard mentions `DROP`. Both derive "the tables that exist" from
+`CREATE TABLE` text alone — `packages/db/src/classification.test.ts:12` matches
+`/CREATE TABLE (?:IF NOT EXISTS )?"?([a-z0-9_]+)"?/gi` and nothing subtracts from that set, and
+`scripts/classification-complete.test.ts` scans every module the same way.
+
+So a dropped table stays "created" forever as far as they are concerned, and they will demand a
+classification row for a table that no longer exists — while `packages/fiscal-verifactu`'s
+`privileges.test.ts`, which reads the LIVE database and compares with `toEqual`, demands the opposite.
+The two guards would contradict each other, and the honest fix is not to keep a lying classification
+row: **both scanners learn to subtract a dropped table**, processing each module's migrations in
+filename order and removing a table on `DROP TABLE`. A create-drop-create sequence then resolves
+correctly by construction.
+
+That machinery is this slice's to build because this slice is the first drop. It is small, it is
+testable in the root project where both guards already live, and the agent slice inherits it.
 
 `location_id` is stamped from `cfg.locationId` — the node's own venue — exactly as
 `generatePairingCode` stamped it (`apps/server/src/device.ts:171`), so the device still asks nothing
@@ -295,8 +318,8 @@ than rework:
    process is restarted. This includes the agent on the server's own box: it needs no address typed,
    but it still asks and is still accepted.
 3. **Pending agents move out of `print_agents`** (owner decision 2026-09-08) into the **shared**
-   `join_requests` table of §4 — one table for both surfaces, not one each, and it is that change
-   which drops `print_agent_pairing_codes`. Denial deletes the row, which retires the `active`-flag
+   `join_requests` table of §4 — one table for both surfaces, not one each. **That slice drops
+   `print_agent_pairing_codes`**, not this one (§4): the agent enrol route reading it ships today. Denial deletes the row, which retires the `active`-flag
    overload the current spec carries ("a denied row is a revoked row that was never approved") and
    retires `agent.pending` with it: an agent polls its own status route exactly as a device does,
    instead of learning it is unapproved from a 403 on the job pull.
@@ -323,8 +346,8 @@ behaviour, CLAUDE.md §1).
 
 ## 9. Deleted
 
-`device_pairing_codes` and `print_agent_pairing_codes` (tables, classification lines, schemas, their
-unique lookup indexes);
+`device_pairing_codes` (table, classification line, schema, its unique lookup index — and see §4.1,
+because dropping it is what the guards have never had to cope with);
 `generatePairingCode`, `verifyPairingCode`, `isDevPairingCode` and `apps/server/src/dev-pairing.ts`;
 `readEnrolCatalogue` in its unauthenticated form (its reads move behind the accept dialog's
 management session); the dashboard's generate-code form; the three routes in §5; the four error codes
