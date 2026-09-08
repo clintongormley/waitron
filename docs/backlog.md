@@ -126,9 +126,13 @@ design-review section apply.
   order: **1.** the print agent process — spec
   [2026-09-08-print-agent-process-design.md](superpowers/specs/2026-09-08-print-agent-process-design.md),
   plan [2026-09-08-print-agent-process.md](superpowers/plans/2026-09-08-print-agent-process.md).
-  **Foundation landed** (this branch): `@waitron/print-agent`, a db-free package holding the ESC/POS
-  transports moved out of `@waitron/printing`, the wire client's `probeNode`, and the
-  follow-the-primary router. **The rest is BLOCKED** on device enrolment landing
+  **Foundation LANDED #282** (2026-09-08): `@waitron/print-agent`, a db-free package holding the
+  ESC/POS transports moved out of `@waitron/printing`, the wire client's `probeNode`, and the
+  follow-the-primary router — plus the `import-x/no-restricted-paths` zone that actually enforces the
+  db-free invariant (an empty `dependencies` block does not: a relative escape resolves, typechecks
+  and runs, measured at review). Plan Tasks 1 and 3 are done; **Task 2 landed only IN PART** —
+  `probeNode` and the shared result types; `join` waits on the amended contract below, `pullJobs` and
+  `report` on the loop that consumes them. **The rest is BLOCKED** on device enrolment landing
   ([2026-09-08-device-join-and-accept-design.md](superpowers/specs/2026-09-08-device-join-and-accept-design.md)),
   which amends this spec §2.3: a two-digit verification number the admin picks out of three, a
   challenge route that never returns the number, a venue-wide in-memory pairing window, and decoys
@@ -140,7 +144,13 @@ design-review section apply.
   closely duplicate `apps/till/src/api/server-router.ts` — about thirty lines worth a shared home
   when the agent LOOP lands. Not now: `apps/till` belongs to Track 1 and has an active branch, and
   the two have already diverged on purpose (this one skips a foreign environment and pins that
-  environment from the configured address; the till does neither). **2.** the virtual PDF printer + a
+  environment from the configured address; the till does neither).
+  *Two more deferred minors from #282's reviews, neither blocking:* `packages/print-agent/src/client.ts`
+  sits at 89% branch coverage (floor 85) — its null-body and non-`Error`-throw arms are unhit, two
+  cheap cases would restore the package to 100%; and `packages/printing/src/printers.ts:9,57-58`
+  carries an `import type` plus a separate `export type … from` for one symbol, where a single
+  `export type { PrintTransport }` would keep the doc comment attached in editor hover.
+  **2.** the virtual PDF printer + a
   `print_jobs` retention sweep (spec §7); **3.** un-pin IP printers from one agent (failover-printing
   §4a); **4.** SumUp once its questions are answered. The manual receipt for 1 is the owner's HP
   LaserJet at `192.168.20.56:9100` (TCP path only — not an ESC/POS device).
@@ -944,7 +954,8 @@ cash-drawer, and cash-drawer authorization consumers landed. Specs/plans under
 exists yet** — that is Track H item 1
 ([2026-09-08-print-agent-process-design.md](superpowers/specs/2026-09-08-print-agent-process-design.md),
 approved 2026-09-08), which also replaces pairing-code enrolment with join-and-accept. Its db-free
-`@waitron/print-agent` package now EXISTS and the ESC/POS transports have MOVED into it. **Its §2.3 enrolment was amended 2026-09-08 before
+`@waitron/print-agent` package now EXISTS and the ESC/POS transports have MOVED into it (#282,
+with the wire client's `probeNode` and the follow-the-primary router). **Its §2.3 enrolment was amended 2026-09-08 before
 implementation** by
 [2026-09-08-device-join-and-accept-design.md](superpowers/specs/2026-09-08-device-join-and-accept-design.md)
 §7 — a two-digit number matched out of three, gated on a shared venue-wide pairing window, with
