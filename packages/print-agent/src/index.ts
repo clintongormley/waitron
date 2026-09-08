@@ -1,3 +1,5 @@
+export { DEFAULT_TIMEOUT_MS, createClient } from "./client.js";
+export type { AgentClient, Failure, NodeProbe, Result, ServerEntry } from "./client.js";
 export {
   DEFAULT_TCP_TIMEOUT_MS,
   FakeSink,
