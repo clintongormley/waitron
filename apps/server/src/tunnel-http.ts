@@ -1,11 +1,27 @@
-import { Agent } from "undici";
+import { Agent, type Dispatcher, fetch as undiciFetch } from "undici";
 import type { HttpClient } from "@waitron/sync";
-import { undiciHttpClient } from "./sync-http.js";
 
 /**
- * The tunnel-aware counterpart of {@link fetchHttpClient} (`sync-http.ts`), behind the same
- * `@waitron/sync` `HttpClient` seam and adapting undici's `Response` to `{ status, text() }` the same
- * way. The difference is where TLS terminates: the caller sets `peer.url` to the RELAY's address, but
+ * Map the `@waitron/sync` `HttpClient` seam onto undici's `fetch` — its `Response` adapted to the tiny
+ * `{ status, text() }` surface `@waitron/sync` needs. An optional `dispatcher` (an undici `Agent`) is
+ * spread only when present, so an absent one leaves undici's global default. Inlined here (it used to
+ * live in the now-deleted `sync-http.ts`) since `tunnelHttpClient` is its only remaining caller — the
+ * outbox pull client it once shared went with the server-side outbox runtime (swap step 4).
+ */
+const undiciHttpClient =
+  (dispatcher?: Dispatcher): HttpClient =>
+  (url, init) =>
+    undiciFetch(url, {
+      method: init.method ?? "GET",
+      headers: init.headers,
+      body: init.body,
+      ...(dispatcher === undefined ? {} : { dispatcher }),
+    });
+
+/**
+ * A tunnel-aware `@waitron/sync` `HttpClient`, adapting undici's `Response` to `{ status, text() }`.
+ * The difference from a plain client is where TLS terminates: the caller sets `peer.url` to the RELAY's
+ * address, but
  * the certificate belongs to the BOX. So the connection dials the relay while validating the box's
  * identity end-to-end — the relay only splices bytes and never terminates TLS.
  *

@@ -33,7 +33,6 @@ import { startServer } from "./boot.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { ALL_MODULES } from "./modules.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
-import { sealMirrorToken } from "./mirror-token.js";
 import { parseEnvFile } from "./env-file.js";
 import { roleUrl } from "./testing/postgres.js";
 import { mintMtlsMaterial } from "./testing/tls.js";
@@ -469,7 +468,6 @@ async function seedMirrorIdentity(
     boxCaPem: "unused-ca-pem",
     originNodeId: MIRROR_ORIGIN_NODE_ID,
   });
-  await sealMirrorToken(admin, PROMOTE_RING, MIRROR_TENANT_ID, "mirror-sync-token");
 
   // Deployment: production (matching WAITRON_ENV) then mode='mirror' (co-sets singleton_role='secondary').
   await stampDeployment(admin, "production");

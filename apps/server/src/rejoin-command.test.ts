@@ -328,7 +328,11 @@ describe("waitron-rejoin rejoin", () => {
     expect(printed).not.toContain("hunter2");
   });
 
-  it("builds a carrier-keyed drain reader when the held chart names a serving-primary", async () => {
+  it("passes no drain reader (STOPGAP — Task 7 wires the native fence-LSN reader)", async () => {
+    // Swap step 4 stopgap: the outbox drain reader is gone with the server-side outbox runtime, and
+    // the native fence-LSN watermark reader (Ruling C2) is Task 7's. Until then `runRejoin` passes NO
+    // drain reader, so `rejoinAsSecondary` refuses `rejoin.no_carrier` (fail-safe — a node is never
+    // wiped while its tail may be un-shipped). Task 7 restores the carrier-keyed reader here.
     const held: SignedMembershipDocument = {
       body: { nodes: [{ nodeId: "carrier-1", standing: "serving-primary" }] },
     } as unknown as SignedMembershipDocument;
@@ -348,7 +352,7 @@ describe("waitron-rejoin rejoin", () => {
       },
     );
     expect(code).toBe(0);
-    expect(typeof received?.readDrainProgress).toBe("function");
+    expect(received?.readDrainProgress).toBeUndefined();
   });
 
   it("reports generically (never raw) when opening the app pool fails", async () => {

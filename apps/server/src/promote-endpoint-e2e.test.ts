@@ -35,7 +35,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer, type StartedServer } from "./boot.js";
 import { ALL_MODULES } from "./modules.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
-import { sealMirrorToken } from "./mirror-token.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { mountPromoteApi } from "./promote-api.js";
 import { readOnlyGate } from "./read-only-gate.js";
@@ -217,7 +216,6 @@ async function seedMirror(admin: Database): Promise<{ nodeId: string; standardSe
     boxCaPem: "unused-ca-pem",
     originNodeId: MIRROR_ORIGIN_NODE_ID,
   });
-  await sealMirrorToken(admin, RING, MIRROR_TENANT_ID, "mirror-sync-token");
 
   // The admin/manager the endpoint + box-status authenticate.
   await admin.execute(sql`

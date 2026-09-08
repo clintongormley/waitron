@@ -9,42 +9,22 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { setSingletonRole, stampDeployment, type Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { enrolPeer, runRetentionSweep, runSyncPull } from "@waitron/sync";
 import { runTunnelClient } from "@waitron/tunnel";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer } from "./boot.js";
 import { roleUrl } from "./testing/postgres.js";
 
-// The four primary-only SINGLETON duties (sync SOURCE, retention sweep, scheduled backup, outbound
-// tunnel client) gate on `singleton_role`, not on `mode` (promotion #158 follow-on). This suite pins
-// the topology no other boot suite exercises WITH THE FOUR SINGLETON-DUTY CONFIGS WIRED: a SELL-ONLY
-// LOCAL SECONDARY — `deployment.mode='primary'` AND `singleton_role='secondary'` — which is NOT a mirror
-// (so `isMirror` is false and the old `!isMirror` gate ran all four, the active-active duplication this
-// change fixes) yet must run NONE of the four, because the one singleton primary owns them.
-// (`boot.promote.test.ts` boots the same `(primary, secondary)` topology but never configures
-// sync/backup/tunnel, so it never exercised the buggy gate for these duties.) TWO manifest clones of the
-// SAME identity: a
-// `(primary, secondary)` one that runs none, and a default-`primary` one that runs all four — the control
-// proving the secondary's absence is real, not a boot that silently wired nothing (CLAUDE.md §1).
-//
-// The `mode='mirror'` case (also runs none) is covered by `boot.mirror.test.ts`; before this change a
-// mirror ran none only because `!isMirror` was false, which is exactly why that suite could not catch the
-// secondary bug — a secondary has `isMirror` false. `runRetentionSweep` / `runTunnelClient` are wrapped so
-// the tests observe whether each duty's worker was STARTED (call-through keeps the real teardown honest);
-// `runSyncPull` is wrapped call-through too because BOTH boots start the pull worker (it is NOT a singleton
-// duty — it gates on sync being configured, not on the role — so a secondary still pulls; out of scope
-// here, pointed at an unreachable peer so it backs off). Real Postgres, not PGlite: the boot reads
-// `deployment` and runs the sync/retention pools as the non-superuser app role, whose grants PGlite's
-// superuser connection would not enforce.
-
-vi.mock("@waitron/sync", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@waitron/sync")>();
-  return {
-    ...actual,
-    runSyncPull: vi.fn(actual.runSyncPull),
-    runRetentionSweep: vi.fn(actual.runRetentionSweep),
-  };
-});
+// The primary-only SINGLETON duties (scheduled backup, outbound tunnel client) gate on `singleton_role`,
+// not on `mode` (promotion #158 follow-on). Since swap step 4 the outbox sync SOURCE and retention sweep
+// are deleted, so two singleton duties remain; this suite pins the topology no other boot suite exercises
+// WITH THE SINGLETON-DUTY CONFIGS WIRED: a SELL-ONLY LOCAL SECONDARY — `deployment.mode='primary'` AND
+// `singleton_role='secondary'` — which is NOT a mirror (so `isMirror` is false and the old `!isMirror`
+// gate ran all of them, the active-active duplication this gate fixes) yet must run NEITHER, because the
+// one singleton primary owns them. TWO manifest clones of the SAME identity: a `(primary, secondary)` one
+// that runs neither, and a default-`primary` one that runs both — the control proving the secondary's
+// absence is real, not a boot that silently wired nothing (CLAUDE.md §1). Real Postgres, not PGlite: the
+// boot reads `deployment` as the non-superuser app role, whose grants PGlite's superuser connection
+// would not enforce.
 
 vi.mock("@waitron/tunnel", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/tunnel")>();
@@ -54,12 +34,10 @@ vi.mock("@waitron/tunnel", async (importOriginal) => {
   };
 });
 
-// One shared module mock accumulates calls across tests, so clear the spies before each so the
-// call-count assertions stay order-independent (boot.test.ts's own rule). `mockClear` keeps each spy's
+// One shared module mock accumulates calls across tests, so clear the spy before each so the call-count
+// assertions stay order-independent (boot.test.ts's own rule). `mockClear` keeps the spy's
 // `vi.fn(actual.*)` call-through implementation, resetting only `mock.calls`.
 beforeEach(() => {
-  vi.mocked(runSyncPull).mockClear();
-  vi.mocked(runRetentionSweep).mockClear();
   vi.mocked(runTunnelClient).mockClear();
 });
 
@@ -94,26 +72,10 @@ const KEY_ENV = {
   ...TILL_ENV,
 };
 
-// One unreachable "peer" (port 1 never listens) for WAITRON_SYNC_PEERS: every pull handshake fails and the
-// worker backs off, so the box still binds and serves — the same unreachable-endpoint shape the mirror and
-// sync suites use. Both boots enter the sync block (so the source-mount gate and the retention gate are
-// both reached); the source and retention are what the gate skips on a secondary.
-const SYNC_PEERS = JSON.stringify([
-  {
-    nodeId: "66666666-6666-4666-8666-666666666666",
-    url: "http://127.0.0.1:1/",
-    token: "peer-token",
-  },
-]);
 let migrationsRoot: string;
 let backupDir: string;
 let secondaryDatabaseUrl: string;
-let secondarySyncDatabaseUrl: string;
-let secondaryRetentionDatabaseUrl: string;
 let primaryDatabaseUrl: string;
-let primarySyncDatabaseUrl: string;
-let primaryRetentionDatabaseUrl: string;
-let primaryPeerToken: string;
 
 /**
  * Seed the FK identity (tenant, location, node, till, series) with the WAITRON_TILL_*_ID on one
@@ -156,20 +118,11 @@ beforeAll(async () => {
   // Owner-role writes (app_user holds no UPDATE on deployment), so they run on the superuser admin.
   await stampDeployment(secondary.admin, "preproduction");
   await setSingletonRole(secondary.admin, "secondary");
-  // The control keeps the column default ('primary', 'primary') — the singleton primary that owns all four.
+  // The control keeps the column default ('primary', 'primary') — the singleton primary that owns both.
   await stampDeployment(primary.admin, "preproduction");
 
-  // A peer enrolled on the primary control (enrolPeer runs as the superuser admin — setup bypasses grants);
-  // the control's /sync-api/hello probe presents this token, which the source resolves against sync_peers.
-  primaryPeerToken = (await enrolPeer(primary.admin, { subscriberId: "sec-ctl", name: "ctl" }))
-    .token;
-
   secondaryDatabaseUrl = roleUrl(secondary.pg.uri, "app_login", "app_pw");
-  secondarySyncDatabaseUrl = roleUrl(secondary.pg.uri, "sync_applier", "ap");
-  secondaryRetentionDatabaseUrl = roleUrl(secondary.pg.uri, "sync_pruner", "pp");
   primaryDatabaseUrl = roleUrl(primary.pg.uri, "app_login", "app_pw");
-  primarySyncDatabaseUrl = roleUrl(primary.pg.uri, "sync_applier", "ap");
-  primaryRetentionDatabaseUrl = roleUrl(primary.pg.uri, "sync_pruner", "pp");
 }, 180_000);
 
 afterAll(async () => {
@@ -255,17 +208,15 @@ function hasEventPrefixed(lines: readonly string[], prefix: string): boolean {
   });
 }
 
-// The four singleton duties' config, present in FULL on both boots so the ONLY thing that decides
-// whether they run is `singleton_role`. The relay + backup DB are unreachable (port 1) on
-// purpose: the real call-through workers back off / the backup read-privilege probe fails fast —
-// this suite asserts the WIRING (started or not), never a live connection. Each boot fills in its
-// own DATABASE/SYNC/RETENTION urls.
+// The singleton duties' config, present in FULL on both boots so the ONLY thing that decides whether
+// they run is `singleton_role`. The relay + backup DB are unreachable (port 1) on purpose: the real
+// call-through worker backs off / the backup read-privilege probe fails fast — this suite asserts the
+// WIRING (started or not), never a live connection. Each boot fills in its own DATABASE url.
 function dutyEnv(port: number) {
   return {
     ...KEY_ENV,
     WAITRON_HTTP_PORT: String(port),
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    WAITRON_SYNC_PEERS: SYNC_PEERS,
     WAITRON_TUNNEL_RELAY_URL: "tcp://127.0.0.1:1",
     WAITRON_TUNNEL_BOX_ID: "box-secondary",
     WAITRON_TUNNEL_TOKEN: "tunnel-secret",
@@ -278,40 +229,28 @@ function dutyEnv(port: number) {
 }
 
 describe("singleton-duty boot (real Postgres, deployment.singleton_role gating)", () => {
-  it("a sell-only local secondary (primary, secondary) runs NONE of the four singleton duties, though it is not a mirror", async () => {
+  it("a sell-only local secondary (primary, secondary) runs NEITHER singleton duty, though it is not a mirror", async () => {
     const port = await freePort();
-    const base = `http://127.0.0.1:${port}`;
     const [server, lines] = await withCapturedStdout(async (captured) => {
       const started = await startServer({
         ...dutyEnv(port),
         DATABASE_URL: secondaryDatabaseUrl,
         WAITRON_MIGRATIONS_DATABASE_URL: secondary.pg.uri,
-        WAITRON_SYNC_DATABASE_URL: secondarySyncDatabaseUrl,
-        WAITRON_SYNC_RETENTION_DATABASE_URL: secondaryRetentionDatabaseUrl,
       });
-      // The loop's first sleep is logged strictly AFTER the (synchronous) boot has decided every gate above
-      // — the sync/retention/backup/tunnel blocks all run before `runLoop` — so once this line has arrived
-      // the backup gate has been evaluated and the absence assertions below are not merely "not yet".
+      // The loop's first sleep is logged strictly AFTER the (synchronous) boot has decided every gate
+      // above — the backup/tunnel blocks run before `runLoop` — so once this line has arrived the backup
+      // gate has been evaluated and the absence assertions below are not merely "not yet".
       await waitForEvent(captured, "loop.sleeping");
       return [started, captured] as const;
     });
     try {
-      // 1. Sync SOURCE — not mounted: /sync-api/hello 404 even for a peer (the primary control below serves
-      //    it 200, so this 404 is the gate, not a route that never existed).
-      const source = await fetch(`${base}/sync-api/hello`);
-      expect(source.status).toBe(404);
-
-      // 2. Retention sweep — not started (the primary control starts it once).
-      expect(runRetentionSweep).not.toHaveBeenCalled();
-
-      // 3. Backup — the gate is skipped ENTIRELY, so NEITHER the read-privilege probe failure
-      // (backup.disabled_probe_failed) NOR the disabled-info line (backup.disabled) is logged.
-      // The primary control below emits a backup.* line for the identical env, so this absence is
-      // the gate rather than a missing config. Asserted after loop.sleeping arrived, so the gate
-      // has been decided.
+      // 1. Backup — the gate is skipped ENTIRELY, so NEITHER the read-privilege probe failure
+      // (backup.disabled_probe_failed) NOR the disabled-info line (backup.disabled) is logged. The
+      // primary control below emits a backup.* line for the identical env, so this absence is the gate
+      // rather than a missing config.
       expect(hasEventPrefixed(lines, "backup.")).toBe(false);
 
-      // 4. Tunnel client — not dialed (the primary control dials it once).
+      // 2. Tunnel client — not dialed (the primary control dials it once).
       expect(runTunnelClient).not.toHaveBeenCalled();
 
       // The secondary still SELLS: its fiscal pass runs as the trivial empty pass (singletonPass resolves a
@@ -321,19 +260,15 @@ describe("singleton-duty boot (real Postgres, deployment.singleton_role gating)"
     } finally {
       await server.close();
     }
-    await expect(fetch(`${base}/sync-api/hello`)).rejects.toThrow(); // listener gone
   }, 60_000);
 
-  it("the singleton primary (primary, primary) of the same identity DOES run all four (control: the secondary's absence is real)", async () => {
+  it("the singleton primary (primary, primary) of the same identity DOES run both (control: the secondary's absence is real)", async () => {
     const port = await freePort();
-    const base = `http://127.0.0.1:${port}`;
     const [server, lines] = await withCapturedStdout(async (captured) => {
       const started = await startServer({
         ...dutyEnv(port),
         DATABASE_URL: primaryDatabaseUrl,
         WAITRON_MIGRATIONS_DATABASE_URL: primary.pg.uri,
-        WAITRON_SYNC_DATABASE_URL: primarySyncDatabaseUrl,
-        WAITRON_SYNC_RETENTION_DATABASE_URL: primaryRetentionDatabaseUrl,
       });
       // The backup gate runs during the (synchronous) boot, so its `backup.*` line is emitted before the
       // first `loop.sleeping` — wait for that to be sure the gate has been decided before asserting.
@@ -341,26 +276,15 @@ describe("singleton-duty boot (real Postgres, deployment.singleton_role gating)"
       return [started, captured] as const;
     });
     try {
-      // 1. Sync SOURCE — mounted and peer-authenticated (200 with the enrolled token).
-      const source = await fetch(`${base}/sync-api/hello`, {
-        headers: { Authorization: `Bearer ${primaryPeerToken}` },
-      });
-      expect(source.status).toBe(200);
-
-      // 2. Retention sweep — started once.
-      expect(runRetentionSweep).toHaveBeenCalledTimes(1);
-
-      // 3. Backup — the gate RAN: with the port-1 backup DB the read-privilege probe fails, so a
-      // `backup.*` line (backup.disabled_probe_failed) is emitted. This is the positive twin of
-      // the secondary's absence assertion — the gate is entered on the singleton primary, skipped
-      // on the secondary.
+      // 1. Backup — the gate RAN: with the port-1 backup DB the read-privilege probe fails, so a
+      // `backup.*` line (backup.disabled_probe_failed) is emitted. The positive twin of the secondary's
+      // absence assertion — entered on the singleton primary, skipped on the secondary.
       expect(hasEventPrefixed(lines, "backup.")).toBe(true);
 
-      // 4. Tunnel client — dialed once.
+      // 2. Tunnel client — dialed once.
       expect(runTunnelClient).toHaveBeenCalledTimes(1);
     } finally {
       await server.close();
     }
-    await expect(fetch(`${base}/sync-api/hello`)).rejects.toThrow();
   }, 60_000);
 });

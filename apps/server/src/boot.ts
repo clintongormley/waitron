@@ -6,13 +6,10 @@ import type { Hono } from "hono";
 import {
   createPostgresDb,
   readDeploymentAxes,
-  readMembershipTrustSet,
   readNodeMembership,
   setSingletonRole,
   readMirrorConfig,
-  withTenant,
   type Database,
-  type MirrorConnection,
 } from "@waitron/db";
 import { credentialTenants, loadKeyRing } from "@waitron/credentials";
 import { registerModulePermissions } from "@waitron/identity";
@@ -30,18 +27,15 @@ import { AppError } from "@waitron/shared";
 import {
   ALL_MODULES,
   ALL_MODULE_PERMISSIONS,
-  ALL_SYNC_ENROLMENTS,
   enabledFloorAnnotators,
   LEDGER_PUBLICATION_TABLES,
-  MODULE_BY_TABLE,
   STATE_PUBLICATION_TABLES,
 } from "./modules.js";
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
 import { parseEnvFile } from "./env-file.js";
 import {
   loadConfig,
-  loadMirrorSyncConfig,
-  loadSyncConfig,
+  loadReplicationConfig,
   loadTunnelConfig,
   type ServerConfig,
 } from "./config.js";
@@ -116,8 +110,7 @@ import { mountDiscovery } from "./discovery-api.js";
 import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
 import { listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
-import { mountSyncApi } from "./sync-api.js";
-import { mountBoxStatusApi, readConfigConflictCount } from "./box-status.js";
+import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
 import { loadBackupConfig } from "./backup-config.js";
@@ -126,22 +119,12 @@ import { runBackupSweep } from "./backup-sweep.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import { readBackupStatus } from "./backup-status.js";
 import { buildBackend } from "./local-fs-backend.js";
-import { fetchHttpClient } from "./sync-http.js";
-import { tunnelHttpClient } from "./tunnel-http.js";
 import { readOnlyGate } from "./read-only-gate.js";
-import { isFenced, shouldFenceRestart } from "./membership-fence.js";
+import { isFenced } from "./membership-fence.js";
 import { ensureMirrorViewer, mirrorSession } from "./mirror-session.js";
 import { assertMirrorBindSafe } from "./mirror-bind-guard.js";
-import { readMirrorToken } from "./mirror-token.js";
-import {
-  lagFor,
-  readDrainProgress,
-  runRetentionSweep,
-  runSyncPull,
-  type SyncLane,
-} from "@waitron/sync";
-import { servingPrimaryNodeId, type TrustSet } from "@waitron/membership";
-import { adoptMembership as adoptMembershipDocument } from "./membership-adopt.js";
+import type { DrainProgress } from "@waitron/sync";
+import { servingPrimaryNodeId } from "@waitron/membership";
 import { runTunnelClient } from "@waitron/tunnel";
 import { readFilingModule, readOrderFlow } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
@@ -600,23 +583,15 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // `execute`, never inside a transaction — because `appliedSchemaVersion`'s 42P01 catch for a
   // never-migrated table poisons an enclosing transaction (spec §3); a fresh connection used
   // auto-commit satisfies that just as the pool would.
-  // SP-2b: hoisted to `startServer` scope so the sync mount/pull sites (~700 lines below) can inject
-  // it into the sync deps (the schema-version park gate). Populated ONLY in the trading-mode block
-  // below, under the SAME `config.till !== undefined` condition that guards those sites, so the sync
-  // wiring never sees it unassigned. The `= {}` default is what satisfies definite-assignment at the
-  // out-of-block reads (the `mountSyncApi` sites, SP-2b) — TS cannot correlate the two `config.till`
-  // conditionals, so it would otherwise demand it — while never actually advertising `{}`, because
-  // those reads only run when `config.till !== undefined`, the same condition that populated it.
-  let myModuleVersions: Record<string, number> = {};
+  // SP-1b drift visibility only (the outbox schema-version park gate that once read this is gone with
+  // the sync block). Computed in the trading-mode block, used solely to log `module.reconcile` drift.
   if (config.till !== undefined) {
     const driftProbe = await createPostgresDb(config.migrationsDatabaseUrl);
     try {
-      // SP-2b: one sweep of every module's applied schema version, keyed by name (main's
-      // `schemaVersionsByModule`, which BR-2's backup manifest shares — the driftProbe is an
-      // auto-commit pool, so its `Promise.all` reads are each isolated); the migrated Set is derived
-      // from it (version > 0). The Set handed to `reconcile` is byte-for-byte the one the former
-      // inline loop built.
-      myModuleVersions = await schemaVersionsByModule(driftProbe, ALL_MODULES);
+      // One sweep of every module's applied schema version, keyed by name (`schemaVersionsByModule`,
+      // which the backup manifest shares — the driftProbe is an auto-commit pool, so its `Promise.all`
+      // reads are each isolated); the migrated Set is derived from it (version > 0).
+      const myModuleVersions = await schemaVersionsByModule(driftProbe, ALL_MODULES);
       const migrated = new Set(
         Object.entries(myModuleVersions)
           .filter(([, v]) => v > 0)
@@ -775,41 +750,39 @@ export async function startServer(env: Record<string, string | undefined>): Prom
                 },
                 req,
               ),
-            adopt: (req) => {
-              // Ruling 1 (fail loud at adopt, not at reboot): an adopted mirror MUST end up with
-              // WAITRON_SYNC_DATABASE_URL in `trading.env`, because the next (mirror) boot's
-              // `loadMirrorSyncConfig` reads it back — an absent one throws `server.config_missing`
-              // there and the box never boots into mirror mode. The POST /setup-api/adopt request is
-              // the ONE interactive moment the operator can fix the deploy env, so if it is unset we
-              // refuse HERE (before any bundle fetch or DB write) rather than persist nothing and let
-              // the reboot fail. Reuse the existing `server.config_missing` code + its `variable`
-              // param shape (config.ts's `required`) — this fact is exactly a missing config var, so
-              // no new code is minted. The guard narrows `config.syncDatabaseUrl` (string | undefined)
-              // to the non-empty string `AdoptDeps.syncDatabaseUrl` requires.
-              if (config.syncDatabaseUrl === undefined) {
-                throw new AppError("server.config_missing", {
-                  variable: "WAITRON_SYNC_DATABASE_URL",
-                });
-              }
-              return adoptFromPrimary(
-                {
-                  ownerDb,
-                  ring,
-                  fetchBundle: fetchMirrorBundle,
-                  advertisedOrigin: config.advertisedOrigin,
-                  persistTrading,
-                  // `writeModuleConfig` returns the path it wrote; the dep only needs `Promise<void>`,
-                  // so discard it the same way `persistTrading` above wraps `writeTradingEnv`.
-                  persistModuleConfig: async (c) => {
-                    await writeModuleConfig(config.stateDir, c);
+            adopt: async (req) => {
+              // Adopt establishes a NATIVE subscription (swap step 4), so it needs the MIGRATOR
+              // connection that holds `pg_create_subscription` and owns the subscription it creates —
+              // distinct from `ownerDb` (the table-OWNER connection for the `deployment`/`mirror_config`
+              // writes). Opened per adopt (a one-shot interactive action) and closed in `finally` so no
+              // pool leaks on the setup path.
+              const replicationDb = await createPostgresDb(config.migrationsDatabaseUrl, {
+                max: 2,
+              });
+              try {
+                return await adoptFromPrimary(
+                  {
+                    ownerDb,
+                    replicationDb,
+                    fetchBundle: fetchMirrorBundle,
+                    advertisedOrigin: config.advertisedOrigin,
+                    environment: config.environment,
+                    persistTrading,
+                    // `writeModuleConfig` returns the path it wrote; the dep only needs `Promise<void>`,
+                    // so discard it the same way `persistTrading` above wraps `writeTradingEnv`.
+                    persistModuleConfig: async (c) => {
+                      await writeModuleConfig(config.stateDir, c);
+                    },
+                    stateDir: config.stateDir,
+                    databaseUrl: config.databaseUrl,
+                    migrationsDatabaseUrl: config.migrationsDatabaseUrl,
+                    database: ownerDatabaseName,
                   },
-                  databaseUrl: config.databaseUrl,
-                  migrationsDatabaseUrl: config.migrationsDatabaseUrl,
-                  syncDatabaseUrl: config.syncDatabaseUrl,
-                  database: ownerDatabaseName,
-                },
-                req,
-              );
+                  req,
+                );
+              } finally {
+                await replicationDb.close();
+              }
             },
             establishIdentity: (tenantId, nodeId) =>
               establishNodeIdentity({ ownerDb, ring }, tenantId, nodeId),
@@ -1091,9 +1064,8 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // fence only by the wipe-and-restore of a later round, which is a fresh boot anyway.
       readOnlyGate(
         () => holders.mode.current === "mirror" || fenced,
-        // Cursor and retirement writes use their own authentication gates.
+        // Retirement and promote writes use their own authentication gates.
         (c) =>
-          (c.req.method === "POST" && c.req.path === "/sync-api/cursor") ||
           (fenced && c.req.method === "POST" && c.req.path === "/api/box/retire") ||
           // The promote trigger is exempt UNCONDITIONALLY, so an authorized POST reaches the handler on
           // a mirror AND on a fenced node — the latter to return the precise `promotion.node_fenced`
@@ -1116,29 +1088,15 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     );
   }
 
-  // The mirror's link to its primary through B's tunnel (C2b, spec §7): the box CA + hostname
-  // `tunnelHttpClient` validates the box's TLS leaf against, the relay URL it dials, the per-peer sync
-  // token, and — from membership promotion R3a — the sync ORIGIN. All read from the DATABASE
-  // (`mirror_config`, written owner-role at adopt) and the vault (`sync.mirror_token`, sealed under the
-  // mirror's OWN box key), NEVER from env. A mirror REQUIRES them: an absent/partial `mirror_config` is
-  // a loud `server.config_invalid` (fail-closed), and an absent or unsealable token throws its own loud
-  // `credentials.*` error — never a silent no-op. The identity is now SPLIT (R3a): the subscriber it
-  // pulls as is its OWN id (`config.till.nodeId`, persisted by adopt), while the ORIGIN it pulls is the
-  // PRIMARY's id (`mirror_config.origin_node_id` = `loaded.originNodeId`) — the two are DISTINCT, and
-  // the local pull cursor is keyed `(subscriber = own, origin = primary, lane)`. `mirrorPeer.nodeId` is
-  // therefore the origin, and `dataNodeId` (below) the same origin, so the mirror's node-scoped reads
-  // resolve the replicated venue data (whose rows keep the primary's node_id). Read ONLY on a mirror (a
-  // primary sets none), and wrapped in the same db-cleanup guard the `loadKeyRing` load above uses, so a
-  // throw closes the pool rather than leaking it (only `db` is open here — the sync/retention pools are
-  // not yet). The token is never logged. Hoisted ABOVE the mounts because `mountReportApi` needs
-  // `dataNodeId`.
-  let mirror: MirrorConnection | undefined;
-  let mirrorPeer: { nodeId: string; url: string; token: string } | undefined;
   // The node whose DATA this server DISPLAYS in its node-scoped read paths (report-api's per-till/fiscal
   // reports). On a PRIMARY it is the node's own id; on a MIRROR it is the ORIGIN — the primary whose
   // replicated sales the mirror holds — because those rows keep the primary's node_id, so scoping by the
   // mirror's own id would return nothing. Distinct from `config.till.nodeId`, which stays the node's OWN
-  // identity for every WRITE / capture-origin path (membership promotion R3a).
+  // identity for every WRITE / capture-origin path (membership promotion R3a). The origin is read from
+  // `mirror_config` (written owner-role at adopt), NEVER from env. A mirror REQUIRES it: an absent
+  // record is a loud `server.config_invalid` (fail-closed). Wrapped in the same db-cleanup guard the
+  // `loadKeyRing` load above uses, so a throw closes the pool rather than leaking it. Hoisted ABOVE the
+  // mounts because `mountReportApi` needs `dataNodeId`.
   let dataNodeId: string = config.till.nodeId;
   if (isMirror) {
     try {
@@ -1152,10 +1110,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
           reason: "mirror_requires_mirror_config",
         });
       }
-      mirror = loaded;
       dataNodeId = loaded.originNodeId;
-      const token = await readMirrorToken(db, ring, config.till.tenantId);
-      mirrorPeer = { nodeId: loaded.originNodeId, url: loaded.relayUrl, token };
     } catch (error) {
       await db.close();
       throw error;
@@ -1519,231 +1474,6 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // the gated groups purely for reading order; route registration only, no database work at boot.
   mountMedia(app, { mediaDir: config.mediaDir }, log);
 
-  // The active-active sync transport. A PRIMARY enables it iff WAITRON_SYNC_PEERS is set
-  // (`loadSyncConfig` → undefined otherwise). A MIRROR always pulls (`loadMirrorSyncConfig` never
-  // returns undefined — an absent WAITRON_SYNC_DATABASE_URL is a loud server.config_missing), and
-  // its pull PEER (the relay + the per-peer token) comes from the DATABASE + the vault below, NOT
-  // from env (C2b, spec §7) — so a mirror needs no WAITRON_SYNC_PEERS. Either way the block opens
-  // its OWN pool (an app_user member with SELECT on sync_log), the primary mounts the
-  // peer-authenticated source group on the SAME app (each caller's Bearer token resolves to its
-  // enrolled sync_peers identity), and both start the background pull worker. The sync NODE ID is
-  // till.nodeId (one source of truth; no second WAITRON_SYNC_NODE_ID), and minTickMs/maxTickMs
-  // double as the worker's idle interval and backoff ceiling. A primary that sets no sync env
-  // leaves syncConfig undefined, so every existing boot is unchanged (boot.test.ts sets none).
-  // Torn down in close() below.
-  const syncConfig = isMirror ? loadMirrorSyncConfig(env) : loadSyncConfig(env);
-  const syncController = new AbortController();
-  let syncDb: Database | undefined;
-  let syncWorker: Promise<void> | undefined;
-  // The retention sweep's OWN pool + worker, declared beside the pull worker's so close() below tears
-  // both down. Both `undefined` unless sync is on AND a retention role is configured (the sweep is
-  // opt-in — see the wiring inside the `if` below).
-  let retentionDb: Database | undefined;
-  let retentionWorker: Promise<void> | undefined;
-  if (syncConfig !== undefined) {
-    syncDb = await createPostgresDb(syncConfig.databaseUrl);
-    // The authoritative replication SOURCE — only the SINGLETON primary serves it (a mirror is a
-    // subscriber that pulls + applies and never sources, C2a design §8; a sell-only local secondary must
-    // not duplicate the primary's source either). So `mountSyncApi` gates on `isSingletonPrimary`. The
-    // one exception is a FENCED node (membership rejoin R2): the `else if (fenced)` branch below serves a
-    // narrow OWN-ORIGIN-ONLY drain source (`ownOriginOnly` forces originId=self, no worker mounted), which
-    // is NOT a duplicate of this authoritative/all-origin source and re-enables no singleton duty —
-    // `isSingletonPrimary` stays false.
-    // The pull worker below still runs whenever sync is configured — pulling is NOT a singleton duty (a mirror
-    // pulls through the tunnel HTTP client, a secondary pulls too), so it stays outside this gate.
-    if (isSingletonPrimary) {
-      mountSyncApi(
-        app,
-        {
-          db: syncDb,
-          tenantId: till.tenantId,
-          nodeId: till.nodeId,
-          environment: config.environment,
-          enrolments: ALL_SYNC_ENROLMENTS,
-          moduleVersions: myModuleVersions,
-        },
-        log,
-      );
-    } else if (fenced) {
-      // Membership rejoin R2 (design §6 step 3): a fenced (sell-only) node serves its OWN-ORIGIN tail so
-      // the carrier can drain it, then wipe-and-restore in R3. `ownOriginOnly` forces originId=self, so a
-      // fenced node can never relay another origin or act as a general source — the narrow reversal of
-      // "a sell-only secondary must not source" above. It stays fully fenced otherwise: isSingletonPrimary
-      // is false (submitter/reconciler/config-writer + retention stay off), and the read-only gate still
-      // blocks tenant/fiscal writes (its single `POST /sync-api/cursor` exemption lets only the peer
-      // cursor report through).
-      mountSyncApi(
-        app,
-        {
-          db: syncDb,
-          tenantId: till.tenantId,
-          nodeId: till.nodeId,
-          environment: config.environment,
-          enrolments: ALL_SYNC_ENROLMENTS,
-          ownOriginOnly: true,
-          moduleVersions: myModuleVersions,
-        },
-        log,
-      );
-    }
-    // Hoisted to a `const` so `runLane`'s closure keeps the non-`undefined` narrowing: `syncDb` is a
-    // `let` declared outside this block, and TS widens a captured `let` back to `Database | undefined`
-    // inside a nested function, whereas a `const` assigned here holds its narrowed `Database` type.
-    const localSyncDb = syncDb;
-    // A mirror pulls through B's reverse tunnel: the peer `url` names the RELAY, but TLS terminates at
-    // the BOX, so `tunnelHttpClient` dials the relay while validating the box's own cert end-to-end
-    // against the DB-stored box CA + hostname (C2b, spec §7). A primary pulls directly over
-    // `fetchHttpClient`. `mirror`/`mirrorPeer` are always defined on a mirror (the required-check above
-    // threw otherwise); the `&& … !== undefined` is what narrows them for the tunnel branch.
-    const syncHttp =
-      isMirror && mirror !== undefined
-        ? tunnelHttpClient({ ca: mirror.boxCaPem, servername: mirror.boxHostname })
-        : fetchHttpClient;
-    // A mirror's ONE peer is the relay it dials, built from the DB config + the vault token above; a
-    // primary's peers come from WAITRON_SYNC_PEERS (loadSyncConfig).
-    const peers = isMirror && mirrorPeer !== undefined ? [mirrorPeer] : syncConfig.peers;
-    // The membership trust set (design §4): the node's own key at setup, plus the primary's key on a
-    // mirror (inherited through adoptVenue's replicated node row). Read from nodes.public_key on the
-    // app pool under the venue tenant (readMembershipTrustSet). A fresh primary trusts itself; a mirror
-    // trusts the primary — so the Slice-3 adoptMembership callback now accepts a genuinely-trusted,
-    // strictly-newer gossiped document instead of the empty-seam no-op.
-    const membershipTrustSet: TrustSet = await readMembershipTrustSet(localSyncDb, till.tenantId);
-    // Best-effort membership gossip on the pull handshake (design §5): the pull worker hands each peer's
-    // advertised /hello document here; the accept fence + term-guarded persist run on the app-role pool
-    // (localSyncDb is a member of app_user, holding the Slice-3 INSERT/UPDATE grant on node_membership).
-    // A rejection (untrusted / not-newer) is the quiet normal case; a real DB/transport fault is caught
-    // and logged by runSyncPull as sync.membership_adopt_failed. Shared by both lanes (idempotent — the
-    // persist's WHERE guard is monotonic under the two-lane race).
-    // Membership Slice 7: the LIVE serving-primary node id the apply path's config-conflict gate keys
-    // on. Initialised from the held membership document at boot, and UPDATED by the `adoptMembership`
-    // callback below when it accepts a strictly-newer document — so a promotion/demotion that arrives
-    // via gossip (no restart) is honoured on the NEXT batch, not only after a reboot (whole-branch
-    // review I1). Injected into both pull lanes as a GETTER (`() => liveServingPrimaryId`) that
-    // `syncPullOnce` reads fresh per batch. `undefined` (no held doc / no serving-primary in the chart)
-    // leaves the gate INERT — normal config down-flow is never broken (fail-safe, R-S7-2). This is a
-    // SEPARATE live holder from the disposal reader's boot-captured `carrierNodeId` const far below:
-    // disposal deliberately keys on the boot-time carrier (a fenced node does not restart on a gossiped
-    // promotion), whereas the gate must track the live serving-primary.
-    let liveServingPrimaryId =
-      heldMembership === null ? undefined : servingPrimaryNodeId(heldMembership);
-    const adoptMembership = async (raw: unknown): Promise<void> => {
-      const outcome = await adoptMembershipDocument(
-        { db: localSyncDb, trustSet: membershipTrustSet },
-        raw,
-      );
-      // Now reachable: with a real trust set the node accepts a trusted, strictly-newer document. Covered
-      // by boot.test.ts's "boot reads a REAL trust set …" case (it drives this very callback), and the
-      // accept fence + persist it delegates to are proven end-to-end in membership-gossip.e2e.test.ts.
-      if (outcome.accepted) {
-        log("info", "membership.adopted", { term: outcome.document.body.term });
-        // Membership Slice 7: keep the config-conflict gate's serving-primary LIVE. The newly-accepted
-        // document may promote/demote the serving-primary, and both pull lanes read this holder fresh
-        // per batch through the getter injected below — so the gate honours the new chart without a
-        // restart (whole-branch review I1). `undefined` when the new chart names no serving-primary,
-        // which leaves the gate inert (fail-safe, R-S7-2).
-        liveServingPrimaryId = servingPrimaryNodeId(outcome.document);
-        // Membership rejoin R1 (design §6 step 2): if this document fences THIS node while it is
-        // running unfenced (was serving-primary this boot), restart into the fenced posture — the boot
-        // path (reconcile axes + mount the read-only gate) applies on reboot. Same next-tick SIGTERM
-        // R3b promotion uses (boot.ts): fire on the NEXT tick so the pull loop's tick returns first;
-        // the supervisor reboots the box. `requestRestart` is only wired in the setup branch, so the
-        // inline process.kill form is used here, as the mirror promote does.
-        if (shouldFenceRestart(fenced, outcome.document, till.nodeId)) {
-          log("info", "membership.fenced_restart", { term: outcome.document.body.term });
-          setTimeout(() => process.kill(process.pid, "SIGTERM"), 0);
-        }
-      }
-    };
-    const runLane = (lane: SyncLane, minIdleMs: number): Promise<void> =>
-      runSyncPull({
-        localDb: localSyncDb,
-        subscriberId: till.nodeId,
-        tenantId: till.tenantId,
-        localEnvironment: config.environment,
-        http: syncHttp,
-        batchLimit: 500,
-        peers,
-        sleep: realSleep,
-        signal: syncController.signal,
-        minIdleMs,
-        maxBackoffMs: config.maxTickMs,
-        log,
-        lane,
-        enrolments: ALL_SYNC_ENROLMENTS,
-        // SP-2b: this subscriber's own per-module applied versions (boot snapshot) + the table→module
-        // map, threaded through applyBatch for the schema-version gate.
-        moduleVersions: myModuleVersions,
-        moduleByTable: MODULE_BY_TABLE,
-        adoptMembership,
-        // Membership Slice 7: the LIVE serving-primary id for the apply path's config-conflict gate,
-        // passed as a getter read fresh per batch (see `liveServingPrimaryId` above). On the CARRIER
-        // draining a returned node this resolves to the carrier's own id (the returned node's rows carry
-        // a different origin → rejected); on a normal secondary/mirror it is the primary it pulls from
-        // (rows carry origin = primary → applied). `undefined` leaves the gate inert (fail-safe, R-S7-2).
-        servingPrimaryId: () => liveServingPrimaryId,
-      });
-    // The ORDERED lane at the existing idle interval (config.minTickMs) and the FAST payments lane at
-    // the tighter syncConfig.fastMinIdleMs, both against the same peers/localDb/http, both under the one
-    // syncController and the existing close() teardown (spec §4d). Promise.all so a rejection from
-    // either reaches close()'s `await syncWorker.catch(() => {})` swallow below; the two lanes
-    // touch disjoint tables and disjoint cursor rows, so they never race (spec §4d). `.then(() => {})`
-    // keeps syncWorker a `Promise<void>` so the existing teardown shape is unchanged.
-    syncWorker = Promise.all([
-      runLane("ordered", config.minTickMs),
-      runLane("fast", syncConfig.fastMinIdleMs),
-    ]).then(() => {});
-    // A SECOND subscription so a lane that settles by rejection (an unexpected throw escaping
-    // runSyncPull's own per-peer catch) is never a process-level unhandled rejection in the window
-    // BEFORE close() runs — the window the single-worker slice never had, because `syncWorker` was
-    // then the same promise the caller already held. This does NOT swallow the rejection for close():
-    // `syncWorker` still rejects, so close()'s own `await syncWorker.catch(() => {})` below is still
-    // the load-bearing teardown-ordering guard (its removal still fails the rejecting-worker test).
-    // In production runSyncPull never rejects (its loop backs off every per-peer error), so this only
-    // ever fires under a mocked worker in the test — but an EMPTY catch here would drop that signal
-    // silently if it ever did happen for real, with sync stopped and no log line to say why. Log it
-    // instead, the same `codeOf`-classified shape `loop.ts` and `error-boundary.ts` already use.
-    syncWorker.catch((err) => log("error", "sync.worker_rejected", { errorCode: codeOf(err) }));
-
-    // The scheduled retention sweep (spec §3.2) — this is what finally SCHEDULES the
-    // previously-unwired pruneSyncLog. Opt-in: only when a retention URL is configured. It opens
-    // its OWN pool using app_user grants, including DELETE on sync_log, and starts
-    // runRetentionSweep under the SAME syncController the pull worker uses, so close()'s single
-    // `syncController.abort()` stops the sweep too. Each tick prunes the log to the min across
-    // every subscriber's cursor and alarms a stalled one; it NEVER evicts and NEVER alive-filters
-    // the prune (an inherited owner decision — a human decides eviction, spec §3.4). Torn down in
-    // close() below. `.catch` logs a settle-by-rejection the same way the pull worker's does —
-    // runRetentionSweep swallows its own per-tick faults, so in practice this only ever fires
-    // under a mocked worker in the test, but an unhandled rejection in the pre-close() window
-    // would be silent otherwise. Retention is a SINGLETON duty: only the singleton primary prunes
-    // the shared `sync_log`. A mirror holds no `sync_log` (it applies, never captures) and a
-    // sell-only local secondary must not run a SECOND pruner against the primary's log — so both
-    // skip the sweep AND the `sync.retention_unconfigured` warn (C2a design §8). Gates on
-    // `isSingletonPrimary`, not `!isMirror`.
-    if (isSingletonPrimary && syncConfig.retentionDatabaseUrl !== undefined) {
-      retentionDb = await createPostgresDb(syncConfig.retentionDatabaseUrl);
-      retentionWorker = runRetentionSweep({
-        db: retentionDb,
-        sleep: realSleep,
-        signal: syncController.signal, // the same controller close() aborts
-        tickMs: syncConfig.retentionTickMs,
-        // Opt-in lag alarm (spec §3.2): when WAITRON_SYNC_LAG_ALARM_ROWS is set the sweep emits the
-        // retention-variant sync.stream_stalled past this threshold — the operator signal an eviction
-        // decision reads. Undefined (unset) leaves the sweep prune-only.
-        lagAlarmRows: syncConfig.lagAlarmRows,
-        log,
-      });
-      retentionWorker.catch((err) =>
-        log("error", "sync.worker_rejected", { errorCode: codeOf(err) }),
-      );
-    } else if (isSingletonPrimary) {
-      // A singleton primary with sync on but no retention role configured: the log will grow unpruned.
-      // Loud, not fatal (spec §3.2/§8 — opt-in, documented-required-in-prod), so an existing sync host that
-      // has not provisioned the role still boots unchanged. A non-singleton node (mirror or local secondary)
-      // skips this warn too — it prunes nothing, so an unconfigured retention role is not its concern.
-      log("warn", "sync.retention_unconfigured", {});
-    }
-  }
-
   // Start backups only on a singleton primary after the configured backup connection
   // passes assertBackupCanReadFiscal. The worker reuses that pool for manifest reads;
   // pg_dump opens its own connection with the same URL. A probe failure leaves backup
@@ -1817,59 +1547,17 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     log("info", "backup.disabled", {});
   }
 
-  // Read replication lag through the sync pool when sync is configured. Capture the pool in a
-  // const so its non-undefined type is preserved inside the reader closure. The deployment holds
-  // one tenant per database. app_user can read its sync log.
-  const lagPool = syncDb;
-  // Hoisted to a plain `const` so TS keeps the `carrierNodeId !== undefined` narrowing inside the
-  // `readDisposal` arrow below (a captured `const`, unlike a `let`, does not widen — same rule the
-  // `localSyncDb` comment above states).
-  //
-  // Carrier-keying coupling the disposal guard relies on: `readDrainProgress` looks the carrier's cursor
-  // up by `sync_cursor.subscriber_id = carrierNodeId`, where `carrierNodeId` is a membership NODE id
-  // (`servingPrimaryNodeId` of the held doc). But the stored `subscriber_id` is whatever the carrier's
-  // token was enrolled under in THIS node's `sync_peers`. The lookup matches ONLY because the carrier's
-  // pull loop reports its cursor with `subscriberId = till.nodeId` (`runSyncPull`, boot.ts:~1369) — i.e.
-  // the house convention `subscriberId === nodeId`. Were the carrier enrolled under a different (e.g.
-  // friendly-name) subscriber id, the cursor lookup returns null → `laneCarrier = 0` → the box reads
-  // `drained:false` INDEFINITELY. That is FAIL-SAFE (never a false `drained:true`, so R2 never green-lights
-  // a junking of a node that hasn't drained), but R3's retire action — which consumes `drained` — must
-  // rely on this same convention or enforce it (enrol the carrier under its nodeId, or key on the node id).
+  // The carrier that would drain this node's fenced tail (`servingPrimaryNodeId` of the held chart),
+  // captured at boot. Kept for the retire/box-status consumers; Task 7 rewrites how it is USED.
   const carrierNodeId = heldMembership === null ? undefined : servingPrimaryNodeId(heldMembership);
-  // The fenced node's own drain-progress reader, computed ONCE and shared by both consumers: the
-  // box-status `disposal` surface (which wraps it with `carrierNodeId` for the wire shape) and
-  // the retire/evict endpoint (`mountBoxRetireApi`, which gates the self-eviction on its
-  // `drained`). Present only on a FENCED node whose held document names a carrier — reads the
-  // own-origin tail vs the carrier's reported cursor on the SAME sync pool under `withTenant` the
-  // lag reader uses; absent (undefined) otherwise, which box-status reports as
-  // `disposal.applicable:false` and retire refuses as `node.retire_no_carrier`. Factored to one
-  // reader so the fragile carrier-keying coupling documented above has a single copy — a future
-  // change to how the drain read is scoped cannot desync the two consumers.
-  //
-  // Two distinct staleness couplings, and only one is fail-safe:
-  //  - Subscriber-id keying (documented above): if the carrier were enrolled under a non-nodeId
-  //    subscriber id, the cursor lookup misses and the reader reads `drained:false` INDEFINITELY. That
-  //    is fail-safe — it can only yield a false `drained:false`, never a false `drained:true` — so within
-  //    ONE carrier retire never green-lights junking a node that has not drained.
-  //  - Boot-captured CARRIER (`carrierNodeId`, bound here at boot; a fenced node does not restart on a
-  //    carrier change — `shouldFenceRestart` is false once `bootFenced`): after a SECOND failover the
-  //    reader still keys on the OLD carrier's cursor, so it CAN return a false `drained:true` (the tail
-  //    reached the old carrier, not the current survivor). This is NOT fail-safe on its own. For the
-  //    RETIRE consumer it is closed at request time: retireSelf re-derives the current carrier from the
-  //    fresh held chart and refuses `node.retire_carrier_changed` on a mismatch (I1), so it never evicts
-  //    against a stale carrier. For the box-status `disposal` READ it remains a benign informational
-  //    stale view — a read, not the destructive action — reconciled on the next boot.
-  const readFenceDrainProgress =
-    lagPool !== undefined && fenced && carrierNodeId !== undefined
-      ? () =>
-          withTenant(lagPool, till.tenantId, (tx) =>
-            readDrainProgress(tx, {
-              selfNodeId: till.nodeId,
-              carrierNodeId,
-              enrolments: ALL_SYNC_ENROLMENTS,
-            }),
-          )
-      : undefined;
+  // STOPGAP (Task 7 rewrites this reader and its three consumers over the native fence-LSN/slot drain,
+  // swap spec §4). The outbox drain reader is gone with the sync block, and the fence-LSN watermark
+  // reader (`confirmed_flush_lsn >= fence_lsn && !active`, Ruling C2) is Task 7's. Until then no
+  // fenced-drain progress is reported: box-status shows `disposal.applicable:false` and retire refuses
+  // `node.retire_no_carrier`. `undefined` keeps all three consumers compiling and fail-safe (never a
+  // false `drained:true`). The IIFE keeps the type the union (not narrowed to `undefined`), so the
+  // `readDisposal` consumer's callable branch still type-checks against Task 7's future reader.
+  const readFenceSlotDrain = ((): (() => Promise<DrainProgress>) | undefined => undefined)();
   mountBoxStatusApi(
     app,
     {
@@ -1879,24 +1567,21 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       health,
       now,
       tlsCertPath: config.tls?.certFile,
-      readReplicationLag:
-        lagPool === undefined
-          ? undefined
-          : () => withTenant(lagPool, till.tenantId, (tx) => lagFor(tx)),
+      // STOPGAP: the native slot-lag reader is Task 7's box-status rewrite. Off until then.
+      readReplicationLag: undefined,
       // Expose freshness only when the backup worker started successfully. This reports
       // the effective worker state, including a failed probe, rather than configuration alone.
       // The disposal reader carries the retiring node id when its fence is active.
       readDisposal:
-        readFenceDrainProgress !== undefined && carrierNodeId !== undefined
-          ? async () => ({ carrierNodeId, ...(await readFenceDrainProgress()) })
+        readFenceSlotDrain !== undefined && carrierNodeId !== undefined
+          ? async () => ({ carrierNodeId, ...(await readFenceSlotDrain()) })
           : undefined,
       readBackup:
         backupWorker !== undefined
           ? () => readBackupStatus(backupBackends, backupConfig!.staleAfterMs, now())
           : undefined,
-      // Expose the configuration-conflict count when the sync pool exists.
-      readConfigConflicts:
-        lagPool === undefined ? undefined : () => readConfigConflictCount(lagPool),
+      // STOPGAP: the config-conflict count read the outbox apply pool; Task 7 rewires box-status.
+      readConfigConflicts: undefined,
       // Report the effective mode the box is actually serving as — the same holder the read-only gate
       // and mirror-session middlewares read — so the status matches what the box enforces and tracks a
       // live promotion the same way, rather than issuing a fresh DB read of its own.
@@ -1913,9 +1598,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // The self-eviction endpoint (retire/evict R3): a fully-drained fenced node retires itself. Mounted
   // UNCONDITIONALLY (a real management endpoint) — `retireSelf`'s ordered guards make it safe on any
   // node: a serving node refuses `node.retire_not_fenced`, and a fenced node with no carrier refuses
-  // `node.retire_no_carrier` (signalled by `readFenceDrainProgress === undefined`). It consumes the
-  // SAME shared `readFenceDrainProgress` box-status's `disposal` surface uses (see its definition above
-  // for the drain-read scoping and the boot-captured staleness), so the two views cannot desync.
+  // `node.retire_no_carrier` (signalled by `readDrainProgress === undefined`). It consumes the SAME
+  // stopgap `readFenceSlotDrain` box-status's `disposal` surface uses; Task 7 rewrites both over the
+  // native fence-LSN/slot drain, so the two views cannot desync.
   mountBoxRetireApi(
     app,
     {
@@ -1923,10 +1608,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       ring,
       tenantId: till.tenantId,
       nodeId: till.nodeId,
-      readDrainProgress: readFenceDrainProgress,
-      // The boot carrier `readFenceDrainProgress` keys on. retireSelf re-derives the current carrier from
-      // the fresh held chart and refuses `node.retire_carrier_changed` if it changed — the request-time
-      // close of the boot-captured staleness noted at `readFenceDrainProgress`'s definition (I1).
+      readDrainProgress: readFenceSlotDrain,
+      // The boot carrier the drain reader keys on. retireSelf re-derives the current carrier from the
+      // fresh held chart and refuses `node.retire_carrier_changed` if it changed (I1).
       carrierNodeId,
     },
     log,
@@ -1983,39 +1667,51 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     log("info", "tunnel.disabled", {});
   }
 
-  // The C2b operator flow's PRIMARY endpoint: POST /management-api/mirror-bundle mints a
-  // MirrorBundle a cloud mirror adopts (design §4). PRIMARY-only, and only when the retention
-  // sweep opened its retention connection — the handler mints the peer token using app_user's
-  // INSERT grant via `enrolPeer`, so the endpoint exists exactly when the connection it needs
-  // does (a mirror never opens one, and a primary with no retention connection does not mount
-  // this endpoint). `relayUrl` is this primary's own relay coordinates (`loadTunnelConfig`,
-  // undefined when no tunnel is configured — the route then refuses `mirror.no_relay` before
-  // minting); `boxHostname` is the same box leaf SAN the discovery-api and cert-minting use;
-  // `designated` is `config.till` (the five WAITRON_TILL_*_ID). Mounted before the SPA catch-alls
-  // below. Kept consistent with retention's gate (`isSingletonPrimary`): `retentionDb` is now
-  // only opened on the singleton primary, so the `!== undefined` already implies it, but gating
-  // explicitly on `isSingletonPrimary` keeps this primary-only endpoint reading the same axis as
-  // the sweep it depends on.
-  if (isSingletonPrimary && retentionDb !== undefined) {
+  // The operator flow's PRIMARY endpoint: POST /management-api/mirror-bundle mints a MirrorBundle a
+  // cloud mirror adopts (design §4). SINGLETON-PRIMARY-only (a mirror emits no bundle, and a sell-only
+  // local secondary must not either). The bundle now carries the primary's native-replication
+  // CONNECTION (swap step 4) — `config.replication` (the `waitron_repl` credential + advertise
+  // address); the route refuses `server.config_missing` (503) when it is unconfigured. `database` is
+  // the name of the primary's own database, carried in the bundle so the mirror's subscription names
+  // the right dbname to COPY from. `relayUrl` is this primary's own relay coordinates
+  // (`loadTunnelConfig`, undefined when no tunnel is configured — the route then refuses
+  // `mirror.no_relay`); `boxHostname` is the same box leaf SAN the discovery-api and cert-minting use;
+  // `designated` is `config.till` (the five WAITRON_TILL_*_ID). Mounted before the SPA catch-alls below.
+  if (isSingletonPrimary) {
+    // This primary's own native-replication credential + advertise address (swap spec §2.2), loaded
+    // from env here — it rides the mirror bundle, not the sale path, so it is only read on the
+    // bundle-minting primary. `undefined` when unconfigured; the route then refuses.
+    const replicationConfig = loadReplicationConfig(env);
+    // The NAME of this primary's own database, carried in the bundle's replication connection so the
+    // mirror's `CREATE SUBSCRIPTION` names the right `dbname`. Parsed from the app URL, never the URL
+    // itself (it can carry a password); a socket/malformed URL falls back to a neutral label.
+    let primaryDatabaseName = "the primary database";
+    try {
+      const parsed = new URL(config.databaseUrl).pathname.replace(/^\//, "");
+      if (parsed !== "") primaryDatabaseName = parsed;
+    } catch {
+      // Keep the neutral label.
+    }
     mountMirrorBundleApi(
       app,
       {
         appDb: db,
-        retentionDb,
         // The box vault key `assembleMirrorBundle` uses to unseal the primary's identity key and endorse
-        // the standby's key (membership promotion R2). Already in scope for the provisioning-secret seal / identity above.
+        // the standby's key (membership promotion R2). Already in scope for the provisioning-secret seal.
         ring,
         stateDir: config.stateDir,
-        // A FULL https URL, not bare host:port: the mirror consumes this as its `peer.url` and
-        // `packages/sync/src/pull.ts` builds `${trimSlash(peer.url)}/sync-api/hello` → `undiciFetch`,
-        // which throws on a scheme-less address. The mirror always speaks HTTPS end-to-end to the box
-        // cert through the tunnel, so the scheme is https (matches Task 5's `https://relay.test:9000/`).
+        // A FULL https URL, not bare host:port: the mirror consumes this end-to-end to the box cert
+        // through the tunnel, so the scheme is https (matches Task 5's `https://relay.test:9000/`).
         relayUrl:
           tunnelConfig !== undefined
             ? `https://${tunnelConfig.relayHost}:${tunnelConfig.relayPort}/`
             : undefined,
         boxHostname: BOX_HOSTNAME,
         designated: config.till,
+        // The primary's own native-replication credential + advertise address, undefined when
+        // unconfigured (the route then refuses `server.config_missing`).
+        replication: replicationConfig,
+        database: primaryDatabaseName,
       },
       log,
     );
@@ -2070,7 +1766,6 @@ export async function startServer(env: Record<string, string | undefined>): Prom
               locationId: till.locationId,
               databaseUrl: config.databaseUrl,
               migrationsDatabaseUrl: config.migrationsDatabaseUrl,
-              syncDatabaseUrl: config.syncDatabaseUrl,
               environment: config.environment,
             };
             await writeTradingEnv(config.stateDir, next);
@@ -2206,10 +1901,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   });
 
   // The shared `StartedServer` + `close()` (see `makeStartedServer`), with the trading mode's own
-  // teardown supplied here: stop the main loop and the sync/retention workers, then drain the app,
-  // sync and retention pools. Byte-for-byte the sequence this branch ran inline before the setup/
-  // trading split — the ordering guarantees (abort the loop and sync together, await the loop, swallow
-  // a worker's settle-by-rejection so it can never skip the guaranteed pool teardown) are unchanged.
+  // teardown supplied here: stop the main loop, the outbound tunnel and the backup sweep, then drain
+  // the app and replication pools. The ordering guarantees (abort the loop and workers together, await
+  // the loop, swallow a worker's settle-by-rejection so it can never skip the guaranteed pool
+  // teardown) are unchanged.
   //
   // Advertise waitron.local over mDNS LAST — after every throwing setup step in this branch AND once
   // `startListening` has bound the socket — so no boot-failure path can leak the UDP :5353 socket (an
@@ -2222,31 +1917,15 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     {
       stopWork: async () => {
         controller.abort();
-        // Stop the sync pull worker alongside the main loop so close() never leaves it dangling; the
-        // worker's abort-aware sleep returns promptly rather than waiting out a backoff.
-        syncController.abort();
-        // Stop the outbound tunnel client the same way — its own controller, aborted here so close()
-        // never leaves it dialing; runTunnelClient resolves promptly on abort (it destroys every live
-        // socket and cancels every pending backoff nap). Aborted alongside the others, awaited below.
+        // Stop the outbound tunnel client — its own controller, aborted here so close() never leaves it
+        // dialing; runTunnelClient resolves promptly on abort (it destroys every live socket and
+        // cancels every pending backoff nap). Aborted alongside the others, awaited below.
         tunnelController.abort();
         // Stop the scheduled backup sweep the same way — its own controller, aborted here so close()
         // never leaves it mid-cadence; runBackupSweep's abort-aware sleep returns promptly rather than
         // waiting out its (up to daily) interval. Aborted alongside the others, awaited below.
         backupController.abort();
         await loop;
-        // Swallow a worker rejection so it can never skip the guaranteed teardown below. The worker is
-        // still AWAITED — a clean shutdown drains it exactly as before, its abort-aware sleep returning
-        // promptly — but if it settles by rejection (an unexpected throw escaping runSyncPull's own
-        // per-peer catch), `.catch(() => {})` keeps that from throwing out of close() BEFORE the pool
-        // teardown, which would leak the HTTP server and both connection pools on exactly the path that
-        // failed. close() resolves either way; the worker's own errors are logged inside runSyncPull
-        // (sync.pull_failed / sync.stream_stalled), not here.
-        if (syncWorker !== undefined) await syncWorker.catch(() => {});
-        // The retention sweep worker, torn down the identical way: `syncController.abort()` above already
-        // stopped it (it shares that signal), so this only awaits its settle, swallowing a rejection so
-        // it can never skip the guaranteed pool teardown below. Its own per-tick faults are logged and
-        // swallowed inside runRetentionSweep, not here.
-        if (retentionWorker !== undefined) await retentionWorker.catch(() => {});
         // The outbound tunnel worker, torn down the identical way: tunnelController.abort() above
         // already signalled it, so this only awaits its settle, swallowing a settle-by-rejection so it
         // can never skip the guaranteed pool teardown below. It never rejects in production (its slots
@@ -2267,8 +1946,6 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         // The replication owner pool (M8), opened after the mirror-config read above and closed here
         // beside the app pool.
         await replicationDb.close();
-        if (syncDb !== undefined) await syncDb.close();
-        if (retentionDb !== undefined) await retentionDb.close();
         // The backup sweep's backup manifest read pool. `stopWork` above already aborted +
         // awaited `backupWorker`, so no tick can be reading the journal off it as it closes.
         if (backupDb !== undefined) await backupDb.close();

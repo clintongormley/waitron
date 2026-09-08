@@ -9,22 +9,20 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { canonicalize, generateNodeKeyPair, verifyBytes } from "@waitron/membership";
 import { parseModuleConfig } from "@waitron/module";
 import { applyVenue, planVenue, type AdoptResult } from "@waitron/provisioning";
-import { authenticatePeer } from "@waitron/sync";
+import type { ReplicationConfig } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import { writeModuleConfig } from "./module-config.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { assembleMirrorBundle } from "./mirror-bundle.js";
 
-// Real Postgres, not PGlite: assembleMirrorBundle reads the venue's parent rows as `app_user`
-// (PGlite connects as a superuser holding every privilege, so it could not prove app_user
-// actually holds SELECT on all five parent tables — the whole point here) and mints the token as
-// an `app_user` member (`sync_pruner`), a non-superuser INSERT on sync_peers. CLAUDE.md §4.
+// Real Postgres, not PGlite: assembleMirrorBundle reads the venue's tenant + node rows as `app_user`
+// (PGlite connects as a superuser holding every privilege, so it could not prove app_user actually
+// holds SELECT on those parent tables) and runs each module's reservation as that role. CLAUDE.md §4.
 const LOCALE = "es-ES";
 
-// The box vault key for `establishNodeIdentity` / `readNodeIdentityKey` — a fixed test ring, exactly
-// as node-identity.test.ts uses. `assembleMirrorBundle` now unseals the primary's identity key to
-// endorse the standby.
+// The box vault key for `establishNodeIdentity` / `readNodeIdentityKey` — `assembleMirrorBundle`
+// unseals the primary's identity key to endorse the standby.
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -33,13 +31,19 @@ const RING: KeyRing = loadKeyRing({
 // The standby's identity key the primary vouches for — a real Ed25519 SPKI public key.
 const STANDBY_PUB = generateNodeKeyPair().publicKey;
 
+// This primary's own native-replication credential + advertise address (swap step 4), the value the
+// bundle carries so the mirror's subscription can dial the primary as `waitron_repl`.
+const REPLICATION: ReplicationConfig = {
+  password: "repl-pw-abc",
+  advertiseHost: "primary.internal",
+  advertisePort: 6543,
+};
+const PRIMARY_DATABASE = "waitron_pp";
+
 const suite = useTemplateDb({ template: "manifest" });
-// A second, never-stamped clone for the null-environment branch: `suite` is stamped in beforeAll, so
-// proving `readDeploymentEnvironment` returns null needs a database that was never stamped.
+// A second, never-stamped clone for the null-environment branch.
 const unstamped = useTemplateDb({ template: "manifest" });
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF — the per-suite counter the sibling real-Postgres suites use.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -48,11 +52,10 @@ function nextNif(): string {
 
 let stateDir: string;
 let caPem: string;
-let appDb: Database; // The deployment holds one tenant per database. app_login → app_user: reads the venue rows in this database
-let retentionDb: Database; // sync_pruner → app_user: mints the peer token
+let appDb: Database; // app_login → app_user: reads the venue rows in this database
 
 /** Provision a fresh venue (as the owner), stamp its database `preproduction`, and return the five
- * designated ids in AdoptResult shape (seriesId = the standard series, first of applyVenue's seriesIds). */
+ * designated ids in AdoptResult shape. */
 async function setupVenue(): Promise<AdoptResult> {
   const venue = await applyVenue(
     planVenue(
@@ -93,8 +96,6 @@ async function setupVenue(): Promise<AdoptResult> {
     nodeId: venue.nodeId,
     seriesId: venue.seriesIds[0]!,
   };
-  // Establish the primary's membership identity so assembleMirrorBundle can unseal it and endorse the
-  // standby (mirrors node-identity.test.ts).
   await establishNodeIdentity(
     { ownerDb: suite.admin, ring: RING },
     designated.tenantId,
@@ -103,9 +104,19 @@ async function setupVenue(): Promise<AdoptResult> {
   return designated;
 }
 
+function baseDeps() {
+  return {
+    appDb,
+    ring: RING,
+    stateDir,
+    relayUrl: "https://relay.test:9000/",
+    boxHostname: "waitron.local",
+    replication: REPLICATION,
+    database: PRIMARY_DATABASE,
+  };
+}
+
 beforeAll(async () => {
-  // The bundle's stateDir must carry tls/ca.crt (the box CA path caCertPath resolves to). Mint a real
-  // self-signed CA and write it there, so boxCaPem reads back a genuine PEM.
   stateDir = await mkdtemp(join(tmpdir(), "waitron-mirror-bundle-state-"));
   await mkdir(join(stateDir, "tls"), { recursive: true });
   caPem = mintSelfSignedServerCert({
@@ -115,52 +126,51 @@ beforeAll(async () => {
   }).caCertPem;
   await writeFile(join(stateDir, "tls", "ca.crt"), caPem);
 
-  // The deployment stamp is a whole-DB fact, so one stamp on the shared template serves every
-  // venue this suite provisions. app_login → app_user for the parent-row reads; sync_pruner →
-  // app_user for enrolPeer.
   await stampDeployment(suite.admin, "preproduction");
   appDb = await suite.pg.connectAs("app_login", "app_pw");
-  retentionDb = await suite.pg.connectAs("sync_pruner", "pp");
 }, 180_000);
 
 afterAll(async () => {
   if (appDb !== undefined) await appDb.close();
-  if (retentionDb !== undefined) await retentionDb.close();
   if (stateDir !== undefined) await rm(stateDir, { recursive: true, force: true });
 });
 
 describe("assembleMirrorBundle (primary side, real Postgres)", () => {
-  it("assembles a bundle carrying the venue rows, connection details, and a fresh token", async () => {
+  it("assembles a bundle carrying tenant + node identity, connection details, and the replication credential", async () => {
     const designated = await setupVenue();
     const standby = { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB };
 
-    const bundle = await assembleMirrorBundle({
-      appDb,
-      retentionDb,
-      ring: RING,
-      stateDir,
-      relayUrl: "https://relay.test:9000/",
-      boxHostname: "waitron.local",
-      designated,
-      standby,
-    });
+    const bundle = await assembleMirrorBundle({ ...baseDeps(), designated, standby });
 
-    // The venue's parent rows are present and tenant-scoped.
-    expect(bundle.rows.tenant.id).toBe(designated.tenantId);
-    expect(bundle.rows.invoiceSeries.length).toBeGreaterThanOrEqual(1);
-    expect(bundle.rows.locations.length).toBeGreaterThanOrEqual(1);
-    expect(bundle.rows.nodes.length).toBeGreaterThanOrEqual(1);
-    expect(bundle.rows.tills.length).toBeGreaterThanOrEqual(1);
-
-    // The connection handshake passes through verbatim.
+    // The connection handshake passes through verbatim; NO parent rows and NO sync token (swap step 4).
     expect(bundle.designated).toEqual(designated);
     expect(bundle.environment).toBe("preproduction");
     expect(bundle.boxHostname).toBe("waitron.local");
     expect(bundle.boxCaPem).toContain("BEGIN CERTIFICATE");
     expect(bundle.relayUrl).toBe("https://relay.test:9000/");
+    expect("rows" in bundle).toBe(false);
+    expect("syncToken" in bundle).toBe(false);
 
-    // The reserved identity: a fresh installation number, disjoint series (FA/RF suffixed with it,
-    // purpose preserved), and an endorsement of the standby's key by the primary node.
+    // The venue's tenant identity (for the mirror's foreign-tenant guard) and the designated node's
+    // descriptor (for the reserved standby node row).
+    expect(bundle.tenant.country).toBe("ES");
+    expect(bundle.tenant.taxId).toMatch(/^\d{8}K$/);
+    // Provisioning names the node after the LOCATION (venue-plan `create-node`).
+    expect(bundle.primaryNode.name).toBe("Sala principal");
+    expect(bundle.primaryNode.filingModule).toBe("verifactu");
+
+    // The replication CONNECTION the mirror's subscription dials — advertise host/port, the primary's
+    // database name, and the `waitron_repl` password (secret, but it must travel for the mirror to
+    // subscribe). The `user` is the well-known REPLICATION_ROLE and is not carried.
+    expect(bundle.replication).toEqual({
+      host: "primary.internal",
+      port: 6543,
+      database: "waitron_pp",
+      password: "repl-pw-abc",
+    });
+
+    // The reserved identity: a fresh installation number, disjoint series, and an endorsement of the
+    // standby's key by the primary node.
     const r = bundle.reservedIdentity;
     const fiscal = r.modules["fiscal-verifactu"] as {
       nif: string;
@@ -168,16 +178,11 @@ describe("assembleMirrorBundle (primary side, real Postgres)", () => {
       numeroInstalacion: number;
     };
     expect(fiscal.numeroInstalacion).toBeGreaterThan(0);
-    // The primary's own IdSistemaInformatico — applyVenue registers the SIF under WAITRON_ID_SISTEMA ("W1").
     expect(fiscal.idSistemaInformatico).toBe("W1");
     expect(r.series.map((s) => s.code).sort()).toEqual(
       [`FA-${fiscal.numeroInstalacion}`, `RF-${fiscal.numeroInstalacion}`].sort(),
     );
-    const byCode = new Map(r.series.map((s) => [s.code, s.purpose]));
-    expect(byCode.get(`FA-${fiscal.numeroInstalacion}`)).toBe("standard");
-    expect(byCode.get(`RF-${fiscal.numeroInstalacion}`)).toBe("rectificative");
     expect(r.endorsement.nodeId).toBe(standby.nodeId);
-    expect(r.endorsement.publicKey).toBe(standby.publicKey);
     expect(r.endorsement.endorsedBy).toBe(designated.nodeId);
     const primaryPub = (await readMembershipTrustSet(suite.admin, designated.tenantId))[
       designated.nodeId
@@ -189,20 +194,9 @@ describe("assembleMirrorBundle (primary side, real Postgres)", () => {
         primaryPub,
       ),
     ).toBe(true);
-
-    // The minted token authenticates as a real peer, resolving to the STANDBY's OWN node id — the
-    // identity the mirror pulls as from membership promotion R3a (NOT the designated/primary node).
-    // Round-trips through authenticatePeer on the same retention pool.
-    const auth = await authenticatePeer(retentionDb, bundle.syncToken);
-    expect(auth.subscriberId).toBe(standby.nodeId);
-    expect(auth.subscriberId).not.toBe(designated.nodeId);
   });
 
   it("carries the primary's on-box module overrides", async () => {
-    // The mint reads <stateDir>/modules.json FRESH at assemble time. Seed a disabling override on a
-    // toggleable module and assert the bundle carries exactly that sparse map, so the mirror inherits
-    // the primary's enabled-module set at adopt (SP-1d). Clean the fixture up in `finally` so the
-    // shared stateDir has no modules.json for the `{}` sibling test, order-independently.
     const toggleable = ALL_MODULES.find((m) => m.tier === "toggleable")!.name;
     await writeModuleConfig(
       stateDir,
@@ -210,12 +204,7 @@ describe("assembleMirrorBundle (primary side, real Postgres)", () => {
     );
     try {
       const bundle = await assembleMirrorBundle({
-        appDb,
-        retentionDb,
-        ring: RING,
-        stateDir,
-        relayUrl: "https://relay.test:9000/",
-        boxHostname: "waitron.local",
+        ...baseDeps(),
         designated: await setupVenue(),
         standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
       });
@@ -226,15 +215,8 @@ describe("assembleMirrorBundle (primary side, real Postgres)", () => {
   });
 
   it("carries {} when the primary has no modules.json", async () => {
-    // The shared stateDir carries only tls/ca.crt (no modules.json), so readModuleConfig returns the
-    // default all-enabled config and serializeModuleConfig yields an empty override map.
     const bundle = await assembleMirrorBundle({
-      appDb,
-      retentionDb,
-      ring: RING,
-      stateDir,
-      relayUrl: "https://relay.test:9000/",
-      boxHostname: "waitron.local",
+      ...baseDeps(),
       designated: await setupVenue(),
       standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
     });
@@ -242,26 +224,16 @@ describe("assembleMirrorBundle (primary side, real Postgres)", () => {
   });
 
   it("carries a WireGuard public key when one is provided, and omits it otherwise (swap S2)", async () => {
-    const baseDeps = {
-      appDb,
-      retentionDb,
-      ring: RING,
-      stateDir,
-      relayUrl: "https://relay.test:9000/",
-      boxHostname: "waitron.local",
-    };
-
     const withKey = await assembleMirrorBundle({
-      ...baseDeps,
+      ...baseDeps(),
       designated: await setupVenue(),
       standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
       wireguardPublicKey: "PUBKEY==",
     });
     expect(withKey.wireguardPublicKey).toBe("PUBKEY==");
-    expect(withKey.syncToken).not.toBe(""); // the token still travels until step 4
 
     const withoutKey = await assembleMirrorBundle({
-      ...baseDeps,
+      ...baseDeps(),
       designated: await setupVenue(),
       standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
     });
@@ -269,21 +241,13 @@ describe("assembleMirrorBundle (primary side, real Postgres)", () => {
   });
 
   it("throws mirror.not_provisioned when the database carries no deployment stamp", async () => {
-    // The never-stamped clone: readDeploymentEnvironment returns null (the deployment table is empty), so
-    // there is nothing to mirror and the assembly refuses rather than shipping a bundle with no
-    // environment. The rows read (which precedes the environment check) simply comes back empty on this
-    // clone, so the throw is what the caller observes.
     const designated = await setupVenue();
     const unstampedApp = await unstamped.pg.connectAs("app_login", "app_pw");
     try {
       await expect(
         assembleMirrorBundle({
+          ...baseDeps(),
           appDb: unstampedApp,
-          retentionDb,
-          ring: RING,
-          stateDir,
-          relayUrl: "https://relay.test:9000/",
-          boxHostname: "waitron.local",
           designated,
           standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
         }),

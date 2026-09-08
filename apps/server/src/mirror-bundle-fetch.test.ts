@@ -12,13 +12,6 @@ import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 // A representative bundle the primary's endpoint would return. The fetcher only JSON-round-trips it,
 // so the exact row content is immaterial; what matters is that a 200 body deep-equals the input.
 const SAMPLE_BUNDLE: MirrorBundle = {
-  rows: {
-    tenant: { id: "11111111-1111-1111-1111-111111111111", legalName: "Waitron SL" },
-    locations: [{ id: "22222222-2222-2222-2222-222222222222" }],
-    nodes: [{ id: "44444444-4444-4444-4444-444444444444" }],
-    tills: [{ id: "33333333-3333-3333-3333-333333333333" }],
-    invoiceSeries: [{ id: "66666666-6666-6666-6666-666666666666" }],
-  },
   designated: {
     tenantId: "11111111-1111-1111-1111-111111111111",
     locationId: "22222222-2222-2222-2222-222222222222",
@@ -26,11 +19,18 @@ const SAMPLE_BUNDLE: MirrorBundle = {
     nodeId: "44444444-4444-4444-4444-444444444444",
     seriesId: "66666666-6666-6666-6666-666666666666",
   },
+  tenant: { country: "ES", taxId: "B00000000" },
+  primaryNode: { name: "Caja 1", filingModule: "fiscal-verifactu", taxModule: null },
   environment: "preproduction",
   boxHostname: "waitron.local",
   boxCaPem: "-----BEGIN CERTIFICATE-----\nFAKE\n-----END CERTIFICATE-----\n",
   relayUrl: "https://relay.example/abc",
-  syncToken: "plaintext-sync-token",
+  replication: {
+    host: "primary.internal",
+    port: 5432,
+    database: "waitron_pp",
+    password: "repl-pw",
+  },
   reservedIdentity: {
     modules: {
       "fiscal-verifactu": { nif: "B00000000", idSistemaInformatico: "W1", numeroInstalacion: 7 },
@@ -102,7 +102,7 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     // The body parsed back to the exact bundle the primary served — including a scalar field read, so
     // this is a real MirrorBundle and not merely a deep-equal on opaque JSON.
     expect(bundle).toEqual(SAMPLE_BUNDLE);
-    expect(bundle.syncToken).toBe("plaintext-sync-token");
+    expect(bundle.replication.password).toBe("repl-pw");
     // The request the fetcher made: a POST to the primary's mirror-bundle path carrying the credential
     // OBJECT plus the standby identity, serialised as the JSON body. The primary authenticates the
     // credential fields, reserves + endorses the standby from `standbyNodeId`/`standbyPublicKey`

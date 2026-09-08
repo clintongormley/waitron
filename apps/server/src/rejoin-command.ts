@@ -1,15 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createPostgresDb, readNodeMembership, withTenant, type Database } from "@waitron/db";
-import { servingPrimaryNodeId } from "@waitron/membership";
+import { createPostgresDb, readNodeMembership, type Database } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { readDrainProgress, type DrainProgress } from "@waitron/sync";
+import { type DrainProgress } from "@waitron/sync";
 import { DEFAULT_MEDIA_ROOT, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT } from "./boot.js";
 import { deploymentEnvironment, resolveConfigDir, type DeploymentEnvironment } from "./config.js";
 import { dropAndCreateDatabase } from "./db-wipe.js";
 import { isUnset } from "./env-value.js";
 import { createLogger } from "./logger.js";
-import { ALL_MODULES, ALL_SYNC_ENROLMENTS } from "./modules.js";
+import { ALL_MODULES } from "./modules.js";
 import { rejoinAsSecondary, type RejoinDeps, type RejoinResult } from "./rejoin.js";
 import {
   validateArtifact,
@@ -288,19 +287,12 @@ export async function runRejoin(deps: {
     return failGeneric();
   }
 
-  const carrier = held === null ? undefined : servingPrimaryNodeId(held);
-  const drainReader =
-    carrier === undefined
-      ? undefined
-      : /* v8 ignore next 8 -- the withTenant + app_user + readDrainProgress path needs a real PG role and the sync tables; exercised by Task 3's real-DB integration, not this unit suite */
-        (): Promise<DrainProgress> =>
-          withTenant(syncDb, cfg.tenantId, (tx) =>
-            readDrainProgress(tx, {
-              selfNodeId: cfg.nodeId,
-              carrierNodeId: carrier,
-              enrolments: ALL_SYNC_ENROLMENTS,
-            }),
-          );
+  // STOPGAP (Task 7 rewrites the rejoin drain over the native fence-LSN watermark, Ruling C2). The
+  // outbox drain reader is gone with the server-side outbox runtime (swap step 4); until Task 7 wires
+  // the fence-LSN reader (`confirmed_flush_lsn >= fence_lsn && !active`), no drain progress is reported
+  // here and `rejoinAsSecondary` refuses `rejoin.no_carrier` (fail-safe — a node is never wiped while
+  // its tail may be un-shipped).
+  const drainReader: (() => Promise<DrainProgress>) | undefined = undefined;
 
   // The BR-3 restore inputs, assembled ONCE and shared by both the write-free `validate` and the
   // destructive `write` seams — a single decrypt/unpack of the same bytes across the wipe.

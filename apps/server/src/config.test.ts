@@ -7,9 +7,7 @@ import {
   deploymentEnvironment,
   isDevMode,
   loadConfig,
-  loadMirrorSyncConfig,
   loadReplicationConfig,
-  loadSyncConfig,
   loadTunnelConfig,
 } from "./config.js";
 
@@ -73,11 +71,6 @@ describe("loadConfig", () => {
       // so the owner write hits the least-privileged role and fails CLOSED (42501) on a role-split
       // appliance rather than silently no-op'ing. Same single-connection default as migrations above.
       adminDatabaseUrl: "postgres://u@h/d",
-      // No WAITRON_SYNC_DATABASE_URL set — OPTIONAL at setup boot (the primary provision path never
-      // needs it), so it is present-but-undefined here, asserted explicitly the same way
-      // settlementLagMs below is. An adopt REQUEST is where its absence is refused (boot's guard),
-      // not setup boot.
-      syncDatabaseUrl: undefined,
       // Production numbering can never be reused, so the safe environment is the default and
       // production must be typed out. This assertion is the guard on that.
       environment: "preproduction",
@@ -548,34 +541,6 @@ describe("loadConfig", () => {
     expect(config.adminDatabaseUrl).toBe(config.databaseUrl);
   });
 
-  // WAITRON_SYNC_DATABASE_URL is the mirror's OWN least-privileged sync pool (a `sync_applier` role),
-  // read back at mirror boot by `loadMirrorSyncConfig`. It is OPTIONAL at setup boot — the primary
-  // provision path never needs it — so `loadConfig` reads it via `isUnset` (NOT `required`): present
-  // when set, undefined when absent OR empty. Adopt is where an unset value is REFUSED (boot's guard,
-  // Ruling 1), because that is the one interactive moment the operator can supply it.
-  it("reads WAITRON_SYNC_DATABASE_URL into config.syncDatabaseUrl when set, and leaves it undefined when absent or empty", () => {
-    const set = loadConfig(
-      { ...MIN_ENV, WAITRON_SYNC_DATABASE_URL: "postgres://sync@h/d" },
-      ROOT,
-      MEDIA_ROOT,
-      STATE_ROOT,
-    );
-    expect(set.syncDatabaseUrl).toBe("postgres://sync@h/d");
-
-    // Absent → undefined.
-    expect(loadConfig(MIN_ENV, ROOT, MEDIA_ROOT, STATE_ROOT).syncDatabaseUrl).toBeUndefined();
-
-    // Empty string is unset (config.ts's own `isUnset`), so `WAITRON_SYNC_DATABASE_URL=` is undefined,
-    // never a blank connection string reaching a sync pool as `""` (CLAUDE.md §3).
-    const empty = loadConfig(
-      { ...MIN_ENV, WAITRON_SYNC_DATABASE_URL: "" },
-      ROOT,
-      MEDIA_ROOT,
-      STATE_ROOT,
-    );
-    expect(empty.syncDatabaseUrl).toBeUndefined();
-  });
-
   it("accepts the highest real TCP port, 65535 — the boundary the rejection test just above it lives one past", () => {
     const config = loadConfig(
       { ...MIN_ENV, WAITRON_HTTP_PORT: "65535" },
@@ -940,147 +905,6 @@ describe("WAITRON_ENV=dev", () => {
   });
 });
 
-describe("loadSyncConfig", () => {
-  it("is undefined when no peers are configured", () => {
-    expect(loadSyncConfig({})).toBeUndefined();
-  });
-
-  it("parses peers and requires a non-blank database url, defaulting the fast tick to 1000ms", () => {
-    const env = {
-      WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "https://peer/", token: "tok2" }]),
-      WAITRON_SYNC_DATABASE_URL: "postgres://sync@host/db",
-    };
-    expect(loadSyncConfig(env)).toEqual({
-      databaseUrl: "postgres://sync@host/db",
-      peers: [{ nodeId: "n2", url: "https://peer/", token: "tok2" }],
-      fastMinIdleMs: 1000,
-      // Defaulted (WAITRON_SYNC_RETENTION_TICK_MS unset). retentionDatabaseUrl is NOT in this
-      // object — the field is omitted when unset (its own test below proves that directly), so
-      // `toEqual` here also pins that no present-but-undefined key leaks in.
-      retentionTickMs: 60_000,
-    });
-  });
-
-  it("reads WAITRON_SYNC_FAST_TICK_MS as the fast lane's idle interval", () => {
-    const env = {
-      WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
-      WAITRON_SYNC_DATABASE_URL: "x",
-      WAITRON_SYNC_FAST_TICK_MS: "500",
-    };
-    expect(loadSyncConfig(env)!.fastMinIdleMs).toBe(500);
-  });
-
-  it("refuses a non-positive-integer WAITRON_SYNC_FAST_TICK_MS", () => {
-    const env = {
-      WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
-      WAITRON_SYNC_DATABASE_URL: "x",
-      WAITRON_SYNC_FAST_TICK_MS: "0",
-    };
-    expect(() => loadSyncConfig(env)).toThrow(/config_invalid|WAITRON_SYNC_FAST_TICK_MS/);
-  });
-
-  it("reads WAITRON_SYNC_RETENTION_TICK_MS as the retention sweep's idle interval, defaulting to 60000", () => {
-    const base = {
-      WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
-      WAITRON_SYNC_DATABASE_URL: "x",
-    };
-    // Default when unset.
-    expect(loadSyncConfig(base)!.retentionTickMs).toBe(60_000);
-    // Honoured when set.
-    expect(
-      loadSyncConfig({ ...base, WAITRON_SYNC_RETENTION_TICK_MS: "30000" })!.retentionTickMs,
-    ).toBe(30_000);
-  });
-
-  it("refuses a non-positive-integer WAITRON_SYNC_RETENTION_TICK_MS", () => {
-    const env = {
-      WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
-      WAITRON_SYNC_DATABASE_URL: "x",
-      WAITRON_SYNC_RETENTION_TICK_MS: "0",
-    };
-    expect(() => loadSyncConfig(env)).toThrow(/config_invalid|WAITRON_SYNC_RETENTION_TICK_MS/);
-  });
-
-  it("sets retentionDatabaseUrl only when WAITRON_SYNC_RETENTION_DATABASE_URL is set (absent → field omitted)", () => {
-    const base = {
-      WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
-      WAITRON_SYNC_DATABASE_URL: "x",
-    };
-    // Set → field carries the URL.
-    expect(
-      loadSyncConfig({ ...base, WAITRON_SYNC_RETENTION_DATABASE_URL: "postgres://ret@host/db" })!
-        .retentionDatabaseUrl,
-    ).toBe("postgres://ret@host/db");
-    // Unset → the key is OMITTED entirely (the sweep-off signal boot reads), not present-but-undefined.
-    // `not.toHaveProperty` distinguishes the two — an `=== undefined` check would pass for both.
-    expect(loadSyncConfig(base)).not.toHaveProperty("retentionDatabaseUrl");
-    // Empty string is unset too (the "empty connection string is a valid connection string" trap,
-    // CLAUDE.md §3): `WAITRON_SYNC_RETENTION_DATABASE_URL=` must omit the field, never reach
-    // `createPostgresDb` as "".
-    expect(loadSyncConfig({ ...base, WAITRON_SYNC_RETENTION_DATABASE_URL: "" })).not.toHaveProperty(
-      "retentionDatabaseUrl",
-    );
-  });
-
-  it("sets lagAlarmRows only when WAITRON_SYNC_LAG_ALARM_ROWS is a positive int (absent → field omitted; non-positive → throws)", () => {
-    const base = {
-      WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
-      WAITRON_SYNC_DATABASE_URL: "x",
-    };
-    // Set to a positive int → field carries the threshold.
-    expect(loadSyncConfig({ ...base, WAITRON_SYNC_LAG_ALARM_ROWS: "1000" })!.lagAlarmRows).toBe(
-      1000,
-    );
-    // Unset → the key is OMITTED entirely (the alarm is opt-in; boot then passes lagAlarmRows
-    // undefined → runRetentionSweep stays prune-only). `not.toHaveProperty` distinguishes an omitted
-    // key from a present-but-undefined one, which an `=== undefined` check would not.
-    expect(loadSyncConfig(base)).not.toHaveProperty("lagAlarmRows");
-    // Empty string is unset too — omit the field, never a present-but-undefined key.
-    expect(loadSyncConfig({ ...base, WAITRON_SYNC_LAG_ALARM_ROWS: "" })).not.toHaveProperty(
-      "lagAlarmRows",
-    );
-    // A non-positive value is refused (server.config_invalid) — the same posture positiveInt takes.
-    expect(() => loadSyncConfig({ ...base, WAITRON_SYNC_LAG_ALARM_ROWS: "0" })).toThrow(
-      /config_invalid|WAITRON_SYNC_LAG_ALARM_ROWS/,
-    );
-    expect(() => loadSyncConfig({ ...base, WAITRON_SYNC_LAG_ALARM_ROWS: "-5" })).toThrow(
-      /config_invalid|WAITRON_SYNC_LAG_ALARM_ROWS/,
-    );
-  });
-
-  it("refuses a blank sync database url", () => {
-    const env = {
-      WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
-      WAITRON_SYNC_DATABASE_URL: "",
-    };
-    expect(() => loadSyncConfig(env)).toThrow(/config_missing|WAITRON_SYNC_DATABASE_URL/);
-  });
-
-  it("refuses a peer with a blank url or token", () => {
-    const env = {
-      WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "", token: "t" }]),
-      WAITRON_SYNC_DATABASE_URL: "x",
-    };
-    expect(() => loadSyncConfig(env)).toThrow(/config_invalid|WAITRON_SYNC_PEERS/);
-  });
-
-  it("refuses a peers value that is valid JSON but not a non-empty array", () => {
-    const base = { WAITRON_SYNC_DATABASE_URL: "x" };
-    expect(() => loadSyncConfig({ ...base, WAITRON_SYNC_PEERS: "[]" })).toThrow(
-      /config_invalid|WAITRON_SYNC_PEERS/,
-    );
-    expect(() => loadSyncConfig({ ...base, WAITRON_SYNC_PEERS: '{"nodeId":"n"}' })).toThrow(
-      /config_invalid|WAITRON_SYNC_PEERS/,
-    );
-  });
-
-  it("refuses malformed WAITRON_SYNC_PEERS JSON", () => {
-    expect(() => loadSyncConfig({ WAITRON_SYNC_PEERS: "not json" })).toThrow(
-      /config_invalid|WAITRON_SYNC_PEERS/,
-    );
-  });
-});
-
 describe("loadTunnelConfig", () => {
   const base = {
     WAITRON_TUNNEL_RELAY_URL: "tcp://relay.example:9000",
@@ -1093,7 +917,7 @@ describe("loadTunnelConfig", () => {
   });
 
   // BINDING RULING (task-5 brief): an absent OR empty WAITRON_TUNNEL_RELAY_URL means the tunnel is
-  // OFF (undefined), exactly like loadSyncConfig's empty WAITRON_SYNC_PEERS off-switch — via isUnset.
+  // OFF (undefined) via isUnset — the absent-or-empty off-switch every optional loader here follows.
   // The empty string does NOT fail closed here; returning undefined is how the empty value never
   // reaches a dialer as "" ("an empty connection string is a valid connection string", CLAUDE.md §3).
   // A PRESENT-but-unparseable url DOES fail closed (the cases below).
@@ -1176,7 +1000,7 @@ describe("loadTunnelConfig", () => {
   });
 
   // Box id + token are required once the tunnel is on, and a blank one fails closed (the
-  // peer_field_blank shape loadSyncConfig uses for a blank peer field): a blank token must never mean
+  // fail-closed shape a blank required field takes here): a blank token must never mean
   // "no auth", a blank box id names no box to the relay.
   it("refuses a blank box id when the relay url is set", async () => {
     const error = await captureError(() =>
@@ -1212,52 +1036,12 @@ describe("loadTunnelConfig", () => {
   });
 });
 
-describe("loadMirrorSyncConfig", () => {
-  // C2b (spec §7): a mirror's CONNECTION to its primary (relay URL, box CA + hostname, per-peer token)
-  // now lives in the DB (`mirror_config`) + the vault (`sync.mirror_token`), read at boot — NOT in env.
-  // This loader supplies only the mirror's LOCAL pull config: the `sync_applier` pool
-  // (WAITRON_SYNC_DATABASE_URL) and the fast-lane tick. `peers` is deliberately empty — boot builds the
-  // one relay peer from the DB config. Unlike `loadSyncConfig` it never returns undefined: a mirror MUST
-  // pull, so an absent sync DB URL is a loud `server.config_missing`.
-  it("returns the sync pool URL + defaulted ticks, and an empty peers list, from just the sync DB URL", () => {
-    expect(loadMirrorSyncConfig({ WAITRON_SYNC_DATABASE_URL: "postgres://a@h/d" })).toEqual({
-      databaseUrl: "postgres://a@h/d",
-      peers: [],
-      fastMinIdleMs: 1000,
-      retentionTickMs: 60_000,
-    });
-  });
-
-  it("reads WAITRON_SYNC_FAST_TICK_MS and WAITRON_SYNC_RETENTION_TICK_MS when set", () => {
-    expect(
-      loadMirrorSyncConfig({
-        WAITRON_SYNC_DATABASE_URL: "postgres://a@h/d",
-        WAITRON_SYNC_FAST_TICK_MS: "250",
-        WAITRON_SYNC_RETENTION_TICK_MS: "5000",
-      }),
-    ).toEqual({
-      databaseUrl: "postgres://a@h/d",
-      peers: [],
-      fastMinIdleMs: 250,
-      retentionTickMs: 5000,
-    });
-  });
-
-  // Fail-closed: a mirror that cannot open its sync pool cannot pull, so an absent (or empty, via
-  // `required`'s `isUnset`) WAITRON_SYNC_DATABASE_URL is a loud boot failure, never sync-off.
-  it("throws server.config_missing when WAITRON_SYNC_DATABASE_URL is absent", async () => {
-    const error = await captureError(() => Promise.resolve(loadMirrorSyncConfig({})));
-    expect(codeOf(error)).toBe("server.config_missing");
-    expect(isAppError(error) && error.params).toEqual({ variable: "WAITRON_SYNC_DATABASE_URL" });
-  });
-});
-
 describe("loadReplicationConfig", () => {
   // The replication credential + advertise address ride the mirror bundle (owner decision 2026-09-07):
   // the password is what a peer's subscription conninfo authenticates as `waitron_repl`, and the
   // host/port is what this node advertises for a peer to dial. Both password AND host are required —
   // an unset (absent OR empty, via `isUnset`) either one disables the whole config, the same
-  // off-switch `loadSyncConfig`/`loadTunnelConfig` take for their required fields.
+  // off-switch `loadTunnelConfig` takes for its required fields.
   const base = {
     WAITRON_REPLICATION_PASSWORD: "repl-secret",
     WAITRON_REPLICATION_HOST: "box.venue.internal",

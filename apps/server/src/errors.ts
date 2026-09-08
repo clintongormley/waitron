@@ -1379,13 +1379,13 @@ declare module "@waitron/shared" {
       currentCarrierNodeId: string | null;
     };
     /**
-     * `retireSelf` found the node fenced with a carrier, but the disposal guard reports its own-origin
-     * `sync_log` tail has NOT fully drained onto that carrier. Refused until the drain completes — a
-     * node must not leave the chart while rows it originated are still un-shipped, or they would be
-     * lost with it. The gate is the disposal guard's `drained` BOOLEAN alone, NEVER a comparison of
-     * `carrierAppliedSeq >= ownTailSeq`: those two legitimately differ while `drained` is `true`
-     * (`ownTailSeq` is the cross-lane MAX and `carrierAppliedSeq` the cross-lane MIN — see
-     * `readDrainProgress` in @waitron/sync). `node.*`, not `server.*`: a fact about this node's state
+     * `retireSelf` found the node fenced with a carrier, but the drain guard reports the carrier has
+     * NOT confirmed this node's fenced WAL tail. Refused until the drain completes — a node must not
+     * leave the chart while rows it originated are still un-shipped, or they would be lost with it. The
+     * gate is the fence-LSN watermark (Ruling C2, spec §4.1): `confirmed_flush_lsn >= fence_lsn`
+     * (recorded when the box entered its read-only fence) AND the carrier's subscription slot is no
+     * longer `active` — both monotone, so a fenced box that keeps writing session WAL cannot decay the
+     * compare. Task 7 wires the reader; this task ships the stopgap. `node.*`, not `server.*`: a fact about this node's state
      * in the topology (`node.read_only`'s rule). No params — the refusal names no row (`node.read_only`'s
      * no-leak discipline). Never renamed once shipped.
      */
@@ -1424,13 +1424,12 @@ declare module "@waitron/shared" {
      */
     "rejoin.no_carrier": Record<string, never>;
     /**
-     * `rejoinAsSecondary` found the node fenced with a carrier, but the disposal guard reports its
-     * own-origin `sync_log` tail has NOT fully drained onto that carrier. Refused BEFORE the wipe — a
-     * node must not be wiped while rows it originated are still un-shipped, or they would be lost with the
-     * wipe (CLAUDE.md §5 unrecoverable-invariant). The gate is the disposal guard's `drained` BOOLEAN
-     * alone, NEVER a comparison of `carrierAppliedSeq >= ownTailSeq`: those two legitimately differ while
-     * `drained` is `true` (`ownTailSeq` is the cross-lane MAX and `carrierAppliedSeq` the cross-lane MIN
-     * — see `readDrainProgress` in @waitron/sync), the same rule `node.retire_not_drained` gives.
+     * `rejoinAsSecondary` found the node fenced with a carrier, but the drain guard reports the carrier
+     * has NOT confirmed this node's fenced WAL tail. Refused BEFORE the wipe — a node must not be wiped
+     * while rows it originated are still un-shipped, or they would be lost with the wipe (CLAUDE.md §5
+     * unrecoverable-invariant). The gate is the fence-LSN watermark (Ruling C2, spec §4.1):
+     * `confirmed_flush_lsn >= fence_lsn` AND the carrier's subscription slot no longer `active`, both
+     * monotone — the same rule `node.retire_not_drained` gives. Task 7 wires the reader.
      * `rejoin.*`, not `server.*`: a fact about this node's state in the topology. No params — the refusal
      * names no row (`node.read_only`'s no-leak discipline). Never renamed once shipped.
      */
@@ -1453,6 +1452,19 @@ declare module "@waitron/shared" {
      * the mirror-assembly precondition. Never renamed once shipped.
      */
     "mirror.not_provisioned": Record<string, never>;
+    /**
+     * A mirror was pointed at a primary whose deployment environment does not match this box's own
+     * (swap step 4). Adopt copies the primary's fiscal chain natively, and one database serves exactly
+     * one environment (CLAUDE.md §5, the one-database-per-environment invariant) — a preproduction
+     * mirror can never hold a production venue's series, or a production sale would leave a permanent
+     * hole. Refused BEFORE any subscription is created or any row stamped. `expected` is this box's
+     * environment, `actual` the primary's — both two-valued config facts already in the host's own
+     * configuration (`production`/`preproduction`), never secrets, the same shape
+     * `deployment.environment_mismatch` carries. `mirror.*` names the DOMAIN CONCEPT — the read-only
+     * mirror adoption — never the throwing package (`tenant.not_found`'s note gives the rule); a
+     * CLIENT/precondition fault mapped to 400 by the adopt route's STATUS map. Never renamed once shipped.
+     */
+    "mirror.environment_mismatch": { expected: string; actual: string };
     /**
      * A mirror could not fetch a bundle because the PRIMARY has no tunnel/relay configured (sync
      * cloud-mirror C2b). The bundle endpoint the mirror pulls from reaches the primary through the

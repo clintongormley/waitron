@@ -41,16 +41,6 @@ export interface ServerConfig {
    * set and would drop it — spec §5).
    */
   adminDatabaseUrl: string;
-  /**
-   * The mirror's OWN least-privileged sync-pool connection (a `sync_applier` LOGIN role), from
-   * `WAITRON_SYNC_DATABASE_URL`. OPTIONAL at setup boot — the primary provision path never needs it,
-   * and a setup box may not have it set yet — so it is read via `isUnset` (absent OR empty →
-   * undefined), NOT `required`. It becomes `trading.env`'s `WAITRON_SYNC_DATABASE_URL` at adopt, the
-   * value the next (mirror) boot's `loadMirrorSyncConfig` reads back. `boot.ts`'s adopt closure
-   * REFUSES an unset value at adopt time (`server.config_missing`, Ruling 1) — the one interactive
-   * moment the operator can supply it — rather than persist nothing and let the reboot fail.
-   */
-  syncDatabaseUrl?: string;
   environment: DeploymentEnvironment;
   /**
    * Whether this host runs in DEV mode (`WAITRON_ENV=dev`) — the switch the dev per-tab device
@@ -214,15 +204,6 @@ export const DEFAULT_MAX_TICK_MS = 60 * 60 * 1000;
  * answer). Neither duty reports `now` for merely SKIPPED work any more — see `skipRetryMs` above,
  * and `drain` has no `deferred` concept at all. */
 const DEFAULT_MIN_TICK_MS = 5_000;
-/** The fast lane's idle interval when WAITRON_SYNC_FAST_TICK_MS is unset. A tight starting point that
- * governing §9 explicitly calls a TUNING TARGET, not a settled constant (spec §4d). No cross-guard
- * against minTickMs: a fast tick not tighter than the ordered tick is a mis-tuning, not a correctness
- * failure. */
-const DEFAULT_SYNC_FAST_TICK_MS = 1000;
-/** The retention sweep's idle interval between prunes when WAITRON_SYNC_RETENTION_TICK_MS is unset
- * (spec §3.2). A minute is a deliberately relaxed cadence: the prune is a bounded background
- * housekeeping DELETE, not on any hot path, so it need not run tight. */
-const DEFAULT_SYNC_RETENTION_TICK_MS = 60_000;
 const DEFAULT_HTTP_PORT = 8080;
 /** The PostgreSQL port a node advertises for a peer's subscription to dial when
  * WAITRON_REPLICATION_PORT is unset — the cluster default. */
@@ -348,103 +329,6 @@ function loadTenantDomain(env: Env): string | undefined {
   return raw.toLowerCase();
 }
 
-export interface SyncPeer {
-  nodeId: string;
-  url: string;
-  token: string;
-}
-export interface SyncTransportConfig {
-  databaseUrl: string;
-  peers: SyncPeer[];
-  /** The fast lane's idle interval (ms) — the tighter tick the payments lane polls at, beside the
-   * ordered lane's config.minTickMs. From WAITRON_SYNC_FAST_TICK_MS, default 1000 (spec §4d). Lives on
-   * the sync config because it is meaningless without sync enabled, like peers. */
-  fastMinIdleMs: number;
-  /** The retention sweep's idle interval (ms) between prunes — from WAITRON_SYNC_RETENTION_TICK_MS,
-   * default 60000 (spec §3.2). Always present (defaulted), unlike retentionDatabaseUrl below, because
-   * the sweep needs a cadence whenever it does run. */
-  retentionTickMs: number;
-  /** OPTIONAL: the connection string for an app_user LOGIN member. runRetentionSweep uses its
-   * sync_log and sync_cursor grants to prune and report per-subscriber lag.
-   * Present ONLY when WAITRON_SYNC_RETENTION_DATABASE_URL is set; ABSENT (not present-but-undefined)
-   * leaves the scheduled sweep OFF — sync still runs, the log just grows unpruned, which boot makes
-   * loud via `sync.retention_unconfigured` (spec §3.2/§8: opt-in here, documented-required in prod). */
-  retentionDatabaseUrl?: string;
-  /** OPTIONAL: the lag threshold (in rows) past which the retention sweep emits the retention-variant
-   * `sync.stream_stalled` for a subscriber — the operator alarm that INFORMS a manual eviction (spec
-   * §3.2). From WAITRON_SYNC_LAG_ALARM_ROWS (a positive int). The alarm is OPT-IN, mirroring
-   * retentionDatabaseUrl above: present ONLY when the variable is set; ABSENT (not
-   * present-but-undefined) leaves the sweep prune-only — it still prunes every tick, it just never
-   * alarms. A non-positive value is refused (`server.config_invalid`) — a threshold of 0/negative
-   * rows is a misconfiguration, not "alarm on everything". Its default is a tuning target, not a
-   * settled constant (spec §8), so there is no baked-in default: unset means the alarm is off. */
-  lagAlarmRows?: number;
-}
-
-/**
- * Sync is enabled iff `WAITRON_SYNC_PEERS` is a non-empty JSON array of `{ nodeId, url, token }`.
- * It requires a sync connection whose LOGIN role inherits app_user. Blank URLs and peer fields
- * fail closed: a blank secret must never mean no authentication. The source authenticates each
- * peer against `sync_peers`; each subscriber presents its peer-specific Bearer token when pulling.
- * The sync node ID is `config.till.nodeId`, so there is only one configured node identity.
- * Absent peers disable sync.
- */
-export function loadSyncConfig(env: Env): SyncTransportConfig | undefined {
-  const rawPeers = env.WAITRON_SYNC_PEERS;
-  if (isUnset(rawPeers)) return undefined;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(rawPeers);
-  } catch {
-    throw new AppError("server.config_invalid", {
-      variable: "WAITRON_SYNC_PEERS",
-      reason: "not_json",
-    });
-  }
-  if (!Array.isArray(parsed) || parsed.length === 0) {
-    throw new AppError("server.config_invalid", {
-      variable: "WAITRON_SYNC_PEERS",
-      reason: "empty_or_not_array",
-    });
-  }
-  const peers = parsed.map((p): SyncPeer => {
-    const peer = p as Partial<SyncPeer>;
-    if (isUnset(peer.nodeId) || isUnset(peer.url) || isUnset(peer.token)) {
-      throw new AppError("server.config_invalid", {
-        variable: "WAITRON_SYNC_PEERS",
-        reason: "peer_field_blank",
-      });
-    }
-    return { nodeId: peer.nodeId, url: peer.url, token: peer.token };
-  });
-  // Parsed once here so the conditional spread below reads the same value the validation throws on:
-  // undefined when unset/empty (alarm off), a positive int otherwise, throwing config_invalid for a
-  // non-positive one.
-  const lagAlarmRows = optionalPositiveInt(env, "WAITRON_SYNC_LAG_ALARM_ROWS");
-  return {
-    databaseUrl: required(env, "WAITRON_SYNC_DATABASE_URL"),
-    peers,
-    fastMinIdleMs: positiveInt(env, "WAITRON_SYNC_FAST_TICK_MS", DEFAULT_SYNC_FAST_TICK_MS),
-    retentionTickMs: positiveInt(
-      env,
-      "WAITRON_SYNC_RETENTION_TICK_MS",
-      DEFAULT_SYNC_RETENTION_TICK_MS,
-    ),
-    // The retention connection is opt-in: an unset OR empty URL omits the field entirely (sweep off,
-    // boot warns loud) rather than a present-but-undefined key or a broken empty connection string
-    // — "an empty connection string is a valid connection string" (CLAUDE.md §3), so it must never
-    // reach `createPostgresDb` as `""`.
-    ...(isUnset(env.WAITRON_SYNC_RETENTION_DATABASE_URL)
-      ? {}
-      : { retentionDatabaseUrl: env.WAITRON_SYNC_RETENTION_DATABASE_URL }),
-    // The lag alarm is opt-in too: `optionalPositiveInt` returns undefined for an unset/empty value
-    // (field omitted → prune-only sweep) and THROWS `server.config_invalid` for a non-positive one, so
-    // a blank never silently means "alarm on everything" and a present-but-undefined key never leaks
-    // in (the same omit-when-unset shape as retentionDatabaseUrl above, CLAUDE.md §3).
-    ...(lagAlarmRows === undefined ? {} : { lagAlarmRows }),
-  };
-}
-
 /**
  * The native-replication credential + advertise address (swap spec §2.2). The `password` is what a
  * peer's `CREATE SUBSCRIPTION` conninfo authenticates as the `waitron_repl` LOGIN REPLICATION role;
@@ -560,32 +444,6 @@ export function loadTunnelConfig(env: Env): TunnelConfig | undefined {
     boxId,
     token,
     poolSize: positiveInt(env, "WAITRON_TUNNEL_POOL_SIZE", DEFAULT_TUNNEL_POOL_SIZE),
-  };
-}
-
-/**
- * The mirror's local pull config uses its `sync_applier` LOGIN (an app_user member) from
- * `WAITRON_SYNC_DATABASE_URL` and the fast-lane tick. Boot builds its peer from `mirror_config`
- * (written by the owner at adopt) and the vault's `sync.mirror_token`, sealed under the mirror's
- * box key. `peers` is therefore empty here and boot's mirror path does not read it.
- * A mirror must pull: an absent or empty database URL throws `server.config_missing`.
- */
-export function loadMirrorSyncConfig(env: Env): SyncTransportConfig {
-  return {
-    databaseUrl: required(env, "WAITRON_SYNC_DATABASE_URL"),
-    // A mirror's single peer (the relay + the vault token) is built at boot from `mirror_config` +
-    // `sync.mirror_token`, never from env — see boot.ts's mirror path.
-    peers: [],
-    fastMinIdleMs: positiveInt(env, "WAITRON_SYNC_FAST_TICK_MS", DEFAULT_SYNC_FAST_TICK_MS),
-    // Never read on a mirror (the retention sweep gates on `singleton_role='primary'` in boot since #168,
-    // and a mirror is always `secondary` — the `deployment_role_valid_ck` CHECK forbids `(mirror, primary)`
-    // and `setDeploymentMode('mirror')` co-sets `secondary` — so it holds no `sync_log` to prune), but the
-    // shared `SyncTransportConfig` shape requires it; defaulted so the type is honest rather than asserted.
-    retentionTickMs: positiveInt(
-      env,
-      "WAITRON_SYNC_RETENTION_TICK_MS",
-      DEFAULT_SYNC_RETENTION_TICK_MS,
-    ),
   };
 }
 
@@ -792,13 +650,6 @@ export function loadConfig(
     adminDatabaseUrl: isUnset(env.WAITRON_ADMIN_DATABASE_URL)
       ? resolvedMigrations
       : env.WAITRON_ADMIN_DATABASE_URL,
-    // The mirror's own sync pool — OPTIONAL at setup boot (the primary provision path never needs
-    // it), so an unset OR empty value is undefined here via `isUnset`, never `""` reaching a sync
-    // pool (CLAUDE.md §3). Adopt refuses an unset value at adopt time (boot's guard, Ruling 1); this
-    // present-but-undefined shape matches `settlementLagMs`/`tillAppDir` above.
-    syncDatabaseUrl: isUnset(env.WAITRON_SYNC_DATABASE_URL)
-      ? undefined
-      : env.WAITRON_SYNC_DATABASE_URL,
     environment,
     devMode: isDevMode(env),
     httpPort,

@@ -14,13 +14,11 @@ import {
   type Database,
 } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { loadKeyRing } from "@waitron/credentials";
 import { hashPin, hashSecret } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer, type StartedServer } from "./boot.js";
 import { roleUrl } from "./testing/postgres.js";
 import { DEVICE_COOKIE } from "./device-session.js";
-import { sealMirrorToken } from "./mirror-token.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
 // The till-reroute HEADLINE proof (S6, till-reroute design §6): TWO booted `apps/server` instances
@@ -100,7 +98,6 @@ const KEY_ENV = {
   WAITRON_STATE_DIR: STATE_ROOT,
   WAITRON_ENV: "preproduction",
 };
-const RING = loadKeyRing(KEY_ENV);
 
 // One unreachable peer for a primary boot's push worker: port 1 has no listener, so the worker backs
 // off and the box still binds and serves.
@@ -254,7 +251,6 @@ beforeAll(async () => {
     }).caCertPem,
     originNodeId: NODE_A,
   });
-  await sealMirrorToken(b.admin, RING, TENANT, "reroute-peer-token");
 
   // The inherited tab: an open working order in B's database tagged with the DEAD node's id (A's).
   await b.admin

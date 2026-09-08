@@ -1,13 +1,15 @@
-// The PRIMARY side of the C2b cloud-mirror operator flow (design §10). `assembleMirrorBundle`
-// reads a venue's parent rows + the box's connection details and mints ONE per-peer sync token,
-// returning a `MirrorBundle` the endpoint serves and the mirror consumes via `adoptVenue`. Swap S2
-// additively carries an optional `wireguardPublicKey` alongside the token (spec §2.3); nothing
-// consumes it yet.
+// The PRIMARY side of the cloud-mirror adopt flow (design §10). `assembleMirrorBundle` reads the
+// venue's tenant identity + the designated node's descriptor, reserves the standby's dormant
+// identity, and returns a `MirrorBundle` the endpoint serves. Since swap step 4 the mirror no longer
+// pulls an outbox: it establishes a NATIVE subscription (initial COPY of every published table), so
+// the bundle carries the primary's replication CONNECTION (the `waitron_repl` credential + advertise
+// address) instead of a per-peer sync token, and no longer carries the venue's parent ROWS — the
+// COPY brings those.
 //
-// The deployment holds one tenant per database. The tenant row is selected by id; locations,
-// nodes, tills and invoice series are read without tenant predicates. `app_user` holds SELECT on
-// these parent tables in the core baseline. The token is minted in PLAINTEXT via `enrolPeer` and
-// returned ONCE; sealing is mirror-side (design §10), and the token is never logged.
+// The deployment holds one tenant per database. The tenant row and the designated node row are
+// selected by id; `app_user` holds SELECT on both in the core baseline. The replication password
+// rides the bundle in PLAINTEXT and is returned ONCE; it is SECRET and never logged (the old
+// syncToken discipline).
 import "./errors.js";
 import { readFile } from "node:fs/promises";
 import { eq } from "drizzle-orm";
@@ -17,20 +19,11 @@ import {
   nodeId as brandNodeId,
   tenantId as brandTenantId,
 } from "@waitron/shared";
-import {
-  invoiceSeries,
-  locations,
-  nodes,
-  readDeploymentEnvironment,
-  tenants,
-  tills,
-  withTenant,
-  type Database,
-} from "@waitron/db";
-import { enrolPeer } from "@waitron/sync";
+import { nodes, readDeploymentEnvironment, tenants, withTenant, type Database } from "@waitron/db";
 import { endorseKey, type Endorsement } from "@waitron/membership";
 import type { KeyRing } from "@waitron/credentials";
-import type { AdoptResult, AdoptVenueRows } from "@waitron/provisioning";
+import type { AdoptResult } from "@waitron/provisioning";
+import type { ReplicationConfig } from "./config.js";
 import { enabledModules, serializeModuleConfig } from "@waitron/module";
 import { caCertPath } from "./box-secrets.js";
 import { readModuleConfig } from "./module-config.js";
@@ -53,20 +46,32 @@ export interface ReservedIdentity {
 }
 
 /**
- * Everything the mirror needs to adopt this venue and pull from the box. `rows` + `designated` are the
- * `adoptVenue` inputs (camelCase Drizzle rows, matching its `$inferInsert`); the remaining fields are
- * the connection handshake. `syncToken` is the plaintext bearer, returned exactly once.
- * `reservedIdentity` is the standby's dormant identity the primary reserves + endorses
- * (reserved-standby-identity design §6 R2).
+ * Everything the mirror needs to adopt this venue and establish a native subscription to the primary.
+ * `designated` are the five ids the primary till was provisioned with (`config.till.*`), so the
+ * mirror knows which node/tenant it mirrors; the venue's parent rows are NOT carried — the native
+ * initial COPY brings them (swap step 4). `tenant` is the venue's `(country, taxId)` identity, for the
+ * mirror-side foreign-tenant + environment guards. `primaryNode` is the designated node's descriptor
+ * (name + filing/tax modules), the shape the reserved standby identity mirrors. `replication` is the
+ * primary's `waitron_repl` connection the mirror's `CREATE SUBSCRIPTION` dials — SECRET, returned once.
+ * `reservedIdentity` is the standby's dormant identity the primary reserves + endorses (design §6 R2).
  */
 export interface MirrorBundle {
-  rows: AdoptVenueRows;
   designated: AdoptResult;
+  /** The venue's tenant identity, for the mirror's foreign-tenant guard (one tenant per database). */
+  tenant: { country: string; taxId: string };
+  /** The designated node's descriptor, so the reserved standby node row mirrors the primary's. */
+  primaryNode: { name: string; filingModule: string | null; taxModule: string | null };
   environment: "production" | "preproduction";
   boxHostname: string;
   boxCaPem: string;
   relayUrl: string;
-  syncToken: string;
+  /**
+   * The primary's native-replication CONNECTION the mirror's subscription dials: the advertise
+   * host/port, the database name, and the `waitron_repl` password. The `user` is the well-known
+   * `REPLICATION_ROLE` and is not carried. SECRET in whole (the password) — returned exactly once in
+   * the bundle response and NEVER logged, the discipline the sync token held before it.
+   */
+  replication: { host: string; port: number; database: string; password: string };
   reservedIdentity: ReservedIdentity;
   /**
    * The primary's enabled-module set as a sparse override map (SP-1b's modules.json inner map), read
@@ -76,67 +81,79 @@ export interface MirrorBundle {
   moduleOverrides: Record<string, boolean>;
   /**
    * The box's WireGuard public key, swap S2 (spec §2.3: "the token goes, the key comes"). Additive
-   * and optional — the live path still authenticates via `syncToken`, removed at step 4 — with no
-   * consumer until S7 wires the tunnel and Track B item 2 proves it.
+   * and optional — no consumer until Track B item 2 proves the tunnel end to end.
    */
   wireguardPublicKey?: string;
 }
 
 /**
- * `appDb` reads the venue rows as `app_user`; `retentionDb` mints the peer token via `enrolPeer`.
- * Both operations use grants held by `app_user`. `appDb` ALSO runs the modules' reservations:
- * `app_user` holds the reads and writes each enabled module's `provisioning.standby.reserve`
- * needs (for fiscal, SELECT/INSERT/UPDATE on `contadores_instalacion`/`registro_sif`/`cadenas`,
- * `packages/fiscal-verifactu/drizzle/0001_fiscal_baseline_sql.sql`, and SELECT on
+ * `appDb` reads the venue rows as `app_user` and runs the modules' reservations: `app_user` holds the
+ * reads and writes each enabled module's `provisioning.standby.reserve` needs (for fiscal,
+ * SELECT/INSERT/UPDATE on `contadores_instalacion`/`registro_sif`/`cadenas`, and SELECT on
  * `invoice_series`), so no broader connection is used (CLAUDE.md §3: never widen a grant). `ring`
  * unseals the primary's identity PRIVATE key (`readNodeIdentityKey`, as `app_user`) to sign the
- * standby's endorsement; `standby` is the node the primary vouches for. `designated` are the five
- * ids the till was provisioned with (`config.till.*`); `stateDir` locates the box CA;
- * `relayUrl`/`boxHostname` are the box's dial-in.
+ * standby's endorsement; `standby` is the node the primary vouches for. `designated` are the five ids
+ * the till was provisioned with (`config.till.*`); `stateDir` locates the box CA;
+ * `relayUrl`/`boxHostname` are the box's dial-in. `replication` is this primary's own
+ * native-replication credential + advertise address (`config.replication`); `database` is the name of
+ * the primary's database, so a subscription's conninfo names the right dbname to COPY from.
  */
 export interface AssembleDeps {
   appDb: Database;
-  retentionDb: Database;
   ring: KeyRing;
   stateDir: string;
   relayUrl: string;
   boxHostname: string;
   designated: AdoptResult;
   standby: { nodeId: string; publicKey: string };
+  /** This primary's own `waitron_repl` credential + advertise address (`config.replication`). */
+  replication: ReplicationConfig;
+  /** The name of the primary's database, dialled in a subscription's conninfo `dbname`. */
+  database: string;
   /** The box's WireGuard public key (swap S2); the box image supplies it in S7, absent in dev/fixture. */
   wireguardPublicKey?: string;
 }
 
 /**
- * Assemble the mirror bundle: the venue's parent rows, the deployment environment, the box's CA + dial
- * details, and a freshly minted per-peer sync token. Throws `mirror.not_provisioned` if the database
- * carries no deployment stamp (there is nothing to mirror). The token's subscriber is the STANDBY's
- * OWN node id (`deps.standby.nodeId`), not the primary's: from membership promotion R3a the mirror
- * runs under its own identity and authenticates AS itself when it pulls, while the ORIGIN it pulls
- * (the primary's node) travels separately in `mirror_config.origin_node_id`. The local pull cursor is
- * keyed (subscriber = own id, origin = primary, lane); the source ignores the request-body subscriber.
+ * Assemble the mirror bundle: the venue's tenant + designated-node identity, the deployment
+ * environment, the box's CA + dial details, the primary's replication connection, and the reserved
+ * standby identity. Throws `mirror.not_provisioned` if the database carries no deployment stamp (there
+ * is nothing to mirror). No token is minted and no parent rows travel — the mirror's native initial
+ * COPY brings the venue data, and the bundle's `replication` connection is what its subscription dials.
  */
 export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBundle> {
-  const rows: AdoptVenueRows = await withTenant(
+  const { tenant, primaryNode } = await withTenant(
     deps.appDb,
     deps.designated.tenantId,
-    async (tx) => ({
-      // `[0]!` is safe: `designated.tenantId` is the primary till's provisioned tenant
-      // (`config.till`), and a provisioned till always has its tenant row (minted as its FK
-      // parent at provision), so the by-id lookup always returns exactly one row.
-      tenant: (await tx.select().from(tenants).where(eq(tenants.id, deps.designated.tenantId)))[0]!,
-      locations: await tx.select().from(locations), // The deployment holds one tenant per database. These reads are unfiltered.
-      nodes: await tx.select().from(nodes),
-      tills: await tx.select().from(tills),
-      invoiceSeries: await tx.select().from(invoiceSeries),
-    }),
+    async (tx) => {
+      // `[0]!` is safe: `designated.tenantId`/`nodeId` are the primary till's provisioned ids
+      // (`config.till`), whose tenant + node rows are minted as its FK parents at provision, so both
+      // by-id lookups always return exactly one row.
+      const t = (
+        await tx
+          .select({ country: tenants.country, taxId: tenants.taxId })
+          .from(tenants)
+          .where(eq(tenants.id, deps.designated.tenantId))
+      )[0]!;
+      const n = (
+        await tx
+          .select({
+            name: nodes.name,
+            filingModule: nodes.filingModule,
+            taxModule: nodes.taxModule,
+          })
+          .from(nodes)
+          .where(eq(nodes.id, deps.designated.nodeId))
+      )[0]!;
+      return { tenant: t, primaryNode: n };
+    },
   );
 
   const environment = await readDeploymentEnvironment(deps.appDb);
   if (environment === null) throw new AppError("mirror.not_provisioned", {});
 
-  // The primary's enabled-module set, read FRESH at mint time rather than from boot — the
-  // operator may have edited modules.json since the primary booted, and a malformed file surfaces its
+  // The primary's enabled-module set, read FRESH at mint time rather than from boot — the operator may
+  // have edited modules.json since the primary booted, and a malformed file surfaces its
   // `module.config_*` code HERE, before the reservation bumps any counter. It both decides which
   // modules reserve below and travels to the mirror as `moduleOverrides`.
   const moduleConfig = await readModuleConfig(deps.stateDir);
@@ -144,17 +161,12 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
 
   // Reserve the standby's dormant identity through each enabled module's provisioning seat
   // (reserved-standby-identity design §6 R2), unseal the primary's identity key, and read the box CA
-  // IN PARALLEL — the three have no data dependency (the endorsement needs only the private key +
-  // `deps.standby`, never `reserved`, and the CA is a file read).
-  //
-  // The reservation shares ONE `withTenant` transaction, so every module's reads and its allocation are
-  // consistent with each other. What a module reserves, and what it throws when the primary is not in a
-  // state to reserve, is the module's own business; nothing is caught here.
-  //
-  // The endorsement is MEMBERSHIP's, not any module's: it is computed below from the primary's identity
-  // PRIVATE key, unsealed as `app_user` inside `readNodeIdentityKey`'s own transaction, and `endorseKey`
-  // signs canonicalize({nodeId, publicKey}) so the endorsement chains the standby's key back to the
-  // primary's setup-established trust anchor (reserved-standby-identity §4).
+  // IN PARALLEL — the three have no data dependency. The reservation shares ONE `withTenant`
+  // transaction, so every module's reads and its allocation are consistent with each other. What a
+  // module reserves, and what it throws when the primary is not in a state to reserve, is the module's
+  // own business; nothing is caught here. The endorsement is MEMBERSHIP's, computed below from the
+  // primary's identity PRIVATE key: `endorseKey` signs canonicalize({nodeId, publicKey}) so it chains
+  // the standby's key back to the primary's setup-established trust anchor (design §4).
   const [reserved, primaryPrivateKey, boxCaPem] = await Promise.all([
     withTenant(deps.appDb, deps.designated.tenantId, async (tx) => {
       const primary = {
@@ -183,22 +195,24 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
     primaryPrivateKey,
   );
 
-  // `enrolPeer` INSERTs a `sync_peers` row (not idempotent, not auto-reaped), so it runs AFTER the
-  // reads have succeeded — never concurrently with them. Were it folded in with a read, a rejected
-  // read (a missing CA) would abandon an already-committed peer row on every retry.
-  const { token } = await enrolPeer(deps.retentionDb, {
-    subscriberId: deps.standby.nodeId,
-    name: "cloud mirror",
-  });
-
   return {
-    rows,
     designated: deps.designated,
+    tenant: { country: tenant.country, taxId: tenant.taxId },
+    primaryNode: {
+      name: primaryNode.name,
+      filingModule: primaryNode.filingModule,
+      taxModule: primaryNode.taxModule,
+    },
     environment,
     boxHostname: deps.boxHostname,
     boxCaPem,
     relayUrl: deps.relayUrl,
-    syncToken: token,
+    replication: {
+      host: deps.replication.advertiseHost,
+      port: deps.replication.advertisePort,
+      database: deps.database,
+      password: deps.replication.password,
+    },
     reservedIdentity: { ...reserved, endorsement },
     moduleOverrides: serializeModuleConfig(moduleConfig),
     wireguardPublicKey: deps.wireguardPublicKey,

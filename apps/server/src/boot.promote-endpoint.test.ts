@@ -29,7 +29,6 @@ import { startServer } from "./boot.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { ALL_MODULES } from "./modules.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
-import { sealMirrorToken } from "./mirror-token.js";
 import { roleUrl } from "./testing/postgres.js";
 
 // Slice 2 Task 7 boot integration: the promote endpoint (`POST /management-api/promote`) is mounted on
@@ -239,7 +238,6 @@ async function seedMirrorIdentity(admin: Database): Promise<{ nodeId: string }> 
     boxCaPem: "unused-ca-pem",
     originNodeId: MIRROR_ORIGIN_NODE_ID,
   });
-  await sealMirrorToken(admin, RING, MIRROR_TENANT_ID, "mirror-sync-token");
 
   await stampDeployment(admin, "production");
   await setDeploymentMode(admin, "mirror");
