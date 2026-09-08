@@ -63,6 +63,7 @@
 | `apps/dashboard/src/api/client.ts`, `screens/printers-screen.ts`, `i18n/strings.ts` (+ tests) | the pending list with Accept/Deny (Task 8) |
 | `apps/print-agent/*` | the container host: `config.ts`, `state.ts`, `setup-page.ts`, `host.ts`, `bin.ts`, `Dockerfile` (Task 9) |
 | `apps/server/src/print-agent-e2e.test.ts` | join → accept → enqueue → pull → bytes on a loopback printer → done; revoke → unauthorized (Task 10) |
+| `scripts/changed-scope.mjs`, `.github/workflows/ci.yml`, `scripts/english-only.test.ts` | the three places a new workspace member must be registered (Tasks 1 and 9) |
 | `docs/backlog.md`, the spec's status line | landing notes (Task 11) |
 
 Tasks 2–4 depend only on Task 1; Tasks 5–8 are independent of Tasks 2–4. Task 9 needs 4; Task 10 needs 4 and 7.
@@ -74,7 +75,7 @@ Tasks 2–4 depend only on Task 1; Tasks 5–8 are independent of Tasks 2–4. T
 **Files:**
 - Create: `packages/print-agent/package.json`, `packages/print-agent/tsconfig.json`, `packages/print-agent/vitest.config.ts`, `packages/print-agent/src/index.ts`
 - Move: `packages/printing/src/transport.ts` → `packages/print-agent/src/transport.ts`; `packages/printing/src/transport.test.ts` → `packages/print-agent/src/transport.test.ts`
-- Modify: `packages/printing/package.json` (add the dependency), `packages/printing/src/printers.ts:56-57`, `packages/printing/src/runtime.ts:1-4`, `packages/printing/src/index.ts:23-26`, `packages/printing/src/runtime.test.ts:11-12`, `packages/printing/src/runtime.active.test.ts`, `runtime.race.test.ts`, `runtime.reclaim.test.ts` (their `./transport.js` imports), `packages/db/src/english-only.ts:14-40`
+- Modify: `packages/printing/package.json` (add the dependency), `packages/printing/src/printers.ts:56-57`, `packages/printing/src/runtime.ts:1-4`, `packages/printing/src/index.ts:24-25`, `packages/printing/src/runtime.test.ts:11-12`, `packages/printing/src/runtime.race.test.ts:10-11`, `packages/printing/src/runtime.reclaim.test.ts:10` (their `./transport.js` imports), `packages/db/src/english-only.ts:14-40`, `scripts/english-only.test.ts:75-106`, `scripts/changed-scope.mjs:278-314`, `.github/workflows/ci.yml:1112-1135, 1181-1204`
 
 **Interfaces:**
 - Produces (barrel `@waitron/print-agent`): `PrintTransport = "usb" | "network_tcp" | "cloud_poll"`, `PrinterTarget`, `Transport`, `NetworkTcpTransport`, `UsbTransport`, `RoutingTransport`, `TransportAdapters`, `FakeSink`, `DEFAULT_TCP_TIMEOUT_MS`, `NetworkTcpOptions` — exactly today's `packages/printing/src/transport.ts` exports plus the `PrintTransport` union.
@@ -190,7 +191,7 @@ and add `import type { PrintTransport } from "@waitron/print-agent";` at the top
 
 `packages/printing/src/runtime.ts:3-4` → `import type { PrintTransport, PrinterTarget, Transport } from "@waitron/print-agent";`
 
-`packages/printing/src/index.ts:23-24` — delete the two `./transport.js` lines and add:
+`packages/printing/src/index.ts:24-25` — delete the two `./transport.js` lines and add:
 
 ```ts
 // The transports live in @waitron/print-agent (the db-free agent package); re-exported so the
@@ -199,9 +200,20 @@ export { FakeSink } from "@waitron/print-agent";
 export type { PrinterTarget, Transport } from "@waitron/print-agent";
 ```
 
-In the four runtime suites replace `from "./transport.js"` with `from "@waitron/print-agent"`.
+In the THREE runtime suites that import it — `runtime.test.ts:11-12`, `runtime.race.test.ts:10-11`, `runtime.reclaim.test.ts:10` — replace `from "./transport.js"` with `from "@waitron/print-agent"`. (`runtime.active.test.ts` imports no transport; leave it alone.)
 
 `packages/db/src/english-only.ts` `GENERIC_PACKAGES`: add `"print-agent",` after `"printing",`.
+
+**`scripts/english-only.test.ts:75-106` pins that array VERBATIM AND IN ORDER**
+(`expect([...GENERIC_PACKAGES]).toEqual([…])`) — add `"print-agent"` in the same position there, or
+Step 5 goes red.
+
+**Register the new member in the CI shard bins** (`scripts/changed-scope.mjs`'s own header at :274-276
+says a member missing from both bins makes `scripts/ci-workflow.test.mjs` fail, and that test asserts
+each member appears exactly once): add `"@waitron/print-agent"` to `LIGHT_B_PACKAGES` (:297-314,
+beside `"@waitron/printing"`), and add the matching literal exclusion line to `.github/workflows/ci.yml`'s
+**test-light-a** step (:1112-1135), which excludes light-b's members:
+`set -- "$@" --filter "!@waitron/print-agent"`.
 
 - [ ] **Step 4: Install and run the moved suite**
 
@@ -218,7 +230,7 @@ Expected: the transport suite passes unchanged (FakeSink / NetworkTcpTransport /
 pnpm --filter @waitron/print-agent lint typecheck
 pnpm --filter @waitron/printing lint typecheck test:coverage
 pnpm typecheck
-pnpm vitest run scripts/english-only.test.ts scripts/errors-reachable.test.ts
+pnpm vitest run scripts/english-only.test.ts scripts/errors-reachable.test.ts scripts/ci-workflow.test.mjs
 pnpm format:check
 ```
 
@@ -227,7 +239,7 @@ Expected: all green. `errors-reachable` skips the new package (no `src/errors.ts
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/print-agent packages/printing packages/db/src/english-only.ts pnpm-lock.yaml
+git add packages/print-agent packages/printing packages/db/src/english-only.ts scripts/english-only.test.ts scripts/changed-scope.mjs .github/workflows/ci.yml pnpm-lock.yaml
 git commit -s -m "feat(print-agent): db-free package; move the transports out of @waitron/printing"
 ```
 
@@ -467,6 +479,9 @@ const ok = <T>(value: T): Result<T> => ({ ok: true, value });
 async function failureOf(res: Response): Promise<Failure> {
   if (res.status >= 500) return { kind: "unreachable", detail: `HTTP ${res.status}` };
   if (res.status === 401) return { kind: "unauthorized" };
+  // 403 on `/print-api/agent/*` is only ever `agent.pending`: the surface's other 403 codes
+  // (`authorization.not_permitted`, `person.suspended`, print-api.ts:135-136) belong to the
+  // management routes, which an agent token never reaches.
   if (res.status === 403) return { kind: "pending" };
   if (res.status === 429) return { kind: "rate_limited" };
   if (res.status === 409) return { kind: "full" };
@@ -694,10 +709,10 @@ describe("Router", () => {
   });
 
   it("fixes the environment from the first successful probe when none was given", async () => {
-    const router = new Router({ configuredUrl: A, probe: probeFrom({ [A]: { acceptingSales: true, environment: "dev" } }) });
+    const router = new Router({ configuredUrl: A, probe: probeFrom({ [A]: { acceptingSales: true, environment: "production" } }) });
     expect(router.environment).toBeUndefined();
     await router.probe();
-    expect(router.environment).toBe("dev");
+    expect(router.environment).toBe("production");
   });
 
   it("merge never drops the configured url, dedupes by origin and drops non-http urls", () => {
@@ -1344,7 +1359,7 @@ In `print-agents.ts`, after `lastSeenAt`:
     joinCode: text("join_code"),
 ```
 
-Delete the whole `printAgentPairingCodes` table (its doc comment and export, lines 60-end) and the now-unused imports (`uniqueIndex` if nothing else uses it). Rewrite the file header's mention of the pairing code to describe join-and-accept in one line.
+Delete the whole `printAgentPairingCodes` table — its doc comment starts at `:59` and the export runs `:76-115`. `uniqueIndex` is used only there, so drop that import; `text` must STAY (the new `joinCode` column needs it). Rewrite the file header's mention of the pairing code to describe join-and-accept in one line.
 
 `packages/db/src/index.ts:32` → `export { printAgents } from "./schema/print-agents.js";`
 
@@ -1352,7 +1367,7 @@ Delete the whole `printAgentPairingCodes` table (its doc comment and export, lin
 
 `packages/fiscal-verifactu/src/privileges.expected.ts:54` → delete the `print_agent_pairing_codes: "SID",` line.
 
-`packages/printing/src/testing/global-setup.ts` → replace `(\`print_agents\`, \`print_agent_pairing_codes\`, \`printers\`, \`print_jobs\`)` with `(\`print_agents\`, \`printers\`, \`print_jobs\`)` and the `dockerRequired` text's "single-use pairing-code redemption" sentence with: `"the join/accept/deny verbs run as the real deployment role with its exact grants, and PGlite's all-superuser connection would pass a missing grant."`
+`packages/printing/src/testing/global-setup.ts` needs THREE edits, all stale claims the behaviour change retires (CLAUDE.md §1): the table list at `:12` loses `print_agent_pairing_codes`; the `dockerRequired` string at `:29-31` loses its "single-use pairing-code redemption" rationale, becoming `"the join/accept/deny verbs run as the real deployment role with its exact grants, and PGlite's all-superuser connection would pass a missing grant."`; and the paragraph at `:24` that justifies real Postgres by "prove the single-use enrol race" is no longer true — the race test is deleted with the pairing code, so restate it as the grants/role rationale.
 
 - [ ] **Step 4: Generate the migration**
 
@@ -1369,7 +1384,7 @@ ALTER TABLE "print_agents" ADD COLUMN "approved_at" timestamp with time zone;-->
 ALTER TABLE "print_agents" ADD COLUMN "join_code" text;
 ```
 
-No `--custom` twin: the table-level grant on `print_agents` (`SELECT, INSERT, UPDATE`) covers new columns, and the dropped table takes its grant with it.
+The `CASCADE` also takes `print_agent_pairing_codes_lookup_idx` (`0001_db_baseline_sql.sql:761`) and the table's two FKs (`:699-700`) — expected, not a surprise. No `--custom` twin is needed: `0001_db_baseline_sql.sql:474` grants `SELECT, INSERT, UPDATE ON "print_agents"` with NO column list, so the two new columns are already covered, and `:476-478`'s pairing grants vanish with the table.
 
 - [ ] **Step 5: Run the package and the root guards**
 
@@ -1377,7 +1392,7 @@ No `--custom` twin: the table-level grant on `print_agents` (`SELECT, INSERT, UP
 TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/db test:coverage
 TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/fiscal-verifactu test -- privileges
 pnpm vitest run scripts/classification-complete.test.ts scripts/append-only-enable-always.test.ts scripts/module-graph-honesty.test.ts
-grep -rn "print_agent_pairing\|printAgentPairingCodes" apps packages scripts --include='*.ts' --include='*.mjs' | grep -v "/drizzle/"
+grep -rn "print_agent_pairing\|printAgentPairingCodes" apps packages scripts --include='*.ts' --include='*.mjs' --exclude-dir=coverage --exclude-dir=node_modules --exclude-dir=dist | grep -v "/drizzle/"
 ```
 
 Expected: db green at 98/95; privileges green; guards green; the grep prints only `packages/printing/src/agent.ts` + its test (Task 6 removes those) and nothing else.
@@ -1614,7 +1629,11 @@ In `authenticateAgent`: select `approvedAt: printAgents.approvedAt` beside `toke
   if (row.approvedAt === null) throw new AppError("agent.pending", {});
 ```
 
-The `agentId`-typed uuid guard, the tenant predicate and the `last_seen_at` gate are unchanged (a pending agent's sighting is still recorded — the dashboard shows when it last knocked).
+The `agentId`-typed uuid guard and the tenant predicate are unchanged. **A pending agent's
+`last_seen_at` is NOT recorded**: the throw above precedes the sighting UPDATE, and even below it the
+throw rolls back the route's single `withTenant` transaction. So the pending list shows no
+"last knocked" time — out of scope for this slice, and the sighting resumes the moment the agent is
+accepted. Say exactly that in the code comment; do not claim the gate is unchanged.
 
 `errors.ts`: delete the three `agent.pairing_*` entries and their doc; add:
 
@@ -1636,7 +1655,7 @@ and change the file header's "Thrown by the printer/agent CRUD, enrolment and ru
 - [ ] **Step 4: Run the package**
 
 Run: `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/printing test:coverage`
-Expected: PASS at 98/95. (The `apps/server` typecheck is now RED until Task 7 — expected; do not run `pnpm typecheck` here.)
+Expected: PASS. (`packages/printing` sits at the 90/90/85/85 FLOOR — `packages/printing/vitest.config.ts:33`; it is not one of `scripts/coverage-thresholds.test.ts`'s six high-bar packages.) The `apps/server` typecheck is now RED until Task 7 — expected; do not run `pnpm typecheck` here.
 
 - [ ] **Step 5: Verify and commit**
 
@@ -1651,7 +1670,7 @@ git commit -s -m "feat(printing): joinAgent/acceptAgent/denyAgent; authenticateA
 ### Task 7: Server routes — join / accept / deny / list; `servers` on the pull
 
 **Files:**
-- Modify: `apps/server/src/print-api.ts` (deps, STATUS, the enrol/codes routes → join/accept/deny, the list projection, the pull reply), `apps/server/src/print-api.test.ts`, `apps/server/src/print-api.pg.test.ts`, `apps/server/src/boot.ts:1416`, `apps/server/src/print-agent-session.ts` (header comment only)
+- Modify: `apps/server/src/print-api.ts` (deps, STATUS, the enrol/codes routes → join/accept/deny, the list projection, the pull reply), `apps/server/src/enrol-rate-limit.ts` (the `code` union + its stale prose — **required, see Step 0**), `apps/server/src/print-api.test.ts`, `apps/server/src/print-api.pg.test.ts`, `apps/server/src/boot.ts:1416`, `apps/server/src/print-agent-session.ts` (header comment only)
 
 **Interfaces:**
 - Consumes: `joinAgent`, `acceptAgent`, `denyAgent`, `MAX_PENDING_AGENTS` (Task 6); `routableServers`, `SignedMembershipDocument` from `@waitron/membership`; `readNodeMembership` from `@waitron/db` (boot).
@@ -1666,6 +1685,25 @@ export interface PrintApiDeps {
 }
 ```
 Routes: `POST /print-api/agent/join {name}` → 201 `{agentId, token, verificationCode}`; `GET /print-api/agent/jobs` → `{ nodeId, servers: RoutableServer[], jobs }`; `GET /management-api/print-agents` rows gain `approvedAt`, `joinCode` and omit denied rows; `POST /management-api/print-agents/:id/accept` → 204; `POST …/:id/deny` → 204. `POST …/codes` and `POST /print-api/agent/enrol` are gone (404).
+
+- [ ] **Step 0: Retype the rate limiter's code union (`apps/server/src/enrol-rate-limit.ts`)**
+
+Task 6 deleted `agent.pairing_rate_limited` from the registry, and `enrol-rate-limit.ts:65` still names
+it in `EnrolRateLimiterOptions["code"]`, with `new AppError(code, {})` at `:104` — so `apps/server` is
+red until this lands. Retype it:
+
+```ts
+  code?: "device.pairing_rate_limited" | "agent.join_rate_limited";
+```
+
+There is **no `max` option and there must not be one**: `:48-55` records the deliberate decision that
+the window and cap are baked in so the limiter "can never be constructed with a different rate POLICY
+than the one it ships". Tests drive it with the injectable clock and an in-process pre-fill instead.
+
+Then sweep this file's stale prose, which a behaviour change retires (CLAUDE.md §1): lines 1-4, 9-13,
+20-22 and 59-63 all cite `POST /print-api/agent/enrol`, "the pairing-code DELETE" and
+`agent.pairing_rate_limited`. Rewrite each to name `POST /print-api/agent/join`, the pending-row
+insert, and `agent.join_rate_limited`.
 
 - [ ] **Step 1: Rewrite the test helpers and the enrol tests (failing first)**
 
@@ -1683,7 +1721,9 @@ async function joinAndAccept(app: Hono, name = "Cocina agent"): Promise<{ agentI
 }
 ```
 
-and rename every `enrolAgent(app, …)` call to `joinAndAccept(app, …)`. `mountApp` in both files becomes:
+and rename every `enrolAgent(app, …)` call to `joinAndAccept(app, …)`.
+
+The two suites have DIFFERENT `mountApp` signatures — do not merge them. In `print-api.test.ts` it becomes:
 
 ```ts
 function mountApp(enrolRateLimiter?: EnrolRateLimiter, held: SignedMembershipDocument | null = null): Hono {
@@ -1697,7 +1737,25 @@ function mountApp(enrolRateLimiter?: EnrolRateLimiter, held: SignedMembershipDoc
 }
 ```
 
-with `const NODE_ID = "33333333-3333-4333-8333-333333333333";` and `import type { SignedMembershipDocument } from "@waitron/membership";` (the pg suite's `mountApp` takes its tenant from `tenantA`).
+with `const NODE_ID = "33333333-3333-4333-8333-333333333333";` and
+`import type { SignedMembershipDocument } from "@waitron/membership";`.
+
+In `print-api.pg.test.ts` the existing signature is `function mountApp(tenant: Tenant): Hono`
+(`:78-81`), called `mountApp(tenantA)` at roughly twenty sites — keep that shape and widen it:
+
+```ts
+function mountApp(tenant: Tenant, held: SignedMembershipDocument | null = null): Hono {
+  const app = new Hono();
+  mountPrintApi(
+    app,
+    { db: suite.admin, cfg: { ...tenant, nodeId: NODE_ID }, readMembership: async () => held },
+    noopLog,
+  );
+  return app;
+}
+```
+
+Every existing `mountApp(tenantA)` call site keeps working unchanged.
 
 Replace the `mountPrintApi — agent enrol` describe in `print-api.test.ts` with:
 
@@ -1721,7 +1779,7 @@ describe("mountPrintApi — agent join / accept / deny", () => {
     const { agentId, token } = (await join.json()) as { agentId: string; token: string };
     const claim = await send(app, "GET", "/print-api/agent/jobs", { bearer: token });
     expect(claim.status).toBe(403);
-    expect(((await claim.json()) as { code: string }).code).toBe("agent.pending");
+    expect(((await claim.json()) as { error: { code: string } }).error.code).toBe("agent.pending");
     const report = await send(app, "POST", `/print-api/agent/jobs/${randomUUID()}/result`, { bearer: token, body: { status: "done" } });
     expect(report.status).toBe(403);
     expect((await send(app, "POST", `/management-api/print-agents/${agentId}/accept`, { cookie: managerCookie })).status).toBe(204);
@@ -1754,20 +1812,34 @@ describe("mountPrintApi — agent join / accept / deny", () => {
   });
 
   it("the (MAX_PENDING_AGENTS + 1)th pending join → 409 agent.join_full", async () => {
-    const app = mountApp(createEnrolRateLimiter({ code: "agent.join_rate_limited", max: 1_000 }));
+    const app = mountApp(); // the default limiter admits ENROL_RATE_MAX (30) per window; 11 joins fit
     for (let i = 0; i < MAX_PENDING_AGENTS; i += 1) {
       expect((await send(app, "POST", "/print-api/agent/join", { body: { name: `b${i}` } })).status).toBe(201);
     }
     const full = await send(app, "POST", "/print-api/agent/join", { body: { name: "b-more" } });
     expect(full.status).toBe(409);
-    expect(((await full.json()) as { code: string }).code).toBe("agent.join_full");
+    expect(((await full.json()) as { error: { code: string } }).error.code).toBe("agent.join_full");
   });
 
   it("rate-limits join: the (cap+1)th attempt is 429 agent.join_rate_limited BEFORE the DB, then the window resets", async () => {
-    // Keep the existing enrol rate-limit test body, with the route renamed to /print-api/agent/join,
-    // the body { name: "x" }, the limiter built with code "agent.join_rate_limited", and the expected
-    // code "agent.join_rate_limited". The under-cap requests must not fill the pending cap: build the
-    // limiter with `max: 3` (ENROL_RATE_MAX is 30 > MAX_PENDING_AGENTS).
+    // THE GUARD (proven by deletion): a per-process GLOBAL fixed-window counter checked at the TOP of
+    // the join handler, before the body parse and the pending-count read. Deleting `enrolLimiter.check()`
+    // from print-api.ts's join route makes the (cap+1)th attempt join/400 instead of 429.
+    let fakeNow = 1_000;
+    const limiter = createEnrolRateLimiter({ now: () => fakeNow, code: "agent.join_rate_limited" });
+    const app = mountApp(limiter);
+    // Pre-fill to the cap IN-PROCESS, so no HTTP join happens first and the pending cap is never
+    // approached — the next HTTP attempt is the (cap+1)th → 429.
+    for (let i = 0; i < ENROL_RATE_MAX; i++) limiter.check();
+    const limited = await send(app, "POST", "/print-api/agent/join", { body: { name: "x" } });
+    expect(limited.status).toBe(429);
+    expect((await limited.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "agent.join_rate_limited" },
+    });
+    // Past the window the counter resets and the request reaches the handler — a real join now, 201.
+    fakeNow += ENROL_RATE_WINDOW_MS + 1;
+    const after = await send(app, "POST", "/print-api/agent/join", { body: { name: "x" } });
+    expect(after.status).toBe(201);
   });
 
   it("the deleted routes answer 404: POST /print-api/agent/enrol and POST /management-api/print-agents/codes", async () => {
@@ -1809,7 +1881,26 @@ Add to the `agent claim + report` describe:
 
 with `import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";` and `import { MAX_PENDING_AGENTS } from "@waitron/printing";`.
 
-In `print-api.pg.test.ts`: the `management routes require printer.manage` test (line 203) minted codes as its gated probe — change its three requests to `POST /management-api/print-agents/${agentId}/accept` on a freshly joined (unaccepted) agent: unauth 401, staff 403, manager 204. Update the `agent-codes screens the body` test in the PGlite suite (line 465) to `join screens the body` (already covered above — delete it).
+**The gate suites — both files, and neither is optional.**
+
+`print-api.test.ts:781-824` builds a `routes` array whose FIRST entry (`:786`) is
+`["POST", "/management-api/print-agents/codes", { label: "X" }]`, driving two gate tests
+(unauth → 401, staff → 403). Deleting that route makes both receive 404. Replace that entry with the
+two new gated routes, which need a pending agent id — so hoist a `join` before the loop and use its id:
+
+```ts
+    ["POST", `/management-api/print-agents/${pendingId}/accept`, undefined],
+    ["POST", `/management-api/print-agents/${pendingId}/deny`, undefined],
+```
+
+In `print-api.pg.test.ts` there are THREE gate tests, not one: `:203` (whose requests at `:218` and
+`:228` both post to the codes route), `:315` and `:555`. Change `:203`'s three requests to
+`POST /management-api/print-agents/${agentId}/accept` on a freshly joined, unaccepted agent —
+unauth 401, staff 403, manager 204 — and leave `:315` / `:555` alone (they gate the station and
+receipt-printer routes, which this task does not touch; confirm they still pass).
+
+Finally, delete the PGlite suite's `agent-codes screens the body` test (`:465`) — the new
+`join screens the body` test above replaces it.
 
 - [ ] **Step 2: Run to see them fail**
 
@@ -1903,7 +1994,7 @@ In `print-api.ts`:
     );
 ```
 
-(If `till` at that site has no `nodeId`, use `config.till.nodeId` — the value `mountNodeApi` receives at line 1353.) Update the comment block above it (lines 1407-1415): "UNAUTHENTICATED agent join (`POST /print-api/agent/join`, a pending row an admin accepts or denies)" and "(accept/deny/list/revoke agents, printers CRUD, recent jobs)".
+`till.nodeId` is correct and confirmed: `till-config.ts:60` declares `nodeId: NodeId`, and it is the same value `mountNodeApi` already receives 63 lines above at `boot.ts:1355`. `readNodeMembership` is already imported at `boot.ts:13`. Update the comment block above it (lines 1407-1415): "UNAUTHENTICATED agent join (`POST /print-api/agent/join`, a pending row an admin accepts or denies)" and "(accept/deny/list/revoke agents, printers CRUD, recent jobs)".
 
 - [ ] **Step 4: Run both suites**
 
@@ -1929,7 +2020,7 @@ git commit -s -m "feat(server): print-agent join/accept/deny routes; the claim r
 ### Task 8: Dashboard — the pending list with Accept / Deny
 
 **Files:**
-- Modify: `apps/dashboard/src/api/client.ts:910-916, 1898-1925`, `apps/dashboard/src/api/client.test.ts:1936-1965`, `apps/dashboard/src/screens/printers-screen.ts` (state 247-250, methods 400-437, `#renderAgent`, `#renderCodePanel` → deleted, `#renderAgentsSection`), `apps/dashboard/src/screens/printers-screen.test.ts` (stub + the seven generate/code tests), `apps/dashboard/src/i18n/strings.ts` (en 193-210, es 753-770)
+- Modify: `apps/dashboard/src/api/client.ts` (`PrintAgentRow` :913-919, `createAgentCode` :1913-1915, the banner comment :1898-1902), `apps/dashboard/src/api/client.test.ts:1936-1965`, `apps/dashboard/src/screens/printers-screen.ts` (class doc :66-77, state :247-252, methods 400-437, `#renderAgent`, `#renderCodePanel` → deleted, `#renderAgentsSection`), `apps/dashboard/src/screens/printers-screen.test.ts` (stub :123 + the six generate/code tests + the two OTHER `createAgentCode` consumers, see Step 3), `apps/dashboard/src/screens/printers-screen.a11y.test.ts` (stub :119 + the pairing-panel case :158-174 — **required, it drives the deleted widgets**), `apps/dashboard/src/i18n/strings.ts` (en :201-209, es :761-769)
 
 **Interfaces:**
 - Consumes: the Task 7 routes.
@@ -1997,11 +2088,18 @@ es:
     "En el ordenador al que está conectada la impresora, abre http://<ese ordenador>:9110 e introduce esta dirección del servidor:",
 ```
 
-Update the section comment (line 193) to "print agents (pending join requests · accept/deny · revoke · last-seen)". Run `pnpm --filter @waitron/dashboard test -- strings` if a key-parity suite exists (it fails on an en/es mismatch).
+Update the section comment (line 193) to "print agents (pending join requests · accept/deny · revoke · last-seen)". **There is no en/es key-parity test** — `apps/dashboard/src/i18n/t.test.ts` is the only strings suite and compares no key sets. Parity is enforced by TypeScript alone (`es` is typed `Record<StringKey, string>`), so an omission in `es` is a TYPECHECK error, not a test failure. Also confirmed safe: `printers.done` is not shared — `devices-screen.ts:568,571,576` uses the separate `devices.*` twins.
 
 - [ ] **Step 3: Screen tests (failing first)**
 
-In `printers-screen.test.ts`: the `agents` fixture gets `approvedAt`/`joinCode` on `a1` (approved) and `a2` (revoked, approved); add a third `a3: { id: "a3", name: "kitchen-pi", active: true, lastSeenAt: null, enrolledAt: "…", approvedAt: null, joinCode: "ABCD" }`. In `stubApi` replace `createAgentCode` with `acceptAgent: vi.fn().mockResolvedValue(undefined), denyAgent: vi.fn().mockResolvedValue(undefined)`. Delete the seven generate/copy/dismiss tests (260-359) and add:
+In `printers-screen.test.ts`: the `agents` fixture gets `approvedAt`/`joinCode` on `a1` (approved) and `a2` (revoked, approved); add a third `a3: { id: "a3", name: "kitchen-pi", active: true, lastSeenAt: null, enrolledAt: "…", approvedAt: null, joinCode: "ABCD" }`. In `stubApi` replace `createAgentCode` with `acceptAgent: vi.fn().mockResolvedValue(undefined), denyAgent: vi.fn().mockResolvedValue(undefined)`. Delete the SIX generate/copy/dismiss tests (`:260, 277, 291, 308, 325, 342`).
+
+Two further tests consume `createAgentCode` and must be retargeted, not deleted — they cover the
+double-submit lock, which still matters: the parametrised `it.each` at ~`:1024-1030` and
+`it("keeps Test Print working while Generate is pending without unlocking Generate")` at ~`:1080-1113`.
+Point both at `acceptAgent` (the new primary mutation) and rename the second's "Generate" to "Accept".
+
+Then add:
 
 ```ts
   // ── Agents: pending join requests ────────────────────────────────────────────────────────────────
@@ -2053,11 +2151,26 @@ In `printers-screen.test.ts`: the `agents` fixture gets `approvedAt`/`joinCode` 
     await flush(el);
     q(el, "[data-test=accept-agent-a3]")!.click();
     await flush(el);
-    expect(q(el, "[data-test=error]")).toBeTruthy();
+    expect(q(el, "[role=alert]")).toBeTruthy(); // the suite's banner selector (printers-screen.test.ts:252)
   });
 ```
 
-(Match the existing suite's error-banner selector — check what the `initial load is rejected` test at line 248 queries and use the same.)
+The banner selector is `[role=alert]`, confirmed at `printers-screen.test.ts:252`.
+
+**`printers-screen.a11y.test.ts`** (same step): its stub at `:119` provides `createAgentCode`, and its
+second case at `:158`, `"renders the shown-once pairing-code panel accessibly"`, types into
+`[data-test=agent-label]` (`:166`) and clicks `[data-test=generate-code]` (`:174`) — all deleted here.
+Swap the stub entries for `acceptAgent`/`denyAgent` and replace that case with a pending-row one:
+
+```ts
+  it("renders a pending join request accessibly (accept and deny are named controls)", async () => {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api: stubApi() });
+    await flush(el);
+    expect(q(el, "[data-test=accept-agent-a3]")).toBeTruthy();
+    expect(q(el, "[data-test=deny-agent-a3]")).toBeTruthy();
+    await expectNoAxeViolations(el); // use whatever helper the file already calls
+  });
+```
 
 - [ ] **Step 4: Screen implementation**
 
@@ -2195,7 +2308,29 @@ export function createContainerHost(opts: { env: EnvConfig; state: FileState; fe
 
 (The package NAME is `@waitron/print-agent-app` so it does not collide with the library; the directory is `apps/print-agent` as the spec names it.)
 
-`tsconfig.json` as `apps/server`'s with `"include": ["src"]`. `vitest.config.ts` as the library's with `exclude: [..., "src/bin.ts"]` in coverage (the process entry, wired by hand — everything it calls is tested).
+`tsconfig.json` as `apps/server`'s with `"include": ["src"]`. `vitest.config.ts` — written out rather
+than described, because `scripts/coverage-thresholds.test.ts` reads this file as TEXT and matches the
+threshold literal exactly (a spread or an extra key fails it):
+
+```ts
+import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
+
+// Hermetic: temp dirs and `app.request`, no listener, no container, no hardware.
+export default defineConfig({
+  test: {
+    globals: true,
+    exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "html", "json-summary"],
+      // `src/bin.ts` is the process entry — wired by hand, exercised by a manual boot; everything it
+      // calls is tested directly.
+      exclude: [...coverageConfigDefaults.exclude, "src/bin.ts"],
+      thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
+    },
+  },
+});
+```
 
 `Dockerfile`:
 
@@ -2351,11 +2486,21 @@ WAITRON_STATE_DIR=$(mktemp -d) WAITRON_SETUP_PORT=9111 gtimeout 5 node apps/prin
 
 Expected: tests green at the floor; the bundle starts, logs the setup page line and a `phase unconfigured` line, and `gtimeout` ends it (exit 124). Optionally `curl -s localhost:9111/status.json` during those 5 s shows `"phase":"unconfigured"`.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 8: Register the app in the CI shard bins**
+
+Same rule as Task 1 (`scripts/changed-scope.mjs:274-276`; `scripts/ci-workflow.test.mjs` asserts every
+member appears in exactly one bin): add `"@waitron/print-agent-app"` to `LIGHT_B_PACKAGES`
+(`scripts/changed-scope.mjs:297-314`) and the matching literal exclusion line to `.github/workflows/ci.yml`'s
+**test-light-a** step (`:1112-1135`): `set -- "$@" --filter "!@waitron/print-agent-app"`.
+
+Run: `pnpm vitest run scripts/ci-workflow.test.mjs scripts/changed-scope.test.mjs`
+Expected: PASS.
+
+- [ ] **Step 9: Commit**
 
 ```bash
 pnpm typecheck && pnpm format:check
-git add apps/print-agent pnpm-lock.yaml
+git add apps/print-agent scripts/changed-scope.mjs .github/workflows/ci.yml pnpm-lock.yaml
 git commit -s -m "feat(print-agent-app): container host — env/state-dir config, LAN setup/status page, esbuild bundle, Dockerfile"
 ```
 
@@ -2463,9 +2608,11 @@ describe("print agent end to end", () => {
     expect(created.status).toBe(201);
     const { id: printerId } = (await created.json()) as { id: string };
     const payload = esc().init().line("Hola").cut().bytes();
-    const jobId = await withTenant(suite.db, tenantId, async (tx) => {
+    const { jobId } = await withTenant(suite.db, tenantId, async (tx) => {
       await asAppUser(tx);
-      return enqueuePrintJob(tx, { tenantId, locationId }, { printerId, payload });
+      // `enqueuePrintJob(tx, cfg, printerId, payload) => { jobId }` (outbox.ts:21-26) — positional,
+      // not an input object, and it returns a wrapper. The idiom is print-api.test.ts:123-129.
+      return enqueuePrintJob(tx, { tenantId, locationId }, printerId, payload);
     });
 
     await agent.runOnce();
@@ -2485,7 +2632,7 @@ describe("print agent end to end", () => {
 });
 ```
 
-(Check `enqueuePrintJob`'s signature in `packages/printing/src/outbox.ts` and `mountNodeApi`'s in `node-api.ts:44` before running; adjust the two calls to match.)
+Both signatures are confirmed against the code: `enqueuePrintJob(tx, cfg, printerId, payload) => { jobId }` (`outbox.ts:21-26`) and `mountNodeApi(app, deps, log)` (`node-api.ts:52`). Write them as given.
 
 - [ ] **Step 2: Run it**
 

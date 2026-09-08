@@ -238,7 +238,7 @@ the lease. Nothing to reconcile on the agent.
   `nc -z`: 9100 open, 631 open, HTTP 200 on 80. This proves the TCP path and nothing about receipt
   formatting — it is not an ESC/POS device, escape codes will print as stray characters and "cut" does
   nothing. Nothing is sent to it without the owner's go-ahead.
-- Coverage: the new package and app at the 90/90/85/85 floor; `packages/printing` stays at 98/95.
+- Coverage: the new package and app at the 90/90/85/85 floor — which `packages/printing` is also on (`packages/printing/vitest.config.ts:33`; it is NOT one of `scripts/coverage-thresholds.test.ts`'s six high-bar packages). `packages/db` keeps 98/98/98/95.
 - Root guards to run after the schema change: `classification-complete`, `append-only-enable-always`,
   `errors-reachable`. The new package throws no codes — it reads the server's `agent.*` codes off the
   wire — so it ships no `errors.ts`; the codes stay declared in `packages/printing/src/errors.ts`.
