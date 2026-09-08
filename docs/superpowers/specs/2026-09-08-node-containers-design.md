@@ -74,15 +74,29 @@ workspace with `--frozen-lockfile`, then run the builds that already exist — `
 `apps/till`, `apps/dashboard`, `apps/setup`. A new `dist/node-entry.js` (§5) is added to the
 server's esbuild list.
 
-**Runtime stage** (`node:26-slim` — glibc, so `pg_dump` is the Debian `postgresql-client-18`
-package; alpine is not used because the PostgreSQL apt repo is the supported way to pin the client
-MAJOR to the server's): copies only the build outputs into `/app` — `server.js`, `node-entry.js`,
-the bins, `drizzle/`, `package.json` (the `{"type":"module"}` marker `bundle-smoke` asserts) and the
-three web apps under `/app/web/{till,dashboard,setup}`. Installs `postgresql-client-18` and nothing
-else. Creates a `waitron` system user; `USER waitron`. Grants the node binary
-`cap_net_bind_service=+ep` (`setcap`) so a non-root process can bind 443 — **a claim to prove with
-a probe before it is written as fact** (plan task: bind 443 as `waitron` inside the built image,
-expect `listening`; the control is the same image without `setcap`, expect `EACCES`).
+**Runtime stage** (`node:26-slim`) copies only the build outputs into `/app` — `server.js`,
+`node-entry.js`, the bins, `drizzle/`, `package.json` (the `{"type":"module"}` marker
+`bundle-smoke` asserts) and the three web apps under `/app/web/{till,dashboard,setup}`. Two
+installs, each measured rather than assumed (§12):
+
+- **`postgresql-client-18`, from the PGDG apt repo — NOT Debian's own.** `node:26-slim` is Debian 13
+  (trixie), whose base repos carry `postgresql-client-17` only, and `pg_dump` 17 REFUSES an 18
+  server: `aborting because of server version mismatch / server version: 18.6; pg_dump version:
+  17.11`, exit 1 — which would break the backup duty (`backup-sweep.ts` shells out to `pg_dump`)
+  while everything else worked. Adding `apt.postgresql.org` (`trixie-pgdg`, keyring under
+  `/usr/share/postgresql-common/pgdg/`) makes `postgresql-client-18` available (18.6-1.pgdg13+2)
+  and the same dump succeeds. The client major must track §3.2's server major: bumping one without
+  the other reintroduces exactly this failure, so the two version numbers are pinned in the
+  Dockerfile beside a comment naming the other.
+- **`libcap2-bin`, to `setcap cap_net_bind_service=+ep /usr/local/bin/node`.** Required by the
+  on-prem profile specifically. Docker's own network namespace sets
+  `net.ipv4.ip_unprivileged_port_start=0`, so a non-root process binds 443 unaided under BRIDGE
+  networking — but `network_mode: host` shares the HOST namespace, where the kernel default 1024
+  applies and the same bind fails `EACCES`. With the capability the bind succeeds in host mode and
+  still succeeds in bridge mode, so the image carries it and both profiles work. (Docker's default
+  capability set retains `CAP_NET_BIND_SERVICE`, so nothing is added at run time.)
+
+Creates a `waitron` system user (fixed uid, §4); `USER waitron`.
 `ENTRYPOINT ["node", "/app/node-entry.js"]`. No `CMD` arguments: the four CLIs are run by naming
 their file (§9).
 
@@ -118,10 +132,13 @@ Five named volumes, so nothing a node keeps outside Postgres lives anywhere else
 | `backups` | `/var/lib/waitron/backups` | `LocalFsBackend`'s encrypted archives — the local destination; the mirror/S3/Drive destinations are the backup-destinations spec |
 | `media` | `/var/lib/waitron/media` | product images — DELETED by the "images into Postgres" item (owner 2026-09-08); listed so the compose is complete today |
 
-Volume ownership: the runtime stage creates the four `/var/lib/waitron/*` mount points owned by
-`waitron` so Docker's first mount inherits that ownership (Docker copies the image path's ownership
-onto a fresh named volume — a claim to check in the plan's first compose-up; the control is a
-volume pre-created by root). `state` files are 0600 already (`box-secrets.ts`).
+**Volume ownership is a boot-blocker, and the Dockerfile is what prevents it.** The runtime stage
+MUST pre-create and `chown` all four `/var/lib/waitron/*` mount points to `waitron`: a fresh named
+volume inherits the ownership of the image path it is mounted over, so a pre-created, chowned path
+comes up owned by the app (`10001`, writable), while a path the image never created comes up
+`root:root` and the non-root process cannot write to it at all (`Permission denied`) — measured
+both ways, §12. A volume added later without its `mkdir`+`chown` in the image is therefore a boot
+failure, not a warning. `state` files are 0600 already (`box-secrets.ts`).
 
 ## 5. The entrypoint — `apps/server/src/node-entry.ts`
 
@@ -330,6 +347,9 @@ OS image; a slimmer image.
 | Bridge networking yields a `172.x` address from `listBoxIpv4` | `os.networkInterfaces` marks only loopback `internal`; `box-reach.ts` header anticipates "a container with only loopback" | read; to be shown in the proof's failing-case print |
 | Docker Desktop `--network host` on macOS is the VM's network | `docker run --rm --network host alpine:3.20 ip -4 addr` → `192.168.65.3/24 eth0` | measured 2026-09-08, Docker 29.3.0 |
 | `restart: unless-stopped` restarts on daemon start and after any exit | Docker docs, "Start containers automatically": _"unless-stopped: Similar to always, except that when the container is stopped (manually or otherwise), it isn't restarted even after Docker daemon restarts."_ — i.e. a container not manually stopped IS restarted | to be re-quoted from the live page in the plan |
-| Non-root bind to 443 needs `cap_net_bind_service` on the binary | to be measured inside the built image (plan task, with a control) | not yet |
-| Docker copies the image path's ownership onto a fresh named volume | to be measured at first compose-up (plan task, with a root-precreated control) | not yet |
+| `node:26-slim` is Debian 13 (trixie); its base repos carry `postgresql-client-17`, not 18 | `docker run --rm node:26-slim` → `VERSION_CODENAME=trixie`; `apt-cache policy postgresql-client-18` empty, `apt-cache search '^postgresql-client'` lists 17 | measured 2026-09-08 |
+| `pg_dump` 17 refuses an 18 server; PGDG's 18 client succeeds against the same server | against `postgres:18-alpine` (server 18.6): pg_dump 17.11 → `aborting because of server version mismatch / server version: 18.6; pg_dump version: 17.11`, exit 1. Control, same server, PGDG pg_dump 18.6 → dump succeeded | measured 2026-09-08, both directions |
+| PGDG `trixie-pgdg` supplies `postgresql-client-18` on this base | `apt-cache policy` after adding the repo → `Candidate: 18.6-1.pgdg13+2` | measured 2026-09-08 |
+| Non-root bind to 443 fails under HOST networking and succeeds under bridge; `setcap` fixes host | same image, non-root: bridge → `listening on 443` (`ip_unprivileged_port_start` = 0); `--network host` → `FAILED EACCES` (host namespace = 1024); with `setcap cap_net_bind_service=+ep` on `/usr/local/bin/node` → `listening on 443` in host mode AND bridge, `getcap` shows `cap_net_bind_service=ep` | measured 2026-09-08, three-way with controls. Taken in Docker Desktop's Linux VM — 1024 is the kernel default, to be re-confirmed on the real Linux box at §10's host-network proof |
+| A fresh named volume inherits the image path's ownership; an un-chowned path comes up root-owned and unwritable | image pre-creates + chowns `/var/lib/waitron/state` to uid 10001 → mounted volume `ls -ldn` shows `10001`, `touch` succeeds. Control, path not pre-created → `0 0`, `touch: Permission denied` | measured 2026-09-08, both directions |
 | `pg_dump` runs as a separate process from the app | `apps/server/src/backup-sweep.ts` header | read 2026-09-08 |
