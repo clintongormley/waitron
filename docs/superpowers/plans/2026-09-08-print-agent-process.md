@@ -37,9 +37,15 @@
 > slice adds a second consumer to it.
 >
 > **Tasks 5, 6, 7 and 8 are BLOCKED** until then: they consume a table, a window and routes that do
-> not exist yet. **Tasks 1, 3 and 9 are independent** — the package scaffold, the follow-the-primary
-> router, the container host — and are unaffected by any of this. Tasks 2, 4, 10 and 11 need
-> regenerating against the amended spec once the mechanism exists.
+> not exist yet. **Tasks 1 and 3 have LANDED** on this branch — the package scaffold, the transport
+> move and the follow-the-primary router were independent of any of this and are done. **Task 9**
+> (the container host) is likewise independent but still open. **Task 2 landed only in part**:
+> `probeNode` and the shared `Result`/`Failure`/`NodeProbe`/`ServerEntry` types, none of which this
+> amendment touches; `join` was deliberately left out because its contract changes under it, and
+> `pullJobs`/`report` because nothing consumes them until the agent loop
+> (`packages/print-agent/src/client.ts`'s header states the same scope ruling). The join half of
+> Task 2, plus Tasks 4, 10 and 11, still need regenerating against the amended spec once the
+> mechanism exists.
 
 ## Global Constraints
 

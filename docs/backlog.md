@@ -787,8 +787,8 @@ partial scope; the detail for a live thread is under *Open threads*.
 application outbox, its HTTP transport, per-peer auth and retention sweep are deleted) · membership +
 promotion + rejoin (the whole arc, *Open threads → Replication, membership & failover*) · backup &
 restore (BR-1..BR-4) · SIF topology (`#33`, `node_id` re-key) · module system · printing subsystem
-(`@waitron/printing` — agents/outbox/Impresoras dashboard — plus `@waitron/print-agent`, the db-free
-home the `usb`+`network_tcp` ESC/POS transports moved to) ·
+(`@waitron/printing` — agents/outbox/ESC/POS builder/Impresoras dashboard — plus
+`@waitron/print-agent`, the db-free home the `usb`+`network_tcp` transports moved to) ·
 CI/test infra (scoped CI, pre-push hook, shared-container test rollout, job-sharding, root scope) ·
 localisation (per-user `persons.locale`, live language switch, venue-default derivation) · logging &
 diagnostics foundation (Slice 1 #192).
@@ -950,9 +950,10 @@ implementation** by
 §7 — a two-digit number matched out of three, gated on a shared venue-wide pairing window, with
 pending agents in a generic `join_requests` table rather than in `print_agents`. **The join/enrolment half is
 BLOCKED until the device slice lands** (owner, 2026-09-08), because that slice builds the shared
-mechanism: Tasks 5-8 wait on it. Tasks 1-3 — the package scaffold, the wire client and the
-follow-the-primary router — have LANDED; of the independent work only Task 9, the container host,
-is left. The plan's banner carries the detail. Item 2 is the virtual PDF printer + `print_jobs`
+mechanism: Tasks 5-8 wait on it. Tasks 1 and 3 — the package scaffold and the follow-the-primary
+router — have LANDED; Task 2 only in part (`probeNode` and the shared wire-client types; `join`,
+`pullJobs` and `report` deliberately deferred). Of the independent work only Task 9, the container
+host, is left. The plan's banner carries the detail. Item 2 is the virtual PDF printer + `print_jobs`
 retention (nothing deletes a job today). **Remaining after those:**
 
 - **Cloud-poll transports** — Star CloudPRNT (`printing-cloud-poll-transport*`) and Epson Server Direct
