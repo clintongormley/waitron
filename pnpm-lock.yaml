@@ -957,9 +957,6 @@ importers:
       '@waitron/scheduler':
         specifier: workspace:*
         version: link:../scheduler
-      '@waitron/sync':
-        specifier: workspace:*
-        version: link:../sync
       '@waitron/workforce':
         specifier: workspace:*
         version: link:../workforce
@@ -1363,9 +1360,6 @@ importers:
       '@waitron/db':
         specifier: workspace:*
         version: link:../db
-      '@waitron/identity':
-        specifier: workspace:*
-        version: link:../identity
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
