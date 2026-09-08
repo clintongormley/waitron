@@ -47,6 +47,17 @@ return procedures rewritten against Postgres's own progress numbers, and a versi
 > the outbox. The contract, all per-module lists, the two root guards and the two-node fixture are in PR
 > (Track A item 3 step 2).
 
+> **2026-09-08 — step 4 built (S4 + S5), correcting the classification below.** The four `sync_*`
+> outbox tables the S1 note kept `local` are now DELETED with the outbox (§7), so the sync module
+> classifies nothing. And `tenant_credentials` moves `state → local` (derived fact 2): both nodes hold
+> `(tenant_id, "membership.node_key")` as a PK (`packages/credentials/drizzle/0000_…:9`), so classified
+> `state` the primary's key copies to the standby BEFORE the finish step and
+> `establishReservedStandbyIdentity`'s idempotence guard (`tryGetCredential(NODE_KEY_PURPOSE) !== null →
+> return`) reads the primary's blob and silently no-ops — the standby never gets its own node row,
+> reserved series or reserved SIF, and is un-promotable while believing it is established (fiscal-grade).
+> As `local`, `fiscal.aeat`/`payments.stripe` also stop travelling — nothing lost, a blob sealed under
+> one node's ring cannot be opened under another's (GCM auth fails). Receipt: `feat/outbox-swap-s4-s5`.
+
 Every table is copied unless its module marks it **local** with a stated reason — the inverse of
 today's opt-in enrolment (28 of 82 tables enrolled; a standby that must take over needs all of them).
 The classes:
@@ -116,6 +127,14 @@ tables took 3 s in the prototype; a deli database over a WAN is minutes), the pr
 (`copy_data = false`, then `DISABLE`). Postgres warns when a `copy_data = true` subscription is
 created against a publisher that itself subscribes; creating the standby's first avoids the case the
 warning is about.
+
+> **2026-09-08 — step 4 built, DROPPING the primary's back-subscription above.** Probe D: a disabled
+> subscription's slot retains WAL (22 MB after 20k 1 KB rows, `wal_status=reserved`); on a standby the
+> apply of the primary's own writes generates that WAL, so the primary's disabled back-subscription
+> would exhaust `max_slot_wal_keep_size` in weeks and be `lost` exactly when the drain window needs it.
+> So a node holds only ONE subscription (to its primary), and the drain window (§4.2) is served by the
+> PROMOTED node's own subscription, narrowed to `ledger` — which exists in every failover, so no
+> standing back-subscription is needed. Receipt: probe D, `feat/outbox-swap-s4-s5` (Task 10 records it).
 
 ### 2.3 The link
 
@@ -214,6 +233,15 @@ on the publisher: for the standby's slot, `pg_replication_slots.confirmed_flush_
 Fencing is unchanged: the box's app goes read-only, nothing about the database changes, and because
 nothing new is written the comparison converges.
 
+> **2026-09-08 — step 4 built; the watermark is a FENCE LSN, not `pg_current_wal_lsn()` (Ruling C2,
+> probe E).** `confirmed_flush_lsn >= pg_current_wal_lsn()` is NOT monotone: after the carrier disables
+> its subscription (§4.2), `confirmed_flush_lsn` freezes while the fenced box keeps writing WAL (session
+> keepalives, autovacuum, checkpoints), so the raw compare decays to false forever. The box records
+> `pg_current_wal_lsn()` in `deployment.fence_lsn` when it enters the fenced/read-only state, and the
+> guard is `confirmed_flush_lsn >= fence_lsn && !active` — both halves monotone. Probe E: after the
+> disable, `>= fence_lsn` stays TRUE where `>= current_wal` reads FALSE (3.2 MB behind), `active=f`. A
+> dead box (no `fence_lsn`) takes the operator's `--accept-loss` path (§4.2 step 2). Receipt: probe E.
+
 ### 4.2 The sequence
 
 1. **Fence** the box (read-only gate, membership document, as R3). The standby's subscription keeps
@@ -245,6 +273,23 @@ nothing new is written the comparison converges.
 The disposal guard ("is my own tail fully on the carrier?") becomes step 4's slot comparison, read on
 the cloud and reported to the box over the management API, or read by the box through its own
 subscription's `pg_stat_subscription`. Retire (a box leaving for good) is the same steps without 5.
+
+> **2026-09-08 — step 4 built; refinements to the sequence above.** (a) **Adopt is subscribe-disabled →
+> boot-finish → enable.** A native initial copy cannot coexist with `adoptVenue`'s scaffold inserts (a
+> pre-inserted PK fails the tablesync COPY, which retries forever), so adopt no longer inserts rows: the
+> subscription is created disabled, and the reserved-identity `establish` moves to a boot-time finish
+> step gated on every `pg_subscription_rel` row reaching `r` (C6 — a mirror can restart mid-copy, so
+> boot must not touch tenant-scoped rows until the copy completes). (b) **Rejoin's wipe is a two-handle
+> `DROP DATABASE … WITH (FORCE)` as the migrator-OWNER + a fresh migrate as the createdb admin**, with
+> NO artifact input; probe F shows the FORCE drop reclaims the box's INACTIVE slot with the database, so
+> rejoin drops no slot of its own and the migrator→`waitron_repl` grant is removed (a §3 "never widen a
+> grant" fix). A `waitron_repl`-authenticated `dropReplicationSlot` verb is kept (tested, no step-4
+> caller — step-5's orphaned-slot reclamation and the operator SKIP runbook are its callers). (c) **A
+> returned box reconciles membership BEFORE selling (Ruling C7):** deleting the pull worker deleted
+> membership gossip, so a box booting as primary with a configured cloud peer best-effort fetches the
+> peer's `GET /management-api/membership` before opening the sale path; a higher-term fencing document
+> sends it read-only, unreachable → proceed (the human-promotion MVP's accepted window). Receipts:
+> probe F, Ruling C7, `feat/outbox-swap-s4-s5`.
 
 ### 4.3 Live-service rows (owner decision 2026-09-05)
 
@@ -361,6 +406,11 @@ a fresh copy. The outbox resume marker planned as BR-4 is not needed, and `backu
 of `sync_log` go. What a backup is for narrows to the cold-recovery case CLAUDE.md §5 already
 describes: a venue with no standby, restoring to trade again on a fresh chain.
 
+> **2026-09-08 — step 4 built.** Done: the outbox is deleted, so `backup-probe.ts` names no `sync_*`
+> table — the base-to-tip grep for `sync_log`/`sync_cursor`/`sync_peers` is empty outside the deprecated
+> `sync.*` error-code notes and the (unrelated) fiscal `envios` outbox. BR-4's resume marker was never
+> built. A restored node re-adopts as step 5 describes.
+
 ## 10. Cloud-only mode
 
 MVP option (a), one node on a managed HA Postgres, has no peer, so nothing here applies except the
@@ -421,6 +471,18 @@ with the owner's sign-off, and its PR carries the two-node suite's output.
    instance — candidates: `CREATE DATABASE … OWNER waitron_migrator` plus migrate as it, or
    `REASSIGN OWNED BY <admin> TO waitron_migrator` after the migration step.
 
+> **2026-09-08 — step 4 built; verifications discharged with receipts.** §13.4 (does
+> `ALTER SUBSCRIPTION … SET PUBLICATION` narrowing take effect for changes already in the publisher's
+> WAL?): probe C — a row already in WAL for the DROPPED publication's table did NOT arrive after
+> re-enable; the kept table's row did. §13.7 (the ownership gap): step 3's `instance` now creates the
+> database `OWNER waitron_migrator` and migrates AS the migrator via a `role=` session option (the FIRST
+> candidate above), so `waitron_migrator` owns every table and `CREATE PUBLICATION … FOR TABLE` succeeds
+> against a live instance — probe A: a plain admin cannot even `CREATE TABLE` in a migrator-owned
+> database (`permission denied for schema public`); `provisioning.database_not_owned` is the guard.
+> §13.3 (`ALTER DEFAULT PRIVILEGES` covering a later migrator table) rides the same shape —
+> `replicationBootstrapStatements` sets it for the migrator before the migrate. Receipts: probes A, C,
+> `feat/outbox-swap-s4-s5`.
+
 ## 14. Slices (each its own plan; order matters)
 
 > **2026-09-05, later the same day:** the owner chose to do item 3 and this swap *all at once*, so
@@ -444,6 +506,15 @@ with the owner's sign-off, and its PR carries the two-node suite's output.
 - **S3 — the fiscal module converted [owner sign-off].**
 - **S4 — promotion and return on LSNs:** §4; rejoin/retire/box-status rewritten; disposal deleted.
 - **S5 — delete the outbox:** everything in §7's first paragraph, in one PR so no half-state ships.
+
+> **2026-09-08 — S4 + S5 built (step 4, the owner-signature PR).** S4: promotion narrows the promoted
+> node's own subscription to `ledger`; box-status/rejoin/retire read `pg_replication_slots` on the
+> fence-LSN watermark (§4.1 note); the disposal guard is deleted. S5: the four `sync_*` tables, the
+> capture triggers, the enrolment seat and `app.node_id` are deleted; the `sync.*` error codes are
+> deprecated, never renamed. Native fiscal rows flow for the first time and `ENABLE ALWAYS` first
+> matters — the owner signs the fidelity suites at land. S6/S7 remain (step 5). Branch
+> `feat/outbox-swap-s4-s5`.
+
 - **S6 — the standby-first migration check, status page numbers, alarms.**
 - **S7 — the WireGuard link on the box image and the SSH fallback** (with Track B item 2).
 

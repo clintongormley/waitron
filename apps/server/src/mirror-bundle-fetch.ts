@@ -21,8 +21,8 @@ import "./errors.js";
 /**
  * Fetch a `MirrorBundle` from the primary at `primaryUrl` using the operator's admin `credential`,
  * carrying the mirror's own `standby` identity (membership promotion R2) for the primary to reserve +
- * endorse. Of the standby's key material only the PUBLIC half travels — the private key is minted and
- * sealed mirror-side (`generateStandbyIdentity`/`establishReservedStandbyIdentity`), never sent.
+ * endorse. Of the standby's key material only the PUBLIC half travels — the private key is minted
+ * mirror-side (`generateStandbyIdentity`) and sealed by the boot-time finish worker, never sent.
  *
  * The standby fields ride the SAME JSON body as the credential, flattened as `standbyNodeId` /
  * `standbyPublicKey` / `standbyContactUrl`: the primary's route screens them alongside the credential
@@ -36,7 +36,7 @@ import "./errors.js";
  * parse as JSON — maps to `mirror.bundle_fetch_failed` (Task 6), which the adopt route reports to the
  * operator as HTTP 502 (the mirror is a gateway and its upstream, the primary, failed). The upstream
  * error is NEVER echoed (its `.message` can embed a URL or connection detail — the `sync.*`/`tunnel.*`
- * no-leak discipline), and neither the `credential` nor the returned `syncToken` is ever logged.
+ * no-leak discipline), and neither the `credential` nor the returned replication password is ever logged.
  */
 export async function fetchMirrorBundle(
   primaryUrl: string,

@@ -74,6 +74,17 @@ describe("the sync error codes carry their declared params", () => {
     });
   });
 
+  it("constructs sync.publication_missing with the subscription name", () => {
+    // A subscription names a publication the publisher does not hold — the copy silently never
+    // happens (probe C: check_publications only WARNs). `subscription` is a schema identifier, never
+    // row content.
+    const error = new AppError("sync.publication_missing", {
+      subscription: "waitron_production_sub_abc",
+    });
+    expect(error.code).toBe("sync.publication_missing");
+    expect(error.params).toEqual({ subscription: "waitron_production_sub_abc" });
+  });
+
   it("constructs sync.subscription_failed with a SQLSTATE, and with null when there is none", () => {
     // sqlState ONLY — never the statement, which embeds the conninfo password (errors.ts header).
     const withState = new AppError("sync.subscription_failed", { sqlState: "22023" });

@@ -1,5 +1,5 @@
 import { quoteIdent, quoteLiteral } from "./identifiers.js";
-import { INSTANCE_ROLES } from "./instance-state.js";
+import { INSTANCE_MIGRATOR_ROLE } from "./instance-state.js";
 
 /** The replication LOGIN role. Distinct from `INSTANCE_ROLES` deliberately: those drive the app
  * provisioner's `create-role` plan, and `waitron_repl` cannot be created there — a `CREATEROLE`
@@ -25,7 +25,7 @@ export const REPLICATION_ROLE = "waitron_repl";
  * rather than going green. */
 export function replicationBootstrapStatements(password: string): string[] {
   const repl = quoteIdent(REPLICATION_ROLE);
-  const migrator = quoteIdent(INSTANCE_ROLES[0]);
+  const migrator = quoteIdent(INSTANCE_MIGRATOR_ROLE);
   return [
     `create role ${repl} login replication password ${quoteLiteral(password)}`,
     `grant pg_create_subscription to ${migrator}`,

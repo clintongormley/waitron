@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { isAppError, locationId as brandLocationId } from "@waitron/shared";
+import { AppError, isAppError, locationId as brandLocationId } from "@waitron/shared";
 import {
   captureError,
   CORE_MIGRATIONS,
@@ -11,9 +11,11 @@ import {
   setDeploymentMode,
   readDeploymentMode,
   readSingletonRole,
+  readFenceLsn,
   readMembershipTrustSet,
   readNodeMembership,
   readStandardSeriesId,
+  setFenceLsnTx,
   writeNodeMembership,
   type Database,
 } from "@waitron/db";
@@ -162,6 +164,16 @@ describe("promoteLocalSecondaryToPrimary", () => {
     expect(await readSingletonRole(db)).toBe("primary");
     expect(d.holders.singletonRole.current).toBe("primary");
     expect((await pass(new Date())).duties.map((r) => r.duty)).toContain(DRAIN_DUTY); // primary: real pass runs
+    await db.close();
+  });
+
+  it("clears deployment.fence_lsn on promotion (the un-fence), symmetric with the mirror promote", async () => {
+    const { db, deps } = await localSecondary();
+    await db.transaction((tx) => setFenceLsnTx(tx, "0/1500000"));
+    expect(await readFenceLsn(db)).toBe("0/1500000");
+
+    await promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true });
+    expect(await readFenceLsn(db)).toBeNull();
     await db.close();
   });
 
@@ -326,9 +338,8 @@ function docAtTerm(term: number, nodeId: string): SignedMembershipDocument {
 // PGlite is sufficient for the promote LOGIC (the mode/singleton flip, the endorsed term-bumped
 // mint, and the term-guard): none has a privilege/concurrency dependency here — the reserved
 // SIF's `currentSif` behaviour on reboot is Task 5's real-PG e2e. Migrates the FULL manifest
-// because `establishReservedStandbyIdentity` writes the reserved SIF (`registro_sif`), and
-// fiscal's SP-3a capture migration needs sync's `sync_capture()` — so the whole manifest
-// is applied (sync before fiscal), the production order.
+// because `establishReservedStandbyIdentity` writes the reserved SIF (`registro_sif`) and each
+// module lands on top of its dependencies in one ordered set — the production order.
 async function mirror(): Promise<{
   db: Database;
   tenantId: string;
@@ -338,6 +349,7 @@ async function mirror(): Promise<{
   deps: (
     log: PromoteDeps["log"],
     persistTradingEnv?: (seriesId: string) => Promise<void>,
+    narrowSubscription?: () => Promise<void>,
   ) => MirrorPromoteDeps;
 }> {
   const db = await createPgliteDb();
@@ -390,7 +402,7 @@ async function mirror(): Promise<{
     nodeId: standby.nodeId,
     standardSeriesId,
     endorsement,
-    deps: (log, persistTradingEnv = async () => {}) => ({
+    deps: (log, persistTradingEnv = async () => {}, narrowSubscription = async () => {}) => ({
       appDb: db,
       ownerDb: db,
       holders,
@@ -399,6 +411,7 @@ async function mirror(): Promise<{
       tenantId,
       nodeId: standby.nodeId,
       persistTradingEnv,
+      narrowSubscription,
     }),
   };
 }
@@ -424,6 +437,63 @@ describe("promoteMirrorToPrimary", () => {
     // Signed by the cloud's OWN key, carrying the primary's endorsement (the first non-setup-signed doc).
     expect(held!.signerNodeId).toBe(nodeId);
     expect(held!.endorsements).toEqual([endorsement]);
+    await db.close();
+  });
+
+  it("narrows the promoted node's subscription AFTER the PONR (drain window is ledger-only)", async () => {
+    // spec §4.2 step 3: once this node is primary, its own subscription to the (now-fenced) old primary
+    // must be narrowed to the ledger publication so the drain window re-copies no state. The narrow runs
+    // AFTER the flip committed — proven by asserting the node is already primary when the spy fires.
+    const { db, deps, nodeId } = await mirror();
+    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary"));
+    let modeWhenNarrowed: string | undefined;
+    let narrowCalls = 0;
+    const result = await promoteMirrorToPrimary(
+      deps(noopLog, undefined, async () => {
+        narrowCalls += 1;
+        modeWhenNarrowed = await readDeploymentMode(db);
+      }),
+      { oldNodeNeutralised: true },
+    );
+    expect(result.alreadyPrimary).toBe(false);
+    expect(narrowCalls).toBe(1);
+    expect(modeWhenNarrowed).toBe("primary"); // the flip had already committed when the narrow ran
+    await db.close();
+  });
+
+  it("a throwing narrow does NOT undo the promotion — it is logged promotion.narrow_failed, not rethrown", async () => {
+    // The node is already primary when the narrow runs, so a narrow failure must not fail the promote:
+    // boot's ensureReplicationShape re-narrows on the next boot. Proven by construction: the promote
+    // RESOLVES (not rejects), the node is primary, and a `promotion.narrow_failed` log line was emitted.
+    const { db, deps, nodeId } = await mirror();
+    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary"));
+    const logs: { level: string; code: string; params: unknown }[] = [];
+    const log: PromoteDeps["log"] = (level, code, params) => logs.push({ level, code, params });
+    const result = await promoteMirrorToPrimary(
+      deps(log, undefined, async () => {
+        throw new AppError("sync.subscription_failed", { sqlState: "42501" });
+      }),
+      { oldNodeNeutralised: true },
+    );
+    expect(result.alreadyPrimary).toBe(false); // the promote succeeded
+    expect(await readDeploymentMode(db)).toBe("primary"); // and the node is primary
+    const narrowFail = logs.find((l) => l.code === "promotion.narrow_failed");
+    expect(narrowFail).toBeDefined();
+    expect((narrowFail!.params as { code: string }).code).toBe("sync.subscription_failed");
+    await db.close();
+  });
+
+  it("clears deployment.fence_lsn on promotion (the un-fence)", async () => {
+    // A node carrying a stale fence watermark is un-fenced when it becomes primary — the watermark is
+    // cleared in the SAME owner transaction as the PONR. Proven by contrast: seed a fence_lsn, promote,
+    // read it back null.
+    const { db, deps, nodeId } = await mirror();
+    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary"));
+    await db.transaction((tx) => setFenceLsnTx(tx, "0/1500000"));
+    expect(await readFenceLsn(db)).toBe("0/1500000");
+
+    await promoteMirrorToPrimary(deps(noopLog), { oldNodeNeutralised: true });
+    expect(await readFenceLsn(db)).toBeNull(); // un-fenced
     await db.close();
   });
 

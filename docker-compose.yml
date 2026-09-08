@@ -7,6 +7,21 @@
 services:
   db:
     image: postgres:18-alpine
+    # Native logical replication (swap step 4): `wal_level=logical` + `track_commit_timestamp=on` are
+    # RESTART-required cluster settings (`PGC_POSTMASTER`), so they live here rather than in an
+    # `ALTER SYSTEM` (which dev-setup's replication bootstrap does for the reloadable
+    # `max_slot_wal_keep_size`). This makes a dev box publishable/subscribable, matching the box
+    # image's `postgresql.conf`.
+    command:
+      [
+        "postgres",
+        "-c",
+        "wal_level=logical",
+        "-c",
+        "track_commit_timestamp=on",
+        "-c",
+        "max_slot_wal_keep_size=4GB",
+      ]
     environment:
       POSTGRES_PASSWORD: pg
     ports:

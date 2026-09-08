@@ -175,7 +175,7 @@ describe("every table is classified exactly once", () => {
     // Those three are created tables, not phantoms.
     for (const t of ["sales", "tenants", "deployment"]) expect(allCreatedTables.has(t)).toBe(true);
 
-    expect(allCreatedTables.size).toBeGreaterThanOrEqual(80);
+    expect(allCreatedTables.size).toBeGreaterThanOrEqual(78);
     expect(discovered.length).toBeGreaterThanOrEqual(8);
   });
 

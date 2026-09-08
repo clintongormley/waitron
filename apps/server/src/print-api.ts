@@ -62,11 +62,9 @@ import type { Logger } from "./logger.js";
  * The deployment holds one tenant per database. Everything `mountPrintApi` needs. `cfg` carries
  * this venue's tenant + location — the scope every `withTenant` below runs under and the two
  * fields the `@waitron/printing` verbs stamp onto minted codes / created printers
- * (`PrintAgentConfig` / `PrintConfig`). No `nodeId`: `print_jobs` carries no sync-capture trigger
- * in this slice (§4, single-writer-per-row until replication lands), so there is no
- * `sync_log.origin_id` to attribute. No cookie config: the AGENT surface authenticates with a
- * Bearer token (never a cookie), and the MANAGEMENT surface reuses the browser management session
- * the sibling gated APIs already carry.
+ * (`PrintAgentConfig` / `PrintConfig`). No `nodeId`: these routes need no write-path node id. No
+ * cookie config: the AGENT surface authenticates with a Bearer token (never a cookie), and the
+ * MANAGEMENT surface reuses the browser management session the sibling gated APIs already carry.
  */
 export interface PrintApiDeps {
   db: Database;

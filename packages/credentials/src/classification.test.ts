@@ -27,6 +27,10 @@ describe("CREDENTIALS_CLASSIFICATION", () => {
     const names = CREDENTIALS_CLASSIFICATION.map((c) => c.table);
     expect(new Set(names).size).toBe(names.length);
   });
+  it("classifies tenant_credentials as local — a per-node vault never replicates (swap step 4)", () => {
+    const entry = CREDENTIALS_CLASSIFICATION.find((c) => c.table === "tenant_credentials");
+    expect(entry?.class).toBe("local");
+  });
   it("classifies exactly the tables this module's migrations create", () => {
     const classified = new Set(CREDENTIALS_CLASSIFICATION.map((c) => c.table));
     const created = new Set(tablesInDrizzle());

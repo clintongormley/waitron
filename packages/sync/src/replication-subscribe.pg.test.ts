@@ -12,14 +12,21 @@
 // provisioning both is a one-way, ~minute setup, not a per-case fixture.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
+import { sqlStateOf } from "@waitron/shared";
+import { createPostgresDb, type Database } from "@waitron/db";
+import { roleUrl } from "@waitron/db/testing/postgres.js";
 import { startTwoNodeCluster, type TwoNodeCluster } from "@waitron/db/testing/two-node.js";
-import { REPLICATION_ROLE } from "@waitron/provisioning";
-import { createPublications } from "./publications.js";
+import { REPLICATION_ROLE, withDatabase } from "@waitron/provisioning";
+import { createPublications, ensurePublications } from "./publications.js";
+import { isDrained, listSlots, readSlotDrain } from "./drain.js";
+import { readSubscriptionStatus } from "./status.js";
 import {
   buildConninfo,
   createSubscription,
   disableSubscription,
+  dropReplicationSlot,
   dropSubscription,
+  dropSubscriptionDetached,
   enableSubscription,
 } from "./subscriptions.js";
 import { provisionAndBootstrapNode, type BootstrappedNode } from "./testing/replication-node.js";
@@ -34,6 +41,9 @@ const NODE_DB = "waitron_repl_node";
 
 const WORKING_SUB = "waitron_sub_from_a";
 const WRONG_ENV_SUB = "waitron_sub_wrong_env";
+// A fresh subscription for the S4 drain/status/detached-drop/slot-drop assertions, so it never
+// collides with the S2 subscriptions above. Postgres names A's publisher-side slot identically.
+const DRAIN_SUB = "waitron_sub_drain";
 
 // The environment each publication name carries. A is a PREPRODUCTION publisher; the wrong-env
 // subscriber names PRODUCTION, which A does not have.
@@ -58,6 +68,9 @@ describe("two-node native replication subscription (swap S2)", () => {
   // The libpq conninfo B uses to dial A: A's NETWORK ALIAS (not its host-published uri), A's target
   // db, the real `waitron_repl` login and A's replication password.
   let conninfoToA: string;
+  // A host-published connection to A authenticated AS `waitron_repl` (a REPLICATION role) — the ONLY
+  // connection allowed to drop A's slots (Ruling I3; the migrator gets 42501). Opened lazily.
+  let replConnToA: Database | undefined;
 
   beforeAll(async () => {
     // The fixture boots two `postgres:18-alpine` on one network; we do NOT use its `migrate` hook
@@ -95,10 +108,11 @@ describe("two-node native replication subscription (swap S2)", () => {
     // releases its slot on A cleanly (the smoke test does the same). Best-effort — teardown must not
     // strand the container stop.
     if (nodeB !== undefined) {
-      for (const name of [WORKING_SUB, WRONG_ENV_SUB]) {
+      for (const name of [WORKING_SUB, WRONG_ENV_SUB, DRAIN_SUB]) {
         await dropSubscription(nodeB.ownerDb, name).catch(() => {});
       }
     }
+    await replConnToA?.close().catch(() => {});
     await nodeA?.close();
     await nodeB?.close();
     await cluster?.stop();
@@ -183,5 +197,118 @@ describe("two-node native replication subscription (swap S2)", () => {
     await new Promise((resolve) => setTimeout(resolve, 3_000));
     const copied = await nodeB.superuserDb.execute<{ c: number }>(countTenant(marker));
     expect(copied.rows[0]?.c).toBe(0);
+  });
+
+  it("ensurePublications is idempotent, and re-adds a table dropped from a publication (S4)", async () => {
+    const stateName = "waitron_preproduction_state";
+    const tablesOfState = async () =>
+      (
+        await nodeA.ownerDb.execute<{ tablename: string }>(
+          sql`select tablename from pg_publication_tables where pubname = ${stateName} order by tablename`,
+        )
+      ).rows.map((r) => r.tablename);
+
+    // Already exactly the derived lists (createPublications ran in beforeAll): a no-op.
+    expect(
+      await ensurePublications(nodeA.ownerDb, {
+        environment: "preproduction",
+        ledgerTables: LEDGER,
+        stateTables: STATE,
+      }),
+    ).toEqual({ created: [], updated: [] });
+
+    // Drift the state publication by dropping `locations`, then reconcile: exactly `state` updates.
+    await nodeA.ownerDb.execute(sql.raw(`ALTER PUBLICATION "${stateName}" SET TABLE "tenants"`));
+    expect(await tablesOfState()).toEqual(["tenants"]);
+    expect(
+      await ensurePublications(nodeA.ownerDb, {
+        environment: "preproduction",
+        ledgerTables: LEDGER,
+        stateTables: STATE,
+      }),
+    ).toEqual({ created: [], updated: ["state"] });
+    expect(await tablesOfState()).toEqual([...STATE].sort());
+  });
+
+  it("drains and reads status, then detaches B and drops A's orphaned slot as waitron_repl (S4)", async () => {
+    // B subscribes to A afresh (its own slot on A, named DRAIN_SUB). copy_data = FALSE: assertion 1
+    // already copied a `tenants` row to B under WORKING_SUB, and dropping a subscription leaves the
+    // copied rows behind, so a second initial COPY would conflict on that row's PK and wedge tablesync
+    // forever (the C6 "initial copy cannot coexist with pre-existing rows" fact). Without a copy every
+    // table reaches `r` at once (tablesReady === tablesTotal === 4) and streaming carries the marker.
+    await createSubscription(nodeB.ownerDb, {
+      name: DRAIN_SUB,
+      conninfo: conninfoToA,
+      publications: PREPROD_PUBS,
+      copyData: false,
+      enabled: true,
+    });
+
+    // A marker on A, and A's WAL position just after it — the FENCE LSN the drain watermark compares
+    // against (Ruling C2), NOT pg_current_wal_lsn() at read time.
+    const marker = "DRAIN_MARKER";
+    await nodeA.ownerDb.execute(insertTenant(marker));
+    const fenceLsn = (
+      await nodeA.ownerDb.execute<{ lsn: string }>(sql`select pg_current_wal_lsn()::text as lsn`)
+    ).rows[0]?.lsn;
+    expect(fenceLsn).toBeDefined();
+
+    // The slot on A drains past the fence (confirmed_flush advances as B applies and reports back).
+    await expect
+      .poll(async () => isDrained(await readSlotDrain(nodeA.ownerDb, DRAIN_SUB), fenceLsn ?? ""), {
+        timeout: 30_000,
+      })
+      .toBe(true);
+
+    // B's subscription status: apply worker up, all four published tables copied, no apply errors.
+    await expect
+      .poll(async () => (await readSubscriptionStatus(nodeB.ownerDb, DRAIN_SUB)).tablesReady, {
+        timeout: 30_000,
+      })
+      .toBe(4);
+    const status = await readSubscriptionStatus(nodeB.ownerDb, DRAIN_SUB);
+    expect(status.exists).toBe(true);
+    expect(status.workerUp).toBe(true);
+    expect(status.tablesTotal).toBe(4);
+    expect(status.tablesReady).toBe(4);
+    expect(status.applyErrorCount).toBe(0);
+
+    // Disable B, bulk-insert on A: the now-inactive slot RETAINS WAL (receipt D).
+    await disableSubscription(nodeB.ownerDb, DRAIN_SUB);
+    await nodeA.ownerDb.execute(
+      sql`insert into tenants (country, tax_id, legal_name)
+          select 'ES', 'BULK_' || g, 'Bulk SL' from generate_series(1, 200) g`,
+    );
+    await expect
+      .poll(async () => (await readSlotDrain(nodeA.ownerDb, DRAIN_SUB)).active, { timeout: 30_000 })
+      .toBe(false);
+    const retained = await readSlotDrain(nodeA.ownerDb, DRAIN_SUB);
+    expect(retained.retainedBytes).not.toBeNull();
+    expect(retained.retainedBytes ?? 0n).toBeGreaterThan(0n);
+
+    // Detach B (its remote slot stays): DISABLE; SET (slot_name = NONE); DROP. A's slot survives,
+    // inactive — an orphan for step-5 reclamation.
+    await dropSubscriptionDetached(nodeB.ownerDb, DRAIN_SUB);
+    const orphan = (await listSlots(nodeA.ownerDb)).find((s) => s.slotName === DRAIN_SUB);
+    expect(orphan).toBeDefined();
+    expect(orphan?.active).toBe(false);
+
+    // Control (Ruling I3): the migrator CANNOT drop the slot — `permission denied to use replication
+    // slots`, SQLSTATE 42501. RUN, not reasoned (CLAUDE.md §1).
+    let migratorDrop: unknown;
+    try {
+      await dropReplicationSlot(nodeA.ownerDb, DRAIN_SUB);
+    } catch (error) {
+      migratorDrop = error;
+    }
+    expect(migratorDrop).toBeDefined();
+    expect(sqlStateOf(migratorDrop)).toBe("42501");
+
+    // A `waitron_repl` connection (a REPLICATION role) drops it, and the slot is gone.
+    replConnToA = await createPostgresDb(
+      roleUrl(withDatabase(cluster.nodeA.uri, nodeA.dbName), REPLICATION_ROLE, nodeA.replPw),
+    );
+    await expect(dropReplicationSlot(replConnToA, DRAIN_SUB)).resolves.toBeUndefined();
+    expect((await listSlots(nodeA.ownerDb)).find((s) => s.slotName === DRAIN_SUB)).toBeUndefined();
   });
 });

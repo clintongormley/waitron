@@ -13,6 +13,7 @@ import { AppError } from "@waitron/shared";
 import {
   asAppUser,
   fireControlMode,
+  readNodeMembership,
   withTenant,
   type Database,
   type Transaction,
@@ -28,6 +29,7 @@ import {
   listActiveStaff,
   listPersons,
   loginManager,
+  loginManagerById,
   reactivatePerson,
   resetPin,
   setEmail,
@@ -111,11 +113,9 @@ import type { Logger } from "./logger.js"; // the same Logger till-api.ts's rout
  */
 export interface ManagementApiDeps {
   db: Database;
-  /** `cfg.tenantId` is the dashboard's own tenant, scoping every `withTenant` below. `nodeId` is this
-   * node's origin id, threaded into every identity-config write's `withTenant` so that the `sync_log`
-   * row the capture trigger records for each enrolled `persons`/`webauthn_credentials` INSERT/UPDATE
-   * carries a real `origin_id` rather than the all-zero sentinel (design §4d(B); sync origin
-   * attribution — proven end-to-end by `sync-origin.test.ts`). */
+  /** `cfg.tenantId` is the dashboard's own tenant, scoping every `withTenant` below. `nodeId` is
+   * this node's id, carried on the uniform write-path `cfg` shape every mounted API takes; it no
+   * longer stamps a capture origin (the application outbox and its capture triggers were removed). */
   cfg: { tenantId: string; nodeId: string };
   /**
    * The venue's own config — the tenant + LOCATION the floor-zone and table config routes (FP-1) scope
@@ -630,6 +630,64 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
+  // GET /management-api/membership — a cloud peer fetches THIS node's current signed membership chart
+  // (Ruling C7). It is how a returning box reconciles at boot: a box that died before it was fenced
+  // comes back naming itself serving-primary, and must learn the promoted cloud's higher-term chart
+  // before it opens the sale path, or two nodes file under one NIF (CLAUDE.md §5, unrecoverable). The
+  // held document is a SIGNED, self-verifying artifact, so the caller re-verifies it against its trust
+  // set regardless; the auth here keeps the chart off arbitrary readers. It reuses the mirror-bundle
+  // credential shape + primitives, NOT a new auth: `loginManagerById` (personId + password + totp) then
+  // the admin-only `mirror.create`, exactly as `POST /management-api/mirror-bundle`. The credential
+  // rides in the `x-waitron-peer-credential` HEADER as JSON, not a body — a GET carries no body (undici
+  // refuses one). A malformed/absent header, a non-UUID personId, a wrong password or a non-string totp
+  // is refused `password.invalid` (401) — the same code and no-enumeration shape the mirror-bundle route
+  // gives, so the response never says which field failed. The session exists only to authorize this one
+  // read: no cookie is set and it is ended in the same transaction. Returns `{ document }` — the held
+  // signed document verbatim, or `null` when this node has never adopted a chart.
+  app.get("/management-api/membership", (c) =>
+    run(c, log, async () => {
+      const raw = c.req.header("x-waitron-peer-credential");
+      let credential: { personId?: string; password?: string; totp?: string } = {};
+      if (raw !== undefined) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          throw new AppError("password.invalid", {});
+        }
+        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+          throw new AppError("password.invalid", {});
+        }
+        credential = parsed as { personId?: string; password?: string; totp?: string };
+      }
+      if (
+        typeof credential.personId !== "string" ||
+        !isUuid(credential.personId) ||
+        typeof credential.password !== "string" ||
+        (credential.totp !== undefined && typeof credential.totp !== "string")
+      ) {
+        throw new AppError("password.invalid", {});
+      }
+      const { personId, password, totp } = credential;
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        const session = await loginManagerById(tx, {
+          tenantId: deps.cfg.tenantId,
+          personId,
+          password,
+          totp,
+        });
+        await authorizeManager(tx, {
+          managementSessionId: session.id,
+          permission: "mirror.create",
+        });
+        await endManagementSession(tx, session.id);
+      });
+      const document = await readNodeMembership(deps.db);
+      return c.json({ document });
+    }),
+  );
+
   // The deployment holds one tenant per database. List every person of the tenant (roles, status,
   // credential BOOLEANS — never secrets). Gated: `requireManagementSession` refuses an
   // unauthenticated request with 401 before any DB work, then `listPersons`'s own
@@ -679,22 +737,17 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         throw new AppError("management.request_invalid", { field: "email" });
       }
       const { displayName, role, pin, email } = body;
-      const created = await withTenant(
-        deps.db,
-        deps.cfg.tenantId,
-        async (tx) => {
-          await asAppUser(tx);
-          return createPerson(tx, {
-            tenantId: deps.cfg.tenantId,
-            managementSessionId: sessionId,
-            displayName,
-            role,
-            pin,
-            email,
-          });
-        },
-        { nodeId: deps.cfg.nodeId },
-      );
+      const created = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return createPerson(tx, {
+          tenantId: deps.cfg.tenantId,
+          managementSessionId: sessionId,
+          displayName,
+          role,
+          pin,
+          email,
+        });
+      });
       return c.json(created, 201);
     }),
   );
@@ -749,26 +802,21 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (email !== undefined && typeof email !== "string") {
         throw new AppError("management.request_invalid", { field: "email" });
       }
-      await withTenant(
-        deps.db,
-        deps.cfg.tenantId,
-        async (tx) => {
-          await asAppUser(tx);
-          if (role !== undefined) {
-            await setRole(tx, { managementSessionId: sessionId, personId: id, role });
-          }
-          if (status === "suspended") {
-            await suspendPerson(tx, { managementSessionId: sessionId, personId: id });
-          }
-          if (status === "active") {
-            await reactivatePerson(tx, { managementSessionId: sessionId, personId: id });
-          }
-          if (typeof email === "string") {
-            await setEmail(tx, { managementSessionId: sessionId, personId: id, email });
-          }
-        },
-        { nodeId: deps.cfg.nodeId },
-      );
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        if (role !== undefined) {
+          await setRole(tx, { managementSessionId: sessionId, personId: id, role });
+        }
+        if (status === "suspended") {
+          await suspendPerson(tx, { managementSessionId: sessionId, personId: id });
+        }
+        if (status === "active") {
+          await reactivatePerson(tx, { managementSessionId: sessionId, personId: id });
+        }
+        if (typeof email === "string") {
+          await setEmail(tx, { managementSessionId: sessionId, personId: id, email });
+        }
+      });
       return c.body(null, 204);
     }),
   );
@@ -787,15 +835,10 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         throw new AppError("management.request_invalid", { field: "pin" });
       }
       const { pin } = body;
-      await withTenant(
-        deps.db,
-        deps.cfg.tenantId,
-        async (tx) => {
-          await asAppUser(tx);
-          await resetPin(tx, { managementSessionId: sessionId, personId: id, pin });
-        },
-        { nodeId: deps.cfg.nodeId },
-      );
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await resetPin(tx, { managementSessionId: sessionId, personId: id, pin });
+      });
       return c.body(null, 204);
     }),
   );
@@ -814,15 +857,10 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         throw new AppError("management.request_invalid", { field: "password" });
       }
       const { password } = body;
-      await withTenant(
-        deps.db,
-        deps.cfg.tenantId,
-        async (tx) => {
-          await asAppUser(tx);
-          await setPassword(tx, { managementSessionId: sessionId, personId: id, password });
-        },
-        { nodeId: deps.cfg.nodeId },
-      );
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await setPassword(tx, { managementSessionId: sessionId, personId: id, password });
+      });
       return c.body(null, 204);
     }),
   );
@@ -2095,22 +2133,17 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const { challengeHandle, response } = await parsePasskeyVerifyBody(c);
-      const out = await withTenant(
-        deps.db,
-        deps.cfg.tenantId,
-        async (tx) => {
-          await asAppUser(tx);
-          return finishPasskeyRegistration(tx, {
-            managementSessionId: sessionId,
-            tenantId: deps.cfg.tenantId,
-            challengeHandle,
-            response: response as never,
-            rpId: deps.rpId,
-            origin: deps.origin,
-          });
-        },
-        { nodeId: deps.cfg.nodeId },
-      );
+      const out = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return finishPasskeyRegistration(tx, {
+          managementSessionId: sessionId,
+          tenantId: deps.cfg.tenantId,
+          challengeHandle,
+          response: response as never,
+          rpId: deps.rpId,
+          origin: deps.origin,
+        });
+      });
       return c.json(out);
     }),
   );
@@ -2149,21 +2182,16 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.post("/management-api/passkey/auth/verify", (c) =>
     run(c, log, async () => {
       const { challengeHandle, response } = await parsePasskeyVerifyBody(c);
-      const session = await withTenant(
-        deps.db,
-        deps.cfg.tenantId,
-        async (tx) => {
-          await asAppUser(tx);
-          return finishPasskeyAuthentication(tx, {
-            tenantId: deps.cfg.tenantId,
-            challengeHandle,
-            response: response as never,
-            rpId: deps.rpId,
-            origin: deps.origin,
-          });
-        },
-        { nodeId: deps.cfg.nodeId },
-      );
+      const session = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return finishPasskeyAuthentication(tx, {
+          tenantId: deps.cfg.tenantId,
+          challengeHandle,
+          response: response as never,
+          rpId: deps.rpId,
+          origin: deps.origin,
+        });
+      });
       setManagementCookie(c, session.id, deps.secureCookies);
       return c.json({ personId: session.personId });
     }),

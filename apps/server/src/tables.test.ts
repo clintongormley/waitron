@@ -49,8 +49,8 @@ import {
 import "./errors.js";
 
 const LOCALE = "es-ES";
-// The whole manifest, not [core]: several tables here transitively need the sync module (bookings'
-// capture trigger EXECUTEs sync's `sync_capture()`), and `manifestSets()` is that whole ordered set.
+// The whole manifest, not [core]: the tables here belong to several modules that FK into core, and
+// `manifestSets()` is that whole ordered set.
 const suite = usePgliteDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,

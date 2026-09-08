@@ -4,7 +4,17 @@ import { createPostgresDb, type Database } from "@waitron/db";
 import { POSTGRES_IMAGE, roleUrl } from "@waitron/db/testing/postgres.js";
 import type { StartedNetwork } from "@waitron/db/testing/two-node.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { replicationBootstrapStatements, withDatabase } from "@waitron/provisioning";
+import {
+  REPLICATION_ROLE,
+  replicationBootstrapStatements,
+  withDatabase,
+} from "@waitron/provisioning";
+
+// Re-exported here so Task 3's fiscal fidelity suite imports `REPLICATION_ROLE` and
+// `provisionAndBootstrapNode` from `@waitron/sync/testing/replication-node.js` without a
+// fiscal→provisioning package edge (I8): this testing barrel already depends on `@waitron/provisioning`,
+// the fiscal package does not.
+export { REPLICATION_ROLE };
 
 /**
  * One PostgreSQL node provisioned the shape native logical replication requires: the migrator
@@ -14,10 +24,11 @@ import { replicationBootstrapStatements, withDatabase } from "@waitron/provision
  *
  * Why the migrator owns the tables: `CREATE PUBLICATION … FOR TABLE` needs the table OWNER (only
  * `FOR ALL TABLES` is superuser, prototype finding 1), and `ALTER DEFAULT PRIVILEGES FOR ROLE
- * waitron_migrator` (§13.3) only reaches objects that role creates. The instance provisioner does not
- * yet migrate as the migrator (Task 8's gap), so this fixture reproduces the prototype's shape by
- * hand: create a plain `login createrole` migrator, hand it the database as OWNER, and run every
- * migration set over a connection authenticated AS that role.
+ * waitron_migrator` (§13.3) only reaches objects that role creates. `waitron-provision instance` now
+ * produces exactly this migrator-owned shape (swap step 4); this fixture keeps its hand-rolled
+ * provisioning only because it needs no operator admin — it creates a plain `login createrole`
+ * migrator, hands it the database as OWNER, and runs every migration set over a connection
+ * authenticated AS that role.
  *
  * `wal_level=logical` and `track_commit_timestamp=on` need a RESTART (`PGC_POSTMASTER`), so they are
  * passed as `postgres -c` args, not `ALTER SYSTEM`. `max_slot_wal_keep_size=4GB` is passed the same

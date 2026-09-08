@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { createPostgresDb, withTenant, type Database } from "@waitron/db";
+import { withRole } from "./identifiers.js";
 import { applyInstance, withDatabase } from "./instance-apply.js";
 import { planInstance } from "./instance-plan.js";
 import { readInstanceState } from "./instance-state.js";
@@ -46,7 +47,7 @@ const FIXED_PW = "fixedpw"; // a fixed generator, so `applyInstance` is determin
 describe("applyVenue against a real container, as the non-superuser owner", () => {
   let pg: RealPostgres;
   let superuser: Database;
-  let owner: Database; // prov_admin @ target — ran the migrations, therefore owns the tables
+  let owner: Database; // waitron_migrator @ target — `instance` migrated AS it, so it owns the tables
 
   beforeAll(async () => {
     pg = await startBarePostgres();
@@ -56,9 +57,12 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
     );
     const adminUri = roleUrl(pg.uri, "prov_admin", "prov");
     const admin = await createPostgresDb(adminUri);
+    // The target is opened AS the migrator (the role option): the migration and the post-migrate role
+    // work run as it, so it owns every table — which is what `applyVenue` then inserts as below.
+    const ownerUri = withRole(withDatabase(adminUri, DATABASE), "waitron_migrator");
     try {
-      // Stand up the whole deployment as prov_admin: create db, migrate every set, create the
-      // two login roles (each with FIXED_PW), stamp. prov_admin ends up owning the tables.
+      // Stand up the whole deployment as prov_admin: create the migrator, the db it owns, migrate AS
+      // it, create the two login roles (each with FIXED_PW), stamp. waitron_migrator owns the tables.
       const before = await readInstanceState(admin, DATABASE, null);
       await applyInstance(
         planInstance(before, { database: DATABASE, environment: "preproduction" }, () => FIXED_PW),
@@ -68,7 +72,7 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
           adminUri,
           migrationsRoot: null,
           openTarget: async () => {
-            const db = await createPostgresDb(withDatabase(adminUri, DATABASE));
+            const db = await createPostgresDb(ownerUri);
             return { db, release: () => db.close() };
           },
         },
@@ -77,7 +81,7 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
       await admin.close();
     }
 
-    owner = await createPostgresDb(withDatabase(adminUri, DATABASE));
+    owner = await createPostgresDb(ownerUri);
   }, 180_000);
 
   afterAll(async () => {
@@ -86,11 +90,13 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
     if (pg !== undefined) await pg.stop();
   });
 
-  it("prov_admin is a non-superuser (the negative control for the run below)", async () => {
+  it("the owner connection is the non-superuser migrator that owns the tables (negative control)", async () => {
+    // The role option makes the session `waitron_migrator` — a non-superuser — and it owns `tenants`,
+    // so every grant and trigger `applyVenue` passes through below is genuinely enforced.
     const rows = await owner.execute<{ me: string; rolsuper: boolean }>(
       sql`select current_user as me, rolsuper from pg_roles where rolname = current_user`,
     );
-    expect(rows.rows[0]?.me).toBe("prov_admin");
+    expect(rows.rows[0]?.me).toBe("waitron_migrator");
     expect(rows.rows[0]?.rolsuper).toBe(false);
     const ownership = await owner.execute<{ owns: boolean }>(sql`
       select relowner = (select oid from pg_roles where rolname = current_user) as owns

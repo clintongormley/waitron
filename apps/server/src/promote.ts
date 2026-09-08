@@ -1,11 +1,13 @@
 import "./errors.js"; // register promotion.* on the shared registry (reachability convention)
 import { AppError } from "@waitron/shared";
+import { codeOf } from "@waitron/server-kit";
 import {
   persistNodeMembershipIfNewerTx,
   readNodeEndorsement,
   readNodeMembership,
   readStandardSeriesId,
   setDeploymentModeTx,
+  setFenceLsnTx,
   setSingletonRoleTx,
   writeNodeMembershipTx,
   type Database,
@@ -40,9 +42,8 @@ export interface PromoteDeps {
   /**
    * The app pool — the holder-refresh READ (`app_user` holds SELECT on `deployment`) and the identity
    * reads, all app-role: `readNodeIdentityKey` unseals the signing key under `withTenant` as `app_user`,
-   * which holds SELECT on `tenant_credentials` (0001_credentials_baseline_sql.sql) — the same role and path
-   * `readMirrorToken` uses at mirror boot; `readNodeMembership` reads the held org chart via `app_user`'s
-   * SELECT on `node_membership`.
+   * which holds SELECT on `tenant_credentials` (0001_credentials_baseline_sql.sql) — app-role at mirror
+   * boot; `readNodeMembership` reads the held org chart via `app_user`'s SELECT on `node_membership`.
    */
   readonly appDb: Database;
   /**
@@ -152,9 +153,12 @@ export async function promoteLocalSecondaryToPrimary(
 
   // PONR: the role flip and the new document commit together in ONE owner transaction (CLAUDE.md §3), so
   // a crash between the two writes cannot leave a primary with no document. Both writes are owner-role.
+  // The fence watermark is cleared here too, symmetric with the mirror promote: becoming the submitter
+  // un-fences this node, so a stale `deployment.fence_lsn` must not survive the flip (Ruling C2).
   await deps.ownerDb.transaction(async (tx) => {
     await setSingletonRoleTx(tx, "primary"); // claims the submitter (§7)
     await writeNodeMembershipTx(tx, document);
+    await setFenceLsnTx(tx, null); // un-fence
   });
 
   // Flip the running pass on its next tick. If THIS read throws after the transaction above committed (a
@@ -197,6 +201,17 @@ export interface MirrorPromoteDeps extends PromoteDeps {
    * before the flip is a correctness invariant, so it lives here rather than in the caller.
    */
   readonly persistTradingEnv: (seriesId: string) => Promise<void>;
+  /**
+   * Narrow this (now-promoted) node's OWN subscription to the ledger publication (spec §4.2 step 3), so
+   * the drain window re-copies no `state`. Injected (boot binds it to
+   * `setSubscriptionPublications(replicationDb, subscriptionName(env, thisNodeId), [publicationName(env,
+   * "ledger")])`) so this DB-centric module names no role and opens no pool. Called AFTER the PONR and
+   * BEFORE the holder refresh: the node is already primary, so a failure here is LOG-ONLY
+   * (`promotion.narrow_failed`) and NOT rethrown — boot's `ensureReplicationShape` re-narrows on the
+   * next boot. Contrast `persistTradingEnv`, which runs BEFORE the PONR because a wrong series must
+   * abort the flip; a missed narrow is self-healing, so it runs after.
+   */
+  readonly narrowSubscription: () => Promise<void>;
 }
 
 /**
@@ -297,8 +312,23 @@ export async function promoteMirrorToPrimary(
   // `MirrorPromoteDeps.persistTradingEnv`.
   await deps.persistTradingEnv(seriesId);
 
-  // PONR: mode + singleton + term-guarded doc in ONE owner transaction (CLAUDE.md §3).
-  await deps.ownerDb.transaction((tx) => commitMirrorPromotionTx(tx, document));
+  // PONR: mode + singleton + term-guarded doc in ONE owner transaction (CLAUDE.md §3). The fence
+  // watermark is CLEARED in the SAME transaction — becoming primary un-fences this node (spec §4.2), so
+  // a stale `deployment.fence_lsn` must not survive the flip. `commitMirrorPromotionTx` (the R3 PONR
+  // body) is untouched; the clear is an added owner write in the same transaction, after it.
+  await deps.ownerDb.transaction(async (tx) => {
+    await commitMirrorPromotionTx(tx, document);
+    await setFenceLsnTx(tx, null); // un-fence
+  });
+
+  // Narrow this node's own subscription to the ledger publication (spec §4.2 step 3), AFTER the PONR:
+  // the node is already primary, so a narrow failure must NOT undo the promotion — it is logged
+  // `promotion.narrow_failed` and NOT rethrown, and boot's `ensureReplicationShape` re-narrows next boot.
+  try {
+    await deps.narrowSubscription();
+  } catch (error) {
+    deps.log("error", "promotion.narrow_failed", { code: codeOf(error) });
+  }
 
   await refreshDeploymentHolders(deps.appDb, deps.holders);
   deps.log("info", "promotion.completed", { target: "mirror" });

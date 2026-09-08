@@ -45,10 +45,15 @@ fix: it requires its own negative control and a recorded reason.
 
 ## How the sync grants fold into app_user
 
-The plan keeps the outbox working while it removes `sync_tailer` and `sync_retention`. Their table
-privileges move into `app_user`, alongside its existing INSERT grants. If you strip the old roles'
-grants before comparing, a correct baseline differs on `sync_log`, `sync_cursor`, `sync_peers` and
-`sync_config_conflicts`. The proof must compare that union so a missing folded privilege fails.
+> Historical: this section records the one-time step-1 fold proof. The `sync_*` outbox tables and the
+> `sync_tailer`/`sync_retention` roles it describes were deleted with the application outbox (swap S5,
+> 2026-09-08); the fold mechanism and its edge tests survive, exercised over a surviving table (see the
+> note further down).
+
+The step-1 plan kept the outbox working while it removed `sync_tailer` and `sync_retention`. Their table
+privileges moved into `app_user`, alongside its existing INSERT grants. If you stripped the old roles'
+grants before comparing, a correct baseline differed on `sync_log`, `sync_cursor`, `sync_peers` and
+`sync_config_conflicts`. The proof compared that union so a missing folded privilege failed.
 
 Before the deleted-role strip, both dumps rewrite GRANT statements on `public` tables naming
 `sync_tailer` or `sync_retention` as grantee to name `app_user`. Table-level GRANTs to `app_user` on the
@@ -65,8 +70,11 @@ statement. No such statement appears in the current OLD prefix dump; rewriting i
 the resulting privileges would not represent the final union. The edge checks run with
 `python3 scripts/schema-equivalence-fold.test.py`, including column REVOKEs and unmeasured verbs.
 
-For example, old `sync_log` grants of INSERT to `app_user`, SELECT to `sync_tailer`, and SELECT,DELETE
-to `sync_retention` compare as `GRANT SELECT,INSERT,DELETE ON TABLE public.sync_log TO app_user;`.
+(The `sync_*` outbox tables and the `sync_tailer`/`sync_retention` roles this section describes were
+deleted with the application outbox — swap S5, 2026-09-08; the fold mechanism and its edge tests remain,
+exercised over a surviving table.) For example, grants of INSERT to `app_user`, SELECT to `sync_tailer`,
+and SELECT,DELETE to `sync_retention` on a table compare as
+`GRANT SELECT,INSERT,DELETE ON TABLE public.payments TO app_user;`.
 If you remove DELETE from the baseline, the proof must print NOT EQUIVALENT and show that grant.
 Run the prefix proof with `SCHEMAEQ_MODULES=core,identity,workforce,workforce-es,payments,scheduler,credentials,sync`
 to exercise this fold before the later modules are baselined. Keep the direct NEW catalog ACL readback

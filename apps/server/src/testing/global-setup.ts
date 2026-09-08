@@ -22,9 +22,9 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
  * The cluster roles are created ONCE here, idempotently, in place of the per-file `probeRole` /
  * `setup` role creation the converted suites used — a shared container is one cluster, so a role
  * created per file would collide on the second file (the plan's "role collisions are the crux").
- * `rls_probe` serves both till-api and till-sale-integrated. The sync LOGIN fixtures inherit
- * app_user for capture, read, apply, cursors and pruning. Roles run after the templates migrate,
- * so app_user exists before the LOGIN fixtures receive their membership.
+ * `rls_probe` serves both till-api and till-sale-integrated. The `app_login` LOGIN fixture inherits
+ * app_user for the write path. Roles run after the templates migrate, so app_user exists before the
+ * LOGIN fixtures receive their membership.
  *
  * A globalSetup's return value is its globalTeardown, so returning `teardown` stops the container
  * once the run finishes.
@@ -56,11 +56,8 @@ export default async function ({ provide }: GlobalSetupContext) {
       { name: "server_webhook_probe", password: "probe", inRole: "app_user" },
       { name: "server_boot_probe", password: "probe", inRole: "app_user" },
       { name: "server_boot_runtime_probe", password: "probe", inRole: "app_user" },
-      // Sync fixtures inherit app_user for the outbox and enrolled-table operations.
+      // The app-role LOGIN fixture, inheriting app_user for write-path operations under the real role.
       { name: "app_login", password: "app_pw", inRole: "app_user" },
-      { name: "sync_reader", password: "rp", inRole: "app_user" },
-      { name: "sync_applier", password: "ap", inRole: "app_user" },
-      { name: "sync_pruner", password: "pp", inRole: "app_user" },
     ],
   });
   provide("sharedPg", handle);

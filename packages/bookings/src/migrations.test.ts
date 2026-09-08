@@ -2,8 +2,8 @@
 // from the MODULE's set, NOT from core, and core applied ALONE carries no `bookings` relation. Real PG
 // rather than PGlite because the four FKs and the ACL are what this proves, and PGlite is a superuser
 // holding every grant. The templates are migrated once in globalSetup — `manifest` is the whole chain
-// (bookings cannot migrate on core alone: its capture trigger EXECUTEs sync's `sync_capture()`), `core`
-// is [core] alone — so this suite only clones them. The core-vs-manifest contrast is what pins that
+// (bookings FKs into core, so it applies the whole manifest), `core` is [core] alone — so this suite
+// only clones them. The core-vs-manifest contrast is what pins that
 // `bookings` left core WITH the module rather than living in the core set.
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";

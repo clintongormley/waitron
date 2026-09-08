@@ -260,6 +260,13 @@ The primary kept selling with the standby dead (CLAUDE.md §5's rule held at the
 5. **Sequences do not replicate.** `time_entries.ingest_seq` (a serial) will be behind on a promoted
    standby; the swap spec needs a `setval` at promotion or a different key. The other two sequences
    belong to the outbox and go with it.
+
+   > **2026-09-08 — Finding 5 discharged (step 4).** The "different key" branch was taken, not the
+   > `setval` one: the per-node working-time rekey (swap spec §4.4, built 2026-09-07) replaced
+   > `time_entries.ingest_seq` with a composite key, and the two outbox sequences went with the outbox
+   > (S5). After step 4, `grep -rn 'GENERATED ALWAYS AS IDENTITY\|serial' packages/*/drizzle/*.sql` is
+   > empty (only a `serialises` prose comment matches), so no sequence-backed column survives and a
+   > promoted standby needs no `setval`.
 6. **Set `max_slot_wal_keep_size`.** At the default `-1` a dead standby makes the primary retain WAL
    without limit, and a full disk is the one failure that WOULD stop sales. A bound invalidates the
    slot instead, which means the standby re-adopts (a fresh initial copy: 78 tables in 3 s here) —

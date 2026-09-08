@@ -14,13 +14,11 @@ import {
   type Database,
 } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { loadKeyRing } from "@waitron/credentials";
 import { hashPin, hashSecret } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer, type StartedServer } from "./boot.js";
 import { roleUrl } from "./testing/postgres.js";
 import { DEVICE_COOKIE } from "./device-session.js";
-import { sealMirrorToken } from "./mirror-token.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
 // The till-reroute HEADLINE proof (S6, till-reroute design §6): TWO booted `apps/server` instances
@@ -100,17 +98,6 @@ const KEY_ENV = {
   WAITRON_STATE_DIR: STATE_ROOT,
   WAITRON_ENV: "preproduction",
 };
-const RING = loadKeyRing(KEY_ENV);
-
-// One unreachable peer for a primary boot's push worker: port 1 has no listener, so the worker backs
-// off and the box still binds and serves.
-const SYNC_PEERS = JSON.stringify([
-  {
-    nodeId: "66666666-6666-4666-8666-666666666666",
-    url: "http://127.0.0.1:1/",
-    token: "peer-token",
-  },
-]);
 
 const a = useTemplateDb({ template: "manifest" });
 const b = useTemplateDb({ template: "manifest" });
@@ -178,15 +165,11 @@ function primaryEnv(
     WAITRON_MIGRATIONS_DATABASE_URL: clone.pg.uri,
     WAITRON_HTTP_PORT: String(port),
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    WAITRON_SYNC_DATABASE_URL: roleUrl(clone.pg.uri, "sync_applier", "ap"),
-    WAITRON_SYNC_PEERS: SYNC_PEERS,
-    WAITRON_SYNC_RETENTION_DATABASE_URL: roleUrl(clone.pg.uri, "sync_pruner", "pp"),
   };
 }
 
-/** The env for B's MIRROR boot: the pull connection comes from `mirror_config` + the vault (seeded in
- * beforeAll), not env, so only the local sync pool is passed. The relay is unreachable, so the pull
- * worker backs off and the box still binds and serves. */
+/** The env for B's MIRROR boot: the replication connection comes from `mirror_config` + the vault
+ * (seeded in beforeAll), not env. The relay is unreachable, so the box still binds and serves. */
 function mirrorEnv(clone: { pg: { uri: string } }, port: number): Record<string, string> {
   return {
     ...KEY_ENV,
@@ -199,7 +182,6 @@ function mirrorEnv(clone: { pg: { uri: string } }, port: number): Record<string,
     WAITRON_MIGRATIONS_DATABASE_URL: clone.pg.uri,
     WAITRON_HTTP_PORT: String(port),
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    WAITRON_SYNC_DATABASE_URL: roleUrl(clone.pg.uri, "sync_applier", "ap"),
   };
 }
 
@@ -254,7 +236,6 @@ beforeAll(async () => {
     }).caCertPem,
     originNodeId: NODE_A,
   });
-  await sealMirrorToken(b.admin, RING, TENANT, "reroute-peer-token");
 
   // The inherited tab: an open working order in B's database tagged with the DEAD node's id (A's).
   await b.admin

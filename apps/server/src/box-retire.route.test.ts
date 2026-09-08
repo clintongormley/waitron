@@ -8,7 +8,7 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import type { MembershipNode, SignedMembershipDocument } from "@waitron/membership";
-import type { DrainProgress } from "@waitron/sync";
+import type { SlotDrain } from "@waitron/sync";
 import { ALL_MODULES } from "./modules.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { mountBoxRetireApi } from "./box-retire.js";
@@ -30,6 +30,18 @@ const RING: KeyRing = loadKeyRing({
 // The carrier a fenced node drains onto — named `serving-primary` in the held chart so a fenced self
 // document has a carrier (the happy-path shape retireSelf accepts).
 const CARRIER_NODE_ID = "88888888-8888-4888-8888-888888888888";
+
+// The fence LSN this node recorded when it fenced, and a drained SlotDrain (slot detached, its
+// confirmed_flush past the fence LSN) — the happy-path shape retireSelf accepts (Ruling C2).
+const FENCE_LSN = "0/1500000";
+const DRAINED: SlotDrain = {
+  exists: true,
+  active: false,
+  walStatus: "reserved",
+  confirmedFlushLsn: "0/1500000",
+  currentWalLsn: "0/1600000",
+  retainedBytes: 0n,
+};
 
 const suite = useTemplateDb({ template: "manifest" });
 
@@ -90,9 +102,9 @@ async function setupTenant(): Promise<{ tenantId: string; nodeId: string }> {
 function buildApp(
   tenantId: string,
   nodeId: string,
-  readDrainProgress: (() => Promise<DrainProgress>) | undefined,
+  readSlotDrain: (() => Promise<SlotDrain>) | undefined,
   // The boot carrier retireSelf checks the fresh held chart against; matches the seeded serving-primary
-  // on the happy path, `undefined` (bound to `readDrainProgress`) on the refusal-before-carrier paths.
+  // on the happy path, `undefined` (bound to `readSlotDrain`) on the refusal-before-carrier paths.
   carrierNodeId: string | undefined = undefined,
 ): Hono {
   const app = new Hono();
@@ -109,7 +121,15 @@ function buildApp(
   );
   mountBoxRetireApi(
     app,
-    { appDb: suite.admin, ring: RING, tenantId, nodeId, readDrainProgress, carrierNodeId },
+    {
+      appDb: suite.admin,
+      ring: RING,
+      tenantId,
+      nodeId,
+      readSlotDrain,
+      fenceLsn: FENCE_LSN,
+      carrierNodeId,
+    },
     () => {},
   );
   return app;
@@ -191,7 +211,7 @@ describe("POST /api/box/retire (real postgres)", () => {
     const app = buildApp(
       tenantId,
       nodeId,
-      () => Promise.resolve({ drained: true, ownTailSeq: 5n, carrierAppliedSeq: 5n }),
+      () => Promise.resolve(DRAINED),
       CARRIER_NODE_ID, // the boot carrier matches the held serving-primary → freshness guard passes
     );
     const res = await app.request("/api/box/retire", {

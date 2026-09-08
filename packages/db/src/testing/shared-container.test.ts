@@ -108,9 +108,8 @@ describe.runIf(dockerAvailable())("startSharedContainer against a real container
         core_again: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS]),
       },
       // `shared_member` is a member of BOTH app_user and shared_probe — the two-membership case a
-      // single-`inRole` role cannot carry, expressed with an inRole ARRAY (apps/server's `sync_applier`
-      // is this shape). `shared_probe` precedes it, so it exists when `in role …, shared_probe` runs;
-      // `app_user` comes from the CORE template.
+      // single-`inRole` role cannot carry, expressed with an inRole ARRAY. `shared_probe` precedes it,
+      // so it exists when `in role …, shared_probe` runs; `app_user` comes from the CORE template.
       roles: [
         { name: "shared_probe", password: "probe_pw", inRole: "app_user" },
         { name: "shared_member", password: "member_pw", inRole: ["app_user", "shared_probe"] },

@@ -5,18 +5,21 @@ import type { InstanceState } from "./instance-state.js";
 const PROVISIONED: InstanceState = {
   database: "waitron",
   databaseExists: true,
+  databaseOwner: "waitron_migrator",
   roles: {
     waitron_migrator: {
       canLogin: true,
       createRole: true,
       superuser: false,
       memberOf: ["app_user"],
+      adminCanSetRole: true,
     },
     waitron_app: {
       canLogin: true,
       createRole: false,
       superuser: false,
       memberOf: ["app_user"],
+      adminCanSetRole: true,
     },
   },
   inside: { migratedSets: ["core", "fiscal-verifactu"], stamp: "preproduction" },
@@ -48,18 +51,21 @@ describe("formatStatus", () => {
     const text = formatStatus({
       database: "waitron",
       databaseExists: true,
+      databaseOwner: "waitron_migrator",
       roles: {
         waitron_migrator: {
           canLogin: false,
           createRole: false,
           superuser: false,
           memberOf: [],
+          adminCanSetRole: true,
         },
         waitron_app: {
           canLogin: true,
           createRole: false,
           superuser: true,
           memberOf: ["app_user"],
+          adminCanSetRole: true,
         },
       },
       inside: { migratedSets: [], stamp: null },
@@ -101,6 +107,7 @@ describe("formatStatus", () => {
     const text = formatStatus({
       database: "waitron",
       databaseExists: false,
+      databaseOwner: null,
       roles: {},
       inside: null,
     }).join("\n");

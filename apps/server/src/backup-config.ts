@@ -8,7 +8,7 @@ import "./errors.js";
 
 /**
  * The scheduled `pg_dump` backup config (slice 4b-ii, widened for BR-1 storage fan-out). OPT-IN
- * and fail-closed, the same posture `loadTunnelConfig`/`loadSyncConfig` take: with no destination
+ * and fail-closed, the same posture `loadTunnelConfig` takes: with no destination
  * configured the whole thing is `undefined` and no backup duty runs. `WAITRON_BACKUP_DIR` remains
  * the single-destination convenience — it becomes one local-fs destination with `id: "primary"` —
  * and `WAITRON_BACKUP_DESTINATIONS` (a JSON array) appends any further destinations after it, so

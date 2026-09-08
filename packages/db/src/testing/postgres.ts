@@ -101,6 +101,27 @@ export async function startPostgresContainer(): Promise<StartedContainer> {
 }
 
 /**
+ * A SINGLE PostgreSQL container booted with `wal_level=logical` and `track_commit_timestamp=on` — the
+ * one-node equivalent of `two-node.ts`'s cluster, for the swap S4 suites that need a REAL logical
+ * replication slot (`pg_create_logical_replication_slot`, `pg_replication_slot_advance`) but no peer to
+ * stream to: a manually-created slot is inactive and its `confirmed_flush_lsn` is driven by the advance
+ * verb, so a second node is unnecessary. `wal_level` needs a restart, so it is a `postgres -c` boot
+ * flag, exactly as `two-node.ts` sets it. Same `com.waitron.reapable` label as `startPostgresContainer`.
+ */
+export async function startLogicalPostgresContainer(): Promise<StartedContainer> {
+  const container = await new PostgreSqlContainer(POSTGRES_IMAGE)
+    .withLabels({ "com.waitron.reapable": "true" })
+    .withCommand(["postgres", "-c", "wal_level=logical", "-c", "track_commit_timestamp=on"])
+    .start();
+  return {
+    uri: container.getConnectionUri(),
+    stop: async () => {
+      await container.stop();
+    },
+  };
+}
+
+/**
  * `uri` with its username/password swapped for `role`/`password` — the one place this connection
  * string's shape is assembled, so a future parameter (e.g. `sslmode`) has one call site to change.
  *

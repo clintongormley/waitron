@@ -19,7 +19,6 @@ import {
   stampDeployment,
   withTenant,
 } from "@waitron/db";
-import { generateNodeKeyPair } from "@waitron/membership";
 import {
   cloneTemplate,
   nextCloneName,
@@ -41,7 +40,6 @@ import {
   migrationOptionsFor,
 } from "@waitron/migrations";
 import { orderedMigrationSets } from "@waitron/module";
-import { enrolPeer, runRetentionSweep, runSyncPull } from "@waitron/sync";
 import { runTunnelClient } from "@waitron/tunnel";
 import {
   DEFAULT_MIGRATIONS_ROOT,
@@ -59,7 +57,6 @@ import { loadTillConfig } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { enrolDevice, generatePairingCode } from "./device.js";
 import { DEV_DEVICE_HEADER } from "./device-session.js";
-import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
 /**
  * F4 (2026-07-27 fix wave): the ONE test below that provisions a tenant with a usable
@@ -91,32 +88,8 @@ vi.mock("undici", async (importOriginal) => {
 });
 
 /**
- * `boot.ts` starts the background pull worker via `runSyncPull`, imported directly (no injection seam).
- * The worker is robust by construction — its loop catches every per-peer error and backs off, so no
- * config makes its return promise reject — yet close()'s teardown ordering must survive a worker that
- * settles by rejection anyway (an unexpected throw escaping the loop). The ONE test that pins that path
- * forces the settle by mocking `runSyncPull`'s return; the default here calls THROUGH to the real
- * implementation, so every other test in this file (the live-worker sync test included) drives the
- * genuine loop unchanged — only the rejection test overrides it, with `mockReturnValueOnce`. Spreading
- * `...actual` keeps `encodeBatch`/`readSyncLogSince` (used by `sync-api.ts` in this same graph) real.
- *
- * `runRetentionSweep` is wrapped the same way, for the same reason: boot starts it directly (no
- * injection seam), so the retention tests below observe the CALL (was it started, with what tickMs and
- * shared signal) via this spy. It calls THROUGH to the real sweep, whose abort-aware loop settles when
- * close() aborts `syncController`, so close()'s teardown is exercised for real.
- */
-vi.mock("@waitron/sync", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@waitron/sync")>();
-  return {
-    ...actual,
-    runSyncPull: vi.fn(actual.runSyncPull),
-    runRetentionSweep: vi.fn(actual.runRetentionSweep),
-  };
-});
-
-/**
  * `boot.ts` starts the outbound cloud-mirror tunnel client via `runTunnelClient`, imported directly
- * (no injection seam), exactly like the sync workers above. The tunnel tests below observe the CALL
+ * (no injection seam). The tunnel tests below observe the CALL
  * (was it started, with which relay host/port/boxId/token, with `localPort === config.httpPort`, and
  * under the boot AbortSignal close() aborts) via this spy, which calls THROUGH to the real client so
  * close()'s teardown is exercised for real — the client resolves on abort, tearing every live socket
@@ -131,13 +104,10 @@ vi.mock("@waitron/tunnel", async (importOriginal) => {
   };
 });
 
-// The two sync-worker spies accumulate calls across tests (one shared module mock), so clear them
-// before each so the call-count/args assertions below are order-independent — this file's own rule
-// (several tests were fixed for order-dependence). `mockClear` resets only `mock.calls`, keeping each
-// spy's `vi.fn(actual.*)` call-through implementation.
+// The tunnel-worker spy accumulates calls across tests (one shared module mock), so clear it before
+// each so the call-count/args assertions below are order-independent — this file's own rule.
+// `mockClear` resets only `mock.calls`, keeping the spy's `vi.fn(actual.*)` call-through implementation.
 beforeEach(() => {
-  vi.mocked(runSyncPull).mockClear();
-  vi.mocked(runRetentionSweep).mockClear();
   vi.mocked(runTunnelClient).mockClear();
 });
 
@@ -244,11 +214,6 @@ const suite = useTemplateDb({ template: "manifest" });
 let migrationsRoot: string;
 let databaseUrl: string;
 let runtimeDatabaseUrl: string;
-// The sync-api pool uses sync_applier, an app_user member with SELECT on sync_peers and
-// UPDATE(last_seen_at). syncPeerToken is enrolled below through the superuser admin and presented
-// by the /sync-api/hello probes.
-let syncDatabaseUrl: string;
-let syncPeerToken: string;
 
 beforeAll(async () => {
   const dbName = new URL(suite.pg.uri).pathname.replace(/^\//, "");
@@ -264,6 +229,21 @@ beforeAll(async () => {
   await suite.admin.execute(
     sql.raw(`grant select on all tables in schema public to ${PROBE_ROLE}`),
   );
+  // Make `PROBE_ROLE` the OWNER of every public table on this clone, so `ensureReplicationShape`'s
+  // boot-time `CREATE PUBLICATION … FOR TABLE …` (owner-only for a non-superuser — prototype finding 1)
+  // succeeds as the migrator connection, exactly as production does: the real migrator OWNS its tables
+  // (Probe A), where this shared template was migrated by the container superuser. Ownership is set at
+  // fixture setup with `ALTER TABLE … OWNER TO` (not `REASSIGN OWNED`), and does not change what
+  // `app_user` (the pool's SET ROLE) may do, so the grant-enforcement assertions below are unaffected.
+  await suite.admin.execute(
+    sql.raw(`do $$
+      declare r record;
+      begin
+        for r in select tablename from pg_tables where schemaname = 'public' loop
+          execute format('alter table public.%I owner to ${PROBE_ROLE}', r.tablename);
+        end loop;
+      end $$;`),
+  );
 
   databaseUrl = roleUrl(suite.pg.uri, PROBE_ROLE, PROBE_PASSWORD);
 
@@ -275,15 +255,6 @@ beforeAll(async () => {
   // EXISTS` reason `PROBE_ROLE`'s own comment above explains. Only its clone-scoped connection URL is
   // built here; no per-DATABASE grant is added, which is exactly what makes it least-privileged.
   runtimeDatabaseUrl = roleUrl(suite.pg.uri, RUNTIME_ROLE, RUNTIME_PASSWORD);
-
-  // The sync pool's role + a peer enrolled on this clone. `sync_applier` (app_user) is created
-  // cluster-wide by the package globalSetup; enrolPeer runs as the superuser admin (setup
-  // bypasses grants). The sync tests below present `syncPeerToken` to /sync-api/hello, which the
-  // source now resolves against sync_peers through this pool (Task 5 — the auth path touches the
-  // DB).
-  syncDatabaseUrl = roleUrl(suite.pg.uri, "sync_applier", "ap");
-  syncPeerToken = (await enrolPeer(suite.admin, { subscriberId: "boot-mirror", name: "boot" }))
-    .token;
 
   // The till's own tenant, location and node, seeded once as the container superuser (exactly as
   // `seedTenant`/`seedNode` do). `startServer` reads the location's `order_flow` at boot
@@ -861,7 +832,7 @@ describe("startServer, against a real container as the deployment role", () => {
       // `0 === 0` pass without boot having migrated anything (CLAUDE.md §1) — except `fiscal-none`, which
       // ships NO migrations by design, so its version is legitimately 0.
       const sets = orderedMigrationSets(ALL_MODULES);
-      expect(sets).toHaveLength(11);
+      expect(sets).toHaveLength(10);
       for (const set of sets) {
         const expected = expectedSchemaVersion(set, migrationsRoot);
         if (set.name === "fiscal-none") expect(expected).toBe(0);
@@ -1440,71 +1411,6 @@ describe("startServer, against a real container as the deployment role", () => {
     }
   }, 60_000);
 
-  it("setup mode: POST /setup-api/adopt is REFUSED (server.config_missing) when WAITRON_SYNC_DATABASE_URL is unset — fail loud at adopt, not at the mirror reboot", async () => {
-    // Ruling 1 (Task 1): an adopted mirror MUST end up with WAITRON_SYNC_DATABASE_URL in trading.env,
-    // because the next (mirror) boot's `loadMirrorSyncConfig` reads it back — without it the reboot
-    // throws `server.config_missing` and the box never enters mirror mode. The POST /setup-api/adopt
-    // request is the ONE interactive moment the operator can fix the deploy env, so boot's adopt
-    // closure refuses HERE when `config.syncDatabaseUrl` is undefined (env lacks the var), BEFORE any
-    // bundle fetch or DB write. Boot omits WAITRON_SYNC_DATABASE_URL here (the setup box was never
-    // given it) and the guard fires. The body is a VALID adopt request (primaryUrl + credential), so
-    // the refusal is the sync-URL guard, not a request-shape 400 (`setup.request_invalid`) — proven
-    // by the `server.config_missing` code + `variable` param, not merely the 400 status. No primary is
-    // ever contacted (the guard short-circuits before `fetchMirrorBundle`), and no restart is
-    // requested. `databaseUrl` is the shared suite's probe role: the guard throws before any write, so
-    // this test mutates nothing and needs no fresh clone.
-    const port = await freePort();
-    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-adopt-nosync-state-"));
-    try {
-      await withMockedKill(async (kills) => {
-        const server = await startServer({
-          DATABASE_URL: databaseUrl,
-          WAITRON_MIGRATIONS_DATABASE_URL: databaseUrl,
-          WAITRON_HTTP_PORT: String(port),
-          WAITRON_MIGRATIONS_DIR: migrationsRoot,
-          WAITRON_STATE_DIR: stateDir,
-          WAITRON_ENV: "preproduction",
-          // Deliberately NO WAITRON_SYNC_DATABASE_URL.
-        });
-        const ca = await readFile(join(stateDir, "tls", "ca.crt"));
-        const { via, close } = httpsVia(ca);
-        try {
-          const body = {
-            primaryUrl: "https://primary.test/",
-            credential: {
-              personId: "99999999-9999-9999-9999-999999999999",
-              password: "dashPass123",
-            },
-          };
-          const response = await fetch(`https://127.0.0.1:${port}/setup-api/adopt`, {
-            ...via,
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(body),
-          });
-          // An AppError not in ADOPT_STATUS is re-emitted at the default 400 with its own structured
-          // code + params (error-boundary.ts), so this pins the CODE, not just the status.
-          expect(response.status).toBe(400);
-          expect(await response.json()).toEqual({
-            error: {
-              code: "server.config_missing",
-              params: { variable: "WAITRON_SYNC_DATABASE_URL" },
-            },
-          });
-          // The guard fired before the persist-then-restart transition, so no SIGTERM was requested
-          // and no trading.env was written.
-          expect(kills).toEqual([]);
-          expect(existsSync(join(stateDir, "trading.env"))).toBe(false);
-        } finally {
-          await close();
-          await server.close();
-        }
-      });
-    } finally {
-      await rm(stateDir, { recursive: true, force: true });
-    }
-  }, 60_000);
-
   it("setup mode: a DEMO provision carrying an AEAT cert is REFUSED (400) — nothing provisioned or sealed", async () => {
     // Defense-in-depth over the full boot (CLAUDE.md §5): the AEAT signing cert is meaningful ONLY for
     // a LIVE ES-common venue, so a demo/preproduction body carrying one is an invalid request that the
@@ -1824,310 +1730,6 @@ describe("startServer, against a real container as the deployment role", () => {
       rmSync(tillApp, { recursive: true, force: true }); // guarded teardown (CLAUDE.md §4)
       rmSync(dashApp, { recursive: true, force: true });
     }
-  }, 60_000);
-
-  it("mounts the peer-authenticated sync API and starts the pull worker AND the retention sweep when WAITRON_SYNC_* is configured", async () => {
-    // The sync transport is enabled by WAITRON_SYNC_PEERS. The peer URL is unreachable, so the
-    // pull worker's one handshake attempt goes through fetchHttpClient (undici's fetch, MOCKED to
-    // reject in this file) and the peer backs off — which is all this test needs from the worker:
-    // it exercises the production HttpClient adapter and the boot wiring without a second live
-    // node. /sync-api/hello with an enrolled peer's token proves mountSyncApi ran with this
-    // node's till.nodeId AND that the auth path resolves against sync_peers (Task 5); a tokenless
-    // request proves the fail-closed guard is live. The sync DB URL is a sync_applier (app_user)
-    // URL — the auth path now reads sync_peers, which the app-only deployment role cannot; the
-    // worker never reaches a sync_log read (it fails at the peer handshake first). close() must
-    // tear the worker + pool down alongside the main loop.
-    //
-    // WAITRON_SYNC_RETENTION_DATABASE_URL is also set (reusing the deployment role), so this same boot
-    // schedules the retention sweep (spec §3.2 — what finally wires pruneSyncLog). runRetentionSweep is
-    // mocked (call-through) in this file, so the assertions below observe the CALL — started once, with
-    // the configured tickMs and the SAME AbortSignal the pull workers share — and close() tears its
-    // pool down too. A large retention tick keeps the real call-through sweep to a single prune attempt
-    // before close() aborts it.
-    const port = await freePort();
-    const server = await startServer({
-      ...KEY_ENV,
-      DATABASE_URL: databaseUrl,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_ENV: "production",
-      WAITRON_SYNC_PEERS: JSON.stringify([
-        {
-          nodeId: "66666666-6666-4666-8666-666666666666",
-          url: "http://127.0.0.1:1/",
-          token: "peer-token",
-        },
-      ]),
-      WAITRON_SYNC_DATABASE_URL: syncDatabaseUrl,
-      // Distinct from the ordered lane's minTickMs default (5000) so the two lanes' idle intervals
-      // are visibly different in the assertions below (spec §4d).
-      WAITRON_SYNC_FAST_TICK_MS: "250",
-      // Enable the retention sweep, reusing the deployment role. A large, distinctive tick so the
-      // call-through sweep runs at most one prune before close() aborts it, and so the assertion below
-      // cannot pass by coincidence with any other tick value in this env.
-      WAITRON_SYNC_RETENTION_DATABASE_URL: databaseUrl,
-      WAITRON_SYNC_RETENTION_TICK_MS: "33000",
-      // The lag alarm is opt-in (spec §3.2). A distinctive value so the pass-through assertion below
-      // cannot pass by coincidence with any other number in this env — proves config → boot wires the
-      // threshold into runRetentionSweep, which is what makes sync.stream_stalled reachable in prod.
-      WAITRON_SYNC_LAG_ALARM_ROWS: "7",
-    });
-    try {
-      const hello = await fetch(`http://127.0.0.1:${port}/sync-api/hello`, {
-        headers: { Authorization: `Bearer ${syncPeerToken}` },
-      });
-      expect(hello.status).toBe(200);
-      expect(await hello.json()).toEqual({
-        nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
-        environment: "production",
-        membership: null, // no document adopted → the handshake carries a null membership (design §5)
-        // Real boot computes the per-module applied versions from the migrated DB (SP-2b) and /hello
-        // echoes them; the exact numbers drift with every migration, so assert the map is genuinely
-        // populated (`core` a real number) rather than pinning drift-prone values — the content is
-        // covered exactly in sync-api.test.ts.
-        moduleVersions: expect.objectContaining({ core: expect.any(Number) }),
-      });
-      // A tokenless request is refused — the fail-closed guard, not just the route, is live.
-      const unauth = await fetch(`http://127.0.0.1:${port}/sync-api/hello`);
-      expect(unauth.status).toBe(401);
-      // Give the pull worker a beat to make its (failing) peer handshake, exercising fetchHttpClient.
-      await delay(100);
-
-      // TWO lane-scoped pull workers were started against the same peer: ordered at config.minTickMs
-      // and fast at fastMinIdleMs (spec §4d). Assert the two calls' lane + minIdleMs pairing.
-      const calls = vi.mocked(runSyncPull).mock.calls.map((c) => c[0]);
-      const ordered = calls.find((d) => d.lane === "ordered");
-      const fast = calls.find((d) => d.lane === "fast");
-      expect(ordered).toBeDefined();
-      expect(fast).toBeDefined();
-      expect(ordered!.minIdleMs).toBe(5_000); // config.minTickMs default
-      expect(fast!.minIdleMs).toBe(250); // WAITRON_SYNC_FAST_TICK_MS below
-      expect(fast!.maxBackoffMs).toBe(ordered!.maxBackoffMs); // both share config.maxTickMs
-
-      // The retention sweep was scheduled exactly once (spec §3.2) — this boot is what finally wires
-      // pruneSyncLog into the running host. Its tickMs is WAITRON_SYNC_RETENTION_TICK_MS, and it shares
-      // the SAME AbortSignal the pull workers carry, so close()'s single syncController.abort() below
-      // stops the sweep too.
-      expect(runRetentionSweep).toHaveBeenCalledTimes(1);
-      const sweep = vi.mocked(runRetentionSweep).mock.calls[0]![0];
-      expect(sweep.tickMs).toBe(33_000);
-      expect(sweep.signal).toBe(ordered!.signal); // one controller aborts pull workers AND the sweep
-      // The configured lag threshold reached runRetentionSweep — so its sync.stream_stalled branch is
-      // now live in prod when WAITRON_SYNC_LAG_ALARM_ROWS is set (spec §3.2, the wiring B8 omitted).
-      expect(sweep.lagAlarmRows).toBe(7);
-    } finally {
-      await server.close();
-    }
-    await expect(fetch(`http://127.0.0.1:${port}/sync-api/hello`)).rejects.toThrow(); // listener gone
-  }, 60_000);
-
-  it("boot reads a REAL trust set, so its adoptMembership callback accepts a trusted, strictly-newer document (Slice 4)", async () => {
-    // The now-live seam: boot reads `membershipTrustSet` from `nodes.public_key` (Slice 4), not the old
-    // empty `{}`. Stamp a node the venue trusts, boot, then drive boot's OWN `adoptMembership` callback
-    // with a document that node signed — the accept fence passes, the term-guarded persist writes
-    // node_membership, and the `if (outcome.accepted)` log fires. This is the branch that carried the
-    // now-false `/* v8 ignore */` while the seam was empty; here it is covered through boot.ts itself.
-    // The peer is unreachable (so the live worker never adopts), so we invoke the captured callback boot
-    // handed runSyncPull directly rather than standing up a live source — that end-to-end pull → adopt is
-    // proven separately in membership-gossip.e2e.test.ts.
-    const SIGNER = "77777777-7777-4777-8777-777777777777";
-    const kp = generateNodeKeyPair();
-    // Stamp the trusted node BEFORE boot: `membershipTrustSet` is read once at startup, so the
-    // row must exist first. Inserted as the container superuser, tenant-scoped to this venue.
-    await suite.admin.execute(sql`
-      insert into nodes (id, tenant_id, location_id, name, public_key)
-      values (${SIGNER}, ${TILL_ENV.WAITRON_TILL_TENANT_ID}, ${TILL_ENV.WAITRON_TILL_LOCATION_ID},
-              'Trusted primary', ${kp.publicKey})`);
-    const port = await freePort();
-    const server = await startServer({
-      ...KEY_ENV,
-      DATABASE_URL: databaseUrl,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_ENV: "production",
-      WAITRON_SYNC_PEERS: JSON.stringify([
-        {
-          nodeId: "66666666-6666-4666-8666-666666666666",
-          url: "http://127.0.0.1:1/",
-          token: "peer-token",
-        },
-      ]),
-      WAITRON_SYNC_DATABASE_URL: syncDatabaseUrl,
-    });
-    try {
-      // Boot handed the same `adoptMembership` callback to both lane workers; grab the ordered lane's.
-      const ordered = vi
-        .mocked(runSyncPull)
-        .mock.calls.map((c) => c[0])
-        .find((d) => d.lane === "ordered");
-      expect(ordered?.adoptMembership).toBeDefined();
-      // Nothing adopted yet — the singleton is empty.
-      expect(await readNodeMembership(suite.admin)).toBeNull();
-      // Drive boot's real callback with a term-5 document the stamped node signed. Because boot's trust
-      // set now maps SIGNER → kp.publicKey, the accept fence passes and the persist lands.
-      await ordered!.adoptMembership!(
-        signedMembershipDoc(5, { signerNodeId: SIGNER, keyPair: kp }),
-      );
-      const held = await readNodeMembership(suite.admin);
-      expect(held).not.toBeNull();
-      expect(held!.body.term).toBe(5);
-      expect(held!.signerNodeId).toBe(SIGNER);
-    } finally {
-      await server.close();
-      // node_membership is a whole-DB singleton and this suite's DB is shared, so clear both writes to
-      // keep the sync tests that assert `membership: null` order-independent (this file's own rule).
-      await suite.admin.execute(sql`delete from node_membership`);
-      await suite.admin.execute(sql`delete from nodes where id = ${SIGNER}`);
-    }
-  }, 60_000);
-
-  it("adoptMembership updates the LIVE serving-primary the config-conflict gate reads per batch (membership Slice 7)", async () => {
-    // Whole-branch review I1: the gate must key on a LIVE serving-primary, not a boot-captured scalar —
-    // a promotion/demotion that arrives via gossip (no restart) must be honoured on the next batch. Boot
-    // injects `servingPrimaryId: () => liveServingPrimaryId` into both lanes and updates that holder in
-    // its OWN `adoptMembership` accept branch. This drives that callback (as the REAL-trust-set test
-    // above does) and asserts the injected GETTER reflects the newly-accepted document.
-    // Prove-by-deletion: remove `liveServingPrimaryId = servingPrimaryNodeId(outcome.document)` in boot
-    // and the getter stays undefined after adoption → the final assertion goes red.
-    const SIGNER = "88888888-8888-4888-8888-888888888888";
-    const kp = generateNodeKeyPair();
-    await suite.admin.execute(sql`
-      insert into nodes (id, tenant_id, location_id, name, public_key)
-      values (${SIGNER}, ${TILL_ENV.WAITRON_TILL_TENANT_ID}, ${TILL_ENV.WAITRON_TILL_LOCATION_ID},
-              'Trusted primary', ${kp.publicKey})`);
-    const port = await freePort();
-    const server = await startServer({
-      ...KEY_ENV,
-      DATABASE_URL: databaseUrl,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_ENV: "production",
-      WAITRON_SYNC_PEERS: JSON.stringify([
-        {
-          nodeId: "99999999-9999-4999-8999-999999999999",
-          url: "http://127.0.0.1:1/",
-          token: "peer-token",
-        },
-      ]),
-      WAITRON_SYNC_DATABASE_URL: syncDatabaseUrl,
-    });
-    try {
-      const ordered = vi
-        .mocked(runSyncPull)
-        .mock.calls.map((c) => c[0])
-        .find((d) => d.lane === "ordered");
-      expect(ordered?.servingPrimaryId).toBeDefined();
-      // No membership held at boot, so the gate is inert (getter returns undefined) — fail-safe.
-      expect(ordered!.servingPrimaryId!()).toBeUndefined();
-      // Adopt a term-6 document the stamped node signed; it names SIGNER as the serving-primary.
-      await ordered!.adoptMembership!(
-        signedMembershipDoc(6, { signerNodeId: SIGNER, keyPair: kp }),
-      );
-      // The injected getter now reflects the newly-accepted serving-primary — LIVE, no restart.
-      expect(ordered!.servingPrimaryId!()).toBe(SIGNER);
-    } finally {
-      await server.close();
-      await suite.admin.execute(sql`delete from node_membership`);
-      await suite.admin.execute(sql`delete from nodes where id = ${SIGNER}`);
-    }
-  }, 60_000);
-
-  it("close() swallows a REJECTING pull worker and still tears down the listener and pools", async () => {
-    // Teardown-ordering fix: close() used to `await syncWorker` BEFORE the try/finally that guarantees
-    // server.close() + the pool teardown, so a worker that settled by rejection threw out of close()
-    // there and leaked the HTTP server and both connection pools. Force exactly that settle: a
-    // pre-rejected worker promise returned once from the mocked runSyncPull. It carries its OWN benign
-    // `.catch` so it is never an unhandled rejection in the window before close() attaches its swallowing
-    // catch. Two directions differ visibly (CLAUDE.md §1): without the fix close() REJECTS with this
-    // error and the listener stays up; with it close() RESOLVES and the listener is gone.
-    const port = await freePort();
-    const workerBoom = new Error("sync pull worker rejected");
-    const rejectedWorker = Promise.reject(workerBoom);
-    rejectedWorker.catch(() => {}); // handled here, so never an unhandled rejection pre-close()
-    vi.mocked(runSyncPull).mockReturnValueOnce(rejectedWorker);
-
-    const server = await startServer({
-      ...KEY_ENV,
-      DATABASE_URL: databaseUrl,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_ENV: "production",
-      WAITRON_SYNC_PEERS: JSON.stringify([
-        {
-          nodeId: "77777777-7777-4777-8777-777777777777",
-          url: "http://127.0.0.1:1/",
-          token: "peer-token",
-        },
-      ]),
-      WAITRON_SYNC_DATABASE_URL: syncDatabaseUrl,
-    });
-
-    // The listener is up before close(): the sync source mounted and bound.
-    const hello = await fetch(`http://127.0.0.1:${port}/sync-api/hello`, {
-      headers: { Authorization: `Bearer ${syncPeerToken}` },
-    });
-    expect(hello.status).toBe(200);
-
-    // The UNSET-retention case (spec §3.2/§8): sync is on but WAITRON_SYNC_RETENTION_DATABASE_URL is
-    // not set here, so the sweep is NOT scheduled — an existing sync host without the retention role
-    // boots unaffected (it logs sync.retention_unconfigured instead). The beforeEach cleared this spy,
-    // so a call from the retention-configured test above cannot leak into this assertion.
-    expect(runRetentionSweep).not.toHaveBeenCalled();
-
-    // close() RESOLVES despite the worker rejection (the swallow), and the guaranteed teardown ran: the
-    // listener is gone — which it could only be if close() got PAST the swallowed worker await into the
-    // try (server.close), whose finally then closed both the app pool and the sync pool.
-    await expect(server.close()).resolves.toBeUndefined();
-    await expect(fetch(`http://127.0.0.1:${port}/sync-api/hello`)).rejects.toThrow();
-  }, 60_000);
-
-  it("close() swallows a REJECTING retention sweep worker and still tears down the listener and pools", async () => {
-    // The retention worker's own settle-by-rejection path, mirroring the pull-worker test above.
-    // runRetentionSweep swallows its per-tick faults so it never rejects in production, but boot
-    // attaches a `.catch` logging sync.worker_rejected for the pre-close() window, and close() must
-    // still tear down if it settles by rejection. Force exactly that: a pre-rejected worker returned
-    // once from the mocked runRetentionSweep, carrying its OWN benign `.catch` so it is never an
-    // unhandled rejection before boot's catch attaches. close() RESOLVES and the listener is gone.
-    const port = await freePort();
-    const workerBoom = new Error("retention sweep worker rejected");
-    const rejectedWorker = Promise.reject(workerBoom);
-    rejectedWorker.catch(() => {}); // handled here, so never an unhandled rejection pre-close()
-    vi.mocked(runRetentionSweep).mockReturnValueOnce(rejectedWorker);
-
-    const server = await startServer({
-      ...KEY_ENV,
-      DATABASE_URL: databaseUrl,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_ENV: "production",
-      WAITRON_SYNC_PEERS: JSON.stringify([
-        {
-          nodeId: "88888888-8888-4888-8888-888888888888",
-          url: "http://127.0.0.1:1/",
-          token: "peer-token",
-        },
-      ]),
-      WAITRON_SYNC_DATABASE_URL: syncDatabaseUrl,
-      // Retention configured, so the sweep is started (and here rejected) and its pool is torn down.
-      WAITRON_SYNC_RETENTION_DATABASE_URL: databaseUrl,
-    });
-
-    // The listener is up before close(): the sync source mounted and bound.
-    const hello = await fetch(`http://127.0.0.1:${port}/sync-api/hello`, {
-      headers: { Authorization: `Bearer ${syncPeerToken}` },
-    });
-    expect(hello.status).toBe(200);
-
-    // The alarm is opt-in: WAITRON_SYNC_LAG_ALARM_ROWS is unset here, so boot passes lagAlarmRows
-    // undefined and the sweep is prune-only (its sync.stream_stalled branch never runs). The
-    // complementary direction to the "set → 7" assertion in the retention-scheduled test above.
-    expect(vi.mocked(runRetentionSweep).mock.calls[0]![0].lagAlarmRows).toBeUndefined();
-
-    // close() RESOLVES despite the retention worker rejection (the swallow), and the guaranteed
-    // teardown ran: the listener is gone, which it could only be if close() got PAST the swallowed
-    // retention-worker await into the try, whose finally then closed the app, sync, and retention pools.
-    await expect(server.close()).resolves.toBeUndefined();
-    await expect(fetch(`http://127.0.0.1:${port}/sync-api/hello`)).rejects.toThrow();
   }, 60_000);
 
   it("dials the outbound cloud-mirror tunnel to config.httpPort when WAITRON_TUNNEL_* is set, and close() aborts it", async () => {

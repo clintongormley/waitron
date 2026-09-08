@@ -198,6 +198,39 @@ export async function setSingletonRoleTx(tx: Transaction, role: SingletonRole): 
   }
 }
 
+/**
+ * The fence-LSN watermark this node recorded when it entered its read-only fence (swap S4, Ruling C2),
+ * as a `pg_lsn` text value (`0/1523AB8`), or `null` when unset — a node that never fenced, and every
+ * primary. The `!active && confirmed_flush_lsn >= fence_lsn` drain guard reads this; a `null` here is
+ * NOT drainable and takes the operator's `--accept-loss` path (spec §4.2). Same `to_regclass` probe
+ * (not a caught undefined-table error) the axis readers use, for the same transaction-poisoning reason:
+ * an unstamped or pre-table database reads `null`. `fence_lsn::text` so the wire value is the LSN text.
+ */
+export async function readFenceLsn(db: Database | Transaction): Promise<string | null> {
+  const present = await db.execute<{ exists: boolean }>(
+    sql`select to_regclass('public.deployment') is not null as exists`,
+  );
+  if (present.rows[0]?.exists !== true) return null;
+  const rows = await db.execute<{ fence_lsn: string | null }>(
+    sql`select fence_lsn::text as fence_lsn from deployment where id = 1`,
+  );
+  return rows.rows[0]?.fence_lsn ?? null;
+}
+
+/**
+ * Records (or, with `null`, clears) the fence-LSN watermark on the singleton `deployment` row, on a
+ * caller-provided transaction so the capture commits atomically with the state change that enters or
+ * leaves the fence (CLAUDE.md §3): the boot demote sets it in the SAME transaction it demotes the
+ * singleton axis; the mirror promote clears it (un-fence) in the SAME transaction as the PONR. An
+ * OWNER-role write (app_user holds no UPDATE on deployment), like the other axis setters. `lsn` is a
+ * `pg_lsn` text value bound and cast to `pg_lsn`; `null` unsets the column. Requires the singleton
+ * row (stamp first) — on an unstamped database the UPDATE is a silent 0-row no-op, which never happens
+ * for a node reaching a fence transition.
+ */
+export async function setFenceLsnTx(tx: Transaction, lsn: string | null): Promise<void> {
+  await tx.execute(sql`update deployment set fence_lsn = ${lsn}::pg_lsn where id = 1`);
+}
+
 /** The stored scrypt verifier of the offline break-glass secret, or `null` when unset — a node
  * minted before this column, an unstamped database, or the primary (never promoted) all read `null`.
  * A plain `select … limit 1` (not the `to_regclass` probe the axis readers use): the singleton row's

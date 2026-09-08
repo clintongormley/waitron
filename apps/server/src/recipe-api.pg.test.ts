@@ -24,10 +24,8 @@ const suite = useTemplateDb({ template: "manifest" });
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
 
-// This node's origin id — threaded into every recipe write's withTenant (a recipe write UPDATEs the
-// sync-enrolled `products` table). This suite proves the gate, not origin attribution
-// (that is `sync-origin.test.ts`), so any valid uuid serves; it must be a uuid for the products
-// capture's app.node_id cast under the real sync triggers.
+// This node's id — carried on the recipe deps `cfg` shape (a recipe write UPDATEs `products`). Any
+// valid uuid serves; the id is not otherwise exercised here.
 const NODE_ID = "11111111-1111-4111-8111-111111111111";
 
 // Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,

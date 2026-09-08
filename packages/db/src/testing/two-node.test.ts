@@ -181,3 +181,42 @@ describe.runIf(dockerAvailable())("two-node fixture", () => {
     await cluster.nodeB.run(`DROP SUBSCRIPTION smoke_sub`);
   });
 });
+
+// The `command` override (swap S4, I4): Case 4 of the fiscal fidelity suite needs an 8 MB
+// `max_slot_wal_keep_size` so a WAL overflow invalidates the slot — but the fixture's own
+// `-c max_slot_wal_keep_size=4GB` boot flag (a `PGC_S_ARGV` setting) outranks any later `ALTER
+// SYSTEM`, so the small bound has to be a BOOT flag too. This proves the caller-supplied command
+// reaches postgres on both nodes; without threading `options.command` through, `SHOW` returns the
+// default `4GB` and this fails.
+describe.runIf(dockerAvailable())("two-node fixture — custom postgres command", () => {
+  let cluster: TwoNodeCluster;
+
+  beforeAll(async () => {
+    cluster = await startTwoNodeCluster({
+      migrate: async () => {},
+      dockerRequired: true,
+      command: [
+        "postgres",
+        "-c",
+        "wal_level=logical",
+        "-c",
+        "track_commit_timestamp=on",
+        "-c",
+        "max_slot_wal_keep_size=8MB",
+      ],
+    });
+  }, 180_000);
+
+  afterAll(async () => {
+    await cluster?.stop();
+  });
+
+  it("boots both nodes with the caller's max_slot_wal_keep_size", async () => {
+    for (const node of [cluster.nodeA, cluster.nodeB]) {
+      const [row] = await node.query<{ max_slot_wal_keep_size: string }>(
+        "SHOW max_slot_wal_keep_size",
+      );
+      expect(row!.max_slot_wal_keep_size).toBe("8MB");
+    }
+  });
+});

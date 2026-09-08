@@ -69,6 +69,15 @@ export interface TwoNodeClusterOptions {
   startNetwork?(): Promise<StartedNetwork>;
   /** Seam — starts one node on the network. Defaults to a real container + connected client. */
   startNode?(network: StartedNetwork, alias: string): Promise<StartedReplNode>;
+  /**
+   * The `postgres` command each node boots with, overriding {@link LOGICAL_REPLICATION_COMMAND}. A
+   * `-c` boot flag is a `PGC_S_ARGV` setting that OUTRANKS a later `ALTER SYSTEM`, so a bound the
+   * default already sets at a different value (`max_slot_wal_keep_size=4GB`) can only be changed
+   * here, not at runtime — the swap S4 WAL-overflow case boots its own cluster with an 8 MB bound
+   * this way (I4). Keep `wal_level=logical` and `track_commit_timestamp=on`, which every replication
+   * node needs.
+   */
+  command?: string[];
 }
 
 export const LOGICAL_REPLICATION_COMMAND = [
@@ -86,14 +95,18 @@ export const LOGICAL_REPLICATION_COMMAND = [
   "max_slot_wal_keep_size=4GB",
 ];
 
-async function startRealNode(network: StartedNetwork, alias: string): Promise<StartedReplNode> {
+async function startRealNode(
+  network: StartedNetwork,
+  alias: string,
+  command: string[],
+): Promise<StartedReplNode> {
   const container = await new PostgreSqlContainer(POSTGRES_IMAGE)
     // Same reaper marker as startPostgresContainer: an interrupted Ryuk-off run leaves this container
     // for `pnpm reap`, which removes ONLY containers carrying this label.
     .withLabels({ "com.waitron.reapable": "true" })
     .withNetwork(network)
     .withNetworkAliases(alias)
-    .withCommand(LOGICAL_REPLICATION_COMMAND)
+    .withCommand(command)
     .start();
   const uri = container.getConnectionUri();
   const client = new pg.Client({ connectionString: uri });
@@ -119,7 +132,9 @@ async function startRealNode(network: StartedNetwork, alias: string): Promise<St
 
 export async function startTwoNodeCluster(options: TwoNodeClusterOptions): Promise<TwoNodeCluster> {
   const startNetwork = options.startNetwork ?? (() => new Network().start());
-  const startNode = options.startNode ?? startRealNode;
+  const command = options.command ?? LOGICAL_REPLICATION_COMMAND;
+  const startNode =
+    options.startNode ?? ((network, alias) => startRealNode(network, alias, command));
 
   /* v8 ignore start -- Docker-absent branch: unreachable in any Docker-present run, which is every
      CI runner and dev machine this package requires (harness.ts `dockerAvailable` documents the same

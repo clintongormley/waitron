@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import type { Database } from "@waitron/db";
-import { INSTANCE_ROLES } from "./instance-state.js";
+import { INSTANCE_MIGRATOR_ROLE } from "./instance-state.js";
 import { REPLICATION_ROLE } from "./replication-bootstrap.js";
 import "./errors.js";
 
@@ -57,7 +57,7 @@ export async function readReplicationReadiness(db: Database): Promise<Replicatio
         select 1 from pg_auth_members m
         join pg_roles g on g.oid = m.roleid
         join pg_roles r on r.oid = m.member
-        where r.rolname = ${INSTANCE_ROLES[0]} and g.rolname = 'pg_create_subscription'
+        where r.rolname = ${INSTANCE_MIGRATOR_ROLE} and g.rolname = 'pg_create_subscription'
       ) as migrator_can_subscribe,
       exists (
         select 1
@@ -66,7 +66,7 @@ export async function readReplicationReadiness(db: Database): Promise<Replicatio
         join pg_roles owner on owner.oid = da.defaclrole
         cross join lateral aclexplode(da.defaclacl) ace
         join pg_roles grantee on grantee.oid = ace.grantee
-        where owner.rolname = ${INSTANCE_ROLES[0]}
+        where owner.rolname = ${INSTANCE_MIGRATOR_ROLE}
           and n.nspname = 'public'
           and da.defaclobjtype = 'r'
           and grantee.rolname = ${REPLICATION_ROLE}

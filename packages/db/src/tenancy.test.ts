@@ -82,66 +82,20 @@ describe("invoice_locales", () => {
   });
 });
 
-describe("app.node_id origin context", () => {
+describe("withTenant transaction context", () => {
   const tenantId = randomUUID();
-  const nodeId = randomUUID();
   let db: Database;
 
   beforeEach(async () => {
     db = suite.db;
   });
 
-  const nodeSetting = (
-    tx: Parameters<Parameters<typeof withTenant>[2]>[0],
-  ): Promise<string | null> =>
-    tx
-      .execute<{ v: string | null }>(sql`select current_setting('app.node_id', true) as v`)
-      .then((r) => r.rows[0]?.v ?? null);
-
-  it("no longer sets app.tenant_id — the database holds one tenant (spec §1)", async () => {
+  it("sets no app.tenant_id GUC — the database holds one tenant (spec §1)", async () => {
     await withTenant(db, tenantId, async (tx) => {
       const { rows } = await tx.execute<{ v: string }>(
         sql`select current_setting('app.tenant_id', true) as v`,
       );
       expect(rows[0]?.v ?? "").toBe("");
     });
-  });
-
-  it("still sets app.node_id when asked (the capture triggers read it until step 4)", async () => {
-    await withTenant(
-      db,
-      tenantId,
-      async (tx) => {
-        const { rows } = await tx.execute<{ v: string }>(
-          sql`select current_setting('app.node_id', true) as v`,
-        );
-        expect(rows[0]?.v).toBe(nodeId);
-      },
-      { nodeId },
-    );
-  });
-
-  it("sets app.node_id to the supplied node id within the transaction (4-arg form)", async () => {
-    const seen = await withTenant(db, tenantId, (tx) => nodeSetting(tx), { nodeId });
-    expect(seen).toBe(nodeId);
-  });
-
-  it("leaves app.node_id unset on the plain 3-arg form (default path byte-unchanged)", async () => {
-    // Proves the existing signature is untouched: no app.node_id is set, so capture falls back to the
-    // all-zero origin. current_setting(..., true) is NULL when never set (or '' once a local set has
-    // been restored at txn end); it is NEVER the node id.
-    const seen = await withTenant(db, tenantId, (tx) => nodeSetting(tx));
-    expect(seen === null || seen === "").toBe(true);
-    expect(seen).not.toBe(nodeId);
-  });
-
-  it("does not leak app.node_id to a later transaction on the same connection", async () => {
-    // The node setting must be cleared when the transaction ends.
-    const within = await withTenant(db, tenantId, (tx) => nodeSetting(tx), { nodeId });
-    expect(within).toBe(nodeId);
-
-    const after = await db.transaction((tx) => nodeSetting(tx));
-    expect(after === null || after === "").toBe(true);
-    expect(after).not.toBe(nodeId);
   });
 });

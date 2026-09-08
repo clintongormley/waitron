@@ -2,7 +2,7 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { asAppUser, withTenant, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
-import type { DrainProgress } from "@waitron/sync";
+import type { SlotDrain } from "@waitron/sync";
 import type { KeyRing } from "@waitron/credentials";
 import { retireSelf } from "./retire.js";
 import { requireManagementSession } from "@waitron/server-kit";
@@ -20,12 +20,15 @@ export type BoxRetireDeps = {
   tenantId: string;
   /** THIS (departing) node — the node that becomes `evicted`, and the eviction document's signer. */
   nodeId: string;
-  /** The drain-progress reader (the same one box-status's `disposal` surface uses), or `undefined`
+  /** The native slot-drain reader (the same slot box-status's `disposal` surface reads), or `undefined`
    * when the held document names no carrier — which retireSelf refuses as `node.retire_no_carrier`. */
-  readDrainProgress: (() => Promise<DrainProgress>) | undefined;
-  /** The carrier node id captured at BOOT that `readDrainProgress` keys on — retireSelf refuses
+  readSlotDrain: (() => Promise<SlotDrain>) | undefined;
+  /** The fence-LSN watermark this node recorded when it fenced (Ruling C2), or `null` for a dead box —
+   * the drain guard `isDrained(d, fenceLsn) && !d.active`; a `null` refuses fail-safe as not_drained. */
+  fenceLsn: string | null;
+  /** The carrier node id captured at BOOT that `readSlotDrain` keys on — retireSelf refuses
    * (`node.retire_carrier_changed`) if the fresh held chart names a different serving-primary, because a
-   * fenced node does not restart on a carrier change. `undefined` exactly when `readDrainProgress` is. */
+   * fenced node does not restart on a carrier change. `undefined` exactly when `readSlotDrain` is. */
   carrierNodeId: string | undefined;
 };
 
@@ -48,6 +51,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "node.retire_not_fenced": 409,
   "node.retire_no_carrier": 409,
   "node.retire_carrier_changed": 409,
+  "node.retire_carrier_attached": 409,
   "node.retire_not_drained": 409,
   "node.retire_superseded": 409,
 };
@@ -81,7 +85,8 @@ export function mountBoxRetireApi(app: Hono, deps: BoxRetireDeps, log: Logger): 
         ring: deps.ring,
         tenantId: deps.tenantId,
         nodeId: deps.nodeId,
-        readDrainProgress: deps.readDrainProgress,
+        readSlotDrain: deps.readSlotDrain,
+        fenceLsn: deps.fenceLsn,
         carrierNodeId: deps.carrierNodeId,
         log,
       });

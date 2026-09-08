@@ -48,9 +48,9 @@ export async function establishNodeIdentity(
 }
 
 /**
- * Unseal the node's identity PRIVATE key (base64 PKCS8) as `app_user` under `withTenant` — the same
- * role/path readMirrorToken uses. The Slice-5 signer's entry point (mint + sign a membership
- * document); exercised now by the establish round-trip. Throws `credentials.decrypt_failed` (a key
+ * Unseal the node's identity PRIVATE key (base64 PKCS8) as `app_user` under `withTenant`. The
+ * Slice-5 signer's entry point (mint + sign a membership document); exercised now by the establish
+ * round-trip. Throws `credentials.decrypt_failed` (a key
  * sealed under a different box key) or `credentials.missing` (never established).
  */
 export function readNodeIdentityKey(

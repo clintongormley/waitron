@@ -38,8 +38,7 @@ let voidSessionId: string;
  * the REAL chain head — none of which a fake backend's own bookkeeping tables can demonstrate.
  */
 // TEST_MIGRATIONS is the full manifest (identity migrates before fiscal): recordVoid now calls
-// `authorize`, which reads identity's persons/sessions, and fiscal's SP-3a capture migration needs
-// sync_capture() from the sync set. See ../test/migrations.ts.
+// `authorize`, which reads identity's persons/sessions. See ../test/migrations.ts.
 const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {

@@ -97,15 +97,10 @@ function printCfg(cfg: TillConfig): PrintConfig {
 /** Run `fn` on a transaction scoped to the venue's tenant as `app_user`, the shape every
  *  route uses. `nodeId` mirrors the fire path so `ticket_items.node_id` is set as production would. */
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(
-    db,
-    cfg.tenantId,
-    async (tx) => {
-      await asAppUser(tx);
-      return fn(tx);
-    },
-    { nodeId: cfg.nodeId },
-  );
+  return withTenant(db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return fn(tx);
+  });
 }
 
 /** Read the print-job outbox; the bytea custom type decodes payload into a Buffer. */

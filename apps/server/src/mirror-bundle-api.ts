@@ -30,6 +30,7 @@ import { withMember } from "@waitron/membership";
 import { authorizeManager, endManagementSession, loginManagerById } from "@waitron/identity";
 import type { KeyRing } from "@waitron/credentials";
 import type { AdoptResult } from "@waitron/provisioning";
+import type { ReplicationConfig } from "./config.js";
 import { assembleMirrorBundle } from "./mirror-bundle.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
 import { isBareOrigin } from "./config.js";
@@ -40,26 +41,29 @@ import type { Logger } from "./logger.js";
 
 /**
  * Everything the mirror-bundle route needs. `appDb` authenticates + authorizes (as `app_user`
- * under `withTenant` + `asAppUser`, the dashboard-login shape) AND reads the venue rows inside
- * `assembleMirrorBundle`; `retentionDb` is the retention connection (an `app_user` member) the
- * retention sweep already opens (`enrolPeer` mints the token as that role — CLAUDE.md §3, never a
- * broader connection). `designated` are the five ids the primary till was provisioned with
- * (`config.till.*`) — its `tenantId` scopes the auth transaction. `stateDir` locates the box CA;
- * `boxHostname` is the box's TLS SAN. `relayUrl` is the primary's own relay coordinates
- * (`loadTunnelConfig`), `undefined` when no tunnel is configured — the endpoint then refuses
- * `mirror.no_relay` rather than minting an undial-able bundle. `ring` is the box vault key used
- * to unseal the primary's identity key — `assembleMirrorBundle` endorses the standby's key with
- * it (design §6 R2), and this route signs the membership document it appends the standby to with
- * it (till-reroute §3.3).
+ * under `withTenant` + `asAppUser`, the dashboard-login shape) AND reads the venue's tenant +
+ * designated-node identity inside `assembleMirrorBundle`. `designated` are the five ids the primary
+ * till was provisioned with (`config.till.*`) — its `tenantId` scopes the auth transaction.
+ * `stateDir` locates the box CA; `boxHostname` is the box's TLS SAN. `relayUrl` is the primary's own
+ * relay coordinates (`loadTunnelConfig`), `undefined` when no tunnel is configured — the endpoint then
+ * refuses `mirror.no_relay` rather than minting an undial-able bundle. `replication` is the primary's
+ * native-replication credential + advertise address (`config.replication`); `undefined` when it is
+ * unconfigured — the endpoint then refuses `server.config_missing` (503), because a bundle with no
+ * replication connection is one no mirror can subscribe to. `database` is the name of the primary's
+ * own database, carried in the bundle's replication connection so the mirror's subscription names the
+ * right dbname to COPY from. `ring` is the box vault key `assembleMirrorBundle` uses to unseal the
+ * primary's identity key (design §6 R2), and this route signs the membership document it appends the
+ * standby to with it (till-reroute §3.3).
  */
 export interface MirrorBundleApiDeps {
   appDb: Database;
-  retentionDb: Database;
   ring: KeyRing;
   stateDir: string;
   relayUrl: string | undefined;
   boxHostname: string;
   designated: AdoptResult;
+  replication: ReplicationConfig | undefined;
+  database: string;
 }
 
 /**
@@ -75,9 +79,11 @@ export interface MirrorBundleApiDeps {
  * which is where a structurally-unreachable `mirror.not_provisioned` (a trading primary is always
  * stamped) would land if `assembleMirrorBundle` ever threw it.
  *
- * The one NON-client entry is `membership.write_contended` (503): the org-chart write lost its term
- * race on every attempt, which is a transient server-side condition the caller retries, not a fault in
- * its request. The boundary permits a 5xx in a status map (`setup-api.ts` maps a 502 the same way).
+ * The NON-client entries are both 503: `membership.write_contended` (the org-chart write lost its
+ * term race on every attempt, a transient server-side condition the caller retries) and
+ * `server.config_missing` (this primary has no replication credential configured, so it cannot mint a
+ * subscribable bundle — a server-side misconfiguration, not a fault in the request). The boundary
+ * permits a 5xx in a status map (`setup-api.ts` maps a 502 the same way).
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "password.invalid": 401,
@@ -88,6 +94,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.no_relay": 400,
   "mirror.standby_invalid": 400,
   "membership.write_contended": 503,
+  "server.config_missing": 503,
 };
 
 /**
@@ -183,19 +190,28 @@ export function mountMirrorBundleApi(
         await endManagementSession(tx, session.id);
       });
 
-      // A mirror with no relay to dial is unusable, so refuse BEFORE minting a token (design §4). The
-      // relay endpoint is infrastructure config, not echoed — `mirror.no_relay` carries no params.
+      // A mirror with no relay to dial is unusable, so refuse BEFORE assembling the bundle (design §4).
+      // The relay endpoint is infrastructure config, not echoed — `mirror.no_relay` carries no params.
       if (deps.relayUrl === undefined) throw new AppError("mirror.no_relay", {});
+      // A bundle carries the primary's replication CONNECTION so the mirror can subscribe (swap step
+      // 4). A primary with no `waitron_repl` credential configured cannot mint a subscribable bundle,
+      // so refuse here — reusing `server.config_missing` (M9), the same code `config.ts` throws for an
+      // unset variable; the value is never echoed, only the variable name. Positioned beside
+      // `mirror.no_relay`, before any reservation runs.
+      if (deps.replication === undefined) {
+        throw new AppError("server.config_missing", { variable: "WAITRON_REPLICATION_PASSWORD" });
+      }
 
       const bundle = await assembleMirrorBundle({
         appDb: deps.appDb,
-        retentionDb: deps.retentionDb,
         ring: deps.ring,
         stateDir: deps.stateDir,
         relayUrl: deps.relayUrl,
         boxHostname: deps.boxHostname,
         designated: deps.designated,
         standby,
+        replication: deps.replication,
+        database: deps.database,
       });
       // The standby joins the org chart AT ADOPT and BEFORE the response, so a bundle is never handed
       // out for a node the chart omits (till-reroute design §3.3) — a till reroutes by `contactUrl`,

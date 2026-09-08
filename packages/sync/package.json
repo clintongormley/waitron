@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing/replication-node.js": "./src/testing/replication-node.ts"
+  },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
@@ -13,7 +17,6 @@
   },
   "dependencies": {
     "@waitron/db": "workspace:*",
-    "@waitron/identity": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
     "drizzle-orm": "^0.45.2",

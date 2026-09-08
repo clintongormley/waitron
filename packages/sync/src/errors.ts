@@ -2,13 +2,17 @@
 // a real module to augment rather than declaring a fresh ambient one — the same idiom
 // packages/credentials/src/errors.ts and packages/payments/src/errors.ts use.
 import "@waitron/shared";
-import type { SyncLane } from "@waitron/sync-enrolment";
 
 /**
  * packages/sync's contribution to the shared error registry, by declaration merging — the
  * DOMAIN-CONCEPT, lowercase, dot-namespaced convention (`sync.*`), never the package name. The rule
  * lives atop packages/shared/src/errors.ts: name what happened to the domain, so `sync.stream_stalled`
  * and never `sync.trigger_failed` (a fact about which plpgsql function threw).
+ *
+ * Five codes here — `peer_environment_mismatch`, `table_not_enrolled`, `stream_stalled`,
+ * `node_unauthorized`, `config_conflict_rejected` — belonged to the deleted application outbox (swap
+ * S5). Codes are never renamed or deleted once shipped (CLAUDE.md §3); they stay registered (and
+ * `errors.test.ts` keeps constructing each) though nothing throws them any more.
  *
  * NO PARAM HERE CARRIES ROW CONTENT. A sync payload is another tenant's business data; these codes
  * name schema identifiers, environment names and counts only — nothing that reaches a log line or a
@@ -41,7 +45,7 @@ declare module "@waitron/shared" {
      *     stringifies it at the alarm edge (consistent with the swept line's `highWater`).
      * `subscriberId` and `originId` name the lagging (subscriber, origin) pair in both. */
     "sync.stream_stalled":
-      | { subscriberId: string; originId: string; backoffMs: number; lane: SyncLane }
+      | { subscriberId: string; originId: string; backoffMs: number; lane: "ordered" | "fast" }
       | { subscriberId: string; originId: string; lag: string };
     /** A peer presented a missing, blank or invalid per-peer bearer token to this node's sync-api. NO
      * PARAMS — the response is uniform (fail-closed, no oracle), and a token must never reach a log
@@ -61,5 +65,10 @@ declare module "@waitron/shared" {
      * `provisioning.role_creation_failed` keeps for `CREATE ROLE`). Five `[0-9A-Z]` cannot be the
      * password. */
     "sync.subscription_failed": { sqlState: string | null };
+    /** A subscription names a publication the publisher does not hold, so its initial copy silently
+     * never happens — `check_publications` only WARNs at CREATE (probe C). Raised where a caller has
+     * verified the publisher's set and refuses the wiring rather than let the copy no-op.
+     * `subscription` is that subscription's name — a schema identifier, never row content. */
+    "sync.publication_missing": { subscription: string };
   }
 }

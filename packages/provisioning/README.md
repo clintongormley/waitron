@@ -31,12 +31,12 @@ absent and lets `@waitron/migrations` resolve each set from `packages/migrations
 
 ## The four commands
 
-| Command    | What it needs                                              | How often           |
-| ---------- | ---------------------------------------------------------- | ------------------- |
-| `keyring`  | nothing at all — no database, no connection string         | once per deployment |
-| `instance` | an admin connection with `CREATEDB` and `CREATEROLE`       | once per deployment |
-| `status`   | the same admin connection; reads only                      | any time            |
-| `venue`    | the owner-admin connection to a stamped, migrated database | once per venue      |
+| Command    | What it needs                                                         | How often           |
+| ---------- | --------------------------------------------------------------------- | ------------------- |
+| `keyring`  | nothing at all — no database, no connection string                    | once per deployment |
+| `instance` | an admin connection with `CREATEDB` and `CREATEROLE`                  | once per deployment |
+| `status`   | the same admin connection; reads only                                 | any time            |
+| `venue`    | the migrator connection (role option) to a stamped, migrated database | once per venue      |
 
 `venue` creates a tenant, a location, a till, a node and its standard and rectificative invoice
 series, then runs each composed module's provisioning seed (the fiscal module's registers the node as
@@ -78,8 +78,8 @@ tmux's own buffer under some configurations, still has it.
 
 ### `instance`
 
-Takes a cluster to a migrated, stamped, granted database with the two logins the host and this tool
-need:
+Takes a cluster to a migrated, stamped, **migrator-owned** database with the two logins the host and
+this tool need:
 
 | Role               | What it is for                                                      |
 | ------------------ | ------------------------------------------------------------------- |
@@ -96,14 +96,13 @@ existed** gets a line saying so and **no connection string** — this tool did n
 role's password, cannot read one back out of `pg_authid`, and a connection string with a wrong
 password is worse than none, because it looks usable and fails at the host's first connect.
 
-**Idempotency.** Running it twice is safe. The second run creates nothing; it re-runs the migrator
-and re-issues the two grants — the plan is never empty, because all three are emitted
-unconditionally rather than diffed, and `src/instance-plan.ts` gives a separate reason for each.
-(For `migrate`: journal-table existence is not "the set finished". For the grants:
-`information_schema.role_table_grants` does not cover database- or schema-level `CREATE` at all.)
-Re-running the migrator applies nothing when nothing is pending, but it is **not privilege-free** —
-see wall 4 under "When the admin did not create the database" for what it costs an admin that lacks
-`CREATE` on the database.
+**Idempotency.** Running it twice is safe. The second run creates nothing and grants nothing; it
+re-runs the migrator — the plan is never empty, because `migrate` is emitted unconditionally rather
+than diffed (journal-table existence is not "the set finished"; `src/instance-plan.ts` gives the
+reason). There are no CREATE grants to re-issue: the migrator OWNS the database and the `public`
+schema, so it holds database- and schema-level `CREATE` implicitly. Re-running the migrator applies
+nothing when nothing is pending, and it runs AS the migrator, so it needs no privilege the migrator
+does not already hold as owner.
 
 #### `instance` is a schema-changing command against a LIVE deployment
 
@@ -121,7 +120,7 @@ copies every package's `drizzle/` folder into `dist/drizzle` when **this** packa
 which `migrationOptionsFor` resolves per set as `<root>/<set name>`. So a `waitron-provision` build
 newer than the `apps/server` build actually running carries migrations the running host has never
 applied — and `instance` will apply them. The scenario is not exotic: re-creating a dropped
-`waitron_app`, re-issuing grants after a manual `REVOKE`, or simply taking `status`'s own advice
+`waitron_app`, re-granting a membership after a manual `REVOKE`, or simply taking `status`'s own advice
 ("Re-running `waitron-provision instance` applies anything still pending") is enough to reach it.
 
 **What that costs a trading shop.** An `ALTER TABLE` takes an `ACCESS EXCLUSIVE` lock on the table
@@ -172,9 +171,10 @@ withhold true superuser access from your connection. RDS explicitly documents `C
 The local test measures the PostgreSQL privilege shape, not compatibility with each hosted service.
 `src/instance-apply.pg.test.ts` runs `applyInstance` against a
 blank PostgreSQL container as a login with `CREATEDB` and `CREATEROLE`. It checks `rolsuper = false`,
-applies the full manifest, creates the two logins, reads the database/schema ACLs and memberships
-back, and checks the deployment stamp. `src/venue-apply.pg.test.ts` then exercises the venue flow as
-the non-superuser table owner.
+applies the full manifest AS the migrator, reads every table's owner back and confirms
+`waitron_migrator` owns them all, checks the deployment stamp, and proves the SET-ROLE refusal a
+non-creating admin hits. `src/venue-apply.pg.test.ts` then exercises the venue flow over the
+migrator (role-option) connection as the non-superuser table owner.
 
 ### `status`
 
@@ -201,10 +201,12 @@ node, a standard plus a rectificative invoice series, and then every composed mo
 seed — the fiscal module's registers the node as a Veri\*Factu SIF and starts its chain. It replaced
 the retired `apps/server/sql/bootstrap-tenant.sql`.
 
-Unlike `instance`, which talks to the cluster admin, `venue` connects to the **target database as the
-owner-admin** — the role that created the tables when it ran `instance` — over the same
-`WAITRON_ADMIN_DATABASE_URL`. `applyVenue` inserts as the table owner, so there is no
-second role and no grant to widen. The database must already be **stamped and migrated**: a venue
+Unlike `instance`, which talks to the cluster admin, `venue` connects to the **target database as
+`waitron_migrator`** — the role that owns every table — by opening the admin's
+`WAITRON_ADMIN_DATABASE_URL` with a session role option (`options=-c role=waitron_migrator`).
+`instance` migrates AS the migrator, so the migrator owns every table; `applyVenue` inserts as that
+owner, and a plain admin connection could not even write the migrator-owned `public` schema. There is
+no second role and no grant to widen. The database must already be **stamped and migrated**: a venue
 against an unstamped database is refused (`provisioning.database_unstamped`), because stamping is
 `instance`'s job and one database per environment is a fiscal invariant.
 
@@ -327,20 +329,21 @@ in the first place, and the printed role strings carry usernames regardless.
 Every refusal is a structured code and its params on stderr — never a raw driver message, which for
 this package would quote a `CREATE ROLE … PASSWORD '<generated>'` statement back verbatim.
 
-| Code                                   | What happened                                                                                                                                                                                                                                                                                                                                                     | What to do                                                                                                                                                                                                                                                                                                                                                                                        |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `provisioning.admin_uri_missing`       | Neither `WAITRON_ADMIN_DATABASE_URL` nor the prompt gave an admin connection string                                                                                                                                                                                                                                                                               | Set the variable, or answer the prompt. Refused rather than defaulted — see "Secrets" above for what `pg` does with an empty one.                                                                                                                                                                                                                                                                 |
-| `provisioning.admin_uri_not_a_url`     | The admin connection string is not a URL `new URL` can parse                                                                                                                                                                                                                                                                                                      | Spell it `postgres://user:pass@host:port/database`. A libpq keyword/value string or a bare socket path is refused before connecting — see "Secrets" above, including the URL spelling for a socket-only cluster.                                                                                                                                                                                  |
-| `provisioning.invalid_identifier`      | A database or role name outside `^[a-z][a-z0-9_]{0,62}$`                                                                                                                                                                                                                                                                                                          | Rename it. A database called `Waitron Prod` is a permanent papercut for whoever operates it.                                                                                                                                                                                                                                                                                                      |
-| `deployment.unknown_environment`       | `--environment` was not `production` or `preproduction`                                                                                                                                                                                                                                                                                                           | Type one of the two.                                                                                                                                                                                                                                                                                                                                                                              |
-| `deployment.already_stamped`           | The database is stamped for the OTHER environment                                                                                                                                                                                                                                                                                                                 | Stop. A pre-production database is never promoted — see the fiscal invariants below.                                                                                                                                                                                                                                                                                                              |
-| `provisioning.role_over_privileged`    | A `waitron_*` role already exists carrying `SUPERUSER`                                                                                                                                                                                                                                                                                                            | Refused, not adopted: a superuser can disable the append-only triggers. Drop or fix the role.                                                                                                                                                                                                                                                                                                     |
-| `provisioning.role_unusable`           | A `waitron_*` role exists but is `NOLOGIN`, or lacks `CREATEROLE`                                                                                                                                                                                                                                                                                                 | Refused rather than `ALTER`ed — this tool did not create it. Fix it by hand, or drop it and re-run.                                                                                                                                                                                                                                                                                               |
-| `provisioning.state_unreadable`        | The admin connection could not reach or read the deployment. `sqlState` says why                                                                                                                                                                                                                                                                                  | `28P01`: wrong password. `42501`: see "When the admin did not create the database" below.                                                                                                                                                                                                                                                                                                         |
-| `provisioning.role_creation_failed`    | `CREATE ROLE` failed. `sqlState` says why                                                                                                                                                                                                                                                                                                                         | `42710`: the role already exists. `42704`: a membership target does not. `42501`: this admin may not — see below.                                                                                                                                                                                                                                                                                 |
-| `provisioning.grant_ineffective`       | Every statement ran, and a privilege in `missing` is still absent afterwards                                                                                                                                                                                                                                                                                      | Almost always the admin lacks grant option on the database or on `public` — see "When the admin did not create the database" below. If the same run also CREATED a role, read "A failed `instance` can orphan a role" before re-running.                                                                                                                                                          |
-| `provisioning.membership_grant_failed` | `GRANT <memberOf> TO <role>` failed. `sqlState` says why                                                                                                                                                                                                                                                                                                          | `42501`: this admin holds no ADMIN OPTION on the role it is granting — see below.                                                                                                                                                                                                                                                                                                                 |
-| `unexpected failure (Error)` — no code | Not a refusal at all. `instance-apply.ts` wraps only `create-role` and `grant-membership` in a `try`/`catch`; `create-database`, `grant-database-create`, `grant-schema-create`, `migrate` and `stamp` are all uncaught, so a driver failure in **any of those five** reaches `bin.ts`'s top-level catch unclassified: no database named, no SQLSTATE, no remedy. | The shape exercised by `instance-apply.pg.test.ts` is `permission denied for database <db>` (42501) on Drizzle's opening `CREATE SCHEMA IF NOT EXISTS "public"` — the tool does not print it, the server log does. Fix that one with the statements under "When the admin did not create the database" below; the real-Postgres suite checks that procedure against an already-migrated database. |
+| Code                                   | What happened                                                                                                                                                                                                                                                                                                  | What to do                                                                                                                                                                                                                                                                                                                 |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `provisioning.admin_uri_missing`       | Neither `WAITRON_ADMIN_DATABASE_URL` nor the prompt gave an admin connection string                                                                                                                                                                                                                            | Set the variable, or answer the prompt. Refused rather than defaulted — see "Secrets" above for what `pg` does with an empty one.                                                                                                                                                                                          |
+| `provisioning.admin_uri_not_a_url`     | The admin connection string is not a URL `new URL` can parse                                                                                                                                                                                                                                                   | Spell it `postgres://user:pass@host:port/database`. A libpq keyword/value string or a bare socket path is refused before connecting — see "Secrets" above, including the URL spelling for a socket-only cluster.                                                                                                           |
+| `provisioning.invalid_identifier`      | A database or role name outside `^[a-z][a-z0-9_]{0,62}$`                                                                                                                                                                                                                                                       | Rename it. A database called `Waitron Prod` is a permanent papercut for whoever operates it.                                                                                                                                                                                                                               |
+| `deployment.unknown_environment`       | `--environment` was not `production` or `preproduction`                                                                                                                                                                                                                                                        | Type one of the two.                                                                                                                                                                                                                                                                                                       |
+| `deployment.already_stamped`           | The database is stamped for the OTHER environment                                                                                                                                                                                                                                                              | Stop. A pre-production database is never promoted — see the fiscal invariants below.                                                                                                                                                                                                                                       |
+| `provisioning.role_over_privileged`    | A `waitron_*` role already exists carrying `SUPERUSER`                                                                                                                                                                                                                                                         | Refused, not adopted: a superuser can disable the append-only triggers. Drop or fix the role.                                                                                                                                                                                                                              |
+| `provisioning.role_unusable`           | A `waitron_*` role exists but is `NOLOGIN`, lacks `CREATEROLE`, or — for the migrator — the admin cannot `SET ROLE` to it (`missing: ["SET ROLE"]`)                                                                                                                                                            | For an attribute: refused rather than `ALTER`ed — this tool did not create it. Fix it by hand, or drop it and re-run. For `SET ROLE`: run as the admin that created the migrator, or have it granted with `GRANT waitron_migrator TO <your_admin> WITH SET TRUE` (see "When the admin did not create the migrator" below). |
+| `provisioning.database_not_owned`      | The target database is owned by a role other than `waitron_migrator` (`owner` names it)                                                                                                                                                                                                                        | Ownership is fixed at CREATE — a database owned by an admin cannot be adopted for replication. Drop it and re-run, so `instance` creates it `OWNER waitron_migrator` (nothing is deployed; `wa-wt reset`).                                                                                                                 |
+| `provisioning.state_unreadable`        | The admin connection could not reach or read the deployment. `sqlState` says why                                                                                                                                                                                                                               | `28P01`: wrong password. `3D000`: the database does not exist. `42501`: the admin cannot read the target's tables.                                                                                                                                                                                                         |
+| `provisioning.role_creation_failed`    | `CREATE ROLE` failed. `sqlState` says why                                                                                                                                                                                                                                                                      | `42710`: the role already exists. `42704`: a membership target does not.                                                                                                                                                                                                                                                   |
+| `provisioning.grant_ineffective`       | Every statement ran, and a membership in `missing` did not land (a revoke raced the run)                                                                                                                                                                                                                       | Re-run `instance`; it re-grants. If the same run also CREATED a role, read "A failed `instance` can orphan a role" before re-running.                                                                                                                                                                                      |
+| `provisioning.membership_grant_failed` | `GRANT <memberOf> TO <role>` failed. `sqlState` says why. The grant runs AS the migrator on the target, which holds ADMIN OPTION on `app_user`, so this is rare                                                                                                                                                | `42501`: the migrator unexpectedly holds no ADMIN OPTION on the role — the deployment is broken; re-provision.                                                                                                                                                                                                             |
+| `unexpected failure (Error)` — no code | Not a refusal at all. `instance-apply.ts` wraps only `create-role` and `grant-membership` in a `try`/`catch`; `create-database`, `migrate` and `stamp` are uncaught, so a driver failure in **any of those three** reaches `bin.ts`'s top-level catch unclassified: no database named, no SQLSTATE, no remedy. | The likeliest shape is an admin lacking `CREATEDB` failing `create-database`. Run as an admin with `createdb createrole`.                                                                                                                                                                                                  |
 
 Every other row is a structured code; that last one is a gap, recorded rather than dressed up.
 Reclassifying it into a `provisioning.*` code is a separate change, because a code is permanent once
@@ -350,100 +353,53 @@ carve-out under which SP-3c DELETED `provisioning.id_sistema_invalid` outright i
 deprecating it: the software-id bound moved into the fiscal module, where the same concept is now
 `sif.id_sistema_invalid`. The rule stands for the day a venue is live.
 
-The uncaught cases also include failures before migration: an admin lacking `CREATEDB` fails on
-`create-database`, and an object grant can fail with `42501` when its grantor holds no privilege
-on the object. The CLI does not classify those errors.
-
 The underlying driver error is deliberately not attached, not even as `cause`: Node's default
 console formatting recurses into `.cause`, which would put a generated password one level down from
 where it was withheld.
 
 ## Known limitations
 
-### When the admin did not create the database
+### When the admin did not create the migrator
 
-`instance` and `status` are best run as the admin that created the database. A **different**
-`login createdb createrole` admin hits four walls in turn, and only the first two are reported
-clearly. Each of the following was reproduced through the built bundle against `postgres:18-alpine`,
-with two admins `adm_a` (which provisioned) and `adm_b` (which did not):
+`instance` creates the database `OWNER waitron_migrator` and migrates AS the migrator (a session
+`SET ROLE`, over the admin's own credentials): every table ends up owned by `waitron_migrator`,
+which is what native logical replication's `CREATE PUBLICATION … FOR TABLE` requires. The admin that
+runs `instance` the first time is granted SET-membership on the migrator it creates
+(`createrole_self_grant = 'set'`), so it can `SET ROLE` to it.
 
-1. **It cannot read the state.** Tables inside the database are owned by whoever created them, so
-   the deployment-stamp read fails and `instance` prints
-   `provisioning.state_unreadable {"database":"wp","sqlState":"42501"}`.
-2. **It cannot create a role that is a member of `app_user`.** PostgreSQL requires ADMIN OPTION on a
-   role to grant it, and an admin that did not create `app_user` holds none:
-   `provisioning.role_creation_failed {"role":"waitron_app","sqlState":"42501"}`. The repair path
-   for an already-existing role reports `provisioning.membership_grant_failed` with the same code.
-3. **Its grants take effect nowhere, and PostgreSQL calls that success.** A `GRANT` from a grantor
-   that holds some privilege on the object but no grant option raises a **WARNING, not an error** —
-   observed directly: as a non-owning admin, `grant create on database acl_db to r_app` printed
-   `WARNING: no privileges were granted for "acl_db"` followed by the command tag `GRANT`, and
-   `pg_database.datacl` afterwards still read `{=Tc/owner_a,owner_a=CTc/owner_a,r_mig=C/owner_a}`
-   with no `r_app` entry at all. The driver reports success, so nothing can be caught. A grantor
-   holding _nothing_ on the object errors instead (42501), but on a database that case needs
-   `PUBLIC`'s default `CONNECT` revoked first, so the silent path is the one an admin normally hits.
-   Two quieter variants: a partly-grantable list warns `not all privileges were granted` and still
-   applies the grantable part, and `GRANT ALL PRIVILEGES` in the same situation prints nothing at
-   all.
-
-   **This is now detected and refused**, not merely documented. After running its plan,
-   `instance` reads the ACLs back **directly** — `pg_database.datacl`, `pg_namespace.nspacl`
-   (including the trailing `*` that is WITH GRANT OPTION) and `pg_auth_members` — and raises
-   `provisioning.grant_ineffective` naming every privilege that is not there. Direct ACL inspection
-   is used rather than `has_database_privilege`/`has_schema_privilege` deliberately: those answer
-   for the RECURSIVE closure, so a role holding CREATE only through a group reads as satisfied when
-   the direct grant is absent. (They report WITH GRANT OPTION perfectly well, via the
-   `'CREATE WITH GRANT OPTION'` privilege spelling — an earlier version of this paragraph said they
-   could not. The closure is the reason; the option is not.)
-
-4. **It cannot run the migrator, and that failure carries no code.** `instance` plans
-   `migrate` on **every** run — it stopped gating on journal presence, see "Idempotency" above — and
-   Drizzle's migrator opens each set with `CREATE SCHEMA IF NOT EXISTS "public"`
-   (`drizzle-orm@0.45.2/pg-core/dialect.js:54`). That statement needs **database-level `CREATE`**
-   whether or not the schema already exists, because PostgreSQL checks the privilege before it
-   evaluates existence — the receipt is in `apps/server/README.md`'s "Two connection strings, one
-   purpose split". An admin without it stops here, and `instance-apply.ts`'s `migrate` case has no
-   `try`/`catch` — like every action except `create-role` and `grant-membership`, so this is the
-   shared gap the error table records rather than one peculiar to `migrate` — so what the operator
-   sees is `unexpected failure (Error)` and exit 1, the last row of that table. Wall 3's own hard
-   42501 lands in the same place, uncoded, for the same reason.
-
-Run `instance` as the admin that created the database. For a different admin on an already-migrated
-database, the following four statements together were sufficient in `instance-apply.pg.test.ts`.
-The test applies them as the original owner to a login with `CREATEDB` and `CREATEROLE`, reads the
-ACLs and membership back, then successfully reapplies the plan:
+A **different** `login createdb createrole` admin — one that did not create the migrator, common on a
+second or third run — holds no SET-membership on it, so it cannot open the target AS the migrator. It
+is refused up front, at the CONNECT, with
+`provisioning.role_unusable {"role":"waitron_migrator","missing":["SET ROLE"]}` — not a bare
+`state_unreadable`, so the operator can tell a missing SET grant from a missing database
+(`instance-apply.pg.test.ts` proves this end to end through `runCli`). The remedy is one statement,
+run as the admin that created the migrator (or any member of it holding ADMIN OPTION):
 
 ```sql
--- inside <db>:
-grant select on all tables in schema public to <new_admin>;
-grant app_user to <new_admin> with admin option;
-grant create on database <db> to <new_admin> with grant option;
-grant create on schema public to <new_admin> with grant option;
+grant waitron_migrator to <your_admin> with set true;
 ```
 
-This experiment does not establish which statement fixes which failure, or that each statement is
-necessary: they were applied together, not removed one at a time. Do not read the list as a measured
-per-capability requirement. These grants do not transfer table ownership or authorize future
-migrations that alter existing tables. Use the original owner for that work. `instance-apply.pg.test.ts` exercises membership
-refusal, ineffective grants, and this delegation procedure with direct ACL read-back. The tool reads each
-grantor's ACL entry: a grantee can have several entries, and a privilege held through another role
-does not substitute for the direct grant the plan promised.
+After that, `<your_admin>` can `SET ROLE waitron_migrator` and re-run `instance`, which migrates and
+does its role work as the migrator exactly as the original admin did. Ownership does not transfer —
+the migrator still owns the tables — which is the point: whoever runs `instance` writes AS the
+migrator, so there is only ever one table owner. A database owned by some OTHER role is a different
+case: it is refused with `provisioning.database_not_owned` and cannot be adopted (ownership is fixed
+at CREATE), so it is dropped and re-created.
 
 ### A second database on the same cluster prints no connection strings
 
 Roles are **cluster-global**; databases are not. So an `instance` against a _new_ database on a
 cluster that already carries `waitron_migrator` and `waitron_app` plans no
 `create-role` at all, and the run ends with "already existed — no connection string" for both
-and exit 0. The database is created, migrated, granted and stamped correctly — what is missing is any
-way to connect to it, unless the strings printed by the **first** provision were kept. Those roles do
-work against the new database with their original passwords; this tool simply cannot re-print them,
-because `pg_authid` stores only a hash.
+and exit 0. The database is created `OWNER waitron_migrator`, migrated and stamped correctly — what
+is missing is any way to connect to it, unless the strings printed by the **first** provision were
+kept. Those roles do work against the new database with their original passwords; this tool simply
+cannot re-print them, because `pg_authid` stores only a hash.
 
 Not a fiscal hazard: stamps are per-database and `stampDeployment` refuses a disagreeing one
 independently of the planner. It is, however, one credential across two databases — PostgreSQL grants
-`CONNECT` to `PUBLIC` by default (the `=Tc/owner_a` entry in the `datacl` transcript above), so the
-same `DATABASE_URL` reaches both. For a production and a pre-production deployment, use separate
-clusters.
+`CONNECT` to `PUBLIC` by default, so the same `DATABASE_URL` reaches both. For a production and a
+pre-production deployment, use separate clusters.
 
 ### A failed `instance` can orphan a role
 
@@ -453,9 +409,10 @@ run generated in memory and never printed. A re-run will not recreate it: the pl
 leaves it alone.
 
 **`provisioning.grant_ineffective` is one of the ways to get here**, and the least obvious, because
-every statement in the plan "succeeded" — the verification that follows them is what fails. On a
-first provision the roles are created before the grants, so a plan that trips it has already minted
-two passwords it will now never print. Treat it like any other mid-plan failure.
+every statement in the plan "succeeded" — the membership verification that follows them is what
+fails (a revoke racing the run). On a first provision the roles are already created by the time it
+trips, so a plan that hits it has already minted two passwords it will now never print. Treat it like
+any other mid-plan failure.
 
 The tool says so on the failure path rather than leaving it to be discovered. The way back is what
 it prints: run `status`, `DROP ROLE` every `waitron_*` role listed as present that you have no

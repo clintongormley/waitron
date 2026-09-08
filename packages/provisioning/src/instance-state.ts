@@ -7,6 +7,11 @@ import { assertIdentifier } from "./identifiers.js";
 export const INSTANCE_ROLES = ["waitron_migrator", "waitron_app"] as const;
 export type InstanceRole = (typeof INSTANCE_ROLES)[number];
 
+/** The migrator — `INSTANCE_ROLES[0]` by construction. It OWNS every table (native logical replication
+ * needs one owner) and holds `pg_create_subscription`; the many call sites that reach for the migrator
+ * name it through this constant rather than re-deriving `INSTANCE_ROLES[0]` each time. */
+export const INSTANCE_MIGRATOR_ROLE: InstanceRole = INSTANCE_ROLES[0];
+
 /**
  * What `pg_roles` says about a role that exists.
  *
@@ -21,6 +26,14 @@ export interface RoleFacts {
   /** Direct memberships only, by role name. `pg_auth_members`, not the recursive closure: the
    * planner grants a specific membership and needs to know whether that exact edge is present. */
   memberOf: string[];
+  /** Whether the ADMIN reading this state can `SET ROLE` to this role — `pg_has_role(current_user,
+   * <role>, 'SET')`. Read for BOTH roles but CHECKED only for the migrator (instance-plan.ts): the
+   * admin migrates and does the post-migrate role work AS the migrator (a session role option), and
+   * only the admin that created the migrator with `createrole_self_grant = 'set'` holds that
+   * membership. On a database this tool provisioned it reads `false` for `waitron_app` — the migrator
+   * created it and nobody SET ROLEs to it — which is fine, because nothing ever SET ROLEs to the app
+   * role. */
+  adminCanSetRole: boolean;
 }
 
 /** What is observable only once the database itself exists. */
@@ -39,6 +52,11 @@ export interface InsideState {
 export interface InstanceState {
   database: string;
   databaseExists: boolean;
+  /** The role that OWNS the database (`pg_get_userbyid(pg_database.datdba)`), or `null` when the
+   * database does not exist. Native logical replication needs `waitron_migrator` to own every table,
+   * so `instance` refuses a database owned by anyone else (instance-plan.ts) — ownership is fixed at
+   * CREATE and cannot be granted into place. */
+  databaseOwner: string | null;
   /** Roles are CLUSTER-global, so these are readable from the admin connection whether or not the
    * database exists. That asymmetry with `inside` is why the two are separate fields. */
   roles: Partial<Record<InstanceRole, RoleFacts>>;
@@ -62,21 +80,30 @@ export async function readInstanceState(
 ): Promise<InstanceState> {
   assertIdentifier("database", database);
 
-  const dbRows = await admin.execute<{ exists: boolean }>(
-    sql`select exists (select 1 from pg_database where datname = ${database}) as exists`,
+  // The owner in the same read as existence: a missing row means "no database", so no owner. The
+  // planner refuses a database owned by anyone but the migrator, so ownership is read here rather
+  // than inferred.
+  const dbRows = await admin.execute<{ owner: string }>(
+    sql`select pg_get_userbyid(datdba) as owner from pg_database where datname = ${database}`,
   );
-  const databaseExists = dbRows.rows[0]?.exists === true;
+  const databaseExists = dbRows.rows[0] !== undefined;
+  const databaseOwner = dbRows.rows[0]?.owner ?? null;
 
   // Cast membership names to text[] so node-postgres decodes an array, not
   // the wire literal for name[]. The planner compares exact membership names.
+  // `pg_has_role(current_user, …, 'SET')`: whether the ADMIN reading this state can SET ROLE to the
+  // role — the migrator refusal (instance-plan.ts) needs it, and only the admin that created the
+  // migrator with `createrole_self_grant = 'set'` holds it.
   const roleRows = await admin.execute<{
     rolname: string;
     rolcanlogin: boolean;
     rolcreaterole: boolean;
     rolsuper: boolean;
+    can_set_role: boolean;
     member_of: string[];
   }>(sql`
     select r.rolname, r.rolcanlogin, r.rolcreaterole, r.rolsuper,
+           pg_has_role(current_user, r.rolname, 'SET') as can_set_role,
            coalesce(
              array(select g.rolname::text from pg_auth_members m
                    join pg_roles g on g.oid = m.roleid
@@ -94,12 +121,14 @@ export async function readInstanceState(
       createRole: row.rolcreaterole,
       superuser: row.rolsuper,
       memberOf: row.member_of,
+      adminCanSetRole: row.can_set_role,
     };
   }
 
   return {
     database,
     databaseExists,
+    databaseOwner,
     roles,
     inside: target === null ? null : await readInside(target),
   };

@@ -1,7 +1,6 @@
 /**
  * app_user's table privileges. Letters: S=SELECT I=INSERT U=UPDATE D=DELETE T=TRUNCATE. The
- * matrix preserves the original grants except for the four sync tables, whose reader and
- * retention grants fold into app_user while the outbox remains. The design is
+ * matrix carries the base grants; the four `sync_*` outbox tables are gone (swap S5). The design is
  * docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md §1. A
  * deliberate grant change edits this file in the same commit, with the reason in the message.
  * Runnable receipts: scripts/schema-equivalence.md describes the dump/ACL comparison, and
@@ -75,10 +74,6 @@ export const PRIVILEGES: Record<string, string> = {
   shift_templates: "SIUD",
   shifts: "SIUD",
   station_printers: "SID",
-  sync_config_conflicts: "SI",
-  sync_cursor: "SIUD",
-  sync_log: "SID",
-  sync_peers: "SIU",
   table_service_statuses: "SIU",
   tenant_credentials: "SIUD",
   tenant_receipts: "SIU",

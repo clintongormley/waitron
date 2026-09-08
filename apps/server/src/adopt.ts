@@ -1,12 +1,28 @@
 import { setDeploymentMode, stampDeployment, writeMirrorConfig, type Database } from "@waitron/db";
-import { adoptVenue, assertNoForeignTenant, readTenantIdentities } from "@waitron/provisioning";
-import type { KeyRing } from "@waitron/credentials";
-import { enabledModules, parseModuleOverrides, type ModuleConfig } from "@waitron/module";
+import {
+  assertNoForeignTenant,
+  readTenantIdentities,
+  REPLICATION_ROLE,
+} from "@waitron/provisioning";
+import { assertReplicationReady } from "@waitron/provisioning";
+import {
+  buildConninfo,
+  createSubscription,
+  dropSubscription,
+  enableSubscription,
+  publicationName,
+  readSubscriptionStatus,
+  subscriptionName,
+  type SubscriptionStatus,
+} from "@waitron/sync";
+import { parseModuleOverrides, type ModuleConfig } from "@waitron/module";
+import { AppError } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
-import { sealMirrorToken } from "./mirror-token.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
+import type { DeploymentEnvironment } from "./config.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
-import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
+import { generateStandbyIdentity } from "./reserved-identity.js";
+import { writePendingAdoption } from "./finish-adoption.js";
 import type { TradingConfig } from "./trading-config.js";
 import "./errors.js";
 
@@ -14,12 +30,10 @@ import "./errors.js";
  * env the supervisor sources on the next boot so the mirror enters the trading branch (design §6). */
 export type PersistTradingArgs = TradingConfig;
 
-/** The admin login the operator supplies for the PRIMARY (design §8). It is the SAME shape the primary's
- * `POST /management-api/mirror-bundle` authenticates — the dashboard-login body (`mirror-bundle-api.ts`
- * screens exactly these fields) — carried as a structured object end to end so the whole chain
- * (connect screen → `/setup-api/adopt` → `fetchMirrorBundle` → the primary) is compile-time safe rather
- * than a JSON string threaded through an opaque `string`. `totp` is present only when the admin has TOTP
- * enrolled. It authorises the bundle mint on the primary; it never touches the mirror's own database. */
+/** The admin login the operator supplies for the PRIMARY (design §8), the SAME shape the primary's
+ * `POST /management-api/mirror-bundle` authenticates by id (`loginManagerById`). `totp` is present
+ * only when the admin has TOTP enrolled. It authorises the bundle mint on the primary; it never
+ * touches the mirror's own database. */
 export interface AdoptCredential {
   personId: string;
   password: string;
@@ -32,18 +46,51 @@ export interface AdoptRequest {
   credential: AdoptCredential;
 }
 
+/**
+ * The native-replication verbs the orchestrator drives against the mirror's OWN replication pool,
+ * injected so `adopt.test.ts` can assert the ORDER (readiness → create → status → enable) and the
+ * CLEANUP (drop on a missing publication or a mid-orchestration throw) WITHOUT a live publisher.
+ * Defaults to the real `@waitron/sync`/`@waitron/provisioning` implementations. `assertReady` is the
+ * cluster-wide replication-readiness precondition; `create` is the disabled initial-copy subscription;
+ * `readStatus` reports `tablesTotal` (the whole publication-missing signal, probe C); `enable` starts
+ * the apply worker after the mirror's config is committed; `drop` removes the subscription on failure.
+ */
+export interface ReplicationVerbs {
+  assertReady: (db: Database) => Promise<void>;
+  create: (
+    db: Database,
+    opts: {
+      name: string;
+      conninfo: string;
+      publications: readonly string[];
+      copyData: boolean;
+      enabled: boolean;
+    },
+  ) => Promise<void>;
+  readStatus: (db: Database, name: string) => Promise<SubscriptionStatus>;
+  enable: (db: Database, name: string) => Promise<void>;
+  drop: (db: Database, name: string) => Promise<void>;
+}
+
+const REAL_REPLICATION: ReplicationVerbs = {
+  assertReady: assertReplicationReady,
+  create: createSubscription,
+  readStatus: readSubscriptionStatus,
+  enable: enableSubscription,
+  drop: dropSubscription,
+};
+
 export interface AdoptDeps {
-  /** The OWNER connection to the mirror's database (`migrationsDatabaseUrl`) — inserts the tenant +
-   * parent rows, stamps `deployment`, writes `mirror_config`, seals the token. `app_user` holds none
-   * of those writes. */
+  /** The OWNER connection to the mirror's database (`migrationsDatabaseUrl`) — stamps `deployment`,
+   * writes `mirror_config`, mints the break-glass verifier. `app_user` holds none of those writes. */
   ownerDb: Database;
-  /** The mirror's OWN vault key. The token is re-sealed under it (design §6); a value sealed with the
-   * primary's key cannot be opened here. */
-  ring: KeyRing;
+  /** The dedicated OWNER replication pool (M8) the subscription verbs run over — the migrator holds
+   * `pg_create_subscription` and owns the subscription it creates. Kept distinct from `ownerDb`. */
+  replicationDb: Database;
   /** Fetches the bundle from the primary, carrying the mirror's own `standby` identity so the primary
-   * can reserve + endorse it (membership promotion R2). Injected so the HTTP call (Task 9) is stubbable
-   * and the orchestration is testable against a hand-built bundle. Throws `mirror.bundle_fetch_failed`
-   * on a failed fetch — surfaced by the fetcher, not this orchestrator. */
+   * can reserve + endorse it (membership promotion R2). Injected so the HTTP call is stubbable and the
+   * orchestration is testable against a hand-built bundle. Throws `mirror.bundle_fetch_failed` on a
+   * failed fetch — surfaced by the fetcher, not this orchestrator. */
   fetchBundle: (
     primaryUrl: string,
     credential: AdoptCredential,
@@ -51,164 +98,185 @@ export interface AdoptDeps {
   ) => Promise<MirrorBundle>;
   /** This node's own advertised origin (`config.advertisedOrigin`), sent to the primary as the joining
    * node's `contactUrl`: the primary records it in the membership document so a till can route here
-   * after a failover (till-reroute design §3.3). The ROUTE's contract accepts `""` (a node that
-   * advertises nothing is still a member), but this node never sends one: `config.advertisedOrigin`
-   * falls back to `managementOrigin`, and `bareOrigin` refuses `""`. */
+   * after a failover (till-reroute design §3.3). */
   advertisedOrigin: string;
-  /** Persists `trading.env` so the next boot enters the trading branch (the setup-api dep, bound to
-   * `writeTradingEnv` in boot). */
+  /** This box's deployment environment (`config.environment`). Adopt refuses a bundle whose
+   * environment differs (`mirror.environment_mismatch`) — one database serves one environment (§5). */
+  environment: DeploymentEnvironment;
+  /** Persists `trading.env` so the next boot enters the trading branch (bound to `writeTradingEnv`). */
   persistTrading: (args: PersistTradingArgs) => Promise<void>;
   /** Persists `<stateDir>/modules.json` so the mirror's next boot sees the primary's enabled set
-   * (SP-1d) — drives reconcile-drift logging now, SP-2's per-module pull filter later. It does NOT
-   * change what the mirror migrates: a fresh mirror already migrated every table in setup mode, so
-   * the trading-boot filter is a no-op over an already-complete schema. Injected — bound to
-   * `writeModuleConfig(config.stateDir, …)` in boot. */
+   * (SP-1d). Injected — bound to `writeModuleConfig(config.stateDir, …)` in boot. */
   persistModuleConfig: (config: ModuleConfig) => Promise<void>;
+  /** The box's persisted state dir — where `pending-adoption.json` (the finish-worker latch) is
+   * written so a mirror boot can establish the reserved identity once the initial copy completes. */
+  stateDir: string;
   /** The app-pool connection string, written into `trading.env` as `DATABASE_URL`. */
   databaseUrl: string;
   /** The owner connection string, written into `trading.env` as `WAITRON_MIGRATIONS_DATABASE_URL`. */
   migrationsDatabaseUrl: string;
-  /** The mirror's OWN sync-pool connection (a `sync_applier` LOGIN role), written into `trading.env`
-   * as `WAITRON_SYNC_DATABASE_URL` — the value the next (mirror) boot's `loadMirrorSyncConfig` reads
-   * back to enter mirror mode. Guaranteed non-empty by the boot adopt closure's Ruling 1 guard, which
-   * refuses an unset value at adopt time (`server.config_missing`) rather than persist nothing. */
-  syncDatabaseUrl: string;
-  /** The NAME of the mirror's own database, echoed by `provisioning.foreign_tenant` when a bundle
-   * for a DIFFERENT tenant is adopted into a database that already holds one (operator-typed
-   * configuration, never a secret). Boot derives it from `config.migrationsDatabaseUrl`, the same
-   * `ownerDatabaseName` the provision path passes to `provisionVenue`. */
+  /** The NAME of the mirror's own database, echoed by `provisioning.foreign_tenant` when a bundle for
+   * a DIFFERENT tenant is adopted into a database that already holds one. */
   database: string;
+  /** The native-replication verbs seam (defaults to the real implementations). */
+  replication?: ReplicationVerbs;
 }
 
 /**
- * Adopt an existing venue into this mirror's own database (design §5), the mirror-side analogue of
- * `provisionVenue`. It mints the standby's identity in memory, fetches the primary's bundle (sending
- * that identity for reservation + endorsement), inserts the identity scaffold with the primary's EXACT
- * ids (never `registerSif` — `adoptVenue` guarantees that, so no second fiscal chain is forked,
- * CLAUDE.md §5), stamps the environment + `mirror` mode, establishes the standby's DORMANT identity from
- * the reserved bundle (design §6 R2), seals the sync token in the mirror's OWN vault, writes the
- * DB-stored connection config, persists the primary's enabled-module set to the mirror's own
- * `modules.json` (SP-1d, so the mirror's next boot sees the same set), and persists `trading.env` for
- * the restart.
+ * Adopt an existing venue into this mirror's own database by establishing a NATIVE subscription to the
+ * primary (swap step 4, design §5), the mirror-side analogue of `provisionVenue`. It mints the
+ * standby's identity in memory, fetches the primary's bundle (sending that identity for reservation +
+ * endorsement), refuses a bundle for a different environment or a foreign tenant, then creates a
+ * DISABLED subscription that COPIES every published table. Because a native COPY cannot coexist with
+ * pre-inserted rows (derived fact 1), adopt no longer inserts scaffold rows and never `registerSif`s —
+ * it forks no fiscal chain (CLAUDE.md §5). The reserved standby identity is DORMANT and is established
+ * later by the boot-time finish worker (Task 5), once every table has finished its initial copy; adopt
+ * only records the latch (`writePendingAdoption`).
  *
- * The order is load-bearing: `stampDeployment` runs BEFORE `setDeploymentMode`, which throws
- * `deployment.not_stamped` on an unstamped database (the `mode` UPDATE needs the singleton row). The
- * environment is stamped to the primary's value because it is immutable and must match the primary —
- * same venue, same chain (the one-database-per-environment invariant, CLAUDE.md §5). The token seal
- * runs after `adoptVenue` inserts the tenant (the vault FK is `restrict`).
+ * The order is load-bearing. `assertReady` runs before any subscription work. Everything AFTER the
+ * disabled `create` — the status read and the config commit — runs inside ONE try/catch that DROPS the
+ * subscription on any throw, so neither a status-read failure, the `publication_missing` throw, nor a
+ * mid-commit failure can leave an orphan subscription (with its publisher-side slot retaining WAL)
+ * behind. A publication name the primary does not serve only WARNs and copies nothing (probe C), so the
+ * status read sees `tablesTotal === 0` and throws `sync.publication_missing`, which the guard turns into
+ * a drop. Only after the config is durable is the subscription ENABLED — a crash before
+ * that leaves an inert, dropped-on-retry subscription, never a mirror applying rows into a database
+ * whose stamp/mirror_config are not yet written.
  *
- * This function does NOT restart the box; the caller (the `/setup-api/adopt` endpoint) does that after
- * `trading.env` is persisted, the same persist-then-restart transition `provision` uses. A partial
- * failure mid-orchestration (a step throws after an earlier step committed) leaves the mirror
- * half-adopted; recovering from that is a deferred concern (spec §11 / the operator re-runs adopt,
- * which is idempotent for the row inserts via `ON CONFLICT DO NOTHING` and for the config via UPSERT).
+ * This function does NOT restart the box; the `/setup-api/adopt` endpoint does that after `trading.env`
+ * is persisted, the same persist-then-restart transition `provision` uses.
  */
 export async function adoptFromPrimary(
   deps: AdoptDeps,
   req: AdoptRequest,
 ): Promise<{ tenantId: string; breakGlassSecret: string }> {
+  const replication = deps.replication ?? REAL_REPLICATION;
+
   // Mint the standby's own identity in memory BEFORE the fetch (design §6 R2): its public half + nodeId
-  // are sent to the primary, which reserves the standby's fiscal identity and endorses its key, returning
-  // both in `bundle.reservedIdentity`. The private half stays local until it is sealed below. This
-  // node's advertised origin rides along as the joining node's `contactUrl`, which the primary appends
-  // to the membership document (till-reroute §3.3).
+  // go to the primary, which reserves the standby's fiscal identity and endorses its key, returning
+  // both in `bundle.reservedIdentity`. This node's advertised origin rides along as the joining node's
+  // `contactUrl`, which the primary appends to the membership document (till-reroute §3.3).
   const standby = generateStandbyIdentity();
   const bundle = await deps.fetchBundle(req.primaryUrl, req.credential, {
     nodeId: standby.nodeId,
     publicKey: standby.publicKey,
     contactUrl: deps.advertisedOrigin,
   });
-  const { designated, rows } = bundle;
+  const { designated } = bundle;
 
-  // SP-1d: validate the primary's enabled-module set FIRST — fail fast, before any side effect. It is
-  // a bare override map (bundle wire value, not a file envelope), so `parseModuleOverrides` takes it
-  // directly (no fabricated `{ modules: … }` wrapper). Re-validated against THIS node's ALL_MODULES:
-  // an unknown/malformed override from a skewed or hostile primary throws `module.config_*` here,
-  // BEFORE stampDeployment/adoptVenue/token-seal mutate the mirror — never leaving a half-adopted DB
-  // for a set we would have rejected. A well-behaved primary on the same monorepo build shares this
-  // node's ALL_MODULES, so a valid bundle never trips this; it fires only for a skewed or hostile
-  // primary — which is exactly why the mirror re-validates external input rather than trusting it
-  // (CLAUDE.md §3). The validated config is persisted below (unconditionally, even {}), so the
-  // mirror's set is explicitly the primary's and re-adopt is idempotent.
+  // SP-1d: validate the primary's enabled-module set FIRST — fail fast, before any side effect. It is a
+  // bare override map (bundle wire value), re-validated against THIS node's ALL_MODULES: an
+  // unknown/malformed override from a skewed or hostile primary throws `module.config_*` here, before
+  // any mutation.
   const moduleConfig = parseModuleOverrides(bundle.moduleOverrides, ALL_MODULES);
 
+  // One database serves one environment (§5). A bundle for a DIFFERENT environment can never be adopted
+  // here — a preproduction mirror holding a production venue's chain would leave a permanent hole in
+  // the production series. Refused before any subscription or stamp.
+  if (bundle.environment !== deps.environment) {
+    throw new AppError("mirror.environment_mismatch", {
+      expected: deps.environment,
+      actual: bundle.environment,
+    });
+  }
+
   // Refuse a FOREIGN tenant before any mutation, the third caller of the shared one-tenant guard
-  // (why it exists: `tenant-guard.ts`; the sibling callers: `provisionVenue`, the `venue` CLI). Runs
-  // after the up-front module validation so both fail-closed checks precede `stampDeployment`.
-  // `adoptVenue`'s `ON CONFLICT (id) DO NOTHING` makes re-inserting the SAME bundle's tenant row a
-  // no-op, but does NOT stop a DIFFERENT tenant landing beside an incumbent — that is this guard's
-  // job. The applied identity is the bundle tenant's `(country, tax_id)` as the primary stored it.
+  // (`tenant-guard.ts`; the siblings: `provisionVenue`, the `venue` CLI). The applied identity is the
+  // bundle tenant's `(country, tax_id)` — the venue rows are not in the bundle any more (the COPY
+  // brings them), so the identity travels as its own field.
   assertNoForeignTenant(
     await readTenantIdentities(deps.ownerDb),
-    { country: rows.tenant.country as string, taxId: rows.tenant.taxId as string },
+    { country: bundle.tenant.country, taxId: bundle.tenant.taxId },
     deps.database,
   );
 
-  await stampDeployment(deps.ownerDb, bundle.environment);
-  await adoptVenue(rows, designated, { db: deps.ownerDb });
-  await setDeploymentMode(deps.ownerDb, "mirror");
-  // Establish the standby's DORMANT identity from the reserved bundle (design §6 R2), after the tenant +
-  // parent rows exist (the vault + node/series FKs are restrict) and before the token seal. All inert:
-  // the reserved SIF is keyed to the standby's OWN nodeId, which from R3a is ALSO `config.till.nodeId`
-  // (the mirror runs under its own identity, persisted below). Inertness therefore rests on the box
-  // being a READ-ONLY MIRROR — the read-only gate refuses every write, so no sale is ever recorded to
-  // resolve it — NOT on an id mismatch; on an R3b promotion the mode flips and this same reserved SIF
-  // is activated as the (now-primary) node's live chain. The
-  // standby's node mirrors the primary's modules: read the primary's designated node row from the bundle
-  // (camelCase `$inferInsert` rows, `Record<string, unknown>`) for its name + filing/tax modules.
-  const primaryNode = bundle.rows.nodes.find((n) => n.id === designated.nodeId);
-  await establishReservedStandbyIdentity(
-    { ownerDb: deps.ownerDb, ring: deps.ring },
-    {
+  // The instance must be replication-ready before a subscription is created — the app provisioner only
+  // VERIFIES the superuser/box-image bootstrap (`provisioning.replication_not_ready`), never performs it.
+  await replication.assertReady(deps.replicationDb);
+
+  const name = subscriptionName(bundle.environment, standby.nodeId);
+  const publications = [
+    publicationName(bundle.environment, "ledger"),
+    publicationName(bundle.environment, "state"),
+  ];
+  // Create the initial-copy subscription DISABLED: `pg_subscription_rel` is populated at CREATE (probe
+  // C), so the status read below sees every table to copy. The conninfo carries the primary's
+  // `waitron_repl` password and is SECRET — `createSubscription` logs only a SQLSTATE on failure.
+  await replication.create(deps.replicationDb, {
+    name,
+    conninfo: buildConninfo({ ...bundle.replication, user: REPLICATION_ROLE }),
+    publications,
+    copyData: true,
+    enabled: false,
+  });
+
+  // The status read AND the config commit sit behind ONE cleanup guard: any throw DROPS the
+  // subscription so no orphan — and no publisher-side slot retaining WAL — is left behind. The status
+  // read is INSIDE too, not just the commit: a status seam that throws after `create` (a lost
+  // connection mid-read) would otherwise exit before the guard and leak the subscription. A publication
+  // name absent on the publisher only WARNs and leaves `pg_subscription_rel` EMPTY (probe C), so a
+  // subscription that copies NOTHING (`tablesTotal === 0`) is a silent mis-wire — detected here and
+  // failed loud rather than booting a mirror that never copies its venue. `stampDeployment` runs BEFORE
+  // `setDeploymentMode` (the `mode` UPDATE needs the singleton row). The environment is the primary's
+  // (immutable, one database per environment, §5).
+  let breakGlassSecret: string;
+  try {
+    const status = await replication.readStatus(deps.replicationDb, name);
+    if (status.tablesTotal === 0) {
+      throw new AppError("sync.publication_missing", { subscription: name });
+    }
+    await stampDeployment(deps.ownerDb, bundle.environment);
+    await setDeploymentMode(deps.ownerDb, "mirror");
+    await writeMirrorConfig(deps.ownerDb, {
+      relayUrl: bundle.relayUrl,
+      boxHostname: bundle.boxHostname,
+      boxCaPem: bundle.boxCaPem,
+      // The sync ORIGIN — the PRIMARY's node id (membership promotion R3a): the node whose replicated
+      // rows this mirror holds, distinct from the standby's OWN id it runs under.
+      originNodeId: designated.nodeId,
+    });
+    // SP-1d: persist the module set validated up-front, so the mirror's next boot sees the primary's
+    // enabled set (unconditional, even `{}`, so a re-adopt is an idempotent overwrite).
+    await deps.persistModuleConfig(moduleConfig);
+    // The finish-worker latch (derived fact 1 / C6): the reserved standby identity is DORMANT and its
+    // establish (which FKs to the copied tenant/location rows) waits until the initial copy completes.
+    // Boot's `runFinishAdoption` reads this file, establishes once every `pg_subscription_rel` row
+    // reaches `r`, then unlinks it.
+    await writePendingAdoption(deps.stateDir, {
       tenantId: designated.tenantId,
       locationId: designated.locationId,
       standby,
-      nodeName: `${(primaryNode?.name as string) ?? "venue"} (standby)`,
-      filingModule: (primaryNode?.filingModule as string | null) ?? null,
-      taxModule: (primaryNode?.taxModule as string | null) ?? null,
-      modules: enabledModules(ALL_MODULES, moduleConfig),
+      nodeName: `${bundle.primaryNode.name} (standby)`,
+      filingModule: bundle.primaryNode.filingModule,
+      taxModule: bundle.primaryNode.taxModule,
       reserved: bundle.reservedIdentity,
-    },
-  );
-  await sealMirrorToken(deps.ownerDb, deps.ring, designated.tenantId, bundle.syncToken);
-  // The mirror's connection config, plus its sync ORIGIN — the PRIMARY's node id (`designated.nodeId`)
-  // (membership promotion R3a). The mirror now runs under its OWN identity (`nodeId` below is the
-  // standby's own), so the node whose replicated rows it pulls can no longer be read off
-  // `config.till.nodeId`; it is persisted here and read back at boot to drive the pull peer's origin
-  // and the mirror's node-scoped read paths (report-api).
-  await writeMirrorConfig(deps.ownerDb, {
-    relayUrl: bundle.relayUrl,
-    boxHostname: bundle.boxHostname,
-    boxCaPem: bundle.boxCaPem,
-    originNodeId: designated.nodeId,
-  });
-  // SP-1d: persist the module set validated up-front (above) into the mirror's own modules.json, so its
-  // next boot sees the primary's enabled set. Ordered before `persistTrading` for the same fail-closed
-  // reason the whole sequence honours — but the throwing check already ran before any DB write.
-  await deps.persistModuleConfig(moduleConfig);
-  await deps.persistTrading({
-    tenantId: designated.tenantId,
-    locationId: designated.locationId,
-    tillId: designated.tillId,
-    // The mirror's OWN node id (the standby minted in memory above), NOT `designated.nodeId` — from
-    // R3a `config.till.nodeId` is the mirror's own identity (the subscriber it pulls as, the origin it
-    // stamps its own writes with once promoted). `tenantId`/`locationId`/`tillId` stay the shared
-    // venue's `designated.*`; `seriesId` stays `designated.*` here (inert on a read-only mirror) and is
-    // corrected to the cloud's own reserved series at R3b.
-    nodeId: standby.nodeId,
-    seriesId: designated.seriesId,
-    databaseUrl: deps.databaseUrl,
-    migrationsDatabaseUrl: deps.migrationsDatabaseUrl,
-    syncDatabaseUrl: deps.syncDatabaseUrl,
-    environment: bundle.environment,
-  });
+      originNodeId: designated.nodeId,
+    });
+    await deps.persistTrading({
+      tenantId: designated.tenantId,
+      locationId: designated.locationId,
+      tillId: designated.tillId,
+      // The mirror's OWN node id (the standby minted above), NOT `designated.nodeId` — from R3a the
+      // mirror runs under its own identity (the subscriber it applies as, the origin it stamps its own
+      // writes with once promoted). `seriesId` stays `designated.*` (inert on a read-only mirror),
+      // corrected to the cloud's own reserved series at R3b.
+      nodeId: standby.nodeId,
+      seriesId: designated.seriesId,
+      databaseUrl: deps.databaseUrl,
+      migrationsDatabaseUrl: deps.migrationsDatabaseUrl,
+      environment: bundle.environment,
+    });
+    // Mint the offline break-glass secret AFTER the mirror is stamped: this is the ONLY promotable
+    // node, so adopt is the right enrolment point. The raw secret is returned exactly once; only its
+    // scrypt verifier is persisted, and it is NEVER logged.
+    breakGlassSecret = await mintBreakGlassSecret(deps.ownerDb);
+  } catch (error) {
+    await replication.drop(deps.replicationDb, name).catch(() => {});
+    throw error;
+  }
 
-  // Mint the offline break-glass secret AFTER the mirror is stamped and its parent rows + deployment
-  // singleton exist (mint UPDATEs that row via the owner pool, which alone holds it). This is the ONLY
-  // promotable node, so adopt is the right — and only — enrolment point. The raw secret is returned
-  // exactly once for the connect response to surface to the operator; only its scrypt verifier is
-  // persisted, and it is NEVER logged (the mirror-bundle sync-token discipline).
-  const breakGlassSecret = await mintBreakGlassSecret(deps.ownerDb);
+  // Only now, with the mirror's config durable, ENABLE the subscription so the initial copy begins.
+  await replication.enable(deps.replicationDb, name);
 
   return { tenantId: designated.tenantId, breakGlassSecret };
 }

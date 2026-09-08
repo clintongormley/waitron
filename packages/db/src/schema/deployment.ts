@@ -34,6 +34,12 @@ export const deployment = pgTable(
     // hold `null`. Never the secret itself — only a verifier — and, like `mode`/`singleton_role`,
     // added by a hand-written ALTER (this table is not in the drizzle schema barrel; see the header).
     breakGlassVerifier: text("break_glass_verifier"),
+    // The fence-LSN watermark (swap S4, Ruling C2): the WAL position recorded when this node entered
+    // its read-only fence. The column's DB type is `pg_lsn` (0001_db_baseline_sql.sql's ALTER); it is
+    // read/written as text here (drizzle has no pg_lsn type), which is safe because this table is not
+    // in the schema barrel so no snapshot diff is derived from this declaration. Nullable — a node
+    // that never fenced holds NULL. Owner-write only, like mode/singleton_role/break_glass_verifier.
+    fenceLsn: text("fence_lsn"),
     stampedAt: timestamp("stamped_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

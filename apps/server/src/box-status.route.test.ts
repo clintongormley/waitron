@@ -3,20 +3,23 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import { beforeAll, describe, expect, it } from "vitest";
+import { asAppUser, withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { createHealthState } from "./health.js";
 import { readBackupStatus, type BackupStatus } from "./backup-status.js";
-import { mountBoxStatusApi, readConfigConflictCount } from "./box-status.js";
+import { mountBoxStatusApi } from "./box-status.js";
 import { buildBackend } from "./local-fs-backend.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { FIXTURE_CERT_PEM } from "./testing/tls-fixture.js";
 
-// Exercise box-status authorization and chain reads on PostgreSQL with manager login.
+// Exercise box-status authorization and chain reads on PostgreSQL with manager login. The native
+// replication/disposal cells are covered by the sibling real-PG suites (box-status.replication.test.ts,
+// box-status.disposal.test.ts) that seed actual slots; here the slot/subscription readers are absent, so
+// replication reads `configured:false` — this suite is about the auth gate and the chain read.
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the seeded manager's dashboard password.
 // Dashboard sign-in resolves the person by EMAIL, so the seeded manager carries a login email
@@ -24,18 +27,6 @@ const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the seeded manager
 const MANAGER_EMAIL = "manager@x.com";
 
 const suite = useTemplateDb({ template: "manifest" });
-
-// The config-conflict count reader uses sync_reader, a LOGIN member of app_user created by global
-// setup. The sync baseline grants app_user SELECT on sync_config_conflicts, whose row_image holds
-// tenant business data. Seeding uses suite.admin; the read exercises the grant through a
-// non-superuser connection. Guarded close (CLAUDE.md §4).
-let conflictsReaderDb: Database | undefined;
-beforeAll(async () => {
-  conflictsReaderDb = await suite.pg.connectAs("sync_reader", "rp");
-});
-afterAll(async () => {
-  if (conflictsReaderDb !== undefined) await conflictsReaderDb.close();
-});
 
 // Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
 // so the provisioned venue needs its own NIF — the same per-suite counter the sibling suites use.
@@ -126,14 +117,10 @@ function buildApp(
       health: createHealthState(opts.now),
       now: () => opts.now,
       tlsCertPath: opts.tlsCertPath,
-      readReplicationLag: undefined,
+      readReplicationSlots: undefined,
+      readReplicationSubscription: undefined,
       readDisposal: undefined,
       readBackup: opts.readBackup,
-      // The Slice-7 config-conflict count reader, on the sync pool (the manifest template carries
-      // the sync module, so sync_config_conflicts exists). Reads through `app_user` — the role
-      // that holds SELECT on the table in the sync baseline — exactly as boot.ts wires it via
-      // `lagPool`.
-      readConfigConflicts: () => readConfigConflictCount(conflictsReaderDb!),
       readMode: () => "primary",
       readSingletonRole: () => "primary",
       readAwaitingFiscalCertificate: () => false,
@@ -181,11 +168,9 @@ describe("GET /api/box/status (real postgres)", () => {
     expect(body.singletonRole).toBe("primary");
     expect(body.environment).toBe("preproduction");
     expect(body.cert).toEqual({ available: false }); // tlsCertPath undefined
-    expect(body.replication).toEqual({ configured: false }); // no lag reader
+    expect(body.replication).toEqual({ configured: false }); // no slot/subscription reader wired here
     expect(body.backup).toEqual({ configured: false });
-    // The reader is wired, so the surface is configured; no conflicts have been recorded on this fresh
-    // clone yet, so the healthy norm is zero.
-    expect(body.configConflicts).toEqual({ configured: true, count: 0 });
+    expect(body.configConflicts).toBeUndefined(); // the config-conflict cell was removed (swap S4)
     expect(body.time.source).toMatch(/timedatectl|unavailable/);
   });
 
@@ -218,43 +203,6 @@ describe("GET /api/box/status (real postgres)", () => {
         { id: "primary", lastBackupAt: mtime.toISOString(), ageSeconds: 30, stale: false },
       ],
     });
-  });
-});
-
-describe("GET /api/box/status surfaces the config-conflict count (real postgres)", () => {
-  let app: Hono;
-  let managerCookie: string;
-  let tenantId: string;
-
-  beforeAll(async () => {
-    const t = await setupTenant();
-    tenantId = t.tenantId;
-    app = buildApp(t.tenantId, t.nodeId, {
-      now: new Date("2026-08-29T10:00:00Z"),
-      tlsCertPath: undefined,
-    });
-    managerCookie = await login(app, MANAGER_EMAIL);
-  });
-
-  // Clear whole-database conflict rows so they do not affect later cases in this file.
-  afterAll(async () => {
-    await suite.admin.execute(sql`delete from sync_config_conflicts`);
-  });
-
-  it("reports configConflicts.count === the number of recorded ops rows", async () => {
-    // Clear first as the owner so the assertion is order-independent, then seed exactly three rows and
-    // read them back through the app-role reader the route uses.
-    await suite.admin.execute(sql`delete from sync_config_conflicts`);
-    for (let i = 0; i < 3; i += 1) {
-      await suite.admin.execute(
-        sql`insert into sync_config_conflicts (table_name, origin_id, lane, row_image)
-            values ('products', gen_random_uuid(), 'ordered', ${JSON.stringify({ id: `p${i}`, tenant_id: tenantId })}::jsonb)`,
-      );
-    }
-    const res = await app.request("/api/box/status", { headers: { cookie: managerCookie } });
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.configConflicts).toEqual({ configured: true, count: 3 });
   });
 });
 

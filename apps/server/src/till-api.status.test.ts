@@ -38,8 +38,8 @@ let STATUS_ID: string;
 let INACTIVE_STATUS_ID: string;
 
 const suite = usePgliteDb({
-  // The whole manifest: bookings' capture trigger EXECUTEs sync's `sync_capture()`, so it cannot
-  // migrate on core+identity alone.
+  // The whole manifest: the tables here span modules that FK into core, so the shared ordered set is
+  // the fixture.
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {

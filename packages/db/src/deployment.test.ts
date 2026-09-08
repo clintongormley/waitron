@@ -7,9 +7,11 @@ import {
   readDeploymentAxes,
   readDeploymentEnvironment,
   readDeploymentMode,
+  readFenceLsn,
   readSingletonRole,
   setDeploymentMode,
   setDeploymentModeTx,
+  setFenceLsnTx,
   setSingletonRole,
   setSingletonRoleTx,
   stampDeployment,
@@ -232,5 +234,28 @@ describeEachTarget("the deployment stamp", (target) => {
     // Unstamped: the singleton row does not exist. Each field falls back to 'primary', matching
     // readDeploymentMode/readSingletonRole — an unstamped database is a sole primary.
     expect(await readDeploymentAxes(db)).toEqual({ mode: "primary", singletonRole: "primary" });
+  });
+
+  it("reads fence_lsn as null on a freshly stamped database", async () => {
+    // The fence watermark (Ruling C2) is unset until a node enters its read-only fence. A stamped
+    // but never-fenced database reads null — the drain guard then treats it as not drained (fail-safe).
+    await stampDeployment(db, "preproduction");
+    expect(await readFenceLsn(db)).toBeNull();
+  });
+
+  it("setFenceLsnTx records the fence watermark and readFenceLsn reads it back", async () => {
+    // A literal LSN (not pg_current_wal_lsn()) so PGlite's single-backend model is not relied on for a
+    // WAL position. pg_lsn normalises "0/1500000" to itself, so the read-back is exact.
+    await stampDeployment(db, "preproduction");
+    await db.transaction((tx) => setFenceLsnTx(tx, "0/1500000"));
+    expect(await readFenceLsn(db)).toBe("0/1500000");
+  });
+
+  it("setFenceLsnTx(null) clears the fence watermark (the promotion un-fence)", async () => {
+    // Proven by contrast with the set test above: passing null must un-set the column, not leave it.
+    await stampDeployment(db, "preproduction");
+    await db.transaction((tx) => setFenceLsnTx(tx, "0/1500000"));
+    await db.transaction((tx) => setFenceLsnTx(tx, null));
+    expect(await readFenceLsn(db)).toBeNull();
   });
 });

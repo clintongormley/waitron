@@ -1,18 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { withTenant, type Database, type Transaction } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 
-// Shared fiscal seeding for the SP-3a fiscal-record-lane suites (fiscal-capture, fiscal-apply,
-// fiscal-upsert, fiscal-fk-defer, fiscal-park-env). Extracted and generalised from pg-restore.test.ts's
-// `seedFiscalRegistro` + fiscal-capture.test.ts's `seedParents`/`insertRegistro`. It lives under
-// apps/server/src/testing/ because its consumers do: the apply-lane gates drive `mountSyncApi` +
-// `ALL_SYNC_ENROLMENTS`, which live only in the composition root and `fiscal-verifactu` cannot import.
-// Coverage-excluded (this package's vitest.config.ts `exclude`). Spanish fiscal column names are used
-// verbatim because apps/* is english-only-exempt — an aside that does not decide placement (packages/
-// fiscal-verifactu is exempt too).
+// Shared fiscal seeding for the fiscal-record suites. It lives under apps/server/src/testing/ because
+// its consumers do (boot.mirror's fidelity seeding). Coverage-excluded (this package's vitest.config.ts
+// `exclude`). Spanish fiscal column names are used verbatim because apps/* is english-only-exempt.
 //
 // Column shapes are the current migrated schema (country/tax_id on tenants, vat_breakdown on sales,
-// node-keyed series/sif/registro), asserted against by fiscal-capture.test.ts already.
+// node-keyed series/sif/registro).
 
 /** Deployment-environment stamp carried on a registro (never HASHED, but replicated verbatim). */
 export type Entorno = "production" | "preproduction";
@@ -88,8 +83,8 @@ export async function insertFiscalSale(db: Database, ids: FiscalIds): Promise<vo
 /**
  * Seeds the FK closure `registros_facturacion` needs — tenant, location, till, node, invoice series,
  * sale, registro_sif — through `db`, and returns the ids. It stops SHORT of the registro itself so a
- * caller can insert that row where it wants it captured (see {@link captureFiscalRegistro}) or seed
- * the same parents on a mirror's target database without also planting the ledger row there.
+ * caller can insert that row itself, or seed the same parents on a mirror's target database without
+ * also planting the ledger row there.
  *
  * Pass the clone's admin connection for these fixture inserts.
  */
@@ -198,22 +193,6 @@ export async function insertFiscalRegistro(
   return { registroId: rows[0]!.id, huella, entorno, secuencia };
 }
 
-/**
- * Inserts a registro AS THE APP WRITER so the fiscal `sync_capture` trigger fires and the row lands in
- * `sync_log` — the SOURCE side of an apply test. `writer` must be an `app_login`-class connection (a
- * non-superuser `app_user` member); the insert runs inside ONE `withTenant(writer, tenantId, …, { nodeId })`
- * so app.node_id, the capture origin, is set for that transaction.
- */
-export async function captureFiscalRegistro(
-  writer: Database,
-  ids: FiscalIds,
-  opts: RegistroOptions = {},
-): Promise<{ registroId: string; huella: string; entorno: Entorno; secuencia: number }> {
-  return withTenant(writer, ids.tenantId, (tx) => insertFiscalRegistro(tx, ids, opts), {
-    nodeId: ids.nodeId,
-  });
-}
-
 export interface SeedFiscalRegistroOptions extends SeedParentsOptions, RegistroOptions {
   /** Also seed a `cadenas` chain-head row pointing at this registro (Tasks 7-9). */
   cadena?: boolean;
@@ -223,14 +202,11 @@ export interface SeedFiscalRegistroOptions extends SeedParentsOptions, RegistroO
 
 /**
  * The all-in-one: seed the FK closure AND the registro (optionally its `cadenas`/`envios` companions)
- * through `db`, returning the parent ids + the registro's id/huella/entorno/secuencia. This is the
- * fixture Tasks 7-9 consume for a ready-made fiscal chain. Task 6's apply suite composes
- * {@link seedFiscalParents} + {@link captureFiscalRegistro} directly instead, because it must seed the
- * SAME parents on two databases and capture the registro on only one of them.
+ * through `db`, returning the parent ids + the registro's id/huella/entorno/secuencia — a ready-made
+ * fiscal chain for a fidelity seed. A caller that needs the same parents on two databases composes
+ * {@link seedFiscalParents} + {@link insertFiscalRegistro} directly instead.
  *
- * The registro is inserted directly through `db` — the capture trigger still fires, but with no
- * app.node_id set it lands under the all-zeros origin, which no origin-filtered pull targets. The
- * companion rows are FK children of the registro, seeded through `db` too.
+ * The registro and its companion `cadenas`/`envios` FK children are inserted directly through `db`.
  */
 export async function seedFiscalRegistro(
   db: Database,

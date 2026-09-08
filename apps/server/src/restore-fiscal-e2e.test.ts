@@ -335,7 +335,7 @@ afterAll(async () => {
 });
 
 describe("fiscal restore (real Postgres, end to end)", () => {
-  it("re-registers the SIF, retires and replaces the series, rewrites trading.env, keeps the ledger immutable, stamps the origin", async () => {
+  it("re-registers the SIF, retires and replaces the series, rewrites trading.env, keeps the ledger immutable", async () => {
     if (containerId === undefined) return;
     const target = await makeFreshTarget();
     const dirs = await arrangeDirs();
@@ -383,11 +383,6 @@ describe("fiscal restore (real Postgres, end to end)", () => {
         .then(() => undefined)
         .catch((e: unknown) => e as { code?: string; cause?: { code?: string } });
       expect(blocked?.code ?? blocked?.cause?.code).toBe("WT001");
-      // Origin stamping: the hook's captured rows carry THIS node, not the all-zero origin.
-      const captured = await db.execute<{ n: number }>(
-        sql`select count(*)::int as n from sync_log where table_name in ('registro_sif', 'cadenas') and origin_id = ${F.nodeId}::uuid`,
-      );
-      expect(captured.rows[0]!.n).toBeGreaterThanOrEqual(3); // revoke + insert + head reset
       expect(await schemaVersionsByModule(db, ALL_MODULES)).toEqual(
         Object.fromEntries(
           ALL_MODULES.map((m) => [m.name, expectedSchemaVersion(m.migrations, migrationsRoot)]),

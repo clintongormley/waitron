@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
-import { assertIdentifier, generatePassword, quoteIdent, quoteLiteral } from "./identifiers.js";
+import {
+  assertIdentifier,
+  generatePassword,
+  quoteIdent,
+  quoteLiteral,
+  withRole,
+} from "./identifiers.js";
 
 describe("assertIdentifier", () => {
   it("accepts an ordinary lower-case name", () => {
@@ -82,5 +88,42 @@ describe("quoteLiteral", () => {
     // way — the same thing `PQescapeLiteral` does.
     expect(quoteLiteral("a\\b")).toBe("E'a\\\\b'");
     expect(quoteLiteral("a\\'b")).toBe("E'a\\\\''b'");
+  });
+});
+
+describe("withRole", () => {
+  it("appends a libpq role option that pg parses back to the role", async () => {
+    // The whole point of the parameter: it makes `migrate` and the post-migrate role work run AS
+    // `waitron_migrator` over the ADMIN's credentials (a session `SET ROLE`), so every table is
+    // migrator-owned. The receipt is `pg`'s own parse — the round-trip, not the string shape.
+    const uri = withRole("postgres://a:p@h:5432/db", "waitron_migrator");
+    const pg = await import("pg");
+    // `connectionParameters` is on the runtime `Client` but not in `@types/pg`'s surface.
+    const client = new pg.default.Client({ connectionString: uri }) as unknown as {
+      connectionParameters: { options: string };
+    };
+    expect(client.connectionParameters.options).toBe("-c role=waitron_migrator");
+  });
+
+  it("refuses a role name outside the identifier grammar", () => {
+    // Validate-and-throw, the §3 rule: this option is embedded in a connection string, never bound.
+    let thrown: unknown;
+    try {
+      withRole("postgres://a:p@h:5432/db", "waitron migrator");
+    } catch (error) {
+      thrown = error;
+    }
+    expect(isAppError(thrown)).toBe(true);
+    if (!isAppError(thrown)) return;
+    expect(thrown.code).toBe("provisioning.invalid_identifier");
+    expect(thrown.params).toEqual({ kind: "role", value: "waitron migrator" });
+  });
+
+  it("refuses a URI that already carries an options parameter, rather than merging", () => {
+    // Merging two libpq option strings is not attempted — a URI this tool composes never carries
+    // `options`, so a pre-existing one is a programmer error, not an operator input.
+    expect(() =>
+      withRole("postgres://a:p@h:5432/db?options=-c+statement_timeout=0", "waitron_migrator"),
+    ).toThrow(/options/);
   });
 });

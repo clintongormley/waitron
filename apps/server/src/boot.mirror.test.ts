@@ -16,8 +16,6 @@ import {
   type Database,
 } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { loadKeyRing } from "@waitron/credentials";
-import { enrolPeer } from "@waitron/sync";
 import { drain } from "@waitron/fiscal-verifactu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer } from "./boot.js";
@@ -26,20 +24,18 @@ import { singletonPass } from "./singleton-pass.js";
 import { seedFiscalRegistro } from "./testing/fiscal-fixtures.js";
 import { roleUrl } from "./testing/postgres.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { sealMirrorToken } from "./mirror-token.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
-// C2a mirror-mode server (Task 5), rewired for C2b (Task 10): the mirror now reads its connection to
-// its primary (relay URL, box CA + hostname, per-peer token) from the DATABASE (`mirror_config`) + the
-// vault (`sync.mirror_token`), NOT from env. Real Postgres, not PGlite: the mirror serves its dashboard
-// through the ambient viewer session, which writes `persons` / `management_sessions` as the
-// NON-superuser `app_user` — so the table GRANTS are enforced, where a PGlite superuser holds every
-// privilege and a missing one would pass (CLAUDE.md §4). `readMirrorConfig`/`readMirrorToken` run as
-// that same app role. THREE manifest clones: a
-// `mirror`-stamped database seeded with its DB connection config (does NOT mount the sync source,
-// refuses writes), a `primary`-stamped one of the SAME identity (DOES mount it) — the control that the
-// mirror's absence is not vacuous — and a `noConfig` mirror-stamped one with NO `mirror_config` row (the
-// fail-closed control).
+// Mirror-mode server boot. Since swap step 4 the mirror reads only its origin/relay/CA from the
+// DATABASE (`mirror_config`, written owner-role at adopt) — the outbox pull and its per-peer token are
+// gone, replaced by a native subscription established at adopt. Real Postgres, not PGlite: the mirror
+// serves its dashboard through the ambient viewer session, which writes `persons` /
+// `management_sessions` as the NON-superuser `app_user` — so the table GRANTS are enforced, where a
+// PGlite superuser holds every privilege and a missing one would pass (CLAUDE.md §4). `readMirrorConfig`
+// runs as that same app role. Manifest clones: a `mirror`-stamped database seeded with its
+// `mirror_config` (read-only, refuses writes), a `primary`-stamped one of the SAME identity (mounts the
+// primary-only surfaces) — the control that the mirror's absence is not vacuous — a `noConfig`
+// mirror-stamped one with NO `mirror_config` row (the fail-closed control), and an adoption-pending one.
 //
 // `DATABASE_URL` is `app_login` (an app_user member) exactly as a real mirror pool is: the ambient
 // session's `ensureMirrorViewer` / `mirrorSession` write through the CONNECTION's role, so they
@@ -50,6 +46,9 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
 const mirror = useTemplateDb({ template: "manifest" });
 const primary = useTemplateDb({ template: "manifest" });
+// A fourth clone for the adoption-pending boot (C6): migrated but with NO identity seeded — it models
+// a mirror that has just adopted and whose native initial copy has not yet brought the tenant rows.
+const adopting = useTemplateDb({ template: "manifest" });
 // A third mirror-stamped clone that is NEVER seeded with a `mirror_config` row — the fail-closed
 // control: a box stamped `deployment.mode='mirror'` with no DB connection config must refuse to boot
 // (server.config_invalid), never serve a mirror that can never reach its primary.
@@ -57,8 +56,7 @@ const noConfig = useTemplateDb({ template: "manifest" });
 
 // The till's fiscal identity — the five WAITRON_TILL_*_ID that put boot into TRADING mode. Distinct
 // per field. Seeded on BOTH clones in `beforeAll` (tenant/location/node/till/series) so a successful
-// boot's `readOrderFlow` / `readVenueLocale` reads resolve and the sync source (on the primary) names
-// this node.
+// boot's `readOrderFlow` / `readVenueLocale` reads resolve.
 const TILL_ENV = {
   WAITRON_TILL_TENANT_ID: "11111111-1111-4111-8111-111111111111",
   WAITRON_TILL_TILL_ID: "22222222-2222-4222-8222-222222222222",
@@ -88,34 +86,18 @@ const KEY_ENV = {
   ...TILL_ENV,
 };
 
-// One unreachable "peer" for the PRIMARY control's WAITRON_SYNC_PEERS. Port 1 never listens, so every
-// pull handshake fails and the worker backs off (the same unreachable-endpoint shape boot.test.ts's
-// sync test uses); the box still binds and serves. The token is irrelevant here (no pull completes).
-const SYNC_PEERS = JSON.stringify([
-  {
-    nodeId: "66666666-6666-4666-8666-666666666666",
-    url: "http://127.0.0.1:1/",
-    token: "peer-token",
-  },
-]);
-
-// The mirror's DB-stored connection config (C2b, spec §7) — written into `mirror_config` (owner-role)
-// on the `mirror` clone, replacing C2a's WAITRON_MIRROR_BOX_* + WAITRON_SYNC_PEERS env. The relay is
-// the same unreachable port-1 endpoint (the pull worker dials it through the tunnel http client and
-// backs off), so the box still binds and serves; the token seals into the vault under `sync.mirror_token`.
+// The mirror's DB-stored connection config (swap step 4) — written into `mirror_config` (owner-role)
+// on the `mirror` clone. Since the outbox pull is gone, a mirror boot only reads `mirror_config` for
+// its origin/relay/CA (no per-peer token); the relay port-1 endpoint is unreachable, which is fine —
+// nothing dials it here.
 const MIRROR_RELAY_URL = "http://127.0.0.1:1/";
 const MIRROR_BOX_HOSTNAME = "mirror-box.local";
-const MIRROR_SYNC_TOKEN = "mirror-peer-token";
 // The sync ORIGIN — the PRIMARY's node id, DISTINCT from this mirror's own `WAITRON_TILL_NODE_ID`
 // (membership promotion R3a: the mirror runs under its own identity, and `mirror_config.origin_node_id`
-// is the separate primary node whose rows it pulls). The relay is unreachable here so no pull completes;
-// this only has to be a well-formed, distinct id to model the split faithfully.
+// is the separate primary node whose rows it holds).
 const MIRROR_ORIGIN_NODE = "77777777-7777-4777-8777-777777777777";
-// The vault key ring the boot's `loadKeyRing(env)` builds from KEY_ENV — used here to SEAL the sync
-// token the same way `adoptFromPrimary` would, so the boot's `readMirrorToken` (app_user) unseals it.
-const RING = loadKeyRing(KEY_ENV);
-// A real box CA PEM for `mirror_config.box_ca_pem` — `tunnelHttpClient` hands it to undici. Never used
-// for a real handshake here (the relay is unreachable), but a genuine PEM keeps the wiring faithful.
+// A real box CA PEM for `mirror_config.box_ca_pem`. Never used for a real handshake here, but a genuine
+// PEM keeps the wiring faithful.
 const BOX_CA_PEM = mintSelfSignedServerCert({
   hostnames: [MIRROR_BOX_HOSTNAME],
   ipAddresses: [],
@@ -124,25 +106,13 @@ const BOX_CA_PEM = mintSelfSignedServerCert({
 
 let migrationsRoot: string;
 let mirrorDatabaseUrl: string;
-let mirrorSyncDatabaseUrl: string;
 let noConfigDatabaseUrl: string;
-let noConfigSyncDatabaseUrl: string;
 let primaryDatabaseUrl: string;
-let primarySyncDatabaseUrl: string;
-// The retention (sync_pruner, an app_user member) URL for the primary — the connection the
-// retention sweep opens and the C2b mirror-bundle endpoint reuses to mint peer tokens. Set on the
-// primary control boot so that endpoint mounts there (the mirror never opens one, so it never
-// mounts — the primary-only proof).
-let primaryRetentionDatabaseUrl: string;
-// A peer enrolled on the PRIMARY clone (enrolPeer runs as the superuser admin — setup bypasses
-// grants). The control's /sync-api/hello probe presents this token, which the source resolves against
-// `sync_peers` through the sync_applier pool.
-let primaryPeerToken: string;
+let adoptingDatabaseUrl: string;
 
 /**
  * Seed the FK identity (tenant, location, node, till, series) with the WAITRON_TILL_*_ID on one
- * clone, as the container superuser. None of these tables is sync-enrolled, so this captures no
- * sync_log rows. Mirrors sync-e2e.test.ts's `seedParents`.
+ * clone, as the container superuser.
  */
 async function seedIdentity(admin: Database): Promise<void> {
   await admin.execute(sql`insert into tenants (id, country, tax_id, legal_name)
@@ -185,29 +155,26 @@ beforeAll(async () => {
   await stampDeployment(primary.admin, "preproduction");
   await stampDeployment(noConfig.admin, "preproduction");
   await setDeploymentMode(noConfig.admin, "mirror");
+  // The adoption-pending clone: stamped preproduction (so `assertDeploymentMatches` passes) and mode
+  // 'mirror', but deliberately NOT seeded with the till identity — the tenant row the initial copy
+  // has not brought yet.
+  await stampDeployment(adopting.admin, "preproduction");
+  await setDeploymentMode(adopting.admin, "mirror");
 
-  // The `mirror` clone's DB-stored connection config + sealed sync token (C2b), written owner-role
-  // exactly as `adoptFromPrimary` would — this is what the boot's `readMirrorConfig` / `readMirrorToken`
-  // (app_user) read INSTEAD of the retired env. The `noConfig` clone deliberately gets NEITHER (the
-  // fail-closed control).
+  // The `mirror` clone's DB-stored connection config (C2b), written owner-role exactly as
+  // `adoptFromPrimary` would — this is what the boot's `readMirrorConfig` (app_user) reads INSTEAD of
+  // the retired env. The `noConfig` clone deliberately gets none (the fail-closed control).
   await writeMirrorConfig(mirror.admin, {
     relayUrl: MIRROR_RELAY_URL,
     boxHostname: MIRROR_BOX_HOSTNAME,
     boxCaPem: BOX_CA_PEM,
     originNodeId: MIRROR_ORIGIN_NODE,
   });
-  await sealMirrorToken(mirror.admin, RING, TILL_ENV.WAITRON_TILL_TENANT_ID, MIRROR_SYNC_TOKEN);
-
-  primaryPeerToken = (await enrolPeer(primary.admin, { subscriberId: "mirror-ctl", name: "ctl" }))
-    .token;
 
   mirrorDatabaseUrl = roleUrl(mirror.pg.uri, "app_login", "app_pw");
-  mirrorSyncDatabaseUrl = roleUrl(mirror.pg.uri, "sync_applier", "ap");
   noConfigDatabaseUrl = roleUrl(noConfig.pg.uri, "app_login", "app_pw");
-  noConfigSyncDatabaseUrl = roleUrl(noConfig.pg.uri, "sync_applier", "ap");
   primaryDatabaseUrl = roleUrl(primary.pg.uri, "app_login", "app_pw");
-  primarySyncDatabaseUrl = roleUrl(primary.pg.uri, "sync_applier", "ap");
-  primaryRetentionDatabaseUrl = roleUrl(primary.pg.uri, "sync_pruner", "pp");
+  adoptingDatabaseUrl = roleUrl(adopting.pg.uri, "app_login", "app_pw");
 }, 180_000);
 
 afterAll(async () => {
@@ -240,7 +207,7 @@ async function poll<T>(predicate: () => T | undefined): Promise<T | undefined> {
 }
 
 describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
-  it("serves a dashboard read via the ambient viewer, refuses writes, and does not mount the sync source", async () => {
+  it("serves a dashboard read via the ambient viewer and refuses writes", async () => {
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
@@ -248,11 +215,8 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       WAITRON_MIGRATIONS_DATABASE_URL: mirror.pg.uri,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      // No WAITRON_SYNC_PEERS and no WAITRON_MIRROR_BOX_* (C2b retired both for the mirror): the relay
-      // URL, box CA + hostname and the per-peer token are read from the DB (`mirror_config`, seeded in
-      // beforeAll) and the vault (`sync.mirror_token`), and the pull worker dials through the tunnel
-      // http client built from that DB config. Only the local sync pool stays in env.
-      WAITRON_SYNC_DATABASE_URL: mirrorSyncDatabaseUrl,
+      // No WAITRON_MIRROR_BOX_* (C2b retired it for the mirror): the relay URL, box CA + hostname are
+      // read from the DB (`mirror_config`, seeded in beforeAll), not env.
     });
     const base = `http://127.0.0.1:${port}`;
     try {
@@ -280,13 +244,7 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       expect(write.status).toBe(403);
       expect(await write.json()).toEqual({ error: { code: "node.read_only", params: {} } });
 
-      // The mirror is a SUBSCRIBER, not a source: mountSyncApi is skipped, so the peer-authenticated
-      // source route is NOT mounted (404) even with a Bearer token. The primary control below proves
-      // this route DOES exist on a non-mirror boot of the same identity — the guard is not vacuous.
-      const source = await fetch(`${base}/sync-api/hello`);
-      expect(source.status).toBe(404);
-
-      // The C2b mirror-bundle endpoint is PRIMARY-only (a mirror emits no bundle), so it is never
+      // The mirror-bundle endpoint is PRIMARY-only (a mirror emits no bundle), so it is never
       // mounted here. A POST is caught by the read-only gate FIRST (node.read_only 403), which is
       // the observable guarantee that a mirror never serves a bundle — the primary control below
       // reaches its OWN auth screen (401) on the same request, the primary-only A/B (the mount
@@ -319,8 +277,8 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       expect(heldOrders.status).toBe(401);
       expect(await heldOrders.json()).toEqual({ error: { code: "session.required", params: {} } });
 
-      // Mirror ⇒ acceptingSales:false; the primary boot in "primary boot of the same identity DOES
-      // mount the sync source" is the control on the same identity.
+      // Mirror ⇒ acceptingSales:false; the "primary boot of the same identity mounts the mirror-bundle
+      // endpoint + operational groups" test below is the control on the same identity.
       const probe = await fetch(`${base}/api/node`);
       expect(probe.status).toBe(200);
       expect(await probe.json()).toMatchObject({ acceptingSales: false });
@@ -335,7 +293,7 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       await server.close();
     }
     // The listener is genuinely gone after close() (workers + pools torn down).
-    await expect(fetch(`${base}/sync-api/hello`)).rejects.toThrow();
+    await expect(fetch(`${base}/api/node`)).rejects.toThrow();
   }, 60_000);
 
   it("runs the trivial empty pass on a mirror — the fiscal drain (AEAT submission) is never invoked", async () => {
@@ -443,11 +401,11 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     expect(afterPrimary.rows[0]?.estado).toBe("pendiente");
   }, 60_000);
 
-  it("primary boot of the same identity DOES mount the sync source (control: the mirror's absence is real)", async () => {
+  it("primary boot of the same identity mounts the mirror-bundle endpoint + operational groups (control: the mirror's absence is real)", async () => {
     // The other direction (CLAUDE.md §1): the SAME identity, stamped 'primary' (mode column default),
-    // mounts the peer-authenticated source group. This is the prove-by-deletion control — flip
-    // boot.ts's `isMirror` off and the mirror test's `/sync-api/hello 404` above becomes a 200 like
-    // this one; keep it and the two disagree, which is the whole point.
+    // mounts the primary-only surfaces the mirror suppresses. The prove-by-deletion control — flip
+    // boot.ts's `isMirror` / singleton gating and the mirror's 403/404s above become the 401s/non-404s
+    // below; keep both and the two disagree, which is the whole point.
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
@@ -455,47 +413,24 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       WAITRON_MIGRATIONS_DATABASE_URL: primary.pg.uri,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_SYNC_PEERS: SYNC_PEERS,
-      WAITRON_SYNC_DATABASE_URL: primarySyncDatabaseUrl,
-      // The retention sweep's own retention connection — the one the C2b mirror-bundle endpoint
-      // reuses to mint peer tokens. Set here so that endpoint mounts on this primary (the mirror
-      // never opens one, so it never mounts there — the primary-only proof, alongside the sync
-      // source above).
-      WAITRON_SYNC_RETENTION_DATABASE_URL: primaryRetentionDatabaseUrl,
-      // No mirror connection config: a primary is not `isMirror`, so boot never reads `mirror_config`
-      // / the vault token, and its peers come from WAITRON_SYNC_PEERS above (loadSyncConfig).
+      // A singleton primary mounts the mirror-bundle endpoint (swap step 4 gates it on
+      // `isSingletonPrimary` alone). No mirror connection config: a primary is not `isMirror`, so boot
+      // never reads `mirror_config`.
     });
     const base = `http://127.0.0.1:${port}`;
     try {
-      const source = await fetch(`${base}/sync-api/hello`, {
-        headers: { Authorization: `Bearer ${primaryPeerToken}` },
-      });
-      expect(source.status).toBe(200);
-      expect(await source.json()).toEqual({
-        nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
-        environment: "preproduction",
-        membership: null, // no document adopted → the handshake carries a null membership (design §5)
-        // Real boot computes the per-module applied versions from the migrated DB (SP-2b) and /hello
-        // echoes them; the exact numbers drift with every migration, so assert the map is genuinely
-        // populated (`core` a real number) rather than pinning drift-prone values — the content is
-        // covered exactly in sync-api.test.ts.
-        moduleVersions: expect.objectContaining({ core: expect.any(Number) }),
-      });
-
-      // The C2b mirror-bundle endpoint IS mounted on this primary (it holds a retention
-      // connection): a body-less POST is screened as password.invalid (401) BEFORE any DB work —
-      // proof the route registered. On the mirror boot above the same request is a 403 (read-only
-      // gate), never a 401: the mirror never serves this route, the primary does (the
-      // primary-only A/B, CLAUDE.md §1).
+      // The mirror-bundle endpoint IS mounted on this singleton primary: a body-less POST is screened
+      // as password.invalid (401) BEFORE any DB work — proof the route registered. On the mirror boot
+      // above the same request is a 403 (read-only gate), never a 401: the mirror never serves this
+      // route, the primary does (the primary-only A/B, CLAUDE.md §1).
       const bundle = await fetch(`${base}/management-api/mirror-bundle`, { method: "POST" });
       expect(bundle.status).toBe(401);
       expect((await bundle.json()).error.code).toBe("password.invalid");
 
-      // The operational agent/device groups DO mount on a primary (Task 4 control, CLAUDE.md §1's
-      // other direction): each GET reaches its own agent/device auth (401 — a missing Bearer / device
-      // cookie), never a 404. This is what makes the mirror's 404s above the guard rather than a route
-      // that never existed. Flip boot.ts's `if (!isMirror)` off and the mirror 404s become 401s like
-      // these; keep it and the two disagree, which is the whole point.
+      // The operational agent/device groups DO mount on a primary (CLAUDE.md §1's other direction):
+      // each GET reaches its own agent/device auth (401 — a missing Bearer / device cookie), never a
+      // 404. This is what makes the mirror's 404s above the guard rather than a route that never
+      // existed.
       const printJobs = await fetch(`${base}/print-api/agent/jobs`);
       expect(printJobs.status).not.toBe(404);
       const deviceStation = await fetch(`${base}/api/device/station`);
@@ -512,7 +447,6 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     } finally {
       await server.close();
     }
-    await expect(fetch(`${base}/sync-api/hello`)).rejects.toThrow();
   }, 60_000);
 
   it("refuses a mirror boot binding a non-loopback host without the WAITRON_MIRROR_ALLOW_EXPOSED opt-in", async () => {
@@ -536,7 +470,6 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
         WAITRON_HTTP_HOST: "0.0.0.0",
         WAITRON_HTTP_PORT: String(await freePort()),
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
-        WAITRON_SYNC_DATABASE_URL: mirrorSyncDatabaseUrl,
       });
     } catch (error) {
       caught = error;
@@ -559,7 +492,6 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       WAITRON_HTTP_HOST: "0.0.0.0",
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_SYNC_DATABASE_URL: mirrorSyncDatabaseUrl,
       WAITRON_MIRROR_ALLOW_EXPOSED: "true",
     });
     const base = `http://127.0.0.1:${port}`;
@@ -575,7 +507,7 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     } finally {
       await server.close();
     }
-    await expect(fetch(`${base}/sync-api/hello`)).rejects.toThrow();
+    await expect(fetch(`${base}/api/node`)).rejects.toThrow();
   }, 60_000);
 
   it("refuses a mirror boot that has no mirror_config row (a mirror REQUIRES its DB connection config)", async () => {
@@ -588,10 +520,10 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     // coverage on that `await db.close()` is what proves it ran.
     //
     // Prove-by-deletion (verified 2026-08-29, then restored): with the `if (loaded === null) throw`
-    // removed, this boot proceeds past the guard to `readMirrorToken`, which throws the CONFUSING
-    // `credentials.missing` — a token error for a box that has no connection config at all — and this
-    // assertion fails `expected 'credentials.missing' to be 'server.config_invalid'`. Restored, it
-    // fails cleanly here with the loud server.config_invalid this asserts.
+    // removed, this boot dereferences `loaded.originNodeId` on a null and throws a CONFUSING TypeError
+    // — not the loud, actionable error — and this assertion fails `expected <TypeError> to be
+    // 'server.config_invalid'`. Restored, it fails cleanly here with the loud server.config_invalid
+    // this asserts.
     let caught: unknown;
     try {
       await startServer({
@@ -600,7 +532,6 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
         WAITRON_MIGRATIONS_DATABASE_URL: noConfig.pg.uri,
         WAITRON_HTTP_PORT: String(await freePort()),
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
-        WAITRON_SYNC_DATABASE_URL: noConfigSyncDatabaseUrl,
       });
     } catch (error) {
       caught = error;
@@ -611,5 +542,78 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       variable: "mirror_config",
       reason: "mirror_requires_mirror_config",
     });
+  }, 60_000);
+
+  it("boots adoption-pending on an EMPTY database with a pending file, serving only /health + /api/box/status", async () => {
+    // C6 / derived fact 1: an adopted mirror restarts while its native initial copy is still running,
+    // so the tenant rows are absent. A pending-adoption.json is present. Boot must enter the
+    // adoption-pending branch and serve a minimal status surface WITHOUT touching tenant-scoped rows.
+    //
+    // FAILING CASE (proven by the empty database here): without the adoption-pending guard, boot would
+    // reach `ensureMirrorViewer(db, tenantId)`, whose `persons` insert FKs to a `tenants` row the copy
+    // has not brought — a foreign-key violation that would throw out of `startServer`. That this boot
+    // returns a serving box instead is the guard working: the identity was never seeded on `adopting`.
+    const stateDir = mkdtempSync(join(tmpdir(), "waitron-adopting-state-"));
+    // A `modules.json` resolving the fiscal slot, matching the suite convention (the shared prefix
+    // migrates the enabled set before the branch is entered).
+    writeFileSync(
+      join(stateDir, "modules.json"),
+      JSON.stringify({ modules: { "fiscal-none": false } }),
+    );
+    // The pending-adoption record (the standby's own identity + reservation). Its `standby.nodeId` is
+    // a distinct valid UUID; the finish worker never reaches `establish` here (no subscription exists,
+    // so the copy never reports ready), so the reserved payload is inert.
+    writeFileSync(
+      join(stateDir, "pending-adoption.json"),
+      JSON.stringify({
+        tenantId: TILL_ENV.WAITRON_TILL_TENANT_ID,
+        locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+        standby: {
+          nodeId: "88888888-8888-4888-8888-888888888888",
+          publicKey: "pub",
+          privateKey: "priv",
+        },
+        nodeName: "standby",
+        filingModule: "fiscal-verifactu",
+        taxModule: null,
+        reserved: { modules: {}, series: [], endorsement: {} },
+        originNodeId: MIRROR_ORIGIN_NODE,
+      }),
+      { mode: 0o600 },
+    );
+    const port = await freePort();
+    const server = await startServer({
+      ...KEY_ENV,
+      WAITRON_STATE_DIR: stateDir,
+      DATABASE_URL: adoptingDatabaseUrl,
+      WAITRON_MIGRATIONS_DATABASE_URL: adopting.pg.uri,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+    });
+    const base = `http://127.0.0.1:${port}`;
+    try {
+      // /health is reachable (the listener is up and the route is mounted). An adoption-pending box
+      // has run no pass, so its readiness probe is legitimately not-ready (503) rather than healthy —
+      // what matters here is that the route answers rather than 404s or drops the connection.
+      const health = await fetch(`${base}/health`);
+      expect([200, 503]).toContain(health.status);
+
+      // /api/box/status reports adoption pending — the minimal, unauthenticated status surface the
+      // adoption-pending branch mounts (no ambient viewer, no management session).
+      const status = await fetch(`${base}/api/box/status`);
+      expect(status.status).toBe(200);
+      expect(await status.json()).toEqual({ adoption: "pending" });
+
+      // No mirror ambient session / dashboard read path is mounted: a dashboard read that the normal
+      // mirror boot answers via the ambient viewer is unreachable here (no `set-cookie`, and the gated
+      // read is not served through an ambient admin). It 401s (route present but no session) rather
+      // than resolving an ambient admin.
+      const dash = await fetch(`${base}/management-api/catalogues`);
+      expect(dash.headers.get("set-cookie")).toBeNull();
+    } finally {
+      await server.close();
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+    await expect(fetch(`${base}/health`)).rejects.toThrow();
   }, 60_000);
 });

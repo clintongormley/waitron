@@ -199,19 +199,12 @@ declare module "@waitron/shared" {
      * `database` only, and never the driver's own error: the same discipline `venue_conflict` keeps
      * — `database` is operator-typed configuration and never a secret. */
     "provisioning.foreign_tenant": { database: string };
-    /** `adoptVenue` finished its inserts but one of the five DESIGNATED ids the mirror bundle names
-     * for `trading.env` is not present among the rows it inserted — a malformed or incomplete bundle
-     * (spec §5). `adoptVenue` inserts the primary's tenant/location/node/till/series rows VERBATIM
-     * with their explicit ids under `ON CONFLICT (id) DO NOTHING`, then reads each designated id back
-     * (SELECT 1 per id); a `null` read means the bundle's row arrays did not carry a row with that
-     * id, so the mirror would boot pointed at a till/series that does not exist. Refused loudly here
-     * rather than left to fail confusingly at first sale.
-     *
-     * `provisioning.*` and not a `tenant.*`/`series.*` prefix: this is a refusal OF STANDING A MIRROR
-     * VENUE UP — the same activity the header describes — not a fact about a row that exists.
-     * `missing` is the ROLE LABEL of the absent parent (`tenant`|`location`|`node`|`till`|`series`),
-     * never the uuid: the label is enough for the operator to see which part of the bundle was
-     * short, and it echoes no id at all — the same discipline the secret-bearing codes above keep. */
+    /** A mirror-bundle adopt found one of the five DESIGNATED ids for `trading.env` absent from the
+     * inserted rows — a malformed or incomplete bundle. DEPRECATED: its former thrower `adoptVenue`
+     * was deleted when the initial copy went native (a native tablesync COPY cannot coexist with
+     * pre-inserted rows — swap S5). The code is kept registered per CLAUDE.md §3 (codes are never
+     * deleted once shipped). `missing` is the ROLE LABEL of the absent parent
+     * (`tenant`|`location`|`node`|`till`|`series`), never the uuid. */
     "provisioning.adopt_incomplete": {
       missing: "tenant" | "location" | "node" | "till" | "series";
     };
@@ -347,6 +340,22 @@ declare module "@waitron/shared" {
       memberOf: string;
       sqlState: string | null;
     };
+    /** A database `instance` would migrate is owned by a role other than `waitron_migrator`. Refused
+     * rather than adopted: native logical replication needs the publication-creating role
+     * (`waitron_migrator`) to own every published table, so `instance` creates the database `OWNER
+     * waitron_migrator` and migrates AS that role (a session `SET ROLE` over the admin's
+     * credentials). A pre-existing database owned by someone else cannot be made to satisfy that by
+     * granting — ownership is fixed at CREATE (owner decision 2026-09-07, never `REASSIGN OWNED`) —
+     * so the developer drops it and re-runs (`wa-wt reset`; nothing is deployed, CLAUDE.md §3).
+     *
+     * Raised in TWO places for the same fact: the pure planner refuses an existing wrongly-owned
+     * database before spending an action, and `verifyGrants` (instance-apply.ts) reads
+     * `pg_database.datdba` back after apply and refuses if the owner is not the migrator — ownership
+     * is a FACT (`datdba`), not a `has_*` privilege, so the §3 recursive-closure false positive does
+     * not apply. `provisioning.*` because it is a fact about standing a deployment up; `database` is
+     * operator-typed configuration and `owner` is a role NAME read from the catalog — neither is a
+     * secret. */
+    "provisioning.database_not_owned": { database: string; owner: string | null };
     /** The instance is not set up for native logical replication. `missing` lists each unmet
      * precondition in words (`wal_level is not logical`, `replication role missing`,
      * `migrator lacks pg_create_subscription`, …) — the box image / operator runs the bootstrap

@@ -3,16 +3,10 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 export default defineConfig({
   test: {
     globals: true,
-    // globalSetup boots ONE shared Postgres container and migrates the `manifest` template every
-    // real-PG gate suite clones (~26ms) instead of each file booting and migrating its own (~1.5s).
-    // See src/testing/global-setup.ts. Because it precedes every worker, a Docker-absent run now
-    // fails the whole package (that file's header explains the broadening).
-    globalSetup: ["./src/testing/global-setup.ts"],
-    // The container boot + migrate is paid ONCE in globalSetup (above), not per file; the per-suite
-    // beforeAll now only CLONES the migrated template (~26ms), so neither timeout is load-bearing for
-    // it any more. They stay at the old per-file-container budget as a harmless ceiling — this package
-    // has no PGlite/WASM suites and nothing in its hooks or tests approaches these figures, so
-    // narrowing them buys nothing. Locally the real-PG tier needs TESTCONTAINERS_RYUK_DISABLED=true or
+    // The two native-replication suites each boot their OWN node(s) in beforeAll
+    // (src/testing/replication-node.ts) — no shared-container globalSetup. The timeouts stay at the
+    // per-file-container budget as a harmless ceiling; nothing in the hooks or tests approaches them,
+    // so narrowing buys nothing. Locally the real-PG tier needs TESTCONTAINERS_RYUK_DISABLED=true or
     // container startup hangs (CLAUDE.md §4).
     testTimeout: 120_000,
     hookTimeout: 180_000,

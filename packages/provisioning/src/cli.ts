@@ -9,10 +9,11 @@ import {
 import { assertPasswordLength, assertPinLength, hashPassword, hashPin } from "@waitron/identity";
 import { enabledModules, type ModuleConfig, type WaitronModule } from "@waitron/module";
 import { venueFiscalSelection } from "./venue-fiscal.js";
-import { assertIdentifier } from "./identifiers.js";
+import { assertIdentifier, withRole } from "./identifiers.js";
 import { applyInstance, withDatabase, type TargetConnection } from "./instance-apply.js";
 import { describeAction, planInstance, type InstanceAction } from "./instance-plan.js";
 import {
+  INSTANCE_MIGRATOR_ROLE,
   INSTANCE_ROLES,
   readInstanceState,
   type InstanceRole,
@@ -607,19 +608,24 @@ async function withState(
   let target: Database | null = null;
   try {
     let state: InstanceState;
+    let probe: InstanceState | undefined;
     try {
-      const probe = await deps.readState(admin, database, null);
-      if (probe.databaseExists) target = await deps.connect(withDatabase(adminUri, database));
+      probe = await deps.readState(admin, database, null);
+      // The target connection carries the role option `options=-c role=waitron_migrator`, so every
+      // session runs AS the migrator: a plain admin connection cannot even read the migrator-owned
+      // tables the second `readState` looks at, and cannot CREATE TABLE for `applyVenue` (probe A
+      // control). The migrator is `INSTANCE_ROLES[0]`.
+      if (probe.databaseExists) target = await deps.connect(targetUri(adminUri, database));
       state = target === null ? probe : await deps.readState(admin, database, target);
     } catch (error) {
-      throw asUnreadable(error, database);
+      throw connectFailure(error, database, probe);
     }
     // The ONE place a connection to the target is opened, for both the state read above and for
     // anything `body` hands to `applyInstance`. `release` is a no-op because this function's own
     // `finally` is what closes it — ownership stated once, here, rather than split across two
     // files that each half-assume it.
     return await body(state, admin, async () => {
-      target ??= await deps.connect(withDatabase(adminUri, database));
+      target ??= await deps.connect(targetUri(adminUri, database));
       return { db: target, release: async () => {} };
     });
   } finally {
@@ -660,7 +666,12 @@ async function withVenueState(
 ): Promise<number> {
   let target: Database;
   try {
-    target = await deps.connect(withDatabase(adminUri, database));
+    // As the OWNER-admin, via the role option: `applyVenue` inserts as the table owner
+    // (`waitron_migrator`), and a plain admin connection cannot CREATE TABLE in the migrator-owned
+    // database (probe A control). Unlike `withState` there is no prior admin probe, so a SET-ROLE
+    // failure here surfaces as `state_unreadable` rather than the more specific role_unusable — venue
+    // is not this refusal's primary path (an operator hits it at `instance`/`status` first).
+    target = await deps.connect(targetUri(adminUri, database));
   } catch (error) {
     // A SQLSTATE-bearing connect failure is the database's verdict (absent, or no privilege on it);
     // `asUnreadable` maps it to `provisioning.state_unreadable` and returns a broken socket untouched,
@@ -686,6 +697,38 @@ function asUnreadable(error: unknown, database: string): unknown {
   const sqlState = sqlStateOf(error);
   if (sqlState === null) return error;
   return new AppError("provisioning.state_unreadable", { database, sqlState });
+}
+
+/** The target database, opened AS the migrator via the session role option — so every session
+ * `instance`/`status`/`venue` runs against a migrator-owned database can read and write it. */
+function targetUri(adminUri: string, database: string): string {
+  return withRole(withDatabase(adminUri, database), INSTANCE_MIGRATOR_ROLE);
+}
+
+/**
+ * Classifies a failure of the state read or the target connect.
+ *
+ * When the plain-admin probe already told us the migrator exists but this admin cannot SET ROLE to
+ * it (`adminCanSetRole: false`), the role-option connect above is GUARANTEED to fail at session
+ * start on the `SET ROLE` — so the failure is the SET-ROLE gap, reported as
+ * `provisioning.role_unusable { missing: ["SET ROLE"] }` rather than a bare `state_unreadable` (I1).
+ * Without this an operator running `status`/`instance` as an admin that did not create the migrator
+ * cannot tell a missing database from a missing SET grant. Anything else falls through to
+ * `asUnreadable`.
+ */
+function connectFailure(
+  error: unknown,
+  database: string,
+  probe: InstanceState | undefined,
+): unknown {
+  const migrator = probe?.roles[INSTANCE_MIGRATOR_ROLE];
+  if (migrator !== undefined && !migrator.adminCanSetRole) {
+    return new AppError("provisioning.role_unusable", {
+      role: INSTANCE_MIGRATOR_ROLE,
+      missing: ["SET ROLE"],
+    });
+  }
+  return asUnreadable(error, database);
 }
 
 /**

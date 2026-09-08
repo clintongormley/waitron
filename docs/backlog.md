@@ -238,8 +238,8 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    superuser provisioning step for the `REPLICATION` role. **Cross-track (Track C):** module SP-2b's schema-version gate (LANDED #230) rests on
    "deliberate rejection of native logical replication"; item 4's spec retires it (its §5).
 3. **Drop FORCE RLS + the multi-role set, squash the migrations, delete the outbox — STEP 1
-   LANDED #255 (2026-09-06), STEP 2 LANDED #271 (2026-09-07), STEP 3 LANDED #274 (2026-09-07); steps
-   4–5 pending owner review:**
+   LANDED #255 (2026-09-06), STEP 2 LANDED #271 (2026-09-07), STEP 3 LANDED #274 (2026-09-07), STEP 4
+   in PR (`feat/outbox-swap-s4-s5`, the owner-signature PR); step 5 pending:**
    [drop-rls-squash-and-outbox-deletion-design](superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md).
    Owner decisions: all at once (item 4's swap slices are steps 2–5 of this chain, since nothing is
    deployed); ONE owner signature, on step 4 (where fiscal rows first flow natively and `ENABLE
@@ -257,6 +257,52 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    precedence is `(recorded_at, node_id, sequence_no)`, a cold-restored box continues its chain (no
    reset, no hook), and a fork surfaces as the `multiple_unique_conflicts` drain stall the swap
    already handles — so the S3/S4 prerequisite is discharged (swap design §4.4).
+
+   **Step 4 in PR (2026-09-08) — swap S4 + S5, the ONE owner signature (fiscal rows first flow
+   natively, `ENABLE ALWAYS` first matters):** promotion/return now run on `pg_replication_slots` and
+   the application outbox is deleted. Landed: the fence-LSN drain watermark
+   (`confirmed_flush_lsn >= deployment.fence_lsn && !active`, monotone where the raw
+   `>= pg_current_wal_lsn()` is not — Ruling C2, probe E); promotion narrows the promoted node's own
+   subscription to `ledger` (the primary's disabled BACK-subscription is DROPPED — probe D: it would
+   retain WAL and be `lost` when the drain needs it); `waitron-provision instance` now creates the
+   database `OWNER waitron_migrator` and migrates AS it via a `role=` session option (probe A — closes
+   the step-3 ownership gap; `provisioning.database_not_owned` guards it); adopt is subscribe-disabled →
+   a boot-time finish step gated on every `pg_subscription_rel` reaching `r` → enable (C6); `rejoin`
+   wipes via `DROP DATABASE … WITH (FORCE)` as the migrator-owner (no artifact, no slot drop — probe F
+   reclaims the inactive slot with the DB; the migrator→`waitron_repl` grant removed, Ruling I3) then
+   re-adopts in setup mode; a returned box reconciles membership (`GET /management-api/membership`)
+   before selling, replacing the deleted gossip (Ruling C7); `--accept-loss` narrowed to the drain
+   guards only. DELETED: the four `sync_*` tables, every module's capture triggers, the enrolment seat,
+   `app.node_id`, `sync-api.ts` + siblings, the pull/retention workers, the sync-token half of the
+   mirror bundle, the SP-2b/settings-conflict gates; the `sync.*` codes are deprecated, never renamed.
+   `tenant_credentials` reclassified `state → local` (derived fact 2 — the `membership.node_key` PK
+   would otherwise no-op the standby's identity establish). **Owner-signature evidence:** the
+   fiscal-fidelity suites (byte-identical native copy of `registros_facturacion`, the `ENABLE ALWAYS`
+   reject-mutation refusal, WAL-overflow, missing-column stall — Task 3) and the full two-node
+   fence→promote→return→drain→wipe→re-adopt arc + every-table copy matrix (Task 10) — read the PR and
+   their output at land. Dev stack made replication-ready (compose `wal_level=logical` +
+   `track_commit_timestamp`; `dev-setup` bootstraps the migrator-owned shape so `wa-wt reset` is the
+   live smoke). Plan: `superpowers/plans/2026-09-07-outbox-swap-s4-s5-promotion-and-deletion.md`.
+
+   **Step 5 (pending) — status, alarms and the operator surface for native replication (swap S6 + S7),
+   refreshed scope:**
+   - status-page numbers + alarms off `pg_stat_subscription` / `pg_stat_subscription_stats` (the
+     `confl_*` conflict columns, lag, `pg_replication_slots.wal_status`);
+   - the operator **SKIP runbook** for a stalled subscription (an `ENABLE ALWAYS` reject-mutation refusal,
+     or a `multiple_unique_conflicts` natural-key clash → `ALTER SUBSCRIPTION … SKIP (lsn …)` after a look);
+   - **orphaned-slot reclamation** on the cloud — the kept `waitron_repl`-authenticated
+     `dropReplicationSlot` verb (tested, no step-4 caller) reclaims a slot a retired/dead box left behind;
+   - a **management route for the post-drain disable** of the carrier's narrowed subscription (step 4
+     narrows + drains; the disable-once-drained is the operator action that closes the window);
+   - the **standby-first migration check** (a subscriber lagging a schema migration parks loudly until it
+     migrates) — replaces the deleted SP-2b park gate; the producer `schemaVersionsByModule` survives;
+   - **WireGuard on the box image** + `pg_hba` admitting `waitron_repl` only from the peer's WireGuard
+     address, and the SSH reverse-tunnel fallback;
+   - **`@waitron/tunnel` retirement** (with Track B item 2) now the link carries native replication +
+     remote access;
+   - the **vault-ring question**, reopened now that `tenant_credentials` is `local`: a blob sealed under
+     one node's ring cannot be opened under another's, so `fiscal.aeat`/`payments.stripe` do not travel to
+     a standby — Track B item 2's shared-ring design is what would let a promoted standby decrypt them.
 
    **Step 3 LANDED #274 (2026-09-07) — swap S2, provisioning (capability + fixture only):** the native
    logical-replication provisioning capability, none of it on the live path yet. `@waitron/sync` gained
@@ -290,19 +336,6 @@ harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.te
    entry — deleted with the outbox in step 4). Exports only; nothing consumed at runtime yet.
    Rebased onto #270 (bookings extracted to `@waitron/bookings`): the `bookings` classification moved
    core→its module (still `state`), and the completeness guard validated the result.
-
-   **Step 3 in PR (2026-09-07):** the provisioning capability — the superuser replication bootstrap
-   (`REPLICATION_ROLE`, `replicationBootstrapStatements`, run against the TARGET database) and its
-   readiness check (`assertReplicationReady`, incl. a per-database `pg_default_acl` SELECT-grant
-   check that catches a bootstrap applied to the wrong database) in `@waitron/provisioning`;
-   publications/subscriptions (`publicationName`, `createPublications`, the subscription verbs,
-   `sync.subscription_failed`) in `@waitron/sync`; the WireGuard-key bundle field
-   (`wireguardPublicKey`); `sqlStateOf` consolidated into `@waitron/shared`. Proven against the
-   two-node fixture; the live adopt/promote/return flip and the fiscal-fidelity suites are step 4.
-   **Ownership gap flagged, not resolved:** `waitron-provision instance` leaves the bootstrap admin,
-   not `waitron_migrator`, owning the baseline tables (`instance-apply.ts:172`) — native replication
-   needs the publication-creating role to own the tables, so step 4 must close this before publishing
-   against a live instance (swap spec §13).
 
    **Step 1 LANDED (#255).** Per-module baselines, FORCE RLS and the seven helper roles gone,
    the `*.rls.test.ts` suites replaced by per-module grant suites and `privileges.test.ts`, and
@@ -1080,7 +1113,11 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
   domain package at all — a real improvement, but it touches `@waitron/identity`'s public surface and
   every `hashSecret` consumer, so it was out of scope for this schema-inversion slice. Small,
   unclaimed, do-anytime.
-- **SP-2b — schema-version handshake + park gate — LANDED #230 (2026-09-05).** `/sync-api/hello` gains
+- **SP-2b — schema-version handshake + park gate — LANDED #230 (2026-09-05).** _(Step-4 note: the
+  `/sync-api/hello` transport and the apply-time park machinery described here were DELETED with the
+  outbox in Track A item 3 step 4; the schema-version PRODUCER `schemaVersionsByModule` survives, and
+  the standby-first migration check that replaces the park gate is step 5. The rest of this entry is the
+  #230 mechanism as landed, kept for history.)_ `/sync-api/hello` gains
   `moduleVersions: Record<string, number>`, a boot snapshot of each module's **applied** (not
   shipped) schema version. A subscriber compares its own applied version per module and **parks**
   (never applies, never drops) a row whose owning module the source has migrated ahead of it,
@@ -1107,12 +1144,17 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
   SP-3 was split into **four slices** (owner decision 2026-09-05, during the SP-3a brainstorm), each its
   own spec→plan→PR under the architecture-spec umbrella: **3a** sync lane, **3b** vocabulary, **3c**
   gated-provisioning seam, **3d** backup/restore hook (= BR-4, folded into SP-3 by owner decision).
-  - **SP-3a — fiscal-record sync lane — LANDED #238 (2026-09-05).** Enrols the six fiscal tables
+  - **SP-3a — fiscal-record sync lane — LANDED #238 (2026-09-05).** _(Step-4 note: the capture DDL, the
+    `sync_capture()` SPI edge and the manifest reorder described here were DELETED in Track A item 3 step
+    4 — fiscal rows now flow via native logical replication, keyed by `node_id`, with `ENABLE ALWAYS`
+    reject-mutation triggers instead of the app-role apply; `graph-honesty` still derives the trigger
+    edge though no module creates one today. The rest is the #238 mechanism as landed, kept for history.)_
+    Enrols the six fiscal tables
     (`registros_facturacion` insert-only + `registro_sif`/`cadenas`/`envios`/`envio_flujo`/`acks`
     watermark-upsert) onto the sync ordered lane via a package-owned `FISCAL_ENROLMENT`
-    (`@waitron/sync-enrolment`); fiscal **owns its capture DDL** (`0014_fiscal_sync_capture.sql`, calling
+    (`@waitron/sync-enrolment`); fiscal **owned its capture DDL** (`0014_fiscal_sync_capture.sql`, calling
     sync's `sync_capture()` SPI — owner principle: fiscal independent, API-only), giving a `fiscal → sync`
-    module edge that **reordered the manifest so fiscal migrates last** and extended the graph-honesty
+    module edge that **reordered the manifest so fiscal migrated last** and extended the graph-honesty
     guard to detect the SPI edge. Fiscal rows apply **verbatim** on a mirror (no huella recompute;
     immutability honoured — a stray mutation as the apply role is `42501` (grant), `WT001` only for a
     bypassing superuser, verified on `postgres:18`); `contadores_instalacion` not enrolled; SP-2b
@@ -1137,6 +1179,8 @@ rows newer than its migrated schema (owner chose this over DDL-over-sync).
       memory `test-server-e2e-timing-flakes`.
 
     - **`test-server (1)` mirror CI timing flake — ROOT-CAUSED and FIXED (condition-based waiting).**
+      _(Step-4 note: `mirror-e2e.test.ts` — an outbox pull-through-the-tunnel test — was DELETED in Track
+      A item 3 step 4; this entry is the historical root-cause of a flake in a now-removed test.)_
       The blob from the actual #260 failure (artifact `server-blob-1`, parsed with `flatted`) named the
       real failure, which the earlier hypotheses in this entry got wrong: **3 failed tasks in
       `mirror-e2e.test.ts`**, the headline "a mirror pulls the primary's sync_log through the tunnel"
@@ -1458,8 +1502,9 @@ partial scope; the detail for a live thread is under *Open threads*.
 | 19 | Opening hours & channel sync | — | not started (Google Business Profile / Maps) |
 | 20 | Procurement & inventory | received purchase invoices (`@waitron/purchasing`, feeds modelo 303) | suppliers/POs/goods-in/stock/3-way reconcile/reorder (parked); AI forecast deferred |
 
-**Cross-cutting infra:** sync/replication (outbox + transport + payments fast lane + per-peer
-`sync_peers` auth + retention) · SIF topology (`#33`, `node_id` re-key) · device identity-1 · printing
+**Cross-cutting infra:** sync/replication (native Postgres logical replication since Track A item 3
+step 4 — the application outbox, its HTTP transport, per-peer `sync_peers` auth and retention sweep are
+deleted) · SIF topology (`#33`, `node_id` re-key) · device identity-1 · printing
 subsystem (`@waitron/printing` — agents/outbox/`usb`+`network_tcp` transports/ESC/POS/Impresoras
 dashboard) · CI/test infra (scoped CI, pre-push hook, shared-container test rollout, job-sharding) ·
 localisation (per-user `persons.locale`, live language switch, venue-default derivation) · logging &
@@ -1507,17 +1552,27 @@ transitions) and automated GitHub-issue creation (needs a stored token in `@wait
   trail (Slice 1 logs only `#selectScreen` sidebar clicks).
 - Roll the trail + report button out to `apps/setup`.
 
-### Sync completion (rest parked; infra-session start-here menu — Track 2)
+### Sync completion (SUPERSEDED 2026-09-05 by the outbox→native-replication swap — Track A item 3)
 
-Mechanism is decided and slices 1–3 + ops + the cloud-mirror A/B/C1/C2a/C2b are landed:
-cross-replication is **application-level** (an outbox — `sync_log` + a generic capture trigger, apply as
-the app role under `withTenant`), **not** native Postgres logical replication. Built: commercial-lane
-outbox, symmetric HTTP-pull transport + per-peer `sync_peers` auth (#144), payments fast lane, retention
-sweep + `waitron-sync-evict`; cloud-mirror identity/auth (A, #144), outbound tunnel (B, #150,
-`@waitron/tunnel` proven against a local relay stand-in), the `dining_tables` FK-closure enrolment (C1,
-#153), the mirror-mode server (C2a, #155 + hardening #164), and the operator flow (C2b, #162 + hardening
-#164). Designs + findings under `docs/superpowers/specs/2026-08-{02,27,28,29}-*sync*` and
-`*cloud-mirror*`.
+> **SUPERSEDED 2026-09-05, deleted in Track A item 3 step 4 (2026-09-08).** The mechanism this whole
+> section describes — an **application-level** outbox (`sync_log` + a generic capture trigger, applied
+> as the app role under `withTenant`) — was REVERSED for **native Postgres logical replication**. The
+> outbox tables, the HTTP-pull transport, per-peer `sync_peers` auth, the retention sweep, the pull/apply
+> loop and `waitron-sync-evict` are all deleted; `@waitron/tunnel` is retired with Track B item 2. Read
+> Track A item 3 (steps 2–5) and item 4 (the swap spec) for what replaced it; the landed-PR records
+> below are kept as history of the mechanism that was removed, not a description of what runs today.
+>
+> The one thing that CARRIED FORWARD: the cloud-mirror peer identity/auth (A, #144), the WireGuard
+> outbound tunnel (B, #150), and the mirror-mode server + operator flow (C2a/C2b) — the LINK and the
+> adoption flow survive; only the replication mechanism riding them changed from the app outbox to
+> native subscriptions.
+
+Historical (the mechanism below is deleted): cross-replication WAS application-level (an outbox —
+`sync_log` + a generic capture trigger). Built and later deleted: commercial-lane outbox, symmetric
+HTTP-pull transport + per-peer `sync_peers` auth (#144), payments fast lane, retention sweep +
+`waitron-sync-evict`; the `dining_tables` FK-closure enrolment (C1, #153). Designs + findings under
+`docs/superpowers/specs/2026-08-{02,27,28,29}-*sync*` and `*cloud-mirror*` record what was true when
+written.
 
 **Track 2 infra-session — start-here menu (mapped 2026-09-01; SUPERSEDED 2026-09-05 — Track B's
 ordered list under *Priorities → Whole-project design review* is the menu now; the notes below are
@@ -1641,7 +1696,12 @@ vs gated on an unbuilt foundation or an external dependency:
   app helpers `isFenced` / `shouldFenceRestart` (`apps/server`); pure `standingOf` /
   `isFencedStanding` in `@waitron/membership`. **No migration** (no schema change; `inmutabilidad` /
   FORCE-RLS / `english-only` unaffected — all standings are already English). **Carry-forwards:**
-  - **R2 (drain-as-source + disposal guard) LANDED #219** (2026-09-05). A fenced (`sell-only`) node now serves an
+  - **R2 (drain-as-source + disposal guard) LANDED #219** (2026-09-05). _(Step-4 note: this entire
+    outbox-based drain — the `/sync-api/log` own-origin source, the `/sync-api/cursor` exemption, the
+    `sync_cursor` disposal guard `readDrainProgress`, and `SYNC_LANES` — was DELETED in Track A item 3
+    step 4 and REPLACED by the native fence-LSN watermark: the carrier's own subscription drains the
+    returned box, and "drained" is `confirmed_flush_lsn >= deployment.fence_lsn && !active` on
+    `pg_replication_slots`, read by box-status/rejoin. Kept for history.)_ A fenced (`sell-only`) node now serves an
     **own-origin drain source** — `mountSyncApi` gained `ownOriginOnly`, which forces `originId=self`
     on `/sync-api/log`, so the current primary (the **carrier**) drains `originId=<returned>` with the
     existing pull loop (no carrier-side code; the two boxes are static mutual peers). The read-only
@@ -1709,7 +1769,12 @@ vs gated on an unbuilt foundation or an external dependency:
       rejoined box sell again; a separate primary-minted slice (no self-promotion — demote-never-promote).
       (c) tiny: `restore.ts`'s "Exposed for R3" comments on the composable steps now describe a path R3
       didn't take (it uses `validateArtifact`/`writeValidated`) — harmless, thin when next touched.
-  - **Slice 7 (conflict surface) LANDED #229** (2026-09-05). Primary-wins for config-class rows: on the
+  - **Slice 7 (conflict surface) LANDED #229** (2026-09-05). _(Step-4 note: the app-level config-conflict
+    apply gate, the `sync_config_conflicts` ops table and the `sync_tailer` reader were DELETED in Track A
+    item 3 step 4. Native replication makes settings primary-wins by CONSTRUCTION — a returned box's
+    `state` publication is never subscribed during the drain window (only its `ledger`), so config rows
+    never travel back; `sync.config_conflict_rejected` is a deprecated code. Post-drain conflict counting
+    via `pg_stat_subscription_stats` is a step-5 alarm. Kept for history.)_ Primary-wins for config-class rows: on the
     carrier draining a returned/fenced node, a config-class row whose `originId` is not the current
     serving-primary is REJECTED (not applied — the primary's config stands) and RECORDED to the new
     append-only ops table `sync_config_conflicts` (whole-DB, NO tenant_id/RLS — `sync_cursor` precedent;
@@ -1760,11 +1825,15 @@ vs gated on an unbuilt foundation or an external dependency:
     wide reviewer's note that a fenced node adopting an *un-fencing* doc persists it without re-promoting in
     place — R1 never produces such a doc (re-admission is wipe-and-restore), so the in-place transition is out
     of scope until the R3 eviction/re-admission producers exist.
-  **Slice 3 (distribution) LANDED #202** (2026-09-03): `/sync-api/hello` now serves `{ nodeId, environment,
-  membership }` (the held signed document or `null`); the pull worker threads that field out of the
-  handshake it already makes each tick and hands it to an injected **best-effort** `adoptMembership`
-  callback (same contract as `reportCursor`, so `@waitron/sync` stays transport-only, no membership/db
-  dep); `apps/server/membership-adopt.ts` verifies authenticity then persists via the new typed
+  **Slice 3 (distribution) LANDED #202** (2026-09-03): _(Step-4 note: `/sync-api/hello` and the pull-worker
+  gossip that carried the membership document are DELETED in Track A item 3 step 4; membership now
+  distributes via a returned box's boot-time `GET /management-api/membership` reconciliation before it
+  sells — Ruling C7. The mechanism below is #202 as landed, kept for history.)_ `/sync-api/hello` served
+  `{ nodeId, environment, membership }` (the held signed document or `null`); the pull worker threaded that
+  field out of the handshake it already makes each tick and handed it to an injected **best-effort**
+  `adoptMembership` callback (same contract as `reportCursor`, so `@waitron/sync` stays transport-only, no
+  membership/db dep); `apps/server/membership-adopt.ts` verifies authenticity then persists via the new
+  typed
   `persistNodeMembershipIfNewer` accessor on `@waitron/db` (a term-guarded `onConflictDoUpdate({setWhere})`,
   the atomic monotonic backstop for the two-lane race — a **sibling** to the still-dumb
   `writeNodeMembership`); migration `0097_node_membership_write_grant.sql` adds the #198-deferred
@@ -1840,7 +1909,7 @@ Design: [backup-restore-regime](superpowers/specs/2026-09-04-backup-restore-regi
   per-destination freshness on `GET /api/box/status`. No restore, no module contributions.
   - *BR-1 deferrals (named, not gaps):* abort-aware **per-destination timeout** (v1 is `LocalFsBackend`-only;
     a hanging destination isn't abandoned mid-tick — same between-ticks abort model as the sibling
-    sync/tunnel/retention workers; lands with the first network s3/sftp backend) · stale-`.tmp` sweep
+    tunnel and backup-sweep workers; lands with the first network s3/sftp backend) · stale-`.tmp` sweep
     (bounded, cosmetic) · **path-traversal containment guard on `StorageBackend` key** — unreachable in v1
     (keys generated internally), **must land with BR-3's first manifest-driven `get(key)`**.
 - **BR-2 — manifest + module `backup` contribution — LANDED #228 (2026-09-05).** A backup is now a single
@@ -1913,7 +1982,11 @@ Design: [backup-restore-regime](superpowers/specs/2026-09-04-backup-restore-regi
   `envios`/`envio_flujo`/`acks` — onto the ordered lane; verbatim, immutability honoured on the subscriber;
   transport-agnostic. The standalone H2 spec/plan live on branch `feat/h2-fiscal-record-sync` (never merged)
   as reference material; SP-3 delivers it as the fiscal module's own sync enrolment, riding SP-2's inversion.
-- **Disposal guard: durability ≠ convergence (open, from the H2 design review 2026-09-04).** The failover
+- **Disposal guard: durability ≠ convergence — CLOSED by Track A item 3 step 4.** _(The app-level
+  disposal guard is deleted; "drained" is now the native fence-LSN watermark read on the CARRIER's own
+  slot — the node that carries the partition forward, so a tail that reached only a passive sink no
+  longer counts as safe; and Ruling C7's boot-time membership reconciliation closes the convergence gap
+  for a returned box. The open question below is resolved by construction.)_ The failover
   disposal guard (promotion-failover §5.1) retires a node "once its owned partition has fully replicated to
   at least one surviving node (peer *or* cloud)." That counts a tail that reached **only the passive cloud
   sink** as safe to dispose — durable, but **not converged**: the cloud is a sink not a relay, so a
@@ -1923,7 +1996,10 @@ Design: [backup-restore-regime](superpowers/specs/2026-09-04-backup-restore-regi
   convergence-gap (item 4) questions; belongs with the disposal-guard / promote-action tooling. H2
   unaffected — it only makes the fiscal `sync_log.seq` measurable. Dated note recorded at
   promotion-failover §5.1.
-- **Kitchen-sync enrolment — LANDED #196.** Enrolled the KDS FK closure onto the ordered lane. The
+- **Kitchen-sync enrolment — LANDED #196.** _(Step-4 note: the ordered lane and per-table enrolment were
+  DELETED in Track A item 3 step 4; every table is now copied by native logical replication unless its
+  module classifies it `local`, so this FK-closure reasoning is historical — the KDS tables are `state`
+  and travel by classification, not enrolment.)_ Enrolled the KDS FK closure onto the ordered lane. The
   closure turned out to be **three** tables, not the two named here: `kitchen_stations`, `kitchen_courses`
   (forced in by the KDS-2 course FKs) and `ticket_items`. Hard gate closed — enrolled
   `categories`/`products`/`working_order_lines` carry `station_id`/`course_id` FKs into the kitchen config
@@ -2100,14 +2176,10 @@ mostly a UX wrapper over built paths; modes 3–4 carry the real new work.
     *Debt*): flow-down means the (currently-always-NULL) plaintext `totp_secret` would replicate to a
     second box the moment anything writes it — so the enrollment slice **must** land AES-256-GCM at-rest
     encryption *before* it writes the column. This slice is safe only while the column stays unwritten.
-  - **The onboarding seed-admin `persons` row captures under the all-zero origin** — `venue-apply`
-    provisions under a bare `withTenant` and the seed-admin insert runs before the node's `nodeId` is
-    generated later in the same plan, so that first admin's `sync_log` row is all-zero-origin (bounded:
-    one row per venue). Whether it must be fixed depends on the secondary-bootstrap model — a mirror
-    that adopts a base DB copy (`adoptVenue`/cold-restore) already has the admin (non-issue; residual is
-    one unpruned `sync_log` row); a pure-sync-reconstruction mirror would be missing it. **Owner
-    decision on the bootstrap model pending**; the fix (generate `nodeId` before the seed and thread it)
-    is small if wanted.
+  - **The onboarding seed-admin `persons` row captures under the all-zero origin — MOOT since Track A
+    item 3 step 4.** _(The `sync_log` capture and its origin stamping are deleted; a standby takes the
+    admin `persons` row via the native initial COPY of the `state` publication, so there is no origin to
+    stamp and nothing to fix. The pure-sync-reconstruction concern is gone with the outbox.)_
 - **On-device agent** (own spec/spike) — the enabler for a till to host a print agent (a single-box
   venue's only box-death printing path); **requires a native app**, so **parked behind the go-native
   decision**.
@@ -2312,7 +2384,8 @@ genuinely-decision-bearing.
   `await c.req.json<T>()` sites (no `?? {}`), on the sale/pay critical path — each needs per-route
   validation tracing before adopting the helper. The till **PIN-login** (`POST /api/session`) is the twin
   of the management login #145 hardened (a `null`/malformed body → opaque 500 instead of a clean 401).
-  `sync-api` / `setup-api` use different-contract defensive forms and are correctly left as-is.
+  `setup-api` uses a different-contract defensive form and is correctly left as-is (`sync-api` was
+  deleted in Track A item 3 step 4).
 - **Encrypt `totp_secret` at rest** (SP5). Stored plaintext today and `app_user` holds SELECT on
   `persons`, so a `persons` leak exposes every enrolled second factor. Latent (nothing writes it yet).
   The enrollment slice must encrypt via the credentials vault (AES-256-GCM), decrypting on the box before
@@ -2376,8 +2449,10 @@ genuinely-decision-bearing.
   (defence-in-depth over today's in-process latch); **(e)** a `sealAeat`/`persistTrading` I/O failure
   *after* `provisionVenue` succeeds wedges the box (tenant minted, no `trading.env`) — add a recovery path
   (detect "DB provisioned but no `trading.env`" and offer re-derive+restart, and/or make the wedge loud);
-  **(f)** the **trading-branch** `closePools` (`boot.ts`) still closes `db`/`syncDb`/`retentionDb`
-  sequentially (a throw from the first skips the rest — extract one `closeAll(pools)`); **(g) R1
+  **(f)** the **trading-branch** `closePools` (`boot.ts`) still closes its pools (`db`, the replication
+  owner pool `replicationDb`, and `backupDb` — the deleted outbox's `syncDb`/`retentionDb` are gone since
+  Track A item 3 step 4) sequentially (a throw from the first skips the rest — extract one
+  `closeAll(pools)`); **(g) R1
   owner-connection:** 2b runs provisioning over `config.migrationsDatabaseUrl`, correct only because
   dev's superuser owns the tables — on a real role-split appliance the setup-mode owner connection must be
   the DB-owner role (wire with the deferred appliance instance role-split), and a wizard-only box persists

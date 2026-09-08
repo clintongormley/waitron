@@ -29,7 +29,6 @@ import { startServer } from "./boot.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { ALL_MODULES } from "./modules.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
-import { sealMirrorToken } from "./mirror-token.js";
 import { roleUrl } from "./testing/postgres.js";
 
 // Slice 2 Task 7 boot integration: the promote endpoint (`POST /management-api/promote`) is mounted on
@@ -239,7 +238,6 @@ async function seedMirrorIdentity(admin: Database): Promise<{ nodeId: string }> 
     boxCaPem: "unused-ca-pem",
     originNodeId: MIRROR_ORIGIN_NODE_ID,
   });
-  await sealMirrorToken(admin, RING, MIRROR_TENANT_ID, "mirror-sync-token");
 
   await stampDeployment(admin, "production");
   await setDeploymentMode(admin, "mirror");
@@ -324,7 +322,6 @@ describe("boot promote endpoint (real Postgres): mounted on both modes, exempt f
       WAITRON_TILL_LOCATION_ID: MIRROR_LOCATION_ID,
       DATABASE_URL: roleUrl(mirrorSuite.pg.uri, "app_login", "app_pw"),
       WAITRON_MIGRATIONS_DATABASE_URL: mirrorSuite.pg.uri,
-      WAITRON_SYNC_DATABASE_URL: roleUrl(mirrorSuite.pg.uri, "sync_applier", "ap"),
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_STATE_DIR: stateDir,
