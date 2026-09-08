@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { readReplicationReadiness } from "@waitron/provisioning";
 import { createPostgresDb, readDeploymentEnvironment, stampDeployment } from "@waitron/db";
 import { startPostgresContainer } from "@waitron/db/testing/postgres.js";
 import { parseEnvFile } from "./env-file.js";
@@ -31,6 +32,7 @@ describe("ensureInstance", () => {
       database: "waitron",
       stateDir,
       log: noopLog,
+      migrationsRoot: null,
     });
     const admin = await createPostgresDb(bootstrapUrl);
     try {
@@ -70,8 +72,15 @@ describe("ensureInstance", () => {
 
   it("does NOT stamp — the wizard's choice of production must remain open", async () => {
     const target = await createPostgresDb(
-      (await ensureInstance({ bootstrapUrl, database: "waitron", stateDir, log: noopLog }))
-        .migrationsDatabaseUrl,
+      (
+        await ensureInstance({
+          bootstrapUrl,
+          database: "waitron",
+          stateDir,
+          log: noopLog,
+          migrationsRoot: null,
+        })
+      ).migrationsDatabaseUrl,
     );
     try {
       // The `deployment` TABLE exists — the core migration creates it
@@ -93,7 +102,13 @@ describe("ensureInstance", () => {
 
   it("is idempotent: a second run plans nothing and leaves instance.env byte-identical", async () => {
     const before = await readFile(join(stateDir, "instance.env"), "utf8");
-    await ensureInstance({ bootstrapUrl, database: "waitron", stateDir, log: noopLog });
+    await ensureInstance({
+      bootstrapUrl,
+      database: "waitron",
+      stateDir,
+      log: noopLog,
+      migrationsRoot: null,
+    });
     expect(await readFile(join(stateDir, "instance.env"), "utf8")).toBe(before);
   });
 
@@ -119,7 +134,13 @@ describe("ensureInstance", () => {
     // authenticate.
     const emptyState = await mkdtemp(join(tmpdir(), "wt-inst-empty-"));
     await expect(
-      ensureInstance({ bootstrapUrl, database: "waitron", stateDir: emptyState, log: noopLog }),
+      ensureInstance({
+        bootstrapUrl,
+        database: "waitron",
+        stateDir: emptyState,
+        log: noopLog,
+        migrationsRoot: null,
+      }),
     ).rejects.toMatchObject({ code: "server.config_invalid" });
 
     // The same refusal for the replication credential, which is a bare password rather than a URL:
@@ -135,7 +156,13 @@ describe("ensureInstance", () => {
       { mode: 0o600 },
     );
     await expect(
-      ensureInstance({ bootstrapUrl, database: "waitron", stateDir: partialState, log: noopLog }),
+      ensureInstance({
+        bootstrapUrl,
+        database: "waitron",
+        stateDir: partialState,
+        log: noopLog,
+        migrationsRoot: null,
+      }),
     ).rejects.toMatchObject({ code: "server.config_invalid" });
   });
 
@@ -145,6 +172,7 @@ describe("ensureInstance", () => {
       database: "waitron",
       stateDir,
       log: noopLog,
+      migrationsRoot: null,
     });
     const target = await createPostgresDb(urls.migrationsDatabaseUrl);
     try {
@@ -156,7 +184,13 @@ describe("ensureInstance", () => {
     // with the stamp, so a hardcoded `preproduction` here would brick every boot of a production
     // box, not just the first — and the stamp it already carries must survive untouched.
     await expect(
-      ensureInstance({ bootstrapUrl, database: "waitron", stateDir, log: noopLog }),
+      ensureInstance({
+        bootstrapUrl,
+        database: "waitron",
+        stateDir,
+        log: noopLog,
+        migrationsRoot: null,
+      }),
     ).resolves.toBeDefined();
     const after = await createPostgresDb(urls.migrationsDatabaseUrl);
     try {
@@ -166,7 +200,7 @@ describe("ensureInstance", () => {
     }
   });
 
-  it("recreates a dropped database using the saved passwords (the rejoin shape)", async () => {
+  it("recreates a dropped database with its replication grants (the rejoin shape)", async () => {
     const admin = await createPostgresDb(bootstrapUrl);
     try {
       await admin.execute(sql.raw(`drop database if exists waitron with (force)`));
@@ -178,9 +212,30 @@ describe("ensureInstance", () => {
       database: "waitron",
       stateDir,
       log: noopLog,
+      migrationsRoot: null,
     });
     const app = await createPostgresDb(urls.databaseUrl);
     await app.close();
+
+    // `waitron_repl` lives in the shared `pg_authid` and survives the wipe, while `pg_default_acl`
+    // and the table grants go with the dropped database — so a role-absence gate alone skips the
+    // bootstrap and leaves the recreated database with no SELECT for the replication role. Nothing
+    // fails at boot; it surfaces at the next adopt, or as a silently empty initial COPY at a
+    // promotion.
+    const target = await createPostgresDb(urls.migrationsDatabaseUrl);
+    try {
+      const acl = await target.execute<{ n: number }>(
+        sql`select count(*)::int as n
+              from pg_default_acl d
+              join pg_roles owner on owner.oid = d.defaclrole
+             where owner.rolname = 'waitron_migrator'
+               and array_to_string(d.defaclacl, ',') like '%waitron_repl%'`,
+      );
+      expect(acl.rows[0]?.n).toBeGreaterThan(0);
+      expect((await readReplicationReadiness(target)).replicationHasDefaultSelect).toBe(true);
+    } finally {
+      await target.close();
+    }
   });
 
   it("withholds the statement and the password when the replication bootstrap fails", async () => {
@@ -194,6 +249,20 @@ describe("ensureInstance", () => {
     ).WAITRON_REPLICATION_PASSWORD;
     expect(password).toBeTruthy();
 
+    // `drop owned by` inside the target FIRST: the re-grant above left `waitron_repl` holding a
+    // default-privileges entry there, and `DROP ROLE` refuses a role with dependent objects (2BP01).
+    const owned = await createPostgresDb(
+      (() => {
+        const url = new URL(bootstrapUrl);
+        url.pathname = "/waitron";
+        return url.toString();
+      })(),
+    );
+    try {
+      await owned.execute(sql.raw(`drop owned by waitron_repl`));
+    } finally {
+      await owned.close();
+    }
     const admin = await createPostgresDb(bootstrapUrl);
     try {
       await admin.execute(sql.raw(`drop role if exists waitron_repl`));
@@ -213,12 +282,13 @@ describe("ensureInstance", () => {
       database: "waitron",
       stateDir,
       log: noopLog,
+      migrationsRoot: null,
     }).then(
       () => null,
       (caught: unknown) => caught,
     );
     expect(error).toMatchObject({
-      code: "server.replication_bootstrap_failed",
+      code: "provisioning.replication_bootstrap_failed",
       params: { sqlState: "42501" },
     });
     const rendered = `${String(error)} ${JSON.stringify(error)} ${(error as Error).stack ?? ""}`;

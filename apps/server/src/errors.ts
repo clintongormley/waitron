@@ -169,17 +169,25 @@ declare module "@waitron/shared" {
      */
     "server.mirror_bind_exposed": { host: string };
     /**
-     * The one-time superuser replication bootstrap failed on the node's own database. Only the
-     * SQLSTATE survives: its first statement embeds the generated `waitron_repl` password, and both
-     * Drizzle's wrapped failure and PostgreSQL's own message quote the failing statement back
-     * verbatim — the rule `provisioning.role_creation_failed` follows for `CREATE ROLE`. Five
-     * characters of `[0-9A-Z]` — `null` when the failure carried none — cannot be the credential
-     * this withholds, and `42501` (this login is
+     * The superuser replication bootstrap failed on the node's own database — the full
+     * `replicationBootstrapStatements` array on a cluster with no `waitron_repl`, or the
+     * `replicationSchemaGrantStatements` re-grant on a database recreated under a surviving one.
+     * Only the SQLSTATE survives: the full array's first statement embeds the generated
+     * `waitron_repl` password, and both Drizzle's wrapped failure and PostgreSQL's own message quote
+     * the failing statement back verbatim — the rule `provisioning.role_creation_failed` follows for
+     * `CREATE ROLE`. (The re-grant carries no credential; it shares the classification so there is
+     * one path, not because it needs the withholding.) Five characters of `[0-9A-Z]` — `null` when
+     * the failure carried none — cannot be the credential this withholds, and `42501` (this login is
      * not a superuser) and `42710` (something already exists) want different responses and read
-     * identically without it. `server.*`: a fact about this process's own start-up. Never renamed
-     * once shipped.
+     * identically without it.
+     *
+     * `provisioning.*`, not `server.*`, though it is thrown from this host: the DOMAIN CONCEPT is
+     * the cluster's provisioning, and `server.*` is reserved for facts about the process itself
+     * (CLAUDE.md §3). Its siblings are `provisioning.role_creation_failed` and
+     * `provisioning.replication_not_ready`; declaring a non-`server.*` code here follows
+     * `deployment.environment_mismatch` below. Never renamed once shipped.
      */
-    "server.replication_bootstrap_failed": { sqlState: string | null };
+    "provisioning.replication_bootstrap_failed": { sqlState: string | null };
     /**
      * This host is configured for one environment and the database belongs to another. Thrown
      * before migrations run, so nothing is written.

@@ -6,7 +6,11 @@ export { generateKeyRing, runKeyring } from "./keyring-command.js";
 export type { GeneratedKeyRing } from "./keyring-command.js";
 export type { ProvisioningIo } from "./io.js";
 export { INSTANCE_ROLES, INSTANCE_MIGRATOR_ROLE, readInstanceState } from "./instance-state.js";
-export { REPLICATION_ROLE, replicationBootstrapStatements } from "./replication-bootstrap.js";
+export {
+  REPLICATION_ROLE,
+  replicationBootstrapStatements,
+  replicationSchemaGrantStatements,
+} from "./replication-bootstrap.js";
 export type { InstanceRole, InstanceState, InsideState, RoleFacts } from "./instance-state.js";
 export {
   assertReplicationReady,

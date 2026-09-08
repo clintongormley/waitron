@@ -10,7 +10,9 @@ import {
   generatePassword,
   planInstance,
   readInstanceState,
+  readReplicationReadiness,
   replicationBootstrapStatements,
+  replicationSchemaGrantStatements,
   withDatabase,
   withRole,
   type InstanceAction,
@@ -93,35 +95,30 @@ async function readSaved(envPath: string): Promise<Record<string, string>> {
 }
 
 /**
- * The one superuser step native replication needs, run once per cluster.
+ * Runs one set of replication statements on a connection that is already open to the TARGET
+ * database as the SUPERUSER.
  *
- * AGAINST THE TARGET DATABASE, and as the SUPERUSER. Two of the statements are schema-local
- * (`grant select on all tables in schema public`, `alter default privileges … in schema public`),
- * so run on the admin's own maintenance database they would silently grant nothing to Waitron's
- * tables — and `pg_roles` cannot tell the two apart, roles being cluster-global. The role option
- * the migrator's connections carry is deliberately absent: `create role … replication` and
- * `alter system` are superuser-only.
+ * Both are required. The database, because the schema-local statements land in whichever database
+ * the connection is on, and `pg_roles` cannot tell a bootstrap that ran on the wrong one from one
+ * that did not — roles are cluster-global, so both answers look alike. The superuser, because
+ * `create role … replication` and `alter system` are superuser-only; the role option the migrator's
+ * connections carry would fail both.
  *
- * Statement 0 embeds the replication password, and both Drizzle's wrapped failure and PostgreSQL's
- * own message quote the failing statement back verbatim, so only the SQLSTATE survives a failure —
- * the rule `applyInstance`'s `create-role` catch follows.
+ * Only the SQLSTATE survives a failure: the full bootstrap's first statement embeds the generated
+ * password, and both Drizzle's wrapped failure and PostgreSQL's own message quote the failing
+ * statement back verbatim, so a caller that logs the caught value would put a credential in a log
+ * file. The re-grant carries no credential and shares this path for uniformity, not from need.
  */
-async function bootstrapReplication(
-  targetUri: string,
-  password: string,
-  log: Logger,
-): Promise<void> {
-  const target = await createPostgresDb(targetUri);
+async function runReplicationStatements(target: Database, statements: string[]): Promise<void> {
   try {
-    for (const statement of replicationBootstrapStatements(password)) {
+    for (const statement of statements) {
       await target.execute(sql.raw(statement));
     }
   } catch (error) {
-    throw new AppError("server.replication_bootstrap_failed", { sqlState: sqlStateOf(error) });
-  } finally {
-    await target.close();
+    throw new AppError("provisioning.replication_bootstrap_failed", {
+      sqlState: sqlStateOf(error),
+    });
   }
-  log("info", "instance.replication_bootstrapped", { role: REPLICATION_ROLE });
 }
 
 /**
@@ -137,11 +134,13 @@ export async function ensureInstance(opts: {
   database: string;
   stateDir: string;
   log: Logger;
-  /** Where the migration sets live. `null` (the default) means "running from source"; inside the
-   * server bundle every set resolves to a folder that does not exist, so a caller running from
-   * `dist/` passes the folder `scripts/copy-migrations.mjs` produced — the same value `boot.ts`
-   * takes from `WAITRON_MIGRATIONS_DIR`. Only the virgin-cluster migrate below reads it. */
-  migrationsRoot?: string | null;
+  /** Where the migration sets live. `null` means "running from source"; inside the server bundle
+   * every set resolves to a folder that does not exist, so a caller running from `dist/` passes the
+   * folder `scripts/copy-migrations.mjs` produced — the same value `boot.ts` takes from
+   * `WAITRON_MIGRATIONS_DIR`. Only the virgin-cluster migrate below reads it, which is the FIRST
+   * boot of a real box, so REQUIRED rather than defaulted: `null` is precisely the value that fails
+   * there, and a required field makes `tsc` catch a forgetful caller instead of the box. */
+  migrationsRoot: string | null;
 }): Promise<InstanceUrls> {
   const envPath = join(opts.stateDir, "instance.env");
   const saved = await readSaved(envPath);
@@ -189,7 +188,7 @@ export async function ensureInstance(opts: {
         admin,
         database: opts.database,
         adminUri: opts.bootstrapUrl,
-        migrationsRoot: opts.migrationsRoot ?? null,
+        migrationsRoot: opts.migrationsRoot,
         openTarget: async () => {
           target ??= await createPostgresDb(targetUri);
           return { db: target, release: async () => {} };
@@ -208,47 +207,69 @@ export async function ensureInstance(opts: {
       created.get(INSTANCE_MIGRATOR_ROLE) ??
       passwordFrom(saved.WAITRON_MIGRATIONS_DATABASE_URL, "WAITRON_MIGRATIONS_DATABASE_URL");
 
-    // `waitron_repl` is cluster-global and cannot be created by the app provisioner (a CREATEROLE
-    // non-superuser may not create a REPLICATION role), so its absence — not the database's state —
-    // is what decides whether the bootstrap runs.
-    const replExists = await roleExists(admin, REPLICATION_ROLE);
-    const savedReplication = saved.WAITRON_REPLICATION_PASSWORD;
-    let replicationPassword: string;
-    if (savedReplication !== undefined && savedReplication !== "") {
-      replicationPassword = savedReplication;
-    } else if (replExists) {
-      throw unrecoverable("WAITRON_REPLICATION_PASSWORD");
-    } else {
-      replicationPassword = generatePassword();
-    }
-    if (!replExists) {
-      await bootstrapReplication(
-        withDatabase(opts.bootstrapUrl, opts.database),
-        replicationPassword,
-        opts.log,
-      );
-    }
+    // ONE superuser connection to the target database for the whole replication step: the readiness
+    // read and whichever statements it selects both need exactly that. Opened here rather than
+    // earlier because on a first provision the database does not exist until `applyInstance` runs.
+    const replication = await createPostgresDb(withDatabase(opts.bootstrapUrl, opts.database));
+    try {
+      // `readReplicationReadiness` answers both questions in one read, and is the package's own
+      // probe — the app provisioner never performs the superuser bootstrap, only decides whether it
+      // has run.
+      const readiness = await readReplicationReadiness(replication);
+      const savedReplication = saved.WAITRON_REPLICATION_PASSWORD;
+      let replicationPassword: string;
+      if (savedReplication !== undefined && savedReplication !== "") {
+        replicationPassword = savedReplication;
+      } else if (readiness.replicationRolePresent) {
+        throw unrecoverable("WAITRON_REPLICATION_PASSWORD");
+      } else {
+        replicationPassword = generatePassword();
+      }
 
-    const urls: InstanceUrls = {
-      databaseUrl: urlFor(opts.bootstrapUrl, "waitron_app", appPassword, opts.database),
-      migrationsDatabaseUrl: urlFor(
-        opts.bootstrapUrl,
-        INSTANCE_MIGRATOR_ROLE,
-        migratorPassword,
-        opts.database,
-      ),
-      replicationPassword,
-    };
-    await writeFileAtomic(
-      envPath,
-      formatEnvFile({
-        DATABASE_URL: urls.databaseUrl,
-        WAITRON_MIGRATIONS_DATABASE_URL: urls.migrationsDatabaseUrl,
-        WAITRON_REPLICATION_PASSWORD: replicationPassword,
-      }),
-      0o600,
-    );
-    return urls;
+      const urls: InstanceUrls = {
+        databaseUrl: urlFor(opts.bootstrapUrl, "waitron_app", appPassword, opts.database),
+        migrationsDatabaseUrl: urlFor(
+          opts.bootstrapUrl,
+          INSTANCE_MIGRATOR_ROLE,
+          migratorPassword,
+          opts.database,
+        ),
+        replicationPassword,
+      };
+      // Persisted BEFORE the statements run, not after. The bootstrap is not one transaction, so a
+      // failure part-way leaves `waitron_repl` created with a password held only in this process —
+      // and the branch above would then refuse every later start as unrecoverable, turning a
+      // transient failure into a permanent crash loop. Written first, the next start recovers the
+      // password from the file and re-runs whatever is still missing.
+      await writeFileAtomic(
+        envPath,
+        formatEnvFile({
+          DATABASE_URL: urls.databaseUrl,
+          WAITRON_MIGRATIONS_DATABASE_URL: urls.migrationsDatabaseUrl,
+          WAITRON_REPLICATION_PASSWORD: replicationPassword,
+        }),
+        0o600,
+      );
+
+      if (!readiness.replicationRolePresent) {
+        await runReplicationStatements(
+          replication,
+          replicationBootstrapStatements(replicationPassword),
+        );
+        opts.log("info", "instance.replication_bootstrapped", { role: REPLICATION_ROLE });
+      } else if (!readiness.replicationHasDefaultSelect) {
+        // The role survived but this DATABASE did not: `waitron_repl` lives in the shared
+        // `pg_authid` while `pg_default_acl` and the table grants go with a dropped database (the R3
+        // rejoin wipe). Re-issuing only the schema-local half is the whole repair — the full array
+        // would fail at `CREATE ROLE` on the surviving role — and without it a rejoined box reads
+        // ready at boot and fails later at adopt, or streams an empty initial COPY at promotion.
+        await runReplicationStatements(replication, replicationSchemaGrantStatements());
+        opts.log("info", "instance.replication_regranted", { role: REPLICATION_ROLE });
+      }
+      return urls;
+    } finally {
+      await replication.close();
+    }
   } finally {
     // Nested so a failure closing the target cannot skip closing the admin connection: both are
     // pools, and leaking either keeps the process alive.
