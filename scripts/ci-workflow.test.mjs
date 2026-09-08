@@ -436,10 +436,25 @@ describe("ci.yml's job graph", () => {
   // `ci`'s needs. A job that does not is reporting to nothing — it could fail while the pull
   // request stays green." Asserted here rather than trusted, because the failure is silent in the
   // direction that matters.
-  it("names every other job in `ci`'s needs", () => {
-    const others = jobs.map((entry) => entry.id).filter((id) => id !== "ci");
+  //
+  // `publish` is the ONE deliberate exception: it runs AFTER `ci` (it `needs: ci`), so it is a
+  // post-gate leaf that reports no required status and cannot be in `ci`'s needs without a cycle.
+  // The next case pins its safety positively rather than leaving it a silent hole.
+  it("names every other job in `ci`'s needs, except the post-`ci` publish leaf", () => {
+    const others = jobs.map((entry) => entry.id).filter((id) => id !== "ci" && id !== "publish");
     expect(others.length).toBeGreaterThan(0);
     expect([...needsOf(job("ci").body)].sort()).toEqual([...others].sort());
+  });
+
+  // The exception's safety, pinned. `publish` must exist, `needs` `ci` (so it fires only after the
+  // whole aggregate), and gate its `if:` on `needs.ci.result` — so an edit that let it publish
+  // without `ci` green fails here rather than shipping `:main` off a red suite (CLAUDE.md §2). This
+  // is what earns `publish`'s absence from `ci`'s needs above.
+  it("gates the publish job downstream of the full `ci` aggregate", () => {
+    const body = job("publish").body;
+    expect(allNeedsOf(body)).toContain("ci");
+    const ifLine = body.find((line) => /^ {4}if:/.test(line)) ?? "";
+    expect(ifLine).toContain("needs.ci.result");
   });
 
   // The other direction. A `needs` entry naming a job that does not exist is not a silent failure —
