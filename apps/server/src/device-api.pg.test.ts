@@ -4,27 +4,10 @@ import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import {
-  assignCatalogueToLocation,
-  createCatalogue,
-  createCategory,
-  createProduct,
-} from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
 import { listDeviceProfiles } from "@waitron/layouts";
-import { applyVenue, planVenue } from "@waitron/provisioning";
-import type { VenueResult } from "@waitron/provisioning";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-  tenantId as brandTenantId,
-  tillId as brandTillId,
-} from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
-import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
 import { parkOrder, placeOrder } from "./working-order.js";
@@ -37,8 +20,8 @@ import {
 } from "./enrol-rate-limit.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { DEV_PAIRING_CODE } from "./dev-pairing.js";
-import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
+import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import "./errors.js";
 
 // Real Postgres, not PGlite — mandatory for THIS surface (CLAUDE.md §4). These routes read and write
@@ -47,7 +30,6 @@ import "./errors.js";
 // privilege, where a missing GRANT passes and fails only at runtime. Each test provisions its OWN
 // tenant, so its device/queue reads are that test's alone and order-independent across the shared
 // clone.
-const LOCALE = "es-ES";
 const suite = useTemplateDb({ template: "manifest" });
 const noopLog: Logger = () => {};
 
@@ -89,146 +71,6 @@ beforeAll(() => {
       Promise.reject(new Error("device-api.pg.test: resolveClient must never be called")),
   });
 });
-
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF — the per-suite counter the sibling real-Postgres suites use.
-let nifCounter = 0;
-function nextNif(): string {
-  nifCounter += 1;
-  return `${String(74_000_000 + nifCounter).padStart(8, "0")}K`;
-}
-
-interface Venue {
-  cfg: TillConfig;
-  /** The location's provisioned default kitchen station — where `placeOrder` fires items, and the
-   *  station the KDS device below binds to. */
-  defaultStationId: string;
-  cafeId: string;
-  aguaId: string;
-  /** A live MANAGEMENT session cookie for a `manager` (holds `device.manage`). */
-  managerCookie: string;
-  /** A live MANAGEMENT session cookie for a `staff` person (holds nothing — the gate refuses it). */
-  staffCookie: string;
-}
-
-function tillConfigFromVenue(venue: VenueResult): TillConfig {
-  return {
-    tenantId: brandTenantId(venue.tenantId),
-    tillId: brandTillId(venue.tillId),
-    nodeId: brandNodeId(venue.nodeId),
-    seriesId: brandSeriesId(venue.seriesIds[0]!),
-    locationId: brandLocationId(venue.locationId),
-    locale: LOCALE,
-    invoiceLocales: [LOCALE],
-    cardProvider: "none",
-    tipsEnabled: false,
-    // ticket_then_pay so `placeOrder` FIRES the lines to the kitchen (open → placed) without filing a
-    // fiscal doc — the lightest fire path that puts real ticket items on the station queue.
-    orderFlow: "ticket_then_pay",
-  };
-}
-
-/**
- * Stand up a fresh provisioned venue (mode `ticket_then_pay`), seed a two-product catalogue, and mint a
- * manager + staff management session. The venue provisions with the DEFAULT `prepay`; the `order_flow`
- * column is flipped to `ticket_then_pay` (as the owner, fixture setup) so the DB agrees with `cfg`, the
- * way `boot.ts`/`modeVenue` wire them.
- */
-async function setupVenue(): Promise<Venue> {
-  const venue = await applyVenue(
-    planVenue(
-      {
-        country: "ES",
-        taxId: nextNif(),
-        legalName: "Deli Test SL",
-        location: {
-          name: "Sala principal",
-          fiscalTerritory: "ES-common",
-          invoiceLocales: [LOCALE],
-          operationDescription: "Venta en establecimiento",
-          addressLine1: "Calle Mayor 1",
-          addressLine2: null,
-          postalCode: "28013",
-          city: "Madrid",
-          province: "Madrid",
-          timeZone: "Europe/Madrid",
-          dayCutover: "05:00",
-        },
-        tillName: "Caja 1",
-        seriesCode: "A",
-        rectificativeSeriesCode: "R",
-        admin: {
-          displayName: "Administradora",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
-        },
-      },
-      ALL_MODULES,
-    ),
-    { db: suite.admin, modules: ALL_MODULES },
-  );
-
-  const cfg = tillConfigFromVenue(venue);
-  await suite.admin.execute(
-    sql`update locations set order_flow = 'ticket_then_pay' where id = ${cfg.locationId}`,
-  );
-
-  const seeded = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
-    const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, cfg.tenantId, { name: "Bebidas" });
-    const cafe = await createProduct(tx, cfg.tenantId, {
-      catalogueId: cat.id,
-      categoryId: bebidas.id,
-      descriptions: { [LOCALE]: "Café" },
-      pricingUnit: "each",
-      unitPrice: "1.50",
-      vatClass: "general",
-    });
-    const agua = await createProduct(tx, cfg.tenantId, {
-      catalogueId: cat.id,
-      categoryId: bebidas.id,
-      descriptions: { [LOCALE]: "Agua" },
-      pricingUnit: "each",
-      unitPrice: "2.00",
-      vatClass: "general",
-    });
-    await assignCatalogueToLocation(tx, venue.locationId, cat.id);
-
-    const mgr = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${cfg.tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
-    const stf = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${cfg.tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
-    const managerSession = await startManagementSession(tx, {
-      tenantId: cfg.tenantId,
-      personId: mgr.rows[0]!.id,
-    });
-    const staffSession = await startManagementSession(tx, {
-      tenantId: cfg.tenantId,
-      personId: stf.rows[0]!.id,
-    });
-    return {
-      cafeId: cafe.id,
-      aguaId: agua.id,
-      managerSid: managerSession.id,
-      staffSid: staffSession.id,
-    };
-  });
-
-  const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    select id from kitchen_stations where location_id = ${cfg.locationId} and is_default and active`);
-
-  return {
-    cfg,
-    defaultStationId: rows[0]!.id,
-    cafeId: seeded.cafeId,
-    aguaId: seeded.aguaId,
-    managerCookie: `${MANAGEMENT_COOKIE}=${seeded.managerSid}`,
-    staffCookie: `${MANAGEMENT_COOKIE}=${seeded.staffSid}`,
-  };
-}
 
 /** Park + place a two-line order (café, agua) so both lines FIRE to the default station, returning the
  *  ticket item ids in `line_no` order (owner read). The per-line bump / foreign-station targets. */
@@ -408,7 +250,7 @@ async function enrolHandheld(
 
 describe("Device API over real Postgres — verify + enrol", () => {
   it("verify returns the venue catalogue and does NOT consume the code (the same code then enrols)", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
     const profileId = await seedProfile(venue.cfg, "till");
     const code = await mintCode(app, venue.managerCookie);
@@ -438,7 +280,7 @@ describe("Device API over real Postgres — verify + enrol", () => {
   });
 
   it("enrol with a `till` profile sets the cookie, auto-creates the register, and /me reports it", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
     const { deviceId, jar } = await enrolTill(app, venue, "Caja del bar");
 
@@ -458,7 +300,7 @@ describe("Device API over real Postgres — verify + enrol", () => {
   });
 
   it("enrol echoes only { deviceId, name, formFactor } — the token rides ONLY in the Set-Cookie", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
     const code = await mintCode(app, venue.managerCookie);
     const profileId = await seedProfile(venue.cfg, "till");
@@ -475,7 +317,7 @@ describe("Device API over real Postgres — verify + enrol", () => {
   });
 
   it("enrol scopes the cookie Domain to the tenant host, host-only otherwise", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = new Hono();
     mountDeviceApi(
       app,
@@ -502,7 +344,7 @@ describe("Device API over real Postgres — verify + enrol", () => {
   });
 
   it("enrol is lenient about the transcribed code (a lowercased code enrols)", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
     const code = await mintCode(app, venue.managerCookie);
     const profileId = await seedProfile(venue.cfg, "till");
@@ -513,7 +355,7 @@ describe("Device API over real Postgres — verify + enrol", () => {
   });
 
   it("verify/enrol with an unknown code → 400 device.pairing_invalid; a missing field → 400", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
     const profileId = await seedProfile(venue.cfg, "till");
 
@@ -561,7 +403,7 @@ describe("Device API over real Postgres — verify + enrol", () => {
   });
 
   it("verify/enrol with an EMPTY or MALFORMED body → 400 management.request_invalid, never a 500", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
 
     for (const path of ["/api/device/enrol/verify", "/api/device/enrol"]) {
@@ -584,7 +426,7 @@ describe("Device API over real Postgres — verify + enrol", () => {
   });
 
   it("enrol with a kds profile but NO station → 400 device.station_required; a handheld with NO register → 400 device.register_required", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
 
     const kdsCode = await mintCode(app, venue.managerCookie);
@@ -613,7 +455,7 @@ describe("Device API over real Postgres — verify + enrol", () => {
     // (or was deleted between verify and enrol) is a CLIENT-recoverable 404 — never the 500 a server
     // fault pages as. The consume-DELETE, register insert and device insert share ONE transaction, so
     // the throw rolls all of them back: no device, and no new register beyond the venue's provisioned one.
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
     const code = await mintCode(app, venue.managerCookie);
     const res = await send(app, "POST", "/api/device/enrol", {
@@ -635,7 +477,7 @@ describe("Device API over real Postgres — verify + enrol", () => {
   });
 
   it("enrol → authenticated station read → bump own item → foreign 403 → revoke stops the cookie", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
 
     const fria = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
@@ -688,7 +530,7 @@ describe("Device API over real Postgres — verify + enrol", () => {
   });
 
   it("the device routes refuse a missing / malformed cookie with 401 device.unauthorized", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
     const noCookie = await send(app, "GET", "/api/device/station", { cookie: null });
     expect(noCookie.status).toBe(401);
@@ -702,7 +544,7 @@ describe("Device API over real Postgres — verify + enrol", () => {
   });
 
   it("advance refuses a bad transition and a malformed item id with 409 ticket.invalid_transition", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
     const { items } = await fireOrder(venue);
     const { jar } = await enrolKds(app, venue, venue.defaultStationId);
@@ -724,7 +566,7 @@ describe("Device API over real Postgres — verify + enrol", () => {
   });
 
   it("advance with an EMPTY, MALFORMED, or null body degrades to 409 ticket.invalid_transition, never a 500", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
     const { items } = await fireOrder(venue);
     const { jar } = await enrolKds(app, venue, venue.defaultStationId);
@@ -752,7 +594,7 @@ describe("Device API over real Postgres — verify + enrol", () => {
 
 describe("Device management routes (device.manage)", () => {
   it("require device.manage — 401 unauthenticated, 403 for a staff session", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
     const DUMMY = "00000000-0000-0000-0000-000000000000";
 
@@ -787,7 +629,7 @@ describe("Device management routes (device.manage)", () => {
   });
 
   it("GET /management-api/devices lists this tenant's devices, kind derived from the profile", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
     const { deviceId, profileId } = await enrolKds(app, venue, venue.defaultStationId);
     const res = await send(app, "GET", "/management-api/devices", { cookie: venue.managerCookie });
@@ -810,7 +652,7 @@ describe("Device management routes (device.manage)", () => {
   });
 
   it("revoke of an unknown / malformed device id → 404 device.not_found", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
     const unknown = randomUUID();
     const res = await send(app, "POST", `/management-api/devices/${unknown}/revoke`, {
@@ -832,8 +674,8 @@ describe("Device management routes (device.manage)", () => {
     // against B's globally-unique device id. Since RLS was dropped (#255) the by-id list/revoke/assign
     // must each carry their OWN tenant scope, or A reaches across the id into B's row. Proven against
     // real Postgres as `app_user`.
-    const venueA = await setupVenue();
-    const venueB = await setupVenue();
+    const venueA = await setupVenue(suite.admin);
+    const venueB = await setupVenue(suite.admin);
     const appA = mountApp(venueA.cfg);
     const appB = mountApp(venueB.cfg);
     const { deviceId, profileId } = await enrolTill(appB, venueB, "Caja B");
@@ -876,7 +718,7 @@ describe("Device management routes (device.manage)", () => {
 
   describe("assign-device-profile (reassign only — the profile is NOT NULL since Task 7)", () => {
     it("reassigns a device to another of this tenant's profiles", async () => {
-      const venue = await setupVenue();
+      const venue = await setupVenue(suite.admin);
       const app = mountApp(venue.cfg);
       const { deviceId } = await enrolKds(app, venue, venue.defaultStationId);
       const target = await seedProfile(venue.cfg, "kds");
@@ -892,8 +734,8 @@ describe("Device management routes (device.manage)", () => {
     });
 
     it("rejects a nonexistent / cross-tenant / absent profile — device untouched", async () => {
-      const venue = await setupVenue();
-      const foreign = await setupVenue();
+      const venue = await setupVenue(suite.admin);
+      const foreign = await setupVenue(suite.admin);
       const app = mountApp(venue.cfg);
       const foreignProfile = await seedProfile(foreign.cfg, "kds");
       const { deviceId, profileId } = await enrolKds(app, venue, venue.defaultStationId);
@@ -930,7 +772,7 @@ describe("Device management routes (device.manage)", () => {
     });
 
     it("with an unknown or malformed device id → 404 device.not_found", async () => {
-      const venue = await setupVenue();
+      const venue = await setupVenue(suite.admin);
       const app = mountApp(venue.cfg);
       const profileId = await seedProfile(venue.cfg, "kds");
       const unknown = randomUUID();
@@ -955,7 +797,7 @@ describe("Device management routes (device.manage)", () => {
 
 describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
   it("sets the hardware trio (+reader) and returns the updated device", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
     const printerId = await seedPrinter(venue.cfg);
     const { deviceId } = await enrolTill(app, venue, "Caja hw");
@@ -987,7 +829,7 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
   });
 
   it("requires device.manage — 401 unauthenticated, 403 for a staff session", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
     const { deviceId } = await enrolTill(app, venue, "Caja gate");
 
@@ -1010,7 +852,7 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
   });
 
   it("rejects an unknown cardProvider with 400 management.request_invalid naming the field", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
     const { deviceId } = await enrolTill(app, venue, "Caja bad");
 
@@ -1029,7 +871,7 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
   });
 
   it("404s an unknown or malformed device id", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
     const unknown = randomUUID();
     const res = await send(app, "PATCH", `/management-api/devices/${unknown}/hardware`, {
@@ -1052,8 +894,8 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
     // Enrol a device in venue A, then PATCH it through venue B's mount (cfg B). A by-id write STILL
     // scopes to the tenant (CLAUDE.md §3), so B's UPDATE matches 0 rows and 404s rather than reaching
     // across the (globally-unique) id. RUN, not read: proven against real Postgres as `app_user`.
-    const venueA = await setupVenue();
-    const venueB = await setupVenue();
+    const venueA = await setupVenue(suite.admin);
+    const venueB = await setupVenue(suite.admin);
     const appA = mountApp(venueA.cfg);
     const appB = mountApp(venueB.cfg);
     const { deviceId } = await enrolTill(appA, venueA, "Caja A");
@@ -1071,8 +913,8 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
   });
 
   it("rejects a receiptPrinterId naming no printer of this tenant with device.binding_invalid", async () => {
-    const venue = await setupVenue();
-    const foreign = await setupVenue();
+    const venue = await setupVenue(suite.admin);
+    const foreign = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
     const foreignPrinter = await seedPrinter(foreign.cfg);
     const { deviceId } = await enrolTill(app, venue, "Caja fk");
@@ -1092,7 +934,7 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
 
 describe("GET /api/device/me + station (SP-A.2 §16)", () => {
   it("reports an enrolled handheld's formFactor + name, station null", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
     const { deviceId, jar } = await enrolHandheld(app, venue, venue.cfg.tillId);
     const res = await send(app, "GET", "/api/device/me", { cookie: jar });
@@ -1107,7 +949,7 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
   });
 
   it("echoes the device's hardware bindings (set as the dashboard would)", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
     const printerId = await seedPrinter(venue.cfg);
     const { deviceId, jar } = await enrolTill(app, venue, "Caja hw");
@@ -1134,7 +976,7 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
   });
 
   it("GET /api/device/station 401s an enrolled handheld — it is bound to no station", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
     const { jar } = await enrolHandheld(app, venue, venue.cfg.tillId);
     const res = await send(app, "GET", "/api/device/station", { cookie: jar });
@@ -1145,7 +987,7 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
   });
 
   it("GET /api/device/me 401s a request with no device cookie", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
     const res = await send(app, "GET", "/api/device/me", { cookie: null });
     expect(res.status).toBe(401);
@@ -1154,7 +996,7 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
 
 describe("enrol rate limiter (spec §8)", () => {
   it("rate-limits enrol: the (cap+1)th attempt is 429 BEFORE the DB (no code consumed), then the window resets", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     let fakeNow = 1_000;
     const limiter = createEnrolRateLimiter({ now: () => fakeNow });
     const app = mountApp(venue.cfg, limiter);
@@ -1191,7 +1033,7 @@ describe("enrol rate limiter (spec §8)", () => {
   });
 
   it("rate-limits verify too: the (cap+1)th verify is 429 BEFORE the DB", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const limiter = createEnrolRateLimiter({ now: () => 1_000 });
     const app = mountApp(venue.cfg, limiter);
     const code = await mintCode(app, venue.managerCookie);
@@ -1208,7 +1050,7 @@ describe("enrol rate limiter (spec §8)", () => {
 
 describe("GET /api/dev/devices (dev-only chooser list)", () => {
   it("lists the venue's active devices (kind derived), no option-sources, no token", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountDevApp(venue.cfg, true);
     const { deviceId } = await enrolKds(app, venue, venue.defaultStationId);
 
@@ -1231,7 +1073,7 @@ describe("GET /api/dev/devices (dev-only chooser list)", () => {
   });
 
   it("lists only ACTIVE devices — a revoked device is omitted", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountDevApp(venue.cfg, true);
     const live = await enrolKds(app, venue, venue.defaultStationId);
     const doomed = await enrolKds(app, venue, venue.defaultStationId);
@@ -1252,7 +1094,7 @@ describe("GET /api/dev/devices (dev-only chooser list)", () => {
   });
 
   it("is absent (404) when devMode is false / omitted", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     expect((await send(mountDevApp(venue.cfg, false), "GET", "/api/dev/devices")).status).toBe(404);
     expect((await send(mountApp(venue.cfg), "GET", "/api/dev/devices")).status).toBe(404);
   });
@@ -1260,7 +1102,7 @@ describe("GET /api/dev/devices (dev-only chooser list)", () => {
 
 describe("deleted routes are gone (404)", () => {
   it("POST /api/dev/devices and POST /api/device/reset no longer exist, even under devMode", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const devApp = mountDevApp(venue.cfg, true);
     expect((await send(devApp, "POST", "/api/dev/devices", { body: {} })).status).toBe(404);
     expect((await send(devApp, "POST", "/api/device/reset", {})).status).toBe(404);
@@ -1281,7 +1123,7 @@ describe("POST /api/device/enrol/verify + enrol with the fixed dev code (dev-onl
   }
 
   it("verify accepts DEMO under devMode and returns the catalogue without a real code row", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountDevApp(venue.cfg, true);
     const res = await send(app, "POST", "/api/device/enrol/verify", {
       body: { code: DEV_PAIRING_CODE.toLowerCase() },
@@ -1292,7 +1134,7 @@ describe("POST /api/device/enrol/verify + enrol with the fixed dev code (dev-onl
   });
 
   it("enrol runs the REAL path for DEMO under devMode (mints a fresh code, enrols the chosen profile)", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountDevApp(venue.cfg, true);
     const profileId = await aTillProfileId(venue.cfg);
     const enrol = await send(app, "POST", "/api/device/enrol", {
@@ -1304,7 +1146,7 @@ describe("POST /api/device/enrol/verify + enrol with the fixed dev code (dev-onl
   });
 
   it("DEMO is reusable — a second fresh browser enrols a second device", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const app = mountDevApp(venue.cfg, true);
     const profileId = await aTillProfileId(venue.cfg);
     const ids: string[] = [];
@@ -1319,7 +1161,7 @@ describe("POST /api/device/enrol/verify + enrol with the fixed dev code (dev-onl
   });
 
   it("DEMO is refused (400 device.pairing_invalid) outside devMode, on both routes", async () => {
-    const venue = await setupVenue();
+    const venue = await setupVenue(suite.admin);
     const profileId = await aTillProfileId(venue.cfg);
     for (const app of [mountDevApp(venue.cfg, false), mountApp(venue.cfg)]) {
       const verify = await send(app, "POST", "/api/device/enrol/verify", {

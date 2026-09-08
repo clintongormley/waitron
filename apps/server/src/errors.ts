@@ -1132,6 +1132,38 @@ declare module "@waitron/shared" {
      */
     "device.profile_missing": Record<string, never>;
     /**
+     * A knock arrived while pairing mode was SHUT (design §1.1). The window is the deliberate admin act
+     * that replaced the pairing code's secret, so this is the ordinary state, not an anomaly: the device
+     * shows "ask the manager to switch on pairing mode" and the operator has a real next step. NO params
+     * — nothing about the window is the joiner's business. Mapped to HTTP 403 by `device-api.ts`'s local
+     * STATUS map. Never renamed once shipped.
+     */
+    "device.pairing_closed": Record<string, never>;
+    /**
+     * The tenant already holds the cap of pending DEVICE join requests (design §1.2's decoy rule needs
+     * room, and an uncapped pending list is a denial-of-service on the admin's attention). Per (tenant,
+     * kind), so ten agents mid-install cannot lock devices out. HTTP 429.
+     */
+    "device.join_full": Record<string, never>;
+    /**
+     * Too many knocks in the limiter's window. The device twin of `agent.join_rate_limited`; replaces
+     * `device.pairing_rate_limited`, which went with the pairing code. HTTP 429.
+     */
+    "device.join_rate_limited": Record<string, never>;
+    /**
+     * The admin tapped a number that is not this request's (design §1.2). The request is DELETED, not
+     * offered again: a wrong tap denies, which is what makes one-in-three an acceptable guess rate. The
+     * device's recovery is its own "Try again", which knocks afresh with a new number. HTTP 400.
+     */
+    "device.join_mismatch": Record<string, never>;
+    /**
+     * No pending join request with that id in this tenant — never existed, already accepted or denied,
+     * or lapsed past its TTL. All fold into one code, as `device.pairing_invalid` folded the pairing
+     * code's misses: the admin's recovery is the same in every case, and the joiner must knock again.
+     * `join_request.*` names the domain concept. HTTP 404.
+     */
+    "join_request.not_found": Record<string, never>;
+    /**
      * A self-signed server certificate was asked for with no hostname to put on the leaf — the
      * `hostnames` list was empty. The box mints its own CA + server cert on first boot to serve
      * setup-mode HTTPS (onboarding slice 2a), and a leaf with no `dNSName` SAN authenticates no
