@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
 import { packageDirOf } from "../packages/module/src/module.js";
+import { tablesCreatedBy } from "../packages/sync-enrolment/src/migration-tables.js";
 
 /**
  * Every table a module's migrations CREATE is classified `ledger`/`state`/`local` (swap spec §2.1)
@@ -23,23 +24,6 @@ import { packageDirOf } from "../packages/module/src/module.js";
 
 const REPO_ROOT = join(import.meta.dirname, "..");
 const PACKAGES_DIR = join(REPO_ROOT, "packages");
-
-/** `CREATE TABLE ["public".]"<name>"` — quoted or bare, schema-qualified or not, IF NOT EXISTS or not.
- * The name capture is digit-tolerant (`[a-z0-9_]+`, `i` flag): real table names carry digits. */
-const CREATE_TABLE =
-  /\bcreate\s+table\s+(?:if\s+not\s+exists\s+)?"?(?:public"?\.)?"?([a-z0-9_]+)"?/gi;
-
-/** Blank block comments, `--` line comments, and `'…'` string literals to whitespace, preserving
- * line count (so a CREATE TABLE mentioned in prose or a comment is ignored). Copied from
- * `module-graph-honesty.test.ts`; naive by design. */
-function stripSql(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, " "))
-    .split("\n")
-    .map((line) => line.replace(/--.*$/, ""))
-    .join("\n")
-    .replace(/'(?:[^']|'')*'/g, (literal) => literal.replace(/[^\n]/g, " "));
-}
 
 /** From every descriptor's `migrations.from` (`../<pkg>/drizzle`), the package DIR → module NAME map,
  * through `@waitron/module`'s `packageDirOf`. A package is in scope only if a descriptor points at it
@@ -69,24 +53,22 @@ function discoverDrizzlePackages(): DrizzlePackage[] {
     }
     const sqls = entries
       .filter((name) => name.endsWith(".sql"))
+      .sort()
       .map((name) => readFileSync(join(drizzleDir, name), "utf8"));
     discovered.push({ moduleName, packageDir, sqls });
   }
   return discovered;
 }
 
-/** Every `CREATE TABLE "<name>"` a module's migrations create (lowercased), by module name. A module
- * with a `drizzle/` dir but no `.sql` (e.g. `fiscal-none`) contributes an empty set. */
+/** Every table a module's migrations leave in existence (lowercased), by module name — CREATEs minus
+ * later DROPs, in filename order. A module with a `drizzle/` dir but no `.sql` (e.g. `fiscal-none`)
+ * contributes an empty set. */
 function createdTablesByModule(discovered: DrizzlePackage[]): Map<string, Set<string>> {
   const byModule = new Map<string, Set<string>>();
   for (const { moduleName, sqls } of discovered) {
-    const tables = byModule.get(moduleName) ?? new Set<string>();
-    for (const raw of sqls) {
-      for (const match of stripSql(raw).matchAll(CREATE_TABLE)) {
-        const table = match[1]?.toLowerCase();
-        if (table !== undefined) tables.add(table);
-      }
-    }
+    const existing = byModule.get(moduleName);
+    const tables = tablesCreatedBy(sqls);
+    if (existing !== undefined) for (const t of existing) tables.add(t);
     byModule.set(moduleName, tables);
   }
   return byModule;
