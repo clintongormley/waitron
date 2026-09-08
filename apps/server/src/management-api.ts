@@ -13,6 +13,7 @@ import { AppError } from "@waitron/shared";
 import {
   asAppUser,
   fireControlMode,
+  readNodeMembership,
   withTenant,
   type Database,
   type Transaction,
@@ -28,6 +29,7 @@ import {
   listActiveStaff,
   listPersons,
   loginManager,
+  loginManagerById,
   reactivatePerson,
   resetPin,
   setEmail,
@@ -627,6 +629,64 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       }
       clearManagementCookie(c);
       return c.body(null, 204);
+    }),
+  );
+
+  // GET /management-api/membership — a cloud peer fetches THIS node's current signed membership chart
+  // (Ruling C7). It is how a returning box reconciles at boot: a box that died before it was fenced
+  // comes back naming itself serving-primary, and must learn the promoted cloud's higher-term chart
+  // before it opens the sale path, or two nodes file under one NIF (CLAUDE.md §5, unrecoverable). The
+  // held document is a SIGNED, self-verifying artifact, so the caller re-verifies it against its trust
+  // set regardless; the auth here keeps the chart off arbitrary readers. It reuses the mirror-bundle
+  // credential shape + primitives, NOT a new auth: `loginManagerById` (personId + password + totp) then
+  // the admin-only `mirror.create`, exactly as `POST /management-api/mirror-bundle`. The credential
+  // rides in the `x-waitron-peer-credential` HEADER as JSON, not a body — a GET carries no body (undici
+  // refuses one). A malformed/absent header, a non-UUID personId, a wrong password or a non-string totp
+  // is refused `password.invalid` (401) — the same code and no-enumeration shape the mirror-bundle route
+  // gives, so the response never says which field failed. The session exists only to authorize this one
+  // read: no cookie is set and it is ended in the same transaction. Returns `{ document }` — the held
+  // signed document verbatim, or `null` when this node has never adopted a chart.
+  app.get("/management-api/membership", (c) =>
+    run(c, log, async () => {
+      const raw = c.req.header("x-waitron-peer-credential");
+      let credential: { personId?: string; password?: string; totp?: string } = {};
+      if (raw !== undefined) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          throw new AppError("password.invalid", {});
+        }
+        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+          throw new AppError("password.invalid", {});
+        }
+        credential = parsed as { personId?: string; password?: string; totp?: string };
+      }
+      if (
+        typeof credential.personId !== "string" ||
+        !isUuid(credential.personId) ||
+        typeof credential.password !== "string" ||
+        (credential.totp !== undefined && typeof credential.totp !== "string")
+      ) {
+        throw new AppError("password.invalid", {});
+      }
+      const { personId, password, totp } = credential;
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        const session = await loginManagerById(tx, {
+          tenantId: deps.cfg.tenantId,
+          personId,
+          password,
+          totp,
+        });
+        await authorizeManager(tx, {
+          managementSessionId: session.id,
+          permission: "mirror.create",
+        });
+        await endManagementSession(tx, session.id);
+      });
+      const document = await readNodeMembership(deps.db);
+      return c.json({ document });
     }),
   );
 

@@ -117,6 +117,18 @@ declare module "@waitron/shared" {
      */
     "node.read_only": Record<string, never>;
     /**
+     * A node booting as PRIMARY discovered, by reconciling with its cloud peer, that a higher-term
+     * membership document fences it (Ruling C7 — the boot-time replacement for the deleted gossip). It
+     * died before it was fenced and came back with a stale serving-primary chart; the peer's current
+     * chart supersedes it, so it boots READ-ONLY rather than sell while the promoted cloud is also
+     * primary (two nodes filing under one NIF — CLAUDE.md §5, unrecoverable). LOGGED, never thrown: a
+     * fenced boot is a STATE, not a crash — `reconcileMembershipOnBoot` persists the superseding
+     * document and boot then runs the same read-only posture a mirror or a rejoin-fenced node runs.
+     * `node.*`, not `server.*`: it is a fact about the node's role in the topology, not the process. No
+     * params — the refusal names no row, the `sync.*`/`tunnel.*` no-leak discipline.
+     */
+    "node.membership_superseded_on_boot": Record<string, never>;
+    /**
      * The HTTP listener's socket failed to bind. `code` is the raw OS error Node attaches to the
      * `'error'` event (`EADDRINUSE` for the common case of a fixed default port already taken,
      * `EACCES` for a privileged port with no permission) — never the `Error` itself, whose

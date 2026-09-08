@@ -6,8 +6,10 @@ import { sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import {
   createPostgresDb,
+  persistNodeMembershipIfNewer,
   readDeploymentAxes,
   readFenceLsn,
+  readMembershipTrustSet,
   readNodeMembership,
   setFenceLsnTx,
   setSingletonRoleTx,
@@ -136,7 +138,8 @@ import {
   subscriptionName,
   type SlotDrain,
 } from "@waitron/sync";
-import { servingPrimaryNodeId } from "@waitron/membership";
+import { acceptMembershipDocument, servingPrimaryNodeId } from "@waitron/membership";
+import { fetchPeerMembershipDocument, reconcileMembershipOnBoot } from "./membership-reconcile.js";
 import { runTunnelClient } from "@waitron/tunnel";
 import { readFilingModule, readOrderFlow } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
@@ -987,13 +990,67 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // it sell-only/evicted must come up FENCED, not as the primary its saved axes still claim. The held
   // document is authority above the persisted axes (wire-protocol §8), and the reconciliation is
   // DEMOTE-ONLY — it can never self-promote. Read UNVERIFIED: the row was verified when adopted
-  // (membership-adopt.ts) or self-signed at promotion, so reading our own authoritative state back
+  // (its acceptance path) or self-signed at promotion, so reading our own authoritative state back
   // needs no re-verify, exactly as the deployment axes are trusted.
-  // Two independent plain reads on the same pool (neither feeds the other's input) — run concurrently.
-  const [heldMembership, initialAxes] = await Promise.all([
-    readNodeMembership(db),
-    readDeploymentAxes(db),
-  ]);
+  const initialAxes = await readDeploymentAxes(db);
+  // Ruling C7 — returned-box membership reconciliation, the boot-time replacement for the deleted
+  // gossip. Deleting the pull worker deleted membership GOSSIP, so a box that died BEFORE it was fenced
+  // would boot with a stale serving-primary chart and SELL while the promoted cloud is also primary —
+  // two nodes filing under one NIF (CLAUDE.md §5, unrecoverable). Only a node booting as PRIMARY
+  // (mode !== 'mirror'; a mirror already boots read-only) with a configured cloud peer (`mirror_config`
+  // present) has someone to be superseded by, so only then does it best-effort fetch the peer's current
+  // signed chart and, if that chart VERIFIES against this node's trust set, is strictly NEWER, and
+  // FENCES this node, PERSIST it. Unreachable / not-newer / unverifiable → nothing persisted, boot
+  // proceeds as primary (a box that cannot reach the cloud cannot have been superseded without a
+  // reachable cloud AND a human promotion — the MVP's accepted window). Run BEFORE the held-membership
+  // read below, so a persisted superseding document flows straight into the existing `fenced` demote +
+  // read-only path (no separate fencing code). A local DB fault while persisting escapes and fails the
+  // boot loudly (§8), closing `db` first like the sibling guards in this region; the peer FETCH never
+  // throws (best-effort → null).
+  if (initialAxes.mode !== "mirror") {
+    let peer: Awaited<ReturnType<typeof readMirrorConfig>>;
+    try {
+      peer = await readMirrorConfig(db);
+    } catch (error) {
+      await db.close();
+      throw error;
+    }
+    if (peer !== null) {
+      try {
+        const [trustSet, held] = await Promise.all([
+          readMembershipTrustSet(db, config.till.tenantId),
+          readNodeMembership(db),
+        ]);
+        await reconcileMembershipOnBoot({
+          held,
+          nodeId: config.till.nodeId,
+          // The peer's membership endpoint, formed from the stored link to the cloud peer. The
+          // credential the peer's endpoint requires rides in a header the box supplies when it holds
+          // one; absent, the peer answers 401 and the best-effort fetch reads it as unreachable →
+          // proceed (Ruling C7). `mirror_config` is owner-written trusted config, so no SSRF screen.
+          peerUrl: `${peer.relayUrl.replace(/\/+$/, "")}/management-api/membership`,
+          fetchPeerMembership: fetchPeerMembershipDocument,
+          // The two-part accept fence over the fetched document (`acceptMembershipDocument`: signature +
+          // trust chain, then strictly-newer against the held term), persisting via the app pool's
+          // term-guarded writer only when it accepts (`app_user` holds INSERT/UPDATE on
+          // `node_membership`). Persist-if-accepted, so a newer verified chart is held even when it does
+          // not fence this node.
+          acceptDocument: async (incoming, currentTerm) => {
+            const result = acceptMembershipDocument(incoming, currentTerm, trustSet);
+            if (result.accepted) await persistNodeMembershipIfNewer(db, incoming);
+            return result;
+          },
+          log,
+        });
+      } catch (error) {
+        await db.close();
+        throw error;
+      }
+    }
+  }
+  // The held membership document, re-read AFTER any reconciliation above so a persisted superseding
+  // chart is reflected here. `fenced` then engages the existing R1 demote + read-only path below.
+  const heldMembership = await readNodeMembership(db);
   const fenced = isFenced(heldMembership, config.till.nodeId);
   let axes = initialAxes;
   if (fenced && axes.singletonRole === "primary") {
