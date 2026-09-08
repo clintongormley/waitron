@@ -97,7 +97,6 @@ const MANIFEST: BackupManifest = {
   createdAt: "2026-09-05T00:00:00.000Z",
   environment: "preproduction",
   modules: {},
-  credentialsKey: "embedded",
 };
 
 const DUMP = Buffer.from("PGDMP-fake-custom-format-dump");
@@ -335,30 +334,6 @@ describe("validateArtifact / writeValidated (R3 validate-before-wipe split)", ()
     });
     expect(runRestore).not.toHaveBeenCalled();
     await expect(stat(join(mediaDir, "abc123.jpg"))).rejects.toMatchObject({ code: "ENOENT" });
-  });
-
-  // §4.2: an "external"-key artifact (a cloud node's — carries NO secrets.env) restored onto a target
-  // with no WAITRON_CREDENTIALS_KEY would leave an unopenable vault, so validation refuses it up front,
-  // beside the environment gate. A target that DOES supply the env key proceeds.
-  const EXTERNAL_ENTRIES = FULL_ENTRIES.filter((e) => e.name !== "secrets/secrets.env");
-
-  it("validateArtifact refuses an external-key artifact when the target has no env key", async () => {
-    const artifact = buildArtifact(EXTERNAL_ENTRIES, { ...MANIFEST, credentialsKey: "external" });
-    await expect(
-      validateArtifact(deps({ artifact, envCredentialsKey: undefined })),
-    ).rejects.toMatchObject({ code: "restore.credentials_key_external" });
-    expect(runRestore).not.toHaveBeenCalled();
-    await expect(stat(join(mediaDir, "abc123.jpg"))).rejects.toMatchObject({ code: "ENOENT" });
-  });
-
-  it("validateArtifact accepts an external-key artifact when the target supplies the env key", async () => {
-    const artifact = buildArtifact(EXTERNAL_ENTRIES, { ...MANIFEST, credentialsKey: "external" });
-    const validated = await validateArtifact(
-      deps({ artifact, envCredentialsKey: "cloud-vault-key" }),
-    );
-    expect(validated.manifest.credentialsKey).toBe("external");
-    // No secrets.env entry rides in an external artifact.
-    expect(validated.secretEntries.map((e) => e.name)).toEqual(["secrets/trading.env"]);
   });
 
   it("validateArtifact throws on a traversal entry (guard) and writes NOTHING", async () => {

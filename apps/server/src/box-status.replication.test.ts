@@ -129,7 +129,6 @@ function buildApp(tenantId: string, nodeId: string, now: Date): Hono {
       readMode: () => "primary",
       readSingletonRole: () => "primary",
       readAwaitingFiscalCertificate: () => false,
-      readFiscalCertificate: () => Promise.resolve("none"),
     },
     () => {},
   );

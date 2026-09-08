@@ -66,9 +66,8 @@ export class SetupDoneScreen extends LitElement {
 
   /**
    * The break-glass secret the adopt path minted (mirror path only), passed by the shell from the
-   * adopt 200. It authorizes promotion AND unlocks the standby's dormant fiscal certificate — shown
-   * ONCE here, since the adopt response carries it a single time and the server never logs or
-   * re-issues it (spec §4.2), so this screen is the operator's only chance to record it.
+   * adopt 200. Shown ONCE here — the adopt response carries it a single time and the server never logs
+   * or re-issues it (spec §4.2), so this screen is the operator's only chance to record it.
    * `undefined` on the primary provision path, which mints no secret and shows no panel.
    */
   @property({ attribute: false }) breakGlassSecret?: string;
@@ -134,8 +133,7 @@ export class SetupDoneScreen extends LitElement {
                 <h2>Save your break-glass code now</h2>
                 <p class="break-glass-warning" data-test="break-glass-warning">
                   Write this down and store it offline. It is shown once and will not be shown
-                  again. It authorizes promotion and unlocks your fiscal certificate — without it a
-                  promoted node sells but cannot file until you install the certificate by hand.
+                  again. You need it to promote this box if the primary is unreachable.
                 </p>
                 <code class="break-glass-secret" data-test="break-glass-secret"
                   >${this.breakGlassSecret}</code

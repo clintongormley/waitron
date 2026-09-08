@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import type { Hono } from "hono";
@@ -36,7 +36,6 @@ import {
 } from "./modules.js";
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
 import { parseEnvFile } from "./env-file.js";
-import { isUnset } from "./env-value.js";
 import {
   loadConfig,
   loadMirrorSyncConfig,
@@ -53,17 +52,10 @@ import {
 } from "./promote.js";
 import type {
   FenceAttestation,
-  MirrorPromoteDeps,
   MirrorPromotionResult,
   PromoteDeps,
   PromotionResult,
 } from "./promote.js";
-import {
-  deleteDormantCert,
-  readCertStatus,
-  sealLiveCertTx,
-  unwrapDormantCert,
-} from "./fiscal-cert.js";
 import { codeOf } from "@waitron/server-kit";
 import { createLogger, type Logger } from "./logger.js";
 import { createRotatingFileSink, createLogReader, tee } from "./log-file.js";
@@ -107,7 +99,6 @@ import { mountScheduleApi } from "./schedule-api.js";
 import { mountMeApi } from "./me-api.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
-import { mountFiscalCertApi } from "./fiscal-cert-api.js";
 import { mountMedia } from "./media-api.js";
 import { assertBuiltApp, mountSpa } from "./spa-api.js";
 import { mountSetup } from "./setup-api.js";
@@ -175,13 +166,9 @@ export interface StartedServer {
    * the box into `mode=primary` (a mirror is not selling, so a brief restart costs nothing). Present only
    * in MIRROR mode; a non-mirror trading box omits it and exposes `promoteLocalSecondaryToPrimary` instead.
    * IN-PROCESS ONLY: no network endpoint yet (spec §8). Requires a fence attestation or it refuses
-   * (`promotion.fence_not_attested`). `ctx.breakGlass`, when set, unwraps the dormant AEAT cert and
-   * seals the live copy inside the promote's point-of-no-return (Task 9, cert-distribution §3.1).
+   * (`promotion.fence_not_attested`).
    */
-  promoteMirrorToPrimary?: (
-    attestation: FenceAttestation,
-    ctx: { breakGlass?: string },
-  ) => Promise<MirrorPromotionResult>;
+  promoteMirrorToPrimary?: (attestation: FenceAttestation) => Promise<MirrorPromotionResult>;
   /** Resolves when the loop has stopped, the listener is closed and the pool is drained. */
   close(): Promise<void>;
 }
@@ -413,10 +400,7 @@ function makeStartedServer(
   teardown: BootTeardown,
   mdns: MdnsResponder,
   promote?:
-    | {
-        kind: "mirror";
-        run: (a: FenceAttestation, ctx: { breakGlass?: string }) => Promise<MirrorPromotionResult>;
-      }
+    | { kind: "mirror"; run: (a: FenceAttestation) => Promise<MirrorPromotionResult> }
     | { kind: "local-secondary"; run: (a: FenceAttestation) => Promise<PromotionResult> },
 ): StartedServer {
   // Guards a second, LOSING concurrent `close()`: without it, both calls would reach the pool
@@ -716,30 +700,17 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         stateDir: config.stateDir,
         hostnames: [BOX_HOSTNAME, "localhost"],
         now,
-        // Pass THIS boot's env, not process.env: on a cloud node it carries the platform-injected
-        // WAITRON_CREDENTIALS_KEY, which tells `ensureBoxSecrets` to write no `secrets.env` (§4 — the
-        // key never touches disk). An on-prem box has no such key and mints `secrets.env` as before.
-        env,
       });
-      // Recover the vault key ring (slice 2b R5), ENV-FIRST, FILE-FALLBACK. A cloud node's key is
-      // injected into the environment by the platform's secrets service and lives on no disk; an
-      // on-prem box's key is the one `ensureBoxSecrets` above minted into `<stateDir>/secrets.env`
-      // (and never loaded into this process's env). The ring is built from whichever is present, so
-      // the provision route can seal the first tenant's `fiscal.aeat` credential either way.
-      //
-      // Precedence, in this ONE place: the env key WINS. If a usable env key AND a `secrets.env` both
-      // exist and DISAGREE, refuse to boot loudly rather than seal under one ring and later read under
-      // the other — a mismatch would strand every credential sealed under whichever key we did not use.
-      const secretsPath = join(config.stateDir, "secrets.env");
-      const fileText = existsSync(secretsPath) ? readFileSync(secretsPath, "utf8") : null;
-      const envKey = env.WAITRON_CREDENTIALS_KEY;
-      if (!isUnset(envKey) && fileText !== null) {
-        const fileKey = parseEnvFile(fileText).WAITRON_CREDENTIALS_KEY;
-        if (fileKey !== undefined && fileKey !== envKey) {
-          throw new AppError("server.credentials_key_conflict", {});
-        }
-      }
-      const ring = loadKeyRing(!isUnset(envKey) ? env : parseEnvFile(fileText ?? ""));
+      // Recover the vault key ring (slice 2b R5). `ensureBoxSecrets` above WROTE
+      // `WAITRON_CREDENTIALS_KEY`(+`_VERSION`) into `<stateDir>/secrets.env` but never loaded it into
+      // this process's env — so, unlike the trading branch (which reads the ring from `env`), the
+      // setup process has no key material in `process.env`. Read the file 2a just wrote back off disk
+      // and build the ring from it, so the provision route can seal the first tenant's `fiscal.aeat`
+      // credential. A missing/unreadable `secrets.env` is a LOUD boot failure (`readFileSync` throws,
+      // caught by the guard above) — correct, since the write above guarantees it on the happy path.
+      const ring = loadKeyRing(
+        parseEnvFile(readFileSync(join(config.stateDir, "secrets.env"), "utf8")),
+      );
       // The OWNER connection every setup-mode owner write opens over — `applyVenue`'s INSERT into
       // `tenants` (which `app_user` deliberately cannot — CLAUDE.md §3), `stampDeployment`'s
       // `deployment` singleton, and the break-glass secret mint the adopt path rides through this same
@@ -934,18 +905,6 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     await db.close();
     throw error;
   }
-
-  // Where this box holds its vault key (§4), threaded into the backup sweep and the recovery-bundle
-  // download below so an env-keyed node's artifacts carry NO key. The discriminator is the on-disk
-  // presence of `secrets.env`, NOT `WAITRON_CREDENTIALS_KEY` in `env`: in trading mode the supervisor
-  // ALWAYS sources the key into the process env (an on-prem box from its own `secrets.env`, a cloud
-  // node from the platform), so `env` cannot tell the two apart — but only an on-prem box mints the
-  // `secrets.env` file (`ensureBoxSecrets`, Task 12), so its presence is exactly "embedded". A cloud
-  // node never wrote one, so "external": its backup omits `secrets.env` and a restore onto a keyless
-  // node is refused rather than left with an unopenable vault.
-  const credentialsKey: "embedded" | "external" = existsSync(join(config.stateDir, "secrets.env"))
-    ? "embedded"
-    : "external";
 
   // Which role this database plays (C2a design §4). A mirror pulls + applies and serves read-only; a
   // primary is today's flow. Read ONCE here into a refreshable holder that the promote action
@@ -1728,9 +1687,6 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         environment: config.environment,
         resolvers: { media: config.mediaDir },
         stateDir: config.stateDir,
-        // §4: an env-keyed (cloud) node's archive carries no `secrets.env`, and its manifest records
-        // "external" so a restore onto a keyless node is refused rather than left unopenable.
-        credentialsKey,
         stagingDir: backupStagingDir,
         databaseUrl: backupConfig.databaseUrl,
         recoveryKey: backupConfig.recoveryKey,
@@ -1845,10 +1801,6 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       readSingletonRole: () => holders.singletonRole.current,
       // The awaiting-cert cell the fiscal pass writes below — same holder, read live per request.
       readAwaitingFiscalCertificate: () => awaitingFiscalCert.current,
-      // The AEAT cert's existence status (live/dormant/none), tenant-scoped — distinct from the
-      // awaiting-cert cell above, which tracks a promoted mirror's sell-now-file-later state.
-      readFiscalCertificate: () =>
-        withTenant(db, till.tenantId, (tx) => readCertStatus(tx, till.tenantId)),
     },
     log,
   );
@@ -1880,7 +1832,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // trading branch only — a setup box has no provisioned identity to recover.
   mountRecoveryBundleApi(
     app,
-    { db, cfg: { tenantId: till.tenantId }, stateDir: config.stateDir, credentialsKey, now },
+    { db, cfg: { tenantId: till.tenantId }, stateDir: config.stateDir, now },
     log,
   );
 
@@ -1994,64 +1946,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // still-read-only mirror), runs the PONR owner transaction, and restarts into `mode=primary` on a real
   // promote — an already-primary re-run is an idempotent no-op that skips the restart. Only a mirror
   // changes its selling series + `deployment.mode` on promotion, so this path exists only in mirror mode.
-  const promoteMirrorRun = (
-    attestation: FenceAttestation,
-    ctx: { breakGlass?: string },
-  ): Promise<MirrorPromotionResult> =>
+  const promoteMirrorRun = (attestation: FenceAttestation): Promise<MirrorPromotionResult> =>
     withOwnerDb(async (deps) => {
-      // Break-glass unlock of the dormant AEAT cert (Task 9, cert-distribution §3.1). The ~128 MiB
-      // scrypt open runs HERE, BEFORE the point-of-no-return — on material it becomes `sealLiveCert`,
-      // whose only work (a `putCredential`) runs INSIDE the PONR owner transaction so "became primary"
-      // and "holds the filing cert" commit together. NEITHER cert failure mode blocks a failover
-      // (CLAUDE.md §5 — nothing external may block a sale/failover): a corrupt INNER envelope (a
-      // break-glass secret that will not open it) deletes the unusable row and promotes with no live
-      // cert; an OUTER vault-ring throw (the row's ciphertext will not decrypt under this node's
-      // credentials ring — `credentials.decrypt_failed`) is a system fault, not proof of corruption, so
-      // it LEAVES the dormant row in place (a later ring fix/rotation may recover it) and promotes with
-      // no live cert. Either way `awaitingFiscalCertificate` becomes true and the operator installs by
-      // hand via `/management-api/fiscal-certificate`.
-      let sealLiveCert: MirrorPromoteDeps["sealLiveCert"];
-      if (ctx.breakGlass !== undefined) {
-        const breakGlass = ctx.breakGlass;
-        let material: Awaited<ReturnType<typeof unwrapDormantCert>>;
-        try {
-          material = await withTenant(db, till.tenantId, (tx) =>
-            unwrapDormantCert(tx, ring, till.tenantId, breakGlass),
-          );
-        } catch (error) {
-          // The OUTER vault-ring open threw: the dormant row cannot be READ at all (not a corrupt
-          // cert). Log it as a distinct vault-unreadable fault, leave the row untouched, and fall
-          // through with `material = "absent"` so the promote proceeds with no live cert. Only THIS
-          // node's own DB/ring is involved, so a genuine bug still surfaces — in the log, not as a
-          // blocked failover.
-          log("warn", "fiscal.certificate_unlock_failed", {
-            tenantId: till.tenantId,
-            reason: "vault_unreadable",
-            errorCode: codeOf(error),
-          });
-          material = "absent";
-        }
-        if (material === "corrupt") {
-          // Delete the corrupt dormant row on the ALREADY-OPEN outer owner handle (`deps.ownerDb`), in
-          // its own owner transaction OUTSIDE the PONR — the promote must succeed even when the cert
-          // cannot be unlocked. An inner-envelope corruption is proof the copy is unusable, so it is
-          // cleared here (unlike the vault-unreadable case above, which is recoverable and kept).
-          await withTenant(deps.ownerDb, till.tenantId, (tx) =>
-            deleteDormantCert(tx, till.tenantId),
-          );
-          log("warn", "fiscal.certificate_unlock_failed", {
-            tenantId: till.tenantId,
-            reason: "corrupt",
-          });
-        } else if (material !== "absent") {
-          sealLiveCert = (tx) => sealLiveCertTx(tx, ring, till.tenantId, material);
-          log("info", "fiscal.certificate_unlocked", { tenantId: till.tenantId });
-        }
-      }
       const result = await promoteMirrorToPrimary(
         {
           ...deps,
-          sealLiveCert,
           // The promoted primary numbers under its OWN reserved standard series, not the primary's inert
           // `till.seriesId` that adopt wrote; every other value is re-emitted unchanged from the running
           // config. Called BEFORE the PONR (inert on a still-read-only mirror), so a PROCESS crash can
@@ -2088,65 +1987,19 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // (primary or fenced) → an informative read-only status: a node its OWN held document marks fenced
   // throws `promotion.node_fenced` (the endpoint maps it to 409), an unfenced primary is already-primary.
   // NEVER calls `promoteLocalSecondaryToPrimary` (shelved active-active, spec §2).
-  const promoteRun = async (
-    attestation: FenceAttestation,
-    ctx: { breakGlass?: string },
-  ): Promise<PromoteRunResult> => {
+  const promoteRun = async (attestation: FenceAttestation): Promise<PromoteRunResult> => {
     if (isMirror) {
-      const result = await promoteMirrorRun(attestation, ctx);
+      const result = await promoteMirrorRun(attestation);
       return { alreadyPrimary: result.alreadyPrimary, restarting: !result.alreadyPrimary };
     }
     const held = await readNodeMembership(db);
     assertNotFenced(held, till.nodeId); // throws promotion.node_fenced on a fenced (primary, secondary) node
-    // An already-primary node has no PONR to fold the cert seal into (`promoteMirrorToPrimary`
-    // early-returns before it), so a break-glass secret cannot unlock here. Do NOT silently drop it
-    // (cert-distribution §3.1): report already-primary as usual, but tell the operator to unlock the
-    // dormant cert out-of-band via Task 10's endpoint.
-    if (ctx.breakGlass !== undefined) {
-      log("warn", "fiscal.certificate_unlock_skipped", {
-        tenantId: till.tenantId,
-        reason: "already_primary",
-        endpoint: "/management-api/fiscal-certificate/unlock",
-      });
-    }
     return { alreadyPrimary: true, restarting: false };
   };
 
   // Mount the operator's failover trigger on BOTH modes (spec §6), before the SPA catch-alls. The
   // read-only gate exempts this POST (above), so a mirror AND a fenced node reach the handler.
   mountPromoteApi(app, { appDb: db, tenantId: config.till.tenantId, run: promoteRun }, log);
-
-  // The AEAT cert management endpoints (cert-distribution §3): `/unlock` (break-glass unlock of the
-  // dormant standby copy) and the install/replace POST (admin-authorized, the renewal path). Mounted
-  // on the SAME management surface as the promote endpoint but WITHOUT a read-only-gate exemption, so a
-  // mirror refuses both with `node.read_only` — only a primary serves them. The cert seat
-  // (`validate`/`seal`) is the ENABLED fiscal contribution's `provisioningSecret` — the SAME seat the
-  // setup provision path reaches — so boot names no regime package (`scripts/module-seams.test.ts`).
-  // A regime that files nothing (`fiscal-none`) carries no `provisioningSecret`; installing a cert is
-  // then a request-shape fault, so the wiring refuses it with `setup.request_invalid` before opening a
-  // pool. The two owner writes (seal live, delete corrupt) borrow the SAME per-call `withOwnerDb` the
-  // promote path uses — a trading box keeps only the app pool open.
-  const certSeat = enabledFiscal.provisioningSecret;
-  mountFiscalCertApi(
-    app,
-    {
-      appDb: db,
-      ring,
-      tenantId: config.till.tenantId,
-      withOwnerDb: (fn) => withOwnerDb((deps) => fn(deps.ownerDb)),
-      validateFreshCert: (raw) => {
-        if (certSeat === undefined)
-          throw new AppError("setup.request_invalid", { field: "aeatCert" });
-        certSeat.validate(raw);
-      },
-      sealFreshCert: (tenantId, raw) => {
-        if (certSeat === undefined)
-          throw new AppError("setup.request_invalid", { field: "aeatCert" });
-        return withOwnerDb((deps) => certSeat.seal({ db: deps.ownerDb, ring }, tenantId, raw));
-      },
-    },
-    log,
-  );
 
   // Serve the built front-ends SAME-ORIGIN (slice 1a), mounted LAST — after every API route AND the
   // optional sync block above — so the till's root catch-all cannot shadow `/api`, `/management-api`,

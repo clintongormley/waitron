@@ -39,7 +39,6 @@ import type { MirrorBundle, ReservedIdentity } from "./mirror-bundle.js";
 import { readMirrorToken } from "./mirror-token.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 import { verifyBreakGlass } from "./break-glass.js";
-import { readCertStatus, unwrapDormantCert } from "./fiscal-cert.js";
 
 // Real Postgres, not PGlite: adopt inserts the parent rows and stamps deployment/mirror_config on the
 // OWNER connection while the read-back runs as `app_user` — a two-role split PGlite's superuser-only
@@ -504,96 +503,6 @@ describe("adoptFromPrimary (mirror-side orchestrator, real Postgres)", () => {
     // wrong one (a stored plaintext would verify anything / nothing differently).
     expect(await verifyBreakGlass(mirrorApp, result.breakGlassSecret)).toBe(true);
     expect(await verifyBreakGlass(mirrorApp, "wrong")).toBe(false);
-  });
-
-  it("seals the bundle's AEAT cert dormant under the minted break-glass secret", async () => {
-    // Cert-distribution design §2.2: when the primary carried a cert, adopt double-wraps it (vault
-    // ring + break-glass) and stores it as `fiscal.aeat.dormant` — readable only with the break-glass
-    // secret this same adopt call minted, never with the mirror's own credentials ring alone.
-    const { rows, designated } = await buildBundleParts();
-    const cert = { pfxBase64: "QQ==", passphrase: "cert-pw", certKind: "sello" };
-    const bundle: MirrorBundle = {
-      rows,
-      designated,
-      environment: "preproduction",
-      boxHostname: "waitron.local",
-      boxCaPem: "x",
-      relayUrl: "https://relay.test/",
-      syncToken: "peer-token-dormant-cert",
-      reservedIdentity: nextReservedIdentity(),
-      moduleOverrides: {},
-      aeatCert: cert,
-    };
-
-    const result = await adoptFromPrimary(
-      {
-        ownerDb: mirrorAdmin,
-        ring: RING,
-        advertisedOrigin: ADVERTISED_ORIGIN,
-        fetchBundle: async () => bundle,
-        persistTrading: async () => {},
-        persistModuleConfig: async () => {},
-        databaseUrl: "postgres://app@mirror/db",
-        migrationsDatabaseUrl: "postgres://owner@mirror/db",
-        syncDatabaseUrl: "postgres://sync@mirror/db",
-        database: "mirror_db",
-      },
-      {
-        primaryUrl: "https://primary.test/",
-        credential: { personId: "99999999-9999-9999-9999-999999999999", password: "p" },
-      },
-    );
-
-    expect(
-      await withTenant(mirrorApp, designated.tenantId, (tx) =>
-        readCertStatus(tx, designated.tenantId),
-      ),
-    ).toBe("dormant");
-    expect(
-      await withTenant(mirrorApp, designated.tenantId, (tx) =>
-        unwrapDormantCert(tx, RING, designated.tenantId, result.breakGlassSecret),
-      ),
-    ).toEqual(cert);
-  });
-
-  it("leaves the cert status none when the bundle carried no cert", async () => {
-    const { rows, designated } = await buildBundleParts();
-    const bundle: MirrorBundle = {
-      rows,
-      designated,
-      environment: "preproduction",
-      boxHostname: "waitron.local",
-      boxCaPem: "x",
-      relayUrl: "https://relay.test/",
-      syncToken: "peer-token-no-cert",
-      reservedIdentity: nextReservedIdentity(),
-      moduleOverrides: {},
-    };
-
-    await adoptFromPrimary(
-      {
-        ownerDb: mirrorAdmin,
-        ring: RING,
-        advertisedOrigin: ADVERTISED_ORIGIN,
-        fetchBundle: async () => bundle,
-        persistTrading: async () => {},
-        persistModuleConfig: async () => {},
-        databaseUrl: "postgres://app@mirror/db",
-        migrationsDatabaseUrl: "postgres://owner@mirror/db",
-        syncDatabaseUrl: "postgres://sync@mirror/db",
-        database: "mirror_db",
-      },
-      {
-        primaryUrl: "https://primary.test/",
-        credential: { personId: "99999999-9999-9999-9999-999999999999", password: "p" },
-      },
-    );
-
-    expect(
-      await withTenant(mirrorApp, designated.tenantId, (tx) =>
-        readCertStatus(tx, designated.tenantId),
-      ),
-    ).toBe("none");
   });
 
   it("bootstraps the mirror's module set from the bundle's overrides", async () => {

@@ -27,12 +27,6 @@ export const PURPOSES = {
    * while nothing is provisioned.
    */
   "fiscal.aeat": ["pfxBase64", "passphrase", "certKind"],
-  /** The DORMANT copy of a standby's AEAT certificate: the plaintext `fiscal.aeat` cert wrapped in a
-   * scrypt+AES-GCM envelope under the node's break-glass secret (cert-distribution design §2.2), then
-   * sealed here under the vault ring like any credential — double-wrapped, so neither the vault key nor
-   * a disk/dump/snapshot alone opens the cert. The drain reads `fiscal.aeat`, never this, so a dormant
-   * standby is not a filing node. One field: the envelope string. */
-  "fiscal.aeat.dormant": ["envelope"],
   /** The per-peer sync bearer token a cloud mirror presents when it pulls (sync cloud-mirror C2b).
    * Sealed under the mirror's OWN box key at adopt; a mirror-local operational secret, one field. */
   "sync.mirror_token": ["token"],

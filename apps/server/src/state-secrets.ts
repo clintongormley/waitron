@@ -6,15 +6,14 @@ import { writeFileAtomic } from "./fs-atomic.js";
 import "./errors.js";
 
 /**
- * The state-dir identity files EVERY recovery artifact carries, whatever holds the vault key — the
- * box's fiscal identity (`trading.env`) and the CA + leaf that let a restored box keep the same
- * trusted identity so already-trusting devices need not re-trust. Relative to `stateDir`, posix-
- * slashed. NOT the database — that is a separate scheduled backup (slice 4b-ii). The layout mirrors
- * `box-secrets.ts`/`trading-config.ts` which WROTE these. The vault master key is the SEPARATE
- * {@link CREDENTIALS_KEY_FILE}, conditional (§4): an on-prem box holds it on disk here, a cloud node
- * holds it only in `WAITRON_CREDENTIALS_KEY` and its artifact carries none.
+ * The fixed set of state-dir secret/identity files a recovery bundle carries — the box's UNRECOVERABLE
+ * material (the vault master key in `secrets.env`), its fiscal identity (`trading.env`), and the CA +
+ * leaf that let a restored box keep the same trusted identity so already-trusting devices need not
+ * re-trust. Relative to `stateDir`, posix-slashed. NOT the database — that is a separate scheduled
+ * backup (slice 4b-ii). The layout mirrors `box-secrets.ts`/`trading-config.ts` which WROTE these.
  */
 export const RECOVERY_FILES = [
+  "secrets.env",
   "trading.env",
   "tls/ca.crt",
   "tls/ca.key",
@@ -23,29 +22,13 @@ export const RECOVERY_FILES = [
 ] as const;
 
 /**
- * The vault master key file. An `"embedded"` (on-prem) box minted it here and its artifact carries
- * it — there is nowhere else to hold the key. An `"external"` (cloud) node's key lives only in
- * `WAITRON_CREDENTIALS_KEY` (the platform injects it, `box-secrets.ts` §4), so it is written to no
- * disk and no artifact carries it: a disk snapshot/dump/backup then yields no usable key.
+ * Read every `RECOVERY_FILES` path under `stateDir` into a `BundleFiles` map. A missing file is a
+ * fatal `recovery.state_incomplete` (a bundle without the vault key is worthless — fail loud, name
+ * the file), not a silently short bundle. Any other read error propagates unchanged.
  */
-export const CREDENTIALS_KEY_FILE = "secrets.env";
-
-/**
- * Read the state-dir secret/identity files under `stateDir` into a `BundleFiles` map. `RECOVERY_FILES`
- * (the identity + TLS set) is always read; `secrets.env` is read too ONLY when `credentialsKey` is
- * `"embedded"` (on-prem — the artifact holds the key). When `"external"` (a cloud node), `secrets.env`
- * is deliberately skipped, so the artifact carries NO vault key (§4). A missing REQUIRED file is a
- * fatal `recovery.state_incomplete` (fail loud, name the file), not a silently short bundle; any other
- * read error propagates unchanged.
- */
-export async function collectStateSecrets(
-  stateDir: string,
-  opts: { credentialsKey: "embedded" | "external" },
-): Promise<BundleFiles> {
-  const required =
-    opts.credentialsKey === "embedded" ? [...RECOVERY_FILES, CREDENTIALS_KEY_FILE] : RECOVERY_FILES;
+export async function collectStateSecrets(stateDir: string): Promise<BundleFiles> {
   const files: BundleFiles = {};
-  for (const rel of required) {
+  for (const rel of RECOVERY_FILES) {
     try {
       files[rel] = await readFile(join(stateDir, rel), "utf8");
     } catch (err) {

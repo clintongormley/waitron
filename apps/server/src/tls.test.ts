@@ -1,4 +1,4 @@
-import { get as httpsGet, request as httpsRequest } from "node:https";
+import { get as httpsGet } from "node:https";
 import type { AddressInfo } from "node:net";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,7 +8,7 @@ import type { ServerType } from "@hono/node-server";
 import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildServeOptions } from "./tls.js";
-import { mintMtlsMaterial, startMtlsServer } from "./testing/tls.js";
+import { mintMtlsMaterial } from "./testing/tls.js";
 
 /**
  * `buildServeOptions` is the whole of this task's TLS surface: with no `tls` it hands `serve` the
@@ -104,51 +104,6 @@ describe("serve(buildServeOptions(base, tls)) over a real TLS handshake", () => 
           s.close((error) => (error ? reject(error) : resolve())),
         );
       }
-    }
-  });
-});
-
-/**
- * The mTLS fixture's failure containment: a responder that throws must become an HTTP 500, never an
- * uncaught exception that crashes the process. The async-rejection case is contained by the request
- * handler's `.catch`; a SYNCHRONOUS throw is the one that escaped when the responder was invoked
- * eagerly as an argument to `Promise.resolve(...)` — a real authenticated request then crashed the
- * process (exit 7) instead of receiving a 500. This test drives a real client-certificate handshake at
- * a synchronously-throwing responder and asserts the 500; the test completing at all is the proof the
- * throw did not take the process down.
- */
-describe("startMtlsServer contains a throwing responder", () => {
-  it("answers HTTP 500 (no process crash) when the responder throws synchronously", async () => {
-    const material = mintMtlsMaterial();
-    const server = await startMtlsServer(material, () => {
-      throw new Error("synchronous responder failure");
-    });
-    try {
-      const url = new URL(server.origin);
-      const status = await new Promise<number>((resolve, reject) => {
-        const req = httpsRequest(
-          {
-            hostname: url.hostname,
-            port: Number(url.port),
-            path: "/",
-            method: "POST",
-            // The server REQUIRES + verifies a client certificate; present the minted client PFX and
-            // trust the minted CA so the handshake completes and the request reaches the responder.
-            ca: material.caPem,
-            pfx: material.clientPfx,
-            passphrase: material.clientPassphrase,
-          },
-          (res) => {
-            res.on("data", () => {});
-            res.on("end", () => resolve(res.statusCode ?? 0));
-          },
-        );
-        req.on("error", reject);
-        req.end("<probe/>");
-      });
-      expect(status).toBe(500);
-    } finally {
-      await server.close();
     }
   });
 });

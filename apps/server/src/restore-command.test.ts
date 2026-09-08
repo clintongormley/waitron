@@ -157,7 +157,6 @@ describe("waitron-restore restore", () => {
       createdAt: "2026-09-05T00:00:00.000Z",
       environment: "preproduction",
       modules: {},
-      credentialsKey: "embedded",
     };
     const entries: ArchiveEntry[] = [
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },

@@ -175,13 +175,6 @@ promote is refused by the latch.
 > It is purely authorization now; a promoted cloud sells but does not file until cert-distribution
 > lands. The "both jobs" framing below (and §5's "unlock the key ring" steps) is superseded.
 
-> **2026-09-07 update (cert distribution):** cert distribution is now designed and built
-> ([2026-09-07-fiscal-cert-distribution-design.md](2026-09-07-fiscal-cert-distribution-design.md)).
-> The "unlock the key ring to unseal a *replicated* cert blob" framing below, and in §5's numbered
-> steps, is superseded a second time: there was never a replicated blob — the standby holds a
-> break-glass-wrapped **dormant** copy of the cert, unwrapped locally at promote time. §7's "abort
-> promotion if the cert cannot be unsealed" is likewise superseded — see the banner there.
-
 The "at the box, offline" constraint belongs to the physical fence of the **old** node (§6), not to the
 promote action on the **new** node — a different machine. Promotion is therefore location-independent
 (#33 §8 already says role resolution is), and:
@@ -291,13 +284,6 @@ Selling on both boxes is safe throughout — active-active never violates single
 ---
 
 ## 7. Failure, rollback, and the point-of-no-return
-
-> **2026-09-07 update (cert distribution):** the "wrong break-glass / missing cert blob → abort
-> promotion" bullet below is superseded by sell-now-file-later (#272): a cert that cannot be
-> unwrapped withholds **filing**, never **selling** — a promoted node still starts its chain and
-> trades; it just cannot submit until the certificate is installed by hand. §8's cold-restore
-> assertion already reflects this. See
-> [2026-09-07-fiscal-cert-distribution-design.md](2026-09-07-fiscal-cert-distribution-design.md).
 
 The sequence is ordered so **every reversible step precedes the point-of-no-return (PONR).** Auth → fence
 attestation → key-ring unlock are all abortable with **zero lasting effect**: a failed promote here leaves

@@ -78,10 +78,6 @@ export const PERMISSIONS = [
   // Promoting a node to primary (authenticated mirror→primary promotion) — an operator-triggered
   // control action, so admin-only. Not in SUPERVISOR/MANAGER; reaches `admin` via ALL.
   "node.promote",
-  // Installing or replacing the venue's AEAT signing certificate on a primary (cert-distribution
-  // design §3.3) — an operator control action, so admin-only. Not in SUPERVISOR/MANAGER; reaches
-  // `admin` via ALL. Codes/permissions are never renamed once shipped.
-  "fiscal.configure",
   // view recent logs + toggle diagnostic verbosity; manager + admin
   "diagnostics.view",
 ] as const;

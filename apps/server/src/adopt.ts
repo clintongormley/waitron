@@ -1,18 +1,10 @@
-import {
-  setDeploymentMode,
-  stampDeployment,
-  withTenant,
-  writeMirrorConfig,
-  type Database,
-} from "@waitron/db";
+import { setDeploymentMode, stampDeployment, writeMirrorConfig, type Database } from "@waitron/db";
 import { adoptVenue, assertNoForeignTenant, readTenantIdentities } from "@waitron/provisioning";
 import type { KeyRing } from "@waitron/credentials";
 import { enabledModules, parseModuleOverrides, type ModuleConfig } from "@waitron/module";
-import { tenantId as brandTenantId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { sealMirrorToken } from "./mirror-token.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
-import { storeDormantCert } from "./fiscal-cert.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 import type { TradingConfig } from "./trading-config.js";
@@ -96,10 +88,8 @@ export interface AdoptDeps {
  * CLAUDE.md §5), stamps the environment + `mirror` mode, establishes the standby's DORMANT identity from
  * the reserved bundle (design §6 R2), seals the sync token in the mirror's OWN vault, writes the
  * DB-stored connection config, persists the primary's enabled-module set to the mirror's own
- * `modules.json` (SP-1d, so the mirror's next boot sees the same set), persists `trading.env` for
- * the restart, and — when the bundle carried one — seals the venue's AEAT cert DORMANT under the
- * break-glass secret this call mints (cert-distribution design §2.2), so the standby holds a copy
- * neither its own vault key nor a disk/dump alone can open.
+ * `modules.json` (SP-1d, so the mirror's next boot sees the same set), and persists `trading.env` for
+ * the restart.
  *
  * The order is load-bearing: `stampDeployment` runs BEFORE `setDeploymentMode`, which throws
  * `deployment.not_stamped` on an unstamped database (the `mode` UPDATE needs the singleton row). The
@@ -219,16 +209,6 @@ export async function adoptFromPrimary(
   // exactly once for the connect response to surface to the operator; only its scrypt verifier is
   // persisted, and it is NEVER logged (the mirror-bundle sync-token discipline).
   const breakGlassSecret = await mintBreakGlassSecret(deps.ownerDb);
-
-  // Seal the venue's AEAT cert DORMANT under the break-glass secret (cert-distribution design §2.2):
-  // double-wrapped (vault ring + break-glass), so neither the cloud disk nor a dump opens it. Only when
-  // the primary carried one — a preproduction venue may have none. Runs on the owner pool inside its own
-  // withTenant tx (the vault FK is restrict; the tenant row already exists from adoptVenue above).
-  if (bundle.aeatCert !== undefined) {
-    await withTenant(deps.ownerDb, brandTenantId(designated.tenantId), (tx) =>
-      storeDormantCert(tx, deps.ring, designated.tenantId, bundle.aeatCert!, breakGlassSecret),
-    );
-  }
 
   return { tenantId: designated.tenantId, breakGlassSecret };
 }
