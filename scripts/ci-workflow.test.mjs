@@ -454,7 +454,10 @@ describe("ci.yml's job graph", () => {
     const body = job("publish").body;
     expect(allNeedsOf(body)).toContain("ci");
     const ifLine = body.find((line) => /^ {4}if:/.test(line)) ?? "";
-    expect(ifLine).toContain("needs.ci.result");
+    // Not merely that it MENTIONS `needs.ci.result` — that a mutation to `== 'failure'` (or dropping
+    // the comparison) would leave pass. Require the success comparison itself, so the guard fails on
+    // anything that would let `:main` ship off a red suite (CLAUDE.md §2).
+    expect(ifLine).toMatch(/needs\.ci\.result\s*==\s*'success'/);
   });
 
   // The other direction. A `needs` entry naming a job that does not exist is not a silent failure —
