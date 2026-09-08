@@ -7,7 +7,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { claimPrintJobs, runAgentOnce } from "./runtime.js";
 import { createPrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
-import { FakeSink } from "./transport.js";
+import { FakeSink } from "@waitron/print-agent";
 import type { PrintConfig } from "./printers.js";
 
 // Real PostgreSQL exercises claims and lease updates after SET ROLE app_user.

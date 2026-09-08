@@ -232,6 +232,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^3.0.0
         version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
+      '@waitron/print-agent':
+        specifier: workspace:*
+        version: link:../../packages/print-agent
       esbuild:
         specifier: ^0.25.0
         version: 0.25.12
@@ -1093,6 +1096,21 @@ importers:
         specifier: ^3.0.0
         version: 3.2.7(@types/node@24.13.3)(@vitest/browser@3.2.7)(tsx@4.23.1)(yaml@2.9.0)
 
+  packages/print-agent:
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
+      '@vitest/coverage-v8':
+        specifier: ^3.0.0
+        version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.7(@types/node@24.13.3)(@vitest/browser@3.2.7)(tsx@4.23.1)(yaml@2.9.0)
+
   packages/printing:
     dependencies:
       '@waitron/db':
@@ -1117,6 +1135,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^3.0.0
         version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
+      '@waitron/print-agent':
+        specifier: workspace:*
+        version: link:../print-agent
       typescript:
         specifier: ^5.7.0
         version: 5.9.3

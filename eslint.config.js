@@ -117,6 +117,46 @@ export default tseslint.config(
   },
 
   {
+    // packages/print-agent is the db-free half of the printing subsystem: it becomes a standalone
+    // process on a restaurant's LAN that reaches the server over HTTP only, so it must never import
+    // @waitron/db (or anything that drags it in). An empty `dependencies` block does NOT enforce
+    // that, for the reason spelled out on the packages/shared zone below: `main` points at TS source
+    // with no build step, so a relative escape like `../../db/src/index.js` resolves, typechecks and
+    // runs while the manifest still reads dependency-free. The dependency arrow is one-way —
+    // @waitron/printing depends on this package, never the reverse.
+    files: ["packages/print-agent/**/*.ts"],
+    plugins: { "import-x": importX },
+    settings: {
+      "import-x/resolver": { typescript: true },
+    },
+    rules: {
+      "import-x/no-restricted-paths": [
+        "error",
+        {
+          basePath: import.meta.dirname,
+          zones: [
+            {
+              target: "./packages/print-agent/**/*",
+              from: ["./packages/**", "./apps/**"],
+              // Absolute and literal-prefixed, never a leading `**/`: minimatch globstars refuse to
+              // cross a dot-prefixed path segment (e.g. a checkout under `.claude/worktrees/...`),
+              // which silently broke the equivalent exception on the verifactu zone and let
+              // same-package relative imports false-positive as boundary violations.
+              except: [`${import.meta.dirname}/packages/print-agent/**`],
+              message:
+                "packages/print-agent runs as a standalone process on the venue's LAN with no " +
+                "database and no repo dependencies — it talks to a Waitron server over HTTP only " +
+                "(docs/superpowers/specs/2026-09-08-print-agent-process-design.md §2.1). " +
+                "@waitron/printing depends on this package, never the reverse; anything it needs " +
+                "belongs in packages/print-agent itself.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  {
     // The generic layer is regime-neutral (spec §2). A second fiscal backend —
     // TicketBAI, Italy, Portugal — brings its own tables and its own
     // vocabulary and touches none of these packages. The moment packages/db

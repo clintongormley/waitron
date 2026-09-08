@@ -1,6 +1,5 @@
 import { writeFile } from "node:fs/promises";
 import net from "node:net";
-import type { PrintTransport } from "./printers.js";
 
 /**
  * The transport layer (design §3c) — the hardware seam the agent runtime pushes claimed jobs through.
@@ -10,6 +9,10 @@ import type { PrintTransport } from "./printers.js";
  * tests exercise the adapters, and the runtime suites push through the fake sink (the deli-hardware
  * verification approach; real printers are verified manually, design §5).
  */
+
+/** How a printer is reached — the `print_transport` pgEnum on the server (packages/db schema/printers.ts).
+ * Declared here, in the db-free package, so the agent and the server share one wire vocabulary. */
+export type PrintTransport = "usb" | "network_tcp" | "cloud_poll";
 
 /**
  * The connection facts a transport needs to reach one printer — the runtime reads them off the

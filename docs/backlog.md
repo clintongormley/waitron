@@ -90,7 +90,8 @@ steps take owner sign-off at land):
    and the measurement that a name-constrained root actually constrains on Android and iOS), plus
    the register/device follow-ups (Track B item 7).
 3. **The printer agent process, then USB and IP printers end to end.** The server side (enrolment,
-   auth, outbox, transports) exists; no agent PROCESS does. Standalone, containerised, follows the
+   auth, outbox) exists, and the transports now live in the db-free `@waitron/print-agent` beside a
+   wire client and a follow-the-primary router; no agent PROCESS does. Standalone, containerised, follows the
    primary like the till. Printer failover in its on-prem form rides on it.
 4. **Payments: card readers.** Stripe Terminal is built. SumUp is built only after its four questions
    are answered — **SENT to SumUp 2026-09-08, awaiting reply**
@@ -123,9 +124,23 @@ design-review section apply.
 - **Track H — hardware** (push steps 3 and 4). Owns `packages/printing`, `packages/print-agent` +
   `apps/print-agent` (new), `packages/payments*`, the printer/payment routes in `apps/server`. Work, in
   order: **1.** the print agent process — spec
-  [2026-09-08-print-agent-process-design.md](superpowers/specs/2026-09-08-print-agent-process-design.md)
-  (approved 2026-09-08; join-and-accept replaces the pairing code, a db-free package behind a `Host`
-  seam, a container host with a loopback setup page; plan next); **2.** the virtual PDF printer + a
+  [2026-09-08-print-agent-process-design.md](superpowers/specs/2026-09-08-print-agent-process-design.md),
+  plan [2026-09-08-print-agent-process.md](superpowers/plans/2026-09-08-print-agent-process.md).
+  **Foundation landed** (this branch): `@waitron/print-agent`, a db-free package holding the ESC/POS
+  transports moved out of `@waitron/printing`, the wire client's `probeNode`, and the
+  follow-the-primary router. **The rest is BLOCKED** on device enrolment landing
+  ([2026-09-08-device-join-and-accept-design.md](superpowers/specs/2026-09-08-device-join-and-accept-design.md)),
+  which amends this spec §2.3: a two-digit verification number the admin picks out of three, a
+  challenge route that never returns the number, a venue-wide in-memory pairing window, and decoys
+  distinct across both surfaces. Settled there too (owner, 2026-09-08, §7.3): pending agents move out
+  of `print_agents` into the **shared** `join_requests` table serving both surfaces — one table, not
+  one each — which retires the `active`-flag overload and `agent.pending`; and it is the PRINT-AGENT
+  slice that drops `print_agent_pairing_codes`, because the enrol route reading it ships today.
+  *Deferred follow-up (2026-09-08 review):* `packages/print-agent`'s `Router` merge and tie-break
+  closely duplicate `apps/till/src/api/server-router.ts` — about thirty lines worth a shared home
+  when the agent LOOP lands. Not now: `apps/till` belongs to Track 1 and has an active branch, and
+  the two have already diverged on purpose (this one skips a foreign environment and pins that
+  environment from the configured address; the till does neither). **2.** the virtual PDF printer + a
   `print_jobs` retention sweep (spec §7); **3.** un-pin IP printers from one agent (failover-printing
   §4a); **4.** SumUp once its questions are answered. The manual receipt for 1 is the owner's HP
   LaserJet at `192.168.20.56:9100` (TCP path only — not an ESC/POS device).
@@ -772,7 +787,8 @@ partial scope; the detail for a live thread is under *Open threads*.
 application outbox, its HTTP transport, per-peer auth and retention sweep are deleted) · membership +
 promotion + rejoin (the whole arc, *Open threads → Replication, membership & failover*) · backup &
 restore (BR-1..BR-4) · SIF topology (`#33`, `node_id` re-key) · module system · printing subsystem
-(`@waitron/printing` — agents/outbox/`usb`+`network_tcp` transports/ESC/POS/Impresoras dashboard) ·
+(`@waitron/printing` — agents/outbox/ESC/POS builder/Impresoras dashboard — plus
+`@waitron/print-agent`, the db-free home the `usb`+`network_tcp` transports moved to) ·
 CI/test infra (scoped CI, pre-push hook, shared-container test rollout, job-sharding, root scope) ·
 localisation (per-user `persons.locale`, live language switch, venue-default derivation) · logging &
 diagnostics foundation (Slice 1 #192).
@@ -927,15 +943,17 @@ cash-drawer, and cash-drawer authorization consumers landed. Specs/plans under
 `docs/superpowers/{specs,plans}/2026-08-17-*` and the failover-printing design. **No agent PROCESS
 exists yet** — that is Track H item 1
 ([2026-09-08-print-agent-process-design.md](superpowers/specs/2026-09-08-print-agent-process-design.md),
-approved 2026-09-08), which also replaces pairing-code enrolment with join-and-accept and moves the
-transports into a db-free `@waitron/print-agent`. **Its §2.3 enrolment was amended 2026-09-08 before
+approved 2026-09-08), which also replaces pairing-code enrolment with join-and-accept. Its db-free
+`@waitron/print-agent` package now EXISTS and the ESC/POS transports have MOVED into it. **Its §2.3 enrolment was amended 2026-09-08 before
 implementation** by
 [2026-09-08-device-join-and-accept-design.md](superpowers/specs/2026-09-08-device-join-and-accept-design.md)
 §7 — a two-digit number matched out of three, gated on a shared venue-wide pairing window, with
-pending agents in a generic `join_requests` table rather than in `print_agents`. **This slice is
-PAUSED until the device slice lands** (owner, 2026-09-08), because that slice builds the shared
-mechanism: Tasks 5-8 are blocked until then, while Tasks 1, 3 and 9 — the package scaffold, the
-router, the container host — are independent. The plan's banner carries the detail. Item 2 is the virtual PDF printer + `print_jobs`
+pending agents in a generic `join_requests` table rather than in `print_agents`. **The join/enrolment half is
+BLOCKED until the device slice lands** (owner, 2026-09-08), because that slice builds the shared
+mechanism: Tasks 5-8 wait on it. Tasks 1 and 3 — the package scaffold and the follow-the-primary
+router — have LANDED; Task 2 only in part (`probeNode` and the shared wire-client types; `join`,
+`pullJobs` and `report` deliberately deferred). Of the independent work only Task 9, the container
+host, is left. The plan's banner carries the detail. Item 2 is the virtual PDF printer + `print_jobs`
 retention (nothing deletes a job today). **Remaining after those:**
 
 - **Cloud-poll transports** — Star CloudPRNT (`printing-cloud-poll-transport*`) and Epson Server Direct

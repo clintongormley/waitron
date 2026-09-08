@@ -82,6 +82,7 @@
     "@types/pg": "^8.11.0",
     "@types/qrcode": "^1.5.5",
     "@vitest/coverage-v8": "^3.0.0",
+    "@waitron/print-agent": "workspace:*",
     "esbuild": "^0.25.0",
     "tsx": "^4.23.1",
     "typescript": "^5.7.0",

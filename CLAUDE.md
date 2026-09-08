@@ -210,6 +210,14 @@ unfiltered `main` run, not a wrong hook.
   On the browser side `@waitron/dashboard-modules` is the composition list's twin — the one place that
   names every UI-bearing module (guarded by `module-seams` + `dashboard-browser-purity`), so
   `apps/dashboard` mounts modules without naming one, exactly as generic provisioning does not.
+- **The hardware transport seam is `@waitron/print-agent`, and it is database-free.** It becomes a
+  standalone LAN process that reaches a server over HTTP only, so it imports no other package in this
+  repo; `@waitron/printing` depends on IT, never the reverse. An empty `dependencies` block is not the
+  guard — `main` points at TS source with no build step, so `../../db/src/index.js` resolves and runs
+  while the manifest still reads dependency-free (measured: with the zone removed that import lints
+  clean). The guard is the `import-x/no-restricted-paths` zone in `eslint.config.js`, alongside
+  `packages/verifactu`'s and `packages/shared`'s. Design:
+  `docs/superpowers/specs/2026-09-08-print-agent-process-design.md` §2.1.
 - **`@waitron/db`'s `exports` map is enumerated, not a wildcard** — `.`, `./testing/postgres.js`,
   `./testing/seed.js`, `./testing/lifecycle.js`, `./testing/shared-container.js`. A wildcard would
   publish the whole harness and give `asAppUser` a second import path. Consequence: `apps/server`
