@@ -790,8 +790,9 @@ describe("startServer, against a real container as the deployment role", () => {
   // The only suite that observes boot's own wiring of the advertised addresses: `box-secrets.test.ts`
   // injects its own `listIpv4` and never calls `startServer`, so it stays green if this wiring is
   // deleted. Here the override has to travel env -> loadConfig -> the ensureBoxSecrets call for the
-  // leaf on disk to carry it, which is what a containerised box depends on.
-  it("setup mode mints the leaf for WAITRON_BOX_ADDRESSES, not for the interfaces", async () => {
+  // leaf on disk to carry it, which is what a containerised box depends on — and the same boot's
+  // /setup-api/discovery answer proves the SECOND consumer, `mountDiscovery`'s deps, is wired too.
+  it("setup mode mints the leaf for WAITRON_BOX_ADDRESSES and serves it as the discovery address", async () => {
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-box-addresses-"));
     // TEST-NET-3 (RFC 5737) — documentation-only, so it can never be an address this host actually
@@ -808,12 +809,30 @@ describe("startServer, against a real container as the deployment role", () => {
     try {
       const leaf = new X509Certificate(await readFile(join(stateDir, "tls", "server.crt"), "utf8"));
       const san = leaf.subjectAltName ?? "";
+      // The box's own CA, so the dial below verifies the leaf it just minted. The loopback SAN
+      // `ensureBoxSecrets` always adds is what makes a 127.0.0.1 dial verify against a leaf whose
+      // only other address is the override.
+      const ca = await readFile(join(stateDir, "tls", "ca.crt"));
       expect(san).toContain(override);
       // 127.0.0.1 is added unconditionally by `ensureBoxSecrets` and is internal, so it is never in
       // `listBoxIpv4()`; every address that IS must be absent, or boot resolved the interfaces
       // despite the override.
       for (const address of listBoxIpv4()) {
         expect(san).not.toContain(address);
+      }
+
+      // The discovery document (and the QR the trust page builds from `qrTarget`) reads the same
+      // override, through `mountDiscovery`'s deps into `buildReachInfo` — a separate call site from
+      // the cert above, so this fails on its own if only that one is wired.
+      const { via, close } = httpsVia(ca);
+      try {
+        const discovery = await fetch(`https://127.0.0.1:${port}/setup-api/discovery`, via);
+        expect(discovery.status).toBe(200);
+        const body = (await discovery.json()) as { addresses: string[]; qrTarget: string };
+        expect(body.addresses).toEqual([override]);
+        expect(body.qrTarget).toBe(`https://${override}:${port}`);
+      } finally {
+        await close();
       }
     } finally {
       await server.close();

@@ -94,8 +94,14 @@ export interface ServerConfig {
    * for a container behind bridge networking, whose interface address no device on the LAN can reach.
    * `WAITRON_BOX_ADDRESSES` supplies it as a comma-separated IPv4 list; an unset OR empty value falls
    * back to the interfaces (the `VAR=`-means-unset rule, CLAUDE.md §3).
+   *
+   * OPERATOR CAVEAT: the self-signed leaf is minted once and then reused forever (`ensureBoxSecrets`
+   * treats `<stateDir>/tls/server.key` as the presence sentinel), so setting or changing this on a
+   * box that has ALREADY booted does not re-mint its SANs — the QR and mDNS move to the new address
+   * while the certificate still covers the old one. Set it on the first boot of a state dir, or
+   * delete the `tls/` quartet to force a re-mint.
    */
-  readonly boxAddresses?: string[];
+  boxAddresses?: string[];
   /**
    * Where the box writes its rotating structured logs — the directory `createRotatingFileSink` appends
    * `waitron.log` (+ rotated `.1`..`.N`) into, and `createLogReader` reads back for the diagnostics

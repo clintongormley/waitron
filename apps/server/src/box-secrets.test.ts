@@ -137,9 +137,8 @@ describe("ensureBoxSecrets", () => {
   });
 
   // Every case above injects mint/makeKeyRing/listIpv4, which leaves the REAL default
-  // branches (mintSelfSignedServerCert, generateKeyRing, defaultListIpv4)
-  // unexercised. Task 4's boot test — which would drive them — does not exist yet, so this one
-  // case runs ensureBoxSecrets with ONLY the required deps, exercising real keygen/entropy/os in a
+  // branches (mintSelfSignedServerCert, generateKeyRing, listBoxIpv4) unexercised. This one case
+  // runs ensureBoxSecrets with ONLY the required deps, exercising real keygen/entropy/os in a
   // single fresh temp dir and asserting the four PEMs + a well-formed secrets.env land.
   it("uses the real minter, key ring and IPv4 detection with no injectables", async () => {
     const d = await newDir();

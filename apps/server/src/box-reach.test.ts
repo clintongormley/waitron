@@ -61,4 +61,15 @@ describe("parseBoxAddresses", () => {
       expect.objectContaining({ code: "server.config_invalid" }),
     );
   });
+
+  // 0.0.0.0 is a bind wildcard, never a destination — advertising it is as unreachable as
+  // advertising loopback, so the guard whose purpose is refusing undialable addresses refuses it.
+  it("refuses the unspecified address 0.0.0.0", () => {
+    expect(() => parseBoxAddresses("0.0.0.0")).toThrow(
+      expect.objectContaining({
+        code: "server.config_invalid",
+        params: expect.objectContaining({ reason: "box_addresses_invalid" }),
+      }),
+    );
+  });
 });

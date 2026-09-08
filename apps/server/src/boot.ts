@@ -481,10 +481,18 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // escapes here (§8) before any logger, pool or listener exists.
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_MEDIA_ROOT, DEFAULT_STATE_ROOT);
   // The addresses this box tells the LAN to reach it on — the leaf's iPAddress SANs, the discovery
-  // document's IP URLs (and the QR built from them) and the mDNS answers. One resolver for all three,
-  // so they can never disagree: the operator's `WAITRON_BOX_ADDRESSES` when set, else the host's own
-  // interfaces. A container behind bridge networking holds an address no device on the venue network
-  // can reach, so it needs the override; a box on the venue's own network does not.
+  // document's IP URLs (and the QR built from them) and the mDNS answers. One resolver, so all three
+  // read the same list on any single call: the operator's `WAITRON_BOX_ADDRESSES` when set, else the
+  // host's own interfaces. A container behind bridge networking holds an address no device on the
+  // venue network can reach, so it needs the override; a box on the venue's own network does not.
+  //
+  // It does NOT keep them agreeing over time, and the difference is observable: the leaf is minted
+  // ONCE and reused (`server.key` is `ensureBoxSecrets`'s presence sentinel), while discovery and
+  // mDNS resolve per request. Adding or changing the override on a box that already holds
+  // `<stateDir>/tls/server.key` therefore moves the QR and the mDNS answers to an address the
+  // certificate does not cover — a name mismatch in the trust flow. Measured on a two-boot probe
+  // against a real container. Set the override on the FIRST boot of a state dir, or discard the
+  // `tls/` quartet to re-mint.
   const boxAddresses = (): string[] => config.boxAddresses ?? listBoxIpv4();
   // Fold every module's permission seat into identity's role ladder ONCE, before any surface that
   // gates on a management session is mounted below (in either mode). Pure and dependency-free (no DB,

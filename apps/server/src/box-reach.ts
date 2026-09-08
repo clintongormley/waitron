@@ -5,8 +5,8 @@ import "./errors.js";
 /**
  * Pure helpers describing how a device on the LAN reaches this box: its non-internal IPv4
  * addresses, the URLs built from them plus the `.local` hostname, and the single URL the IP-QR
- * encodes. The discovery API (slice 3) and boot wiring consume this; nothing here does I/O beyond
- * enumerating the interfaces, and even that is injectable so it never runs in a unit test.
+ * encodes. The discovery API, the boot wiring and `box-secrets.ts` (the leaf's iPAddress SANs)
+ * consume this; nothing here does I/O beyond enumerating the interfaces, and even that is injectable.
  */
 
 export interface ReachInfo {
@@ -34,9 +34,10 @@ export interface BuildReachOptions {
  * Non-internal IPv4 addresses of this host. `internal` drops loopback and the `IPv4` filter drops
  * the IPv6 entries `networkInterfaces` returns for the same interface.
  *
- * Only ever runs on the real-`os` default path — every unit test injects `listIpv4` — so it is left
- * to the `apps/server` coverage aggregate rather than pinned by a real-interface test (the same
- * real-only-path posture `boot.ts` and `vitest.config.ts` record).
+ * Left to the `apps/server` coverage aggregate rather than pinned by a real-interface test: what it
+ * returns depends on the host's interfaces, so an assertion on the VALUE would be untestable. The
+ * boot suite calls it to assert the addresses it returns are ABSENT from an overridden leaf, which
+ * holds whatever this host answers.
  */
 export function listBoxIpv4(): string[] {
   return Object.values(networkInterfaces())
@@ -76,7 +77,8 @@ const IPV4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
  * It exists because a container does not necessarily sit on the venue's network: under bridge
  * networking `listBoxIpv4` returns the container's own address, which is non-internal and
  * unreachable, so the box would mint a certificate for and advertise an address no device can
- * reach. Loopback is refused for the same reason it would be wrong to advertise.
+ * reach. Loopback and the unspecified address are refused for that same reason: neither is an
+ * address a device on the venue network can dial.
  */
 export function parseBoxAddresses(raw: string | undefined): string[] | undefined {
   if (raw === undefined || raw.trim() === "") return undefined;
@@ -85,7 +87,7 @@ export function parseBoxAddresses(raw: string | undefined): string[] | undefined
     const match = IPV4.exec(entry);
     const octetsValid =
       match !== null && match.slice(1).every((octet) => Number(octet) >= 0 && Number(octet) <= 255);
-    if (!octetsValid || entry.startsWith("127.")) {
+    if (!octetsValid || entry.startsWith("127.") || entry === "0.0.0.0") {
       throw new AppError("server.config_invalid", {
         variable: "WAITRON_BOX_ADDRESSES",
         reason: "box_addresses_invalid",
