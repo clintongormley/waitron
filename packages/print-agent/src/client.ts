@@ -40,6 +40,21 @@ export interface AgentClient {
  * so the router's poll loop is never held open. */
 export const DEFAULT_TIMEOUT_MS = 3_000;
 
+/**
+ * A rejection value rendered as a string, without ever throwing. A rejection is not guaranteed to be
+ * an `Error`, nor even stringifiable: `String(value)` invokes `toString`, which an object is free to
+ * implement badly. That throw would leave the catch block and escape this module's one contract —
+ * that no network condition reaches the caller as an exception — so it is contained here.
+ */
+function describeRejection(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  try {
+    return String(error);
+  } catch {
+    return "unstringifiable rejection";
+  }
+}
+
 function isNodeProbe(value: unknown): value is Omit<NodeProbe, "term"> & { term?: unknown } {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Record<string, unknown>;
@@ -84,8 +99,7 @@ async function foldFetch<T>(
   } catch (error) {
     // A thrown fetch (connection refused, DNS failure, …) and an aborted deadline land here
     // identically — both mean the server could not be reached in time.
-    const detail = error instanceof Error ? error.message : String(error);
-    return { ok: false, failure: { kind: "unreachable", detail } };
+    return { ok: false, failure: { kind: "unreachable", detail: describeRejection(error) } };
   } finally {
     clearTimeout(timer);
   }
