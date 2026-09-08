@@ -1,7 +1,7 @@
 import { createPostgresDb, readFenceLsn, readNodeMembership, type Database } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { readSlotDrain, subscriptionName, type SlotDrain } from "@waitron/sync";
-import { INSTANCE_ROLES, withDatabase, withRole } from "@waitron/provisioning";
+import { INSTANCE_MIGRATOR_ROLE, withDatabase, withRole } from "@waitron/provisioning";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { servingPrimaryNodeId } from "@waitron/membership";
 import { DEFAULT_STATE_ROOT } from "./boot.js";
@@ -15,9 +15,6 @@ import { tryLoadTillConfig } from "./till-config.js";
 import "./errors.js";
 
 type Env = NodeJS.ProcessEnv;
-
-/** The table-owning migrator role every wipe DROPs and CREATEs the database as (probe A/F). */
-const MIGRATOR = INSTANCE_ROLES[0]; // "waitron_migrator"
 
 /** The comparable target a libpq URL names, for the `DATABASE_URL` vs `WAITRON_MIGRATIONS_DATABASE_URL`
  * same-database check and to derive the target db NAME the wipe recreates. `null` when the string is not
@@ -228,14 +225,19 @@ export async function runRejoin(deps: {
     // CREATE as the plain maintenance admin holding CREATEDB, re-migrate the fresh db migrator-owned, then
     // clear trading.env so the next boot enters setup mode. No slot drop, no migrator→repl grant.
     wipeDatabase: async () => {
-      const dropAs = await connect(withRole(maintenanceUrl, MIGRATOR));
+      const dropAs = await connect(withRole(maintenanceUrl, INSTANCE_MIGRATOR_ROLE));
       const createAs = await connect(maintenanceUrl);
       try {
-        await dropAndCreateDatabase({ dropAs, createAs, database: dbName, owner: MIGRATOR });
+        await dropAndCreateDatabase({
+          dropAs,
+          createAs,
+          database: dbName,
+          owner: INSTANCE_MIGRATOR_ROLE,
+        });
       } finally {
         await Promise.all([dropAs.close(), createAs.close()]);
       }
-      await migrate(withRole(withDatabase(maintenanceUrl, dbName), MIGRATOR));
+      await migrate(withRole(withDatabase(maintenanceUrl, dbName), INSTANCE_MIGRATOR_ROLE));
       await clearTradingEnv(stateDir);
     },
     log,

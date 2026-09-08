@@ -47,7 +47,7 @@ import {
   planVenue,
   quoteIdent,
   withRole,
-  INSTANCE_ROLES,
+  INSTANCE_MIGRATOR_ROLE,
   REPLICATION_ROLE,
   replicationBootstrapStatements,
 } from "@waitron/provisioning";
@@ -87,7 +87,7 @@ export const DEV_REPLICATION_PASSWORD = "dev-repl";
  * `waitron-provision instance` produces, which boot's `ensureReplicationShape` needs for its owner-only
  * `CREATE PUBLICATION … FOR TABLE`. Pure. */
 export function devMigrationsUrl(databaseUrl: string): string {
-  return withRole(databaseUrl, INSTANCE_ROLES[0]);
+  return withRole(databaseUrl, INSTANCE_MIGRATOR_ROLE);
 }
 
 /** The dev venue's fiscal territory. Named once so the venue plan and the fiscal-slot `modules.json`
@@ -530,18 +530,18 @@ async function ensureDevReplicationShape(
   const url = new URL(superuserUrl);
   const dbName = decodeURIComponent(url.pathname.replace(/^\//, ""));
   const adminUser = decodeURIComponent(url.username);
-  const migrator = quoteIdent(INSTANCE_ROLES[0]);
+  const migrator = quoteIdent(INSTANCE_MIGRATOR_ROLE);
   const client = new pg.Client({ connectionString: superuserUrl });
   await client.connect();
   try {
     // The migrator role — `login createrole` because the migrate (run AS it) creates `app_user`.
     // Guarded so a re-run does not error on an existing role.
     const hasMigrator = await client.query("select 1 from pg_roles where rolname = $1", [
-      INSTANCE_ROLES[0],
+      INSTANCE_MIGRATOR_ROLE,
     ]);
     if (hasMigrator.rowCount === 0) {
       await client.query(`create role ${migrator} login createrole`);
-      log(`dev-setup: created ${INSTANCE_ROLES[0]}`);
+      log(`dev-setup: created ${INSTANCE_MIGRATOR_ROLE}`);
     }
     // The privileges production gets from db ownership, granted explicitly on the shared dev database:
     // CREATE on schema public so the migrate (AS the migrator) can create its tables; CREATE on the

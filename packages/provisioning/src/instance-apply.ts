@@ -5,12 +5,8 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { quoteIdent, quoteLiteral, withRole } from "./identifiers.js";
 import { sqlStateOf } from "./sql-state.js";
 import { describeAction, type InstanceAction } from "./instance-plan.js";
-import { INSTANCE_ROLES } from "./instance-state.js";
+import { INSTANCE_MIGRATOR_ROLE } from "./instance-state.js";
 import "./errors.js";
-
-/** The table OWNER, and the role every session after `create-database` runs as (via the role option
- * on the target connection). `INSTANCE_ROLES[0]` by construction. */
-const MIGRATOR = INSTANCE_ROLES[0];
 
 /**
  * A connection to the TARGET database, together with the one call that gives it back.
@@ -98,7 +94,7 @@ export async function applyInstance(
           // escaping it is the whole defence.
           const createRoleSql = `create role ${quoteIdent(action.role)} ${attributes} password ${quoteLiteral(action.password)}${memberships}`;
           try {
-            if (action.role === MIGRATOR) {
+            if (action.role === INSTANCE_MIGRATOR_ROLE) {
               // The migrator is created by the ADMIN, in ONE transaction with
               // `createrole_self_grant = 'set'` — the GUC is session-scoped, and a pooled,
               // un-transacted `SET` lands on a different backend than the `CREATE ROLE`, so the admin
@@ -174,7 +170,7 @@ export async function applyInstance(
           // a re-run that action is absent while `migrate` is present, so deriving it from the
           // actions would fail exactly when the tool is used idempotently.
           await applyMigrations(
-            withRole(withDatabase(deps.adminUri, deps.database), MIGRATOR),
+            withRole(withDatabase(deps.adminUri, deps.database), INSTANCE_MIGRATOR_ROLE),
             migrationOptionsFor(manifestSets(), deps.migrationsRoot),
           );
           break;
@@ -228,7 +224,7 @@ async function verifyGrants(actions: readonly InstanceAction[], deps: ApplyDeps)
       sql`select pg_get_userbyid(datdba) as owner from pg_database where datname = ${deps.database}`,
     );
     const owner = rows.rows[0]?.owner ?? null;
-    if (owner !== MIGRATOR) {
+    if (owner !== INSTANCE_MIGRATOR_ROLE) {
       throw new AppError("provisioning.database_not_owned", { database: deps.database, owner });
     }
   }

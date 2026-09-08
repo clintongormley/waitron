@@ -1627,8 +1627,10 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   const carrierNodeId = heldMembership === null ? undefined : servingPrimaryNodeId(heldMembership);
   // The fence-LSN watermark this node recorded when it entered its read-only fence (Ruling C2), read
   // ONCE at boot — `null` on a serving node (never fenced) or a dead box. The drain guard is
-  // `isDrained(slot, fenceLsn) && !slot.active`.
-  const fenceLsn = await readFenceLsn(db);
+  // `isDrained(slot, fenceLsn) && !slot.active`. Only ever consulted when a carrier is known (both
+  // `readDisposal` and `mountBoxRetireApi` are inert with no carrier), so skip the read entirely on an
+  // unfenced primary rather than spend a round-trip on a value nothing reads.
+  const fenceLsn = carrierNodeId === undefined ? null : await readFenceLsn(db);
   // The native slot-drain reader (swap S4): the carrier's slot on THIS node is named by the carrier
   // (C1), read on the migrator/owner pool (`replicationDb`) — a non-superuser reads pg_replication_slots
   // unmasked (probe B). `undefined` when the held chart names no carrier, exactly as retire/box-status

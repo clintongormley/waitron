@@ -2,6 +2,7 @@ import { AppError } from "@waitron/shared";
 import { type DeploymentEnvironment } from "@waitron/db";
 import { generatePassword } from "./identifiers.js";
 import {
+  INSTANCE_MIGRATOR_ROLE,
   INSTANCE_ROLES,
   type InstanceRole,
   type InstanceState,
@@ -26,11 +27,6 @@ export interface InstanceRequest {
   database: string;
   environment: DeploymentEnvironment;
 }
-
-/** The role that owns the database, and therefore every migrated table — the one native logical
- * replication needs to hold, since `CREATE PUBLICATION … FOR TABLE` requires the table owner. It is
- * `INSTANCE_ROLES[0]` by construction. */
-const MIGRATOR: InstanceRole = INSTANCE_ROLES[0];
 
 /** The role each login inherits its table privileges through — created by the migration, not a
  * login this tool mints. */
@@ -97,7 +93,7 @@ export function planInstance(
   // Ownership is fixed at CREATE (owner decision 2026-09-07, never `REASSIGN OWNED`): a database
   // owned by anyone but the migrator cannot be made to satisfy replication by granting, so it is
   // refused rather than adopted. `databaseExists` implies `databaseOwner` is set.
-  if (state.databaseExists && state.databaseOwner !== MIGRATOR) {
+  if (state.databaseExists && state.databaseOwner !== INSTANCE_MIGRATOR_ROLE) {
     throw new AppError("provisioning.database_not_owned", {
       database: request.database,
       owner: state.databaseOwner,
@@ -109,7 +105,7 @@ export function planInstance(
   }
 
   const actions: InstanceAction[] = [];
-  const migrator = state.roles[MIGRATOR];
+  const migrator = state.roles[INSTANCE_MIGRATOR_ROLE];
 
   // The migrator is created FIRST, over the admin (instance-apply.ts routes it through the
   // `createrole_self_grant` transaction), so it can OWN the database created next and so migrate can
@@ -118,15 +114,19 @@ export function planInstance(
   if (migrator === undefined) {
     actions.push({
       kind: "create-role",
-      role: MIGRATOR,
+      role: INSTANCE_MIGRATOR_ROLE,
       password: password(),
-      createRole: REQUIREMENTS[MIGRATOR].createRole,
+      createRole: REQUIREMENTS[INSTANCE_MIGRATOR_ROLE].createRole,
       memberOf: [],
     });
   }
 
   if (!state.databaseExists) {
-    actions.push({ kind: "create-database", database: request.database, owner: MIGRATOR });
+    actions.push({
+      kind: "create-database",
+      database: request.database,
+      owner: INSTANCE_MIGRATOR_ROLE,
+    });
   }
 
   // Migrate AS the migrator (the session role option, instance-apply.ts). UNCONDITIONAL, so a run
@@ -141,7 +141,7 @@ export function planInstance(
   // The migrator's app_user membership, granted after migrate (as the migrator, which now owns
   // app_user and holds ADMIN OPTION on it) — freshly created above, or drifted on a re-run.
   if (migrator === undefined || !migrator.memberOf.includes(APP_USER)) {
-    actions.push({ kind: "grant-membership", role: MIGRATOR, memberOf: APP_USER });
+    actions.push({ kind: "grant-membership", role: INSTANCE_MIGRATOR_ROLE, memberOf: APP_USER });
   }
 
   // waitron_app is created LAST, as the migrator, `IN ROLE app_user` (which now exists) — or its
@@ -191,7 +191,7 @@ export function assertUsable(role: InstanceRole, facts: RoleFacts): void {
   // migrator over the admin's own credentials, and only the admin that created it with
   // `createrole_self_grant = 'set'` holds that membership. `adminCanSetRole` is read for both roles
   // but nothing ever SET ROLEs to the app role, so it is not checked there.
-  if (role === MIGRATOR && !facts.adminCanSetRole) missing.push("SET ROLE");
+  if (role === INSTANCE_MIGRATOR_ROLE && !facts.adminCanSetRole) missing.push("SET ROLE");
   if (missing.length > 0) throw new AppError("provisioning.role_unusable", { role, missing });
 }
 

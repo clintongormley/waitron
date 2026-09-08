@@ -7,6 +7,11 @@ import { assertIdentifier } from "./identifiers.js";
 export const INSTANCE_ROLES = ["waitron_migrator", "waitron_app"] as const;
 export type InstanceRole = (typeof INSTANCE_ROLES)[number];
 
+/** The migrator — `INSTANCE_ROLES[0]` by construction. It OWNS every table (native logical replication
+ * needs one owner) and holds `pg_create_subscription`; the many call sites that reach for the migrator
+ * name it through this constant rather than re-deriving `INSTANCE_ROLES[0]` each time. */
+export const INSTANCE_MIGRATOR_ROLE: InstanceRole = INSTANCE_ROLES[0];
+
 /**
  * What `pg_roles` says about a role that exists.
  *

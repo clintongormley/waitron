@@ -13,6 +13,7 @@ import { assertIdentifier, withRole } from "./identifiers.js";
 import { applyInstance, withDatabase, type TargetConnection } from "./instance-apply.js";
 import { describeAction, planInstance, type InstanceAction } from "./instance-plan.js";
 import {
+  INSTANCE_MIGRATOR_ROLE,
   INSTANCE_ROLES,
   readInstanceState,
   type InstanceRole,
@@ -701,7 +702,7 @@ function asUnreadable(error: unknown, database: string): unknown {
 /** The target database, opened AS the migrator via the session role option — so every session
  * `instance`/`status`/`venue` runs against a migrator-owned database can read and write it. */
 function targetUri(adminUri: string, database: string): string {
-  return withRole(withDatabase(adminUri, database), INSTANCE_ROLES[0]);
+  return withRole(withDatabase(adminUri, database), INSTANCE_MIGRATOR_ROLE);
 }
 
 /**
@@ -720,10 +721,10 @@ function connectFailure(
   database: string,
   probe: InstanceState | undefined,
 ): unknown {
-  const migrator = probe?.roles[INSTANCE_ROLES[0]];
+  const migrator = probe?.roles[INSTANCE_MIGRATOR_ROLE];
   if (migrator !== undefined && !migrator.adminCanSetRole) {
     return new AppError("provisioning.role_unusable", {
-      role: INSTANCE_ROLES[0],
+      role: INSTANCE_MIGRATOR_ROLE,
       missing: ["SET ROLE"],
     });
   }

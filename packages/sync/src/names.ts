@@ -19,9 +19,18 @@ export function subscriptionName(
   return `waitron_${environment}_sub_${subscriberNodeId.replace(/-/g, "").toLowerCase()}`;
 }
 
+/** The `pg_lsn` text shape — `high/low`, both segments hex (case-insensitive). names.ts is the LSN
+ * home, so this one regex is shared by `lsnValue` here and `skipSubscriptionStatement`'s guard. */
+const LSN_RE = /^([0-9A-Fa-f]+)\/([0-9A-Fa-f]+)$/;
+
+/** Whether `s` is a valid `pg_lsn` text value (`high/low`, both hex). */
+export function isLsn(s: string): boolean {
+  return LSN_RE.test(s);
+}
+
 /** A `pg_lsn` as its `high/low` hex value, both segments hex. */
 function lsnValue(lsn: string): bigint {
-  const match = /^([0-9A-Fa-f]+)\/([0-9A-Fa-f]+)$/.exec(lsn);
+  const match = LSN_RE.exec(lsn);
   if (match === null) throw new Error(`not an LSN: ${JSON.stringify(lsn)}`);
   return (BigInt(`0x${match[1]}`) << 32n) | BigInt(`0x${match[2]}`);
 }

@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { AppError, quoteLiteral, sqlStateOf } from "@waitron/shared";
 import type { Database } from "@waitron/db";
 import { quoted } from "./identifier.js";
+import { isLsn } from "./names.js";
 import "./errors.js";
 
 /** The replication login and the peer to reach it. Secret in whole. */
@@ -95,7 +96,7 @@ export function refreshSubscriptionStatement(name: string): string {
   return `ALTER SUBSCRIPTION ${quoted(name)} REFRESH PUBLICATION`;
 }
 export function skipSubscriptionStatement(name: string, lsn: string): string {
-  if (!/^[0-9A-F]+\/[0-9A-F]+$/i.test(lsn)) throw new Error(`not an LSN: ${JSON.stringify(lsn)}`);
+  if (!isLsn(lsn)) throw new Error(`not an LSN: ${JSON.stringify(lsn)}`);
   return `ALTER SUBSCRIPTION ${quoted(name)} SKIP (lsn = '${lsn}')`;
 }
 export async function enableSubscription(db: Database, name: string): Promise<void> {
