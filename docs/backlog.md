@@ -145,11 +145,19 @@ design-review section apply.
   when the agent LOOP lands. Not now: `apps/till` belongs to Track 1 and has an active branch, and
   the two have already diverged on purpose (this one skips a foreign environment and pins that
   environment from the configured address; the till does neither).
-  *Two more deferred minors from #282's reviews, neither blocking:* `packages/print-agent/src/client.ts`
-  sits at 89% branch coverage (floor 85) — its null-body and non-`Error`-throw arms are unhit, two
-  cheap cases would restore the package to 100%; and `packages/printing/src/printers.ts:9,57-58`
-  carries an `import type` plus a separate `export type … from` for one symbol, where a single
-  `export type { PrintTransport }` would keep the doc comment attached in editor hover.
+  *#282's deferred minors: one CLOSED, one still open.* **Closed by #283** — `client.ts`'s two unhit
+  branches (a `null` response body; a non-`Error` rejection) are pinned, 89.28% → 96.87%. Chasing them
+  surfaced a real hole and fixed it: the client's one contract is that no network condition reaches
+  the caller as an exception, but the catch block ended in `String(error)`, which invokes `toString` —
+  an object with a hostile `toString` escaped the catch and the caller's `await`. Probed before
+  fixing: a `Symbol` rejection is fine (`String(sym)` is specified), an object with a throwing
+  `toString` was not. **Deliberately NOT chased to 100%** (owner, 2026-09-08): the one branch left is
+  the `finally`'s exception-propagation entry, which V8 counts but which is unreachable now that the
+  catch cannot throw. The `finally` itself runs on all six exits — removing it would mean six
+  `clearTimeout` calls and a leaked timer the day someone adds a seventh. Do not "fix" this number.
+  *Still open:* `packages/printing/src/printers.ts:9,57-58` carries an `import type` plus a separate
+  `export type … from` for one symbol, where a single `export type { PrintTransport }` would keep the
+  doc comment attached in editor hover.
   **2.** the virtual PDF printer + a
   `print_jobs` retention sweep (spec §7); **3.** un-pin IP printers from one agent (failover-printing
   §4a); **4.** SumUp once its questions are answered. The manual receipt for 1 is the owner's HP
