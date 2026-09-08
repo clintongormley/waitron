@@ -169,6 +169,18 @@ declare module "@waitron/shared" {
      */
     "server.mirror_bind_exposed": { host: string };
     /**
+     * The one-time superuser replication bootstrap failed on the node's own database. Only the
+     * SQLSTATE survives: its first statement embeds the generated `waitron_repl` password, and both
+     * Drizzle's wrapped failure and PostgreSQL's own message quote the failing statement back
+     * verbatim — the rule `provisioning.role_creation_failed` follows for `CREATE ROLE`. Five
+     * characters of `[0-9A-Z]` — `null` when the failure carried none — cannot be the credential
+     * this withholds, and `42501` (this login is
+     * not a superuser) and `42710` (something already exists) want different responses and read
+     * identically without it. `server.*`: a fact about this process's own start-up. Never renamed
+     * once shipped.
+     */
+    "server.replication_bootstrap_failed": { sqlState: string | null };
+    /**
      * This host is configured for one environment and the database belongs to another. Thrown
      * before migrations run, so nothing is written.
      *
