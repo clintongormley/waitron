@@ -1,4 +1,3 @@
-// apps/server/src/box-env.test.ts
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

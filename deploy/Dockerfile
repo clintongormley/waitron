@@ -78,7 +78,7 @@ RUN install -d -o waitron -g waitron -m 0700 /var/lib/waitron \
 # real Veri*Factu backend into an append-only, hash-chained table, under any WAITRON_ENV including
 # production. A production image has no business carrying it. dist/package.json ({"type":"module"})
 # travels with the bundle so /app declares its own module system rather than inheriting one from a
-# walk up the filesystem. deploy-image-config.test.ts pins this list against package.json's `bin`.
+# walk up the filesystem. deploy-image-env.test.ts pins this list against package.json's `bin`.
 COPY --from=build --chown=waitron:waitron \
   /src/apps/server/dist/server.js \
   /src/apps/server/dist/node-entry.js \
