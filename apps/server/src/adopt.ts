@@ -133,12 +133,13 @@ export interface AdoptDeps {
  * later by the boot-time finish worker (Task 5), once every table has finished its initial copy; adopt
  * only records the latch (`writePendingAdoption`).
  *
- * The order is load-bearing. `assertReady` runs before any subscription work. A publication name the
- * primary does not serve only WARNs and copies nothing (probe C), so adopt reads the subscription
- * status, sees `tablesTotal === 0`, DROPS the subscription and throws `sync.publication_missing` —
- * never leaving a dead subscription behind. The mirror's config is committed inside a try/catch that
- * DROPS the subscription on any throw, so a partial failure leaves neither a half-adopted database nor
- * an orphan subscription. Only after the config is durable is the subscription ENABLED — a crash before
+ * The order is load-bearing. `assertReady` runs before any subscription work. Everything AFTER the
+ * disabled `create` — the status read and the config commit — runs inside ONE try/catch that DROPS the
+ * subscription on any throw, so neither a status-read failure, the `publication_missing` throw, nor a
+ * mid-commit failure can leave an orphan subscription (with its publisher-side slot retaining WAL)
+ * behind. A publication name the primary does not serve only WARNs and copies nothing (probe C), so the
+ * status read sees `tablesTotal === 0` and throws `sync.publication_missing`, which the guard turns into
+ * a drop. Only after the config is durable is the subscription ENABLED — a crash before
  * that leaves an inert, dropped-on-retry subscription, never a mirror applying rows into a database
  * whose stamp/mirror_config are not yet written.
  *
@@ -209,21 +210,21 @@ export async function adoptFromPrimary(
     enabled: false,
   });
 
-  // A publication name absent on the publisher only WARNs and leaves `pg_subscription_rel` EMPTY (probe
-  // C) — so a subscription that copies NOTHING is a silent mis-wire. Detect it by `tablesTotal === 0`,
-  // DROP the dead subscription, and fail loud rather than boot a mirror that never copies its venue.
-  const status = await replication.readStatus(deps.replicationDb, name);
-  if (status.tablesTotal === 0) {
-    await replication.drop(deps.replicationDb, name);
-    throw new AppError("sync.publication_missing", { subscription: name });
-  }
-
-  // Commit the mirror's config behind a cleanup guard: any throw here DROPS the subscription so no
-  // orphan is left applying into a half-stamped database. `stampDeployment` runs BEFORE
+  // The status read AND the config commit sit behind ONE cleanup guard: any throw DROPS the
+  // subscription so no orphan — and no publisher-side slot retaining WAL — is left behind. The status
+  // read is INSIDE too, not just the commit: a status seam that throws after `create` (a lost
+  // connection mid-read) would otherwise exit before the guard and leak the subscription. A publication
+  // name absent on the publisher only WARNs and leaves `pg_subscription_rel` EMPTY (probe C), so a
+  // subscription that copies NOTHING (`tablesTotal === 0`) is a silent mis-wire — detected here and
+  // failed loud rather than booting a mirror that never copies its venue. `stampDeployment` runs BEFORE
   // `setDeploymentMode` (the `mode` UPDATE needs the singleton row). The environment is the primary's
   // (immutable, one database per environment, §5).
   let breakGlassSecret: string;
   try {
+    const status = await replication.readStatus(deps.replicationDb, name);
+    if (status.tablesTotal === 0) {
+      throw new AppError("sync.publication_missing", { subscription: name });
+    }
     await stampDeployment(deps.ownerDb, bundle.environment);
     await setDeploymentMode(deps.ownerDb, "mirror");
     await writeMirrorConfig(deps.ownerDb, {

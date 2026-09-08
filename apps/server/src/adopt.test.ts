@@ -357,6 +357,28 @@ describe("adoptFromPrimary (native-subscription mirror adopt, real Postgres)", (
     expect(await readDeploymentEnvironment(mirrorAdmin)).toBeNull();
   });
 
+  it("drops the subscription when readStatus itself throws (status-seam cleanup guard)", async () => {
+    // The status read must sit INSIDE the cleanup guard: a status seam that throws AFTER `create`
+    // (a lost connection to the mirror mid-read) would otherwise leave the subscription — and its
+    // publisher-side slot retaining WAL — orphaned. Deletion-proof: move the status read back OUTSIDE
+    // the try/catch in adopt.ts and `drop` disappears (the created subscription is left behind).
+    const rep = recordingReplication();
+    const boom = new Error("status connection lost");
+    const verbs: ReplicationVerbs = {
+      ...rep.verbs,
+      readStatus: async () => {
+        rep.calls.push("readStatus");
+        throw boom;
+      },
+    };
+    const error = await adoptFromPrimary(deps(verbs), REQ).catch((e: unknown) => e);
+    expect(error).toBe(boom);
+    // The subscription created before the status read was DROPPED even though the read threw, and it
+    // was never enabled.
+    expect(rep.calls).toEqual(["assertReady", "create", "readStatus", "drop"]);
+    expect(rep.calls).not.toContain("enable");
+  });
+
   it("drops the subscription when a config write throws mid-orchestration (cleanup guard)", async () => {
     const rep = recordingReplication();
     const boom = new Error("disk full");
