@@ -272,6 +272,9 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   }
 
   // The counter covers the WHOLE attempt, so it is written before the first step that can fail.
+  // Consequence, accepted: an attempt CUT SHORT counts too — three power-cycles during the up-to-60 s
+  // Postgres wait land a box on the page, where the retry button clears it. A counter that only
+  // counted completed failures could not count the boot that hangs, which is the case it exists for.
   await deps.writeRecoveryState(deps.stateDir, afterFailure(state, BOOT_INCOMPLETE, new Date()));
 
   let server: { close(): Promise<void> };

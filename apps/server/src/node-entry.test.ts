@@ -159,6 +159,22 @@ describe("runEntry", () => {
     );
   });
 
+  it("counts a boot that HANGS in the instance bootstrap, which no failure handler can see", async () => {
+    // The pre-boot write's own unique job. The wide `try`/`catch` already records every boot step
+    // that THROWS, so a control that only moves this write down still passes on the throwing cases;
+    // a hang is what separates them. `ensureInstance` is the reachable hang — `waitForPostgres` is
+    // bounded and throws, and `loadBoxEnv` is filesystem work — and it is the real shape of a
+    // Postgres that accepts TCP and then never answers.
+    const d = deps({ ensureInstance: vi.fn(() => new Promise<never>(() => {})) });
+    void runEntry(d);
+    await vi.waitFor(() =>
+      expect(d.writeRecoveryState).toHaveBeenCalledWith(
+        "/state",
+        expect.objectContaining({ failures: 1 }),
+      ),
+    );
+  });
+
   it("does NOT clear the counter merely because the server started", async () => {
     const d = deps({ readRecoveryState: vi.fn(() => Promise.resolve({ ...FRESH, failures: 2 })) });
     await runEntry(d);
@@ -241,6 +257,54 @@ describe("runEntry", () => {
     });
     await runEntry(d);
     expect(ports).toEqual([8080]);
+  });
+
+  it("a failing state-volume write neither throws nor kills a healthy server", async () => {
+    const log = vi.fn();
+    const scheduleStayedUp = vi.fn<(ms: number, onStayedUp: () => void) => void>(() => {});
+    const d = deps({
+      readRecoveryState: vi.fn(() => Promise.resolve({ ...FRESH, failures: 2 })),
+      // The pre-boot write succeeds; the stayed-up clear, two minutes later, does not.
+      writeRecoveryState: vi
+        .fn()
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValue(new Error("EROFS")),
+      scheduleStayedUp,
+      log,
+    });
+    await runEntry(d);
+    const [, onStayedUp] = scheduleStayedUp.mock.calls[0]!;
+    // Left floating, this rejection is an unhandled rejection — which by Node's default takes down a
+    // server that has been up and trading for two minutes.
+    expect(() => onStayedUp()).not.toThrow();
+    await vi.waitFor(() =>
+      expect(log).toHaveBeenCalledWith(
+        "warn",
+        "recovery.state_write_failed",
+        expect.objectContaining({ errorCode: "unknown" }),
+      ),
+    );
+  });
+
+  it("the retry survives a failing state-volume write and still exits", async () => {
+    let served: Hono | undefined;
+    const exit = vi.fn();
+    const d = deps({
+      readRecoveryState: vi.fn(() =>
+        Promise.resolve({ ...FRESH, failures: 3, level: levelFor(3) }),
+      ),
+      writeRecoveryState: vi.fn(() => Promise.reject(new Error("EROFS"))),
+      serveRecovery: (app: Hono) => {
+        served = app;
+        return Promise.resolve(undefined);
+      },
+      exit,
+    });
+    await runEntry(d);
+    await served!.request("/recovery-api/retry", { method: "POST" });
+    // A reset that failed leaves the box in recovery after the restart — the page comes back and the
+    // operator can press the button again, which is a better outcome than a crash mid-response.
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(0));
   });
 
   it("refuses an unset OR empty bootstrap URL before it can resolve to localhost", async () => {
