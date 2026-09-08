@@ -153,24 +153,49 @@ start, in order:
 1. **Wait for Postgres** on `WAITRON_BOOTSTRAP_DATABASE_URL` (the superuser URL compose derives
    from `.env`'s `POSTGRES_PASSWORD`, §7) — a bounded retry loop, the shape of `dev-setup.ts`'s
    `waitForPostgres`, exits non-zero with `server.config_missing` if the variable is unset.
-2. **Ensure the instance.** Read the cluster's state with `readInstanceState`, plan with
-   `planInstance({ database: "waitron", environment })`, apply with `applyInstance` — the SAME
-   three functions `waitron-provision instance` runs, so the on-box shape and the CLI's are one
-   code path. The `environment` is `WAITRON_ENV` when set in the process environment (the compose
-   `.env` never sets it, §7), else `trading.env`'s if that file exists, else `preproduction` — the
-   same "unset means preproduction" rule as `config.ts` (`dev` is preproduction too, as `config.ts`
-   treats it — `planInstance` takes only the two `DeploymentEnvironment` values). Then `replicationBootstrapStatements` if
-   `waitron_repl` is absent (`assertReplicationReady`'s probe decides). The generated passwords are
-   written ONCE to `<state>/instance.env` (0600, via `formatEnvFile`/`writeFileAtomic`) as
-   `DATABASE_URL` (the `waitron_app` login), `WAITRON_MIGRATIONS_DATABASE_URL` (the migrator) and
-   `WAITRON_REPLICATION_PASSWORD`, each pointing at `127.0.0.1:5432/waitron`; every later start
-   reads them back and `planInstance` emits only what is missing. A wiped-and-rejoined box (roles
-   survive — they are cluster-level — the database is dropped `WITH (FORCE)` by `rejoin`) therefore
-   gets exactly one `create-database` action and nothing else. **Interaction with `waitron-rejoin`
-   and `waitron-restore` is a plan task:** both run against a STOPPED server (`docker compose run`,
-   §10), and their own database creation must agree with this step's — read `bin-rejoin.ts` and
-   `bin-restore.ts` before writing this; if they create the database themselves the entrypoint
-   must find it and stop, never race.
+2. **Ensure the instance — the database, its roles and the replication bootstrap, and NOTHING
+   else.** Read the cluster's state with `readInstanceState`, plan with `planInstance`, apply with
+   `applyInstance` — the same three functions `waitron-provision instance` runs, so the on-box
+   shape and the CLI's stay one code path. Two constraints make this safe, and both are load-
+   bearing:
+
+   **It must never stamp, and never migrate.** `planInstance` emits `stamp` and `migrate` actions;
+   the entrypoint applies neither, keeping only `create-database`, `create-role` and
+   `grant-membership`. Migrating is already `boot.ts`'s job (`applyMigrations` runs unconditionally
+   before the mode branch), so applying it here would just run it twice. Stamping is the dangerous
+   one: `stampDeployment` is PERMANENT and one-way — a second stamp that disagrees throws
+   `deployment.already_stamped` — and the environment is not known before the operator chooses it
+   in the wizard. An entrypoint that stamped `preproduction` on first boot would make the box
+   permanently unable to be provisioned as PRODUCTION (the wizard's own
+   `provisionVenue` → `stampDeployment` would throw), which is unrecoverable without dropping the
+   database. Stamping stays where the operator's choice is: the wizard, at provision time.
+
+   **The environment it passes is read from the database, never guessed.** `planInstance` REFUSES
+   up-front when `state.inside.stamp` disagrees with the requested environment
+   (`instance-plan.ts` — `deployment.already_stamped`, thrown before any action is emitted), so a
+   guessed value would brick every boot of an already-stamped box, not just the first. The
+   entrypoint therefore passes `state.inside.stamp` when the database carries one, and
+   `preproduction` only when it carries none — where no disagreement is possible and the stamp
+   action is filtered away regardless. `WAITRON_ENV` is deliberately NOT consulted here: the
+   database's own stamp is the authority (CLAUDE.md §5, one database per environment).
+
+   Then `replicationBootstrapStatements` if `waitron_repl` is absent (`assertReplicationReady`'s
+   probe decides). The generated passwords are written ONCE to `<state>/instance.env` (0600, via
+   `formatEnvFile`/`writeFileAtomic`) as `DATABASE_URL` (the `waitron_app` login),
+   `WAITRON_MIGRATIONS_DATABASE_URL` (the migrator) and `WAITRON_REPLICATION_PASSWORD`, each
+   pointing at `127.0.0.1:5432/waitron`; every later start reads them back and `planInstance` emits
+   only what is missing. They are captured off the `create-role` actions, which carry the generated
+   password — the CLI prints them for the same reason, and neither can recover a password it did
+   not generate.
+
+   **Rejoin and restore agree with this by construction** (checked, not assumed):
+   `dropAndCreateDatabase` (`db-wipe.ts`, the R3 rejoin wipe) drops the database and RECREATES it
+   empty and migrator-owned, and roles are cluster-global, so a rejoined box presents
+   database-exists + roles-exist + nothing-inside — for which this step plans no actions at all and
+   `boot.ts` migrates as usual. It also closes a gap `db-wipe.ts`'s header records: a crash between
+   its drop and its create leaves the box dropped-not-created and "does not self-recover on re-run".
+   Under this entrypoint it does — the next start plans the one `create-database` and continues.
+
 3. **Load the env files** into the process environment: `instance.env`, then `secrets.env`, then
    `trading.env` — **a variable already present in the environment always wins over a file**.
    That is cloud rule 4's cheap half: a cloud profile can inject `WAITRON_CREDENTIALS_KEY` from the
