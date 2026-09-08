@@ -129,11 +129,14 @@ reads the venue's catalogue — there is no unauthenticated catalogue endpoint l
    nothing in `devices` and every other device route answers `device.unauthorized`. The token is inert
    by construction rather than by a flag.
 4. The device shows the number large, with "waiting for approval", and polls
-   `GET /api/device/join/status`, which resolves that cookie against `device_join_requests` and
-   answers `pending`, `approved` or `not_approved`.
-5. `approved` → **the status response re-issues the cookie as `${deviceId}.${token}`** (the same
-   secret, the new selector, since accept copies `token_hash` onto the `devices` row). The device
-   boots into the shell its profile's form factor selects. `not_approved` → "This device was not approved", with *Try again*, which knocks afresh
+   `GET /api/device/join/status`, which resolves that cookie — first against `join_requests`, then
+   against `devices` — and answers `pending`, `approved` or `not_approved`.
+5. `approved` → the device boots into the shell its profile's form factor selects. **The cookie is set
+   once, at join, and never re-issued**: accept gives the new `devices` row the request's OWN id along
+   with its token hash, so the selector the device already holds keeps naming the right row. An
+   accepted request's id is simply the device's id, and a denied request's id is never used again. The
+   alternative — minting a fresh device id and re-issuing the cookie on the status response — adds a
+   step at which a cookie can be dropped, and buys nothing. `not_approved` → "This device was not approved", with *Try again*, which knocks afresh
    as a new request with a new number.
 
 A denied request row is deleted, so `not_approved` covers denied, expired and never-existed alike.
@@ -208,7 +211,7 @@ serve both.
 | `id`, `tenant_id`, `location_id` | as `device_pairing_codes` had them; `NOT NULL` for both kinds |
 | `kind` | a `join_request_kind` pgEnum, `device` \| `print_agent` — what an accepted request becomes |
 | `label` | the name that was asked for (an agent accept writes it to `print_agents.name`) |
-| `token_hash` | minted at join; copied to the real row at accept, so the joiner's token survives approval |
+| `token_hash` | minted at join; copied to the real row at accept — which also takes the request's `id` — so the joiner's cookie survives approval untouched |
 | `verification_number` | the two-digit number, `text` |
 | `created_at` | TTL is fifteen minutes, filtered on read and swept opportunistically at join and accept, as the pairing code's TTL was |
 
@@ -255,7 +258,7 @@ had.
 | Route | Auth | Does |
 | --- | --- | --- |
 | `POST /api/device/join` `{name}` | none; window-gated (`device.pairing_closed`), rate limited (`device.join_rate_limited`), capped at ten pending (`device.join_full`) | inserts the request, mints the number and token; sets the inert cookie; returns `{ joinId, verificationNumber }` |
-| `GET /api/device/join/status` | the inert device cookie | `pending` \| `approved` \| `not_approved` |
+| `GET /api/device/join/status` | the inert device cookie | `pending` \| `approved` \| `not_approved`; resolves the selector against `join_requests`, then `devices` |
 | `GET /management-api/join-requests?kind=` | the kind's own permission | pending rows: `{ id, kind, label, createdAt }` — **never the number** |
 | `GET /management-api/join-requests/:id/challenge` | the row's kind's permission | three shuffled numbers per §1.2 |
 | `POST /management-api/join-requests/:id/deny` | the row's kind's permission | deletes the request |
