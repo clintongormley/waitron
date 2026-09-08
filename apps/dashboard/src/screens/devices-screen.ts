@@ -443,8 +443,7 @@ export class DevicesScreen extends LitElement {
         ...(binding === "register" ? { registerId: this.chosenRegisterId } : {}),
       });
       this.openRequestId = null;
-      await this.#reloadJoins();
-      await this.#reloadDevices();
+      await Promise.all([this.#reloadJoins(), this.#reloadDevices()]);
     } catch (error) {
       const code = codeOf(error);
       this.errorKey = code;

@@ -7,7 +7,8 @@
  * an open door). It also costs no migration, no classification and no grant.
  *
  * ONE holder serves BOTH surfaces (owner decision 2026-09-08): `boot.ts` builds it once and passes it
- * to the device and print mounts, so "venue-wide" is a property of the wiring rather than a rule
+ * to the device mount and the shared join mount (`mountDeviceApi` and `mountJoinApi`; the print mount
+ * is not wired to it this slice), so "venue-wide" is a property of the wiring rather than a rule
  * anyone has to remember.
  */
 

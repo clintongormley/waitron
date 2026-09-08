@@ -411,18 +411,15 @@ unchanged, so no new H2 receipt
    kind derives from its profile's `form_factor`; a `till`-form-factor enrol auto-creates its own
    register; `tills(tenant_id, location_id, name)` is unique per venue; the shift session is keyed to
    the device's register; a per-(device, person) PIN throttle (`pin.throttled`).
-   - **IN FLIGHT — enrolment by pairing mode + numeric match.** Branch `feat/device-join-and-accept`
-     (worktree `waitron-feat-device-join-and-accept`), 10 of 13 tasks landed and reviewed as of
-     2026-09-08; plan
+   - **COMPLETE, finishing the branch for its PR — enrolment by pairing mode + numeric match.** Branch
+     `feat/device-join-and-accept` (worktree `waitron-feat-device-join-and-accept`), all 13 tasks
+     implemented and reviewed as of 2026-09-09; plan
      [`2026-09-08-device-join-and-accept.md`](superpowers/plans/2026-09-08-device-join-and-accept.md),
      execution ledger at `.superpowers/sdd/2026-09-08-device-join-and-accept/progress.md` in that
      worktree (gitignored) and a session handoff beside it in `docs/handoffs/` (also gitignored — it
-     exists only on this machine). Remaining: review Task 10 (the till, implemented but unreviewed),
-     Task 11 (dev mode + the receipt sweep), Task 12 (end to end + the full gate).
-     **Two things a resuming session needs before touching anything:** the dev till cannot enrol until
-     Task 11 lands (`createPairingMode()` starts shut and there is no devMode auto-open yet, so the
-     documented `DEMO` procedure in `README.md`, `CLAUDE.md` §6 and `docs/ui-review.md` returns
-     `device.pairing_closed`); and **do not run `pnpm --filter @waitron/db db:generate`** — it proposes
+     exists only on this machine). devMode now auto-accepts, so the dev till enrols on first knock (the
+     retired `DEMO` pairing code is gone). **One thing a resuming session needs before touching
+     anything:** **do not run `pnpm --filter @waitron/db db:generate`** — it proposes
      `DROP TABLE "bookings" CASCADE`, a live table `@waitron/bookings` owns, because that table left
      core's schema barrel in #270 but stayed in core's snapshot chain. Design approved 2026-09-08,
      [`2026-09-08-device-join-and-accept-design.md`](superpowers/specs/2026-09-08-device-join-and-accept-design.md),

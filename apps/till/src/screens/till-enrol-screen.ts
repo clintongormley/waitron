@@ -159,6 +159,7 @@ export class TillEnrolScreen extends LitElement {
     if (!this.isConnected) return;
     if (status === "approved") {
       clearInterval(this.#poll);
+      this.#poll = undefined;
       this.dispatchEvent(
         new CustomEvent("enrolled", {
           detail: { deviceId: this.joinId },
@@ -168,6 +169,7 @@ export class TillEnrolScreen extends LitElement {
       );
     } else if (status === "not_approved") {
       clearInterval(this.#poll);
+      this.#poll = undefined;
       this.phase = "refused";
     }
   }

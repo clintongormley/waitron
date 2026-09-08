@@ -393,10 +393,13 @@ async function provisionVenue(
 }
 
 /**
- * Enrol three demo devices through the SHIPPING knock-then-accept path (`enrolDeviceForTest`, the
- * fixture every join-and-accept suite shares) so `?dev`'s chooser lists a real till, handheld and
- * kitchen display on first run and the seed EXERCISES the production accept code rather than direct-
- * inserting `devices` rows. Each device is its own transaction now that join-and-accept replaces the
+ * Enrol three demo devices via `enrolDeviceForTest` (`src/testing/enrol.ts`, the fixture every
+ * join-and-accept suite shares) so `?dev`'s chooser lists a real till, handheld and kitchen display on
+ * first run. This runs the store body — `createJoinRequest` then `acceptDeviceJoinRequest`'s
+ * profile-resolve → bind → `devices` insert — NOT the admin-facing pairing window or numeric
+ * challenge/match gate, which the fixture deliberately bypasses (it is not a production verb). So the
+ * seed exercises the accept store logic, not the shipping window-and-match flow, and stops short of
+ * direct-inserting `devices` rows. Each device is its own transaction now that join-and-accept replaces the
  * pairing code's single mint→redeem pair with a knock and a separate accept — there is no longer one
  * shared tenant transaction to roll the three back together, so a failure partway leaves the earlier
  * device(s) enrolled; devSetup's own idempotency check (a venue already provisioned refuses a second

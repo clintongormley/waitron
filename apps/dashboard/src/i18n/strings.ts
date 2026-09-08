@@ -186,7 +186,7 @@ export const en = {
   "devices.label": "Label",
   "devices.pairing_title": "Allow new devices",
   "devices.pairing_hint":
-    "Devices and printer agents can only ask to join while this is open. It closes on its own after fifteen minutes.",
+    "Devices can only ask to join while this is open. It closes on its own after fifteen minutes.",
   "devices.pairing_loading": "Checking…",
   "devices.pairing_open": "Open now",
   "devices.pairing_open_until": "Open until {time}",
@@ -762,7 +762,7 @@ export const es: Record<StringKey, string> = {
   "devices.label": "Etiqueta",
   "devices.pairing_title": "Permitir dispositivos nuevos",
   "devices.pairing_hint":
-    "Los dispositivos y los agentes de impresión solo pueden solicitar el alta mientras esto esté abierto. Se cierra solo a los quince minutos.",
+    "Los dispositivos solo pueden solicitar el alta mientras esto esté abierto. Se cierra solo a los quince minutos.",
   "devices.pairing_loading": "Comprobando…",
   "devices.pairing_open": "Abrir ahora",
   "devices.pairing_open_until": "Abierto hasta las {time}",
