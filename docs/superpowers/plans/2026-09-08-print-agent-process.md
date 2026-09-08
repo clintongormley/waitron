@@ -10,6 +10,26 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-08-print-agent-process-design.md`
 
+> **⚠ Amended 2026-09-08, after this plan was written — do not execute Tasks 2, 4, 5, 6, 7, 8 or 10
+> as written.** The owner extended join-and-accept to devices and chose one mechanism for both
+> surfaces
+> ([2026-09-08-device-join-and-accept-design.md](../specs/2026-09-08-device-join-and-accept-design.md)
+> §7). Four changes reach this plan:
+>
+> 1. The verification code is a **two-digit number the admin picks out of three**, not a 4-character
+>    Crockford string. `join_code` → `verification_number`; `JoinReply.verificationCode`, the agent
+>    status page and every `"ABCD"` fixture change with it (Tasks 2, 4, 5, 6, 7, 8, 10).
+> 2. `GET /management-api/print-agents` **must not return the number**. A `…/:id/challenge` route
+>    returns three shuffled numbers, no decoy equal to any other pending request's real number across
+>    both surfaces; accept takes `{ choice }` and a wrong choice denies the row (Tasks 6, 7, 8).
+> 3. `POST /print-api/agent/join` is gated on a **venue-wide fifteen-minute pairing window** held in
+>    memory on the primary (`agent.pairing_closed`); a refused agent retries with backoff, which is
+>    distinct from denied (Tasks 4, 6, 7, 8).
+> 4. Recommended and pending the owner's call: pending agents move to `print_agent_join_requests`
+>    (`local`), which retires both the `active`-flag overload and `agent.pending` (Tasks 5, 6, 7).
+>
+> Tasks 1, 3, 9 and 11 are unaffected. Regenerate the rest from the amended spec before executing.
+
 ## Global Constraints
 
 - Branch `feat/print-agent` in a worktree made with `python3 ~/workspace/tools/worktree.py new waitron feat/print-agent` (CLAUDE.md §6). Every commit `git commit -s`.
