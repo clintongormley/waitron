@@ -1,7 +1,7 @@
 # LAN HTTPS: installable handheld + name-constrained CA — spike and build definition
 
 **Date:** 2026-09-08
-**Status:** Desktop half RUN and PASSED 2026-09-08 (§6); phone rows still owed (the owner's, on real devices). Owner asked for the two open items in
+**Status:** Desktop half RUN and PASSED; Android RUN and FAILED (§6, §7) — a user-installed name-constrained root is NOT constrained on Android. iOS still owed. Owner asked for the two open items in
 [2026-09-08-handheld-app-store-and-kiosk-findings.md](2026-09-08-handheld-app-store-and-kiosk-findings.md)
 §2–§3 to be nailed down. This note turns them into one measured spike and one small build, each
 with its failing case stated up front (CLAUDE.md §1). The onboarding design
@@ -158,13 +158,56 @@ clicked through — measure whether `navigator.serviceWorker.register()` throws 
 real device, but do not depend on it. The `http://waitron.local` landing page (§3, never redirects)
 is therefore the load-bearing surface, exactly as the owner specified.
 
+## 7. Android result — RUN 2026-09-08 — the constraint is NOT enforced (design-changing)
+
+Run on one Android phone (Chrome; exact version not captured — **record it next time**) on the shop
+WiFi, against this Mac standing in for the box. Clean method: the old root removed, Chrome fully
+closed, the root reinstalled, then both URLs opened in a **fresh Incognito tab with no
+click-through** (the earlier confound). The box server logged every TLS handshake, so the result is
+ground truth, not a read of the address bar:
+
+```
+TLS-SNI servername=probe.192-168-10-101.sslip.io -> serving leaf B(control)
+HTTPS 192.168.10.242 host=probe.192-168-10-101.sslip.io:8443 / -> 200
+```
+
+The phone was served leaf B — a certificate for a name OUTSIDE the root's permitted subtree — and
+**completed the connection and loaded the page with a clean padlock.** The positive leaf A also
+loaded cleanly. So on Android, a user-installed root is trusted for EVERY name; the `nameConstraints`
+extension is not enforced by the Android user-CA trust path that Chrome uses. The same leaf B is
+refused by desktop Chrome 152, macOS SecTrust (Safari/iOS) and OpenSSL (§6).
+
+**This falsifies the §3 premise for Android.** "Installing the box's CA on a personal phone is
+acceptable because the root is name-constrained" is TRUE on desktop and on Apple platforms and
+**FALSE on Android**: the Android install warning ("the certificate owner could access your data …
+from websites that you visit") is literally accurate, because Android will not honour the constraint
+that was supposed to contain it. Scope: one device, user trust store (the relevant case — that is
+where a waiter installs it); Android's incomplete name-constraint enforcement on user roots is
+long-standing, so one device is enough to change the decision, but the Chrome/Android version should
+be recorded on the next run and an iOS device still measured.
+
+**Decisions this forces (for the owner):**
+
+- **Keep the name constraint in the box CA anyway** — it costs nothing and it DOES contain the root
+  on desktop and iOS, and it is correct hygiene. Just do not rely on it for the Android threat model.
+- **For a personal ANDROID phone, installing the box CA means broad device trust.** Two ways to live
+  with it: (a) treat the box CA private key as high-value (it already lives only on the box; document
+  that a leak would let an attacker MITM that phone's other traffic — the protection a constraint
+  would have given is absent on Android); or (b) use the **public-certificate path for BYOD Android**
+  so no CA install is needed — bring-your-own-domain now (§4), the cloud broker later. Shop-owned
+  Android tablets carry the same risk but the venue owns it. iOS BYOD keeps the constraint, so it is
+  the lower-risk personal device.
+- **This sharpens the owner's 2026-09-08 "most waiters use their own phones" decision:** on Android
+  those phones either accept broad trust in the box CA or need the public-cert path. Worth an explicit
+  owner call before go-live.
+
 ## 5. Provenance
 
 | Claim | Source / status |
 | --- | --- |
 | Chrome install criteria: manifest fields + HTTPS | <https://web.dev/articles/install-criteria> (read for the findings note, 2026-09-08) |
 | Screen Wake Lock needs a secure context; iOS Safari 16.4+ | <https://caniuse.com/wake-lock> |
-| Chrome and Safari honour `nameConstraints` on a user-installed root | **MEASURED true on macOS 2026-09-08 (§6): Chrome 152 + SecTrust both refuse the control leaf** |
+| Chrome and Safari honour `nameConstraints` on a user-installed root | **MIXED, measured 2026-09-08: TRUE on macOS Chrome 152 + SecTrust (§6); FALSE on Android — the control leaf loaded (§7)** |
 | No service worker is required for Chrome install | belief from the same install-criteria page; the spike's "Install appears" row confirms |
 | Service-worker registration fails with `SecurityError` on a click-through (untrusted) HTTPS origin | **belief — not measurable headlessly (§6); a real-device row** |
 | HSTS disables the interstitial click-through | belief (documented Chrome/Safari behaviour); the spike confirms the box sends no HSTS |

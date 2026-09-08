@@ -1007,9 +1007,13 @@ mostly a UX wrapper over built paths; modes 3–4 carry the real new work.
 - **A setup box's `/health` returns 503 by design** (no duty loop → not trading-healthy); a
   liveness/supervisor probe must gate on **`/setup-api/status`** (200), or it restart-loops an
   unprovisioned box.
-- **The per-device "is the CA trusted?" check is deferred to a browser-behaviour spike** — spec §17/§18's
-  "untrusted-CA origins block SW/PWA/WebAuthn until trusted" is decisive and unverified; the trust
-  page instructs + offers the download/QR but does not assert trust state. The same spike should
+- **The name-constrained-CA model does NOT protect a personal Android phone** (spike RUN 2026-09-08,
+  [2026-09-08-lan-https-install-and-name-constraints-spike.md](superpowers/specs/2026-09-08-lan-https-install-and-name-constraints-spike.md)
+  §7): a user-installed root is trusted for every name on Android (server-log-confirmed), while desktop
+  Chrome and iOS/Safari honour the constraint (§6). Keep the constraint (it helps desktop + iOS), but
+  for BYOD Android either accept broad trust in the box CA or use the public-certificate path
+  (bring-your-own-domain now, cloud broker later) — an owner call before go-live. The
+  SW/PWA/WebAuthn-blocked-until-trusted behaviour (spec §17/§18) and an iOS device are still to measure. The same spike should
   check that Chrome and Safari honour a NAME-CONSTRAINED root, since waiters will install the box's
   CA on their own phones
   ([2026-09-08-handheld-app-store-and-kiosk-findings.md](superpowers/specs/2026-09-08-handheld-app-store-and-kiosk-findings.md) §3).
