@@ -553,6 +553,62 @@ describe("acceptDeviceJoinRequest", () => {
       await b.close();
     }
   });
+
+  it("two concurrent accepts of a TILL profile: exactly one wins, the loser never reaches register creation", async () => {
+    const venue = await setupVenue(suite.admin);
+    // A `till` profile: resolveDeviceBinding WRITES here (createRegister auto-creates a `tills` row
+    // named after the device before the device INSERT), the different failure mode from the `kds`
+    // race above — under the old plain-SELECT shape, the loser reached `createRegister` too, deriving
+    // the SAME name from the one request's label, and failed on `device.register_name_taken` (a
+    // clean-looking but WRONG code that masks the real defect) rather than ever reaching the
+    // `devices` INSERT. Delete-first must stop the loser before it writes anything at all.
+    const profileId = await seedProfile(venue.cfg, "till");
+    const made = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Till racer" });
+    });
+
+    const a = await suite.pg.connect();
+    const b = await suite.pg.connect();
+    try {
+      const attempt = (db: Database): Promise<AcceptResult> =>
+        withTenant(db, venue.cfg.tenantId, async (tx) => {
+          await asAppUser(tx);
+          return acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
+            choice: made.verificationNumber,
+            profileId,
+          });
+        });
+
+      const outcomes = await Promise.allSettled([attempt(a), attempt(b)]);
+      const winner = outcomes.find(
+        (o): o is PromiseFulfilledResult<AcceptResult> => o.status === "fulfilled",
+      );
+      const loser = outcomes.find((o): o is PromiseRejectedResult => o.status === "rejected");
+      expect(winner).toBeDefined();
+      expect(loser).toBeDefined();
+      expect(winner!.value).toMatchObject({ ok: true });
+      // The point: under delete-first the loser is refused BEFORE it ever calls createRegister, so
+      // it sees the same join_request.not_found every other losing race does — never
+      // device.register_name_taken, which would mean it got as far as writing a second register.
+      expect(loser!.reason).toMatchObject({ code: "join_request.not_found" });
+
+      const { rows: deviceRows } = await suite.admin.execute<{ n: number }>(sql`
+        select count(*)::int as n from devices
+        where tenant_id = ${venue.cfg.tenantId} and id = ${made.joinId}
+      `);
+      expect(deviceRows[0]!.n).toBe(1);
+      // No orphan register from the loser: exactly the one the winner's accept created.
+      const { rows: tillRows } = await suite.admin.execute<{ n: number }>(sql`
+        select count(*)::int as n from tills
+        where tenant_id = ${venue.cfg.tenantId} and name = 'Till racer'
+      `);
+      expect(tillRows[0]!.n).toBe(1);
+    } finally {
+      await a.close();
+      await b.close();
+    }
+  });
 });
 
 describe("denyJoinRequest", () => {
