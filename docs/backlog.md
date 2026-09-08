@@ -651,7 +651,11 @@ screens, `apps/server/src/modules.ts` (the maps derived from that list), and the
        incrementally; migrate core screens off the coarse `requiresManager` role gate onto permission ids now
        that `getMe` carries the permission set. CI: bookings' browser vitest runs in the shared `test-light-a`
        shard (Chromium in a light bin) — CONFIRMED green on #273 (`test-light-a` 3m1s); the dedicated dual-mode
-       shard stays the fallback only if that bin later hangs.
+       shard stays the fallback only if that bin later hangs. **First hang observed 2026-09-08 (#277,
+       floor-perf):** `test-light-a` hung the full 6h GitHub max-timeout and was cancelled, then passed in
+       ~2min on a plain re-run — a shared-shard infra hang, not the diff (that PR's change runs in bookings'
+       NODE project, not the browser one). One data point; if it recurs, move bookings' browser tests to the
+       dedicated dual-mode shard.
 4. **Control plane brainstorm — NEW (owner-added 2026-09-05).** With one tenant per database and a
    dedicated cloud instance per tenant, the only multi-tenant service Waitron will run is a small
    control plane: accounts (a customer of ours, a concept the schema does not have — a tenant is a
