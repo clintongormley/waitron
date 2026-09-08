@@ -67,6 +67,20 @@ describe("createJoinRequest", () => {
       });
     });
     expect(first.verificationNumber).toBe("47");
+    // The first request's two DECOYS are random and are ALSO spoken for, so the second generator's
+    // fallback has to be a value they did not take: a generator that only ever yields one blocked
+    // number starves the pick loop into `device.join_full`, which is exactly the path the
+    // "real avoids issued decoys" test below demonstrates on purpose. Read them back (`unnest`, so the
+    // driver hands back one text per row rather than an array literal — CLAUDE.md §4) and choose a
+    // free fallback, keeping this test about the REAL-number rule it is named for.
+    const taken = await suite.admin.execute<{ n: string }>(
+      sql`select unnest(decoy_numbers) as n from join_requests
+           where tenant_id = ${venue.cfg.tenantId}`,
+    );
+    expect(taken.rows).toHaveLength(2);
+    for (const r of taken.rows) expect(r.n).toMatch(/^\d{2}$/);
+    const spokenFor = new Set(["47", ...taken.rows.map((r) => r.n)]);
+    const fallback = ["13", "14", "15", "16"].find((n) => !spokenFor.has(n))!;
     const second = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
       await asAppUser(tx);
       return createJoinRequest(tx, venue.cfg, {
@@ -74,11 +88,11 @@ describe("createJoinRequest", () => {
         label: "Bar till",
         numbers: (() => {
           let n = 0;
-          return () => (n++ === 0 ? 47 : 13);
+          return () => (n++ === 0 ? 47 : Number(fallback));
         })(),
       });
     });
-    expect(second.verificationNumber).toBe("13");
+    expect(second.verificationNumber).toBe(fallback);
   });
 
   it("refuses a real number that is already someone else's DECOY (rule: real avoids issued decoys)", async () => {
