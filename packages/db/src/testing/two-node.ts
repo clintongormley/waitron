@@ -19,13 +19,23 @@ import { POSTGRES_IMAGE } from "./postgres.js";
  * subscription's CONNECTION string reaches a peer through the network, never through the
  * host-published `uri`, which only this process can use.
  *
- * Cleanup, both paths. Setup acquires the network, then each node, then migrates each; a failure at
- * ANY of those steps (a container that will not start, `migrate()` throwing) stops whatever has
- * already come up — best-effort, in reverse order, network last — before re-throwing the original
- * error, so a half-built cluster never leaks. `stop()` runs the same teardown. With Ryuk disabled
- * locally (CLAUDE.md §4) an interrupted run leaks the network — but the containers carry
- * `com.waitron.reapable`, so `pnpm reap` removes them, and an orphaned empty network is harmless (it
- * holds nothing and is cheap to prune).
+ * Resilience. Under the full local workspace run a container boot can be transiently starved; with
+ * no bound such a boot hangs the suite's whole `beforeAll` timeout instead of failing and recovering.
+ * So the whole acquire (network → both nodes → migrate) retries up to {@link MAX_ACQUIRE_ATTEMPTS}
+ * attempts, each real boot is bounded ({@link STARTUP_TIMEOUT_MS} on the container, a connect timeout
+ * on the client), and a failed attempt tears itself down before the next tries in a calmer window.
+ * The bounds trade a hang for a bounded failure: the retries are for a transient stall that clears by
+ * attempt 2, NOT slack to absorb three full-length boots — the consuming suites' 300s `beforeAll`
+ * also spends time on the pub/sub steps, so a genuine 3×~60s run leaves little of that budget.
+ *
+ * Cleanup, both paths, per attempt. An attempt acquires the network, then both nodes IN PARALLEL,
+ * then migrates each; a failure at ANY step (a container that will not start, `migrate()` throwing)
+ * stops whatever that attempt brought up — best-effort, in reverse order, network last. Nodes boot
+ * with `Promise.allSettled`, so a partner that came up while the other failed is captured and
+ * stopped, never abandoned in flight. `stop()` on the returned cluster runs the same teardown for the
+ * winning attempt. With Ryuk disabled locally (CLAUDE.md §4) an interrupted run leaks the network —
+ * but the containers carry `com.waitron.reapable`, so `pnpm reap` removes them, and an orphaned empty
+ * network is harmless (it holds nothing and is cheap to prune).
  */
 export interface ReplNode {
   /** Reaches this node from the HOST (published port). Used by this process's own pg clients. */
@@ -95,6 +105,20 @@ export const LOGICAL_REPLICATION_COMMAND = [
   "max_slot_wal_keep_size=4GB",
 ];
 
+/** Attempts to acquire the whole cluster before giving up. A transient contention stall on one
+ * attempt recovers on the next; three bounds a run of failures to a loud error, not a hung suite. */
+export const MAX_ACQUIRE_ATTEMPTS = 3;
+/** Bounds one container boot so a starved start FAILS (and the attempt retries) rather than hanging
+ * the wait strategy forever. A genuine three-attempt run at this bound eats most of the 300s hook,
+ * so it is a ceiling for the pathological case, not headroom the happy path relies on. */
+export const STARTUP_TIMEOUT_MS = 60_000;
+/** Bounds `client.connect()` so a container that is up but not yet answering fails fast, not hangs. */
+const CONNECT_TIMEOUT_MS = 15_000;
+/** Short pause before a retry so the next attempt lands in a calmer window, not back-to-back. */
+const RETRY_BACKOFF_MS = 500;
+
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function startRealNode(
   network: StartedNetwork,
   alias: string,
@@ -107,9 +131,15 @@ async function startRealNode(
     .withNetwork(network)
     .withNetworkAliases(alias)
     .withCommand(command)
+    // Bound the boot so a starved start fails at the bound and the acquire retries, rather than the
+    // wait strategy hanging the whole suite `beforeAll` (this fixture's original flake).
+    .withStartupTimeout(STARTUP_TIMEOUT_MS)
     .start();
   const uri = container.getConnectionUri();
-  const client = new pg.Client({ connectionString: uri });
+  const client = new pg.Client({
+    connectionString: uri,
+    connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
+  });
   await client.connect();
   const node: ReplNode = {
     uri,
@@ -151,30 +181,51 @@ export async function startTwoNodeCluster(options: TwoNodeClusterOptions): Promi
   }
   /* v8 ignore stop */
 
-  // Every resource that has come up, in acquisition order; teardown reverses it (nodes before the
-  // network) and swallows each failure so one wedged stop can never strand the rest. `Promise<unknown>`
-  // because a network's `stop()` resolves to a `StoppedNetwork`, not void (TypeScript's void-return
-  // relaxation covers `() => T`, never `Promise<T>` against `Promise<void>` — see postgres.ts).
-  const started: Array<{ stop(): Promise<unknown> }> = [];
-  const teardown = async () => {
-    for (const resource of [...started].reverse()) {
-      await resource.stop().catch(() => {});
-    }
-  };
+  // The acquire retries: a transiently-starved boot fails its attempt, tears that attempt down, and
+  // the next tries in a calmer window. Only the LAST attempt's error surfaces.
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= MAX_ACQUIRE_ATTEMPTS; attempt += 1) {
+    // Everything THIS attempt brought up, in acquisition order; teardown reverses it (nodes before
+    // the network) and swallows each failure so one wedged stop can never strand the rest.
+    // `Promise<unknown>` because a network's `stop()` resolves to a `StoppedNetwork`, not void
+    // (TypeScript's void-return relaxation covers `() => T`, never `Promise<T>` against
+    // `Promise<void>` — see postgres.ts).
+    const started: Array<{ stop(): Promise<unknown> }> = [];
+    const teardown = async () => {
+      for (const resource of [...started].reverse()) {
+        await resource.stop().catch(() => {});
+      }
+    };
 
-  try {
-    const network = await startNetwork();
-    started.push(network);
-    const a = await startNode(network, "node-a");
-    started.push(a);
-    const b = await startNode(network, "node-b");
-    started.push(b);
-    await options.migrate(a.node.uri);
-    await options.migrate(b.node.uri);
-    return { nodeA: a.node, nodeB: b.node, stop: teardown };
-  } catch (error) {
-    // Setup failed after some resources came up — stop exactly those, then surface the real cause.
-    await teardown();
-    throw error;
+    try {
+      const network = await startNetwork();
+      started.push(network);
+      // Boot both nodes concurrently. `allSettled` waits for BOTH to settle, so a node that comes up
+      // while its partner fails is captured for teardown here — never left as an in-flight promise
+      // whose container leaks. Results keep input order, so [0] is node-a, [1] is node-b.
+      const settled = await Promise.allSettled([
+        startNode(network, "node-a"),
+        startNode(network, "node-b"),
+      ]);
+      for (const result of settled) {
+        if (result.status === "fulfilled") started.push(result.value);
+      }
+      const rejected = settled.find((result) => result.status === "rejected");
+      if (rejected) throw rejected.reason;
+      const [a, b] = settled as [
+        PromiseFulfilledResult<StartedReplNode>,
+        PromiseFulfilledResult<StartedReplNode>,
+      ];
+      await options.migrate(a.value.node.uri);
+      await options.migrate(b.value.node.uri);
+      return { nodeA: a.value.node, nodeB: b.value.node, stop: teardown };
+    } catch (error) {
+      // This attempt failed after some resources came up — stop exactly those, remember the cause,
+      // and retry unless this was the last attempt.
+      lastError = error;
+      await teardown();
+      if (attempt < MAX_ACQUIRE_ATTEMPTS) await delay(RETRY_BACKOFF_MS);
+    }
   }
+  throw lastError;
 }
