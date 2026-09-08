@@ -123,9 +123,18 @@ design-review section apply.
 - **Track H — hardware** (push steps 3 and 4). Owns `packages/printing`, `packages/print-agent` +
   `apps/print-agent` (new), `packages/payments*`, the printer/payment routes in `apps/server`. Work, in
   order: **1.** the print agent process — spec
-  [2026-09-08-print-agent-process-design.md](superpowers/specs/2026-09-08-print-agent-process-design.md)
-  (approved 2026-09-08; join-and-accept replaces the pairing code, a db-free package behind a `Host`
-  seam, a container host with a loopback setup page; plan next); **2.** the virtual PDF printer + a
+  [2026-09-08-print-agent-process-design.md](superpowers/specs/2026-09-08-print-agent-process-design.md),
+  plan [2026-09-08-print-agent-process.md](superpowers/plans/2026-09-08-print-agent-process.md).
+  **Foundation landed** (this branch): `@waitron/print-agent`, a db-free package holding the ESC/POS
+  transports moved out of `@waitron/printing`, the wire client's `probeNode`, and the
+  follow-the-primary router. **The rest is BLOCKED** on device enrolment landing
+  ([2026-09-08-device-join-and-accept-design.md](superpowers/specs/2026-09-08-device-join-and-accept-design.md)),
+  which amends this spec §2.3: a two-digit verification number the admin picks out of three, a
+  challenge route that never returns the number, a venue-wide in-memory pairing window, and decoys
+  distinct across both surfaces. Settled there too (owner, 2026-09-08, §7.3): pending agents move out
+  of `print_agents` into the **shared** `join_requests` table serving both surfaces — one table, not
+  one each — which retires the `active`-flag overload and `agent.pending`; and it is the PRINT-AGENT
+  slice that drops `print_agent_pairing_codes`, because the enrol route reading it ships today; **2.** the virtual PDF printer + a
   `print_jobs` retention sweep (spec §7); **3.** un-pin IP printers from one agent (failover-printing
   §4a); **4.** SumUp once its questions are answered. The manual receipt for 1 is the owner's HP
   LaserJet at `192.168.20.56:9100` (TCP path only — not an ESC/POS device).
