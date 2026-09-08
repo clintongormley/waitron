@@ -93,6 +93,42 @@ describe("createClient — probeNode", () => {
     }
   });
 
+  it("a 200 whose body is the literal null is bad_reply", async () => {
+    // `typeof null === "object"`, so the shape guard's null check is the ONLY thing standing between
+    // a `null` body and a property read on it. A server answering `null` is malformed, not reachable.
+    const client = createClient({ fetch: vi.fn().mockResolvedValue(reply(200, null)) });
+    expect(await client.probeNode(URL_A)).toMatchObject({
+      ok: false,
+      failure: { kind: "bad_reply" },
+    });
+  });
+
+  it("a fetch that throws a non-Error still yields unreachable, with the value stringified", async () => {
+    // A rejection is not guaranteed to be an Error — a `fetch` polyfill or a host object can reject
+    // with anything. The detail must still be a readable string rather than "undefined".
+    const client = createClient({ fetch: vi.fn().mockRejectedValue("socket hang up") });
+    expect(await client.probeNode(URL_A)).toEqual({
+      ok: false,
+      failure: { kind: "unreachable", detail: "socket hang up" },
+    });
+  });
+
+  it("a rejection that cannot be stringified is still unreachable, not a throw", async () => {
+    // The module's contract is that NO network condition escapes as an exception. A rejection value
+    // is not guaranteed to be stringifiable — an object whose `toString` throws would otherwise carry
+    // that throw out of the catch block and past the caller's `await`.
+    const hostile = {
+      toString() {
+        throw new Error("hostile toString");
+      },
+    };
+    const client = createClient({ fetch: vi.fn().mockRejectedValue(hostile) });
+    await expect(client.probeNode(URL_A)).resolves.toMatchObject({
+      ok: false,
+      failure: { kind: "unreachable" },
+    });
+  });
+
   it("clears the timeout on success (the process is not held open by a pending timer)", async () => {
     vi.useFakeTimers();
     try {
