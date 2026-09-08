@@ -124,4 +124,14 @@ describe.runIf(POSTGRES_COVERED)("createPostgresDb", () => {
     await db.close();
     await expect(db.execute(sql`select 1`)).rejects.toThrow();
   });
+
+  it("honours poolOptions (a capped pool still answers a query)", async () => {
+    // The `poolOptions` seam exists so a small owner pool can cap its connection count (`{ max: 2 }`);
+    // the observable contract is only that the merged config still opens and queries — the cap itself
+    // is a pg-internal we do not reach into.
+    const db = await createPostgresDb(container.getConnectionUri(), { max: 2 });
+    const result = await db.execute(sql`select 1 as one`);
+    expect(result.rows[0]).toEqual({ one: 1 });
+    await db.close();
+  });
 });

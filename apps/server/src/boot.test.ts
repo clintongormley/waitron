@@ -264,6 +264,21 @@ beforeAll(async () => {
   await suite.admin.execute(
     sql.raw(`grant select on all tables in schema public to ${PROBE_ROLE}`),
   );
+  // Make `PROBE_ROLE` the OWNER of every public table on this clone, so `ensureReplicationShape`'s
+  // boot-time `CREATE PUBLICATION … FOR TABLE …` (owner-only for a non-superuser — prototype finding 1)
+  // succeeds as the migrator connection, exactly as production does: the real migrator OWNS its tables
+  // (Probe A), where this shared template was migrated by the container superuser. Ownership is set at
+  // fixture setup with `ALTER TABLE … OWNER TO` (not `REASSIGN OWNED`), and does not change what
+  // `app_user` (the pool's SET ROLE) may do, so the grant-enforcement assertions below are unaffected.
+  await suite.admin.execute(
+    sql.raw(`do $$
+      declare r record;
+      begin
+        for r in select tablename from pg_tables where schemaname = 'public' loop
+          execute format('alter table public.%I owner to ${PROBE_ROLE}', r.tablename);
+        end loop;
+      end $$;`),
+  );
 
   databaseUrl = roleUrl(suite.pg.uri, PROBE_ROLE, PROBE_PASSWORD);
 

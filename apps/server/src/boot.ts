@@ -32,7 +32,9 @@ import {
   ALL_MODULE_PERMISSIONS,
   ALL_SYNC_ENROLMENTS,
   enabledFloorAnnotators,
+  LEDGER_PUBLICATION_TABLES,
   MODULE_BY_TABLE,
+  STATE_PUBLICATION_TABLES,
 } from "./modules.js";
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
 import { parseEnvFile } from "./env-file.js";
@@ -108,6 +110,8 @@ import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { writeTradingEnv, type TradingConfig } from "./trading-config.js";
+import { ensureReplicationShape } from "./replication.js";
+import { readPendingAdoption, runFinishAdoption } from "./finish-adoption.js";
 import { mountDiscovery } from "./discovery-api.js";
 import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
 import { listBoxIpv4 } from "./box-reach.js";
@@ -906,6 +910,79 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     throw error;
   }
 
+  // Adoption-pending boot (C6 / derived fact 1): an adopted mirror restarts into a database whose
+  // native initial copy is still running (spec §2.2, "minutes over a WAN"), so its tenant-scoped rows
+  // are not there yet. Boot must NOT touch them until the copy completes — it serves `/health` and a
+  // minimal `/api/box/status` reporting `adoption: pending`, ensures the two publications, and starts
+  // `runFinishAdoption`, which seals the reserved identity + ambient viewer once every table has
+  // copied, then the box restarts into normal mirror mode. It reads no deployment axes / membership,
+  // mounts no mirror session and no till/node-scoped read path — `ensureMirrorViewer` in particular
+  // would throw a `persons`→`tenants` FK violation on the still-empty database (mirror-session.ts).
+  // Entered BEFORE the axes read below for that reason.
+  const pendingAdoption = await readPendingAdoption(config.stateDir);
+  if (pendingAdoption !== null) {
+    // A dedicated small OWNER pool (M8 — `replicationDb`, NEVER `ownerDb`, already declared from a
+    // possibly-different role at the demote and promote sites). Wrapped so a throw closes both pools
+    // (only `db` + this one are open here) before rethrowing.
+    let replicationDb: Database;
+    try {
+      replicationDb = await createPostgresDb(config.migrationsDatabaseUrl, { max: 2 });
+    } catch (error) {
+      await db.close();
+      throw error;
+    }
+    try {
+      // Mode is 'mirror' (a mirror-to-be): this only ensures the publications (ready for a later
+      // promotion) and narrows nothing.
+      await ensureReplicationShape(replicationDb, {
+        environment: config.environment,
+        mode: "mirror",
+        ledgerTables: LEDGER_PUBLICATION_TABLES,
+        stateTables: STATE_PUBLICATION_TABLES,
+        log,
+      });
+    } catch (error) {
+      await Promise.allSettled([replicationDb.close(), db.close()]);
+      throw error;
+    }
+    // The only status surface an adoption-pending box serves — unauthenticated (no ambient viewer
+    // exists yet) and deliberately minimal, distinct from the full `mountBoxStatusApi` shape.
+    app.get("/api/box/status", (c) => c.json({ adoption: "pending" }, 200));
+    const finishController = new AbortController();
+    const finishWorker = runFinishAdoption({
+      replicationDb,
+      ring,
+      stateDir: config.stateDir,
+      environment: config.environment,
+      modules: setsToMigrate,
+      log,
+      signal: finishController.signal,
+    });
+    // A settle-by-rejection before close() must not become a process-level unhandled rejection — log
+    // it the `codeOf`-classified way the sync/backup workers below do (runFinishAdoption swallows its
+    // own per-tick faults, so this only ever fires under an unexpected escape).
+    finishWorker.catch((err) =>
+      log("error", "adoption.worker_rejected", { errorCode: codeOf(err) }),
+    );
+    const server = startListening(config, app, now, log);
+    const mdns = startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: listBoxIpv4, log });
+    return makeStartedServer(
+      server,
+      health,
+      log,
+      {
+        stopWork: async () => {
+          finishController.abort();
+          await finishWorker.catch(() => {});
+        },
+        closePools: async () => {
+          await Promise.allSettled([replicationDb.close(), db.close()]);
+        },
+      },
+      mdns,
+    );
+  }
+
   // Which role this database plays (C2a design §4). A mirror pulls + applies and serves read-only; a
   // primary is today's flow. Read ONCE here into a refreshable holder that the promote action
   // (`promoteLocalSecondaryToPrimary`, this slice) refreshes after its owner-role write — so a mode flip
@@ -1083,6 +1160,34 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       await db.close();
       throw error;
     }
+  }
+
+  // Native replication shape, reconciled on EVERY boot (swap spec §2.1/§4.2): ensure both publications
+  // name their derived tables and, on a PRIMARY, self-heal any subscription still naming the state
+  // publication down to ledger-only (a promoted node's drain window must not re-copy state). A
+  // dedicated small OWNER pool (M8 — `replicationDb`, NOT `ownerDb`, which the demote/promote sites
+  // above/below already take): the migrator owns every published table and every subscription it
+  // created, and this pool only runs that occasional owner DDL, so it is capped. Opened AFTER the last
+  // db-cleanup throw site in this branch (the mirror-config read just above) so a throw here is the
+  // first that must also drain it; closed in `closePools` below.
+  let replicationDb: Database;
+  try {
+    replicationDb = await createPostgresDb(config.migrationsDatabaseUrl, { max: 2 });
+  } catch (error) {
+    await db.close();
+    throw error;
+  }
+  try {
+    await ensureReplicationShape(replicationDb, {
+      environment: config.environment,
+      mode: holders.mode.current,
+      ledgerTables: LEDGER_PUBLICATION_TABLES,
+      stateTables: STATE_PUBLICATION_TABLES,
+      log,
+    });
+  } catch (error) {
+    await Promise.allSettled([replicationDb.close(), db.close()]);
+    throw error;
   }
 
   const reconciler = new StripeReconciler({
@@ -2159,6 +2264,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       },
       closePools: async () => {
         await db.close();
+        // The replication owner pool (M8), opened after the mirror-config read above and closed here
+        // beside the app pool.
+        await replicationDb.close();
         if (syncDb !== undefined) await syncDb.close();
         if (retentionDb !== undefined) await retentionDb.close();
         // The backup sweep's backup manifest read pool. `stopWork` above already aborted +

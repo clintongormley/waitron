@@ -224,6 +224,9 @@ const DEFAULT_SYNC_FAST_TICK_MS = 1000;
  * housekeeping DELETE, not on any hot path, so it need not run tight. */
 const DEFAULT_SYNC_RETENTION_TICK_MS = 60_000;
 const DEFAULT_HTTP_PORT = 8080;
+/** The PostgreSQL port a node advertises for a peer's subscription to dial when
+ * WAITRON_REPLICATION_PORT is unset — the cluster default. */
+const DEFAULT_REPLICATION_PORT = 5432;
 /** The rotating log file's size ceiling when WAITRON_LOG_MAX_BYTES is unset — 10 MB, a full file that
  * still opens instantly in an editor. */
 const DEFAULT_LOG_MAX_BYTES = 10_000_000;
@@ -439,6 +442,36 @@ export function loadSyncConfig(env: Env): SyncTransportConfig | undefined {
     // a blank never silently means "alarm on everything" and a present-but-undefined key never leaks
     // in (the same omit-when-unset shape as retentionDatabaseUrl above, CLAUDE.md §3).
     ...(lagAlarmRows === undefined ? {} : { lagAlarmRows }),
+  };
+}
+
+/**
+ * The native-replication credential + advertise address (swap spec §2.2). The `password` is what a
+ * peer's `CREATE SUBSCRIPTION` conninfo authenticates as the `waitron_repl` LOGIN REPLICATION role;
+ * `advertiseHost`/`advertisePort` is the reachable address this node publishes for that peer to dial.
+ * It rides the mirror bundle (owner decision 2026-09-07), not the sale path — so it is OPTIONAL:
+ * absent on a box that never hands out or dials a subscription.
+ */
+export interface ReplicationConfig {
+  password: string;
+  advertiseHost: string;
+  advertisePort: number;
+}
+
+/**
+ * Native replication is configured iff BOTH the `waitron_repl` password and the advertise host are
+ * set — an unset (absent OR empty, via `isUnset`) either one returns `undefined`, the same off-switch
+ * `loadSyncConfig`/`loadTunnelConfig` take for a required field: a blank password must never mean "no
+ * auth", and a blank host names no address to dial. The port defaults to the cluster default 5432.
+ */
+export function loadReplicationConfig(env: Env): ReplicationConfig | undefined {
+  const password = env.WAITRON_REPLICATION_PASSWORD;
+  const advertiseHost = env.WAITRON_REPLICATION_HOST;
+  if (isUnset(password) || isUnset(advertiseHost)) return undefined;
+  return {
+    password,
+    advertiseHost,
+    advertisePort: positiveInt(env, "WAITRON_REPLICATION_PORT", DEFAULT_REPLICATION_PORT),
   };
 }
 

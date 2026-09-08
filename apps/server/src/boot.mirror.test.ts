@@ -50,6 +50,9 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
 const mirror = useTemplateDb({ template: "manifest" });
 const primary = useTemplateDb({ template: "manifest" });
+// A fourth clone for the adoption-pending boot (C6): migrated but with NO identity seeded — it models
+// a mirror that has just adopted and whose native initial copy has not yet brought the tenant rows.
+const adopting = useTemplateDb({ template: "manifest" });
 // A third mirror-stamped clone that is NEVER seeded with a `mirror_config` row — the fail-closed
 // control: a box stamped `deployment.mode='mirror'` with no DB connection config must refuse to boot
 // (server.config_invalid), never serve a mirror that can never reach its primary.
@@ -129,6 +132,8 @@ let noConfigDatabaseUrl: string;
 let noConfigSyncDatabaseUrl: string;
 let primaryDatabaseUrl: string;
 let primarySyncDatabaseUrl: string;
+let adoptingDatabaseUrl: string;
+let adoptingSyncDatabaseUrl: string;
 // The retention (sync_pruner, an app_user member) URL for the primary — the connection the
 // retention sweep opens and the C2b mirror-bundle endpoint reuses to mint peer tokens. Set on the
 // primary control boot so that endpoint mounts there (the mirror never opens one, so it never
@@ -185,6 +190,11 @@ beforeAll(async () => {
   await stampDeployment(primary.admin, "preproduction");
   await stampDeployment(noConfig.admin, "preproduction");
   await setDeploymentMode(noConfig.admin, "mirror");
+  // The adoption-pending clone: stamped preproduction (so `assertDeploymentMatches` passes) and mode
+  // 'mirror', but deliberately NOT seeded with the till identity — the tenant row the initial copy
+  // has not brought yet.
+  await stampDeployment(adopting.admin, "preproduction");
+  await setDeploymentMode(adopting.admin, "mirror");
 
   // The `mirror` clone's DB-stored connection config + sealed sync token (C2b), written owner-role
   // exactly as `adoptFromPrimary` would — this is what the boot's `readMirrorConfig` / `readMirrorToken`
@@ -207,6 +217,8 @@ beforeAll(async () => {
   noConfigSyncDatabaseUrl = roleUrl(noConfig.pg.uri, "sync_applier", "ap");
   primaryDatabaseUrl = roleUrl(primary.pg.uri, "app_login", "app_pw");
   primarySyncDatabaseUrl = roleUrl(primary.pg.uri, "sync_applier", "ap");
+  adoptingDatabaseUrl = roleUrl(adopting.pg.uri, "app_login", "app_pw");
+  adoptingSyncDatabaseUrl = roleUrl(adopting.pg.uri, "sync_applier", "ap");
   primaryRetentionDatabaseUrl = roleUrl(primary.pg.uri, "sync_pruner", "pp");
 }, 180_000);
 
@@ -611,5 +623,79 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       variable: "mirror_config",
       reason: "mirror_requires_mirror_config",
     });
+  }, 60_000);
+
+  it("boots adoption-pending on an EMPTY database with a pending file, serving only /health + /api/box/status", async () => {
+    // C6 / derived fact 1: an adopted mirror restarts while its native initial copy is still running,
+    // so the tenant rows are absent. A pending-adoption.json is present. Boot must enter the
+    // adoption-pending branch and serve a minimal status surface WITHOUT touching tenant-scoped rows.
+    //
+    // FAILING CASE (proven by the empty database here): without the adoption-pending guard, boot would
+    // reach `ensureMirrorViewer(db, tenantId)`, whose `persons` insert FKs to a `tenants` row the copy
+    // has not brought — a foreign-key violation that would throw out of `startServer`. That this boot
+    // returns a serving box instead is the guard working: the identity was never seeded on `adopting`.
+    const stateDir = mkdtempSync(join(tmpdir(), "waitron-adopting-state-"));
+    // A `modules.json` resolving the fiscal slot, matching the suite convention (the shared prefix
+    // migrates the enabled set before the branch is entered).
+    writeFileSync(
+      join(stateDir, "modules.json"),
+      JSON.stringify({ modules: { "fiscal-none": false } }),
+    );
+    // The pending-adoption record (the standby's own identity + reservation). Its `standby.nodeId` is
+    // a distinct valid UUID; the finish worker never reaches `establish` here (no subscription exists,
+    // so the copy never reports ready), so the reserved payload is inert.
+    writeFileSync(
+      join(stateDir, "pending-adoption.json"),
+      JSON.stringify({
+        tenantId: TILL_ENV.WAITRON_TILL_TENANT_ID,
+        locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+        standby: {
+          nodeId: "88888888-8888-4888-8888-888888888888",
+          publicKey: "pub",
+          privateKey: "priv",
+        },
+        nodeName: "standby",
+        filingModule: "fiscal-verifactu",
+        taxModule: null,
+        reserved: { modules: {}, series: [], endorsement: {} },
+        originNodeId: MIRROR_ORIGIN_NODE,
+      }),
+      { mode: 0o600 },
+    );
+    const port = await freePort();
+    const server = await startServer({
+      ...KEY_ENV,
+      WAITRON_STATE_DIR: stateDir,
+      DATABASE_URL: adoptingDatabaseUrl,
+      WAITRON_MIGRATIONS_DATABASE_URL: adopting.pg.uri,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_SYNC_DATABASE_URL: adoptingSyncDatabaseUrl,
+    });
+    const base = `http://127.0.0.1:${port}`;
+    try {
+      // /health is reachable (the listener is up and the route is mounted). An adoption-pending box
+      // has run no pass, so its readiness probe is legitimately not-ready (503) rather than healthy —
+      // what matters here is that the route answers rather than 404s or drops the connection.
+      const health = await fetch(`${base}/health`);
+      expect([200, 503]).toContain(health.status);
+
+      // /api/box/status reports adoption pending — the minimal, unauthenticated status surface the
+      // adoption-pending branch mounts (no ambient viewer, no management session).
+      const status = await fetch(`${base}/api/box/status`);
+      expect(status.status).toBe(200);
+      expect(await status.json()).toEqual({ adoption: "pending" });
+
+      // No mirror ambient session / dashboard read path is mounted: a dashboard read that the normal
+      // mirror boot answers via the ambient viewer is unreachable here (no `set-cookie`, and the gated
+      // read is not served through an ambient admin). It 401s (route present but no session) rather
+      // than resolving an ambient admin.
+      const dash = await fetch(`${base}/management-api/catalogues`);
+      expect(dash.headers.get("set-cookie")).toBeNull();
+    } finally {
+      await server.close();
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+    await expect(fetch(`${base}/health`)).rejects.toThrow();
   }, 60_000);
 });

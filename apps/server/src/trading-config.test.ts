@@ -2,7 +2,7 @@ import { mkdtemp, readFile, readdir, stat, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect, afterEach } from "vitest";
-import { writeTradingEnv, type TradingConfig } from "./trading-config.js";
+import { clearTradingEnv, writeTradingEnv, type TradingConfig } from "./trading-config.js";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -93,5 +93,20 @@ describe("writeTradingEnv", () => {
     // torn file, which is the whole point of the atomic write. A successful run leaves only the file.
     const names = await readdir(d);
     expect(names).toEqual(["trading.env"]);
+  });
+});
+
+describe("clearTradingEnv", () => {
+  it("removes an existing trading.env so the box reboots into SETUP mode", async () => {
+    const d = await newDir();
+    await writeTradingEnv(d, cfg);
+    await clearTradingEnv(d);
+    expect(await readdir(d)).toEqual([]);
+  });
+
+  it("is a no-op when there is no trading.env (idempotent)", async () => {
+    const d = await newDir();
+    await clearTradingEnv(d); // must not throw on an absent file
+    expect(await readdir(d)).toEqual([]);
   });
 });

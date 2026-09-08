@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { rm } from "node:fs/promises";
 import { writeFileAtomic } from "./fs-atomic.js";
 import { formatEnvFile } from "./env-file.js";
 
@@ -61,4 +62,13 @@ export async function writeTradingEnv(stateDir: string, cfg: TradingConfig): Pro
   });
   await writeFileAtomic(path, body, 0o600);
   return path;
+}
+
+/**
+ * Remove `<stateDir>/trading.env` so the next boot has no trading identity to source and comes up in
+ * SETUP mode. Idempotent (`force: true`) — a box with no trading.env is already in the target state,
+ * so a missing file is not an error. The sibling `secrets.env` is left untouched.
+ */
+export async function clearTradingEnv(stateDir: string): Promise<void> {
+  await rm(join(stateDir, "trading.env"), { force: true });
 }

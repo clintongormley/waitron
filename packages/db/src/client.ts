@@ -98,9 +98,15 @@ export async function createPgliteDb(dataDir?: string): Promise<Database> {
   });
 }
 
-/** Pooled real PostgreSQL for the cloud deployment and the Testcontainers suite. */
-export async function createPostgresDb(connectionString: string): Promise<Database> {
-  const pool = new Pool({ connectionString });
+/** Pooled real PostgreSQL for the cloud deployment and the Testcontainers suite. `poolOptions` merges
+ * into the pool config (spread over `connectionString`) so a caller can cap a small, seldom-used
+ * owner pool — e.g. `{ max: 2 }` for a connection that only runs occasional owner DDL — rather than
+ * hold the default ten idle connections. Omitted, the pool keeps node-postgres's defaults. */
+export async function createPostgresDb(
+  connectionString: string,
+  poolOptions: pg.PoolConfig = {},
+): Promise<Database> {
+  const pool = new Pool({ connectionString, ...poolOptions });
   // node-postgres requires a pool 'error' listener. An error on an IDLE client —
   // a server shutdown, a failover, or a network drop terminating a checked-in
   // connection (SQLSTATE 57P01) — is emitted on the pool, and with no listener

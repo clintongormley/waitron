@@ -8,6 +8,7 @@ import {
   isDevMode,
   loadConfig,
   loadMirrorSyncConfig,
+  loadReplicationConfig,
   loadSyncConfig,
   loadTunnelConfig,
 } from "./config.js";
@@ -1248,5 +1249,43 @@ describe("loadMirrorSyncConfig", () => {
     const error = await captureError(() => Promise.resolve(loadMirrorSyncConfig({})));
     expect(codeOf(error)).toBe("server.config_missing");
     expect(isAppError(error) && error.params).toEqual({ variable: "WAITRON_SYNC_DATABASE_URL" });
+  });
+});
+
+describe("loadReplicationConfig", () => {
+  // The replication credential + advertise address ride the mirror bundle (owner decision 2026-09-07):
+  // the password is what a peer's subscription conninfo authenticates as `waitron_repl`, and the
+  // host/port is what this node advertises for a peer to dial. Both password AND host are required —
+  // an unset (absent OR empty, via `isUnset`) either one disables the whole config, the same
+  // off-switch `loadSyncConfig`/`loadTunnelConfig` take for their required fields.
+  const base = {
+    WAITRON_REPLICATION_PASSWORD: "repl-secret",
+    WAITRON_REPLICATION_HOST: "box.venue.internal",
+  };
+
+  it("returns undefined when the password is unset", () => {
+    expect(
+      loadReplicationConfig({ WAITRON_REPLICATION_HOST: "box.venue.internal" }),
+    ).toBeUndefined();
+    expect(loadReplicationConfig({ ...base, WAITRON_REPLICATION_PASSWORD: "" })).toBeUndefined();
+  });
+
+  it("returns undefined when the host is unset", () => {
+    expect(loadReplicationConfig({ WAITRON_REPLICATION_PASSWORD: "repl-secret" })).toBeUndefined();
+    expect(loadReplicationConfig({ ...base, WAITRON_REPLICATION_HOST: "" })).toBeUndefined();
+  });
+
+  it("defaults the port to 5432", () => {
+    expect(loadReplicationConfig(base)).toEqual({
+      password: "repl-secret",
+      advertiseHost: "box.venue.internal",
+      advertisePort: 5432,
+    });
+  });
+
+  it("parses WAITRON_REPLICATION_PORT when set", () => {
+    expect(
+      loadReplicationConfig({ ...base, WAITRON_REPLICATION_PORT: "5433" })?.advertisePort,
+    ).toBe(5433);
   });
 });
