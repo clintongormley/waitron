@@ -95,17 +95,28 @@ Three rules carry the weight the code's entropy used to:
 1. **The pending list never returns the number.** The dashboard cannot show the answer beside the
    question. (This is the substantive amendment to the print-agent spec, where
    `GET /management-api/print-agents` returns `joinCode` on the row.)
-2. **The server builds the choice set and does not say which is real.** Opening a pending row asks
-   for a challenge; the reply is three shuffled numbers. The admin taps one, the dashboard posts the
-   value, and the server compares it to the request's own number. The check is server-side and unit
-   testable, and the browser genuinely cannot leak the answer — the person is what is being tested,
-   not the page.
+2. **The server builds the choice set once, at join, and does not say which is real.** The row
+   carries its number AND its two decoys. Opening a pending row asks for a challenge; the reply is
+   those same three, shuffled. The admin taps one, the dashboard posts the value, and the server
+   compares it to the request's own number.
+
+   **The set must be fixed, not re-rolled per call.** Two challenges drawing fresh decoys would
+   intersect in exactly one value — the real one — so any client holding a management session could
+   derive the answer and never risk a mismatch, which is precisely the check this is for. Fixed, a
+   second call teaches nothing, and reopening a row shows the same three numbers rather than three
+   new ones. The check stays server-side; the person is what is being tested, not the page.
 3. **No decoy equals any other pending request's real number, across both surfaces in the tenant.**
    Without this, two devices joining at once can be honestly ambiguous, and that ambiguity is exactly
    what an attacker would arrange: knock at the same moment as a real device and hope its number
    appears among your decoys. Because both surfaces share one table (§4) this is one read rather than
-   a union two implementations have to keep in step. With a cap of ten pending rows per surface, at
-   most twenty of the hundred values are real, so decoys always have room.
+   a union two implementations have to keep in step.
+
+   Since rule 2 fixes the decoys at join, the rule has to hold in BOTH directions and at one moment:
+   a new request's **real** number avoids every existing real AND every issued decoy, and its
+   **decoys** avoid every existing real. Otherwise a decoy issued at 10:01 becomes somebody's real
+   number at 10:02 and the collision the rule forbids arrives by the back door. Worst case that
+   reserves sixty of the hundred values (twenty pending rows × three), which leaves room; the cap is
+   what keeps it true.
 
 **A wrong tap denies the request; it is not a retry.** This is what makes one-in-three acceptable: a
 blind guesser gets a single one-in-three attempt per knock, and knocks are rate limited, capped, and
@@ -213,6 +224,7 @@ serve both.
 | `label` | the name that was asked for (an agent accept writes it to `print_agents.name`) |
 | `token_hash` | minted at join; copied to the real row at accept — which also takes the request's `id` — so the joiner's cookie survives approval untouched |
 | `verification_number` | the two-digit number, `text` |
+| `decoy_numbers` | the two decoys, `text[]`, minted with the number at join — fixed so a second challenge teaches nothing (§1.2 rule 2) |
 | `created_at` | TTL is fifteen minutes, filtered on read and swept opportunistically at join and accept, as the pairing code's TTL was |
 
 The cap of ten pending rows is per `(tenant, kind)`, so ten agents mid-install cannot lock devices
@@ -300,9 +312,14 @@ pending cookie's selector matches no `devices` row and every ordinary device rou
 status rather than an error. The print agent needs `agent.pending` only because its pending rows sit
 in `print_agents` — adopting §7.3 retires that code too.
 
-Unchanged and now raised on the accept route: `device.station_required`, `device.register_required`,
-`device.till_required`, `device.register_name_taken`, `device.profile_missing`,
-`device.binding_invalid`.
+Unchanged, and now raised on the accept route rather than the enrol route:
+`device.station_required`, `device.register_required`, `device.register_name_taken`,
+`device.binding_invalid` and `device_profile.not_found`.
+
+Two codes an earlier draft of this section listed here do NOT belong: `device.till_required` is the
+SALE-path guard (`apps/server/src/till-api.ts:569`, `apps/server/src/device-session.ts:376`) and is
+never raised at enrolment, and `device.profile_missing` has no thrower anywhere in the tree —
+`apps/server/src/device-api.ts:155` records that it was retired. Neither changes here.
 
 ---
 
@@ -393,7 +410,9 @@ Stated plainly, because the alternative is a claim that outruns the code (CLAUDE
   reads and writes zero of tenant B's rows (CLAUDE.md §3, the till-reroute S3 receipt). Real
   Postgres, as `app_user` with `rolsuper = f` — reading did not catch that class last time; running a
   two-tenant probe did.
-- **Grants** on `device_join_requests` in `packages/db`'s privileges suite, plus the two root guards
+- **Grants** on `join_requests` in the whole-manifest matrix
+  (`packages/fiscal-verifactu/src/privileges.expected.ts`, asserted with `toEqual` against the live
+  database), plus the two root guards
   after the schema change: `scripts/classification-complete.test.ts` and
   `scripts/append-only-enable-always.test.ts`.
 - **Dashboard**: the accept dialog's three buttons under the existing a11y suites; the device screen's

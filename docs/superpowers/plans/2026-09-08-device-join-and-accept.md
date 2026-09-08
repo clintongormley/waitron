@@ -67,9 +67,10 @@ database and demands the opposite.
 - Create: `packages/sync-enrolment/src/migration-tables.ts`
 - Create: `packages/sync-enrolment/src/migration-tables.test.ts`
 - Modify: `packages/sync-enrolment/src/index.ts` (export the new function)
-- Modify: `scripts/classification-complete.test.ts:29-33` (the `CREATE_TABLE` regex), `:35-44`
-  (`stripSql`), `:70-73` (the file read), `:80-95` (`createdTablesByModule`)
-- Modify: `packages/db/src/classification.test.ts:8-17` (`tablesInDrizzle`)
+- Modify: `scripts/classification-complete.test.ts:29-30` (the `CREATE_TABLE` regex), `:35-42`
+  (`stripSql`), `:70-73` (the file read), `:80-91` (`createdTablesByModule`)
+- Modify: `packages/db/src/classification.test.ts:8-17` (`tablesInDrizzle`) and `:32`
+  (`const created = new Set(tablesInDrizzle());`)
 
 **Interfaces:**
 
@@ -197,9 +198,11 @@ export function tablesCreatedBy(files: readonly string[]): Set<string> {
     const sql = stripSql(raw);
     const statements: Statement[] = [];
     for (const m of sql.matchAll(CREATE_TABLE)) {
+      /* v8 ignore next -- a matched group 1 is always defined; the guard is for the type, not a case */
       if (m[1] !== undefined) statements.push({ index: m.index, table: m[1].toLowerCase(), drops: false });
     }
     for (const m of sql.matchAll(DROP_TABLE)) {
+      /* v8 ignore next */
       if (m[1] !== undefined) statements.push({ index: m.index, table: m[1].toLowerCase(), drops: true });
     }
     statements.sort((a, b) => a.index - b.index);
@@ -278,7 +281,11 @@ function tablesInDrizzle(): Set<string> {
 }
 ```
 
-and at `:31` change `const created = new Set(tablesInDrizzle());` to `const created = tablesInDrizzle();`.
+and at `:32` change `const created = new Set(tablesInDrizzle());` to `const created = tablesInDrizzle();`
+(`:31` is `const classified = …` — do not touch it).
+
+`DROP COLUMN` and `DROP CONSTRAINT` must keep NOT matching: `packages/db/drizzle/0003_drop_device_kind.sql`
+and `0004_device_binding_rule_sql.sql:6` contain both, and `DROP_TABLE` requires the word `table`.
 
 Confirm `@waitron/sync-enrolment` is already a dependency of `@waitron/db` — `packages/db/src/classification.ts:1` imports `classify` from it, so it is.
 
@@ -320,6 +327,10 @@ because readdirSync does not."
 - Create: `packages/db/drizzle/0008_join_requests.sql` (generated) and
   `packages/db/drizzle/0009_join_requests_grants_sql.sql` (`--custom`)
 - Modify: `packages/fiscal-verifactu/src/privileges.expected.ts:27` (row swap)
+- Modify: `packages/db/src/schema/devices.test.ts` — `:8` drops `devicePairingCodes` from the import,
+  and the whole `device_pairing_codes` material goes: `:44`, `:122`, `:172-224` (columns, the
+  `DELETE … RETURNING`, the 23505-on-duplicate-digest case, the `drop index …_lookup_idx` mutation)
+- Modify: `packages/db/src/schema/devices.fk.test.ts:65` — `delete from device_pairing_codes`
 - Create: `packages/db/src/schema/join-requests.test.ts`
 
 **Interfaces:**
@@ -449,6 +460,11 @@ export const joinRequests = pgTable(
     // whole job is to be compared across a room, so two digits, not a Crockford string. What defends a
     // mix-up is the decoy rule plus deny-on-wrong (design §1.2), never this column's entropy.
     verificationNumber: text("verification_number").notNull(),
+    // The two decoys, minted WITH the number at join and never re-rolled. Re-rolling per challenge
+    // would let two calls intersect in exactly one value — the real one — so any client with a
+    // management session could derive the answer and never risk a mismatch, which is the check the
+    // whole design rests on (design §1.2 rule 2).
+    decoyNumbers: text("decoy_numbers").array().notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
       .notNull()
       .defaultNow(),
@@ -534,8 +550,17 @@ Expected: all PASS. `packages/db`'s classification guard passing here is the pro
 subtracts — before Task 1 it would fail with `device_pairing_codes` in the "classified but not
 created" list.
 
-**Note:** `apps/server` will not typecheck until Task 7 deletes the code that imports
-`devicePairingCodes`. That is expected; do not try to fix `apps/server` here.
+Also run the second root guard, as spec §11 asks — `join_requests` creates no `reject_mutation`
+trigger so it will pass, but the guard is what proves that:
+
+```bash
+pnpm vitest run --project root scripts/append-only-enable-always.test.ts
+```
+
+**Note:** `apps/server` will not typecheck until Tasks 6 and 6b delete and migrate the code that
+imports `devicePairingCodes`. That is expected; do not try to fix `apps/server` here. `packages/db`'s
+OWN suite is a different matter — the two files above are in this task precisely so this task can end
+green.
 
 - [ ] **Step 8: Commit**
 
@@ -760,7 +785,13 @@ a device id being freshly minted, and a denied request's id is simply never used
 
 **Interfaces:**
 
-- Produces: `createJoinRequest(tx, cfg, input: { kind: JoinRequestKind; label: string; fullCode: ErrorCode; numbers?: () => number }): Promise<{ joinId: string; verificationNumber: string; token: string }>`
+- Produces: `createJoinRequest(tx, cfg, input: { kind: JoinRequestKind; label: string; numbers?: () => number }): Promise<{ joinId: string; verificationNumber: string; token: string }>`
+  — **no `fullCode` parameter.** An earlier draft passed the surface's own `*.join_full` code, but
+  `agent.join_full` does not exist (grep of `apps` + `packages`, excluding `dist`: zero hits;
+  `packages/printing/src/errors.ts` declares only `agent.not_found`, `agent.unauthorized` and the
+  three `agent.pairing_*`), so `new AppError("agent.join_full", {})` would not typecheck. This slice
+  throws `device.join_full` for both kinds; the agent slice declares its own code and widens the verb
+  then, when there is a caller to justify it.
 - Produces: `readJoinStatus(tx, cfg, joinId: string, token: string): Promise<"pending" | "approved" | "not_approved">`
 - Produces: `PENDING_CAP = 10`, `JOIN_TTL_MS = 15 * 60 * 1000`
 - Consumes: `joinRequests` (Task 2), `hashSecret`/`verifySecret` from `@waitron/identity`
@@ -813,8 +844,11 @@ and the grants are part of what is being asserted:
 ```ts
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, useTemplateDb, withTenant } from "@waitron/db";
 import { JOIN_TTL_MS, PENDING_CAP, createJoinRequest, readJoinStatus } from "./join-requests.js";
+// `useTemplateDb` is NOT on the `@waitron/db` barrel — the exports map is enumerated (CLAUDE.md §3),
+// and the sibling suite imports it from the subpath (`device-api.pg.test.ts:5-6`).
+import { asAppUser, withTenant } from "@waitron/db";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 
 // … suite + `setupVenue()` exactly as `device-api.pg.test.ts:135-228` builds them; reuse that helper
 // by extracting it if it is not already exported.
@@ -827,7 +861,6 @@ describe("createJoinRequest", () => {
       return createJoinRequest(tx, venue.cfg, {
         kind: "device",
         label: "Bar till",
-        fullCode: "device.join_full",
       });
     });
     expect(made.verificationNumber).toMatch(/^\d{2}$/);
@@ -844,7 +877,6 @@ describe("createJoinRequest", () => {
       return createJoinRequest(tx, venue.cfg, {
         kind: "print_agent",
         label: "Kitchen box",
-        fullCode: "agent.join_full",
         numbers: always47,
       });
     });
@@ -854,7 +886,6 @@ describe("createJoinRequest", () => {
       return createJoinRequest(tx, venue.cfg, {
         kind: "device",
         label: "Bar till",
-        fullCode: "device.join_full",
         numbers: (() => {
           let n = 0;
           return () => (n++ === 0 ? 47 : 13);
@@ -872,23 +903,20 @@ describe("createJoinRequest", () => {
         await createJoinRequest(tx, venue.cfg, {
           kind: "device",
           label: `d${i}`,
-          fullCode: "device.join_full",
-        });
+          });
       }
       await expect(
         createJoinRequest(tx, venue.cfg, {
           kind: "device",
           label: "one too many",
-          fullCode: "device.join_full",
-        }),
+          }),
       ).rejects.toMatchObject({ code: "device.join_full" });
       // The OTHER kind is unaffected — the cap is per (tenant, kind).
       await expect(
         createJoinRequest(tx, venue.cfg, {
           kind: "print_agent",
           label: "agent",
-          fullCode: "agent.join_full",
-        }),
+          }),
       ).resolves.toBeDefined();
     });
   });
@@ -900,14 +928,12 @@ describe("createJoinRequest", () => {
       const stale = await createJoinRequest(tx, venue.cfg, {
         kind: "device",
         label: "stale",
-        fullCode: "device.join_full",
       });
       await tx.execute(sql`
         update join_requests set created_at = now() - interval '16 minutes' where id = ${stale.joinId}`);
       await createJoinRequest(tx, venue.cfg, {
         kind: "device",
         label: "fresh",
-        fullCode: "device.join_full",
       });
       const { rows } = await tx.execute<{ label: string }>(sql`select label from join_requests`);
       expect(rows.map((r) => r.label)).toEqual(["fresh"]);
@@ -971,15 +997,21 @@ async function sweepLapsed(tx: Transaction, cfg: TillConfig): Promise<void> {
     );
 }
 
-/** Every verification number currently spoken for in this tenant, EITHER kind. The cross-surface scope
- * is the point (design §1.2 rule 3): an agent request and a device request must never show the same
- * number, or an admin comparing across two screens can be honestly misled. */
-export async function pendingNumbers(tx: Transaction, cfg: TillConfig): Promise<Set<string>> {
+/** Every number currently spoken for in this tenant, EITHER kind, split by role. The cross-surface
+ * scope is the point (design §1.2 rule 3): an agent request and a device request must never show the
+ * same number, or an admin comparing across two screens can be honestly misled. */
+export async function pendingNumbers(
+  tx: Transaction,
+  cfg: TillConfig,
+): Promise<{ reals: Set<string>; decoys: Set<string> }> {
   const rows = await tx
-    .select({ n: joinRequests.verificationNumber })
+    .select({ n: joinRequests.verificationNumber, d: joinRequests.decoyNumbers })
     .from(joinRequests)
     .where(eq(joinRequests.tenantId, cfg.tenantId));
-  return new Set(rows.map((r) => r.n));
+  return {
+    reals: new Set(rows.map((r) => r.n)),
+    decoys: new Set(rows.flatMap((r) => r.d)),
+  };
 }
 
 /** `00`–`99`. Two digits because the number is COMPARED across a room, never typed — its job is
@@ -994,9 +1026,6 @@ export async function createJoinRequest(
   input: {
     kind: JoinRequestKind;
     label: string;
-    /** The `*.join_full` code for THIS surface — the surface owns its own vocabulary, the same way
-     * `createEnrolRateLimiter` takes its code. */
-    fullCode: "device.join_full" | "agent.join_full";
     /** Injectable for tests; production uses `randomInt(0, 100)`. */
     numbers?: () => number;
   },
@@ -1007,19 +1036,36 @@ export async function createJoinRequest(
     .select({ count: sql<number>`count(*)::int` })
     .from(joinRequests)
     .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.kind, input.kind)));
-  if (count >= PENDING_CAP) throw new AppError(input.fullCode, {});
+  if (count >= PENDING_CAP) throw new AppError("device.join_full", {});
 
-  const taken = await pendingNumbers(tx, cfg);
+  // The REAL number avoids every existing real AND every issued decoy; the DECOYS avoid every real.
+  // Both directions matter because the decoys are fixed here and live as long as the row: without the
+  // first rule, a decoy issued at 10:01 becomes somebody's real number at 10:02, and the collision
+  // §1.2 rule 3 forbids arrives by the back door. Worst case that reserves sixty of the hundred
+  // values (twenty pending rows × three), which the cap is what keeps true.
+  const { reals, decoys } = await pendingNumbers(tx, cfg);
   const next = input.numbers ?? (() => randomInt(0, 100));
-  let verificationNumber: string | undefined;
-  // At most 2 × PENDING_CAP of the hundred values can be taken, so a free one is always within reach;
-  // the bound makes the loop total rather than trusting that arithmetic to stay true.
-  for (let attempt = 0; attempt < 200 && verificationNumber === undefined; attempt++) {
-    const candidate = twoDigits(next() % 100);
-    if (!taken.has(candidate)) verificationNumber = candidate;
-  }
+  const pick = (forbidden: ReadonlySet<string>): string | undefined => {
+    for (let attempt = 0; attempt < 400; attempt++) {
+      const candidate = twoDigits(next() % 100);
+      if (!forbidden.has(candidate)) return candidate;
+    }
+    /* v8 ignore next */
+    return undefined;
+  };
+  const spokenFor = new Set([...reals, ...decoys]);
+  const verificationNumber = pick(spokenFor);
   /* v8 ignore next */
-  if (verificationNumber === undefined) throw new AppError(input.fullCode, {});
+  if (verificationNumber === undefined) throw new AppError("device.join_full", {});
+  const decoyNumbers: string[] = [];
+  const decoyForbidden = new Set([...reals, verificationNumber]);
+  while (decoyNumbers.length < 2) {
+    const d = pick(decoyForbidden);
+    /* v8 ignore next */
+    if (d === undefined) throw new AppError("device.join_full", {});
+    decoyNumbers.push(d);
+    decoyForbidden.add(d);
+  }
 
   const token = randomBytes(32).toString("base64url");
   const [row] = await tx
@@ -1031,6 +1077,7 @@ export async function createJoinRequest(
       label: input.label,
       tokenHash: hashSecret(token),
       verificationNumber,
+      decoyNumbers,
     })
     .returning({ id: joinRequests.id });
   return { joinId: row!.id, verificationNumber, token };
@@ -1112,7 +1159,9 @@ swept at the head of every verb rather than by a background job."
 **Interfaces:**
 
 - Produces: `listPendingJoinRequests(tx, cfg, kind): Promise<{ id: string; kind: JoinRequestKind; label: string; createdAt: string }[]>` — **no number in the row type**, which is the design's rule 1 expressed as a type.
-- Produces: `challengeFor(tx, cfg, id: string, opts?: { numbers?: () => number }): Promise<{ choices: string[] }>`
+- Produces: `challengeFor(tx, cfg, id: string): Promise<{ choices: string[] }>` — it READS the row's
+  fixed set and shuffles it; it takes no number source, because re-rolling is the defect (spec §1.2
+  rule 2).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1124,14 +1173,15 @@ describe("listPendingJoinRequests", () => {
     const venue = await setupVenue();
     const rows = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till", fullCode: "device.join_full" });
-      await createJoinRequest(tx, venue.cfg, { kind: "print_agent", label: "Box", fullCode: "agent.join_full" });
+      await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
+      await createJoinRequest(tx, venue.cfg, { kind: "print_agent", label: "Box" });
       return listPendingJoinRequests(tx, venue.cfg, "device");
     });
     expect(rows).toHaveLength(1);
     expect(rows[0]!.label).toBe("Bar till");
-    // The whole point of the numeric match: the list cannot show the answer beside the question.
-    expect(JSON.stringify(rows)).not.toMatch(/\d{2}/);
+    // The whole point of the numeric match: the list cannot show the answer beside the question. The
+    // key set is what expresses that — a "no two digits anywhere" assertion would trip on the row's
+    // own UUID and ISO timestamp and could never pass.
     expect(Object.keys(rows[0]!).sort()).toEqual(["createdAt", "id", "kind", "label"]);
   });
 });
@@ -1141,7 +1191,7 @@ describe("challengeFor", () => {
     const venue = await setupVenue();
     const { made, choices } = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "d", fullCode: "device.join_full" });
+      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "d" });
       return { made, choices: (await challengeFor(tx, venue.cfg, made.joinId)).choices };
     });
     expect(choices).toHaveLength(3);
@@ -1150,12 +1200,26 @@ describe("challengeFor", () => {
     for (const c of choices) expect(c).toMatch(/^\d{2}$/);
   });
 
+  it("returns the SAME three numbers on every call — a second call must teach nothing", async () => {
+    const venue = await setupVenue();
+    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "d" });
+      const first = await challengeFor(tx, venue.cfg, made.joinId);
+      const second = await challengeFor(tx, venue.cfg, made.joinId);
+      // Sets, not arrays: the order is shuffled per call, the MEMBERSHIP is fixed. Two re-rolled sets
+      // would intersect in exactly one value — the real one — handing the answer to any client with a
+      // management session.
+      expect(new Set(second.choices)).toEqual(new Set(first.choices));
+    });
+  });
+
   it("never offers a decoy that is another pending request's real number, in EITHER kind", async () => {
     const venue = await setupVenue();
     await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      const agent = await createJoinRequest(tx, venue.cfg, { kind: "print_agent", label: "a", fullCode: "agent.join_full" });
-      const device = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "d", fullCode: "device.join_full" });
+      const agent = await createJoinRequest(tx, venue.cfg, { kind: "print_agent", label: "a" });
+      const device = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "d" });
       // Drive the decoy source to WANT the agent's number; it must be skipped.
       const wantsAgents = (() => { let i = 0; return () => (i++ < 2 ? Number(agent.verificationNumber) : 88); })();
       const { choices } = await challengeFor(tx, venue.cfg, device.joinId, { numbers: wantsAgents });
@@ -1170,7 +1234,7 @@ describe("challengeFor", () => {
     await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
       await asAppUser(tx);
       for (let i = 0; i < 40; i++) {
-        const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: `d${i}`, fullCode: "device.join_full" });
+        const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: `d${i}` });
         const { choices } = await challengeFor(tx, venue.cfg, made.joinId);
         positions.add(choices.indexOf(made.verificationNumber));
         await denyJoinRequest(tx, venue.cfg, made.joinId); // keep under the cap
@@ -1227,7 +1291,7 @@ async function requirePending(
   tx: Transaction,
   cfg: TillConfig,
   id: string,
-): Promise<{ id: string; kind: JoinRequestKind; label: string; verificationNumber: string; tokenHash: string; locationId: string }> {
+): Promise<{ id: string; kind: JoinRequestKind; label: string; verificationNumber: string; decoyNumbers: string[]; tokenHash: string; locationId: string }> {
   await sweepLapsed(tx, cfg);
   const [row] = await tx
     .select({
@@ -1235,6 +1299,7 @@ async function requirePending(
       kind: joinRequests.kind,
       label: joinRequests.label,
       verificationNumber: joinRequests.verificationNumber,
+      decoyNumbers: joinRequests.decoyNumbers,
       tokenHash: joinRequests.tokenHash,
       locationId: joinRequests.locationId,
     })
@@ -1259,20 +1324,11 @@ export async function challengeFor(
   tx: Transaction,
   cfg: TillConfig,
   id: string,
-  opts: { numbers?: () => number } = {},
 ): Promise<{ choices: string[] }> {
   const row = await requirePending(tx, cfg, id);
-  const forbidden = await pendingNumbers(tx, cfg);
-  forbidden.delete(row.verificationNumber);
-
-  const next = opts.numbers ?? (() => randomInt(0, 100));
-  const choices = [row.verificationNumber];
-  for (let attempt = 0; attempt < 400 && choices.length < 3; attempt++) {
-    const candidate = twoDigits(next() % 100);
-    if (!forbidden.has(candidate) && !choices.includes(candidate)) choices.push(candidate);
-  }
-  /* v8 ignore next */
-  if (choices.length < 3) throw new AppError("join_request.not_found", {});
+  // The set was fixed at join and is READ here, never re-rolled — see the column's comment and
+  // design §1.2 rule 2. Only the ORDER varies per call.
+  const choices = [row.verificationNumber, ...row.decoyNumbers];
 
   // Fisher-Yates over a cryptographic source: a predictable position would let a careless admin learn
   // "the real one is always first" and stop comparing, which is the whole failure this guards.
@@ -1289,9 +1345,13 @@ export async function challengeFor(
 Run: `pnpm --filter @waitron/server test -- join-requests`
 Expected: PASS (minus the shuffle test if held back to Task 6).
 
-- [ ] **Step 5: Prove the decoy rule by deletion**
+- [ ] **Step 5: Prove both rules by deletion**
 
-Remove `!forbidden.has(candidate)` and confirm the cross-kind test FAILS. Revert.
+In `createJoinRequest`, remove the decoys from `spokenFor` (so a real number may collide with an
+issued decoy) and confirm the cross-kind test FAILS. Then make `challengeFor` mint two fresh decoys
+instead of reading the row's, and confirm the "same three numbers on every call" test FAILS. Revert
+both. The second is the one that matters: without it the property §1.2 rule 2 claims is simply false,
+and no other test in the tree would notice.
 
 - [ ] **Step 6: Commit**
 
@@ -1320,8 +1380,12 @@ happens not to ask for one."
 
 **Interfaces:**
 
-- Produces: `acceptDeviceJoinRequest(tx, cfg, id, input: { choice: string; profileId: string; stationId?: string | null; registerId?: string | null }): Promise<{ deviceId: string; name: string; formFactor: FormFactor }>`
-- Produces: `denyJoinRequest(tx, cfg, id, kind): Promise<void>`
+- Produces: `acceptDeviceJoinRequest(tx, cfg, id, input): Promise<AcceptResult>` where
+  `type AcceptResult = { ok: true; deviceId: string; name: string; formFactor: FormFactor } | { ok: false; reason: "mismatch" }`.
+  **It returns the mismatch; it does not throw it** — see Step 4.
+- Produces: `denyJoinRequest(tx, cfg, id): Promise<JoinRequestKind>` — it returns the kind it deleted
+  rather than taking one. On the SHARED deny route the kind is not known until the row is read, so a
+  `kind` parameter would either be vacuous or force the route to read the row twice.
 - Produces (in `device.ts`): `resolveDeviceBinding(tx, cfg, locationId, input: { profileId; name; stationId?; registerId? }): Promise<{ stationId: string | null; tillId: string | null; formFactor: FormFactor }>` — the profile→form-factor→binding logic lifted verbatim out of `enrolDevice`, including the register auto-creation for a `till` form factor.
 
 - [ ] **Step 1: Lift the binding logic out of `enrolDevice`**
@@ -1369,8 +1433,10 @@ export async function resolveDeviceBinding(
 
 Delete `generatePairingCode` (`:160-193`), `verifyPairingCode` (`:308-328`), `readEnrolCatalogue`
 (`:281-297`) and `EnrolCatalogue` (`:269-273`), `encodePairingCode`, `normalizePairingCode`,
-`PAIRING_TTL_MS`, `PAIRING_CODE_BYTES` and `CROCKFORD_ALPHABET`, and drop `devicePairingCodes` and
-`createHash` from the imports. `listDeviceProfiles`, `listStations` and the `tills` read that
+`PAIRING_TTL_MS`, `PAIRING_CODE_BYTES` and `CROCKFORD_ALPHABET`. `tsconfig.base.json` sets
+`noUnusedLocals`, so every import those verbs alone used must go with them: `devicePairingCodes`,
+`createHash`, `randomBytes` and `hashSecret` (token minting lives in `join-requests.ts` now),
+`listDeviceProfiles` (`:16`) and `listStations` (`:19`). Typecheck names them if any is missed. `listDeviceProfiles`, `listStations` and the `tills` read that
 `readEnrolCatalogue` used are still wanted — the dashboard's accept dialog needs the same three lists,
 so keep them reachable through whatever management reads already serve the devices screen (check
 `GET /management-api/devices` and the device-profiles screen's client before deleting anything they
@@ -1384,10 +1450,10 @@ Append to `apps/server/src/join-requests.test.ts`:
 describe("acceptDeviceJoinRequest", () => {
   it("creates the device with the request's OWN id, so the joiner's cookie survives", async () => {
     const venue = await setupVenue();
-    const profileId = await seedProfile(venue, "till");
+    const profileId = await seedProfile(venue.cfg, "till");
     const { made, accepted, status } = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till", fullCode: "device.join_full" });
+      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
       const { choices } = await challengeFor(tx, venue.cfg, made.joinId);
       void choices;
       const accepted = await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
@@ -1396,7 +1462,7 @@ describe("acceptDeviceJoinRequest", () => {
       });
       return { made, accepted, status: await readJoinStatus(tx, venue.cfg, made.joinId, made.token) };
     });
-    expect(accepted.deviceId).toBe(made.joinId);
+    expect(accepted).toMatchObject({ ok: true, deviceId: made.joinId });
     expect(status).toBe("approved");
   });
 
@@ -1409,17 +1475,25 @@ describe("acceptDeviceJoinRequest", () => {
     // given, after createRegister would have run — or stub the insert); assert NO orphan tills row
   });
 
-  it("DENIES on a wrong choice — the request is gone and cannot be retried", async () => {
+  it("DENIES on a wrong choice, and the deny SURVIVES THE TRANSACTION", async () => {
     const venue = await setupVenue();
-    const profileId = await seedProfile(venue, "till");
+    const profileId = await seedProfile(venue.cfg, "till");
+    // Two SEPARATE withTenant blocks on purpose. A single block that catches the rejection inside
+    // itself never commits or rolls anything back, so it would pass against code that throws from
+    // inside the transaction and loses the DELETE — the defect this test exists to catch.
+    const made = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return createJoinRequest(tx, venue.cfg, { kind: "device", label: "d" });
+    });
+    const wrong = made.verificationNumber === "00" ? "01" : "00";
+    const refused = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, { choice: wrong, profileId });
+    });
+    expect(refused).toEqual({ ok: false, reason: "mismatch" });
+    // Gone AFTER the transaction committed — this is what makes one-in-three an acceptable guess rate.
     await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "d", fullCode: "device.join_full" });
-      const wrong = made.verificationNumber === "00" ? "01" : "00";
-      await expect(
-        acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, { choice: wrong, profileId }),
-      ).rejects.toMatchObject({ code: "device.join_mismatch" });
-      // Gone, not offered again — this is what makes one-in-three an acceptable guess rate.
       await expect(
         acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, { choice: made.verificationNumber, profileId }),
       ).rejects.toMatchObject({ code: "join_request.not_found" });
@@ -1436,7 +1510,8 @@ describe("acceptDeviceJoinRequest", () => {
 
 describe("denyJoinRequest", () => {
   it("deletes the request, and the joiner reads not_approved", async () => { /* … */ });
-  it("throws join_request.not_found for an unknown id, another tenant's, or the wrong kind", async () => { /* … */ });
+  it("throws join_request.not_found for an unknown id or another tenant's", async () => { /* … */ });
+  it("returns the kind it deleted, so the shared route can authorize against it", async () => { /* … */ });
 });
 ```
 
@@ -1461,8 +1536,11 @@ Append to `apps/server/src/join-requests.ts`:
  * (CLAUDE.md §3). The request's id becomes the device's id, which is what lets the joiner's cookie
  * survive approval untouched.
  *
- * A WRONG CHOICE DENIES. The request is deleted before the mismatch is thrown, so a mistaken tap costs
- * the joiner a fresh knock rather than handing a guesser a second one-in-three attempt.
+ * A WRONG CHOICE DENIES — AND THAT IS WHY THIS RETURNS RATHER THAN THROWS. `withTenant` IS the
+ * transaction (`packages/db/src/tenancy.ts:15`, `db.transaction((tx) => fn(tx))`), so an `AppError`
+ * thrown from here rolls the DELETE back with it and a wrong tap becomes an unlimited retry — the
+ * exact opposite of the property that makes one-in-three an acceptable guess rate (design §1.2). The
+ * caller commits this result and throws `device.join_mismatch` AFTER the transaction returns.
  */
 export async function acceptDeviceJoinRequest(
   tx: Transaction,
@@ -1477,7 +1555,7 @@ export async function acceptDeviceJoinRequest(
     await tx
       .delete(joinRequests)
       .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.id, id)));
-    throw new AppError("device.join_mismatch", {});
+    return { ok: false, reason: "mismatch" };
   }
 
   const binding = await resolveDeviceBinding(tx, cfg, row.locationId, {
@@ -1502,7 +1580,7 @@ export async function acceptDeviceJoinRequest(
     .delete(joinRequests)
     .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.id, id)));
 
-  return { deviceId: row.id, name: row.label, formFactor: binding.formFactor };
+  return { ok: true, deviceId: row.id, name: row.label, formFactor: binding.formFactor };
 }
 
 /** Refuse a request. Deleting the row is the whole of it — there is no denied state to carry, because
@@ -1511,13 +1589,12 @@ export async function denyJoinRequest(
   tx: Transaction,
   cfg: TillConfig,
   id: string,
-  kind: JoinRequestKind,
-): Promise<void> {
+): Promise<JoinRequestKind> {
   const row = await requirePending(tx, cfg, id);
-  if (row.kind !== kind) throw new AppError("join_request.not_found", {});
   await tx
     .delete(joinRequests)
     .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.id, id)));
+  return row.kind;
 }
 ```
 
@@ -1528,10 +1605,14 @@ Import `resolveDeviceBinding` from `./device.js` and `FormFactor` from `@waitron
 Run: `pnpm --filter @waitron/server test -- join-requests`
 Expected: PASS, including Task 5's shuffle test now that `denyJoinRequest` exists.
 
-- [ ] **Step 6: Prove deny-on-wrong by deletion**
+- [ ] **Step 6: Prove deny-on-wrong by deletion, and prove the rollback trap is really there**
 
-Remove the `delete` before the `device.join_mismatch` throw and confirm the "gone, not offered again"
-assertion FAILS. Revert. This is the single line that turns a one-in-three guess into a one-shot one.
+First remove the `delete` before the mismatch return and confirm the test FAILS. Revert.
+
+Then change the mismatch branch to `throw new AppError("device.join_mismatch", {})` — the shape an
+earlier draft of this plan had — and confirm the test **still fails**, because the throw rolls the
+DELETE back out of `withTenant`. That is the trap: a wrong tap would have become an unlimited retry,
+and the only reason it is visible is that this test spans transactions. Revert to the returned result.
 
 - [ ] **Step 7: Commit**
 
@@ -1551,6 +1632,116 @@ an agent's ask into a device.
 The profile/binding rules are lifted out of enrolDevice unchanged; only
 the caller moved, from an unauthenticated route to a device.manage
 session — which matters because they write."
+```
+
+---
+
+### Task 6b: Migrate every enrolment fixture in `apps/server`
+
+Ten test suites and `dev-setup` build devices through the verbs Task 6 deletes. Task 7's gate is an
+UNFILTERED `pnpm --filter @waitron/server test:coverage`, so unless this lands first that task cannot
+end green. This is the largest single piece of work in the slice and it is almost entirely mechanical.
+
+**Files** (every one verified by
+`grep -rln "enrolDevice\|generatePairingCode\|verifyPairingCode\|readEnrolCatalogue" apps/server`):
+
+| File | What it does today |
+| --- | --- |
+| `apps/server/src/device.test.ts:18,73-115` | a whole `describe("generatePairingCode")` |
+| `apps/server/src/device.pg.test.ts:17,121-310` | ~12 `enrolDevice` call sites |
+| `apps/server/src/device-session.test.ts:19,96-705` | ~8 device fixtures |
+| `apps/server/src/boot.test.ts:58,2401-2402` | |
+| `apps/server/src/till-api.test.ts:34,294` | |
+| `apps/server/src/till-api.pg.test.ts:37,280,591,1273,1490` | |
+| `apps/server/src/till-api.courses.test.ts:28,224` | |
+| `apps/server/src/till-api.receipt.test.ts:43,341-342` | |
+| `apps/server/src/till-api.reprint.test.ts:24,171` | |
+| `apps/server/src/sale-till-source.receipt.test.ts:33,196,214` | |
+| `apps/server/src/errors.test.ts:179-184` | constructs `device.pairing_rate_limited` |
+| `apps/server/scripts/dev-setup.ts:66,409-478` | seeds three demo devices |
+| `apps/server/scripts/dev-setup.test.ts:365` | `select count(*) from device_pairing_codes` |
+| `apps/server/src/promote-endpoint-e2e.test.ts:236`, `till-reroute-e2e.test.ts:109` | comments only — stale receipts naming `enrolDevice` |
+
+- [ ] **Step 1: Write the one shared fixture the ten suites will use**
+
+Create `apps/server/src/testing/enrol.ts` (a test-only helper, not shipped code):
+
+```ts
+/**
+ * Enrol a device the way production now does — knock, then accept — in one call, so ten suites that
+ * only ever wanted "a device exists" do not each re-implement the two-step flow. Deliberately NOT a
+ * production verb: it bypasses the pairing window and the numeric match, which is exactly what a
+ * fixture wants and exactly what a route must never do.
+ */
+export async function enrolDeviceForTest(
+  db: Database,
+  cfg: TillConfig,
+  input: { name: string; profileId: string; stationId?: string; registerId?: string },
+): Promise<{ deviceId: string; token: string }> {
+  return withTenant(db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const made = await createJoinRequest(tx, cfg, { kind: "device", label: input.name });
+    const accepted = await acceptDeviceJoinRequest(tx, cfg, made.joinId, {
+      choice: made.verificationNumber,
+      profileId: input.profileId,
+      stationId: input.stationId ?? null,
+      registerId: input.registerId ?? null,
+    });
+    /* v8 ignore next -- the fixture always passes the request's own number */
+    if (!accepted.ok) throw new Error("enrolDeviceForTest: mismatch");
+    return { deviceId: accepted.deviceId, token: made.token };
+  });
+}
+```
+
+- [ ] **Step 2: Migrate the ten suites**
+
+Mechanically: every `enrolDevice(tx, cfg, { code, name, profileId, … })` becomes
+`enrolDeviceForTest(db, cfg, { name, profileId, … })`, and every `generatePairingCode` call that only
+existed to feed it is deleted. Delete `device.test.ts:73-115` outright — it tests a verb that no
+longer exists. In `errors.test.ts:179-184`, swap `device.pairing_rate_limited` for
+`device.join_rate_limited`.
+
+Run each suite as you go: `pnpm --filter @waitron/server test -- <suite>`.
+
+- [ ] **Step 3: Rewrite `dev-setup`'s three demo devices**
+
+`dev-setup.ts:409-478` seeds a `till`, a `phone-portrait` bound to the till's auto-created register,
+and a `kds` bound to the "Cocina" station, through `readEnrolCatalogue` + `generatePairingCode` +
+`enrolDevice`. Rewrite it as three `enrolDeviceForTest` calls with the profiles and bindings it
+already resolves — **not** through dev-mode auto-accept, which can only produce a default-profile
+till and would silently drop the handheld and the kitchen display. Delete the
+`select count(*) from device_pairing_codes` assertion at `dev-setup.test.ts:365`.
+
+- [ ] **Step 4: Sweep the two comment-only receipts**
+
+`promote-endpoint-e2e.test.ts:236` and `till-reroute-e2e.test.ts:109` both explain a hand-built
+`token_hash` as "the same shape `enrolDevice` stores". The shape is unchanged — it is
+`hashSecret(token)` either way — so the fix is to name what stores it now
+(`acceptDeviceJoinRequest`), not to change the fixtures. Editing a file is not auditing it; a claim
+naming a deleted function is exactly the stale receipt CLAUDE.md §1 is about.
+
+- [ ] **Step 5: Run the package unfiltered**
+
+Run: `pnpm --filter @waitron/server test:coverage && pnpm --filter @waitron/server typecheck`
+Expected: PASS. This is the gate Task 7 depends on.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add apps/server
+git commit -s -m "test(server): migrate every enrolment fixture to join-and-accept
+
+Ten suites and dev-setup built devices through the pairing-code verbs.
+One shared fixture replaces them, doing knock-then-accept in a call, so
+suites that only ever wanted 'a device exists' say that. dev-setup keeps
+building all three demo devices explicitly rather than leaning on dev-mode
+auto-accept, which can only produce a default-profile till and would
+silently drop the handheld and the kitchen display.
+
+Two e2e comments explained a hand-built token_hash as 'the shape
+enrolDevice stores'; the shape is unchanged, so they now name what stores
+it."
 ```
 
 ---
@@ -1622,6 +1813,8 @@ describe("GET /api/device/join/status", () => {
   it("401s without a cookie", async () => { /* … */ });
 });
 
+// `device-api.pg.test.ts:1261` ALREADY has a `describe("deleted routes are gone (404)")`. Extend that
+// one with these three rows rather than adding a second describe of the same name.
 describe("deleted routes are gone (404)", () => {
   it.each([
     ["POST", "/api/device/enrol"],
@@ -1649,6 +1842,11 @@ Delete `mintCode` (`:349-354`) and rewrite `enrolKds`/`enrolTill`/`enrolHandheld
 the window, `POST /api/device/join`, then accept through `acceptDeviceJoinRequest` on `suite.admin` —
 every later describe in this file depends on those three fixtures, so they must keep returning
 `{ deviceId, jar, profileId }` unchanged.
+
+Also rewrite the `enrol rate limiter (spec §8)` describe at `:1155-1207`: it drives the deleted verify
+and enrol routes, and its limiter is constructed with `device.pairing_rate_limited`. Point it at
+`POST /api/device/join` with `createEnrolRateLimiter({ code: "device.join_rate_limited" })`, keeping
+its controllable clock and its pre-filled-window technique.
 
 - [ ] **Step 2: Run and watch them fail**
 
@@ -1681,8 +1879,7 @@ replace both enrol routes with:
         return createJoinRequest(tx, deps.cfg, {
           kind: "device",
           label: name,
-          fullCode: "device.join_full",
-        });
+          });
       });
       // The cookie's SELECTOR is the join request's id, which accept carries onto the devices row — so
       // this cookie is set once and never re-issued. Until then it names no device, so `requireDevice`
@@ -1798,6 +1995,9 @@ it("GET …?kind=print_agent needs printer.manage, not device.manage", …)
 it("GET …/:id/challenge returns three numbers, one of them the request's", …)
 it("challenge on another tenant's request is 404", …)
 it("POST …/:id/deny deletes it; a second deny is 404", …)
+it("a caller with NEITHER permission gets 403 for a live id AND for an unknown one", …)
+it("a wrong choice is 400 AND the request is gone when a FRESH request re-reads it", …)
+  // the route-level proof of the rollback trap: the verb test spans transactions, this spans requests
 
 // the device accept
 it("POST /management-api/device-join-requests/:id/accept with the right number enrols the device", …)
@@ -1853,10 +2053,20 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
       return fn(tx);
     });
 
-  /** Read the row's kind FIRST, under `device.manage`-or-`printer.manage`… no: read it under the
-   * caller's claim and check the permission the row's kind demands. Implemented as: resolve the row
-   * inside a tenant tx with `asAppUser`, then `authorizeManager` for `PERMISSION_FOR[row.kind]`, then
-   * act. A caller holding neither permission never learns whether the id exists. */
+  /**
+   * The shared by-id routes need the permission the ROW's kind demands, which is not known until the
+   * row is read — so `gated` cannot take it up front. The shape, exactly:
+   *
+   *   1. inside `withTenant` + `asAppUser`, read the row (tenant-scoped);
+   *   2. `authorizeManager` for `PERMISSION_FOR[row.kind]`;
+   *   3. act.
+   *
+   * A caller holding neither permission gets 403 whether or not the row exists — step 2 runs before
+   * anything is disclosed, and a MISSING row must also answer 403 rather than 404, or the status code
+   * itself tells an unauthorised caller which ids are live. So: read the row; if it is missing, still
+   * authorize (against `device.manage`, the stricter reading) and only then answer
+   * `join_request.not_found`.
+   */
   // … GET /management-api/pairing-mode      → { open, openUntil, refusedRecently }   (device.manage)
   // … POST /management-api/pairing-mode     → { openUntil }                          (device.manage)
   // … DELETE /management-api/pairing-mode   → 204                                    (device.manage)
@@ -1867,6 +2077,17 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
   //       body { choice, profileId, stationId?, registerId? } screened with requireString /
   //       requireBodyUuid / the optionalUuid helper device-api.ts already has (lift it into
   //       server-kit's request-screens if both files want it rather than copying it).
+  //
+  // THE ACCEPT ROUTE THROWS THE MISMATCH AFTER THE TRANSACTION, NOT INSIDE IT:
+  //
+  //   const result = await gated(sessionId, "device.manage", (tx) =>
+  //     acceptDeviceJoinRequest(tx, deps.cfg, id, body),
+  //   );
+  //   if (!result.ok) throw new AppError("device.join_mismatch", {});
+  //   return c.json({ deviceId: result.deviceId, name: result.name, formFactor: result.formFactor }, 200);
+  //
+  // `withTenant` IS the transaction (`packages/db/src/tenancy.ts:15`), so throwing from inside it
+  // would roll back the deny the verb just wrote and turn a wrong tap into an unlimited retry.
 }
 ```
 
@@ -1900,8 +2121,9 @@ Expected: PASS, including the boot suites.
 
 - [ ] **Step 6: Prove the kind gate by deletion**
 
-Delete the `row.kind !== kind` check in `denyJoinRequest` and confirm the "wrong kind is 404" test
-FAILS. Revert.
+Delete the `row.kind !== "device"` check in `acceptDeviceJoinRequest` and confirm the "refuses a
+print_agent request" test FAILS. Revert. That check is what stops a `device.manage` holder turning an
+agent's ask into a device.
 
 - [ ] **Step 7: Commit**
 
@@ -1926,7 +2148,9 @@ ALL), so one gate excludes nobody."
 
 **Files:**
 
-- Modify: `apps/dashboard/src/api/client.ts` (six verbs; `generateDeviceCode` deleted)
+- Modify: `apps/dashboard/src/api/client.ts` (seven verbs; `createDeviceCode` at `:1757` deleted, with
+  its doc block `:1751-1756`)
+- Modify: `apps/dashboard/src/api/client.test.ts:1623-1650` — the two tests for that verb
 - Modify: `apps/dashboard/src/screens/devices-screen.ts` (`:193` the armed-revoke state is the confirm
   idiom to reuse; the generate-code panel is replaced)
 - Modify: `apps/dashboard/src/i18n/strings.ts` (`en` at `:158-171`, `es` at `:598+`)
@@ -1975,7 +2199,17 @@ Following the `#request` shape at `apps/dashboard/src/api/client.ts:1169`:
   }
 ```
 
-Delete `generateDeviceCode` and the `DeviceCode` type.
+Delete `createDeviceCode` (`client.ts:1757`) — the verb is `createDeviceCode`, not
+`generateDeviceCode`, and there is no `DeviceCode` type; it returns `Promise<{ code: string }>`. Its
+caller is `devices-screen.ts:274`, its doc block is `client.ts:1742` and `:1751-1756`, and it is
+stubbed in both screen suites at `devices-screen.test.ts:89` and `.a11y.test.ts:93`.
+
+The accept dialog's three pickers need profiles, stations and registers. The client ALREADY has
+`listStations()` (`client.ts:1621`), `listDeviceProfiles()` (`:1797`) and the tills read (`:1004`) —
+no new route is needed, which is what `readEnrolCatalogue`'s deletion in Task 6 was betting on. Those
+three are gated on `till.configure` rather than `device.manage`; `MANAGER` holds both
+(`packages/identity/src/permissions.ts:102-115`) so nobody is excluded today, and that sentence
+belongs in a comment because it is a claim that would go stale silently if the role map changed.
 
 - [ ] **Step 2: Write the failing screen tests**
 
@@ -1987,8 +2221,9 @@ it("shows the pairing toggle shut, with the refused hint when knocks were turned
 
 it("opens pairing mode and shows a countdown", …)
 
-it("lists pending requests by name, and the markup contains NO two-digit number", …)
-  // expect(el.shadowRoot!.innerHTML).not.toMatch(/>\s*\d{2}\s*</)
+it("lists pending requests by name, and never renders the request's verification number", …)
+  // Assert the absence of the SPECIFIC number the fake API knows, not "any two digits" — a blanket
+  // /\d{2}/ trips on "12 minutes ago" and on the row's own id, and could never pass.
 
 it("opening a row fetches the challenge and renders THREE number buttons", …)
 
@@ -2174,7 +2409,15 @@ dashboard notification surface the backlog now records."
 - Modify: `apps/till/src/i18n/strings.ts` (`en` at `:169-186`, `es` at `:548+`)
 - Modify: the boot front door and the dev chooser that render `<till-enrol-screen>` (find them by
   `grep -rn "till-enrol-screen" apps/till/src`) — the `code` property is gone
-- Modify: `apps/till/src/screens/till-enrol-screen.test.ts`
+- Modify: `apps/till/src/screens/till-enrol-screen.test.ts`,
+  `apps/till/src/screens/till-enrol-screen.a11y.test.ts:5,7` and
+  `apps/till/src/screens/till-device-chooser.test.ts:5,28` — both import `type { EnrolCatalogue }`,
+  which this task deletes, so `@waitron/till` will not typecheck until they are updated
+- Modify: `apps/till/src/i18n/codes.ts:37-44` and `apps/till/src/i18n/codes.test.ts:46-58` — the
+  user-facing messages for `device.pairing_invalid` / `device.pairing_expired`, codes Task 7 deletes.
+  Replace with a `device.pairing_closed` message pointing at the dashboard toggle
+- Check: `apps/till/src/till-app.test.ts:414,753` and `till-app.a11y.test.ts:45` reference the
+  two-step enrol screen; confirm whether they assert on step-1 DOM before assuming they still pass
 
 **Interfaces:**
 
@@ -2274,8 +2517,15 @@ Three states rather than two steps:
     if (!this.isConnected) return;
     if (status === "approved") {
       clearInterval(this.#poll);
+      // The detail MUST still carry deviceId: `till-device-chooser.ts:130-135` destructures it and
+      // calls `setDevDeviceId(deviceId)`. Under Task 4's id carry-over the join response's `joinId`
+      // IS the device's id, so the screen already holds it.
       this.dispatchEvent(
-        new CustomEvent("enrolled", { detail: {}, bubbles: true, composed: true }),
+        new CustomEvent("enrolled", {
+          detail: { deviceId: this.joinId },
+          bubbles: true,
+          composed: true,
+        }),
       );
     } else if (status === "not_approved") {
       clearInterval(this.#poll);
@@ -2298,9 +2548,12 @@ The waiting view renders the number large and announced, not merely styled:
   }
 ```
 
-The `enrolled` event's detail loses `name`/`formFactor` (the device never learned its profile). Check
-both parents: the boot front door only re-boots, and the dev chooser only wants `deviceId` — if either
-reads `formFactor`, have the parent read it from `/api/device/me` after the re-boot instead.
+The `enrolled` event's detail keeps `deviceId` and loses `name`/`formFactor` — the device never learns
+its profile now. Verified consumers: `till-device-chooser.ts:130-135` destructures `deviceId` only,
+and the boot front door merely re-boots. If a third parent turns up reading `formFactor`, have it read
+`/api/device/me` after the re-boot rather than widening this event.
+
+Add `@state() private joinId = "";`, set from the join response.
 
 - [ ] **Step 5: Strings, both locales**
 
@@ -2350,11 +2603,28 @@ cleared on teardown so a torn-down screen leaves no timer."
 **Files:**
 
 - Modify: `apps/server/src/device-api.ts` (the devMode branch on join)
-- Modify: `apps/server/scripts/dev-setup.ts` and `dev-setup.test.ts`
-- Modify: `docs/backlog.md:155` (the run-path line naming pairing code **DEMO**)
+- Modify: `docs/backlog.md:155` (the run-path line naming pairing code **DEMO**) and `:386` (which
+  calls the new table `device_join_requests` — it is `join_requests`)
 - Modify: `CLAUDE.md` (§6's `wa-wt reset` paragraph: "the till is then re-enrolled per browser with the
   fixed dev pairing code `DEMO`")
-- Modify: `docs/ui-review.md` if it repeats the DEMO step (`grep -rn "DEMO" docs/`)
+- Modify: `README.md:89-90` — "Enrol the till once per browser with the pairing code **DEMO**". The
+  root README is format-checked and takes the normal flow (CLAUDE.md §6), so it is not a docs-only edit
+- Modify: `docs/ui-review.md:12` **and** `:27` — two separate DEMO claims
+- Modify: `apps/server/src/errors.ts:949`, `:1014`, `:1105-1107` — doc blocks on codes that SURVIVE
+  (`device.binding_invalid` among them) but describe `device_pairing_codes` constraint names
+- Modify: `apps/server/src/device-api.ts:108`, `:190`, `:195-198` — header prose describing the
+  verify / enrol / device-code routes
+- Modify: `packages/db/src/unique-violation.test.ts:54,58` — a `"device_pairing_codes_till_fk"` string
+  fixture naming a table that no longer exists (the parser under test is unaffected; the name is a
+  stale receipt)
+- Modify: `packages/layouts/src/device-profile-store.ts:82-83,100,238` — three comments explaining what
+  a pairing code may and may not reference
+
+`dev-setup`'s three demo devices are Task 6b's, not this task's: dev-mode auto-accept can only produce
+a default-profile till, so it cannot seed the handheld or the kitchen display.
+
+`grep -rn -i 'pairing\|enrol\|DEMO' .github/` returns nothing relevant — a checked negative, recorded
+here so nobody re-checks it, and because SP-3b's receipt sweep missed exactly that path once.
 
 A behaviour change retires every receipt about the old behaviour, and editing a file is not auditing
 it (CLAUDE.md §1). Read the whole base-to-tip range for prose that describes enrolment, not just the
@@ -2398,9 +2668,19 @@ In the join handler, before the window check:
 ```
 
 and after `createJoinRequest`, when `auto`, call `acceptDeviceJoinRequest` in the same transaction with
-the request's own number and a profile resolved from the venue's default. Pick the profile the way
-`dev-setup` seeds them — read `listDeviceProfiles` and take the `till` form factor, throwing
-`device.profile_missing` if the venue has none.
+the request's own number and a profile resolved from the venue's default: read `listDeviceProfiles` and take the `till` form
+factor, throwing **`device_profile.not_found`** if the venue has none. Not `device.profile_missing` —
+that code has no thrower anywhere in the tree and `device-api.ts:155` records that it was retired, and
+in any case it is absent from Task 7's STATUS map, so it would fall through the error boundary to the
+default status.
+
+**A regression this introduces, deliberately.** `till-device-chooser.ts`'s dev-only "Set up a new
+device" used to let the operator pick the form factor and binding; under auto-accept it always mints a
+`till`, and a repeated name throws `device.register_name_taken` (409) because a till enrol
+auto-creates a register named after the device. That is acceptable for a dev affordance — the three
+demo devices `dev-setup` seeds still cover the other form factors, and the real flow is exercised by
+the dashboard. Say so in the chooser's header comment rather than leaving the next reader to discover
+it.
 
 - [ ] **Step 3: Sweep the receipts**
 
@@ -2513,19 +2793,37 @@ Task 12 step 4 updates that plan's banner. §8 dev mode → Task 11. §9 deletio
 §10 is a statement of posture, nothing to build. §11 testing → distributed, with the by-id two-tenant
 probe in Task 12. §12 sequencing → this plan is the first slice.
 
-**One deviation from the spec, deliberate and recorded here:** spec §2 step 5 says the status response
-re-issues the cookie as `${deviceId}.${token}`. Task 4 carries the request's id onto the device row
-instead, so no re-issue is needed and the cookie is set once. That is strictly simpler and removes a
-step where a cookie could be dropped. **The spec must be updated to match before this plan is
-executed** — otherwise a reviewer comparing the two will read it as an unexplained divergence.
+**Deviations from the spec, all now folded back into it** (the spec was updated in the same commit as
+this revision, so plan and spec agree):
+
+- The cookie is set once, at join: accept gives the device row the request's own id, rather than the
+  status response re-issuing a cookie.
+- The choice set is fixed at join and stored on the row (`decoy_numbers`), rather than re-rolled per
+  challenge — a re-rolled set intersects in exactly one value, which hands the answer to any client
+  holding a management session.
+- The mint rule spans decoys as well as reals, in both directions, so a decoy issued now cannot become
+  somebody's real number later.
+- Spec §1.1's "passed to both `mountDeviceApi` and `mountPrintApi`" is deferred to the agent slice; so
+  is §3.1's printers-screen copy of the toggle. This slice wires the device side only.
 
 **Type consistency.** `JoinRequestKind` is used identically in Tasks 4, 5, 6 and 8.
-`createJoinRequest` takes `fullCode` in Tasks 4 and 7. `challengeFor`'s `{ choices: string[] }` is
-what Task 9's client types. `acceptDeviceJoinRequest`'s input `{ choice, profileId, stationId?,
-registerId? }` matches Task 8's body screens and Task 9's client verb.
+`createJoinRequest` takes no error-code parameter in any task (`agent.join_full` does not exist yet).
+`challengeFor(tx, cfg, id)` takes no number source, and its `{ choices: string[] }` is what Task 9's
+client types. `acceptDeviceJoinRequest` returns the `AcceptResult` discriminated union in Tasks 6, 6b
+and 8, and only the route turns `{ ok: false }` into `device.join_mismatch`. `denyJoinRequest` returns
+the kind and takes none.
 
 **Known soft spots for the executor.** Task 2 step 5 depends on what drizzle-kit actually emits for a
-removed table — read the generated file rather than assuming. Task 6 step 1 deletes
-`readEnrolCatalogue`, whose three reads the dashboard's accept dialog still needs; confirm which
-management routes already serve profiles, stations and registers before deleting rather than after.
-Task 10 changes the `enrolled` event's detail, so both of its parents must be checked.
+removed table — read the generated file rather than assuming. Task 6b is the largest and least
+interesting task in the slice; resist doing it in the same commit as Task 6, because a mechanical
+migration and a behaviour change reviewed together hide each other. The decoy budget is worth watching
+if the cap ever rises: twenty pending rows reserve sixty of the hundred two-digit values.
+
+**What a fresh-context review found in the first draft of this plan, and where it landed.** A wrong
+choice was deleted-then-thrown inside `withTenant`, so the transaction rolled the deny back and a
+wrong tap became an unlimited retry — the property §1.2 rests on, silently absent, with the plan's own
+test passing because it never spanned a transaction (Task 6). The challenge re-rolled its decoys, so
+two calls intersected in the real number (Tasks 4, 5). Eleven `apps/server` consumers of the deleted
+verbs went unnamed, which no task could have ended green (Task 6b). `agent.join_full` was typed but
+does not exist (Task 4). And the receipt sweep missed the root README, the till's error-code map and
+three `packages/layouts` comments (Task 11).
