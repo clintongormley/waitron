@@ -541,7 +541,7 @@ a fresh worktree. Compose names its project after the directory, so an unqualifi
 `wa-wt` brings the shared db up under `COMPOSE_PROJECT_NAME=waitron`, copies the newest sibling
 `.env` into a worktree that has none, and follows the log. `wa-wt reset [name]` is the only "start
 over": it wipes the volume, reseeds from that checkout's code and copies the new `.env` to every
-checkout; the till is then re-enrolled per browser with the fixed dev pairing code `DEMO`. Cost: a
+checkout. Cost: a
 round trip each on 2026-09-05 and 2026-09-06 while the two rules were manual. Detail:
 `docs/ui-review.md` → _Running the stack from a worktree_.
 

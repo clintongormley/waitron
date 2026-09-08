@@ -433,6 +433,61 @@ describe("POST /api/device/join", () => {
   });
 });
 
+describe("devMode auto-accept", () => {
+  it("auto-accepts a knock with the venue's default till profile, and the cookie works immediately", async () => {
+    // The window is NEVER opened (mountDevApp builds a fresh shut holder), so in production this knock
+    // would 403. devMode holds it open and accepts the request in the same transaction with the venue's
+    // provisioned default `till` profile, so the joiner's cookie is a working device cookie at once — no
+    // window, no approval step.
+    const venue = await setupVenue(suite.admin);
+    const app = mountDevApp(venue.cfg, true);
+    const res = await send(app, "POST", "/api/device/join", { body: { name: "Dev till" } });
+    expect(res.status).toBe(200);
+
+    const me = await send(app, "GET", "/api/device/me", { cookie: deviceCookieFrom(res) });
+    expect(me.status).toBe(200);
+    expect(await me.json()).toMatchObject({ name: "Dev till", formFactor: "till" });
+
+    // The request row is CONSUMED by the accept — it is now a device, not a pending join.
+    const { rows } = await suite.admin.execute<{ n: number }>(
+      sql`select count(*)::int as n from join_requests where tenant_id = ${venue.cfg.tenantId}`,
+    );
+    expect(rows[0]!.n).toBe(0);
+  });
+
+  it("404s device_profile.not_found when the venue has no default till profile, rolling the request back", async () => {
+    const venue = await setupVenue(suite.admin);
+    // Remove the provisioned default `till` profile (no device references it yet, so the RESTRICT FK is
+    // not tripped). Auto-accept then has no default to resolve.
+    await suite.admin.execute(
+      sql`delete from device_profiles where tenant_id = ${venue.cfg.tenantId} and form_factor = 'till'`,
+    );
+    const app = mountDevApp(venue.cfg, true);
+    const res = await send(app, "POST", "/api/device/join", { body: { name: "Dev till" } });
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
+      "device_profile.not_found",
+    );
+    // The throw is inside the same transaction as the mint, so the just-created request is rolled back —
+    // no orphan pending row nobody can approve.
+    const { rows } = await suite.admin.execute<{ n: number }>(
+      sql`select count(*)::int as n from join_requests where tenant_id = ${venue.cfg.tenantId}`,
+    );
+    expect(rows[0]!.n).toBe(0);
+  });
+
+  it("outside devMode the same knock still needs an open window (403)", async () => {
+    const venue = await setupVenue(suite.admin);
+    const res = await send(mountDevApp(venue.cfg, false), "POST", "/api/device/join", {
+      body: { name: "x" },
+    });
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
+      "device.pairing_closed",
+    );
+  });
+});
+
 describe("GET /api/device/join/status", () => {
   it("is pending, then approved once accepted, on the SAME cookie", async () => {
     const venue = await setupVenue(suite.admin);
@@ -1100,7 +1155,10 @@ describe("GET /api/dev/devices (dev-only chooser list)", () => {
   it("lists the venue's active devices (kind derived), no option-sources, no token", async () => {
     const venue = await setupVenue(suite.admin);
     const app = mountDevApp(venue.cfg, true);
-    const { deviceId } = await enrolKds(app, venue, venue.defaultStationId);
+    // Enrol through a NON-dev mount: a devMode knock now auto-accepts as a till (this task), so the full
+    // knock+accept helper — which enrols a KDS bound to a station — runs against a production mount. The
+    // dev list reads the same tenant's devices, so the route under test still sees the KDS device.
+    const { deviceId } = await enrolKds(mountApp(venue.cfg), venue, venue.defaultStationId);
 
     const res = await send(app, "GET", "/api/dev/devices");
     expect(res.status).toBe(200);
@@ -1123,8 +1181,11 @@ describe("GET /api/dev/devices (dev-only chooser list)", () => {
   it("lists only ACTIVE devices — a revoked device is omitted", async () => {
     const venue = await setupVenue(suite.admin);
     const app = mountDevApp(venue.cfg, true);
-    const live = await enrolKds(app, venue, venue.defaultStationId);
-    const doomed = await enrolKds(app, venue, venue.defaultStationId);
+    // Enrol through a non-dev mount (a devMode knock auto-accepts as a till now); the dev list reads the
+    // same tenant's devices.
+    const enrolApp = mountApp(venue.cfg);
+    const live = await enrolKds(enrolApp, venue, venue.defaultStationId);
+    const doomed = await enrolKds(enrolApp, venue, venue.defaultStationId);
     expect(
       (
         await send(app, "POST", `/management-api/devices/${doomed.deviceId}/revoke`, {

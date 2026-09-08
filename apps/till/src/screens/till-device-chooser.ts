@@ -16,10 +16,16 @@ import type { DevDeviceList, TillApi } from "../api/client.js";
  *    `x-waitron-dev-device` header the server trusts in dev mode). That per-tab id is how one browser runs
  *    device X in one tab and device Y in another.
  *  - **Set up a new device** — collapsed by default; expands to the {@link TillEnrolScreen}, which knocks
- *    at `POST /api/device/join` like any other fresh browser. There is no dev shortcut: an admin must have
- *    pairing mode open and must accept the number, exactly as in a venue. On approval the new device id is
- *    written to THIS tab's `sessionStorage` (not the browser cookie), so the fresh device stays this tab's
- *    identity.
+ *    at `POST /api/device/join` like any other fresh browser. Because the server runs in devMode here, that
+ *    knock is AUTO-ACCEPTED on the spot with the venue's default `till` profile — no pairing window, no
+ *    number to match. On approval the new device id is written to THIS tab's `sessionStorage` (not the
+ *    browser cookie), so the fresh device stays this tab's identity.
+ *
+ *    A DELIBERATE regression of the old dev form: this affordance can only ever mint a `till` (auto-accept
+ *    resolves the default profile, and a default profile is the one form factor it can produce), and a
+ *    REPEATED name throws `device.register_name_taken` (409) because a till enrol auto-creates a register
+ *    named after the device. Both are acceptable for a dev tool — the three demo devices `dev-setup` seeds
+ *    cover the other form factors, and the real accept-with-profile flow is exercised by the dashboard.
  *
  * It is a DEVELOPER TOOL, never a shipped surface: reachable only when the server exposes the dev route
  * (devMode). Its own chrome is DELIBERATELY plain English literals, not `t()` catalogue keys — there is

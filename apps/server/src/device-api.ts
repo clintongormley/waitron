@@ -17,13 +17,13 @@ import { AppError } from "@waitron/shared";
 import { asAppUser, deviceProfiles, devices, ticketItems, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
-import { kindOfFormFactor } from "@waitron/layouts";
+import { kindOfFormFactor, listDeviceProfiles } from "@waitron/layouts";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
 import { readDeviceCookie, requireDevice, setDeviceCookie } from "./device-session.js";
 import { bindingFkField } from "./device.js";
-import { createJoinRequest, readJoinStatus } from "./join-requests.js";
+import { acceptDeviceJoinRequest, createJoinRequest, readJoinStatus } from "./join-requests.js";
 import type { PairingMode } from "./pairing-mode.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import {
@@ -105,15 +105,18 @@ const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
  *    403 — the ORDINARY state, not an anomaly), `device.join_full` (the tenant already holds the cap of
  *    pending device requests, 429) and `device.join_rate_limited` (the knock flood guard, 429 —
  *    `enrol-rate-limit.ts` throws it at the TOP of the knock handler, before any DB work).
- *  - The accept-time binding + join faults, which NO route on this surface throws (verified by grep:
- *    it neither imports `resolveDeviceBinding` nor any join verb that raises them — its
- *    `join-requests.js` import is `createJoinRequest`/`readJoinStatus` alone). They belong to the
- *    ACCEPT route, which is `join-api.ts`'s, and are mapped here to the SAME statuses that file gives
- *    them for the reason `device.till_required` below is: a code has one status wherever it is
- *    answered, so a device route that later grows a binding write inherits it rather than the map's
- *    400 default. `device.station_required`, `device.register_required`, `device.register_name_taken`
- *    (the ONE 409 of the set), `device_profile.not_found`, `station.not_found`,
- *    `device.join_mismatch` (a wrong number, 400) and `join_request.not_found` (404).
+ *  - The accept-time binding + join faults. The knock's devMode auto-accept runs
+ *    `acceptDeviceJoinRequest` in the same transaction (which is why `join-requests.js` is imported for
+ *    that verb, not `createJoinRequest`/`readJoinStatus` alone), so TWO of these can actually arise on
+ *    THIS surface: `device_profile.not_found` (thrown directly when the venue has no default `till`
+ *    profile) and `device.register_name_taken` (409 — the accept auto-creates the till's register and a
+ *    duplicate device name collides on it, via `resolveDeviceBinding`). The REST belong to the ACCEPT
+ *    route alone (`join-api.ts`'s) — auto-accept always uses a `till` profile with no station/register,
+ *    so it never raises them — and are mapped here to the SAME statuses that file gives them for the
+ *    reason `device.till_required` below is: a code has one status wherever it is answered, so a device
+ *    route that grows a binding write inherits it rather than the map's 400 default.
+ *    `device.station_required`, `device.register_required`, `station.not_found`, `device.join_mismatch`
+ *    (a wrong number, 400) and `join_request.not_found` (404).
  *    `device.binding_invalid` is the exception: this surface throws it too, from the
  *    assign-device-profile and hardware routes' composite-FK 23503 translation. The accept route
  *    raises it as well, through `requireLiveRegister` (`device.ts`), which is why it is the one code
@@ -183,7 +186,9 @@ const run = createErrorBoundary(STATUS, "device.failed");
  *  1. UNAUTHENTICATED joining, a KNOCK and a POLL — mirrors the till's `POST /api/session` in carrying
  *     no prior-session guard, running as `app_user` under the tenant. `POST /api/device/join` asks to
  *     join: it is refused unless an admin has the venue's pairing window open, and otherwise mints a
- *     pending request, returns the number the admin must match, and sets the device cookie.
+ *     pending request, returns the number the admin must match, and sets the device cookie. In
+ *     `devMode` the window is bypassed and the request is accepted on the spot with the venue's default
+ *     `till` profile, so a dev browser boots straight in (see the knock handler).
  *     `GET /api/device/join/status` is the joiner asking whether it is in yet, on that same cookie.
  *     Approval itself is an ADMIN act on another surface (`join-api.ts`), never anything a device can
  *     do for itself. The token leaves ONLY in the cookie (never the body); the knock is rate-limited
@@ -241,7 +246,14 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // nothing external may block a sale). The window is the cheaper check but runs second, so a flood
       // is refused as a flood rather than reported as a shut door.
       enrolLimiter.check();
-      if (!deps.pairingMode.isOpen()) {
+      // devMode holds the window permanently open and accepts the knock immediately with the venue's
+      // default `till` profile, so a fresh browser at a worktree till boots straight in — the step that
+      // used to need the fixed `DEMO` code and a re-enrol after every `wa-wt reset`. It runs the REAL
+      // join + accept verbs (below), so demo mode exercises the production path rather than a second,
+      // divergent one (the defect #269 named). The rate limit still runs FIRST — a dev flood is still a
+      // flood — but the window is not consulted, so `noteRefused` never fires in dev.
+      const auto = deps.devMode === true;
+      if (!auto && !deps.pairingMode.isOpen()) {
         deps.pairingMode.noteRefused();
         throw new AppError("device.pairing_closed", {});
       }
@@ -249,7 +261,24 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const name = requireString(body.name, "name");
       const made = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
-        return createJoinRequest(tx, deps.cfg, { kind: "device", label: name });
+        const request = await createJoinRequest(tx, deps.cfg, { kind: "device", label: name });
+        if (auto) {
+          // Resolve the venue's default `till` profile and accept in the SAME transaction — the
+          // one-transaction guarantee `acceptDeviceJoinRequest`'s header requires, so a later throw
+          // (no till profile, or a register-name collision) rolls the just-minted request back rather
+          // than leaving a pending row nobody can approve. `listDeviceProfiles` is name-ordered, so the
+          // first `till` is the deterministic default. The request's own number is always the match, so
+          // accept can only return `{ ok: true }` here — the mismatch arm is unreachable in dev.
+          const till = (await listDeviceProfiles(tx, deps.cfg.tenantId)).find(
+            (profile) => profile.formFactor === "till",
+          );
+          if (till === undefined) throw new AppError("device_profile.not_found", {});
+          await acceptDeviceJoinRequest(tx, deps.cfg, request.joinId, {
+            choice: request.verificationNumber,
+            profileId: till.id,
+          });
+        }
+        return request;
       });
       // The cookie's SELECTOR is the join request's id, which accept carries onto the devices row — so
       // this cookie is set once and never re-issued. Until then it names no device, so `requireDevice`

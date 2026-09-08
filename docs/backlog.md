@@ -185,7 +185,7 @@ hosted in Spain (owner decision 2026-09-05), so asesor Q16 does not arise.
 
 **Run path (local; no hardware, cloud, or AEAT cert):** `pnpm dev:setup && pnpm dev` → till
 <http://localhost:5190>, dashboard <http://localhost:5191>, setup <http://localhost:5192>, server
-:8080. Enrol the till once per browser with pairing code **DEMO** (dev only). Till PIN **5555**;
+:8080. The till enrols itself on first load in dev mode — no code, no approval step. Till PIN **5555**;
 dashboard **owner@demo.waitron.local / dashPass123**. `dev:setup` seeds a believable demo
 restaurant: two menus (~44 products with per-dish images), a floor plan (3 zones / ~16 tables), staff
 on PIN 5555, and ~28 days of back-dated preproduction sales — English by default, Spanish via
