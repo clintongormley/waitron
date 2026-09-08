@@ -163,12 +163,13 @@ describe("rejoinAsSecondary", () => {
     expect(calls).toEqual(["close", "wipe"]);
   });
 
-  it("--accept-loss forces the wipe on a dead box, bypassing the drain guards", async () => {
-    // The dead-box path (spec §4.2 step 2): the box cannot prove its drain, but the operator accepts the
-    // loss. Every drain/standing guard is bypassed; the slot reader is never even consulted. Still closes
-    // our own connections before the FORCE drop.
+  it("--accept-loss waives the drain confirmation on a FENCED box and proceeds to the wipe", async () => {
+    // The dead-box path (spec §4.2 step 2): a fenced box that cannot prove its drain (fence LSN unset,
+    // and the slot would refuse `not_drained`) is wiped anyway — the operator accepts the loss. The drain
+    // guards are waived (the slot reader is never consulted), but the box is fenced with a carrier, so the
+    // wipe proceeds. Still closes our own connections before the FORCE drop, and returns the carrier.
     const calls: string[] = [];
-    const d = makeDeps(heldDoc(NODE_ID, "serving-primary"), {
+    const d = makeDeps(heldDoc(NODE_ID, "sell-only"), {
       acceptLoss: true,
       fenceLsn: null,
       readSlotDrain: vi.fn(async () => {
@@ -182,9 +183,33 @@ describe("rejoinAsSecondary", () => {
       }),
     });
 
-    await expect(rejoinAsSecondary(d)).resolves.toEqual({ wiped: true, carrierNodeId: null });
+    await expect(rejoinAsSecondary(d)).resolves.toEqual({ wiped: true, carrierNodeId: CARRIER_ID });
     expect(calls).toEqual(["close", "wipe"]);
     expect(d.readSlotDrain).not.toHaveBeenCalled();
+  });
+
+  it("--accept-loss still REFUSES an unfenced serving-primary (never wipes a live primary)", async () => {
+    // The irreversible-wipe guard `--accept-loss` must NOT waive (CLAUDE.md §5): a live serving primary
+    // could hold un-shipped fiscal rows. Proven by contrast with the fenced accept-loss test above.
+    const d = makeDeps(heldDoc(NODE_ID, "serving-primary"), { acceptLoss: true });
+
+    const err = await captureError(() => rejoinAsSecondary(d));
+    expect(isAppError(err) && err.code).toBe("rejoin.not_fenced");
+    expect(d.closePreWipe).not.toHaveBeenCalled();
+    expect(d.wipeDatabase).not.toHaveBeenCalled();
+  });
+
+  it("--accept-loss still REFUSES a fenced box whose chart names no carrier (rejoin.no_carrier)", async () => {
+    // The `no_carrier` guard `--accept-loss` must NOT waive: a box with no survivor to re-adopt from can
+    // never legitimately rejoin, and (per the header) can't have reached the cloud to be fenced anyway.
+    const d = makeDeps(heldDoc(NODE_ID, "sell-only", { carrier: false }), {
+      acceptLoss: true,
+      readSlotDrain: undefined,
+    });
+
+    const err = await captureError(() => rejoinAsSecondary(d));
+    expect(isAppError(err) && err.code).toBe("rejoin.no_carrier");
+    expect(d.wipeDatabase).not.toHaveBeenCalled();
   });
 
   it("drives the guard ladder off the threaded `held` document (read-once), not a db read", async () => {

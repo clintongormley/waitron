@@ -159,7 +159,7 @@ describe("waitron-rejoin rejoin", () => {
     let received: RejoinDeps | undefined;
     const rejoin = async (d: RejoinDeps): Promise<RejoinResult> => {
       received = d;
-      return { wiped: true as const, carrierNodeId: null };
+      return { wiped: true as const, carrierNodeId: "carrier-x" };
     };
     const { code } = await run({}, { argv: ["rejoin", "--accept-loss"], rejoin });
     expect(code).toBe(0);
@@ -173,7 +173,7 @@ describe("waitron-rejoin rejoin", () => {
       {
         rejoin: async (d): Promise<RejoinResult> => {
           received = d;
-          return { wiped: true as const, carrierNodeId: null };
+          return { wiped: true as const, carrierNodeId: "carrier-x" };
         },
       },
     );

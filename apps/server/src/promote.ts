@@ -154,9 +154,12 @@ export async function promoteLocalSecondaryToPrimary(
 
   // PONR: the role flip and the new document commit together in ONE owner transaction (CLAUDE.md §3), so
   // a crash between the two writes cannot leave a primary with no document. Both writes are owner-role.
+  // The fence watermark is cleared here too, symmetric with the mirror promote: becoming the submitter
+  // un-fences this node, so a stale `deployment.fence_lsn` must not survive the flip (Ruling C2).
   await deps.ownerDb.transaction(async (tx) => {
     await setSingletonRoleTx(tx, "primary"); // claims the submitter (§7)
     await writeNodeMembershipTx(tx, document);
+    await setFenceLsnTx(tx, null); // un-fence
   });
 
   // Flip the running pass on its next tick. If THIS read throws after the transaction above committed (a

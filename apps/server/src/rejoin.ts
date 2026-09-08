@@ -26,7 +26,8 @@ export interface RejoinDeps {
    *  UNLESS `acceptLoss` — the drain guard is `isDrained(d, fenceLsn) && !d.active`. */
   readonly fenceLsn: string | null;
   /** The operator's `--accept-loss` override (spec §4.2 step 2): a dead box that cannot prove its drain
-   * is wiped anyway, the operator accepting any un-shipped tail. Bypasses EVERY drain/standing guard. */
+   * is wiped anyway, the operator accepting any un-shipped tail. Waives ONLY the drain confirmation
+   * (`carrier_attached` + `not_drained`); `not_fenced` and `no_carrier` are still enforced. */
   readonly acceptLoss: boolean;
   /** Close the pre-wipe pools (the app + owner/migrator pools the caller opened and the slot reader
    * used). Called AFTER the last guard and BEFORE `wipeDatabase` — the FORCE drop terminates any
@@ -42,10 +43,11 @@ export interface RejoinDeps {
 
 export interface RejoinResult {
   readonly wiped: true;
-  /** The serving-primary this node drained onto (from the held chart), or `null` on the `--accept-loss`
-   * path where no drain was verified. Informational — the wiped box re-adopts from setup, it does not
-   * stream from a carrier here. */
-  readonly carrierNodeId: string | null;
+  /** The serving-primary named in the held chart — the carrier this node drained onto and will re-adopt
+   * from. Always present: both the guarded and the `--accept-loss` paths pass the `no_carrier` guard, so
+   * a carrier is known even when the drain confirmation was waived. Informational — the wiped box
+   * re-adopts from setup, it does not stream from a carrier here. */
+  readonly carrierNodeId: string;
 }
 
 /**
@@ -67,54 +69,55 @@ export interface RejoinResult {
  * document once and threads that SAME document in as `deps.held`, keying `readSlotDrain` on the carrier
  * from it — so the guards and the drain reader see one chart and no stale-carrier gap exists (spec §4).
  *
- * `--accept-loss` (dead-box path, spec §4.2 step 2): a box that cannot prove its drain (no fence LSN,
- * or the carrier unreachable) is wiped anyway, the operator having accepted the loss of any un-shipped
- * tail. It bypasses EVERY drain/standing guard — the slot reader is never consulted — but still closes
- * our own connections before the FORCE drop.
+ * `--accept-loss` (dead-box path, spec §4.2 step 2) waives ONLY the drain confirmation
+ * (`carrier_attached` + `not_drained`) — the operator accepts losing any tail that never reached the
+ * carrier. It does NOT waive `not_fenced` or `no_carrier`: the wipe is irreversible (CLAUDE.md §5), and
+ * requiring a fenced standing is the guard that stops `--accept-loss` from wiping a genuinely-live
+ * serving primary and destroying its un-shipped fiscal rows. A returning dead box is fenced by the
+ * boot membership reconciliation (Task 8) BEFORE the operator runs rejoin, so a fenced standing is
+ * reachable; and a box that can never reach the cloud to be fenced also can't reach a carrier to adopt
+ * from, so `no_carrier` already refuses it — no legitimate rejoin is lost by keeping those two guards.
  */
 export async function rejoinAsSecondary(deps: RejoinDeps): Promise<RejoinResult> {
-  // --accept-loss short-circuits the whole guard ladder (dead-box path, spec §4.2 step 2): the operator
-  // has accepted losing any tail that never reached the carrier, so no drain proof is required. We still
-  // close our own connections before the FORCE drop, then wipe.
-  if (deps.acceptLoss) {
-    deps.log("warn", "rejoin.accept_loss", {});
-    await deps.closePreWipe();
-    await deps.wipeDatabase();
-    deps.log("info", "rejoin.wiped", {});
-    return { wiped: true, carrierNodeId: null };
-  }
-
   const held = deps.held;
   const standing = held === null ? undefined : standingOf(held, deps.nodeId);
 
-  // 1. Not fenced: a serving-primary/serving-secondary node, a node absent from the chart, or no held
-  // document at all — none may be wiped. A serving node is still trading and could hold un-shipped rows.
+  // 1. Not fenced — ENFORCED even under `--accept-loss`: a serving-primary/serving-secondary node, a
+  // node absent from the chart, or no held document at all — none may be wiped, or the irreversible
+  // wipe could destroy a live primary's un-shipped fiscal rows (CLAUDE.md §5). See the header for why
+  // a fenced standing is always reachable for a legitimate rejoin.
   if (!isFencedStanding(standing)) {
     throw new AppError("rejoin.not_fenced", {});
   }
 
-  // 2. No carrier: fenced, but the held chart names no serving-primary to have drained onto. Signalled
-  // by an `undefined` carrier in the chart OR an `undefined` slot reader; guarding both refuses
-  // fail-safe and narrows `carrier` to a string. `held` is non-null here (a null held gives standing
-  // `undefined`, not fenced → thrown above).
+  // 2. No carrier — ENFORCED even under `--accept-loss`: fenced, but the held chart names no
+  // serving-primary to have drained onto and to re-adopt from. Signalled by an `undefined` carrier in
+  // the chart OR an `undefined` slot reader; guarding both refuses fail-safe and narrows `carrier` to a
+  // string. `held` is non-null here (a null held gives standing `undefined`, not fenced → thrown above).
   const carrier = servingPrimaryNodeId(held!);
   if (carrier === undefined || deps.readSlotDrain === undefined) {
     throw new AppError("rejoin.no_carrier", {});
   }
 
-  // 3. The fence-LSN drain guard (Ruling C2), refused BEFORE the wipe: a node must not be wiped while
-  // rows it originated are still un-shipped, or they are lost (CLAUDE.md §5). Two monotone halves:
+  // 3. The fence-LSN drain confirmation (Ruling C2) — the ONLY guards `--accept-loss` waives (spec §4.2
+  // step 2). Without the flag, a node must not be wiped while rows it originated are still un-shipped, or
+  // they are lost (CLAUDE.md §5); with it, the operator accepts that loss for a dead box that cannot
+  // prove its drain. Two monotone halves:
   //   (a) carrier still ATTACHED — the slot is `active`, the drain window is open. `rejoin.carrier_attached`.
   //   (b) NOT drained — the slot is detached but `confirmed_flush_lsn < fence_lsn` (or the fence LSN is
   //       unset, which without --accept-loss is not drainable). `rejoin.not_drained`.
-  const drain = await deps.readSlotDrain();
-  if (drain.active) {
-    throw new AppError("rejoin.carrier_attached", {});
+  if (deps.acceptLoss) {
+    deps.log("warn", "rejoin.accept_loss", { carrierNodeId: carrier });
+  } else {
+    const drain = await deps.readSlotDrain();
+    if (drain.active) {
+      throw new AppError("rejoin.carrier_attached", {});
+    }
+    if (deps.fenceLsn === null || !isDrained(drain, deps.fenceLsn)) {
+      throw new AppError("rejoin.not_drained", {});
+    }
+    deps.log("info", "rejoin.drained", { carrierNodeId: carrier });
   }
-  if (deps.fenceLsn === null || !isDrained(drain, deps.fenceLsn)) {
-    throw new AppError("rejoin.not_drained", {});
-  }
-  deps.log("info", "rejoin.drained", { carrierNodeId: carrier });
 
   // Close our own connections to the target db BEFORE the FORCE drop (which would otherwise terminate
   // them out from under us). Everything the guards needed has been read by now.

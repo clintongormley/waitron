@@ -248,8 +248,9 @@ describe("retireSelf", () => {
   });
 
   it("refuses when the fence LSN is unset (a dead/never-fenced box) with node.retire_not_drained", async () => {
-    // A null fence LSN cannot be compared — fail-safe as not_drained, never a false evict. retainedBytes
-    // is null here because the slot fixture is absent-shaped for this case.
+    // A null fence LSN cannot be compared — fail-safe as not_drained, never a false evict. The slot
+    // fixture (`drained`, retainedBytes 0n) is otherwise fully drained, so ONLY the null fence LSN is
+    // what refuses here — isolating that half of the guard.
     const { db, deps, nodeId } = await fencedNode();
     await writeNodeMembership(db, heldDoc(nodeId, "sell-only"));
 

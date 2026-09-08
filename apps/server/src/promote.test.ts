@@ -167,6 +167,16 @@ describe("promoteLocalSecondaryToPrimary", () => {
     await db.close();
   });
 
+  it("clears deployment.fence_lsn on promotion (the un-fence), symmetric with the mirror promote", async () => {
+    const { db, deps } = await localSecondary();
+    await db.transaction((tx) => setFenceLsnTx(tx, "0/1500000"));
+    expect(await readFenceLsn(db)).toBe("0/1500000");
+
+    await promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: true });
+    expect(await readFenceLsn(db)).toBeNull();
+    await db.close();
+  });
+
   it("is idempotent — a second promote on an already-primary node is a no-op", async () => {
     const { db, deps } = await localSecondary();
     const d = deps(noopLog);

@@ -242,8 +242,7 @@ export async function runRejoin(deps: {
 
   try {
     const result = await rejoin(rejoinDeps);
-    const carrier = result.carrierNodeId ?? "an operator-adopted primary (accept-loss)";
-    deps.out(`wiped ${dbName}; next boot is setup mode — re-adopt from ${carrier}`);
+    deps.out(`wiped ${dbName}; next boot is setup mode — re-adopt from ${result.carrierNodeId}`);
     return 0;
   } catch (err) {
     if (err instanceof AppError && err.code.startsWith("rejoin.")) {
