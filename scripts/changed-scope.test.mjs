@@ -145,6 +145,16 @@ describe("classify", () => {
       "packages/db/src/index.ts",
     );
   });
+
+  // A REGRESSION PIN, green the day it was written: `isInertPath` is an allowlist of inert paths,
+  // so `deploy/` is code by construction and nothing had to change for this to hold. It is here
+  // because ci.yml's `image` job — the only proof that a non-root process binds 443 under host
+  // networking — gates on `code`, so an entry added to isInertPath for `deploy/` would stop
+  // building the box's own image while every other check stayed green.
+  it("classifies deploy/ as code, so a Dockerfile change still builds the image", () => {
+    expect(classify(["deploy/Dockerfile"]).code).toBe(true);
+    expect(classify(["deploy/compose.yml"]).code).toBe(true);
+  });
 });
 
 const ls = (...names) => JSON.stringify(names.map((name) => ({ name })));
