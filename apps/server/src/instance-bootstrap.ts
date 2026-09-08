@@ -278,7 +278,7 @@ export async function ensureInstance(opts: {
       // failure part-way leaves `waitron_repl` created with a password held only in this process —
       // and the branch above would then refuse every later start as unrecoverable, turning a
       // transient failure into a permanent crash loop. Written first, the next start recovers the
-      // password from the file and re-runs whatever is still missing.
+      // password from the file and re-runs the missing replication grants (the gate below).
       await writeFileAtomic(
         envPath,
         formatEnvFile({

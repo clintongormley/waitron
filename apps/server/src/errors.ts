@@ -171,7 +171,7 @@ declare module "@waitron/shared" {
     /**
      * The superuser replication bootstrap failed on the node's own database — the full
      * `replicationBootstrapStatements` array on a cluster with no `waitron_repl`, or the
-     * `replicationSchemaGrantStatements` re-grant on a database recreated under a surviving one.
+     * `replicationRepairStatements` re-run that restores a lost prerequisite under a surviving one.
      * Only the SQLSTATE survives: the full array's first statement embeds the generated
      * `waitron_repl` password, and both Drizzle's wrapped failure and PostgreSQL's own message quote
      * the failing statement back verbatim — the rule `provisioning.role_creation_failed` follows for

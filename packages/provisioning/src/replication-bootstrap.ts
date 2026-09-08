@@ -13,8 +13,9 @@ export const REPLICATION_ROLE = "waitron_repl";
  * below because they are the only half that is PER-DATABASE, and a database can be discarded while
  * the cluster-global half survives: the R3 rejoin wipe (`dropAndCreateDatabase`) drops the database
  * and takes its `pg_default_acl` with it, while `waitron_repl` lives in the shared `pg_authid` and
- * remains. A caller that re-provisions such a database must re-issue exactly these two, and cannot
- * re-run the whole array — `CREATE ROLE` would fail on the surviving role.
+ * remains. These two are the per-database half of `replicationRepairStatements`, which a caller
+ * re-runs on a surviving role to restore any lost prerequisite; the whole bootstrap array cannot
+ * re-run there — `CREATE ROLE` would fail on the surviving role.
  *
  * Carries NO credential, so unlike the array below it is safe to log and needs no withholding catch.
  * Idempotent: both statements are absolute grants, not increments.
