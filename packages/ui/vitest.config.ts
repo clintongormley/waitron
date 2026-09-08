@@ -44,11 +44,19 @@ export default defineConfig({
       // list — verified empirically: omitting the spread lets vite.config.ts,
       // vitest.config.ts, and vite-env.d.ts reappear in the report. Spread the
       // defaults (test files, *.d.ts, config files) and add this package's own
-      // non-source surfaces: the demo/workbench app and the test-only helpers that
-      // exist purely to support *.test.ts files (mount/cleanup, axe assertions).
+      // non-source surfaces: the demo/workbench app, the brand assets and their
+      // hand-run generator, and the test-only helpers that exist purely to support
+      // *.test.ts files (mount/cleanup, axe assertions).
       exclude: [
         ...coverageConfigDefaults.exclude,
         "demo/**",
+        // Without this the hand-run generator counts as 0%-covered source and drags the package
+        // under its 90% floor — measured at 88.87% against an earlier, shorter draft of it — which
+        // would buy a test of a tool whose whole job is shelling out to a binary that is not a
+        // workspace dependency. What the exclude gives up is coverage pressure to test that tool;
+        // the property worth holding instead, that the apps' icon links and publicDir still agree
+        // with this directory, is pinned from the root project by scripts/brand-icons.test.ts.
+        "brand/**",
         "src/test-helpers.ts",
         "src/a11y-helpers.ts",
         "src/tokens/token-test-helpers.ts",
