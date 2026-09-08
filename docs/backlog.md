@@ -605,22 +605,27 @@ screens, `apps/server/src/modules.ts` (the maps derived from that list), and the
        not close the read leak). **FIXED 2026-09-08 (#276)**:
        the pre-check now scopes `eq(diningTables.tenantId, cfg.tenantId)`, so another tenant's real table id
        reads as absent (clean `table.not_found`, not a raw 23503); real-PG two-tenant regression in
-       `tabs.pg.test.ts`. **NEW leads found while there (code-traced, NOT yet run — verify by two-tenant
-       probe FIRST, own branch):** a FAMILY of unscoped by-id reads, same §3 class as the fixed
-       `getHeldOrder` leak, all in `apps/server` (line numbers omitted — grep the names). (1) `lockOpenTabRow`
-       reads `working_orders` by id with no tenant predicate and `lockOpenTab` reads `dining_tables` by
-       `tab_id` likewise; the ~8 tab verbs reaching them via `lockOpenTab` (`sendLines`/`recallLines`/
-       `addTabRound`/`voidTabLine`/`setLineCourse`/`setLineServed`/`transferLines`/`splitOffCheck`). (2)
-       `assertTabOpen` is a SEPARATE untenanted `working_orders` by-id read, reached by
-       `moveTab`/`joinTable`/`readTabLines` (the convention review caught `moveTab` going through THIS, not
-       `lockOpenTab`). (3) `payWorkingOrder` (`till-sale.ts`) reads the order id with no tenant predicate
-       before creation, and (4) park replay (`working-order.ts`) reads by order id + status alone — both
-       flagged by the run-it seat. The three helpers (1–2) take no `cfg`, so the fix threads `cfg.tenantId`
-       through them; `payWorkingOrder`/`parkOrder` (3–4) already have `cfg` in scope, so there it is just
-       adding the predicate. Plus a cross-tenant test per verb. Floor
-       perf (pre-existing, moved verbatim): `floor.ts`
-       constructs two `Intl.DateTimeFormat` per poll + a per-poll `locations.time_zone` read — memoize per
-       timezone. `CoreServices` is one shared interface every module receives whole — when a 2nd core verb is
+       `tabs.pg.test.ts`. **§3 by-id read-leak FAMILY — FIXED 2026-09-08 (branch
+       `fix/tab-pay-by-id-tenant-scope`),** same class as the fixed `getHeldOrder` leak. Three helpers now take
+       `cfg` (NOT a bare `tenantId` — two adjacent `string` params invited the very transposition this fights;
+       simplify lens) and scope by it: `lockOpenTabRow`/`lockOpenTab` (tab verbs `sendLines`/`recallLines`/
+       `addTabRound`/`voidTabLine`/`setLineCourse`/`markLineServed`/`unmarkLineServed`/`transferLines`/
+       `splitOffCheck`/`unjoinTable`) and `assertTabOpen` (`moveTab`/`joinTable`/`readTabLines`). Also scoped:
+       `mergeTabs`'s own reads + abandon and `moveTabLines`'s read (threaded `cfg`) — the run-it seat RAN a
+       probe showing tenant A merged AND abandoned B's tabs; `parkOrder`'s replay read; and ALL eleven
+       `payWorkingOrder`/collect/integrated by-id reads in `till-sale.ts` (the same lock+replay shape). Real-PG
+       cross-tenant regressions in `tabs.pg.test.ts` for the four families with an observable discriminator (a
+       tab verb via `lockOpenTab`; `moveTab` via `assertTabOpen`; `mergeTabs`; `parkOrder`'s replay, which had
+       RETURNED the other tenant's order number — the RED proof). The `payWorkingOrder`/collect reads are
+       scoped defensively: with the lock read scoped a foreign id never reaches the retrieved-order reader, and
+       downstream `readSettledTicket`/sales reads already scope by tenant, so there is no observable
+       final-state discriminator to probe. **Still open (SEPARATE classes, scope next):** (i) request-supplied
+       TABLE-id reads — `moveTab`/`joinTable`'s `toTableId`, `assertTableAvailable` — the deliveryTableId/openTab
+       shape (a table id from the request, not an order/tab id); (ii) `ticket_items` by-id reads/updates in
+       `bumpCourseReady`/`advanceTicketItem`/`advanceTicket` (still `_cfg`, unscoped — a KDS §3 class). **Floor perf —
+       FIXED 2026-09-08 (branch `perf/floor-datetimeformat-memoize`):** `floor.ts` memoizes its per-timezone
+       `Intl.DateTimeFormat` (was building two per poll); the per-poll `locations.time_zone` DB read is left
+       as-is (staleness out of scope). `CoreServices` is one shared interface every module receives whole — when a 2nd core verb is
        needed (SP2+), prefer per-module narrow required-services interfaces. `floorAnnotations` is honestly
        single-purpose (`{reservedTime}`) today — genuinely generalize only when a 2nd annotator appears.
    - **SP2 — dashboard module-UI seat — LANDED (2026-09-07).** The general, reusable browser-module seat: a

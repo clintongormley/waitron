@@ -316,7 +316,10 @@ export async function payWorkingOrder(
         const [locked] = await tx
           .select({ status: workingOrders.status })
           .from(workingOrders)
-          .where(eq(workingOrders.id, req.id))
+          // Tenant-scoped: a by-id read is not isolated since RLS was dropped (#255), so a foreign
+          // tenant's order id must resolve as "no row" (walk-up) here, never as their open order
+          // (CLAUDE.md §3). Same-tenant pay is unchanged — the order is this tenant's.
+          .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)))
           .for("update");
 
         // Step 2. Already settled → idempotent replay. A retry whose first response was lost, or the
@@ -399,7 +402,8 @@ export async function payWorkingOrder(
       const [row] = await tx
         .select({ status: workingOrders.status })
         .from(workingOrders)
-        .where(eq(workingOrders.id, req.id));
+        // Tenant-scoped like the lock read above (CLAUDE.md §3).
+        .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)));
       /* v8 ignore start */
       if (row?.status !== "settled") {
         // A unique violation with no settled winner is not our idempotency case (e.g. a pay racing a
@@ -643,7 +647,9 @@ async function fileImmediateSale(
       settledAt: settledAt.toISOString(),
       ...(markCollected ? { collectedAt: settledAt.toISOString() } : {}),
     })
-    .where(eq(workingOrders.id, workingOrderId));
+    // Tenant-scoped for uniformity with the sibling finalize updates; the caller has already taken a
+    // tenant-scoped `.for("update")` lock on this row, so this can only ever match its own order.
+    .where(and(eq(workingOrders.id, workingOrderId), eq(workingOrders.tenantId, cfg.tenantId)));
 
   // `FiscalRecordRef` exposes no series code or invoice number (it is regime-opaque), so the
   // human-facing "A/1" is read back from the sale row and its series (the shared `readInvoiceNumber`
@@ -765,7 +771,7 @@ export async function payWorkingOrderIntegrated(
       const [locked] = await tx
         .select({ status: workingOrders.status })
         .from(workingOrders)
-        .where(eq(workingOrders.id, req.id))
+        .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)))
         .for("update");
 
       // Already settled → idempotent replay (a retry whose first response was lost). Files nothing.
@@ -1007,7 +1013,7 @@ async function finalizeCapture(
             settledAt: settledAt.toISOString(),
             ...(markCollected ? { collectedAt: settledAt.toISOString() } : {}),
           })
-          .where(eq(workingOrders.id, req.id));
+          .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)));
 
         const ticket: TillSaleResult = {
           invoiceNumber: await readInvoiceNumber(tx, saleId),
@@ -1093,7 +1099,7 @@ async function finalizeRecovery(
       const [locked] = await tx
         .select({ status: workingOrders.status })
         .from(workingOrders)
-        .where(eq(workingOrders.id, req.id))
+        .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)))
         .for("update");
 
       // A concurrent winner (another retry) filed the sale and settled the order while this one waited on
@@ -1177,7 +1183,7 @@ async function finalizeRecovery(
           settledAt: settledAt.toISOString(),
           ...(locked?.status === "placed" ? { collectedAt: settledAt.toISOString() } : {}),
         })
-        .where(eq(workingOrders.id, req.id));
+        .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)));
 
       const ticket: TillSaleResult = {
         invoiceNumber: await readInvoiceNumber(tx, saleId),
@@ -1283,7 +1289,7 @@ async function finalizeSettle(
             settledAt: settledAt.toISOString(),
             collectedAt: settledAt.toISOString(),
           })
-          .where(eq(workingOrders.id, req.id));
+          .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)));
 
         // Read the ticket back from the just-settled (already-issued) invoice — a fresh collect, so
         // `change` stays the "0.00" default.
@@ -1358,7 +1364,7 @@ async function finalizeSettleRecovery(
       const [locked] = await tx
         .select({ status: workingOrders.status })
         .from(workingOrders)
-        .where(eq(workingOrders.id, req.id))
+        .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)))
         .for("update");
 
       // A concurrent winner settled the invoice and moved the order while this one waited on the lock →
@@ -1423,7 +1429,7 @@ async function finalizeSettleRecovery(
           settledAt: settledAt.toISOString(),
           collectedAt: settledAt.toISOString(),
         })
-        .where(eq(workingOrders.id, req.id));
+        .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)));
 
       const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
       // Print-on-sale (design §3c) for the invoice-first (Mode-I) integrated SETTLE RECOVERY — the fresh
@@ -1502,7 +1508,7 @@ export async function collectOrder(
       const [locked] = await tx
         .select({ status: workingOrders.status })
         .from(workingOrders)
-        .where(eq(workingOrders.id, req.id))
+        .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)))
         .for("update");
 
       // Already settled → idempotent replay: a retry whose first response was lost, or the loser of a
@@ -1592,7 +1598,7 @@ export async function collectOrder(
             settledAt: settledAt.toISOString(),
             collectedAt: settledAt.toISOString(),
           })
-          .where(eq(workingOrders.id, req.id));
+          .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)));
 
         // Read the ticket back from the just-settled invoice, carrying the real cash-back (a FRESH
         // collect, not a replay, so not the "0.00" default).

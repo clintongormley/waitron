@@ -169,7 +169,7 @@ describe("moveTabLines", () => {
     const from = await openTabOn(cfg, t1, [{ productId: cafeId, quantity: "1" }]);
     const to = await openTabOn(cfg, t2, [{ productId: aguaId, quantity: "1" }]);
 
-    await asApp(cfg, (tx) => moveTabLines(tx, from, to));
+    await asApp(cfg, (tx) => moveTabLines(tx, cfg, from, to));
 
     // Destination now carries both lines; the café keeps its own locked gross; source is empty.
     const dest = await linesOf(to);
@@ -189,7 +189,7 @@ describe("moveTabLines", () => {
     ]);
     const to = await openTabOn(cfg, t2, []);
 
-    await asApp(cfg, (tx) => moveTabLines(tx, from, to, [2])); // move only line 2 (agua)
+    await asApp(cfg, (tx) => moveTabLines(tx, cfg, from, to, [2])); // move only line 2 (agua)
 
     expect(await linesOf(to)).toHaveLength(1);
     expect((await linesOf(to))[0]!.productId).toBe(aguaId);
@@ -205,7 +205,7 @@ describe("moveTabLines", () => {
     const from = await openTabOn(cfg, t1, []); // empty tab
     const to = await openTabOn(cfg, t2, [{ productId: aguaId, quantity: "1" }]);
 
-    await asApp(cfg, (tx) => moveTabLines(tx, from, to));
+    await asApp(cfg, (tx) => moveTabLines(tx, cfg, from, to));
     expect(await linesOf(to)).toHaveLength(1); // unchanged
   });
 
@@ -217,7 +217,7 @@ describe("moveTabLines", () => {
     const to = await openTabOn(cfg, t2, []);
     // Abandon the destination (owner write, fixture setup).
     await db.execute(sql`update working_orders set status = 'abandoned' where id = ${to}`);
-    await expect(asApp(cfg, (tx) => moveTabLines(tx, from, to))).rejects.toMatchObject({
+    await expect(asApp(cfg, (tx) => moveTabLines(tx, cfg, from, to))).rejects.toMatchObject({
       code: "tab.not_open",
       params: { tabId: to },
     });
@@ -234,7 +234,7 @@ describe("moveTabLines", () => {
     // moveTabLines must self-guard. Without it, the "move all" shape (no lineNos) appends both lines as
     // duplicates then deletes BOTH copies (the trailing delete matches workingOrderId = fromTabId, now
     // also toTabId), wiping the tab.
-    await expect(asApp(cfg, (tx) => moveTabLines(tx, tab, tab))).rejects.toMatchObject({
+    await expect(asApp(cfg, (tx) => moveTabLines(tx, cfg, tab, tab))).rejects.toMatchObject({
       code: "tab.merge_self",
       params: { tabId: tab },
     });

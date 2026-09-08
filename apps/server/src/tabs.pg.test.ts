@@ -28,7 +28,7 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { addTabRound, openTab } from "./working-order.js";
+import { addTabRound, mergeTabs, moveTab, openTab, parkOrder } from "./working-order.js";
 import { payWorkingOrder, recordTillSale } from "./till-sale.js";
 import "./errors.js";
 
@@ -340,6 +340,126 @@ describe("openTab tenant scope (a by-id table read must not cross tenants)", () 
     // Fixed: the row is invisible to B → table.not_found. Vulnerable prints code "table.inactive"
     // (B read A's row) or `undefined` (a raw error) — either way this fails.
     expect(outcome).toEqual({ resolved: false, code: "table.not_found" });
+  });
+});
+
+// The tab/pay by-id read-leak FAMILY (§3, the till-reroute S3 / getHeldOrder shape): since RLS was
+// dropped (#255) a by-id read of `working_orders`/`dining_tables` scopes to the tenant itself, never a
+// globally-unique id alone. These prove the three internal helpers now miss a FOREIGN tenant's row —
+// `lockOpenTab`/`lockOpenTabRow` (the tab-write verbs), `assertTabOpen` (moveTab/joinTable/readTabLines),
+// and `parkOrder`'s idempotent replay. Two tenants share ONE database; the isolation is an application
+// `WHERE` predicate, so this suite is real PG for the fiscal scaffolding, not a §4 requirement.
+describe("cross-tenant isolation — tab/pay by-id reads (§3)", () => {
+  const openTabFor = async (
+    cfg: TillConfig,
+    product: AvailableProduct,
+    label: string,
+  ): Promise<string> => {
+    const tableId = await seedTable(cfg, label);
+    const { tabId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return openTab(tx, cfg, { tableId, lines: [{ productId: product.id, quantity: "1" }] });
+    });
+    return tabId;
+  };
+
+  it("addTabRound against a FOREIGN tenant's tab throws tab.not_open (lockOpenTab)", async () => {
+    const { cfg: cfgA, cafe: cafeA } = await setupVenue();
+    const { cfg: cfgB, cafe: cafeB } = await setupVenue();
+    const bTab = await openTabFor(cfgB, cafeB, "B-add");
+
+    // Before the fix `lockOpenTab` read B's `working_orders`/`dining_tables` rows by id alone and the
+    // path ran on to the composite-FK write (a raw 23503); scoped to A the lock misses → tab.not_open.
+    await expect(
+      withTenant(suite.admin, cfgA.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return addTabRound(tx, cfgA, bTab, [{ productId: cafeA.id, quantity: "1" }]);
+      }),
+    ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId: bTab } });
+
+    // B's tab is untouched — still its single opening line, no round appended across the boundary.
+    const { rows } = await suite.admin.execute<{ n: string }>(
+      sql`select count(*)::text as n from working_order_lines where working_order_id = ${bTab}`,
+    );
+    expect(Number(rows[0]!.n)).toBe(1);
+  });
+
+  it("moveTab against a FOREIGN tenant's tab throws tab.not_open (assertTabOpen)", async () => {
+    const { cfg: cfgA } = await setupVenue();
+    const { cfg: cfgB, cafe: cafeB } = await setupVenue();
+    const bTab = await openTabFor(cfgB, cafeB, "B-move");
+    const bTable = await suite.admin.execute<{ id: string }>(
+      sql`select id from dining_tables where tab_id = ${bTab}`,
+    );
+    const targetA = await seedTable(cfgA, "A-target");
+
+    await expect(
+      withTenant(suite.admin, cfgA.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return moveTab(tx, cfgA, bTab, targetA);
+      }),
+    ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId: bTab } });
+
+    // B's tab still covers B's table (the move never crossed the boundary).
+    const { rows } = await suite.admin.execute<{ tid: string | null }>(
+      sql`select tab_id as tid from dining_tables where id = ${bTable.rows[0]!.id}`,
+    );
+    expect(rows[0]!.tid).toBe(bTab);
+  });
+
+  it("parkOrder replaying a FOREIGN tenant's order id re-throws, never returns its order number", async () => {
+    const { cfg: cfgA, cafe: cafeA } = await setupVenue();
+    const { cfg: cfgB, cafe: cafeB } = await setupVenue();
+    // B holds a parked order under a known id.
+    const bOrderId = randomUUID();
+    await parkOrder({ db: suite.admin }, cfgB, {
+      id: bOrderId,
+      lines: [{ productId: cafeB.id, quantity: "1" }],
+      label: "B held",
+    });
+
+    // A parks under the SAME id: the insert collides on the global `working_orders.id` PK (23505), so
+    // parkOrder replays. Before the fix the replay read found B's open order by id alone and RESOLVED
+    // with B's order number (the leak); scoped to A it misses and the raw 23505 re-throws.
+    await expect(
+      parkOrder({ db: suite.admin }, cfgA, {
+        id: bOrderId,
+        lines: [{ productId: cafeA.id, quantity: "1" }],
+        label: "A collision",
+      }),
+    ).rejects.toThrow();
+
+    // B's order is untouched — still open, still B's label.
+    const { rows } = await suite.admin.execute<{ status: string; label: string | null }>(
+      sql`select status, label from working_orders where id = ${bOrderId}`,
+    );
+    expect(rows[0]!.status).toBe("open");
+    expect(rows[0]!.label).toBe("B held");
+  });
+
+  it("mergeTabs against a FOREIGN tenant's tabs throws tab.not_open, never merges/abandons them", async () => {
+    const { cfg: cfgA } = await setupVenue();
+    const { cfg: cfgB, cafe: cafeB } = await setupVenue();
+    const bInto = await openTabFor(cfgB, cafeB, "B-into");
+    const bFrom = await openTabFor(cfgB, cafeB, "B-from");
+
+    // mergeTabs reads `working_orders`/`dining_tables` by id in its OWN queries (not via the helpers).
+    // Before the fix, tenant A merged B's tabs and ABANDONED B's source across the boundary — the empty
+    // source has no composite-FK backstop (the run-it review reproduced exactly this). Scoped, A's read
+    // misses → tab.not_open, before any write.
+    await expect(
+      withTenant(suite.admin, cfgA.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return mergeTabs(tx, cfgA, bInto, bFrom, { freeSourceTable: true });
+      }),
+    ).rejects.toMatchObject({ code: "tab.not_open" });
+
+    // Both of B's tabs are still OPEN — neither merged nor abandoned across the tenant boundary.
+    const { rows } = await suite.admin.execute<{ status: string }>(
+      sql`select status from working_orders where id in (${bInto}, ${bFrom})`,
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.status === "open")).toBe(true);
   });
 });
 
