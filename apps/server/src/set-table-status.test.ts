@@ -18,8 +18,8 @@ import { listTablesWithState, openTab } from "./working-order.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
-// The whole manifest (`manifestSets()`), applied in order — bookings' capture trigger EXECUTEs sync's
-// `sync_capture()`, so the set cannot be narrowed to one that omits sync.
+// The whole manifest (`manifestSets()`), applied in order — the tables here belong to modules (e.g.
+// bookings) that FK into core, so the shared ordered set is the fixture.
 const suite = usePgliteDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,

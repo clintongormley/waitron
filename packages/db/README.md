@@ -5,9 +5,10 @@ and real PostgreSQL use one dialect; there is no SQLite path. See
 `docs/superpowers/specs/2026-07-19-sales-spine-and-fiscal-layer-design.md` §3.
 
 Each database holds one tenant.
-`withTenant(db, tenantId, fn, opts?)` runs your work in one transaction and keeps the tenant argument
-explicit at call sites. It sets `app.node_id` when you supply `opts.nodeId`, so capture triggers can
-record the producing node. It does not set a tenant session variable.
+`withTenant(db, tenantId, fn)` runs your work in one transaction and keeps the tenant argument
+explicit at call sites. One tenant per database is the isolation boundary, so it sets no tenant
+session variable; `tenantId` is retained as the explicit write-path parameter every write path
+threads.
 
 ## Commands
 

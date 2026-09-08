@@ -45,10 +45,15 @@ fix: it requires its own negative control and a recorded reason.
 
 ## How the sync grants fold into app_user
 
-The plan keeps the outbox working while it removes `sync_tailer` and `sync_retention`. Their table
-privileges move into `app_user`, alongside its existing INSERT grants. If you strip the old roles'
-grants before comparing, a correct baseline differs on `sync_log`, `sync_cursor`, `sync_peers` and
-`sync_config_conflicts`. The proof must compare that union so a missing folded privilege fails.
+> Historical: this section records the one-time step-1 fold proof. The `sync_*` outbox tables and the
+> `sync_tailer`/`sync_retention` roles it describes were deleted with the application outbox (swap S5,
+> 2026-09-08); the fold mechanism and its edge tests survive, exercised over a surviving table (see the
+> note further down).
+
+The step-1 plan kept the outbox working while it removed `sync_tailer` and `sync_retention`. Their table
+privileges moved into `app_user`, alongside its existing INSERT grants. If you stripped the old roles'
+grants before comparing, a correct baseline differed on `sync_log`, `sync_cursor`, `sync_peers` and
+`sync_config_conflicts`. The proof compared that union so a missing folded privilege failed.
 
 Before the deleted-role strip, both dumps rewrite GRANT statements on `public` tables naming
 `sync_tailer` or `sync_retention` as grantee to name `app_user`. Table-level GRANTs to `app_user` on the

@@ -39,10 +39,9 @@ export interface ReverseViaStripeOptions {
    */
   tenantId: TenantId;
   /**
-   * The reversing node's origin id. Once carried the `app.node_id` GUC the sync capture triggers read;
-   * capture is gone (swap S5) and it is no longer threaded into `withTenant`, but the field stays on
-   * the shared options — every live caller (the reconcile sweep and both interactive providers) has a
-   * node id in hand and passes it, and it identifies the reversing node for the record path.
+   * The reversing node's id, carried on the shared options — every live caller (the reconcile sweep
+   * and both interactive providers) has a node id in hand and passes it; it identifies the reversing
+   * node for the record path.
    */
   nodeId: string;
   /** Maps the payment's stored `external_ref` to the identifier the processor's refund API needs.

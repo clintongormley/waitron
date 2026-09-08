@@ -19,7 +19,7 @@ import {
 // these writes. The mirror server (Task 5) hands `ensureMirrorViewer` / `mirrorSession` an
 // app_user-authenticated pool, so exercise them through one: `app_login` is a cluster LOGIN role that
 // is a MEMBER of `app_user` (apps/server/src/testing/global-setup.ts), inheriting its grants — the
-// same production shape the sibling real-Postgres suites (sync-api.test.ts) use.
+// same production shape the sibling real-Postgres suites use.
 const suite = useTemplateDb({ template: "manifest" });
 
 // One shared tenant for the whole file. The viewer is a fixed-id SINGLETON (its PK is a constant), so

@@ -251,7 +251,7 @@ describe("adoptFromPrimary (native-subscription mirror adopt, real Postgres)", (
     expect(cfg.originNodeId).toBe(DESIGNATED.nodeId);
 
     // trading.env carries the shared venue's ids but the mirror's OWN node id (the minted standby),
-    // NOT the primary's, and never a WAITRON_SYNC_DATABASE_URL (the outbox pool is gone).
+    // NOT the primary's, and no sync-pool env (the outbox is gone).
     expect(persistedTrading).toHaveLength(1);
     expect(persistedTrading[0]).toMatchObject({
       tenantId: DESIGNATED.tenantId,

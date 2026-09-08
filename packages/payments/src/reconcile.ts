@@ -230,9 +230,8 @@ export interface ReconcileDeps {
   reverse: ReversalFn;
   incidents: IncidentSink;
   settlementLagMs: number;
-  /** This node's origin id. Once carried the `app.node_id` GUC the sync capture triggers read;
-   * capture is gone (swap S5), so it is no longer threaded into `withTenant`, but the field stays as
-   * the reconcile sweep's node identity (the reconciler forwards it here). */
+  /** This node's id — the reconcile sweep's node identity, forwarded here to identify the node for
+   * the record path. */
   nodeId: string;
 }
 

@@ -340,7 +340,6 @@ function mirrorEnv(
     WAITRON_TILL_LOCATION_ID: MIRROR_LOCATION_ID,
     DATABASE_URL: roleUrl(clone.pg.uri, "app_login", "app_pw"),
     WAITRON_MIGRATIONS_DATABASE_URL: clone.pg.uri,
-    WAITRON_SYNC_DATABASE_URL: roleUrl(clone.pg.uri, "sync_applier", "ap"),
     WAITRON_HTTP_PORT: String(port),
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
     WAITRON_STATE_DIR: stateDir,
@@ -440,8 +439,7 @@ describe("promote endpoint e2e — the whole arc over HTTP (real Postgres)", () 
       expect(persisted.WAITRON_TILL_SERIES_ID).not.toBe(MIRROR_DESIGNATED_SERIES_ID);
 
       // Restart into mode=primary: close the mirror and boot from the persisted trading.env (the box the
-      // supervisor would source). No sync peers — a fresh promoted primary has none yet — so the boot
-      // enables no sync source (loadSyncConfig gates on WAITRON_SYNC_PEERS).
+      // supervisor would source).
       await mirror.close();
       const primaryPort = await freePort();
       const primaryBase = `http://127.0.0.1:${primaryPort}`;

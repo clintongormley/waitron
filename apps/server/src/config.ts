@@ -345,8 +345,8 @@ export interface ReplicationConfig {
 /**
  * Native replication is configured iff BOTH the `waitron_repl` password and the advertise host are
  * set — an unset (absent OR empty, via `isUnset`) either one returns `undefined`, the same off-switch
- * `loadSyncConfig`/`loadTunnelConfig` take for a required field: a blank password must never mean "no
- * auth", and a blank host names no address to dial. The port defaults to the cluster default 5432.
+ * `loadTunnelConfig` takes for a required field: a blank password must never mean "no auth", and a
+ * blank host names no address to dial. The port defaults to the cluster default 5432.
  */
 export function loadReplicationConfig(env: Env): ReplicationConfig | undefined {
   const password = env.WAITRON_REPLICATION_PASSWORD;
@@ -374,20 +374,19 @@ const DEFAULT_TUNNEL_POOL_SIZE = 4;
 /**
  * The outbound cloud-mirror tunnel (sub-project B) is enabled iff `WAITRON_TUNNEL_RELAY_URL` is set
  * to a parseable url naming the relay's host and port. Then the box id and per-box token are
- * required, and a blank one fails closed (the same posture `loadSyncConfig` takes for a blank peer
- * field, CLAUDE.md §3): a blank token must never mean "no auth", and a blank box id names no box to
- * the relay. Absent OR empty relay url → `undefined` → no tunnel is dialed, exactly like
- * `loadSyncConfig`'s empty `WAITRON_SYNC_PEERS` off-switch, so a host that sets no tunnel env (every
- * existing boot) is unaffected. A PRESENT-but-unparseable relay url THROWS rather than silently
+ * required, and a blank one fails closed (CLAUDE.md §3): a blank token must never mean "no auth", and
+ * a blank box id names no box to the relay. Absent OR empty relay url → `undefined` → no tunnel is
+ * dialed, so a host that sets no tunnel env (every existing boot) is unaffected. A PRESENT-but-unparseable
+ * relay url THROWS rather than silently
  * disabling the tunnel: "an empty connection string is a valid connection string" (CLAUDE.md §3) —
  * the empty value is off by returning `undefined` (never reaching a dialer as `""`), but a malformed
  * ADDRESS an operator actually supplied is a boot-time refusal, never a degenerate value handed on.
  */
 export function loadTunnelConfig(env: Env): TunnelConfig | undefined {
   const rawUrl = env.WAITRON_TUNNEL_RELAY_URL;
-  // Absent OR empty → tunnel off (undefined), via `isUnset` — the same off-switch `loadSyncConfig`
-  // uses for an empty `WAITRON_SYNC_PEERS`. Returning undefined is how the empty value never reaches
-  // a dialer as `""` (CLAUDE.md §3); a present-but-malformed url is failed closed just below.
+  // Absent OR empty → tunnel off (undefined), via `isUnset`. Returning undefined is how the empty
+  // value never reaches a dialer as `""` (CLAUDE.md §3); a present-but-malformed url is failed closed
+  // just below.
   if (isUnset(rawUrl)) return undefined;
   let url: URL;
   try {

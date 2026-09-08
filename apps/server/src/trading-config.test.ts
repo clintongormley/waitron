@@ -37,8 +37,8 @@ describe("writeTradingEnv", () => {
     // Exact-equality on the whole file is the strongest check: it pins the eight names, their values,
     // the order the supervisor sources them in, and the trailing LF, all at once. The five
     // WAITRON_TILL_*_ID + DATABASE_URL(+migrations) + WAITRON_ENV are what the next boot reads to enter
-    // TRADING mode. Since swap step 4 there is no WAITRON_SYNC_DATABASE_URL — a mirror applies through a
-    // native subscription, not an outbox pull.
+    // TRADING mode. Since swap step 4 no sync-pool env is written — a mirror applies through a native
+    // subscription, not an outbox pull — and the exact-equality below pins that absence.
     const env = await readFile(await writeTradingEnv(d, cfg), "utf8");
     expect(env).toBe(
       "WAITRON_TILL_TENANT_ID=tenant-1\n" +
@@ -50,8 +50,6 @@ describe("writeTradingEnv", () => {
         "WAITRON_MIGRATIONS_DATABASE_URL=postgres://mig@localhost/waitron\n" +
         "WAITRON_ENV=production\n",
     );
-    // No WAITRON_SYNC_DATABASE_URL line at all (the outbox pool is gone).
-    expect(env).not.toContain("WAITRON_SYNC_DATABASE_URL");
   });
 
   it("writes the file 0600 (owner-only)", async () => {

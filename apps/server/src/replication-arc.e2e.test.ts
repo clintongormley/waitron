@@ -329,7 +329,7 @@ describe("native-replication arc — Case 2: the fence→promote→return→wipe
   }, 300_000);
 
   afterAll(async () => {
-    for (const h of openHandles) await h.close().catch(() => {});
+    for (const h of openHandles) await h?.close().catch(() => {});
     await appA?.close().catch(() => {});
     await appB?.close().catch(() => {});
     await nodeA?.close().catch(() => {});

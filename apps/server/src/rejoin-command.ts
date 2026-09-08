@@ -205,7 +205,8 @@ export async function runRejoin(deps: {
   }
 
   // The carrier keys the slot reader on this node's publisher-side slot (named by the carrier, C1). A
-  // held chart with no serving-primary → no reader → `rejoin.no_carrier` (unless `--accept-loss`).
+  // held chart with no serving-primary → no reader → `rejoin.no_carrier`, which `--accept-loss` does
+  // NOT waive (it waives only the drain guards, `carrier_attached`/`not_drained`).
   const carrierNodeId = held === null ? undefined : servingPrimaryNodeId(held);
   const readSlotDrainReader: (() => Promise<SlotDrain>) | undefined =
     carrierNodeId === undefined

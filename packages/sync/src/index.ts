@@ -1,8 +1,6 @@
 // The entire public surface of @waitron/sync — native logical replication only. Re-exports, no logic.
-//
-// The application outbox (capture triggers, sync_log, the pull/apply loop, per-table enrolment) is
-// gone (swap S5); what remains is the native-replication layer: publications, subscriptions, the
-// name/LSN helpers, the drain/status readers, and the table classification vocabulary.
+// The layer is: publications, subscriptions, the name/LSN helpers, the drain/status readers, and the
+// table classification vocabulary.
 
 // The table-classification vocabulary, re-exported from the leaf `@waitron/sync-enrolment` so existing
 // importers of `@waitron/sync` keep resolving these. The composition root assembles every module's

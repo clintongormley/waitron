@@ -322,7 +322,6 @@ describe("boot promote endpoint (real Postgres): mounted on both modes, exempt f
       WAITRON_TILL_LOCATION_ID: MIRROR_LOCATION_ID,
       DATABASE_URL: roleUrl(mirrorSuite.pg.uri, "app_login", "app_pw"),
       WAITRON_MIGRATIONS_DATABASE_URL: mirrorSuite.pg.uri,
-      WAITRON_SYNC_DATABASE_URL: roleUrl(mirrorSuite.pg.uri, "sync_applier", "ap"),
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_STATE_DIR: stateDir,

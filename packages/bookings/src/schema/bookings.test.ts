@@ -35,7 +35,7 @@ describe("the bookings Drizzle table config", () => {
 // Real Postgres (a whole-manifest template clone), not PGlite: every write below runs as the non-owner
 // `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
 // cases retain the role switch so the reads and writes still exercise app_user grants. The `manifest`
-// template (not [core, bookings]) because bookings' capture trigger EXECUTEs sync's `sync_capture()`.
+// template (not [core, bookings]) is the shared ordered set — bookings FKs into core.
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";

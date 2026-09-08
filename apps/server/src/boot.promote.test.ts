@@ -500,8 +500,6 @@ describe("promote (real Postgres): mirror → primary, in-process, restart-into-
       WAITRON_MIGRATIONS_DATABASE_URL: mirrorSuite.pg.uri,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      // A mirror boots with its own sync pool (loadMirrorSyncConfig reads this) — a sync_applier role.
-      WAITRON_SYNC_DATABASE_URL: roleUrl(mirrorSuite.pg.uri, "sync_applier", "ap"),
       WAITRON_STATE_DIR: stateDir,
     }).catch(async (err: unknown) => {
       // On a boot failure `server` is never assigned, so the finally below never runs — clean up the

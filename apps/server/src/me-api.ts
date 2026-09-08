@@ -35,12 +35,9 @@ import type { Logger } from "./logger.js";
 export interface MeApiDeps {
   db: Database;
   /**
-   * `tenantId` scopes every `withTenant` below; `nodeId` is this node's id, threaded into `asStaff`'s
-   * `withTenant` for sync origin attribution — mirroring `management-api.ts`. `PUT /session/me/locale`
-   * calls `setPersonLocale`, a `persons` UPDATE, and `persons` is a sync-enrolled table, so its capture
-   * must stamp a REAL origin (`app.node_id`) rather than the all-zero uuid a bare 3-arg withTenant
-   * leaves — which never replicates and never prunes. Inert for the non-enrolled workforce writes
-   * `asStaff` also wraps: it only sets a GUC the `persons` capture trigger reads.
+   * `tenantId` scopes every `withTenant` below. `nodeId` is this node's id, carried on the uniform
+   * write-path `cfg` shape every mounted API takes; it no longer stamps a capture origin (the
+   * application outbox and its capture triggers were removed).
    */
   cfg: { tenantId: string; nodeId: string };
   /**
@@ -109,17 +106,10 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   /** Run `fn` on the app role under this venue's tenant — the one place the withTenant/asAppUser pair
    * is expressed, so no route re-implements it. */
   const asStaff = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-    withTenant(
-      deps.db,
-      deps.cfg.tenantId,
-      async (tx) => {
-        await asAppUser(tx);
-        return fn(tx);
-      },
-      // Threads this node's id into `app.node_id` so the ONE enrolled write this helper wraps — the
-      // `persons` UPDATE in `PUT /session/me/locale` — captures a real sync origin. Harmless for the
-      // non-enrolled workforce writes (shifts/swaps/absences carry no capture trigger).
-    );
+    withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return fn(tx);
+    });
 
   // The public supported-locale list + the venue's default UI locale. Deliberately UNAUTHENTICATED
   // (the dashboard shell fetches it before login to pick its language) and free of secrets — `locales`

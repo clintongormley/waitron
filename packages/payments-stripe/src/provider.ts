@@ -41,9 +41,7 @@ export interface StripeTerminalProviderOptions {
    * database phase below scopable without threading a tenant through methods (`void`/`refund`
    * carry only a payment reference). The host builds one provider per tenant. */
   tenantId: TenantId;
-  /** This node's origin id. Once carried the `app.node_id` GUC the sync capture triggers read;
-   * capture is gone (swap S5), so it is no longer threaded into `withTenant`, but the field stays: the
-   * adapter passes it on to `reverseViaStripe` and it identifies the node for the record path. A
+  /** This node's id, passed on to `reverseViaStripe` to identify the node for the record path. A
    * per-till provider serves one node, so the id is known at construction, exactly like `tenantId`. */
   nodeId: string;
   resolveReader: (tenantId: TenantId, tillId: TillId) => Promise<string>;

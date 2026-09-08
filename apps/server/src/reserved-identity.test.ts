@@ -24,9 +24,8 @@ const RING: KeyRing = loadKeyRing({
 const ENDORSEMENT: Endorsement = { nodeId: "n", publicKey: "p", endorsedBy: "e", signature: "s" };
 
 describe("establishReservedStandbyIdentity", () => {
-  // The full manifest, not just [core, credentials, fiscal]: fiscal's SP-3a capture migration
-  // needs sync's `sync_capture()`, so the whole manifest is applied (sync before fiscal) — the
-  // production order.
+  // The full manifest (`manifestSets()`), not just [core, credentials, fiscal]: each module lands on
+  // top of its dependencies in one ordered set — the production order.
   const suite = usePgliteDb({
     migrations: migrationOptionsFor(manifestSets(), null),
     timeoutMs: 60_000,

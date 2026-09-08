@@ -21,8 +21,7 @@ const DRAIN_AT = new Date("2026-07-21T00:01:00Z"); // past the seeded `proximo_i
 const PERIOD = { year: "2026", month: "07" };
 
 // TEST_MIGRATIONS is the full manifest (identity migrates before fiscal): recordVoid now calls
-// `authorize`, which reads identity's persons/sessions, and fiscal's SP-3a capture migration needs
-// sync_capture() from the sync set. See ../test/migrations.ts.
+// `authorize`, which reads identity's persons/sessions. See ../test/migrations.ts.
 const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
 /**

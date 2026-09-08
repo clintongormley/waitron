@@ -28,8 +28,8 @@ import "./errors.js";
 // race is proven against real Postgres in `bookings-cas.test.ts`, the routes in `routes.test.ts`). Every read/write still runs
 // through `withTenant` + `asAppUser`, so the tenant scope and the `party_size > 0` CHECK are exercised
 // exactly as production does, not bypassed. `TESTCONTAINERS_RYUK_DISABLED` is irrelevant here — no
-// container is started. Fixtures apply the whole manifest (BOOKINGS_TEST_MIGRATIONS): bookings'
-// capture trigger EXECUTEs sync's `sync_capture()`, so it cannot migrate on core alone.
+// container is started. Fixtures apply the whole manifest (BOOKINGS_TEST_MIGRATIONS): bookings FKs
+// into core, so it lands on top of the shared ordered set.
 const suite = usePgliteDb({
   migrations: BOOKINGS_TEST_MIGRATIONS,
   timeoutMs: 60_000,

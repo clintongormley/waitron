@@ -13,7 +13,7 @@ import "./errors.js";
 
 // The reserved-on-floor annotator is a correlated read with no privilege/concurrency dimension, so
 // PGlite is enough (the moved-from `apps/server/src/tables.test.ts` cases ran on PGlite too). The whole
-// manifest, not [core, bookings]: bookings' capture trigger EXECUTEs sync's `sync_capture()`.
+// manifest, not [core, bookings]: the shared ordered set lands bookings on top of its dependencies.
 const suite = usePgliteDb({ migrations: BOOKINGS_TEST_MIGRATIONS, timeoutMs: 60_000 });
 
 let db: Database;

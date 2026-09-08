@@ -40,8 +40,8 @@ import "./errors.js";
 
 // PGlite, not real Postgres: the session routes are LOGIC (login → cookie → logout), and the login
 // path runs through `withTenant` + `asAppUser` exactly as production does. Sessions/persons live in
-// identity; the schema is the whole manifest (bookings' capture trigger EXECUTEs sync's
-// `sync_capture()`, so it cannot migrate on core+identity alone). What `app_user` may do to those
+// identity; the schema is the whole manifest (the tables here span modules that FK into core, so the
+// shared ordered set is the fixture). What `app_user` may do to those
 // tables is pinned by packages/fiscal-verifactu's privileges.expected.ts, not here.
 let cfg: TillConfig;
 let ana: { id: string };

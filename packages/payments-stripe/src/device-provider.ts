@@ -55,10 +55,8 @@ export interface StripeOnDeviceProviderOptions {
    * the reversals be scoped at all, since neither carries a tenant in its arguments. The host
    * builds one provider per tenant. */
   tenantId: TenantId;
-  /** This node's origin id. Once carried the `app.node_id` GUC the sync capture triggers read;
-   * capture is gone (swap S5), so it is no longer threaded into `withTenant`, but the field stays: the
-   * adapter passes it on to `reverseViaStripe` and it identifies the node for the record path. Known at
-   * construction like `tenantId` (one node per till). */
+  /** This node's id, passed on to `reverseViaStripe` to identify the node for the record path.
+   * Known at construction like `tenantId` (one node per till). */
   nodeId: string;
 }
 

@@ -33,8 +33,8 @@ import "./errors.js";
 // over the commercial table/tab verbs, which are LOGIC (no privilege or concurrency behaviour to
 // prove here). The table/tab verbs' own real-PG proofs (the FOR UPDATE tab lock, the composite FKs)
 // live in `tabs.pg.test.ts`, `move-merge.pg.test.ts` and packages/db's schema suites; they are not
-// re-proven at the HTTP layer. The schema is the whole manifest: bookings' capture trigger EXECUTEs
-// sync's `sync_capture()`, so it cannot migrate on core+identity alone.
+// re-proven at the HTTP layer. The schema is the whole manifest: the tables here span modules that FK
+// into core, so the shared ordered set is the fixture.
 let cfg: TillConfig;
 let ana: { id: string };
 // The one product seeded into the counter location's catalogue, so a tab can open with a real line

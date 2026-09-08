@@ -164,7 +164,7 @@ export async function enrolAgent(
  * throws `agent.unauthorized`. The Task-6 Hono wrapper (`requireAgent`) extracts the
  * `Authorization: Bearer <token>` header and calls this; header parsing is that wrapper's trivial
  * concern, so this core takes a plain string and never sees Hono. The `tx` is already tenant-scoped by
- * that wrapper (`withTenant` + `asAppUser`), the `sync-api.ts` machine-to-machine shape.
+ * that wrapper (`withTenant` + `asAppUser`), the machine-to-machine shape.
  *
  * The token is `${agentId}.${secret}`: the id SELECTS the row (scrypt is per-row-salted, so the id is
  * needed to fetch the salt) and the secret VALIDATES it. Every failure — a malformed token, a

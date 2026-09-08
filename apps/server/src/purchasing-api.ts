@@ -41,9 +41,8 @@ import type { Logger } from "./logger.js";
 /**
  * Everything the dashboard's purchase-invoice routes need: `db` + this venue's own `cfg.tenantId`
  * are passed to every `withTenant` below. The deployment holds one tenant per database. No
- * `nodeId` (unlike `CatalogueApiDeps`): the purchase-invoice tables carry no sync-capture
- * trigger, so there is no `sync_log.origin_id` to attribute. No card provider, clock or media
- * store either — these routes touch only the two purchase-invoice tables via the headless
+ * `nodeId` (unlike `CatalogueApiDeps`): these routes need no write-path node id. No card provider,
+ * clock or media store either — they touch only the two purchase-invoice tables via the headless
  * `@waitron/purchasing` ops.
  */
 export interface PurchasingApiDeps {

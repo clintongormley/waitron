@@ -177,9 +177,10 @@ export interface StartedServer {
 
 /**
  * The mode-specific half of `close()` (see `makeStartedServer`): how to stop this boot's background
- * work and which connection pools to drain. Trading mode fills both in — abort the loop and the
- * sync/retention workers, then close the app, sync and retention pools. Setup mode's `stopWork` is a
- * no-op (a setup box runs neither loop nor sync) and its `closePools` drains only the app pool.
+ * work and which connection pools to drain. Trading mode fills both in — abort the main loop, the
+ * outbound tunnel and the backup sweep, then close the app, replication and backup-manifest pools.
+ * Setup mode's `stopWork` is a no-op (a setup box runs no background loop) and its `closePools`
+ * drains only the app pool.
  */
 interface BootTeardown {
   stopWork: () => Promise<void>;
@@ -276,8 +277,7 @@ export async function buildCardProvider(
       client,
       db: deps.db,
       tenantId: cfg.tenantId,
-      // The till's own node id, so a card collect's enrolled `payments` writes capture this node as
-      // the sync origin (design §4d(B)).
+      // The till's own node id, identifying this node on the card-collect record path.
       nodeId: cfg.nodeId,
       resolveReader: () => Promise.resolve(readerId),
     });
@@ -390,9 +390,9 @@ function startListening(
  * The `StartedServer` BOTH modes return, with the shared `close()` sequence written once. `close()`
  * is idempotent and always drains the connection pools, whatever the teardown does first — the
  * mode-specific parts arrive as `teardown` (a `BootTeardown`): `stopWork` stops any background work
- * and awaits it (the loop plus the sync/retention workers in trading mode; a no-op in setup mode),
- * then `closePools` releases the pools (app + sync + retention + the backup manifest pool in trading
- * mode; the app pool alone in setup mode). `mdns` is the shared mDNS responder both modes start in the prefix; `close()` stops it
+ * and awaits it (the loop plus the outbound tunnel and backup sweep in trading mode; a no-op in
+ * setup mode), then `closePools` releases the pools (app + replication + the backup manifest pool in
+ * trading mode; the app pool alone in setup mode). `mdns` is the shared mDNS responder both modes start in the prefix; `close()` stops it
  * FIRST — the box is going down, so it must stop advertising `waitron.local` before anything else.
  */
 function makeStartedServer(
@@ -432,9 +432,9 @@ function makeStartedServer(
       // is defensive rather than a response to an observed failure.
       await mdns.stop().catch(() => {});
       // Stop this boot's background work and await it BEFORE the listener/pool teardown below, so
-      // close() never leaves a worker dangling. In trading mode this aborts the main loop and the
-      // sync/retention workers and swallows a worker's settle-by-rejection so it can never skip the
-      // guaranteed teardown; in setup mode there is nothing to stop.
+      // close() never leaves a worker dangling. In trading mode this aborts the main loop, the
+      // outbound tunnel and the backup sweep and swallows a worker's settle-by-rejection so it can
+      // never skip the guaranteed teardown; in setup mode there is nothing to stop.
       await teardown.stopWork();
       // `finally`, not a plain sequential `await`: a rejecting `server.close()` (the listener
       // already gone — see bin.ts's own double-signal guard) must still drain the pool. `close()`
@@ -571,12 +571,6 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   const moduleConfig = await readModuleConfig(config.stateDir);
   const setsToMigrate =
     config.till === undefined ? ALL_MODULES : enabledModules(ALL_MODULES, moduleConfig);
-  // `ALL_SYNC_ENROLMENTS` (from ./modules.js) is the assembled module sync-enrolment set, injected into
-  // the sync source (`mountSyncApi`), the pull loop (`runSyncPull`), and the disposal guard
-  // (`readDrainProgress`) below — `@waitron/sync` no longer owns it (SP-2a inversion). Assembled from
-  // ALL_MODULES, NOT the enabled set, to stay behaviour-preserving: the former central `ENROLLED` was
-  // unconditional; the enabled-set-aware pull is DEFERRED (spec §2/§7), built with the first
-  // genuinely-toggleable module.
   await applyMigrations(
     config.migrationsDatabaseUrl,
     migrationOptionsFor(orderedMigrationSets(setsToMigrate), config.migrationsRoot),
@@ -842,7 +836,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
           {
             // A setup box runs no background work, so there is nothing to abort or await.
             stopWork: () => Promise.resolve(),
-            // The app pool AND the provisioning owner pool — no sync/retention pools exist here.
+            // Just the app pool AND the provisioning owner pool — a setup box opens no others.
             // `allSettled`, not sequential `await`s: a rejecting `db.close()` must NOT leak `ownerDb`.
             // Both are closed regardless of either's outcome, so neither pool dangles on the teardown
             // path (which `close()` runs even after a `server.close()` rejection).
@@ -1108,28 +1102,28 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // gate's own per-request predicate re-reads `mode` live (so a promotion lifts it without a restart),
   // and is deliberately kept separate below.
   const fencedOrMirror = isMirror || fenced;
-  // The four primary-only SINGLETON duties below (sync SOURCE, retention sweep, scheduled backup, outbound
-  // tunnel client) gate on THIS, not on `isMirror`: they must run on the ONE `singleton_role='primary'`
-  // node, never on every non-mirror node (promotion runbook design §2/§3c — the same axis `singletonPass`
-  // already gates the fiscal drain/reconcile pass on, #158). The bug this fixes: a SELL-ONLY LOCAL
-  // SECONDARY (`mode='primary'`, `singleton_role='secondary'`) is NOT a mirror, so the old `!isMirror`
-  // gate ran all four on it — a second node pruning the shared `sync_log`, dialing the one outbound tunnel,
-  // writing scheduled backups and serving the authoritative sync source, duplicating the primary
-  // (active-active). Because `deployment_role_valid_ck` rejects `(mirror, primary)`, `singleton_role='primary'`
-  // already implies `mode='primary'`, so this predicate alone is correct and a mirror is always 'secondary'.
+  // The primary-only SINGLETON duties below (scheduled backup, outbound tunnel client, and the fiscal
+  // drain/reconcile pass) gate on THIS, not on `isMirror`: they must run on the ONE
+  // `singleton_role='primary'` node, never on every non-mirror node (promotion runbook design §2/§3c —
+  // the same axis `singletonPass` already gates the fiscal drain/reconcile pass on, #158). The bug this
+  // fixes: a SELL-ONLY LOCAL SECONDARY (`mode='primary'`, `singleton_role='secondary'`) is NOT a mirror,
+  // so the old `!isMirror` gate ran them on it too — a second node dialing the one outbound tunnel and
+  // writing scheduled backups, duplicating the primary (active-active). Because `deployment_role_valid_ck`
+  // rejects `(mirror, primary)`, `singleton_role='primary'` already implies `mode='primary'`, so this
+  // predicate alone is correct and a mirror is always 'secondary'.
   //
   // BOOT decision, captured once like `isMirror` — DELIBERATELY not live. An in-process promotion (#160
   // `promoteLocalSecondaryToPrimary` flips `singleton_role` live and starts the fiscal pass next tick) will
-  // NOT start these four without a restart; the live worker-lifecycle manager that would is promotion
+  // NOT start these duties without a restart; the live worker-lifecycle manager that would is promotion
   // Slice 3 (runbook §3c), deferred behind reserved-SIF staging. This change only moves the gate from `mode`
-  // to `singleton_role` (fixing the active-active duplication) — it does not make the four start live.
+  // to `singleton_role` (fixing the active-active duplication) — it does not make them start live.
   const isSingletonPrimary = holders.singletonRole.current === "primary";
   // FAIL CLOSED before we even seed the mirror's UNAUTHENTICATED admin surface: a mirror auto-logs a
   // full-admin viewer in (`ensureMirrorViewer` + `mirrorSession` below), so the ONLY thing keeping it
   // off the network is the loopback default of `config.httpHost`. Refuse a non-loopback bind under
   // mirror mode unless the operator explicitly opts in (`WAITRON_MIRROR_ALLOW_EXPOSED`); a primary is
   // unaffected. Placed here (not at the `startListening` bind further down) so the refuse path opens
-  // no ambient viewer, no sync/tunnel workers and no retention pool — only `db` is live, closed the
+  // no ambient viewer and no tunnel or backup workers — only `db` is live, closed the
   // same way the `loadKeyRing` guard above does rather than leaking the pool.
   try {
     assertMirrorBindSafe(config, isMirror, env);
@@ -1174,7 +1168,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // reports). On a PRIMARY it is the node's own id; on a MIRROR it is the ORIGIN — the primary whose
   // replicated sales the mirror holds — because those rows keep the primary's node_id, so scoping by the
   // mirror's own id would return nothing. Distinct from `config.till.nodeId`, which stays the node's OWN
-  // identity for every WRITE / capture-origin path (membership promotion R3a). The origin is read from
+  // identity for every WRITE path (membership promotion R3a). The origin is read from
   // `mirror_config` (written owner-role at adopt), NEVER from env. A mirror REQUIRES it: an absent
   // record is a loud `server.config_invalid` (fail-closed). Wrapped in the same db-cleanup guard the
   // `loadKeyRing` load above uses, so a throw closes the pool rather than leaking it. Hoisted ABOVE the
@@ -1392,7 +1386,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // promotion needs no restart. Boot un-mounting is chosen for now — tighter read-only-mirror posture,
   // and the verb gate can't catch a write-behind-a-GET without a new path deny-list — and converting it
   // to the §3a form belongs with promotion Slice 3, which already converts the analogous
-  // `singleton_role`-gated workers (sync source / retention / backup / tunnel, §3c — re-gated in #168) to
+  // `singleton_role`-gated workers (backup / tunnel, §3c — re-gated in #168) to
   // runtime-startable. See read-only-gate.ts's header.
   if (!fencedOrMirror) {
     // The trusted-DEVICE surface (device-identity-1) on the SAME app, the identical convention: the
@@ -1435,9 +1429,8 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     app,
     {
       db,
-      // `nodeId` is THIS node's origin id (the same `till.nodeId` the adjacent `mountCatalogueApi`
-      // receives — one source of truth), threaded so each identity-config write's `withTenant` stamps
-      // `sync_log.origin_id` with this node rather than the all-zero sentinel (sync origin attribution).
+      // `nodeId` is THIS node's id (the same `till.nodeId` the adjacent `mountCatalogueApi`
+      // receives — one source of truth), carried on the uniform write-path `cfg` shape.
       cfg: { tenantId: till.tenantId, nodeId: till.nodeId },
       // The venue's own config (tenant + location) the FP-1 zone/table config routes scope to — the
       // SAME `till` config `mountTillApi` receives above, so the dashboard "Sala" surface and the till
@@ -1535,9 +1528,8 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // (db + this venue's tenant); no fiscal backend, clock or card provider. Routes only.
   mountMeApi(
     app,
-    // `nodeId` is THIS node's origin id (the same `till.nodeId` `mountManagementApi`/`mountCatalogueApi`
-    // receive) — `PUT /management-api/session/me/locale` writes `persons.locale` (a sync-enrolled table),
-    // so its capture must stamp a real origin rather than the all-zero uuid.
+    // `nodeId` is THIS node's id (the same `till.nodeId` `mountManagementApi`/`mountCatalogueApi`
+    // receive), carried on the uniform write-path `cfg` shape.
     // `modules` is the enabled-module set (`setsToMigrate`, boot.ts above) by name — surfaced by
     // `GET /session/me` so the dashboard activates and shows only enabled modules. Includes `core`
     // harmlessly (the browser registry only matches UI-bearing ids).

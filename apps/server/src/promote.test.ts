@@ -338,9 +338,8 @@ function docAtTerm(term: number, nodeId: string): SignedMembershipDocument {
 // PGlite is sufficient for the promote LOGIC (the mode/singleton flip, the endorsed term-bumped
 // mint, and the term-guard): none has a privilege/concurrency dependency here — the reserved
 // SIF's `currentSif` behaviour on reboot is Task 5's real-PG e2e. Migrates the FULL manifest
-// because `establishReservedStandbyIdentity` writes the reserved SIF (`registro_sif`), and
-// fiscal's SP-3a capture migration needs sync's `sync_capture()` — so the whole manifest
-// is applied (sync before fiscal), the production order.
+// because `establishReservedStandbyIdentity` writes the reserved SIF (`registro_sif`) and each
+// module lands on top of its dependencies in one ordered set — the production order.
 async function mirror(): Promise<{
   db: Database;
   tenantId: string;

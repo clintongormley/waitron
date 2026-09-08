@@ -185,6 +185,22 @@ waits for the owner's signature.
    siblings, the pull/retention workers in `boot.ts`, the sync-token half of the mirror bundle, the
    SP-2b gate, the settings-conflict gate, and every test of those. **Owner signs this one:** it is
    where fiscal rows first flow natively and where `ENABLE ALWAYS` first matters.
+
+   > **2026-09-08 — step 4 built (swap spec S4 + S5), the owner-signature PR.** `rejoin`/`retire`/
+   > `box-status`/promotion now read `pg_replication_slots`; the `packages/sync` outbox source, the four
+   > `sync_*` tables, every module's capture triggers, `sync-api.ts` and siblings, the pull/retention
+   > workers, the sync-token half of the mirror bundle, and `app.node_id` are deleted; the `sync.*`
+   > codes are deprecated, never renamed. Deviations from the design, each with a receipt (all in the
+   > swap spec's dated notes): (a) the primary's disabled BACK-subscription is DROPPED — it would retain
+   > WAL and be `lost` when the drain needs it (probe D); the drain window is served by the promoted
+   > node's own subscription, narrowed. (b) "drained" is a FENCE-LSN watermark
+   > (`confirmed_flush >= deployment.fence_lsn && !active`), not `>= pg_current_wal_lsn()` — the raw
+   > compare is non-monotone once the box is fenced (Ruling C2, probe E). (c) a returned box RECONCILES
+   > membership (`GET /management-api/membership`) before selling, replacing the deleted gossip (Ruling
+   > C7). (d) `rejoin` drops NO slot of its own — the wipe's `DROP DATABASE … WITH (FORCE)` reclaims the
+   > inactive slot, and the migrator→`waitron_repl` grant is removed as a §3 grant-widening fix (probe F,
+   > Ruling I3). The step-2/3 ownership gap is closed: `instance` creates the database
+   > `OWNER waitron_migrator` and migrates AS it (probe A). Branch `feat/outbox-swap-s4-s5`.
 5. **Status, alarms, the standby-first migration check, the link on the box image** — swap spec S6
    + S7, with Track B item 2.
 

@@ -65,10 +65,10 @@ import type { Logger } from "./logger.js";
  */
 export interface CatalogueApiDeps {
   db: Database;
-  /** `nodeId` is this node's origin id, threaded into every catalogue write's `withTenant` so the
-   * enrolled `catalogues`/`categories`/`products` INSERT/UPDATE the capture trigger records carries a
-   * real `sync_log.origin_id` rather than the all-zero sentinel (design §4d(B); sync origin
-   * attribution — proven end-to-end by `sync-origin.test.ts`). */
+  /** `cfg.tenantId` scopes every `withTenant` below (one tenant per database). `nodeId` is this
+   * node's id, carried on the uniform write-path `cfg` shape every mounted API takes; it no longer
+   * stamps a capture origin — the application outbox and its capture triggers were removed (native
+   * replication ships every row). */
   cfg: { tenantId: string; nodeId: string };
   mediaDir: string;
   maxUploadBytes: number;
@@ -285,20 +285,14 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   // CATALOGUE_WRITE_PERMISSION, then run `fn`. Every route funnels its DB work through here so the gate
   // is applied identically and in exactly one place — the design §3 seam.
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-    withTenant(
-      deps.db,
-      deps.cfg.tenantId,
-      async (tx) => {
-        await asAppUser(tx);
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: CATALOGUE_WRITE_PERMISSION,
-        });
-        return fn(tx);
-      },
-      // Sets app.node_id for this tx so sync_capture stamps origin_id (design §4d(B)). asAppUser's
-      // SET ROLE does not reset the transaction-local GUC, so origin attribution survives the switch.
-    );
+    withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await authorizeManager(tx, {
+        managementSessionId: sessionId,
+        permission: CATALOGUE_WRITE_PERMISSION,
+      });
+      return fn(tx);
+    });
 
   // ── Catalogues ─────────────────────────────────────────────────────────────────────────────────
   app.get("/management-api/catalogues", (c) =>

@@ -22,8 +22,7 @@ import { seedTenantWithSif } from "../test/fixtures.js";
 import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
 // TEST_MIGRATIONS is the full manifest (identity migrates before fiscal): recordVoid now calls
-// `authorize`, which reads identity's persons/sessions, and fiscal's SP-3a capture migration needs
-// sync_capture() from the sync set. See ../test/migrations.ts.
+// `authorize`, which reads identity's persons/sessions. See ../test/migrations.ts.
 const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
 // The `DrainDeps` a `VerifactuBackend` used to assemble internally, built here directly now that the
