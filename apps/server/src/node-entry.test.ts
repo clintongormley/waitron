@@ -97,6 +97,68 @@ describe("runEntry", () => {
     await vi.waitFor(() => expect(order).toEqual(["counter", "start"]));
   });
 
+  it("counts a boot that fails BEFORE the server — the escalation the recovery page depends on", async () => {
+    // Measured on the built bundle before this ordering existed: five failing boots (no bootstrap
+    // URL, then a dead database) each exited 1 and left the state volume EMPTY, so a box with an
+    // unreachable Postgres restart-looped for ever and never reached the page.
+    for (const failing of [
+      { waitForPostgres: vi.fn(() => Promise.reject(new Error("ECONNREFUSED"))) },
+      {
+        ensureInstance: vi.fn(() =>
+          Promise.reject(
+            new AppError("provisioning.role_unusable", {
+              role: "waitron_repl",
+              missing: ["LOGIN"],
+            }),
+          ),
+        ),
+      },
+      { loadBoxEnv: vi.fn(() => Promise.reject(new Error("EACCES"))) },
+    ]) {
+      const d = deps(failing);
+      await expect(runEntry(d)).rejects.toThrow();
+      expect(d.writeRecoveryState).toHaveBeenCalledWith(
+        "/state",
+        expect.objectContaining({ failures: 1 }),
+      );
+    }
+  });
+
+  it("escalates to the recovery level on the third failed boot, whatever failed", async () => {
+    const d = deps({
+      readRecoveryState: vi.fn(() => Promise.resolve({ ...FRESH, failures: 2 })),
+      waitForPostgres: vi.fn(() => Promise.reject(new Error("ECONNREFUSED"))),
+    });
+    await expect(runEntry(d)).rejects.toThrow();
+    expect(d.writeRecoveryState).toHaveBeenCalledWith(
+      "/state",
+      expect.objectContaining({ failures: 3, level: "recovery" }),
+    );
+  });
+
+  it("reports a state-volume write failure without replacing the boot's own error", async () => {
+    const log = vi.fn();
+    const d = deps({
+      startServer: vi.fn(() =>
+        Promise.reject(
+          new AppError("migrations.set_missing", { name: "core", folder: "/app/drizzle" }),
+        ),
+      ),
+      // The pre-boot write succeeds; the one recording the classification does not.
+      writeRecoveryState: vi
+        .fn()
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValue(new Error("EROFS")),
+      log,
+    });
+    await expect(runEntry(d)).rejects.toMatchObject({ code: "migrations.set_missing" });
+    expect(log).toHaveBeenCalledWith(
+      "warn",
+      "recovery.state_write_failed",
+      expect.objectContaining({ errorCode: "unknown" }),
+    );
+  });
+
   it("does NOT clear the counter merely because the server started", async () => {
     const d = deps({ readRecoveryState: vi.fn(() => Promise.resolve({ ...FRESH, failures: 2 })) });
     await runEntry(d);
@@ -165,6 +227,22 @@ describe("runEntry", () => {
     expect(ports).toEqual([443, 8080]);
   });
 
+  it("refuses an out-of-range WAITRON_HTTP_PORT instead of handing listen a raw RangeError", async () => {
+    const ports: number[] = [];
+    const d = deps({
+      baseEnv: { WAITRON_HTTP_PORT: "999999" },
+      readRecoveryState: vi.fn(() =>
+        Promise.resolve({ ...FRESH, failures: 3, level: levelFor(3) }),
+      ),
+      serveRecovery: (_app: Hono, opts: { port: number }) => {
+        ports.push(opts.port);
+        return Promise.resolve(undefined);
+      },
+    });
+    await runEntry(d);
+    expect(ports).toEqual([8080]);
+  });
+
   it("refuses an unset OR empty bootstrap URL before it can resolve to localhost", async () => {
     for (const raw of [undefined, ""]) {
       const d = deps({ baseEnv: { WAITRON_BOOTSTRAP_DATABASE_URL: raw } });
@@ -198,8 +276,12 @@ describe("runEntry", () => {
     await runEntry(d);
     const res = await served!.request("/recovery-api/retry", { method: "POST" });
     expect(res.status).toBe(200);
-    expect(d.writeRecoveryState).toHaveBeenCalledWith("/state", FRESH);
-    expect(exit).toHaveBeenCalledWith(0);
+    // `await`ed through `waitFor`: with no Node response to hang the exit on (`app.request()` has
+    // none), the route fires `onRetry` without awaiting it.
+    await vi.waitFor(() => {
+      expect(d.writeRecoveryState).toHaveBeenCalledWith("/state", FRESH);
+      expect(exit).toHaveBeenCalledWith(0);
+    });
   });
 });
 
@@ -274,10 +356,11 @@ describe("recoveryTlsFiles", () => {
 describe("serveRecovery", () => {
   it("serves the page over plain HTTP when there is no leaf to serve it with", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "wt-serve-"));
+    const onRetry = vi.fn(() => Promise.resolve());
     const app = recoveryApp({
       state: { ...FRESH, failures: 3, level: "recovery", lastErrorCode: "module.config_invalid" },
       logDir: stateDir,
-      onRetry: () => Promise.resolve(),
+      onRetry,
     });
     const server = await serveRecovery(app, { stateDir, port: 0, log: vi.fn() });
     try {
@@ -286,6 +369,15 @@ describe("serveRecovery", () => {
       const res = await fetch(`http://127.0.0.1:${port}/`);
       expect(res.status).toBe(200);
       expect(await res.text()).toContain("module.config_invalid");
+
+      // The retry, over a REAL socket: the body must arrive in full BEFORE `onRetry` (which exits
+      // the process in production) runs. A test through `app.request()` cannot see this ordering at
+      // all — there is no Node response to finish.
+      const retried = await fetch(`http://127.0.0.1:${port}/recovery-api/retry`, {
+        method: "POST",
+      });
+      expect(await retried.json()).toEqual({ ok: true });
+      await vi.waitFor(() => expect(onRetry).toHaveBeenCalledWith("normal"));
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

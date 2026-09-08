@@ -8,7 +8,7 @@ import { AppError } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
 import { DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT, startServer } from "./boot.js";
 import { loadBoxEnv } from "./box-env.js";
-import { resolveConfigDir } from "./config.js";
+import { DEFAULT_HTTP_PORT, MAX_HTTP_PORT, resolveConfigDir } from "./config.js";
 import { isUnset } from "./env-value.js";
 import { ensureInstance, type InstanceUrls } from "./instance-bootstrap.js";
 import { createLogger, type Logger } from "./logger.js";
@@ -36,14 +36,6 @@ const STAYED_UP_MS = 120_000;
 
 const WAIT_ATTEMPTS = 60;
 const WAIT_DELAY_MS = 1000;
-
-/** The recovery listener's port when `WAITRON_HTTP_PORT` is unset or unparseable — the same value
- * `config.ts`'s own `DEFAULT_HTTP_PORT` falls back to, duplicated rather than imported because the
- * recovery path must not call `loadConfig`: a box reaches recovery precisely when its configuration
- * or its database may be the thing that is broken, and a config that throws would take the page
- * down with it. The shipped image always sets the variable (443, spec §3.1), so this fallback is
- * reached only by a hand-run box. */
-const FALLBACK_HTTP_PORT = 8080;
 
 /** The recovery-state marker for an attempt whose outcome is not known YET — written before the
  * server starts, so a boot that HANGS (and therefore never produces a real code) still leaves the
@@ -188,26 +180,40 @@ function bootstrapUrlFrom(env: NodeJS.ProcessEnv): string {
   return raw;
 }
 
-/** `WAITRON_HTTP_PORT`, or the fallback. Zero is refused with the rest: it means "any free port" to
- * `listen`, which would bind the recovery page somewhere the operator cannot find it. */
+/**
+ * `WAITRON_HTTP_PORT`, or `config.ts`'s own default — resolved here rather than through
+ * `loadConfig`, because a box reaches recovery precisely when its configuration may be what is
+ * broken and a config that throws would take the page down with it. The bounds are `config.ts`'s
+ * too, imported not copied: an out-of-range value reaches `listen` as a raw `ERR_SOCKET_BAD_PORT`,
+ * and a box whose `WAITRON_HTTP_PORT` is `999999` is exactly a box that fails `loadConfig` three
+ * times and lands here. Zero is out of range for the same reason the rest are: to `listen` it means
+ * "any free port", which puts the page somewhere the operator cannot find it.
+ */
 function httpPortFrom(env: NodeJS.ProcessEnv): number {
   const port = Number.parseInt(env.WAITRON_HTTP_PORT ?? "", 10);
-  return Number.isInteger(port) && port > 0 ? port : FALLBACK_HTTP_PORT;
+  return Number.isInteger(port) && port > 0 && port <= MAX_HTTP_PORT ? port : DEFAULT_HTTP_PORT;
 }
 
-/** How long the real `exit` lets the event loop run before it takes the process down. */
-const EXIT_FLUSH_MS = 250;
-
 /* v8 ignore start -- the real process binding; every test supplies its own `exit` instead */
-const DEFAULT_EXIT = (code: number): void => {
-  // Scheduled, not immediate: the only caller is the recovery page's retry, which runs INSIDE the
-  // request handler, and exiting there kills the socket before the response flushes. Measured on
-  // the built bundle against the running page — an immediate `process.exit` returned an empty body
-  // to the POST; with the delay it returns `{"ok":true}`. `unref` so this timer alone never holds
-  // a process open that has nothing else to do.
-  setTimeout(() => process.exit(code), EXIT_FLUSH_MS).unref();
-};
+const DEFAULT_EXIT = (code: number): void => process.exit(code);
 /* v8 ignore stop */
+
+/**
+ * Persist the escalation state, REPORTING a write failure rather than letting it become the
+ * outcome. Used everywhere the write is not the point of the moment: on the failure path the boot's
+ * own error is what an operator needs, in the stayed-up callback a floating rejection would kill a
+ * HEALTHY server two minutes after it booted, and in the retry a failed reset just means the page
+ * comes back after the restart. The one write that is NOT routed through here is the pre-boot
+ * counter, which is allowed to throw: a state volume that cannot be written is a box that can never
+ * escalate, and the server would fail on the same volume moments later anyway.
+ */
+async function persistState(deps: EntryDeps, next: RecoveryState): Promise<void> {
+  try {
+    await deps.writeRecoveryState(deps.stateDir, next);
+  } catch (error) {
+    deps.log("warn", "recovery.state_write_failed", { errorCode: codeOf(error) });
+  }
+}
 
 /**
  * One container start: decide the level, bring the cluster into shape, hand the server its
@@ -218,9 +224,12 @@ const DEFAULT_EXIT = (code: number): void => {
  * 1. The level is read FIRST, before anything touches Postgres. A database-side failure is exactly
  *    what puts a box in recovery, so deciding after the wait and the bootstrap would make the page
  *    unreachable in most of the cases it exists for (spec §9.3).
- * 2. The failure counter is written BEFORE `startServer`, never only in a failure handler: a boot
- *    that HANGS never throws, and a catch-only counter would leave such a box restart-looping
- *    forever without ever escalating.
+ * 2. The failure counter is written BEFORE the boot's FIRST step, never only in a failure handler
+ *    and never only around `startServer`: a boot that HANGS never throws, and a counter written
+ *    later covers none of the steps most likely to fail. Measured on the built bundle when it sat
+ *    after them: five failing boots (no bootstrap URL, then a dead database) each exited 1 and left
+ *    the state volume EMPTY — a box with an unreachable Postgres restart-looped every ~60 s and
+ *    could never reach the page that exists for exactly that case.
  * 3. It CLEARS only from the stayed-up callback — `startServer` resolved AND the process then
  *    survived `STAYED_UP_MS`. Clearing on "started" alone is a measurement where pass and fail look
  *    alike: a module throwing five seconds in would reset the counter on every attempt.
@@ -235,6 +244,12 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   const exit = deps.exit ?? DEFAULT_EXIT;
 
   if (state.level === "recovery") {
+    // The page's log tail is the SERVER's rotating file (`<logDir>/waitron.log`). A box escalated
+    // before the server ever started — an `ensureInstance` or `waitForPostgres` failure — therefore
+    // shows its `lastErrorCode` above an empty tail, because the entrypoint's own log goes to stdout
+    // (`docker logs`) and nothing writes that file until `startServer` gets far enough. Stated, not
+    // fixed: a second sink in the entrypoint is more moving parts on the one path that must not
+    // fail, and the code plus `docker logs` carry the same information.
     deps.log("warn", "recovery.serving", {
       failures: state.failures,
       lastErrorCode: state.lastErrorCode,
@@ -247,7 +262,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
         // so a zero count IS "normal" and a hand-written level could not pin a box either way. The
         // exit is the whole retry — Docker's restart policy performs the restart (spec §9.3).
         onRetry: async () => {
-          await deps.writeRecoveryState(deps.stateDir, FRESH);
+          await persistState(deps, FRESH);
           exit(0);
         },
       }),
@@ -256,42 +271,42 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     return;
   }
 
-  const bootstrapUrl = bootstrapUrlFrom(deps.baseEnv);
-  await deps.waitForPostgres(bootstrapUrl);
-  const urls = await deps.ensureInstance({
-    bootstrapUrl,
-    database: DATABASE,
-    stateDir: deps.stateDir,
-    log: deps.log,
-    migrationsRoot: deps.migrationsRoot ?? DEFAULT_MIGRATIONS_ROOT,
-  });
-
-  // AFTER `ensureInstance`, which has just written `instance.env` — that file is where the merged
-  // environment's `DATABASE_URL` comes from.
-  const env = await deps.loadBoxEnv(deps.baseEnv, deps.stateDir);
-  // The server never holds superuser credentials: its owner connection is the MIGRATOR, the role
-  // that owns the tables (`boot.ts`'s setup branch documents why). Deleted from the object handed
-  // on, not merely left unread — a bundled module reading `process.env` directly would still find
-  // it otherwise, and this process's own `process.env` is what `baseEnv` is.
-  delete env[BOOTSTRAP_URL];
-  env.WAITRON_ADMIN_DATABASE_URL = urls.migrationsDatabaseUrl;
-
+  // The counter covers the WHOLE attempt, so it is written before the first step that can fail.
   await deps.writeRecoveryState(deps.stateDir, afterFailure(state, BOOT_INCOMPLETE, new Date()));
 
   let server: { close(): Promise<void> };
   try {
+    const bootstrapUrl = bootstrapUrlFrom(deps.baseEnv);
+    await deps.waitForPostgres(bootstrapUrl);
+    const urls = await deps.ensureInstance({
+      bootstrapUrl,
+      database: DATABASE,
+      stateDir: deps.stateDir,
+      log: deps.log,
+      migrationsRoot: deps.migrationsRoot ?? DEFAULT_MIGRATIONS_ROOT,
+    });
+
+    // AFTER `ensureInstance`, which has just written `instance.env` — that file is where the merged
+    // environment's `DATABASE_URL` comes from.
+    const env = await deps.loadBoxEnv(deps.baseEnv, deps.stateDir);
+    // The server never holds superuser credentials: its owner connection is the MIGRATOR, the role
+    // that owns the tables (`boot.ts`'s setup branch documents why). This object is the server's
+    // WHOLE configuration — `startServer` reads what it is handed, not `process.env` — and the
+    // process's own copy is scrubbed separately by the wiring at the bottom of this file, because
+    // `loadBoxEnv` returns a new object and deleting from it leaves `process.env` untouched.
+    delete env[BOOTSTRAP_URL];
+    env.WAITRON_ADMIN_DATABASE_URL = urls.migrationsDatabaseUrl;
+
     server = await deps.startServer(env);
   } catch (error) {
-    // Same count as the pre-start write — this attempt is one failure, not two — now carrying the
+    // Same count as the pre-boot write — one attempt is one failure, not two — now carrying the
     // real classification for the page. Rethrown so the process exits non-zero and Docker restarts.
-    await deps.writeRecoveryState(deps.stateDir, afterFailure(state, codeOf(error), new Date()));
+    await persistState(deps, afterFailure(state, codeOf(error), new Date()));
     throw error;
   }
 
   deps.installShutdownHandlers(server);
-  deps.scheduleStayedUp(STAYED_UP_MS, () => {
-    void deps.writeRecoveryState(deps.stateDir, FRESH);
-  });
+  deps.scheduleStayedUp(STAYED_UP_MS, () => void persistState(deps, FRESH));
 }
 
 /* v8 ignore start -- the real process wiring: `process.env`, the `pg` driver, a timer and
@@ -309,7 +324,12 @@ async function connectOnce(url: string): Promise<void> {
 }
 
 function bootThisProcess(): Promise<void> {
-  const env = process.env;
+  // Snapshot, THEN scrub: the entrypoint is the only thing that may hold the superuser URL, and
+  // nothing after it — no module of the server, no library reading `process.env` directly — has any
+  // business finding it. `loadBoxEnv` returns a new object, so deleting the key there would leave
+  // this process's own copy intact.
+  const env = { ...process.env };
+  delete process.env[BOOTSTRAP_URL];
   const stateDir = resolveConfigDir(env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
   const log = createLogger(
     (line) => void process.stdout.write(line),

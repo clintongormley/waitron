@@ -220,7 +220,11 @@ export const DEFAULT_MAX_TICK_MS = 60 * 60 * 1000;
  * answer). Neither duty reports `now` for merely SKIPPED work any more — see `skipRetryMs` above,
  * and `drain` has no `deferred` concept at all. */
 const DEFAULT_MIN_TICK_MS = 5_000;
-const DEFAULT_HTTP_PORT = 8080;
+/** Exported for `node-entry.ts`'s recovery path, which resolves the same variable WITHOUT calling
+ * `loadConfig` — a box is in recovery precisely when its configuration may be what is broken, so a
+ * config that throws must not take the page down with it. One constant, not two, so the page and
+ * the server can never disagree about where an operator will look for it. */
+export const DEFAULT_HTTP_PORT = 8080;
 /** The PostgreSQL port a node advertises for a peer's subscription to dial when
  * WAITRON_REPLICATION_PORT is unset — the cluster default. */
 const DEFAULT_REPLICATION_PORT = 5432;
@@ -235,8 +239,11 @@ const DEFAULT_HTTP_HOST = "127.0.0.1";
  * a value like `999999` reach `serve()` (`boot.ts`), which throws a raw, unformatted
  * `RangeError [ERR_SOCKET_BAD_PORT]` straight out of `startServer` — not the structured
  * `server.config_invalid` this file promises for every other bad input, and not what
- * `apps/server/README.md`'s "every value is validated once, at boot" line claims either. */
-const MAX_HTTP_PORT = 65_535;
+ * `apps/server/README.md`'s "every value is validated once, at boot" line claims either. Exported
+ * for the same reason `DEFAULT_HTTP_PORT` above is: `node-entry.ts`'s recovery path needs the same
+ * bound, and an unbounded copy there would throw that same raw `RangeError` out of the one call
+ * that serves the page. */
+export const MAX_HTTP_PORT = 65_535;
 /** Loopback defaults for the passkey Relying Party, so dev and every test resolve a working RP ID +
  * origin without setting either variable. These apply in preproduction/dev ONLY: in production both
  * are REQUIRED (`requiredInProduction` below throws `server.config_missing` if either is unset), so a

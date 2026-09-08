@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { ServerResponse } from "node:http";
 import { Hono } from "hono";
+import type { Context } from "hono";
 import type { RecoveryLevel, RecoveryState } from "./recovery-state.js";
 
 const MAX_LOG_LINES = 200;
@@ -10,7 +12,8 @@ export interface RecoveryDeps {
   state: RecoveryState;
   logDir: string;
   /** Writes the reset counter and exits; Docker's restart policy performs the actual restart —
-   * this route never restarts the process itself. */
+   * this route never restarts the process itself. Run AFTER the response has been written, not
+   * before — see `outgoingOf`. */
   onRetry: (level: RecoveryLevel) => Promise<void>;
 }
 
@@ -38,6 +41,19 @@ async function tailLog(logDir: string): Promise<string[]> {
   }
   const lines = text.split("\n").filter((line) => line !== "");
   return lines.slice(-MAX_LOG_LINES);
+}
+
+/**
+ * The Node response this request will be written to. `@hono/node-server` puts it on `c.env`
+ * (`{ incoming, outgoing }`); it is absent when the app is exercised through `app.request()`, which
+ * has no Node response at all — hence the guard rather than a cast alone.
+ *
+ * It exists so the retry's process exit can wait for the `'finish'` EVENT instead of a delay: the
+ * exit happens inside this handler's own request, and taking the process down before the socket has
+ * flushed returns an empty body to the operator who just pressed the button.
+ */
+function outgoingOf(c: Context): ServerResponse | undefined {
+  return (c.env as { outgoing?: ServerResponse } | undefined)?.outgoing;
 }
 
 function renderPage(state: RecoveryState, logLines: string[]): string {
@@ -81,8 +97,14 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
 
   app.get("/recovery-api/status", (c) => c.json(deps.state));
 
-  app.post("/recovery-api/retry", async (c) => {
-    await deps.onRetry("normal");
+  app.post("/recovery-api/retry", (c) => {
+    const outgoing = outgoingOf(c);
+    if (outgoing === undefined) {
+      // No Node response to wait on (`app.request()`): nothing can be racing the flush either.
+      void deps.onRetry("normal");
+    } else {
+      outgoing.once("finish", () => void deps.onRetry("normal"));
+    }
     return c.json({ ok: true });
   });
 
