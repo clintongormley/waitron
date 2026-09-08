@@ -239,7 +239,9 @@ rather than only reasoned about in a comment."
 **Files:**
 - Modify: `apps/server/src/box-reach.ts`, `apps/server/src/box-secrets.ts`,
   `apps/server/src/config.ts`, `apps/server/src/boot.ts`
-- Test: `apps/server/src/box-reach.test.ts`, `apps/server/src/config.test.ts`
+- Test: `apps/server/src/box-reach.test.ts`, `apps/server/src/config.test.ts`,
+  `apps/server/src/boot.test.ts` (the SAN deletion-proof — it is the only suite that observes
+  `boot.ts`'s wiring)
 
 **Interfaces:**
 - Produces: `parseBoxAddresses(raw: string | undefined): string[] | undefined` (exported from
@@ -748,11 +750,18 @@ describe("ensureInstance", () => {
         .migrationsDatabaseUrl,
     );
     try {
+      // The `deployment` TABLE exists — the core migration creates it
+      // (packages/db/drizzle/0001_db_baseline_sql.sql), and on a virgin cluster this entrypoint
+      // ran that migration to mint `app_user`. What must NOT exist is a ROW: stamping is the
+      // wizard's, and an unstamped database is what keeps `production` reachable.
       const present = await target.execute<{ exists: boolean }>(
         sql`select to_regclass('public.deployment') is not null as exists`,
       );
-      // Nothing migrated yet, so there is no table to stamp into — and nothing tried.
-      expect(present.rows[0]?.exists).toBe(false);
+      expect(present.rows[0]?.exists).toBe(true);
+      const stamped = await target.execute<{ n: number }>(
+        sql`select count(*)::int as n from deployment`,
+      );
+      expect(stamped.rows[0]?.n).toBe(0);
     } finally {
       await target.close();
     }
@@ -1523,8 +1532,10 @@ the image path's ownership and would otherwise mount root-owned."
 ### Task 9: CI — build the image, smoke it, publish it
 
 **Files:**
-- Modify: `.github/workflows/ci.yml`, `scripts/changed-scope.mjs`
-- Test: `scripts/changed-scope.test.ts` (the existing root suite)
+- Modify: `.github/workflows/ci.yml` (add the `image` job AND add it to `ci`'s `needs`)
+- Test: `scripts/changed-scope.test.mjs` (a regression pin — green from the start),
+  `scripts/ci-workflow.test.mjs` (existing; it pins ci.yml's job graph and must stay green)
+- **Not** modified: `scripts/changed-scope.mjs` — `deploy/**` already classifies as code
 
 **`deploy/**` already classifies as CODE — do not "fix" it.** `isInertPath`
 (`scripts/changed-scope.mjs`) treats only `docs/`, `.codex/`, `.vscode/`, `.gitignore`,
