@@ -93,8 +93,9 @@ steps take owner sign-off at land):
    auth, outbox, transports) exists; no agent PROCESS does. Standalone, containerised, follows the
    primary like the till. Printer failover in its on-prem form rides on it.
 4. **Payments: card readers.** Stripe Terminal is built. SumUp is built only after its four questions
-   are answered — the draft to send is
-   [research/2026-09-08-sumup-questions.md](research/2026-09-08-sumup-questions.md).
+   are answered — **SENT to SumUp 2026-09-08, awaiting reply**
+   ([research/2026-09-08-sumup-questions.md](research/2026-09-08-sumup-questions.md)); question 4 (offline
+   after pairing) is design-invalidating, so the build waits on it.
 5. **The in-app walkthrough** — tables, sales, kitchen, bookings, tips, shifts: mostly built;
    [ui-review.md](ui-review.md) is the tracker. Plus the counter kitchen fire and the pricing
    adjustments under *Product work still open*.
@@ -1308,8 +1309,9 @@ genuinely-decision-bearing.
 **SumUp:**
 
 - **Four unverified questions, one design-invalidating**
-  ([sumup provider spec](superpowers/specs/2026-07-30-sumup-card-present-provider-design.md) §7), wanted
-  **before** the SumUp provider is built. The decisive one: **does the reader still work
+  ([sumup provider spec](superpowers/specs/2026-07-30-sumup-card-present-provider-design.md) §7;
+  the send-ready form is [research/2026-09-08-sumup-questions.md](research/2026-09-08-sumup-questions.md),
+  **SENT 2026-09-08, awaiting reply**), wanted **before** the SumUp provider is built. The decisive one: **does the reader still work
   standalone/offline once paired to SumUp's cloud?** If not, the deli-hardware outage path (assumes a card
   can be taken when the internet is down) must be rewritten. The other three: may we *supply* the
   idempotency key; are reader webhooks signed like online ones; does `void` map onto the refund endpoint.

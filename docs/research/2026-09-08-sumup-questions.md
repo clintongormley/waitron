@@ -1,5 +1,7 @@
 # Questions for SumUp before we build the card-reader integration (2026-09-08)
 
+**Status: SENT to SumUp 2026-09-08; awaiting reply.** The card-reader build (Track H) does not start until the answers land — question 4 (does the reader work offline once paired) is design-invalidating.
+
 Context to give SumUp: we are building a restaurant point-of-sale for Spain. We want to drive a
 SumUp card reader (Solo, or whichever model you recommend for a counter) from our own software using
 the Cloud API for reader checkouts. The venue must be able to keep taking card payments when the
