@@ -1,0 +1,13 @@
+-- The pairing code is gone: a device now knocks (`join_requests`) and an admin accepts, so nothing
+-- reads or writes this table any more — `apps/server/src/device.ts` lost its mint/verify/redeem verbs
+-- and `device-api.ts` its three routes in the same commit. Dropped rather than left dormant because an
+-- unused table still carries grants, a classification row and a publication membership.
+--
+-- Safe to DROP outright: nothing references it (its own mint-time binding FKs went with their columns,
+-- and no other table ever pointed AT it — verified with `grep -n 'device_pairing_codes' packages/db`,
+-- which now matches only this file and the earlier migrations that created it). Waitron is
+-- pre-production, so there is no data to preserve and no backfill (CLAUDE.md §3).
+--
+-- CASCADE is deliberately NOT used: a dependency this drop does not expect should FAIL here rather than
+-- be silently removed with the table.
+DROP TABLE "device_pairing_codes";

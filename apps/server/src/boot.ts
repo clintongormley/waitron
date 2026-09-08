@@ -88,6 +88,7 @@ import { mountWebhook } from "./webhook.js";
 import { mountTillApi } from "./till-api.js";
 import { mountNodeApi } from "./node-api.js";
 import { mountDeviceApi } from "./device-api.js";
+import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
 import { mountManagementApi } from "./management-api.js";
 import { openTab } from "./working-order.js";
@@ -1389,18 +1390,29 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // `singleton_role`-gated workers (backup / tunnel, §3c — re-gated in #168) to
   // runtime-startable. See read-only-gate.ts's header.
   if (!fencedOrMirror) {
+    // ONE window for the venue: every surface that has a knock shares this holder, so "venue-wide" is a
+    // property of the wiring rather than a rule anyone has to remember (design §1.1). In memory, so a
+    // restart or a promotion starts SHUT — a node that has just taken over must not inherit an open door.
+    const pairingMode = createPairingMode();
     // The trusted-DEVICE surface (device-identity-1) on the SAME app, the identical convention: the
-    // UNAUTHENTICATED enrol route, the `requireDevice`-guarded KDS routes (a kitchen screen reads and
-    // bumps only its own bound station), and the `device.manage`-gated management routes (mint a pairing
-    // code, list devices, revoke one). It reuses the EXACT `db` and — unlike the sibling mounts, which
-    // pass a `{ tenantId }` subset — the FULL `till` config `mountTillApi` receives above, because the
-    // device verbs are typed `cfg: TillConfig` and `listStationQueue` scopes the queue by `cfg.nodeId`
+    // UNAUTHENTICATED knock and join-status routes, the `requireDevice`-guarded KDS routes (a kitchen
+    // screen reads and bumps only its own bound station), and the `device.manage`-gated management routes
+    // (list devices, revoke one, rebind one). It reuses the EXACT `db` and — unlike the sibling mounts,
+    // which pass a `{ tenantId }` subset — the FULL `till` config `mountTillApi` receives above, because
+    // the device verbs are typed `cfg: TillConfig` and `listStationQueue` scopes the queue by `cfg.nodeId`
     // (the routes touch none of the fiscal ids on it). `secureCookies` is the SAME hoisted binding, so the
-    // enrolment cookie is `Secure` iff TLS is configured. Routes only — no database work at boot; the
+    // device cookie is `Secure` iff TLS is configured. Routes only — no database work at boot; the
     // device guard and the `device.manage` gate run per request.
     mountDeviceApi(
       app,
-      { db, cfg: till, secureCookies, devMode: config.devMode, tenantDomain: config.tenantDomain },
+      {
+        db,
+        cfg: till,
+        secureCookies,
+        pairingMode,
+        devMode: config.devMode,
+        tenantDomain: config.tenantDomain,
+      },
       log,
     );
     // The printing subsystem's HTTP surface on the SAME app, the identical three-group convention: the

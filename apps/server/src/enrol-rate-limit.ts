@@ -1,4 +1,4 @@
-// Keeps `device.pairing_rate_limited` (errors.ts) reachable from this file — it is the DEFAULT code
+// Keeps `device.join_rate_limited` (errors.ts) reachable from this file — it is the DEFAULT code
 // this limiter throws and one of the two the enrol surfaces pass (the print surface passes its own
 // `agent.pairing_rate_limited`, registered in @waitron/printing's errors.ts and reached through
 // print-api.ts's imports). The reachability convention device.ts / kitchen.ts follow. See errors.ts.
@@ -6,20 +6,20 @@ import "./errors.js";
 import { AppError } from "@waitron/shared";
 
 /**
- * The redemption rate-limit for the enrol routes (`POST /api/device/enrol`, device-identity-1 §8, and
+ * The rate-limit for the unauthenticated enrol routes (`POST /api/device/join`, device-identity-1 §8, and
  * `POST /print-api/agent/enrol`, which reuses this same limiter). A per-process, in-memory, GLOBAL
- * fixed-window counter, checked at the TOP of the enrol handler BEFORE the body is parsed and BEFORE the
- * pairing-code DELETE — so a rejected attempt touches no DB. Only the thrown CODE differs per surface
+ * fixed-window counter, checked at the TOP of the handler BEFORE the body is parsed and BEFORE any DB
+ * work — so a rejected attempt touches no DB. Only the thrown CODE differs per surface
  * (see {@link EnrolRateLimiterOptions.code}); the window, cap and topology reasoning below are shared.
  *
  * Why a limit at all, and why THIS shape:
- *  - The primary brute-force controls already exist — the pairing code is ~40-bit Crockford entropy,
- *    single-use, 15-min TTL (device.ts §2c) — so brute-forcing a code over HTTP is already infeasible.
+ *  - It is not the primary guard on either surface: the device knock is admitted only while an admin
+ *    holds the venue's pairing window open, and the print agent redeems a high-entropy single-use code.
  *    This limit is therefore DEFENSE-IN-DEPTH plus DoS / connection-pool protection.
- *  - Rejecting BEFORE the DB is the point: an enrol flood must not exhaust the connection pool and
+ *  - Rejecting BEFORE the DB is the point: a flood must not exhaust the connection pool and
  *    starve the sale path (the fiscal invariant "nothing may block a sale", CLAUDE.md §5). Since the
- *    check runs before `c.req.json()` and before `enrolDevice`'s locking DELETE, a rejected attempt does
- *    no DB work and consumes no pairing code.
+ *    check runs before `c.req.json()` and before any query, a rejected attempt does no DB work and
+ *    creates no row.
  *  - GLOBAL, not per-IP: the on-prem server sits behind the snitun tunnel / a reverse proxy, so every
  *    client presents one source address and a per-IP key would collapse to a single bucket and buy
  *    nothing. A single global cap is robust to that topology.
@@ -37,8 +37,8 @@ export const ENROL_RATE_WINDOW_MS = 60_000;
 
 /**
  * The most enrol attempts allowed per {@link ENROL_RATE_WINDOW_MS}. 30/min ≈ one every two seconds
- * sustained — vast headroom over legitimate use (an operator mints a code and one device redeems it;
- * even a handful of fat-fingered retries is nowhere near this), while a brute-force / DoS flood of
+ * sustained — vast headroom over legitimate use (an admin opens the window and a few screens knock;
+ * even a handful of retries is nowhere near this), while a brute-force / DoS flood of
  * thousands per second is blunted to 30 DB-touching attempts a minute and the rest are refused before
  * any DB work. Deliberately generous: the goal is to blunt a flood, NOT to police normal enrolment, so
  * the cap must never block a real retry.
@@ -56,13 +56,13 @@ export interface EnrolRateLimiterOptions {
   now?: () => number;
   /**
    * The `AppError` code thrown when the window is over the cap. Each enrol surface passes its OWN domain
-   * code — `device.pairing_rate_limited` for `POST /api/device/enrol`, `agent.pairing_rate_limited` for
-   * `POST /print-api/agent/enrol` — so a throttled enrol is answered in that surface's namespace (codes
+   * code — `device.join_rate_limited` for `POST /api/device/join`, `agent.pairing_rate_limited` for
+   * `POST /print-api/agent/enrol` — so a throttled attempt is answered in that surface's namespace (codes
    * name the domain concept, CLAUDE.md §1/§3) and no caller has to catch-and-translate a foreign one.
-   * Defaults to `device.pairing_rate_limited`, the original device-enrol code, so a caller that omits it
-   * keeps that behaviour. Both codes take empty params.
+   * Defaults to `device.join_rate_limited`, so a caller that omits it gets the device surface's code.
+   * Both codes take empty params.
    */
-  code?: "device.pairing_rate_limited" | "agent.pairing_rate_limited";
+  code?: "device.join_rate_limited" | "agent.pairing_rate_limited";
 }
 
 export interface EnrolRateLimiter {
@@ -87,7 +87,7 @@ export interface EnrolRateLimiter {
  * one per enrol surface at boot); only the clock and code are injectable.
  */
 export function createEnrolRateLimiter(opts: EnrolRateLimiterOptions = {}): EnrolRateLimiter {
-  const { now = Date.now, code = "device.pairing_rate_limited" } = opts;
+  const { now = Date.now, code = "device.join_rate_limited" } = opts;
   let windowStart = now();
   let count = 0;
   return {

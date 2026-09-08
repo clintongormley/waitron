@@ -24,7 +24,6 @@ export const PRIVILEGES: Record<string, string> = {
   daily_close_chain: "SIU",
   daily_closes: "SI",
   deployment: "S",
-  device_pairing_codes: "SID",
   device_profiles: "SIUD",
   devices: "SIU",
   dining_tables: "SIU",

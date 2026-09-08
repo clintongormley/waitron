@@ -39,8 +39,10 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import pg from "pg";
-import { asAppUser, createPostgresDb, withTenant, type Database } from "@waitron/db";
+import { and, eq } from "drizzle-orm";
+import { asAppUser, createPostgresDb, tills, withTenant, type Database } from "@waitron/db";
 import { hashPassword, hashPin } from "@waitron/identity";
+import { listDeviceProfiles } from "@waitron/layouts";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   applyVenue,
@@ -63,9 +65,8 @@ import { ALL_MODULES } from "../src/modules.js";
 import { venueModuleConfig } from "../src/provision.js";
 import { writeModuleConfig } from "../src/module-config.js";
 import { resolveConfigDir } from "../src/config.js";
-import { readEnrolCatalogue } from "../src/device.js";
+import { listStations } from "../src/kitchen.js";
 import { enrolDeviceForTest } from "../src/testing/enrol.js";
-import { DEV_PAIRING_CODE } from "../src/dev-pairing.js";
 import type { TillConfig } from "../src/till-config.js";
 import { parseEnvFile } from "../src/env-file.js";
 import { seedDemoRestaurant } from "./demo-seed/seed.js";
@@ -433,18 +434,21 @@ async function seedDemoDevices(
 
   // The profiles + stations the devices bind to — provisioning seeds one profile per form factor
   // (till/kds/phone-portrait) and the default "Cocina" station.
-  const before = await withTenant(db, cfg.tenantId, async (tx) => {
+  const { profiles, stations } = await withTenant(db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-    return readEnrolCatalogue(tx, cfg);
+    return {
+      profiles: await listDeviceProfiles(tx, cfg.tenantId),
+      stations: await listStations(tx, cfg),
+    };
   });
   const profileFor = (formFactor: "till" | "kds" | "phone-portrait"): string => {
-    const profile = before.profiles.find((p) => p.formFactor === formFactor);
+    const profile = profiles.find((p) => p.formFactor === formFactor);
     if (profile === undefined) {
       throw new Error(`dev-setup: no seeded device profile for form factor "${formFactor}"`);
     }
     return profile.id;
   };
-  const kitchen = before.stations.find((s) => s.name === "Cocina");
+  const kitchen = stations.find((s) => s.name === "Cocina");
   if (kitchen === undefined) {
     throw new Error('dev-setup: no "Cocina" kitchen station to bind the kitchen display to');
   }
@@ -457,9 +461,18 @@ async function seedDemoDevices(
   const counter = (
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      return readEnrolCatalogue(tx, cfg);
+      return tx
+        .select({ id: tills.id })
+        .from(tills)
+        .where(
+          and(
+            eq(tills.tenantId, cfg.tenantId),
+            eq(tills.locationId, cfg.locationId),
+            eq(tills.name, "Mostrador"),
+          ),
+        );
     })
-  ).registers.find((r) => r.name === "Mostrador");
+  )[0];
   if (counter === undefined) {
     throw new Error('dev-setup: the till enrol did not create its "Mostrador" register');
   }
@@ -688,9 +701,9 @@ async function main(): Promise<void> {
   console.log("    Mostrador (till) · Camarero 1 (handheld) · Pantalla Cocina (kitchen display)");
   console.log("");
   console.log(
-    `  Or enrol a FRESH browser at http://localhost:5190 with pairing code: ${DEV_PAIRING_CODE}`,
+    "  Or knock from a FRESH browser at http://localhost:5190 — a manager then switches on",
   );
-  console.log("  (fixed in dev mode, reusable by every fresh browser)");
+  console.log("  pairing mode in the dashboard and matches the number the till shows.");
   const salesDays = resolveSalesDays();
   if (!result.reused) {
     console.log(

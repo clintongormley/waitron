@@ -51,11 +51,11 @@ describe("pgErrorConstraint", () => {
       pgErrorConstraint(
         Object.assign(new Error("fk"), {
           code: "23503",
-          constraint: "device_pairing_codes_till_fk",
+          constraint: "devices_receipt_printer_fk",
         }),
         "23503",
       ),
-    ).toBe("device_pairing_codes_till_fk");
+    ).toBe("devices_receipt_printer_fk");
   });
 
   it("returns the constraint name through a Drizzle-wrapped cause chain", () => {

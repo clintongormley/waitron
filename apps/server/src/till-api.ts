@@ -190,7 +190,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "pin.invalid": 401,
   // The wrong-PIN back-off (§5, `pin-throttle.ts`): inside the escalating wait window the login route
   // refuses BEFORE the credential check, carrying `retryAfterSeconds` in the payload. 429 (too many
-  // requests) — the same status `device.pairing_rate_limited` takes on the enrol surface — not 401,
+  // requests) — the same status `device.join_rate_limited` takes on the device surface — not 401,
   // so the till can tell "wait N seconds" apart from "wrong PIN" and render the countdown (§3.4).
   "pin.throttled": 429,
   "person.not_found": 401,
@@ -565,7 +565,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const device = await requireDevice(deps, c);
       // Every sale-capable device carries a non-null `till_id` by the §1.3 form-factor trigger; a
       // till-less device (a kds display) should never reach a roster login, so guard the NOT NULL
-      // `sessions.till_id` defensively with the mint-time twin `device.till_required`.
+      // `sessions.till_id` defensively with `device.till_required`, the same code the sale path uses.
       if (device.tillId === null) throw new AppError("device.till_required", {});
       const deviceTillId = device.tillId;
       // Wrong-PIN back-off (§5) BEFORE the credential check: inside the wait window this throws

@@ -352,8 +352,7 @@ export async function requireDevice(
  * - No `waitron_device` cookie (`tryReadDevice` → `null`) ⇒ `device.unauthorized` — the existing
  *   device-auth code (an ordinary env-only till is no longer a sellable box on its own).
  * - A device with no till (`tillId === null`, e.g. a `kds_station`, which rings no sale) ⇒
- *   `device.till_required` — the mint-time twin (Task 12) reused: a till-less device cannot ring
- *   a sale.
+ *   `device.till_required` — a till-less device cannot ring a sale.
  *
  * On success the row's `till_id` is branded `TillId` via the shared `tillId` guard
  * (UUID-validated, `packages/shared/src/ids.ts`), the SAME brand `loadTillConfig` applies to the

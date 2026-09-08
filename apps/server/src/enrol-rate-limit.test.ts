@@ -24,7 +24,7 @@ function caught(fn: () => void): unknown {
 }
 
 describe("the enrol fixed-window rate limiter", () => {
-  it("allows up to the baked-in cap within one window, then throws device.pairing_rate_limited", () => {
+  it("allows up to the baked-in cap within one window, then throws device.join_rate_limited", () => {
     const now = 1_000; // fixed — every check falls in the one window
     const limiter = createEnrolRateLimiter({ now: () => now });
 
@@ -36,7 +36,7 @@ describe("the enrol fixed-window rate limiter", () => {
     // The (cap+1)th in the SAME window is refused with the domain code (→ HTTP 429 at the route).
     const e = caught(() => limiter.check());
     expect(isAppError(e)).toBe(true);
-    if (isAppError(e)) expect(e.code).toBe("device.pairing_rate_limited");
+    if (isAppError(e)) expect(e.code).toBe("device.join_rate_limited");
   });
 
   it("resets the counter once the window advances (injected clock)", () => {

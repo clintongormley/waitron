@@ -1,9 +1,10 @@
-import { boolean, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { locations, tenants } from "./tenants.js";
 
 /**
- * An always-on trusted DEVICE (device-identity-1) — a physical screen that enrols ONCE via a pairing
- * code and authenticates itself thereafter with an httpOnly cookie, with NO per-person login. A device
+ * An always-on trusted DEVICE (device-identity-1) — a physical screen that joins ONCE (it knocks, an
+ * admin accepts) and authenticates itself thereafter with an httpOnly cookie, with NO per-person
+ * login. A device
  * is DEFINED by its `device_profile_id` (NOT NULL): the profile's form factor decides whether it binds
  * a kitchen station (kds) or a register (every other form factor) — enforced by device_binding_rule_insert / _update,
  * not a kind column. Tenant + location scoped (spec §2a) — separate `tenant_id` and `location_id` FKs,
@@ -90,59 +91,5 @@ export const devices = pgTable(
     // Composite (tenant_id, id) UNIQUE — the target a later table's tenant-consistent
     // (tenant_id, device_id) FK would use, the same role kitchen_stations_tenant_id_key plays.
     unique("devices_tenant_id_key").on(t.tenantId, t.id),
-  ],
-);
-
-/**
- * A short-lived, single-use PAIRING CODE (device-identity-1, §2b). An admin mints one; the device
- * redeems it and becomes a `devices` row. Modelled on the WebAuthn challenge (packages/identity
- * passkey.ts): the TTL is computed in code from `created_at` (there is deliberately no `expires_at`
- * column), and redemption is a locking `DELETE … RETURNING` that serialises concurrent redeems and
- * consumes the code.
- *
- * The code carries NO binding columns: the enrolling device's profile (and everything the profile
- * decides — form factor, station/register binding, hardware) is chosen at enrolment, not stamped on
- * the code. The code is only the redeemable secret and its venue scope.
- *
- * That DELETE is why `app_user` holds DELETE here — NOVEL for this repo's tenant tables (the DELETE
- * precedent is 0039/0042) — and no UPDATE: a code is consumed, never edited. The grant
- * (SELECT/INSERT/DELETE) is hand-written in the paired --custom migration.
- *
- * `code_sha256` is the SHA-256 of a high-entropy pairing code (§2c), the deterministic lookup key
- * the redeeming device selects on (it sends only the code, no selector, so a per-row scrypt salt
- * cannot be used for lookup). The `(tenant_id, code_sha256)` index is that redemption path.
- */
-export const devicePairingCodes = pgTable(
-  "device_pairing_codes",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id")
-      .notNull()
-      /* v8 ignore next */
-      .references(() => tenants.id, { onDelete: "restrict" }),
-    // The venue the code (and the device it enrols) belongs to — required scope. Direct location_id →
-    // locations.id FK, onDelete restrict, the `shifts` shape (spec §2b), as on `devices`.
-    locationId: uuid("location_id")
-      .notNull()
-      /* v8 ignore next */
-      .references(() => locations.id, { onDelete: "restrict" }),
-    // SHA-256 of a high-entropy pairing code (§2c) — the indexed lookup key. Not a per-row-salted
-    // scrypt hash: the redeeming device sends only the code, so lookup must be by a deterministic
-    // digest. High entropy + single-use + a short TTL is what keeps that lookup safe.
-    codeSha256: text("code_sha256").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => [
-    // Composite (tenant_id, id) UNIQUE — the composite-FK target, as for the other tenant tables.
-    unique("device_pairing_codes_tenant_id_key").on(t.tenantId, t.id),
-    // The redemption lookup path: DELETE … WHERE tenant_id = $t AND code_sha256 = $h RETURNING.
-    // UNIQUE, not a plain index: `enrolDevice`'s DELETE … RETURNING reads only the FIRST row, so two
-    // rows sharing a (tenant, digest) would let one escape consumption — breaking the single-use
-    // invariant. The unique index makes that unrepresentable and serves the lookup identically; the
-    // generator's ~1-in-2^40 duplicate now fails the INSERT (the manager retries) rather than silently
-    // minting a consumable duplicate. tenant_id leads the key, so uniqueness is per-tenant.
-    uniqueIndex("device_pairing_codes_lookup_idx").on(t.tenantId, t.codeSha256),
   ],
 );

@@ -85,7 +85,6 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("deployment", "local", LOCAL),
   classify("mirror_config", "local", "this node's link to its cloud mirror; not copied"),
   classify("node_membership", "local", "this node's membership record; not copied"),
-  classify("device_pairing_codes", "local", "this node's pending device pairings; not copied"),
   classify(
     "print_agent_pairing_codes",
     "local",

@@ -1,11 +1,11 @@
 // Side-effect only: loads this host's errors.ts augmentation for the codes THIS file throws directly —
-// `device.forbidden_station` and `device.not_found` (the route-owned faults), `device.binding_invalid`
-// (the assign-device-profile route's composite-FK translation for a bad `deviceProfileId`, the SAME
-// code the enrol path raises), `management.request_invalid` (the body/id screens) and `ticket.invalid_transition`
-// (the malformed-item-id screen). The device
-// pairing/auth codes (`device.pairing_invalid`/`device.pairing_expired`/`device.unauthorized`) and
-// `station.not_found` reach here through the value imports of the verbs/guard that throw them
-// (`device.js`, `device-session.js`, `working-order.js`); `device.pairing_rate_limited` reaches here
+// `device.pairing_closed` (the shut-window refusal on the knock), `device.unauthorized` (the join-status
+// cookie screen and the station route's no-station fold), `device.forbidden_station` and
+// `device.not_found` (the route-owned faults), `device.binding_invalid` (the assign-device-profile
+// route's composite-FK translation for a bad `deviceProfileId`), `management.request_invalid` (the
+// body/id screens) and `ticket.invalid_transition` (the malformed-item-id screen). The join-request and
+// device-auth codes reach here through the value imports of the verbs/guard that throw them
+// (`join-requests.js`, `device-session.js`, `working-order.js`); `device.join_rate_limited` reaches here
 // through the value import of `createEnrolRateLimiter` (`enrol-rate-limit.js`, which throws it); and
 // the management-session/authorization codes through `@waitron/identity`; the mgmt siblings
 // (`purchasing-api.ts`) rely on the same transitive reachability. See the note atop `errors.ts`.
@@ -21,15 +21,10 @@ import { kindOfFormFactor } from "@waitron/layouts";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
-import { requireDevice, setDeviceCookie } from "./device-session.js";
-import {
-  bindingFkField,
-  enrolDevice,
-  generatePairingCode,
-  readEnrolCatalogue,
-  verifyPairingCode,
-} from "./device.js";
-import { isDevPairingCode } from "./dev-pairing.js";
+import { readDeviceCookie, requireDevice, setDeviceCookie } from "./device-session.js";
+import { bindingFkField } from "./device.js";
+import { createJoinRequest, readJoinStatus } from "./join-requests.js";
+import type { PairingMode } from "./pairing-mode.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import {
   requireBodyUuid,
@@ -47,10 +42,10 @@ import type { Logger } from "./logger.js";
 /**
  * Everything `mountDeviceApi` needs. `cfg` is the FULL `TillConfig` (the shape `mountTillApi` receives),
  * NOT a `{ tenantId }` subset: the verbs this surface calls are typed `cfg: TillConfig`
- * (`generatePairingCode` reads `cfg.tenantId`/`cfg.locationId` to stamp the code, `listStationQueue`
+ * (`createJoinRequest` reads `cfg.tenantId`/`cfg.locationId` to stamp the request, `listStationQueue`
  * reads `cfg.nodeId` to scope the queue to this node), so the config has to carry those three fields and
  * a narrower object would not typecheck. The routes touch NONE of the fiscal ids on it. `secureCookies`
- * marks the enrolment cookie `Secure` only under TLS — the same value `boot.ts` hands the till and
+ * marks the device cookie `Secure` only under TLS — the same value `boot.ts` hands the till and
  * management mounts (`config.tls !== undefined`), so the device cookie is never `Secure` on a
  * plain-HTTP loopback host where the browser would then never send it back.
  */
@@ -59,7 +54,15 @@ export interface DeviceApiDeps {
   cfg: TillConfig;
   secureCookies: boolean;
   /**
-   * The redemption rate-limiter for `POST /api/device/enrol` (spec §8). Optional and injected ONLY by
+   * The venue-wide window during which a knock is admitted (`pairing-mode.ts`). REQUIRED, not optional:
+   * a mount with no window would admit every knock, and an unauthenticated row-creating route whose
+   * only guard defaults to "open" is exactly the fail-open shape this design replaced the pairing
+   * code's secret with a deliberate admin act to avoid. `boot.ts` builds ONE holder for the venue and
+   * hands it to every surface that has a knock, so "venue-wide" is a property of the wiring.
+   */
+  pairingMode: PairingMode;
+  /**
+   * The rate-limiter for `POST /api/device/join` (spec §8). Optional and injected ONLY by
    * tests, which pass a limiter over a controllable clock to prove the window behaviour without a real
    * sleep; production omits it and `mountDeviceApi` builds the default per-process, GLOBAL enrol limiter
    * (`createEnrolRateLimiter()`, which bakes in `ENROL_RATE_MAX` per `ENROL_RATE_WINDOW_MS`). See
@@ -68,13 +71,10 @@ export interface DeviceApiDeps {
   enrolRateLimiter?: EnrolRateLimiter;
   /**
    * When `true`, mounts the SP-C dev-only per-tab device switcher list (`GET /api/dev/devices`); outside
-   * dev it DOES NOT EXIST (404) — the same fail-closed shape as the `DEV_DEVICE_HEADER` override. It ALSO
-   * makes the always-mounted `POST /api/device/enrol/verify` and `POST /api/device/enrol` accept the
-   * fixed dev pairing code (`dev-pairing.ts`) — a behaviour switch on production routes, not a mount gate:
-   * verify returns the catalogue without a real code row, and enrol mints a fresh real code then runs the
-   * REAL `enrolDevice` under it; outside dev that code is just an invalid one. OPTIONAL so every existing
-   * `DeviceApiDeps`/`mountDeviceApi` construction (boot, tests) compiles unchanged: undefined means the
-   * dev route is not mounted, so the default is production, and the routes gate on `deps.devMode === true`.
+   * dev it DOES NOT EXIST (404) — the same fail-closed shape as the `DEV_DEVICE_HEADER` override.
+   * OPTIONAL so every existing `DeviceApiDeps`/`mountDeviceApi` construction (boot, tests) compiles
+   * unchanged: undefined means the dev route is not mounted, so the default is production, and the
+   * routes gate on `deps.devMode === true`.
    */
   devMode?: boolean;
   /**
@@ -99,26 +99,21 @@ const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
  * SERVER fault reaches `run` as a NON-AppError and becomes an opaque `server.internal` 500. A registered
  * code absent from this table defaults to 400 via `run`.
  *
- *  - The device-auth + enrol codes: `device.unauthorized` (the guard's fold of missing/unknown/revoked,
- *    401), `device.forbidden_station` (a device bumping another station's item, 403), the pairing-code
- *    redemption faults (`device.pairing_invalid`/`device.pairing_expired`, 400),
- *    `device.pairing_rate_limited` (the enrol flood guard, the FIRST 429 in `apps/server` —
- *    `enrol-rate-limit.ts` throws it at the TOP of the enrol handler, before any DB work),
- *    `device.pairing_code_unavailable` (a mint whose digest collided with an outstanding code's, 409 —
- *    `generatePairingCode` maps the `device_pairing_codes_lookup_idx` 23505 rather than surfacing a raw
- *    500), `device.station_required` (ENROLLING a kds-profile device with NO station — a validation
- *    failure `enrolDevice` raises before any write, 400; the code is a bare token now, so this is an
- *    enrol-time fault, not a mint one). Two enrol-time siblings — `device.register_required` (a
- *    handheld-profile device enrolled with no register) and `device.register_name_taken` (a
- *    `till`-profile device whose auto-created register collides on name at the venue, `enrolDevice`
- *    translating the `tills_tenant_location_name_key` 23505, the ONE 409 of the enrol-validation set).
- *    `device.till_required` is not thrown here (it is the SALE-path guard, device-session.ts) but is
- *    mapped to the SAME 400 till-api.ts gives it, so the code has one status everywhere.
- *    `device.binding_invalid` (a request naming a till/printer/profile id that is not this tenant's —
- *    the composite-FK 23503 translated by constraint name, OR the enrol path's explicit register read
- *    finding no such row of this venue, 400), `device.not_found` (the manager-facing revoke of an
- *    absent device id, 404) and `station.not_found` (ENROLLING against an unknown/foreign/retired
- *    station that WAS supplied, 404, via `requireLiveStation`).
+ *  - The device-auth + join codes: `device.unauthorized` (the guard's fold of missing/unknown/revoked,
+ *    401, and the join-status route's own cookie screen), `device.forbidden_station` (a device bumping
+ *    another station's item, 403), `device.pairing_closed` (a knock while the venue's window is shut,
+ *    403 — the ORDINARY state, not an anomaly), `device.join_full` (the tenant already holds the cap of
+ *    pending device requests, 429) and `device.join_rate_limited` (the knock flood guard, 429 —
+ *    `enrol-rate-limit.ts` throws it at the TOP of the knock handler, before any DB work).
+ *  - The accept-time binding faults. They are thrown by `resolveDeviceBinding` on the ACCEPT route,
+ *    which is `join-api.ts`'s — mapped here too so a code answered by both surfaces has one status
+ *    everywhere: `device.station_required`, `device.register_required`, `device.register_name_taken`
+ *    (the ONE 409 of the set), `device.binding_invalid`, `device_profile.not_found` and
+ *    `station.not_found`. `device.join_mismatch` (a wrong number, 400) and `join_request.not_found`
+ *    (404) are mapped for the same reason.
+ *    `device.till_required` is not thrown here either (it is the SALE-path guard, device-session.ts) but
+ *    is mapped to the SAME 400 till-api.ts gives it. `device.not_found` is this surface's own (the
+ *    manager-facing revoke/reassign of an absent device id, 404).
  *  - The management-gate codes, mirroring `purchasing-api.ts`: `management_session.*` (401) and
  *    `person.suspended`/`authorization.not_permitted` (403), thrown by `requireManagementSession` /
  *    `authorizeManager`, plus `management.request_invalid` (400) from the body/id screens.
@@ -129,13 +124,17 @@ const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
 const STATUS: Record<string, ContentfulStatusCode> = {
   "device.unauthorized": 401,
   "device.forbidden_station": 403,
-  "device.pairing_invalid": 400,
-  "device.pairing_expired": 400,
-  "device.pairing_rate_limited": 429,
-  "device.pairing_code_unavailable": 409,
-  // The three enrol-time binding-validation faults `enrolDevice` raises before/at the device write, all
-  // request-shape 400s naming the problem (never a value) — a kds profile enrolled with no station
-  // (`station_required`), a handheld profile with no register (`register_required`), and the
+  // The knock's own three refusals. `pairing_closed` is a 403 rather than a 401: the door is shut, not
+  // the caller unknown, and the device's next step is a person, not a credential.
+  "device.pairing_closed": 403,
+  "device.join_full": 429,
+  "device.join_rate_limited": 429,
+  // A wrong number denies the request (the row is already gone), so this is a plain request fault.
+  "device.join_mismatch": 400,
+  "join_request.not_found": 404,
+  // The three accept-time binding-validation faults `resolveDeviceBinding` raises before/at the device
+  // write, all request-shape 400s naming the problem (never a value) — a kds profile accepted with no
+  // station (`station_required`), a handheld profile with no register (`register_required`), and the
   // binding-FK/explicit-read translation for a named id that is no row of this tenant/venue
   // (`binding_invalid`, which names the FIELD, so it reads as a malformed request, unlike the 404
   // `station.not_found` a supplied-but-unknown station takes). `register_name_taken` is the ONE 409 of
@@ -149,8 +148,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // one status everywhere it is answered.
   "device.till_required": 400,
   "device.binding_invalid": 400,
-  // The enrol path named a profileId that is no profile of this tenant (unknown or just-deleted). Since
-  // `profileId` is a CLIENT choice from the verify catalogue, this is a 404 the operator recovers from by
+  // The accept named a profileId that is no profile of this tenant (unknown or just-deleted). Since
+  // `profileId` is the admin's own choice in the accept dialog, this is a 404 they recover from by
   // re-picking — the device-profile store's own code, reused (the management surface maps it the same).
   // (`device.profile_missing` is retired here — its only thrower, the deleted dev-till mint, is gone.)
   "device_profile.not_found": 404,
@@ -174,37 +173,36 @@ const run = createErrorBoundary(STATUS, "device.failed");
  * convention, attached to the SAME app. Every handler is wrapped in `run` so the whole surface maps
  * errors identically:
  *
- *  1. UNAUTHENTICATED enrolment, a TWO-STEP flow — mirrors the till's `POST /api/session` in carrying no
- *     prior-session guard, running as `app_user` under the tenant. `POST /api/device/enrol/verify`
- *     verifies a code WITHOUT consuming it and returns the venue's catalogue (profiles/stations/registers)
- *     so the device can describe itself; `POST /api/device/enrol` then redeems the SAME code with the
- *     operator's choices, enrols the device and sets the trusted device cookie from the token the verb
- *     mints. The token leaves ONLY in the cookie (never the body). Both are rate-limited FIRST (§8).
+ *  1. UNAUTHENTICATED joining, a KNOCK and a POLL — mirrors the till's `POST /api/session` in carrying
+ *     no prior-session guard, running as `app_user` under the tenant. `POST /api/device/join` asks to
+ *     join: it is refused unless an admin has the venue's pairing window open, and otherwise mints a
+ *     pending request, returns the number the admin must match, and sets the device cookie.
+ *     `GET /api/device/join/status` is the joiner asking whether it is in yet, on that same cookie.
+ *     Approval itself is an ADMIN act on another surface (`join-api.ts`), never anything a device can
+ *     do for itself. The token leaves ONLY in the cookie (never the body); the knock is rate-limited
+ *     FIRST (§8).
  *  2. DEVICE-GUARDED routes (`GET /api/device/me`, `GET /api/device/station`, `POST
  *     /api/device/ticket-items/:id/advance`) — each calls `requireDevice` FIRST (401 otherwise) and
  *     resolves to the CALLER's own device: `me` returns that device's identity, while the station
  *     routes scope every read/bump to the device's OWN bound station (a bump of another station's item
  *     is `device.forbidden_station`, 403).
- *  3. `device.manage`-GATED management routes (`POST /management-api/device-codes`, `GET
- *     /management-api/devices`, `POST /management-api/devices/:id/revoke`, `POST
+ *  3. `device.manage`-GATED management routes (`GET /management-api/devices`, `POST
+ *     /management-api/devices/:id/revoke`, `POST
  *     /management-api/devices/:id/assign-device-profile`, `PATCH /management-api/devices/:id/hardware`)
  *     — each calls `requireManagementSession` (401),
  *     then funnels its DB work through the local `gated` helper, which `authorizeManager`s `device.manage`
  *     (403) before the op runs, in exactly one place.
  *  4. DEV-ONLY route, mounted only under `devMode` (404 otherwise): the `?dev` switcher's device list
- *     (`GET /api/dev/devices`). Under `devMode` the verify/enrol routes of group 1 additionally accept
- *     the fixed dev pairing code (`dev-pairing.ts`): verify returns the catalogue without a real code row,
- *     and enrol mints a fresh real code then runs the REAL `enrolDevice` under it (the production path,
- *     no operator mint required). Outside dev the code is just an invalid one.
+ *     (`GET /api/dev/devices`).
  */
 export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): void {
-  // The GLOBAL, in-memory, per-process redemption rate-limiter for the enrol route (spec §8). Built ONCE
+  // The GLOBAL, in-memory, per-process rate-limiter for the knock route (spec §8). Built ONCE
   // here so it is one bucket for the whole mounted API — in production `mountDeviceApi` is called once at
   // boot, so "per-mount" is "per-process". A test may inject its own limiter (over a controllable clock);
   // production omits it and gets the default `createEnrolRateLimiter({ code })` (`ENROL_RATE_MAX` per
-  // `ENROL_RATE_WINDOW_MS`), throwing this surface's own `device.pairing_rate_limited` (429).
+  // `ENROL_RATE_WINDOW_MS`), throwing this surface's own `device.join_rate_limited` (429).
   const enrolLimiter =
-    deps.enrolRateLimiter ?? createEnrolRateLimiter({ code: "device.pairing_rate_limited" });
+    deps.enrolRateLimiter ?? createEnrolRateLimiter({ code: "device.join_rate_limited" });
 
   // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries
   // `device.manage`, then run `fn`. Every management route funnels its DB work through here so the gate
@@ -228,91 +226,54 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   const ownDeviceById = (id: string) =>
     and(eq(devices.tenantId, deps.cfg.tenantId), eq(devices.id, id));
 
-  // A present-but-optional body UUID: absent OR explicit `null` → `null` (the field does not apply to
-  // this profile's form factor); a present value must be UUID-SHAPED (a non-uuid would `22P02` at the
-  // bare-uuid column) → `management.request_invalid` naming the field. `enrolDevice` decides whether the
-  // field is REQUIRED for the chosen profile (`device.station_required` / `device.register_required`).
-  const optionalUuid = (v: unknown, field: string): string | null =>
-    v === undefined || v === null ? null : requireBodyUuid(v, field);
-
-  // ── Verify a pairing code (UNAUTHENTICATED, does NOT consume it) ───────────────────────────────────
-  // The FIRST step of enrolment: the device sends its code, and — without burning it — gets back the
-  // venue's catalogue (profiles/stations/registers) so the operator can describe this device before the
-  // consuming `POST /api/device/enrol`. Rate-limited FIRST (the enrol convention, §8): a flood is refused
-  // 429 with ZERO DB work, so it cannot starve the sale path (CLAUDE.md §5).
-  app.post("/api/device/enrol/verify", (c) =>
+  // ── Knock (UNAUTHENTICATED) ────────────────────────────────────────────────────────────────────────
+  app.post("/api/device/join", (c) =>
     run(c, log, async () => {
+      // Rate limit, then the window, BOTH before the body is parsed and before any DB work — so a flood
+      // on this unauthenticated route draws no connection from the pool and creates no row (CLAUDE.md §5,
+      // nothing external may block a sale). The window is the cheaper check but runs second, so a flood
+      // is refused as a flood rather than reported as a shut door.
       enrolLimiter.check();
-      const body = await readJsonBody<{ code?: unknown }>(c);
-      const code = requireString(body.code, "code");
-      // In devMode ONLY, the fixed dev code is valid and returns the catalogue WITHOUT a real code row.
-      // Outside devMode the word is hashed like any other and misses — `device.pairing_invalid`.
-      const devDemo = deps.devMode === true && isDevPairingCode(code);
-      const catalogue = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      if (!deps.pairingMode.isOpen()) {
+        deps.pairingMode.noteRefused();
+        throw new AppError("device.pairing_closed", {});
+      }
+      const body = await readJsonBody<{ name?: unknown }>(c);
+      const name = requireString(body.name, "name");
+      const made = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
-        return devDemo ? readEnrolCatalogue(tx, deps.cfg) : verifyPairingCode(tx, deps.cfg, code);
+        return createJoinRequest(tx, deps.cfg, { kind: "device", label: name });
       });
-      return c.json(catalogue, 200);
+      // The cookie's SELECTOR is the join request's id, which accept carries onto the devices row — so
+      // this cookie is set once and never re-issued. Until then it names no device, so `requireDevice`
+      // finds nothing and every other device route answers `device.unauthorized`: the token is inert by
+      // construction rather than by a flag. The token itself leaves the process only here.
+      setDeviceCookie(c, `${made.joinId}.${made.token}`, deps.secureCookies, deps.tenantDomain);
+      return c.json({ joinId: made.joinId, verificationNumber: made.verificationNumber }, 200);
     }),
   );
 
-  // ── Enrol (UNAUTHENTICATED, consumes the code) ─────────────────────────────────────────────────────
-  app.post("/api/device/enrol", (c) =>
+  // ── Am I in yet? (the joiner's own cookie) ─────────────────────────────────────────────────────────
+  // Pending, approved and not_approved are the only three answers, and the last folds denied, lapsed
+  // and never-existed together: the joiner's recovery is to knock again in every case.
+  app.get("/api/device/join/status", (c) =>
     run(c, log, async () => {
-      // Rate-limit FIRST — before the body is parsed and before `enrolDevice`'s locking DELETE — so an
-      // enrol flood is refused (429 `device.pairing_rate_limited`) with ZERO DB work: no connection is
-      // drawn from the pool and no pairing code is touched, which is what keeps a flood on this
-      // unauthenticated route from starving the sale path (CLAUDE.md §5, "nothing may block a sale").
-      // Defense-in-depth over the code's own ~40-bit / single-use / 15-min-TTL controls (enrol-rate-limit.ts).
-      enrolLimiter.check();
-      // Read via `readJsonBody`, so an empty/malformed/`null` body coerces to `{}` (never an opaque
-      // 500) and flows to the string screens → a clean `management.request_invalid` 400 naming the field.
-      const body = await readJsonBody<{
-        code?: unknown;
-        name?: unknown;
-        profileId?: unknown;
-        stationId?: unknown;
-        registerId?: unknown;
-      }>(c);
-      const code = requireString(body.code, "code");
-      const name = requireString(body.name, "name");
-      const profileId = requireBodyUuid(body.profileId, "profileId");
-      const stationId = optionalUuid(body.stationId, "stationId");
-      const registerId = optionalUuid(body.registerId, "registerId");
-      // In devMode ONLY, the fixed dev code runs the REAL enrol path: mint a fresh real code in the SAME
-      // tenant tx, then `enrolDevice` under it with the operator's chosen profile/binding. Outside
-      // devMode the word is hashed like any other and misses in `enrolDevice`'s DELETE →
-      // `device.pairing_invalid`.
-      const devDemo = deps.devMode === true && isDevPairingCode(code);
-      const enrolled = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const raw = readDeviceCookie(c);
+      if (raw === null) throw new AppError("device.unauthorized", {});
+      // A cookie that is not `<selector>.<token>` names nothing — refused HERE rather than passed to the
+      // verb, so a malformed value never reaches a query. `device.unauthorized` carries no params, so
+      // this confirms nothing to an unauthenticated caller.
+      const dot = raw.indexOf(".");
+      if (dot <= 0 || dot === raw.length - 1) throw new AppError("device.unauthorized", {});
+      const joinId = raw.slice(0, dot);
+      const token = raw.slice(dot + 1);
+      // The selector goes into a bare-uuid comparison, where a non-uuid would `22P02` a 500.
+      if (!isUuid(joinId)) throw new AppError("device.unauthorized", {});
+      const status = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
-        const effectiveCode = devDemo ? (await generatePairingCode(tx, deps.cfg)).code : code;
-        return enrolDevice(tx, deps.cfg, {
-          code: effectiveCode,
-          name,
-          profileId,
-          stationId,
-          registerId,
-        });
+        return readJoinStatus(tx, deps.cfg, joinId, token);
       });
-      // The cookie is `${deviceId}.${token}` — a selector plus the scrypt-checked validator. The token
-      // is the ONLY secret and leaves the process ONLY here, in the Set-Cookie header; it is NEVER echoed
-      // in the body. The `name`/`formFactor` the verb returns are non-secret and the enrol-confirmation
-      // view wants them inline (spec §3b: the response is `{ deviceId, name, formFactor }`).
-      setDeviceCookie(
-        c,
-        `${enrolled.deviceId}.${enrolled.token}`,
-        deps.secureCookies,
-        deps.tenantDomain,
-      );
-      return c.json(
-        {
-          deviceId: enrolled.deviceId,
-          name: enrolled.name,
-          formFactor: enrolled.formFactor,
-        },
-        200,
-      );
+      return c.json({ status }, 200);
     }),
   );
 
@@ -405,18 +366,6 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         await advanceTicketItem(tx, deps.cfg, id, to);
       });
       return c.body(null, 204);
-    }),
-  );
-
-  // ── Mint a pairing code (device.manage) ───────────────────────────────────────────────────────────
-  app.post("/management-api/device-codes", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      // The code is a BARE bearer token — no body. The device describes itself (kind, station, till,
-      // profile, hardware) when it redeems the code and enrols (Tasks 7-8); this route only authorises
-      // a manager and mints. `generatePairingCode` returns `{ code }`.
-      const result = await gated(sessionId, (tx) => generatePairingCode(tx, deps.cfg));
-      return c.json(result, 201);
     }),
   );
 
@@ -614,8 +563,8 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // ── Dev-only per-tab device switcher list (SP-C) ─────────────────────────────────────────────────────
   // Mounted ONLY in devMode, so outside dev this route DOES NOT EXIST (404) — the same fail-closed shape
   // as the override header. The chooser lists the venue's active devices so a browser can adopt one via
-  // the dev-override header; the mint-and-adopt and reset routes it used to sit beside are gone (the
-  // enrol flow's `DEMO` code covers dev enrolment). The read runs under `withTenant` + `asAppUser`;
+  // the dev-override header; the mint-and-adopt and reset routes it used to sit beside are gone. A
+  // browser with no device knocks like any other. The read runs under `withTenant` + `asAppUser`;
   // nothing here returns a token or reader credential.
   if (deps.devMode) {
     app.get("/api/dev/devices", (c) =>

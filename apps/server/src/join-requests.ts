@@ -336,8 +336,8 @@ export async function acceptDeviceJoinRequest(
 
 /** Refuse a request. Deleting the row is the whole of it — there is no denied state to carry, because
  * both real tables now hold only approved rows and a joiner's recovery is to knock again. Returns the
- * kind it deleted rather than taking one: on the shared deny route the kind is not known until the row
- * is read, so a `kind` parameter would either be vacuous or force the route to read the row twice. */
+ * kind it deleted rather than taking one: a deny route shared by both surfaces cannot know the kind
+ * until the row is read, so a `kind` parameter would either be vacuous or force a second read. */
 export async function denyJoinRequest(
   tx: Transaction,
   cfg: TillConfig,

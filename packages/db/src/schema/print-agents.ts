@@ -59,7 +59,7 @@ export const printAgents = pgTable(
 /**
  * A short-lived, single-use PAIRING CODE for print-agent enrolment (§2a). An admin mints one (the
  * `printer.manage` generate verb, a later task); the local agent redeems it and becomes a
- * `print_agents` row. Modelled on `device_pairing_codes` / the WebAuthn challenge: the TTL is
+ * `print_agents` row. Modelled on the WebAuthn challenge (packages/identity passkey.ts): the TTL is
  * computed in code from `created_at` (there is deliberately no `expires_at` column), and redemption
  * is a locking `DELETE … RETURNING` that serialises concurrent redeems and consumes the code.
  *
@@ -70,8 +70,8 @@ export const printAgents = pgTable(
  * `code_sha256` is the SHA-256 of a high-entropy pairing code (§2a), the deterministic lookup key the
  * redeeming agent selects on (it sends only the code, no selector, so a per-row scrypt salt cannot be
  * used for lookup). The `(tenant_id, code_sha256)` UNIQUE index is that redemption path — UNIQUE, not
- * plain, for the same single-use reason `device_pairing_codes_lookup_idx` gives. `label` is the name
- * to stamp on the enrolled agent.
+ * plain, because a redeem reading only the FIRST of two rows sharing a digest would escape
+ * consumption. `label` is the name to stamp on the enrolled agent.
  */
 export const printAgentPairingCodes = pgTable(
   "print_agent_pairing_codes",
@@ -99,17 +99,16 @@ export const printAgentPairingCodes = pgTable(
   },
   (t) => [
     // Composite (tenant_id, id) UNIQUE — the composite-FK target, as for the other tenant tables
-    // (device_pairing_codes_tenant_id_key plays the same role).
+    // (devices_tenant_id_key plays the same role).
     unique("print_agent_pairing_codes_tenant_id_key").on(t.tenantId, t.id),
     // The redemption lookup path: DELETE … WHERE tenant_id = $t AND code_sha256 = $h RETURNING.
     // UNIQUE, not a plain index: the redeem reads only the FIRST row, so two rows sharing a
     // (tenant, digest) would let one escape consumption — breaking the single-use invariant. The
     // unique index makes that unrepresentable and serves the lookup identically; a colliding digest
-    // fails the INSERT rather than silently minting a consumable duplicate. Unlike
-    // `device_pairing_codes` (whose ~40-bit human-transcribed Crockford code carries a real ~2^-40
-    // collision the minter maps/retries), `generateAgentCode` (packages/printing) draws a 256-bit code
-    // (`randomBytes(32).base64url`), so this unique index is a defense-in-depth BACKSTOP unreachable in
-    // practice — no retry path hangs off it. tenant_id leads the key, so uniqueness is per-tenant.
+    // fails the INSERT rather than silently minting a consumable duplicate. `generateAgentCode`
+    // (packages/printing) draws a 256-bit code (`randomBytes(32).base64url`), so this unique index is a
+    // defense-in-depth BACKSTOP unreachable in practice — no retry path hangs off it. tenant_id leads
+    // the key, so uniqueness is per-tenant.
     uniqueIndex("print_agent_pairing_codes_lookup_idx").on(t.tenantId, t.codeSha256),
   ],
 );

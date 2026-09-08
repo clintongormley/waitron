@@ -49,12 +49,13 @@ export const PERMISSIONS = [
   // capability, so it lives in the SUPERVISOR set — supervisor, manager (spreads SUPERVISOR) and admin
   // (ALL) hold it, staff never does. Codes/permissions are never renamed once shipped.
   "report.view",
-  // Generating pairing codes and managing enrolled devices (a kitchen/station display binds to one
-  // kitchen_stations row via a single-use pairing code, then authenticates by a device cookie) from
-  // the management dashboard (device-identity-1). A domain-named DEVICE-ADMIN permission, distinct from
-  // staff admin (person.manage); granted to manager + admin, the same roles as the other management
-  // write gates. The device ROUTES themselves are device-cookie-authenticated (requireDevice), NOT
-  // gated on this — this gates only the enrol-code/list/revoke management surface (spec §3a/§3e).
+  // Admitting devices and managing enrolled ones (a screen asks to join, an admin opens the venue's
+  // pairing window and matches the number it shows; the accepted device authenticates by a device
+  // cookie thereafter) from the management dashboard (device-identity-1). A domain-named DEVICE-ADMIN
+  // permission, distinct from staff admin (person.manage); granted to manager + admin, the same roles
+  // as the other management write gates. The device ROUTES themselves are device-cookie-authenticated
+  // (requireDevice), NOT gated on this — this gates only the window/accept/list/revoke management
+  // surface (spec §3a/§3e).
   // Codes/permissions are never renamed once shipped.
   "device.manage",
   // Central management of the printing subsystem (enrol/list/revoke print agents, CRUD printers,
