@@ -7,6 +7,30 @@ import { DEFAULT_TIME_ZONE, locations } from "@waitron/db";
 import type { FloorAnnotator } from "@waitron/module";
 import { bookings } from "./schema/bookings.js";
 
+/** The wall-clock formatter for a zone, built once per distinct zone and reused. Constructing an
+ *  `Intl.DateTimeFormat` is expensive and both the zone validation and the wall-clock read happen on
+ *  every floor poll, so a distinct zone builds its formatter once. Only a SUCCESSFUL construction is
+ *  cached: an invalid zone throws `RangeError` before the `set`, so it is never memoised as valid and
+ *  keeps falling back on every poll. */
+const wallClockFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function wallClockFormatter(timeZone: string): Intl.DateTimeFormat {
+  let fmt = wallClockFormatters.get(timeZone);
+  if (fmt === undefined) {
+    fmt = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
+    wallClockFormatters.set(timeZone, fmt);
+  }
+  return fmt;
+}
+
 /** Resolve a stored IANA time zone, substituting the schema default for an unrecognised value.
  *  `locations.time_zone` is free-text with NO CHECK constraint (`.notNull().default("Europe/Madrid")`),
  *  so a typo or a legacy value can be anything. `Intl.DateTimeFormat({ timeZone })` throws `RangeError`
@@ -14,8 +38,9 @@ import { bookings } from "./schema/bookings.js";
  *  out the operational floor. A zone `Intl` rejects falls back to the column's own default. */
 function safeTimeZone(timeZone: string): string {
   try {
-    // Constructing the formatter is what validates the zone; it throws RangeError for an unknown one.
-    new Intl.DateTimeFormat(undefined, { timeZone });
+    // Building the (memoised) formatter is what validates the zone; it throws RangeError for an unknown
+    // one. A valid zone is constructed here once and `venueWallClock` reuses the cached instance.
+    wallClockFormatter(timeZone);
     return timeZone;
   } catch {
     return DEFAULT_TIME_ZONE;
@@ -27,15 +52,7 @@ function safeTimeZone(timeZone: string): string {
  *  for the imminence check are the venue's local values at read time. Returns the local calendar date
  *  (`YYYY-MM-DD`) and time-of-day (`HH:MM`, 24-hour). */
 function venueWallClock(now: Date, timeZone: string): { date: string; time: string } {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(now);
+  const parts = wallClockFormatter(timeZone).formatToParts(now);
   const get = (type: Intl.DateTimeFormatPartTypes): string =>
     parts.find((p) => p.type === type)!.value;
   return {
