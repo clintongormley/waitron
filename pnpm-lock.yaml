@@ -797,6 +797,9 @@ importers:
       '@waitron/migrations':
         specifier: workspace:*
         version: link:../migrations
+      '@waitron/sync':
+        specifier: workspace:*
+        version: link:../sync
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10
