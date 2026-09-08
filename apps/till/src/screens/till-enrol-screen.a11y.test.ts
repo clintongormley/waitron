@@ -2,22 +2,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./till-enrol-screen.js";
 import type { TillEnrolScreen } from "./till-enrol-screen.js";
-import type { EnrolCatalogue, TillApi } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
 
-function catalogue(): EnrolCatalogue {
+type JoinVerbs = "join" | "joinStatus" | "getLocales";
+function stubApi(overrides: Partial<Record<JoinVerbs, unknown>> = {}): TillApi {
   return {
-    profiles: [
-      { id: "pr-till", name: "Front counter", formFactor: "till" },
-      { id: "pr-kds", name: "Kitchen pass", formFactor: "kds" },
-    ],
-    stations: [{ id: "st1", name: "Pass" }],
-    registers: [{ id: "rg1", name: "Caja 1" }],
-  };
-}
-
-function stubApi(overrides: Partial<Record<"enrolVerify" | "getLocales", unknown>> = {}): TillApi {
-  return {
-    enrolVerify: vi.fn().mockResolvedValue(catalogue()),
+    join: vi.fn().mockResolvedValue({ joinId: "jr-1", verificationNumber: "47" }),
+    joinStatus: vi.fn().mockResolvedValue({ status: "pending" }),
     getLocales: vi.fn().mockResolvedValue({ locales: [] }),
     ...overrides,
   } as unknown as TillApi;
@@ -28,10 +19,26 @@ async function flush(el: TillEnrolScreen): Promise<void> {
   await el.updateComplete;
 }
 
+/** Names the device and knocks, settling the join. */
+async function knock(el: TillEnrolScreen): Promise<void> {
+  const input = el.shadowRoot!.querySelector<HTMLElement & { value: string }>("[data-name]")!;
+  input.value = "Front counter";
+  input.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "Front counter" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
+  await flush(el);
+}
+
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-enrol-screen a11y (%s theme)", (theme) => {
-  it("has no violations on step 1 (labelled key field + Continue)", async () => {
+  it("has no violations on the name phase (labelled field + Ask to join)", async () => {
     const { el, host } = await mountWidget<TillEnrolScreen>(
       "till-enrol-screen",
       { api: stubApi() },
@@ -41,20 +48,27 @@ describe.each(["light", "dark"] as const)("till-enrol-screen a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations on step 2 (name + profile + a binding picker)", async () => {
-    // A preset key jumps straight to the describe step; a kds profile surfaces the station picker so
-    // the sweep covers the labelled name field, the profile select and a binding select together.
+  it("has no violations on the waiting phase (the announced number)", async () => {
     const { el, host } = await mountWidget<TillEnrolScreen>(
       "till-enrol-screen",
-      { api: stubApi(), code: "DEMO" },
+      { api: stubApi() },
       theme,
     );
     await flush(el);
-    const profile = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-profile]")!;
-    profile.value = "pr-kds";
-    profile.dispatchEvent(new Event("change"));
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-station]")).not.toBeNull();
+    await knock(el);
+    expect(el.shadowRoot!.querySelector("[data-number]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations on the refusal banner (danger-on-surface, not muted text)", async () => {
+    const { el, host } = await mountWidget<TillEnrolScreen>(
+      "till-enrol-screen",
+      { api: stubApi({ join: vi.fn().mockRejectedValue({ code: "device.pairing_closed" }) }) },
+      theme,
+    );
+    await flush(el);
+    await knock(el);
+    expect(el.shadowRoot!.querySelector("[data-error]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 });

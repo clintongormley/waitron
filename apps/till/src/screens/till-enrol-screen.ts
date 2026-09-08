@@ -1,48 +1,50 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles, type WtInput } from "@waitron/ui";
-import { selectStyles } from "../select-styles.js";
+import { submitOnEnter, baseStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import "../widgets/language-chooser.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { kindOfFormFactor } from "../layout.js";
-import type { EnrolCatalogue, TillApi } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+
+/** How often the waiting view asks whether an admin has answered. */
+const POLL_MS = 2_000;
 
 /**
- * The device front door's ENROL screen (device-enrolment §3.3) — one screen, two steps, the twin the
- * boot decision renders for a FRESH (unenrolled) browser and the dev chooser embeds pre-advanced:
+ * The device front door's JOIN screen (device-join-and-accept §2) — the twin the boot decision renders
+ * for a FRESH (unenrolled) browser and the dev chooser embeds. Three phases:
  *
- *  - **step 1 — the key.** A single field for the enrolment key → {@link TillApi.enrolVerify}, which
- *    validates the key WITHOUT consuming it and returns the {@link EnrolCatalogue} step 2 binds against.
- *  - **step 2 — describe this device.** Name + a profile picker, then a binding picker DRIVEN by the
- *    chosen profile's form factor: a STATION picker for a `kds` profile, a CASH-REGISTER picker for a
- *    phone/tablet handheld (defaulting to the sole register), or NEITHER for a counter `till` (whose
- *    register the server auto-creates). "Set up device" → {@link TillApi.enrol}.
+ *  - **`name`** — one field, a name, and a button. There is nothing else to ask: the profile and the
+ *    binding are chosen by an admin in the dashboard's accept dialog, so an unapproved device reads no
+ *    catalogue and learns nothing about the venue.
+ *  - **`waiting`** — the two-digit number {@link TillApi.join} returned, announced and shown large,
+ *    while {@link TillApi.joinStatus} is polled on the pending cookie.
+ *  - **`refused`** — the admin said no, the request lapsed, or it never existed (the server folds all
+ *    three into `not_approved`); Try again knocks afresh, which is the recovery in every case.
  *
- * The dev "Set up a new device" path passes a preset {@link code} (`DEMO`): the screen auto-verifies it
- * on connect and jumps straight to step 2, so demo mode never types a key (§2.4). A refused key/enrol
- * shows the ONE generic `device.enrol_failed` banner — the operator's only recovery is a fresh key from
- * a manager either way, so distinguishing invalid from expired buys the device nothing.
+ * A refused KNOCK returns to `name` with a banner, because the name is the one thing the operator can
+ * still change there. `device.pairing_closed` earns its own sentence through `i18n/codes.ts` — the
+ * operator has a real next step (ask a manager to switch pairing on) — while every other code degrades
+ * to that resolver's generic sentence, since a flood or a full venue leaves them only "try again".
  *
- * On a redeemed enrol the screen emits a composed, bubbling `enrolled` carrying `{ deviceId }`. It never
- * routes itself: the boot front door re-boots on that event (the httpOnly device cookie the enrol set is
- * the source of truth), and the dev chooser writes the id to this tab's `sessionStorage` — two different
- * parents, one event. The resolved token never rides the body; only the redemption's success matters here.
- *
- * Human labels throughout: the profile picker shows each profile's `name`, and the binding pickers their
- * option names — no `kds_station`/`till`/`phone-portrait` token is ever rendered (device-enrolment §3.3).
+ * On approval the screen emits a composed, bubbling `enrolled` carrying `{ deviceId }`. It never routes
+ * itself: the boot front door re-boots on that event (the httpOnly cookie the knock set is the source of
+ * truth), and the dev chooser writes the id to this tab's `sessionStorage` — two parents, one event. The
+ * id is the join response's `joinId`: accept carries the request's id onto the `devices` row
+ * (`apps/server/src/join-requests.ts`), so the approved device's id is one the screen already holds. The
+ * detail carries no `name`/`formFactor` because this device is never told its profile; a future parent
+ * that needs one reads `GET /api/device/me` after the re-boot rather than widening this event.
  */
 @customElement("till-enrol-screen")
 export class TillEnrolScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
       }
 
-      /* A narrow reading column so the fields + button stack rather than span a device edge-to-edge. */
+      /* A narrow reading column so the field + button stack rather than span a device edge-to-edge. */
       .screen {
         display: flex;
         max-width: 24rem;
@@ -61,17 +63,17 @@ export class TillEnrolScreen extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
-      .field {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-      }
-
-      label {
+      /* The number is the whole point of the waiting view: an admin reads it off this screen and taps its
+         twin in the dashboard, often at arm's length. */
+      .number {
+        margin: 0;
+        font-size: 4rem;
         font-weight: var(--wt-font-weight-bold);
+        letter-spacing: 0.1em;
+        text-align: center;
       }
 
-      /* The enrol error banner — the danger-on-surface pairing the lock/station screens use (a11y-safe in
+      /* The refusal banner — the danger-on-surface pairing the lock/station screens use (a11y-safe in
          both themes), never behind muted text. */
       .error {
         margin: 0;
@@ -89,137 +91,97 @@ export class TillEnrolScreen extends LitElement {
     new LocaleChangeController(this);
   }
 
-  /** The HTTP face of the till. Threaded from the parent (boot front door or the dev chooser); the enrol
-   * path is unauthenticated — no session yet. */
+  /** The HTTP face of the till. Threaded from the parent (boot front door or the dev chooser); the join
+   * path is unauthenticated — no session, and no device yet. */
   @property({ attribute: false }) api!: TillApi;
 
-  /** A PRESET enrolment key. Non-empty (the dev chooser passes `DEMO`) makes the screen auto-verify on
-   * connect and skip straight to step 2. Empty (the production front door) starts on step 1. */
-  @property() code = "";
-
-  /** Which step is showing. `key` verifies the enrolment key; `describe` binds the device. */
-  @state() private step: "key" | "describe" = "key";
-  /** The catalogue a verified key returned (profiles + station/register option-sources). */
-  @state() private catalogue?: EnrolCatalogue;
-  /** The key that VERIFIED — sent back on the enrol POST (never re-read from the now-hidden field). */
-  @state() private verifiedCode = "";
-  /** The step-1 field's tracked value, purely to gate Continue; the submitted key is read live off the
-   * field at click time (a paste/autofill that changed it after the last `wt-change` still submits). */
-  @state() private enteredKey = "";
-  /** Whether the last verify/enrol attempt was refused — drives the one generic `device.enrol_failed`. */
-  @state() private failed = false;
-  /** Reentry guard: one in-flight verify OR enrol at a time (a double-tap is a no-op). */
-  @state() private busy = false;
-
-  /** Step-2 fields. `profileId` drives which binding picker (station vs register vs neither) shows. */
+  /** `name` asks for a name; `waiting` shows the number and polls; `refused` offers Try again. */
+  @state() private phase: "name" | "waiting" | "refused" = "name";
+  /** The operator's chosen name, retained across a refusal so Try again knocks without retyping it. */
   @state() private name = "";
-  @state() private profileId = "";
-  @state() private stationId = "";
-  @state() private registerId = "";
+  /** The two digits an admin matches in the dashboard. */
+  @state() private verificationNumber = "";
+  /** The accepted device's id — the join response's `joinId`, carried onto the devices row at accept. */
+  @state() private joinId = "";
+  /** The code of the last refused KNOCK, or `""` for no banner. Rendered through `codeMessage`, so an
+   * unmapped code degrades to a generic sentence rather than reaching an operator raw. */
+  @state() private errorCode = "";
+  /** Reentry guard: one in-flight knock at a time (a double-tap is a no-op). */
+  @state() private busy = false;
+  #poll?: ReturnType<typeof setInterval>;
 
-  override connectedCallback(): void {
-    super.connectedCallback();
-    // The dev "Set up a new device" path pre-fills `DEMO`: verify it for the catalogue and jump to step 2
-    // without ever showing the key field (device-enrolment §2.4).
-    if (this.code !== "") void this.#verify(this.code);
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    // A screen torn down mid-wait must not keep a timer alive against a dead component.
+    if (this.#poll !== undefined) clearInterval(this.#poll);
   }
 
-  /** Track the key field's value and clear a stale error as the operator retypes. */
-  #onKey(event: Event): void {
-    this.enteredKey = (event as CustomEvent<{ value: string }>).detail.value;
-    this.failed = false;
-  }
-
-  /** Read the key LIVE off the field and verify it — the Continue handler. */
-  #continue(): void {
-    const key = this.shadowRoot!.querySelector<WtInput>("[data-key]")!.value;
-    void this.#verify(key);
+  /** Track the name field and clear a stale banner as the operator retypes. */
+  #onName(event: Event): void {
+    this.name = (event as CustomEvent<{ value: string }>).detail.value;
+    this.errorCode = "";
   }
 
   /**
-   * Verify a key WITHOUT consuming it. On success stash the catalogue + the verified key, default a sole
-   * register/station picker, and advance to step 2 (only if still connected — a torn-down view never
-   * repaints). A refused/empty key shows the generic banner and stays on step 1.
+   * Knock at `POST /api/device/join`. On success the number goes up and the poll starts; a refusal
+   * returns to the `name` phase with a banner — from `waiting` this cannot happen, but Try again on
+   * `refused` re-enters here, and the name field is the only thing the operator can still change.
    */
-  async #verify(key: string): Promise<void> {
-    if (key === "" || this.busy) return;
+  async #join(): Promise<void> {
+    if (this.name === "" || this.busy) return;
     this.busy = true;
-    this.failed = false;
+    this.errorCode = "";
     try {
-      const catalogue = await this.api.enrolVerify(key);
+      const { joinId, verificationNumber } = await this.api.join(this.name);
       if (!this.isConnected) return;
-      this.catalogue = catalogue;
-      this.verifiedCode = key;
-      // Default a SOLE register/station so a single-location deli never touches the picker (§2.3).
-      this.registerId = catalogue.registers.length === 1 ? catalogue.registers[0]!.id : "";
-      this.stationId = catalogue.stations.length === 1 ? catalogue.stations[0]!.id : "";
-      this.step = "describe";
-    } catch {
-      this.failed = true;
+      this.joinId = joinId;
+      this.verificationNumber = verificationNumber;
+      this.phase = "waiting";
+      this.#poll = setInterval(() => void this.#tick(), POLL_MS);
+    } catch (cause) {
+      if (!this.isConnected) return;
+      this.errorCode = (cause as { code?: string }).code ?? "server.internal";
+      this.phase = "name";
     } finally {
       this.busy = false;
     }
   }
 
-  /** The chosen profile's derived device kind (`kds_station`/`handheld`/`till`), or `undefined` when no
-   * profile is chosen or its form factor is unknown — which picker step 2 shows keys off this. */
-  #chosenKind(): ReturnType<typeof kindOfFormFactor> {
-    const profile = this.catalogue?.profiles.find((p) => p.id === this.profileId);
-    return profile === undefined ? undefined : kindOfFormFactor(profile.formFactor);
-  }
-
-  /** Track a step-2 text field and clear a stale error. */
-  #onName(event: Event): void {
-    this.name = (event as CustomEvent<{ value: string }>).detail.value;
-    this.failed = false;
-  }
-
-  /** Whether the describe form can submit — a name, a profile, and the binding the profile's kind needs. */
-  #canSubmit(): boolean {
-    if (this.name === "" || this.profileId === "" || this.busy) return false;
-    const kind = this.#chosenKind();
-    if (kind === "kds_station") return this.stationId !== "";
-    if (kind === "handheld") return this.registerId !== "";
-    return true; // a `till` (or an unknown kind) needs no binding
-  }
-
-  /**
-   * Enrol the device with the verified key + the description. Builds the ONE binding the profile's kind
-   * uses (station for kds, register for handheld, neither for till). On success — and only if still
-   * connected — emits the composed `enrolled` carrying the new `deviceId`; a refusal shows the banner.
-   */
-  async #enrol(): Promise<void> {
-    if (!this.#canSubmit()) return;
-    const kind = this.#chosenKind();
-    this.busy = true;
-    this.failed = false;
+  /** One poll of the pending cookie. A transient failure keeps waiting: the admin has not answered
+   * either way, and a knock the device abandons on a network blip cannot be resumed. */
+  async #tick(): Promise<void> {
+    let status: string;
     try {
-      const res = await this.api.enrol({
-        code: this.verifiedCode,
-        name: this.name,
-        profileId: this.profileId,
-        ...(kind === "kds_station" ? { stationId: this.stationId } : {}),
-        ...(kind === "handheld" ? { registerId: this.registerId } : {}),
-      });
-      if (!this.isConnected) return;
+      ({ status } = await this.api.joinStatus());
+    } catch {
+      return;
+    }
+    if (!this.isConnected) return;
+    if (status === "approved") {
+      clearInterval(this.#poll);
       this.dispatchEvent(
         new CustomEvent("enrolled", {
-          detail: { deviceId: res.deviceId, name: res.name, formFactor: res.formFactor },
+          detail: { deviceId: this.joinId },
           bubbles: true,
           composed: true,
         }),
       );
-    } catch {
-      this.failed = true;
-    } finally {
-      this.busy = false;
+    } else if (status === "not_approved") {
+      clearInterval(this.#poll);
+      this.phase = "refused";
     }
   }
 
   override render(): TemplateResult {
     return html`
       <section class="screen">
-        ${this.step === "key" ? this.#renderKeyStep() : this.#renderDescribeStep()}
+        ${
+          this.phase === "waiting"
+            ? this.#renderWaiting()
+            : this.phase === "refused"
+              ? this.#renderRefused()
+              : this.#renderName()
+        }
       </section>
       <till-language-chooser
         .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
@@ -227,112 +189,65 @@ export class TillEnrolScreen extends LitElement {
     `;
   }
 
-  #renderError(): TemplateResult | typeof nothing {
-    return this.failed
-      ? html`<p class="error" role="alert">${t("device.enrol_failed")}</p>`
-      : nothing;
-  }
-
-  #renderKeyStep(): TemplateResult {
+  #renderName(): TemplateResult {
     return html`
-      <h1 class="title">${t("device.enrol_key_title")}</h1>
-      <p class="hint">${t("device.enrol_key_hint")}</p>
-      ${this.#renderError()}
+      <h1 class="title">${t("device.join_name_title")}</h1>
+      <p class="hint">${t("device.join_name_hint")}</p>
+      ${
+        this.errorCode === ""
+          ? nothing
+          : html`<p class="error" role="alert" data-error>${codeMessage(this.errorCode)}</p>`
+      }
       <wt-input
         @keydown=${(e: KeyboardEvent) =>
-          submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-continue]"))}
-        data-key
-        .label=${t("device.enrol_key_label")}
-        @wt-change=${(e: Event) => this.#onKey(e)}
-      ></wt-input>
-      <wt-button
-        data-continue
-        variant="primary"
-        ?disabled=${this.enteredKey === "" || this.busy}
-        @click=${() => this.#continue()}
-      >
-        ${t("device.enrol_continue")}
-      </wt-button>
-    `;
-  }
-
-  #renderDescribeStep(): TemplateResult {
-    const catalogue = this.catalogue;
-    if (catalogue === undefined) return html`<p class="hint">…</p>`;
-    const kind = this.#chosenKind();
-    return html`
-      <h1 class="title">${t("device.describe_title")}</h1>
-      ${this.#renderError()}
-      <wt-input
+          submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-submit]"))}
         data-name
-        .label=${t("device.describe_name")}
+        .label=${t("device.join_name_label")}
         .value=${this.name}
         @wt-change=${(e: Event) => {
           e.stopPropagation();
           this.#onName(e);
         }}
       ></wt-input>
-      <div class="field">
-        <label for="enrol-profile">${t("device.describe_profile")}</label>
-        <select
-          id="enrol-profile"
-          data-profile
-          .value=${this.profileId}
-          @change=${(e: Event) => {
-            this.profileId = (e.target as HTMLSelectElement).value;
-            this.failed = false;
-          }}
-        >
-          <option value="">—</option>
-          ${catalogue.profiles.map((p) => html`<option value=${p.id}>${p.name}</option>`)}
-        </select>
-      </div>
-      ${
-        kind === "kds_station"
-          ? this.#renderStationField(catalogue)
-          : kind === "handheld"
-            ? this.#renderRegisterField(catalogue)
-            : nothing
-      }
       <wt-button
         data-submit
         variant="primary"
-        ?disabled=${!this.#canSubmit()}
-        @click=${() => void this.#enrol()}
+        ?disabled=${this.name === "" || this.busy}
+        @click=${() => void this.#join()}
       >
-        ${t("device.describe_submit")}
+        ${t("device.join_submit")}
       </wt-button>
     `;
   }
 
-  #renderStationField(catalogue: EnrolCatalogue): TemplateResult {
-    return html`<div class="field">
-      <label for="enrol-station">${t("device.describe_station")}</label>
-      <select
-        id="enrol-station"
-        data-station
-        .value=${this.stationId}
-        @change=${(e: Event) => (this.stationId = (e.target as HTMLSelectElement).value)}
+  #renderWaiting(): TemplateResult {
+    return html`
+      <h1 class="title">${t("device.join_waiting_title")}</h1>
+      <p class="hint">${t("device.join_waiting_hint")}</p>
+      <p
+        class="number"
+        data-number
+        role="status"
+        aria-label=${t("device.join_number_label").replace("{number}", this.verificationNumber)}
       >
-        <option value="">—</option>
-        ${catalogue.stations.map((s) => html`<option value=${s.id}>${s.name}</option>`)}
-      </select>
-    </div>`;
+        ${this.verificationNumber}
+      </p>
+    `;
   }
 
-  #renderRegisterField(catalogue: EnrolCatalogue): TemplateResult {
-    return html`<div class="field">
-      <label for="enrol-register">${t("device.describe_register")}</label>
-      <select
-        id="enrol-register"
-        data-register
-        .value=${this.registerId}
-        @change=${(e: Event) => (this.registerId = (e.target as HTMLSelectElement).value)}
+  #renderRefused(): TemplateResult {
+    return html`
+      <h1 class="title">${t("device.join_refused_title")}</h1>
+      <p class="hint">${t("device.join_refused_hint")}</p>
+      <wt-button
+        data-retry
+        variant="primary"
+        ?disabled=${this.busy}
+        @click=${() => void this.#join()}
       >
-        <option value="">—</option>
-        ${catalogue.registers.map((r) => html`<option value=${r.id}>${r.name}</option>`)}
-      </select>
-    </div>`;
+        ${t("device.join_retry")}
+      </wt-button>
+    `;
   }
 }
 

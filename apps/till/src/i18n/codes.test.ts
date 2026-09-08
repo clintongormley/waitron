@@ -40,22 +40,23 @@ it("defaults to the module locale when none is passed (shipped default en-GB)", 
   expect(codeMessage("swap.not_found")).toBe("No se ha encontrado ese cambio de turno");
 });
 
-it("resolves the device pairing-code errors to specific, actionable copy (device-identity-1 §5a)", () => {
-  // The enrol view surfaces a rejected `{ code }` through this resolver, so an operator setting up a
-  // display sees why a code was refused (wrong/used vs expired) — never the raw wire code.
-  expect(codeMessage("device.pairing_invalid", "en")).toBe(
-    "That pairing code is not valid — check it and try again",
+it("resolves a shut pairing window to its own actionable copy, in both locales (device-join-and-accept §2)", () => {
+  // The join screen renders a refused knock through this resolver. `pairing_closed` is the one refusal
+  // with a real next step, so it must name the dashboard toggle rather than degrade to the generic.
+  expect(codeMessage("device.pairing_closed", "en")).toBe(
+    "New devices aren't being accepted right now. Ask a manager to switch on “Allow new devices”.",
   );
-  expect(codeMessage("device.pairing_expired", "en")).toBe(
-    "That pairing code has expired — ask for a new one",
-  );
-  expect(codeMessage("device.pairing_invalid", "es")).toBe(
-    "Ese código de emparejamiento no es válido. Revísalo e inténtalo de nuevo",
-  );
-  expect(codeMessage("device.pairing_expired", "es")).toBe(
-    "Ese código de emparejamiento ha caducado. Solicita uno nuevo",
+  expect(codeMessage("device.pairing_closed", "es")).toBe(
+    "Ahora mismo no se aceptan dispositivos nuevos. Pide a un responsable que active «Permitir dispositivos nuevos».",
   );
   expect(codeMessage("device.unauthorized", "en")).toBe(
-    "This display isn't set up — enter a pairing code",
+    "This device isn't set up — ask to join this venue",
   );
+});
+
+it("degrades the other join refusals to the generic sentence, naming nothing about the venue", () => {
+  // Deliberate: a flood and a full venue leave the operator only "try again", and a specific sentence
+  // for either would tell an unapproved device something about the venue's state (design §12).
+  expect(codeMessage("device.join_rate_limited", "en")).toBe("Something went wrong, try again");
+  expect(codeMessage("device.join_full", "en")).toBe("Something went wrong, try again");
 });

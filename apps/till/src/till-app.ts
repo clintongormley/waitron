@@ -21,8 +21,8 @@ import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
 import "./screens/till-station-screen.js";
-// The device front door (device-enrolment §3.1): the two-step enrol screen a fresh browser shows, and the
-// dev-only device chooser. The app's boot decision renders one of these ahead of the lock screen/shell.
+// The device front door (device-enrolment §3.1): the join screen a fresh browser shows, and the dev-only
+// device chooser. The app's boot decision renders one of these ahead of the lock screen/shell.
 import "./screens/till-enrol-screen.js";
 import "./screens/till-device-chooser.js";
 import "./screens/till-expo-screen.js";
@@ -347,9 +347,9 @@ export class TillApp extends LitElement {
    * the shell/lock (and {@link #shellActive} is held false):
    *
    *  - `"chooser"` — dev mode AND this tab has no adopted device: the `<till-device-chooser>` lists the
-   *    venue's devices to adopt, or opens a `DEMO` enrol;
-   *  - `"enrol"` — not enrolled (no device cookie, not a dev-chooser case): the `<till-enrol-screen>` at
-   *    step 1 (the key), for a FRESH production browser to pair itself.
+   *    venue's devices to adopt, or opens the join screen;
+   *  - `"enrol"` — not enrolled (no device cookie, not a dev-chooser case): the `<till-enrol-screen>`, for
+   *    a FRESH production browser to ask to join this venue.
    *
    * An enrolled `kds` boots straight into the kiosk shell and a non-kds enrolled device to the login (lock)
    * screen — both leave this `undefined`. Set by {@link #boot}; the enrol screen's `enrolled` event re-runs
@@ -794,7 +794,7 @@ export class TillApp extends LitElement {
     //  - any other kind (a counter `till`, or an unknown forward-compatible value): stay on the login
     //    screen as a normal operator till.
     // A NOT-enrolled browser 401s (`device.unauthorized`) — the EXPECTED fresh-browser case: show the
-    // ENROL screen at step 1 (§3.1 row 2), NOT `boot.error` (a device 401 is not a boot failure — that is
+    // JOIN screen (§3.1 row 2), NOT `boot.error` (a device 401 is not a boot failure — that is
     // getTill's alone). State-only writes below need no isConnected guard (Lit never paints a detached
     // element); the `getDeviceStation` await takes one.
     try {
@@ -820,9 +820,9 @@ export class TillApp extends LitElement {
       // Route to the enrol front door ONLY on a genuine unauthorized answer — a 401 rejects with
       // `{ code: "device.unauthorized" }` (a fresh browser, a dev tab's stale adopted id, or a KDS whose
       // cookie was revoked mid-session and whose `getDeviceStation` now 401s: all recover through the
-      // unified two-step enrol). Any OTHER failure is TRANSIENT — a 5xx, a network blip, a ServerRouter
+      // unified join screen). Any OTHER failure is TRANSIENT — a 5xx, a network blip, a ServerRouter
       // failover to an origin without the device cookie — and carries no such code; stranding an
-      // otherwise-enrolled, SELLABLE till behind an enrol key it cannot clear without a manager would
+      // otherwise-enrolled, SELLABLE till behind an approval it cannot get without a manager would
       // block sales (CLAUDE.md §5). So fall through to the login screen exactly as the pre-front-door boot
       // did (`screen` is already `lock`; a resolved identity's name/id stay set). NOT `boot.error` either —
       // a device probe failure was never a boot failure (that is getTill's alone).
@@ -1287,15 +1287,16 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * The production front-door enrol screen redeemed an enrolment key: the device cookie is now set, so
-   * re-run {@link #boot}. The boot's identity probe reads the fresh cookie and routes to the right
-   * destination — `kds` prefetches the bound station and boots the kiosk shell; a `handheld` or counter
-   * `till` lands on the login screen. The re-boot (not a bare state flip) is why the enrolled KIND is not
-   * read here: the redeemed cookie, not the event, is the source of truth, so a device picks up its shell
-   * exactly as a cold load of an already-enrolled device would. `#boot` clears {@link frontDoor} itself.
+   * An admin approved this browser's join request: the cookie the knock set now names a real device, so
+   * re-run {@link #boot}. The boot's identity probe reads that cookie and routes to the right destination
+   * — `kds` prefetches the bound station and boots the kiosk shell; a `handheld` or counter `till` lands
+   * on the login screen. The re-boot (not a bare state flip) is why the enrolled KIND is not read here:
+   * the cookie, not the event, is the source of truth, so a device picks up its shell exactly as a cold
+   * load of an already-enrolled device would — which matters more now that the device is never told its
+   * own profile. `#boot` clears {@link frontDoor} itself.
    *
-   * The dev CHOOSER's embedded enrol screen does NOT reach this handler — it stops the `enrolled` event
-   * and writes the new id to the tab's `sessionStorage` + navigates instead (a dev-tab enrol, not a
+   * The dev CHOOSER's embedded join screen does NOT reach this handler — it stops the `enrolled` event
+   * and writes the new id to the tab's `sessionStorage` + navigates instead (a dev-tab join, not a
    * production re-boot).
    */
   async #onEnrolled(): Promise<void> {
@@ -1317,7 +1318,7 @@ export class TillApp extends LitElement {
    * An enrolled DEVICE display's authenticated probe answered 401 (`device.unauthorized`) — its device
    * cookie was revoked or expired mid-session (emitted by `till-station-screen`'s device-mode probe).
    * Re-boot through the unified front door: `#boot`'s identity probe now 401s too, so the front-door
-   * decision routes the unauthorized device to the two-step enrol screen (device-enrolment §3.1) — the
+   * decision routes the unauthorized device to the join screen (device-enrolment §3.1) — the
    * recovery, in place of the station screen's removed bespoke enrol sub-view.
    */
   async #onDeviceUnauthorized(): Promise<void> {
@@ -2445,8 +2446,8 @@ export class TillApp extends LitElement {
         <!-- The device FRONT DOOR (device-enrolment §3.1), shown ahead of the shell/lock so it takes
              precedence over whatever screen the boot left set. The chooser is the dev-only device picker
              (its enrolled event is handled INSIDE the chooser — a dev-tab adopt, not the app's re-boot);
-             the enrol screen is the two-step enrolment a fresh production browser shows, whose enrolled
-             event (wired above) re-boots into the matching shell. -->
+             the enrol screen is the join screen a fresh production browser shows, whose enrolled event
+             (wired above) re-boots into the matching shell. -->
         ${
           this.frontDoor === "chooser"
             ? html`<till-device-chooser

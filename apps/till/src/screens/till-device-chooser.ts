@@ -15,10 +15,11 @@ import type { DevDeviceList, TillApi } from "../api/client.js";
  *    navigates to `/`, so the tab boots as that device (the stored id rides every request as the
  *    `x-waitron-dev-device` header the server trusts in dev mode). That per-tab id is how one browser runs
  *    device X in one tab and device Y in another.
- *  - **Set up a new device** — collapsed by default; expands to the {@link TillEnrolScreen} pre-advanced to
- *    its describe step with the fixed `DEMO` key (dev mode verifies `DEMO` for the catalogue). On a redeemed
- *    enrol the new device id is written to THIS tab's `sessionStorage` (not the browser cookie), so the fresh
- *    device stays this tab's identity.
+ *  - **Set up a new device** — collapsed by default; expands to the {@link TillEnrolScreen}, which knocks
+ *    at `POST /api/device/join` like any other fresh browser. There is no dev shortcut: an admin must have
+ *    pairing mode open and must accept the number, exactly as in a venue. On approval the new device id is
+ *    written to THIS tab's `sessionStorage` (not the browser cookie), so the fresh device stays this tab's
+ *    identity.
  *
  * It is a DEVELOPER TOOL, never a shipped surface: reachable only when the server exposes the dev route
  * (devMode). Its own chrome is DELIBERATELY plain English literals, not `t()` catalogue keys — there is
@@ -124,9 +125,9 @@ export class TillDeviceChooser extends LitElement {
     this.navigate("/");
   }
 
-  /** The embedded enrol screen redeemed a `DEMO` enrol: adopt the fresh device for THIS tab (its id, not
-   * the browser cookie) and boot into it. The `enrolled` event is handled here and NOT re-dispatched — a
-   * dev-tab enrol is a chooser affordance, not the production front-door re-boot. */
+  /** The embedded join screen was approved: adopt the fresh device for THIS tab (its id, not the browser
+   * cookie) and boot into it. The `enrolled` event is handled here and NOT re-dispatched — a dev-tab join
+   * is a chooser affordance, not the production front-door re-boot. */
   #onEnrolled(event: Event): void {
     event.stopPropagation();
     const { deviceId } = (event as CustomEvent<{ deviceId: string }>).detail;
@@ -190,7 +191,6 @@ export class TillDeviceChooser extends LitElement {
         this.settingUp
           ? html`<till-enrol-screen
               .api=${this.api}
-              code="DEMO"
               @enrolled=${(e: Event) => this.#onEnrolled(e)}
             ></till-enrol-screen>`
           : html`<wt-button

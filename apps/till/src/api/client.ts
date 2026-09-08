@@ -690,46 +690,29 @@ export interface StationQueueGroup {
 }
 
 /**
- * `POST /api/device/enrol/verify` success (device-enrolment §2.2) — the catalogue the enrol screen's
- * SECOND step binds against, returned when a live enrolment key verifies (WITHOUT consuming it). Holding
- * a live key is the authorisation to read this. `profiles` are the venue's device profiles (each carrying
- * the `formFactor` that decides which binding picker step 2 shows); `stations` and `registers` are the
- * pickers' option-sources. A LOCAL mirror of the server's verify response (`apps/server/src/device.ts`),
- * NOT imported — the same bundle-decoupling rationale as every other type in this file. `formFactor` is a
- * plain `string` (not the `FormFactor` union): the screen resolves it through `kindOfFormFactor`, which
- * treats an unknown value as "no special picker".
+ * `POST /api/device/join` success (device-join-and-accept §2) — what a knock learns: the pending
+ * REQUEST's id and the two-digit number an admin picks out of three in the dashboard to approve it.
+ * Nothing about the venue rides this response — no profiles, no stations, no registers — because the
+ * profile and the binding are chosen in the dashboard's accept dialog, so an unapproved device learns
+ * nothing. The device TOKEN is absent too: it leaves the server ONLY in the httpOnly `Set-Cookie`.
+ * `joinId` IS the id the device will have once accepted — `acceptDeviceJoinRequest` carries the
+ * request's id onto the `devices` row (`apps/server/src/join-requests.ts`), which is why the join
+ * response alone is enough for the screen to announce its own `deviceId`.
+ * A LOCAL mirror of the server's response, NOT imported — the same bundle-decoupling rationale as
+ * every other type in this file.
  */
-export interface EnrolCatalogue {
-  profiles: { id: string; name: string; formFactor: string }[];
-  stations: { id: string; name: string }[];
-  registers: { id: string; name: string }[];
+export interface DeviceJoinResult {
+  joinId: string;
+  verificationNumber: string;
 }
 
 /**
- * `POST /api/device/enrol` body (device-enrolment §2.2) — the describe-this-device step's submission: the
- * verified `code`, the operator-chosen `name`, the chosen `profileId`, and EXACTLY ONE binding driven by
- * the profile's form factor — `stationId` for a `kds` profile, `registerId` for a phone/tablet handheld,
- * NEITHER for a counter `till` (the server creates its register). The client omits the binding the profile
- * does not use (never sends `""`); the server re-validates the pairing authoritatively.
+ * `GET /api/device/join/status` success (device-join-and-accept §2) — the three answers a waiting
+ * joiner can get. `not_approved` folds denied, lapsed and never-existed together: the joiner's
+ * recovery is to knock again in every one of those cases (`apps/server/src/device-api.ts`).
  */
-export interface DeviceEnrolInput {
-  code: string;
-  name: string;
-  profileId: string;
-  stationId?: string;
-  registerId?: string;
-}
-
-/**
- * `POST /api/device/enrol` success (device-enrolment §2.2) — the three NON-SECRET fields the server echoes
- * after consuming the key and inserting the device: the new device's id, its operator-chosen `name`, and
- * its resolved `formFactor`. The trusted device TOKEN is ABSENT — it leaves the server ONLY in the httpOnly
- * `Set-Cookie` header, never a JSON body. A LOCAL mirror of the server's enrol response, NOT imported.
- */
-export interface DeviceEnrolResult {
-  deviceId: string;
-  name: string;
-  formFactor: string;
+export interface DeviceJoinStatus {
+  status: "pending" | "approved" | "not_approved";
 }
 
 /**
@@ -785,8 +768,8 @@ export interface DeviceStation {
  * server's dev-route shape (`apps/server/src/device-api.ts`), deliberately NOT imported — the same
  * bundle-decoupling rationale as every other type in this file. `kind` stays a plain `string` (not a
  * union): the chooser only surfaces the values the server sends, so a new device kind never breaks it.
- * The mint-and-adopt round trip and the option-source lists it used to carry are GONE — dev enrolment
- * now runs the real enrol flow with the `DEMO` key, so the chooser only reads and labels the list.
+ * The mint-and-adopt round trip and the option-source lists it used to carry are GONE — a dev tab joins
+ * through the real `POST /api/device/join` flow, so the chooser only reads and labels the list.
  */
 export interface DevDevice {
   id: string;
@@ -1421,39 +1404,37 @@ export class TillApi {
     });
   }
 
-  // --- Device mode (device-identity-1 §5a): the enrolled KDS station display + the enrol front door.
+  // --- Device mode (device-identity-1 §5a): the enrolled KDS station display + the join front door.
   // These verbs need NO operator session — the httpOnly device cookie rides `credentials: "include"`
-  // (set by `enrol`'s Set-Cookie) exactly like the session cookie, so `#request`'s path is unchanged. ---
+  // (set by `join`'s Set-Cookie) exactly like the session cookie, so `#request`'s path is unchanged. ---
 
   /**
-   * Verify an enrolment key WITHOUT consuming it (device-enrolment §2.2) → `POST /api/device/enrol/verify`
-   * with `{ code }`. UNAUTHENTICATED (no session, no device cookie yet), behind the enrol limiter. On a
-   * live key the server returns the {@link EnrolCatalogue} the enrol screen's second step needs; a
-   * missing/expired key rejects `{ code: "device.pairing_invalid" }` / `{ code: "device.pairing_expired" }`.
-   * In devMode the fixed reusable `DEMO` key verifies too. The key is sent VERBATIM — the server normalises.
+   * Ask to join this venue (device-join-and-accept §2) → `POST /api/device/join` with `{ name }`.
+   * UNAUTHENTICATED and behind the enrol limiter. The server refuses with `device.pairing_closed`
+   * (403) unless an admin has pairing mode open, and otherwise sets an httpOnly cookie naming a
+   * pending REQUEST — inert until an admin matches the number this returns, because `requireDevice`
+   * finds no device row for that selector. A flood draws `device.join_rate_limited`; a venue already
+   * at its pending cap draws `device.join_full`.
    */
-  enrolVerify(code: string): Promise<EnrolCatalogue> {
-    return this.#request<EnrolCatalogue>("/api/device/enrol/verify", "POST", { code });
+  join(name: string): Promise<DeviceJoinResult> {
+    return this.#request<DeviceJoinResult>("/api/device/join", "POST", { name });
   }
 
   /**
-   * Enrol this browser as a trusted device (device-enrolment §2.2) → `POST /api/device/enrol` with the
-   * verified key plus the device description. UNAUTHENTICATED, behind the enrol limiter. The server
-   * CONSUMES the key, resolves the profile's form factor, binds the chosen station (kds) or register
-   * (handheld — a counter till has its register auto-created), inserts the device, and returns the token
-   * ONLY in the httpOnly device cookie (never the body) — so this resolves the three NON-SECRET
-   * {@link DeviceEnrolResult} fields the confirmation view shows. In devMode the `DEMO` key runs the real
-   * insert. A consumed/expired key or an invalid binding rejects with its domain `{ code }`.
+   * Am I in yet? (device-join-and-accept §2) → `GET /api/device/join/status`, on the pending cookie the
+   * knock set. No new cookie follows an approval: accept carries the request's id onto the devices row,
+   * so the SAME cookie that named a request now names the device. A missing/malformed cookie rejects
+   * `{ code: "device.unauthorized" }` (401).
    */
-  enrol(input: DeviceEnrolInput): Promise<DeviceEnrolResult> {
-    return this.#request<DeviceEnrolResult>("/api/device/enrol", "POST", input);
+  joinStatus(): Promise<DeviceJoinStatus> {
+    return this.#request<DeviceJoinStatus>("/api/device/join/status", "GET");
   }
 
   /**
    * The enrolled display's OWN bound station + queue (device-identity-1 §5a) → `GET /api/device/station`.
    * The device cookie names the station server-side (fixed at enrolment), so there is no id to pass. A
    * missing/rejected/revoked cookie rejects `{ code: "device.unauthorized" }` (401) — the signal the
-   * station screen reads to show its enrol view instead of the queue.
+   * station screen reads to re-boot through the join front door instead of rendering a queue.
    */
   getDeviceStation(): Promise<DeviceStation> {
     return this.#request<DeviceStation>("/api/device/station", "GET");
