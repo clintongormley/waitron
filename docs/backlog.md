@@ -943,13 +943,24 @@ mostly a UX wrapper over built paths; modes 3–4 carry the real new work.
   unprovisioned box.
 - **The per-device "is the CA trusted?" check is deferred to a browser-behaviour spike** — spec §17/§18's
   "untrusted-CA origins block SW/PWA/WebAuthn until trusted" is decisive and unverified; the trust
-  page instructs + offers the download/QR but does not assert trust state.
+  page instructs + offers the download/QR but does not assert trust state. The same spike should
+  check that Chrome and Safari honour a NAME-CONSTRAINED root, since waiters will install the box's
+  CA on their own phones
+  ([2026-09-08-handheld-app-store-and-kiosk-findings.md](superpowers/specs/2026-09-08-handheld-app-store-and-kiosk-findings.md) §3).
 - **The box image carries the replication cluster settings and the WireGuard link** (Track A step 5):
   `wal_level=logical`, `track_commit_timestamp=on`, `max_slot_wal_keep_size`, the `waitron_repl`
   bootstrap, `pg_hba` admitting it only from the peer's WireGuard address.
 
 **Parked beneath the two tracks (distribution / failover):**
 
+- **Handheld: kiosk mode is optional, never required; most waiters use their own phones** (owner,
+  2026-09-08). Baseline = installed home-screen web app + the till's staff PIN. The till ships **no
+  web manifest yet** (Chrome offers only a tab shortcut without one), so the PWA-install step of the
+  onboarding flow needs a manifest + HTTPS before it works. Later options, none built: Chromium
+  `--kiosk` in the box image (the node as a counter till), Fully Kiosk resale for dedicated tablets
+  (check reseller terms), Android Management API enrolment as a Waitron Cloud feature. No app-store
+  commission applies to a POS app taking payment for physical goods. Survey + decisions:
+  [2026-09-08-handheld-app-store-and-kiosk-findings.md](superpowers/specs/2026-09-08-handheld-app-store-and-kiosk-findings.md).
 - **Cloud trial on-ramp** — same-origin PWA pointed at a cloud instance; preproduction, shared demo
   tenant. Gated on Waitron Cloud (a per-tenant instance fleet plus the control plane, Track C item 4).
 - **Identity on a standby:** `persons` + `webauthn_credentials` are `state`, so a standby can
