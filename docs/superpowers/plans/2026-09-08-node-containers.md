@@ -4,8 +4,8 @@
 
 **Goal:** Package a Waitron node as two containers (app + Postgres) with named volumes, so a blank
 Linux box goes from power-on to a browser-driven setup wizard to a selling venue with nobody typing
-anything on the box — and so a box whose server will not boot degrades to safe mode and then to a
-recovery page instead of bricking.
+anything on the box — and so a box whose server will not boot serves a recovery page instead of
+bricking silently.
 
 **Architecture:** A new in-image entrypoint (`node-entry.ts`) becomes the container's command. It
 waits for Postgres, ensures the instance shape (database + roles + replication bootstrap, never a
@@ -61,9 +61,10 @@ Actions + GHCR.
 | `recovery-surface.ts` | the minimal HTTPS page served when the server will not boot |
 | `node-entry.ts` | the container entrypoint: wires the five above in order |
 
-**Modified:** `bin.ts` (use `run-server.ts`), `config.ts` (`WAITRON_BOX_ADDRESSES`, safe mode),
-`box-reach.ts` (own the one IPv4 reader), `box-secrets.ts` (consume it), `boot.ts` (safe-mode
-overlay + pass addresses), `apps/server/package.json` (bundle `node-entry`),
+**Modified:** `bin.ts` (use `run-server.ts`), `config.ts` (`WAITRON_BOX_ADDRESSES`),
+`box-reach.ts` (own the one IPv4 reader), `box-secrets.ts` (consume it), `discovery-api.ts` +
+`boot.ts` (thread the addresses through five call sites), `apps/server/package.json` (bundle
+`node-entry`),
 `scripts/changed-scope.mjs` (`deploy/**` is code), `.github/workflows/ci.yml` (the `image` job),
 `docs/backlog.md`.
 
@@ -82,7 +83,7 @@ overlay + pass addresses), `apps/server/package.json` (bundle `node-entry`),
 - Consumes: `startServer` (`boot.ts`), `createLogger` (`logger.ts`), `codeOf` (`@waitron/server-kit`).
 - Produces: `installShutdownHandlers(server: { close(): Promise<void> }, deps?: ShutdownDeps): void`
   where `ShutdownDeps = { on: (sig: NodeJS.Signals, fn: () => void) => void; write: (line: string, done: () => void) => void; exit: (code: number) => void; now: () => Date }`.
-  Task 8 calls it.
+  Task 7 calls it.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -269,12 +270,21 @@ describe("parseBoxAddresses", () => {
     expect(parseBoxAddresses(" 192.168.1.10 , 10.0.0.4 ")).toEqual(["192.168.1.10", "10.0.0.4"]);
   });
 
+  // AppError's message is the CODE alone (`super(code)` — packages/shared/src/errors.ts), so a
+  // regex on the message can never see `reason`. Assert the structured fields instead.
   it("refuses a non-IPv4 entry", () => {
-    expect(() => parseBoxAddresses("192.168.1.10,nope")).toThrow(/box_addresses_invalid/);
+    expect(() => parseBoxAddresses("192.168.1.10,nope")).toThrow(
+      expect.objectContaining({
+        code: "server.config_invalid",
+        params: expect.objectContaining({ reason: "box_addresses_invalid" }),
+      }),
+    );
   });
 
   it("refuses loopback — it would advertise an address no device can reach", () => {
-    expect(() => parseBoxAddresses("127.0.0.1")).toThrow(/box_addresses_invalid/);
+    expect(() => parseBoxAddresses("127.0.0.1")).toThrow(
+      expect.objectContaining({ code: "server.config_invalid" }),
+    );
   });
 });
 ```
@@ -282,17 +292,24 @@ describe("parseBoxAddresses", () => {
 ```ts
 // apps/server/src/config.test.ts — append to the existing describe
 it("carries WAITRON_BOX_ADDRESSES through to config", () => {
-  const cfg = loadTestConfig({ WAITRON_BOX_ADDRESSES: "192.168.1.10" });
+  const cfg = loadConfig(
+    { ...MIN_ENV, WAITRON_BOX_ADDRESSES: "192.168.1.10" },
+    ROOT,
+    MEDIA_ROOT,
+    STATE_ROOT,
+  );
   expect(cfg.boxAddresses).toEqual(["192.168.1.10"]);
 });
 
 it("leaves boxAddresses undefined when the variable is unset", () => {
-  expect(loadTestConfig({}).boxAddresses).toBeUndefined();
+  expect(loadConfig(MIN_ENV, ROOT, MEDIA_ROOT, STATE_ROOT).boxAddresses).toBeUndefined();
 });
 ```
 
-(`loadTestConfig` is this file's existing helper for building a minimal valid env — reuse it
-exactly as the neighbouring cases do; do not invent a second one.)
+**Read `config.test.ts` before writing these.** Its actual shape is a four-positional-argument
+`loadConfig(env, ROOT, MEDIA_ROOT, STATE_ROOT)` over a `MIN_ENV` constant that already carries
+`DATABASE_URL` and the five `WAITRON_TILL_*` ids. There is no single-argument helper — match the
+neighbouring cases exactly and do not add one.
 
 - [ ] **Step 2: Run and watch them fail**
 
@@ -343,26 +360,39 @@ behaviour change retires its receipts (CLAUDE.md §1).
 In `config.ts`, beside the other optional reads: `boxAddresses: parseBoxAddresses(env.WAITRON_BOX_ADDRESSES)`,
 with the field declared on the config interface as `readonly boxAddresses?: string[]`.
 
-In `boot.ts`, at each of the three call sites, replace the bare reader with the resolved list:
+In `boot.ts`, thread the resolved list into FIVE call sites — read them first, because they are
+three different consumers and the mDNS one appears three times:
 
 ```ts
 const boxAddresses = () => config.boxAddresses ?? listBoxIpv4();
-// ensureBoxSecrets({ ..., listIpv4: boxAddresses })
-// buildReachInfo({ ..., listIpv4: boxAddresses })
-// startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: boxAddresses, log })
 ```
+
+| consumer | where | how |
+| --- | --- | --- |
+| `ensureBoxSecrets` | `boot.ts` (setup branch, ~`:687`) | add `listIpv4: boxAddresses` — the parameter already exists (`box-secrets.ts`), the call simply does not pass it today |
+| `mountDiscovery` → `buildReachInfo` | `boot.ts` (~`:675`) builds the deps; the call is in `discovery-api.ts` (~`:65`) | thread `listIpv4` through `mountDiscovery`'s deps. **`buildReachInfo` is NOT called from `boot.ts`** — do not look for it there |
+| `startMdnsResponder` | `boot.ts` `:831`, `:950`, `:2018` | `getAddresses: boxAddresses` at **all three**; patching one leaves two advertising the container's address |
+
+Verify the count before you start: `grep -n 'startMdnsResponder\|ensureBoxSecrets\|mountDiscovery' apps/server/src/boot.ts`.
 
 - [ ] **Step 4: Run the tests**
 
 Run: `pnpm --filter @waitron/server test:coverage`
 Expected: PASS.
 
-- [ ] **Step 5: Prove the override actually reaches the certificate**
+- [ ] **Step 5: Prove the override reaches the certificate — at the level that can actually see it**
 
-Run: `pnpm --filter @waitron/server exec vitest run src/box-secrets.test.ts`
-Then delete the `listIpv4` argument from the `ensureBoxSecrets` call in `boot.ts` and re-run the
-box-secrets suite. Expected: a SAN assertion fails. Restore it. Record the deletion-proof in the
-commit message — a guard nobody has failed on purpose is not a proven guard.
+`box-secrets.test.ts` imports `ensureBoxSecrets` directly and injects its own `listIpv4`; it never
+calls `startServer`, so deleting the argument at `boot.ts`'s call site leaves that suite GREEN. A
+deletion-proof whose control was never run is exactly the false receipt CLAUDE.md §1 is about.
+
+The proof has to observe the wiring, so add it to `boot.test.ts` (which boots against a real
+container): boot with `WAITRON_BOX_ADDRESSES=203.0.113.7`, read the leaf back out of the state dir
+and assert `203.0.113.7` is among its SANs and that no interface address is.
+
+Run: `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server exec vitest run src/boot.test.ts`
+Then delete `listIpv4: boxAddresses` from the `ensureBoxSecrets` call and re-run.
+Expected: the new SAN assertion fails. Restore it and record BOTH readings in the commit.
 
 - [ ] **Step 6: Commit**
 
@@ -395,7 +425,7 @@ ensureBoxSecrets call fails a SAN assertion."
 **Interfaces:**
 - Produces:
   ```ts
-  export type RecoveryLevel = "normal" | "safe-mode" | "recovery";
+  export type RecoveryLevel = "normal" | "recovery";
   export interface RecoveryState {
     failures: number;
     level: RecoveryLevel;
@@ -410,7 +440,8 @@ ensureBoxSecrets call fails a SAN assertion."
   ```
   Tasks 7 and 8 consume all of them.
 
-Thresholds (spec §9.2): 3 consecutive failures → `safe-mode`; 6 → `recovery`.
+Threshold (spec §9.2): 3 consecutive failures → `recovery`. One degraded level only — §9.1 records
+why a degraded-but-trading mode cannot be built on the tiers that exist.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -429,12 +460,10 @@ import {
 } from "./recovery-state.js";
 
 describe("levelFor", () => {
-  it("escalates normal → safe-mode → recovery at 3 and 6", () => {
+  it("escalates normal → recovery at 3", () => {
     expect(levelFor(0)).toBe("normal");
     expect(levelFor(2)).toBe("normal");
-    expect(levelFor(3)).toBe("safe-mode");
-    expect(levelFor(5)).toBe("safe-mode");
-    expect(levelFor(6)).toBe("recovery");
+    expect(levelFor(3)).toBe("recovery");
     expect(levelFor(99)).toBe("recovery");
   });
 });
@@ -449,12 +478,12 @@ describe("afterFailure", () => {
     expect(next.lastFailureAt).toBe(at.toISOString());
   });
 
-  it("reaches safe-mode on the third consecutive failure", () => {
+  it("reaches recovery on the third consecutive failure", () => {
     const at = new Date("2026-09-08T10:00:00Z");
     let s = FRESH;
     for (let i = 0; i < 3; i += 1) s = afterFailure(s, "boom", at);
     expect(s.failures).toBe(3);
-    expect(s.level).toBe("safe-mode");
+    expect(s.level).toBe("recovery");
   });
 });
 
@@ -499,10 +528,10 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { writeFileAtomic } from "./fs-atomic.js";
 
-/** Where a box sits on the escalation, and therefore whether it can still SELL: `safe-mode` runs
- *  the server with the toggleable modules off (core + fiscal still trade); `recovery` runs no
- *  server at all. */
-export type RecoveryLevel = "normal" | "safe-mode" | "recovery";
+/** Where a box sits on the escalation, and therefore whether it can still SELL. Only two levels:
+ *  a degraded-but-trading mode cannot be built on the tiers that exist (spec §9.1) and belongs to
+ *  the recovery spec. */
+export type RecoveryLevel = "normal" | "recovery";
 
 export interface RecoveryState {
   failures: number;
@@ -518,13 +547,10 @@ export const FRESH: RecoveryState = {
   lastFailureAt: null,
 };
 
-const SAFE_MODE_AT = 3;
-const RECOVERY_AT = 6;
+const RECOVERY_AT = 3;
 
 export function levelFor(failures: number): RecoveryLevel {
-  if (failures >= RECOVERY_AT) return "recovery";
-  if (failures >= SAFE_MODE_AT) return "safe-mode";
-  return "normal";
+  return failures >= RECOVERY_AT ? "recovery" : "normal";
 }
 
 export function afterFailure(
@@ -587,11 +613,11 @@ Expected: PASS.
 git add apps/server/src/recovery-state.ts apps/server/src/recovery-state.test.ts
 git commit -s -m "feat(server): recovery escalation state in the state volume
 
-Three consecutive failed boots reach safe mode, six reach recovery mode.
-The level is always derived from the count on read rather than trusted from
-the file, so a hand-edited level cannot pin a box into recovery; an absent
-or corrupt file is FRESH rather than a throw, since this is the file
-consulted on the path that exists to recover a broken box."
+Three consecutive failed boots reach recovery mode. The level is always
+derived from the count on read rather than trusted from the file, so a
+hand-edited level cannot pin a box into recovery; an absent or corrupt file
+is FRESH rather than a throw, since this is the file consulted on the path
+that exists to recover a broken box."
 ```
 
 ---
@@ -621,13 +647,24 @@ consulted on the path that exists to recover a broken box."
     log: Logger;
   }): Promise<InstanceUrls>;
   ```
-  Task 8 calls it.
+  Task 7 calls it.
 
-**The two rules this task exists to honour** (spec §5, and a Critical if broken):
+**The three rules this task exists to honour** (spec §5, each a Critical if broken):
 
-1. **Apply only `create-database`, `create-role` and `grant-membership`.** Never `migrate`
-   (`boot.ts` already migrates unconditionally before the mode branch), never `stamp`.
-2. **Pass the environment READ FROM the database's own stamp**, or `preproduction` when there is
+1. **Never apply `stamp`.** `stampDeployment` is permanent and one-way, and the environment is the
+   operator's choice in the wizard. A default stamp here leaves a box that can never be provisioned
+   as production.
+2. **Apply `migrate` only when the cluster has no `app_user` role.** Both extremes are broken.
+   Filtering it always fails a VIRGIN box on every boot: `app_user` is created by the core migration
+   (`packages/db/drizzle/0001_db_baseline_sql.sql`), and `planInstance` emits `migrate` BEFORE the
+   `grant-membership waitron_migrator → app_user` and `create-role waitron_app … IN ROLE app_user`
+   that need it, so they fail `role "app_user" does not exist`. Applying it always is also wrong:
+   `applyInstance`'s migrate runs `manifestSets()` — the FULL manifest — so it would migrate modules
+   the operator disabled, which `boot.ts`'s trading branch deliberately does not. Gating on
+   `app_user` gives a virgin cluster one full migration here (identical to the `setup-migrates-all`
+   boot that follows, and there is no `modules.json` yet) and leaves every later start's migrations
+   to `boot.ts`.
+3. **Pass the environment READ FROM the database's own stamp**, or `preproduction` when there is
    none. `planInstance` throws `deployment.already_stamped` *before emitting any action* when the
    stamp disagrees, so a guessed value bricks every boot of a production box, not just the first.
 
@@ -679,6 +716,23 @@ describe("ensureInstance", () => {
         sql`select count(*)::int as n from pg_roles where rolname = 'waitron_repl' and rolreplication`,
       );
       expect(repl.rows[0]?.n).toBe(1);
+    } finally {
+      await admin.close();
+    }
+    // Roles are CLUSTER-global, so the pg_roles count above passes even if the bootstrap ran
+    // against the WRONG database — both answers look alike (CLAUDE.md §1). The schema-local half is
+    // what distinguishes them, so assert it IN THE TARGET database: a default-privileges entry for
+    // the migrator granting SELECT to waitron_repl.
+    const target = await createPostgresDb(urls.migrationsDatabaseUrl);
+    try {
+      const acl = await target.execute<{ n: number }>(
+        sql`select count(*)::int as n
+              from pg_default_acl d
+              join pg_roles owner on owner.oid = d.defaclrole
+             where owner.rolname = 'waitron_migrator'
+               and array_to_string(d.defaclacl, ',') like '%waitron_repl%'`,
+      );
+      expect(acl.rows[0]?.n).toBe(1);
     } finally {
       await admin.close();
     }
@@ -769,14 +823,20 @@ export interface InstanceUrls {
  * permanent and one-way, so stamping a default here would leave a box that can never be
  * provisioned as production.
  */
-const OWNED: ReadonlySet<InstanceAction["kind"]> = new Set(["create-database", "create-role", "grant-membership"]);
+const OWNED: ReadonlySet<InstanceAction["kind"]> = new Set([
+  "create-database",
+  "create-role",
+  "grant-membership",
+]);
 
 /** Compose `<base>` with a different user, password and database — the two login URLs are the
  *  bootstrap URL's host/port with the generated credentials substituted. */
 function urlFor(bootstrapUrl: string, user: string, password: string, database: string): string {
   const url = new URL(bootstrapUrl);
-  url.username = encodeURIComponent(user);
-  url.password = encodeURIComponent(password);
+  // Assign RAW: the URL setters percent-encode already, so encoding here would double-encode and
+  // `passwordFrom` would read a still-encoded password back and re-encode it.
+  url.username = user;
+  url.password = password;
   url.pathname = `/${database}`;
   return url.toString();
 }
@@ -804,15 +864,34 @@ export async function ensureInstance(opts: {
 
   const admin = await createPostgresDb(opts.bootstrapUrl);
   try {
-    const state = await withDatabase(opts.bootstrapUrl, opts.database, async (target) =>
-      readInstanceState(admin, opts.database, target),
+    // TWO-PHASE read, exactly as `cli.ts`'s `withState` does it: `readInstanceState`'s `target` is a
+    // connection to the target database, and on a first provision there is none to open.
+    // `withDatabase(uri, database)` returns a connection STRING (it is not a scope function), and
+    // the target is reached AS THE MIGRATOR — without `withRole` the later `create-role` runs as the
+    // admin, which is not what `applyInstance` documents it needs.
+    const targetUri = withRole(
+      withDatabase(opts.bootstrapUrl, opts.database),
+      INSTANCE_MIGRATOR_ROLE,
     );
+    const probe = await readInstanceState(admin, opts.database, null);
+    let state = probe;
+    if (probe.databaseExists) {
+      const target = await createPostgresDb(targetUri);
+      try {
+        state = await readInstanceState(admin, opts.database, target);
+      } finally {
+        await target.close();
+      }
+    }
 
     // Read from the database, never guessed: planInstance REFUSES up front when the existing stamp
     // disagrees with the requested environment, so a wrong value here fails every future boot.
     const environment = state.inside?.stamp ?? "preproduction";
-    const actions = planInstance(state, { database: opts.database, environment }).filter((action) =>
-      OWNED.has(action.kind),
+    // `migrate` survives the filter only on a cluster with no `app_user` — see rule 2 above.
+    const appUserExists = await roleExists(admin, "app_user");
+    const actions = planInstance(state, { database: opts.database, environment }).filter(
+      (action) =>
+        OWNED.has(action.kind) || (action.kind === "migrate" && !appUserExists),
     );
 
     if (actions.length > 0) {
@@ -838,7 +917,13 @@ export async function ensureInstance(opts: {
       created.get("waitron_migrator") ?? passwordFrom(saved.WAITRON_MIGRATIONS_DATABASE_URL);
     const replicationPassword = saved.WAITRON_REPLICATION_PASSWORD ?? generatePassword();
 
-    await ensureReplicationRole(admin, replicationPassword, opts.log);
+    // AGAINST THE TARGET DATABASE, never the admin's `/postgres`: two of
+    // `replicationBootstrapStatements`' statements are schema-local (`grant select on all tables in
+    // schema public`, `alter default privileges … in schema public`), so run on the wrong database
+    // they silently grant nothing to Waitron's tables. Both existing callers
+    // (`packages/sync/src/testing/replication-node.ts`, `apps/server/scripts/dev-setup.ts`) connect
+    // to the target for exactly this reason.
+    await ensureReplicationRole(admin, targetUri, replicationPassword, opts.log);
 
     const urls: InstanceUrls = {
       databaseUrl: urlFor(opts.bootstrapUrl, "waitron_app", appPassword, opts.database),
@@ -866,26 +951,38 @@ export async function ensureInstance(opts: {
 }
 ```
 
-Implement the three helpers the above names — `openTarget` (a `TargetConnection` over the target
-database, matching how `cli.ts` builds one), `passwordFrom` (pull the password out of a saved URL,
-throwing `server.config_invalid` with `reason: "instance_password_unrecoverable"` when the role
-exists but no saved URL does), and `ensureReplicationRole` (run
-`replicationBootstrapStatements(password)` only when `pg_roles` has no `REPLICATION_ROLE`, each
-statement `sql.raw` and autocommit; never log the statement — it carries the password, the same
-rule `CREATE ROLE` follows).
+Implement the four helpers the above names, reading `cli.ts`'s `withState` first as the reference:
+
+- `openTarget()` — the `TargetConnection` `applyInstance` needs, built over `targetUri` (the
+  `withRole(withDatabase(...))` string above), matching `cli.ts`.
+- `roleExists(admin, name)` — `select 1 from pg_roles where rolname = $1`, parameterised.
+- `passwordFrom(savedUrl)` — `new URL(saved).password`, throwing `server.config_invalid` with
+  `reason: "instance_password_unrecoverable"` when the role exists but no saved URL does.
+- `ensureReplicationRole(admin, targetUri, password, log)` — when `pg_roles` has no
+  `REPLICATION_ROLE`, open a connection to `targetUri` and run `replicationBootstrapStatements(password)`
+  there, each `sql.raw` and autocommit. **Never log the statement or the password** — it carries the
+  credential, the same rule `CREATE ROLE` follows (spec's `sqlStateOf` convention).
 
 - [ ] **Step 4: Run the tests**
 
 Run: `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server exec vitest run src/instance-bootstrap.pg.test.ts`
 Expected: PASS, all five cases.
 
-- [ ] **Step 5: Prove the stamp filter by deletion**
+- [ ] **Step 5: Prove BOTH gates by deletion — each in the direction that fails**
 
-Remove `"stamp"` from the filter so the entrypoint would apply it, add a test that pre-stamps the
-database `production` and then calls `ensureInstance`, and confirm it throws
-`deployment.already_stamped`. Expected: it does. Restore the filter and confirm the same test now
-passes. Record both readings in the commit message — this is the failure the filter exists to
-prevent, and a filter nobody has broken on purpose is not a proven filter.
+*The stamp filter.* Add a test that pre-stamps the database `production` (migrate it first, then
+`stampDeployment`), then calls `ensureInstance`. With the filter in place it must succeed and leave
+the stamp `production`. Now let `"stamp"` through the filter and re-run: expect
+`deployment.already_stamped`. Restore.
+
+*The migrate gate.* On a genuinely blank cluster (a fresh container, no `app_user`), make the filter
+drop `migrate` unconditionally and run the first test. Expected: it fails with
+`role "app_user" does not exist` — that is the blank-box brick this gate exists to prevent. Restore
+the gate and confirm it passes. Then, on an already-migrated cluster, assert the plan the entrypoint
+applies contains NO `migrate` action, so a disabled module's migrations are never applied behind
+`boot.ts`'s filter.
+
+Record all four readings in the commit. A gate nobody has broken on purpose is not a proven gate.
 
 - [ ] **Step 6: Run the provisioning package's gate too**
 
@@ -923,7 +1020,7 @@ restored the same case passes."
 
 **Interfaces:**
 - Produces: `loadBoxEnv(base: NodeJS.ProcessEnv, stateDir: string): Promise<NodeJS.ProcessEnv>`.
-  Task 8 calls it.
+  Task 7 calls it.
 
 Order: `instance.env`, then `secrets.env`, then `trading.env` — a later FILE overrides an earlier
 one, and anything already in `base` (the real environment) beats all three. That precedence is
@@ -1049,123 +1146,7 @@ the precedence case."
 
 ---
 
-### Task 6: Safe mode — a boot-scoped module overlay
-
-**Files:**
-- Modify: `apps/server/src/config.ts`, `apps/server/src/boot.ts`
-- Test: `apps/server/src/config.test.ts`, `apps/server/src/boot.safe-mode.test.ts`
-
-**Interfaces:**
-- Produces: `config.safeMode: boolean` (from `WAITRON_SAFE_MODE=1`), and a `boot.ts`-local
-  `safeModeConfig(moduleConfig, modules)` that overlays every `toggleable` module off.
-
-Safe mode is an OVERLAY, never a write to `modules.json`: the operator's file is untouched, so
-leaving safe mode restores exactly what they had. The fiscal slot (`provision-only`) and `core`
-(`mandatory`) stay ENABLED — a box that cannot chain locally must refuse to sell rather than sell
-unfiled, so a broken fiscal module escalates to recovery mode instead of degrading into trading.
-
-- [ ] **Step 1: Write the failing test**
-
-```ts
-// apps/server/src/boot.safe-mode.test.ts
-import { describe, expect, it } from "vitest";
-import { parseModuleConfig } from "@waitron/module";
-import { ALL_MODULES } from "./modules.js";
-import { safeModeConfig } from "./boot.js";
-
-describe("safeModeConfig", () => {
-  it("disables every toggleable module and keeps mandatory + provision-only", () => {
-    const overlaid = safeModeConfig(parseModuleConfig({}, ALL_MODULES), ALL_MODULES);
-    for (const module of ALL_MODULES) {
-      const enabled = overlaid.overrides.get(module.name) !== false;
-      expect(enabled, `${module.name} (${module.tier})`).toBe(module.tier !== "toggleable");
-    }
-  });
-
-  it("keeps the fiscal slot enabled — a box that cannot chain must not sell unfiled", () => {
-    const overlaid = safeModeConfig(parseModuleConfig({}, ALL_MODULES), ALL_MODULES);
-    const fiscal = ALL_MODULES.filter((m) => m.tier === "provision-only");
-    expect(fiscal.length).toBeGreaterThan(0);
-    for (const module of fiscal) expect(overlaid.overrides.get(module.name)).not.toBe(false);
-  });
-
-  it("leaves an operator's own disable in place", () => {
-    const operator = parseModuleConfig({ bookings: false }, ALL_MODULES);
-    expect(safeModeConfig(operator, ALL_MODULES).overrides.get("bookings")).toBe(false);
-  });
-});
-```
-
-- [ ] **Step 2: Run and watch it fail**
-
-Run: `pnpm --filter @waitron/server exec vitest run src/boot.safe-mode.test.ts`
-Expected: FAIL — `safeModeConfig` is not exported from `boot.ts`.
-
-- [ ] **Step 3: Implement**
-
-In `config.ts`, beside the other booleans: `safeMode: env.WAITRON_SAFE_MODE === "1"`.
-
-In `boot.ts`, export the overlay and apply it where `moduleConfig` is read:
-
-```ts
-/**
- * Safe mode's module set: every `toggleable` module off, `mandatory` (core) and `provision-only`
- * (the fiscal slot) untouched. An OVERLAY over the operator's parsed config rather than a write to
- * their `modules.json`, so leaving safe mode restores exactly what they had.
- *
- * The fiscal slot deliberately stays enabled. If fiscal is what is broken, safe mode fails too and
- * the entrypoint escalates to recovery mode — which is correct: a box that cannot hash-chain
- * locally must refuse to SELL rather than sell unfiled (CLAUDE.md §5).
- */
-export function safeModeConfig(
-  desired: ModuleConfig,
-  modules: readonly WaitronModule[],
-): ModuleConfig {
-  const overrides = new Map(desired.overrides);
-  for (const module of modules) {
-    if (module.tier === "toggleable") overrides.set(module.name, false);
-  }
-  return { overrides };
-}
-```
-
-and at the read site:
-
-```ts
-const desired = await readModuleConfig(config.stateDir);
-const moduleConfig = config.safeMode ? safeModeConfig(desired, ALL_MODULES) : desired;
-if (config.safeMode) {
-  log("warn", "boot.safe_mode", {
-    disabled: ALL_MODULES.filter((m) => m.tier === "toggleable").map((m) => m.name),
-  });
-}
-```
-
-- [ ] **Step 4: Run the tests**
-
-Run: `pnpm --filter @waitron/server test:coverage`
-Expected: PASS.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add apps/server/src/boot.ts apps/server/src/boot.safe-mode.test.ts \
-        apps/server/src/config.ts apps/server/src/config.test.ts
-git commit -s -m "feat(server): safe mode overlays the toggleable modules off
-
-WAITRON_SAFE_MODE=1 boots with every toggleable module disabled and core +
-the fiscal slot untouched, so a broken optional module still leaves a
-selling venue. An overlay, never a write to modules.json, so leaving safe
-mode restores the operator's own config exactly.
-
-The fiscal slot stays enabled deliberately: if fiscal is what is broken,
-safe mode fails too and the box escalates to recovery mode. A box that
-cannot hash-chain locally must refuse to sell, not sell unfiled."
-```
-
----
-
-### Task 7: The recovery surface
+### Task 6: The recovery surface
 
 **Files:**
 - Create: `apps/server/src/recovery-surface.ts`
@@ -1174,12 +1155,12 @@ cannot hash-chain locally must refuse to sell, not sell unfiled."
 **Interfaces:**
 - Consumes: `RecoveryState` (Task 3), `readFile` for the log tail, `Hono`.
 - Produces: `recoveryApp(deps: { state: RecoveryState; logDir: string; onRetry: (level: RecoveryLevel) => Promise<void> }): Hono`.
-  Task 8 serves it over the box's own TLS.
+  Task 7's `serveRecovery` puts it behind the box's own TLS — this task produces only the app.
 
 Serves: `GET /` (a plain HTML page — what failed, the count, the last error code, the last 200 log
-lines), `GET /recovery-api/status` (the same as JSON), `POST /recovery-api/retry` (reset to normal
-and exit), `POST /recovery-api/safe-mode` (set the count to the safe-mode threshold and exit).
-Docker's restart policy performs the restart; the handler only writes and exits.
+lines), `GET /recovery-api/status` (the same as JSON), and `POST /recovery-api/retry` (reset the
+counter and exit). Docker's restart policy performs the restart; the handler only writes and exits.
+There is no safe-mode action — spec §9.1 says why that level is not built here.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1199,32 +1180,35 @@ const state = afterFailure(
 );
 
 describe("recoveryApp", () => {
-  it("states the level, the count and the last error on the page", async () => {
+  it("states the count and the last error on the page", async () => {
     const app = recoveryApp({ state, logDir: await mkdtemp(join(tmpdir(), "wt-log-")), onRetry: vi.fn() });
     const res = await app.request("/");
     expect(res.status).toBe(200);
     const body = await res.text();
     expect(body).toContain("module.config_invalid");
-    expect(body).toContain("3");
+    // NOT `toContain("3")`: the page also renders an ISO timestamp, which contains a 3 most of the
+    // time, so that would pass with the count omitted entirely.
+    expect(body).toMatch(/failed 3 times|3 consecutive/i);
   });
 
-  it("serves the same facts as JSON", async () => {
+  it("serves exactly the same facts as JSON — no extra field leaks", async () => {
     const app = recoveryApp({ state, logDir: await mkdtemp(join(tmpdir(), "wt-log-")), onRetry: vi.fn() });
     const res = await app.request("/recovery-api/status");
-    expect(await res.json()).toMatchObject({
+    // toEqual, not toMatchObject: an unlisted key is never checked, and this route must not leak a
+    // log path or a raw error message (CLAUDE.md §4).
+    expect(await res.json()).toEqual({
       failures: 3,
-      level: "safe-mode",
+      level: "recovery",
       lastErrorCode: "module.config_invalid",
+      lastFailureAt: state.lastFailureAt,
     });
   });
 
-  it("retry asks for a normal boot; safe-mode asks for safe mode", async () => {
+  it("retry resets the counter and asks for a normal boot", async () => {
     const onRetry = vi.fn(() => Promise.resolve());
     const app = recoveryApp({ state, logDir: await mkdtemp(join(tmpdir(), "wt-log-")), onRetry });
     expect((await app.request("/recovery-api/retry", { method: "POST" })).status).toBe(200);
     expect(onRetry).toHaveBeenCalledWith("normal");
-    expect((await app.request("/recovery-api/safe-mode", { method: "POST" })).status).toBe(200);
-    expect(onRetry).toHaveBeenCalledWith("safe-mode");
   });
 
   it("shows the log tail, and tolerates no log at all", async () => {
@@ -1263,15 +1247,14 @@ git commit -s -m "feat(server): the recovery page served when the server will no
 
 Plain HTML plus a JSON twin: the level, the consecutive failure count, the
 last classified error and the log tail, with two actions — retry a normal
-boot, or boot in safe mode. Both only write the counter and exit; Docker's
-restart policy does the restart. Markup is inline and dependency-free
-because this page has to render when the app's own module graph is what
-failed."
+boot — which only writes the counter and exits; Docker's restart policy does
+the restart. Markup is inline and dependency-free because this page has to
+render when the app's own module graph is what failed."
 ```
 
 ---
 
-### Task 8: The entrypoint
+### Task 7: The entrypoint
 
 **Files:**
 - Create: `apps/server/src/node-entry.ts`
@@ -1283,15 +1266,39 @@ failed."
 - Produces: the container's `ENTRYPOINT`. Exports `runEntry(deps)` so the wiring is testable
   without spawning a process.
 
-Order (spec §5): wait for Postgres → `ensureInstance` → `loadBoxEnv` (and DELETE
-`WAITRON_BOOTSTRAP_DATABASE_URL` from what is passed on, plus set `WAITRON_ADMIN_DATABASE_URL` to
-the migrator URL) → read the level → serve recovery, or start the server.
+Order (spec §5, §9.3) — **the level is read FIRST**:
 
-The counter clears only on a boot that STAYS UP: `startServer` resolving means migrations applied,
-pools opened and the listener bound, and the timer then requires the process to survive
-`STAYED_UP_MS` (120 000) beyond that. Clearing on "started" alone would be a measurement where pass
-and fail look alike — a module throwing five seconds in would reset the counter every attempt and
-the box would restart-loop forever without ever escalating.
+1. `readRecoveryState(stateDir)` → if the level is `recovery`, serve the page and return. Nothing
+   before this may touch Postgres: a database-side failure is exactly what puts a box here, so
+   ordering the decision after `waitForPostgres`/`ensureInstance` makes the page unreachable in most
+   of the cases it exists for.
+2. `waitForPostgres` → `ensureInstance` → `loadBoxEnv`, DELETING `WAITRON_BOOTSTRAP_DATABASE_URL`
+   from what is passed on and setting `WAITRON_ADMIN_DATABASE_URL` to the migrator URL.
+3. Write the incremented counter **before** `startServer`, then start it.
+
+Two rules the tests must pin, both from spec §9.2:
+
+- **The counter is incremented BEFORE the server starts, never only in a failure handler.** A boot
+  that HANGS never throws, so a catch-only counter leaves such a box restart-looping forever without
+  escalating — the exact case the ordering exists for.
+- **It clears only on a boot that STAYS UP:** `startServer` resolved (migrations applied, pools
+  open, listener bound) AND the process then survived `STAYED_UP_MS` (120 000). Clearing on
+  "started" alone is a measurement where pass and fail look alike — a module throwing five seconds
+  in would reset the counter on every attempt.
+
+`startServer` resolving is deliberately the signal rather than a healthy `/health` probe: `/health`
+is 503 on a setup box by design, so a health-gated reset would drive every unprovisioned box into
+recovery.
+
+**This task also implements the two collaborators its test injects** — no other task produces them:
+
+- `waitForPostgres(url, deps)` — a bounded retry loop (the shape of `dev-setup.ts`'s own), throwing
+  `server.config_missing` when `WAITRON_BOOTSTRAP_DATABASE_URL` is unset, as spec §5 step 1 requires.
+- `serveRecovery(app, opts)` — serves Task 6's Hono app over the box's own CA + leaf read from the
+  state volume, on `WAITRON_HTTP_PORT`, via `@hono/node-server`'s `serve` with a TLS option built
+  the same way `boot.ts`'s `buildServeOptions` does. **When the state volume holds no leaf yet** (a
+  box that has never completed a setup boot) it falls back to plain HTTP on the same port rather
+  than failing — spec §9.3 states this limit rather than leaving it implicit.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1340,21 +1347,41 @@ describe("runEntry", () => {
     expect(d.writeRecoveryState).toHaveBeenCalledWith("/state", expect.objectContaining({ failures: 1 }));
   });
 
-  it("sets WAITRON_SAFE_MODE at the safe-mode level", async () => {
+  it("serves the recovery page and never starts the server at the recovery level", async () => {
     const d = deps({
       readRecoveryState: vi.fn(() => Promise.resolve({ ...FRESH, failures: 3, level: levelFor(3) })),
     });
     await runEntry(d);
-    expect((d.startServer.mock.calls[0]![0] as NodeJS.ProcessEnv).WAITRON_SAFE_MODE).toBe("1");
+    expect(d.serveRecovery).toHaveBeenCalled();
+    expect(d.startServer).not.toHaveBeenCalled();
   });
 
-  it("serves the recovery page and never starts the server at the recovery level", async () => {
+  it("decides BEFORE touching Postgres — the page is served even when the database is unreachable", async () => {
     const d = deps({
-      readRecoveryState: vi.fn(() => Promise.resolve({ ...FRESH, failures: 6, level: levelFor(6) })),
+      readRecoveryState: vi.fn(() => Promise.resolve({ ...FRESH, failures: 3, level: levelFor(3) })),
+      waitForPostgres: vi.fn(() => Promise.reject(new Error("ECONNREFUSED"))),
+      ensureInstance: vi.fn(() => Promise.reject(new Error("must not be called"))),
     });
     await runEntry(d);
     expect(d.serveRecovery).toHaveBeenCalled();
-    expect(d.startServer).not.toHaveBeenCalled();
+    expect(d.waitForPostgres).not.toHaveBeenCalled();
+  });
+
+  it("increments the counter BEFORE the server starts, so a HANGING boot still escalates", async () => {
+    const order: string[] = [];
+    const d = deps({
+      writeRecoveryState: vi.fn(() => {
+        order.push("counter");
+        return Promise.resolve();
+      }),
+      // Never resolves and never rejects — the boot that hangs. A catch-only counter loses this case.
+      startServer: vi.fn(() => {
+        order.push("start");
+        return new Promise(() => {});
+      }),
+    });
+    void runEntry(d);
+    await vi.waitFor(() => expect(order).toEqual(["counter", "start"]));
   });
 
   it("does NOT clear the counter merely because the server started", async () => {
@@ -1413,7 +1440,7 @@ on every attempt and loop forever without escalating."
 
 ---
 
-### Task 9: The images, the compose file, and the one-time preparation
+### Task 8: The images, the compose file, and the one-time preparation
 
 **Files:**
 - Create: `deploy/Dockerfile`, `deploy/compose.yml`, `deploy/.env.example`, `deploy/prepare.sh`,
@@ -1440,12 +1467,16 @@ with a comment naming the pairing.
 
 - [ ] **Step 2: Build it and check the four measured properties**
 
+The image sets `ENTRYPOINT ["node", "/app/node-entry.js"]` and no `CMD`, so a bare
+`docker run … <command>` passes the command as ARGUMENTS TO THE ENTRYPOINT rather than running it.
+Every probe therefore overrides it:
+
 ```bash
 docker build -f deploy/Dockerfile -t waitron:dev .
-docker run --rm waitron:dev pg_dump --version                       # expect 18.x
-docker run --rm waitron:dev getcap /usr/local/bin/node              # expect cap_net_bind_service=ep
-docker run --rm waitron:dev sh -c 'id -u; ls -ldn /var/lib/waitron/state'  # expect non-root, owned by it
-docker run --rm waitron:dev node /app/server.js 2>&1 | head -3      # expect server.config_missing
+docker run --rm --entrypoint pg_dump waitron:dev --version            # expect 18.x
+docker run --rm --entrypoint getcap  waitron:dev /usr/local/bin/node  # expect cap_net_bind_service=ep
+docker run --rm --entrypoint sh waitron:dev -c 'id -u; ls -ldn /var/lib/waitron/state'
+docker run --rm --entrypoint node waitron:dev /app/server.js 2>&1 | head -3  # expect server.config_missing
 ```
 
 Expected: `pg_dump (PostgreSQL) 18.x`; the capability present; a non-zero uid owning the state dir;
@@ -1489,34 +1520,43 @@ the image path's ownership and would otherwise mount root-owned."
 
 ---
 
-### Task 10: CI — build the image, smoke it, publish it
+### Task 9: CI — build the image, smoke it, publish it
 
 **Files:**
 - Modify: `.github/workflows/ci.yml`, `scripts/changed-scope.mjs`
 - Test: `scripts/changed-scope.test.ts` (the existing root suite)
 
-**`deploy/**` must classify as CODE**, or the `changes` job skips the image build for a Dockerfile
-change — the exact hole CLAUDE.md §2 warns about.
+**`deploy/**` already classifies as CODE — do not "fix" it.** `isInertPath`
+(`scripts/changed-scope.mjs`) treats only `docs/`, `.codex/`, `.vscode/`, `.gitignore`,
+`.editorconfig` and root-level `*.md` as inert, and `classify` returns `code: true` for the first
+non-inert path. So a Dockerfile change already gates the image job in. This task therefore has NO
+red step for the classifier; it adds a REGRESSION test pinning that behaviour, which is honest about
+what it is.
 
-- [ ] **Step 1: Write the failing test**
+Two further facts to match rather than invent: the exported helper is `classify`, not
+`classifyPaths`, and the suite is `scripts/changed-scope.test.mjs`, not `.ts`.
 
-```ts
-// scripts/changed-scope.test.ts — append to the existing describe
-it("classifies deploy/ as code, so a Dockerfile change builds the image", () => {
-  expect(classifyPaths(["deploy/Dockerfile"]).code).toBe(true);
-  expect(classifyPaths(["deploy/compose.yml"]).code).toBe(true);
+- [ ] **Step 1: Add the regression test (green from the start — say so in the commit)**
+
+```js
+// scripts/changed-scope.test.mjs — append to the existing describe
+it("classifies deploy/ as code, so a Dockerfile change still builds the image", () => {
+  expect(classify(["deploy/Dockerfile"]).code).toBe(true);
+  expect(classify(["deploy/compose.yml"]).code).toBe(true);
 });
 ```
 
-(Use whichever exported helper the neighbouring cases use — read the file first and match it; do
-not introduce a second classifier entry point.)
+- [ ] **Step 2: Run it**
 
-- [ ] **Step 2: Run and watch it fail**
+Run: `pnpm exec vitest run scripts/changed-scope.test.mjs`
+Expected: PASS immediately. This pins today's behaviour so a future narrowing of the classifier
+cannot silently stop building the image.
 
-Run: `pnpm exec vitest run scripts/changed-scope.test.ts`
-Expected: FAIL — `deploy/Dockerfile` currently classifies as documentation/inert.
+- [ ] **Step 3: Add the `image` job — and satisfy the workflow guard**
 
-- [ ] **Step 3: Add `deploy/**` to the code paths, then add the `image` job**
+**`scripts/ci-workflow.test.mjs` pins ci.yml's job graph** — it asserts that `ci`'s `needs` names
+every other job and that no job needs something absent. Adding `image` without adding it to `ci`'s
+`needs` fails that suite; run it as part of this step, not at the end.
 
 The job: `needs: changes`, `if: needs.changes.outputs.code == 'true'`, buildx with GHA cache;
 compose up against fresh volumes; assert `/setup-api/status` is 200 and `/setup-api/ca.crt` serves
@@ -1524,19 +1564,21 @@ a PEM; `down -v`. On a push to `main` only, log in to GHCR with `GITHUB_TOKEN` a
 `:sha-<short>` and a `v*` tag's version, `linux/amd64,linux/arm64` (amd64 only on PRs). Add it to
 the `ci` aggregate job's `needs`.
 
-- [ ] **Step 4: Run the root suite**
+- [ ] **Step 4: Run the root suite, which includes the workflow guard**
 
 Run: `pnpm exec vitest run`
-Expected: PASS.
+Expected: PASS — in particular `scripts/ci-workflow.test.mjs`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add .github/workflows/ci.yml scripts/changed-scope.mjs scripts/changed-scope.test.ts
+git add .github/workflows/ci.yml scripts/changed-scope.test.mjs
 git commit -s -m "ci: build, smoke and publish the node image
 
-deploy/ classifies as code, or the changes job would skip the image build
-for a Dockerfile change — the scoped-CI hole CLAUDE.md §2 records. The job
+deploy/ ALREADY classified as code (isInertPath lists only docs and a few
+root config paths), so the added classifier test is a regression pin that
+was green from the start, not a fix — it stops a future narrowing from
+silently skipping the image build. The job
 brings the compose stack up on fresh volumes and asserts the setup surface
 answers over the box's own TLS, so the non-root bind to 443 under host
 networking is exercised on every merge rather than only on a real box."
@@ -1544,7 +1586,7 @@ networking is exercised on every merge rather than only on a real box."
 
 ---
 
-### Task 11: The run-it proof, the docs and the backlog
+### Task 10: The run-it proof, the docs and the backlog
 
 **Files:**
 - Modify: `docs/superpowers/specs/2026-09-08-node-containers-design.md` (§11 receipts),
@@ -1567,11 +1609,10 @@ step, state what the FAILING case would print.
 - [ ] **Step 2: Run the recovery proof**
 
 Force a failing boot (point `WAITRON_MIGRATIONS_DATABASE_URL` at a database the migrator cannot
-reach), restart three times and confirm safe mode is entered; three more and confirm the recovery
-page is served at the same URL with the box's own certificate. Then use its "retry" button and
-confirm a normal boot resumes.
+reach), restart three times and confirm the recovery page is served at the same URL with the box's
+own certificate. Then use its "retry" button and confirm a normal boot resumes.
 *Failing case for the counter rule:* if the box never escalates past `normal`, the stayed-up
-condition is wrong — that is the exact bug Task 8's test exists to prevent.
+condition is wrong — that is the exact bug Task 7's test exists to prevent.
 
 - [ ] **Step 3: Record both receipts in the spec's §11 and §13**
 
@@ -1597,24 +1638,49 @@ git commit -s -m "docs: the container proof receipts and the backlog update"
 
 ## Self-review
 
-**Spec coverage.** §3.1 → Task 9. §3.2 → Task 9. §4 → Task 9. §5 steps 1–5 → Tasks 4, 5, 8 (step 1's
-wait loop is inside Task 8's `waitForPostgres` dep). §6 → Task 2 + Task 9. §7 → Task 9. §8 → Task 9.
-§9.1/9.2 → Tasks 3, 6, 8. §9.3 → Task 7. §10 → Task 10. §11 → Tasks 4, 8, 10, 11.
+**Spec coverage.** §3.1 → Task 8. §3.2 → Task 8. §4 → Task 8. §5 steps 1–5 → Tasks 4, 5, 7 (step 1's
+`waitForPostgres` and §9.3's `serveRecovery` are both IMPLEMENTED in Task 7, not merely injected).
+§6 → Task 2 + Task 8. §7 → Task 8. §8 → Task 8. §9.1 → no task, by design: the section's content is
+the decision NOT to build a degraded-but-trading level. §9.2 → Tasks 3 and 7. §9.3 → Tasks 6 and 7.
+§10 → Task 9. §11 → Tasks 4, 7, 9, 10.
 
-**Two gaps found and closed while reviewing:** the spec's §5 step 4 (read the level) had no task of
-its own — folded into Task 8, which is where the branch lives. The `dist/package.json` marker
-`bundle-smoke` asserts is produced by `copy-migrations.mjs`, which Task 9's runtime stage must copy
-into `/app` — called out in Task 9 step 1's reference to spec §3.1.
+**Corrections applied after the fresh-context plan review** (each was a defect in the first draft,
+verified against the code before fixing):
 
-**Placeholders:** none — every code step carries the code. Task 7 step 3 and Task 9 steps 1/3 give
-the properties rather than full listings (an HTML page and a compose file), which is deliberate:
+1. The entrypoint's migrate filter was fatal — `app_user` comes from the core migration, so a virgin
+   box could never provision. Now gated on `app_user`'s absence (Task 4, rule 2), with the
+   blank-cluster failure proven by deletion.
+2. `withDatabase(uri, database)` returns a connection STRING, not a scope function, and the target
+   must be reached via `withRole` (Task 4).
+3. The replication bootstrap's two schema-local statements must run against the TARGET database;
+   the old test asserted only cluster-global `pg_roles`, where pass and fail look identical
+   (Task 4).
+4. Safe mode is removed entirely — it cannot be built on the `toggleable` tier, which includes
+   `identity`, `credentials` and `payments`.
+5. The recovery decision now precedes the Postgres wait, or the page is unreachable in most of the
+   cases it exists for (Task 7).
+6. Fabricated API details replaced with the real ones: `loadConfig(env, ROOT, MEDIA_ROOT,
+   STATE_ROOT)` over `MIN_ENV` (not a `loadTestConfig`), `AppError.message` is the code alone,
+   `classify` not `classifyPaths`, `changed-scope.test.mjs` not `.ts`.
+7. `deploy/**` already classifies as code, so Task 9's classifier test is an honest regression pin,
+   not a red-then-green fix; and `ci-workflow.test.mjs` pins ci.yml's job graph, so `image` must be
+   added to `ci`'s `needs`.
+8. Every `docker run` probe needs `--entrypoint`, since the image has an ENTRYPOINT and no CMD.
+
+**Placeholders:** none — every code step carries the code. Task 6 step 3 and Task 8 steps 1/3 give
+properties rather than full listings (an HTML page, a Dockerfile and a compose file), deliberately:
 their content is fully determined by the spec sections cited, and transcribing them twice invites
-the two copies to drift.
+the copies to drift.
 
-**Type consistency:** `RecoveryLevel`/`RecoveryState`/`FRESH` (Task 3) are used unchanged in Tasks
-7 and 8. `InstanceUrls` (Task 4) is consumed in Task 8. `installShutdownHandlers` (Task 1) is
-called in Task 8. `parseBoxAddresses` (Task 2) is read by `config.ts` in the same task.
-`safeModeConfig` (Task 6) is exercised by the `WAITRON_SAFE_MODE` env var Task 8 sets.
+**Type consistency:** `RecoveryLevel` is `"normal" | "recovery"` in both the Interfaces block and
+the implementation. `RecoveryState`/`FRESH` (Task 3) are used unchanged in Tasks 6 and 7.
+`InstanceUrls` (Task 4) is consumed in Task 7. `installShutdownHandlers` (Task 1) is called in
+Task 7. `parseBoxAddresses` (Task 2) is read by `config.ts` in the same task. `recoveryApp` (Task 6)
+is served by Task 7's `serveRecovery`.
+
+**Known gap, stated rather than hidden:** nothing here proves a box can still SELL under any
+degraded condition, because this spec no longer claims one exists. The only degraded level is
+"no server", which needs no such proof.
 
 **Review weight (CLAUDE.md):** this diff touches config/boot wiring, provisioning, a cross-package
 contract and CI — a **risk trigger**, so the FULL ceremony applies: per-task reviews, and
