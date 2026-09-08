@@ -39,8 +39,13 @@ a run in which both are refused means the harness is wrong (the constrained leaf
 **Materials (one script, `openssl`, kept in the repo when the spike lands):**
 
 1. Root CA with `basicConstraints=CA:TRUE,pathlen:0` and
-   `nameConstraints=critical,permitted;DNS:waitron.local,permitted;IP:192.168.1.10/255.255.255.255,excluded;DNS:.,excluded;IP:0.0.0.0/0.0.0.0`
-   (the exact permitted IP is the box's; the exclusions close everything else).
+   `nameConstraints=critical,permitted;DNS:waitron.local,permitted;IP:10.0.0.0/255.0.0.0,permitted;IP:172.16.0.0/255.240.0.0,permitted;IP:192.168.0.0/255.255.0.0`.
+   The permitted set is the name plus the three PRIVATE address ranges, not the box's own IP: the
+   root is minted once at first boot, before the box knows what address the router will give it,
+   and a DHCP change must not force every phone to reinstall a root. The leaf (re-minted at boot)
+   carries the box's actual address. A constraint to private ranges still keeps the promise that
+   matters — the root can never vouch for any public name or address. (A `permitted` list is
+   exclusive by itself; no `excluded` entries are needed. The spike's Leaf B tests exactly that.)
 2. Leaf A: `waitron.local` + the box IP in SANs — must be ACCEPTED.
 3. Leaf B (control): `example.com` — must be REFUSED.
 4. Leaf C (second control, optional): a name inside the permitted set but signed by an
@@ -49,6 +54,19 @@ a run in which both are refused means the harness is wrong (the constrained leaf
 
 **Matrix.** Chrome on Android, Safari on iOS, Chrome on macOS, Safari on macOS, Chromium on Linux
 (the box image). Record the browser and OS version for each row.
+
+**Two extra rows the trust flow (§3) depends on:**
+
+- **Click-through detection.** After a user clicks past the browser's "not private" warning, can
+  the page tell that the root is NOT trusted? Belief: `navigator.serviceWorker.register()` throws a
+  `SecurityError` on an origin with a certificate error in Chrome and Safari, while it succeeds once
+  the root is trusted — so a failed registration is the signal. Failing case: registration succeeds
+  either way, in which case the page cannot detect it and the instructions must be shown on the
+  HTTP page only. Also record whether the click-through is even offered (some managed devices hide
+  it).
+- **HSTS must NOT be sent on the private-CA origin.** A `Strict-Transport-Security` header removes
+  the click-through entirely, which would strand a phone on an error page with no route to the
+  instructions. Confirm the box sends none today and pin it with a test.
 
 **What to record per row:** Leaf A accepted? Leaf B refused? With the root NOT yet trusted: is
 service-worker registration blocked, does "Install" appear, does `navigator.credentials` work,
@@ -73,9 +91,16 @@ system trust). The phone rows need real devices on the shop WiFi and are the own
    required for install (web.dev install criteria; confirmed by the spike's "Install appears" row).
 2. **Name-constrain the CA** to `waitron.local` + the box's LAN address, `pathlen:0`. Pre-production:
    regenerate, no migration of existing certs. This is *Debt → Provisioning* item (a).
-3. **Trust flow reachable from the till's origin**, not only setup mode: a phone is pointed at the
-   till URL first; the "install our certificate" page and the CA download must be one tap away from
-   the till's own error/landing state, with the iOS "Enable full trust" step spelled out.
+3. **The trust flow, owner-specified (2026-09-08):**
+   - `http://waitron.local` (port 80) never redirects. It serves one page: "you have reached the
+     unencrypted address", a download button for the certificate, install steps chosen from the
+     device's user agent (iOS: install the profile, then Settings → General → About → Certificate
+     Trust Settings → enable full trust; Android: Settings → Security → install a CA certificate;
+     macOS/Windows/Linux their own), and a link to `https://waitron.local`.
+   - On `https://waitron.local` the app runs the click-through detector (the spike row above). If the
+     root is not trusted it shows the SAME instructions page instead of the till, with the link back
+     to the HTTP page for the download. Nothing else loads until the check passes.
+   - No HSTS on this origin (spike row above).
 4. **Screen wake lock** requested while an operator is logged in.
 5. **Acceptance (run on a real Android phone and an iPhone on the shop WiFi):** install the CA;
    open the till; Chrome/Safari offer install; the installed app opens standalone with no address
@@ -85,16 +110,17 @@ system trust). The phone rows need real devices on the shop WiFi and are the own
 Sits in the on-prem push under *device onboarding and the three displays*; it is on the critical
 path for waiters' own phones and nothing else.
 
-## 4. An option to keep in view — bring your own domain
+## 4. An option for technical installers — bring your own domain
 
 The paid tier's public certificate needs Waitron Cloud to broker the DNS-01 challenge, which is on
-the back burner. A single venue that controls a real domain does not need the broker: the box can
-hold a DNS-provider API token and complete DNS-01 itself, then serve `<box>.<venue-domain>` with a
-Let's Encrypt certificate — no per-phone CA install. The box keeps its private CA + `waitron.local`
-leaf as the offline fallback exactly as the findings note §3 describes for the paid tier. Worth a
-half-day design if the spike's decision rule comes out badly, or if the deli would rather skip the
-per-phone install. The later cloud broker replaces only where the DNS-01 answer comes from, so the
-decision is cloud-compatible.
+the back burner. A venue that controls a real domain does not need the broker: the box can hold a
+DNS-provider API token and complete DNS-01 itself, then serve `<box>.<venue-domain>` with a Let's
+Encrypt certificate — no per-phone CA install. **This is NOT the default for non-technical owners**
+(owner, 2026-09-08): it needs a domain, a DNS provider with an API, and a token pasted into the
+box. It is documented as an option for a technical installer (the deli's own owner is one), and
+the private CA with the guided page above stays the default. The box keeps its private CA +
+`waitron.local` leaf as the offline fallback either way. The later cloud broker replaces only where
+the DNS-01 answer comes from, so the decision is cloud-compatible.
 
 ## 5. Provenance
 
@@ -104,3 +130,5 @@ decision is cloud-compatible.
 | Screen Wake Lock needs a secure context; iOS Safari 16.4+ | <https://caniuse.com/wake-lock> |
 | Chrome and Safari honour `nameConstraints` on a user-installed root | **belief — the spike measures it** |
 | No service worker is required for Chrome install | belief from the same install-criteria page; the spike's "Install appears" row confirms |
+| Service-worker registration fails with `SecurityError` on a click-through (untrusted) HTTPS origin | **belief — the spike measures it** |
+| HSTS disables the interstitial click-through | belief (documented Chrome/Safari behaviour); the spike confirms the box sends no HSTS |

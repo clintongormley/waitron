@@ -102,6 +102,35 @@ steps take owner sign-off at land):
    fiscal-certificate distribution rebuild, rejoin and re-admission, replication status + alarms
    (Track A step 5's on-prem half), the two-node end-to-end proof over LAN and over WireGuard.
 
+**Parallel tracks (owner, 2026-09-08: many fronts at once).** The six steps above are the dependency
+order; the work is cut into four tracks by file ownership so four sessions can run without editing
+the same files. Each track is its own worktree; the coordination rules at the end of the
+design-review section apply.
+
+- **Track 1 — devices & UI** (push steps 2 and 5). Owns `apps/till`, `apps/dashboard`, `apps/setup`'s
+  screens, the device/session/enrol routes in `apps/server`, `packages/layouts`, `packages/ui`,
+  `packages/identity`. Work: device onboarding and the three displays, kiosk, the installable-till
+  build (manifest, trust flow, wake lock), the register/device follow-ups, the `ui-review.md`
+  walkthrough, counter kitchen fire, pricing adjustments, the two open by-id read-leak classes.
+- **Track P — platform & packaging** (push step 1). Owns the Dockerfiles/compose, `packages/provisioning`,
+  `apps/server`'s config/boot wiring/backup-*/media/tls + certificate code, `packages/credentials`.
+  Work: the two containers + volumes, the from-scratch primary and first-run modes 1–2, images into
+  Postgres, backup destinations (mirror → S3 → Drive), the name-constrained CA + HTTP landing page,
+  the LAN-HTTPS spike (its desktop half; the phone rows are the owner's).
+- **Track H — hardware** (push steps 3 and 4). Owns `packages/printing`, the new print-agent app,
+  `packages/payments*`, the printer/payment routes in `apps/server`. Work: the standalone print agent,
+  USB + IP printers end to end, printer failover on prem, SumUp once its questions are answered.
+- **Track R — replication & failover** (push step 6; the former Tracks A + B). Owns
+  `packages/sync`, `packages/membership`, `packages/db`'s harness, `apps/server`'s promote / rejoin /
+  box-* / membership code, `CLAUDE.md` §2–§5. Work: the on-prem mirror end to end, the cert-distribution
+  rebuild, re-admission, replication status + alarms, node-role collapse, every two-node suite run
+  over LAN and WireGuard.
+
+The former Track C's remaining items are hygiene done when passing (the alta de-dup [owner], the
+backup-container rethink, dashboard screens onto the module seat, the graph-honesty detector) and
+sit with whichever track touches the file. Fiscal-adjacent work in any track still takes owner
+sign-off at land.
+
 **Back burner — cloud (docs only, no build):** Waitron Cloud itself, the control plane (Track C
 item 4), cloud-only redundancy (Track B item 4), the cloud trial on-ramp, WireGuard on the box
 image and `@waitron/tunnel`'s retirement (Track A step 5's cloud half), the cloud-standby e2e
@@ -122,9 +151,10 @@ on PIN 5555, and ~28 days of back-dated preproduction sales — English by defau
 
 ### Whole-project design review (2026-09-05) — decisions taken; execution in three parallel tracks
 
-> **Reprioritised 2026-09-08.** The on-prem push above is the order of work. The three tracks below
-> keep their file ownership and their open items; cloud-only items are marked **BACK BURNER** and
-> are not built until Waitron Cloud starts.
+> **Reprioritised 2026-09-08.** The on-prem push above is the order of work and its four tracks
+> (1 / P / H / R) are the sessions. The three tracks below are the 2026-09-05 cut, kept for their
+> open items: Tracks A + B now run as Track R, Track C's remainder is hygiene done when passing.
+> Cloud-only items are marked **BACK BURNER** and are not built until Waitron Cloud starts.
 
 A base-to-tip review of the code and every Track-2 spec, with the owner answering the review's
 questions. Its process outcomes have all landed and live in the rule files, not here: CLAUDE.md §1's
