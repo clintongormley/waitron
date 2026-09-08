@@ -780,7 +780,7 @@ partial scope; the detail for a live thread is under *Open threads*.
 
 | # | Sub-project | State | Remaining |
 | --- | --- | --- | --- |
-| 1 | Design system | `@waitron/ui` token layer + primitives (`--wt-*`) | — |
+| 1 | Design system | `@waitron/ui` token layer + primitives (`--wt-*`); brand assets (#284) — running-waiter mark, WAiTRON wordmark, lockup, and the favicon/app-icon set all three apps serve from `packages/ui/brand/public` | a web-app manifest and its 192/512 icons, if one is ever wanted (dropped as unreferenced) |
 | 2 | Sales spine | Immutable hash-chained sales, per-tenant series, catalogue, tenant model | — |
 | 3 | Fiscal layer | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first; fiscal is a module (`fiscal-verifactu`, `fiscal-none`) | F3 asesor/XSD confirmations (Debt); cert distribution to a promoted node (Track B item 3) |
 | 4 | Payment layer | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook | SumUp provider; webhook `recordSale` hand-off; reconcile remediation UI |
