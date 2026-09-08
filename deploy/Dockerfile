@@ -1,0 +1,111 @@
+# The Waitron node's app image. Built from the repository root:
+#   docker build -f deploy/Dockerfile -t waitron:dev .   (`pnpm build:image`)
+
+# ---------------------------------------------------------------------------
+# Build stage — install the workspace and run the builds that already exist.
+# ---------------------------------------------------------------------------
+FROM node:26 AS build
+
+# pnpm is installed by npm rather than corepack: corepack is no longer shipped in the node image
+# (measured on node:26 — `corepack: not found`). The version is the root package.json's
+# `packageManager` field; the two must stay equal or the lockfile check below is meaningless.
+RUN npm install --global pnpm@9.15.0
+
+# The root `prepare` script installs git hooks, which a build context without .git cannot do and an
+# image has no use for.
+ENV HUSKY=0
+
+WORKDIR /src
+COPY . .
+RUN pnpm install --frozen-lockfile
+
+# `@waitron/server`'s build emits dist/server.js, dist/node-entry.js (this image's ENTRYPOINT), the
+# four operator CLIs and dist/drizzle/ (copy-migrations.mjs); the three web apps emit dist/ via vite.
+RUN pnpm --filter @waitron/server build \
+  && pnpm --filter @waitron/till build \
+  && pnpm --filter @waitron/dashboard build \
+  && pnpm --filter @waitron/setup build
+
+# ---------------------------------------------------------------------------
+# Runtime stage — the build outputs, a Postgres client and a non-root user.
+# ---------------------------------------------------------------------------
+FROM node:26-slim AS runtime
+
+# The Postgres CLIENT major, which MUST track the SERVER major in deploy/compose.yml
+# (postgres:18-alpine). Bumping one without the other reintroduces the failure this repo comes from:
+# pg_dump 17 refuses an 18 server ("aborting because of server version mismatch"), which breaks the
+# backup duty while everything else keeps working.
+ARG PG_MAJOR=18
+
+# postgresql-client comes from PGDG, not Debian: node:26-slim is Debian 13 (trixie), whose own repos
+# carry postgresql-client-17 only. libcap2-bin is here for the setcap below.
+RUN set -eux; \
+  apt-get update; \
+  apt-get install -y --no-install-recommends ca-certificates curl libcap2-bin; \
+  install -d /usr/share/postgresql-common/pgdg; \
+  curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+    -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc; \
+  echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt trixie-pgdg main" \
+    > /etc/apt/sources.list.d/pgdg.list; \
+  apt-get update; \
+  apt-get install -y --no-install-recommends "postgresql-client-${PG_MAJOR}"; \
+  apt-get purge -y --auto-remove curl; \
+  rm -rf /var/lib/apt/lists/*
+
+# The on-prem profile is `network_mode: host`, whose namespace keeps the kernel's
+# ip_unprivileged_port_start=1024, so a non-root bind to 443 fails EACCES there — while Docker's own
+# bridge namespace sets 0 and needs nothing. The capability makes both profiles work, and Docker's
+# default capability set retains CAP_NET_BIND_SERVICE, so nothing is added at run time.
+RUN setcap cap_net_bind_service=+ep /usr/local/bin/node
+
+RUN groupadd --system --gid 10001 waitron \
+  && useradd --system --uid 10001 --gid 10001 --home-dir /var/lib/waitron \
+    --shell /usr/sbin/nologin waitron
+
+# A fresh named volume INHERITS the ownership of the image path it is mounted over: a pre-created,
+# chowned path comes up owned by the app and writable, while a path the image never created comes up
+# root:root and the non-root process cannot write to it at all. Adding a volume to compose.yml
+# without its line here is therefore a boot failure, not a warning.
+RUN install -d -o waitron -g waitron -m 0700 /var/lib/waitron \
+  && install -d -o waitron -g waitron -m 0700 \
+    /var/lib/waitron/state \
+    /var/lib/waitron/logs \
+    /var/lib/waitron/media \
+    /var/lib/waitron/backups
+
+# dist/package.json ({"type":"module"}) travels with the bundle, so /app declares its own module
+# system rather than inheriting one from a walk up the filesystem.
+COPY --from=build --chown=waitron:waitron /src/apps/server/dist/ /app/
+COPY --from=build --chown=waitron:waitron /src/apps/till/dist/ /app/web/till/
+COPY --from=build --chown=waitron:waitron /src/apps/dashboard/dist/ /app/web/dashboard/
+COPY --from=build --chown=waitron:waitron /src/apps/setup/dist/ /app/web/setup/
+
+# Fixed in the image, never operator-set: the server's own defaults for these sit beside the bundle,
+# which is a read-only layer — every writable path is a volume. WAITRON_BACKUP_DIR is deliberately
+# NOT here: a destination without WAITRON_BACKUP_RECOVERY_KEY and WAITRON_BACKUP_DATABASE_URL is
+# fail-closed (backup-config.ts's loadBackupConfig throws), so setting the path alone would take a
+# provisioned box down at boot. compose.yml passes all three together from the box's .env.
+#
+# WAITRON_HTTP_HOST must be 0.0.0.0: config.ts defaults it to 127.0.0.1, which is right for a dev
+# machine and wrong for every container — the phone is the screen, so a server bound to the
+# container's own loopback is reachable by nothing. Measured on the first stack-up: with the
+# default, the published port accepts the TCP connection (docker-proxy) and then resets the TLS
+# handshake, while the in-container healthcheck passes — the two look nothing alike from outside.
+ENV WAITRON_STATE_DIR=/var/lib/waitron/state \
+  WAITRON_LOG_DIR=/var/lib/waitron/logs \
+  WAITRON_MEDIA_DIR=/var/lib/waitron/media \
+  WAITRON_MIGRATIONS_DIR=/app/drizzle \
+  WAITRON_TILL_APP_DIR=/app/web/till \
+  WAITRON_DASHBOARD_APP_DIR=/app/web/dashboard \
+  WAITRON_SETUP_APP_DIR=/app/web/setup \
+  WAITRON_HTTP_PORT=443 \
+  WAITRON_HTTP_HOST=0.0.0.0 \
+  NODE_ENV=production
+
+USER waitron
+WORKDIR /app
+
+# No CMD: the entrypoint takes no arguments, and the four operator CLIs are run by naming their file
+# with --entrypoint (deploy/README.md). A bare `docker run <image> <command>` would otherwise pass
+# the command to node-entry.js as arguments and re-run the bootstrap.
+ENTRYPOINT ["node", "/app/node-entry.js"]

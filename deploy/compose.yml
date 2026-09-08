@@ -1,0 +1,111 @@
+# A Waitron node: the app and its Postgres. Everything the node keeps lives in the five named
+# volumes below, so `docker volume` is the whole of a box's life.
+#
+# Operating this file — including which CLI invocation bypasses the entrypoint and which does not —
+# is deploy/README.md. `deploy/prepare.sh` installs this once per box; the restaurant never runs it.
+name: waitron
+
+services:
+  app:
+    # Override with WAITRON_IMAGE=waitron:dev in deploy/.env to run a locally built image.
+    image: ${WAITRON_IMAGE:-ghcr.io/clintongormley/waitron:main}
+    restart: unless-stopped
+    # Host networking is the on-prem profile: mDNS answers on the LAN, the box sees its real IPv4
+    # addresses (the leaf's SANs and the setup QR are built from them), and 443 binds with no port
+    # map. The image carries cap_net_bind_service because this namespace keeps the kernel's 1024
+    # floor, which Docker's own bridge namespace does not.
+    network_mode: host
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # The one secret a box needs before anything runs. The entrypoint uses it to create the
+      # database and the roles, then deletes it from the environment it hands the server: the server
+      # itself never holds superuser credentials.
+      WAITRON_BOOTSTRAP_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@127.0.0.1:5432/postgres
+      # Only for a profile where interface sniffing cannot see the LAN (a bridge/cloud compose, or
+      # Docker Desktop, whose "host" network is the Linux VM's). Empty = sniff, the on-prem default.
+      WAITRON_BOX_ADDRESSES: ${WAITRON_BOX_ADDRESSES:-}
+      # Local backups are all three or none: a destination without a database URL and a recovery key
+      # is refused at boot rather than shipped unencrypted, so an operator sets the trio in .env or
+      # leaves it empty and no backup duty runs.
+      WAITRON_BACKUP_DIR: ${WAITRON_BACKUP_DIR:-}
+      WAITRON_BACKUP_DATABASE_URL: ${WAITRON_BACKUP_DATABASE_URL:-}
+      WAITRON_BACKUP_RECOVERY_KEY: ${WAITRON_BACKUP_RECOVERY_KEY:-}
+    volumes:
+      - state:/var/lib/waitron/state
+      - logs:/var/lib/waitron/logs
+      - media:/var/lib/waitron/media
+      - backups:/var/lib/waitron/backups
+    # EITHER endpoint returning 200 is healthy, because neither exists in both modes: /health is 503
+    # by design on a setup box (no duty loop means not trading-healthy) and /setup-api/status is
+    # mounted only in setup mode. A probe on one alone would restart-loop the other mode forever.
+    # Certificate verification is off because this is loopback against the box's own leaf; there is
+    # no curl in a slim image, hence node -e.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - "-e"
+        - 'const h=require("node:https"),p=(u)=>new Promise((r)=>{const q=h.get({host:"127.0.0.1",port:Number(process.env.WAITRON_HTTP_PORT||443),path:u,rejectUnauthorized:false},(s)=>{s.resume();r(s.statusCode===200)});q.on("error",()=>r(false));q.setTimeout(5000,()=>{q.destroy();r(false)})});Promise.all([p("/health"),p("/setup-api/status")]).then((o)=>process.exit(o.some(Boolean)?0:1))'
+      interval: 10s
+      timeout: 10s
+      # The setup boot runs every migration before it listens.
+      start_period: 60s
+      retries: 3
+    # The server's JSON lines go to stdout, so `docker compose logs` works; the cap stops a chatty
+    # box filling the disk with a second copy of what the logs volume already rotates.
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    # Native logical replication needs these three; the first two are RESTART-required cluster
+    # settings, so they live here rather than in an ALTER SYSTEM. This stanza IS the box image's
+    # postgresql.conf.
+    command:
+      [
+        "postgres",
+        "-c",
+        "wal_level=logical",
+        "-c",
+        "track_commit_timestamp=on",
+        "-c",
+        "max_slot_wal_keep_size=4GB",
+      ]
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?deploy/.env must set POSTGRES_PASSWORD — prepare.sh generates it}
+    networks:
+      - internal
+    # Loopback only. The cluster is never LAN-reachable, which is what lets pg_hba stay the image's
+    # default; the app reaches it over the host's loopback because it runs in the host namespace.
+    ports:
+      - "127.0.0.1:5432:5432"
+    # Postgres 18+ keeps its data in a SUBDIRECTORY of /var/lib/postgresql; mounting the volume at
+    # the pre-18 /data path makes the container detect "data in an unused mount" and exit 1.
+    volumes:
+      - db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+
+networks:
+  internal:
+
+volumes:
+  db:
+  state:
+  logs:
+  media:
+  backups:
