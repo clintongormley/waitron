@@ -2,9 +2,10 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { readMembershipTrustSet, stampDeployment, type Database } from "@waitron/db";
+import { readMembershipTrustSet, stampDeployment, withTenant, type Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { loadKeyRing, type KeyRing } from "@waitron/credentials";
+import { loadKeyRing, putCredential, type KeyRing } from "@waitron/credentials";
+import { tenantId as brandTenantId } from "@waitron/shared";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { canonicalize, generateNodeKeyPair, verifyBytes } from "@waitron/membership";
 import { parseModuleConfig } from "@waitron/module";
@@ -266,6 +267,45 @@ describe("assembleMirrorBundle (primary side, real Postgres)", () => {
       standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
     });
     expect(withoutKey.wireguardPublicKey).toBeUndefined();
+  });
+
+  it("carries the primary's AEAT cert when present", async () => {
+    const designated = await setupVenue();
+    await withTenant(suite.admin, designated.tenantId, (tx) =>
+      putCredential(tx, RING, {
+        tenantId: brandTenantId(designated.tenantId),
+        purpose: "fiscal.aeat",
+        value: { pfxBase64: "QQ==", passphrase: "pw", certKind: "sello" },
+      }),
+    );
+
+    const bundle = await assembleMirrorBundle({
+      appDb,
+      retentionDb,
+      ring: RING,
+      stateDir,
+      relayUrl: "https://relay.test:9000/",
+      boxHostname: "waitron.local",
+      designated,
+      standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
+    });
+
+    expect(bundle.aeatCert).toEqual({ pfxBase64: "QQ==", passphrase: "pw", certKind: "sello" });
+  });
+
+  it("omits aeatCert when the primary holds none", async () => {
+    const bundle = await assembleMirrorBundle({
+      appDb,
+      retentionDb,
+      ring: RING,
+      stateDir,
+      relayUrl: "https://relay.test:9000/",
+      boxHostname: "waitron.local",
+      designated: await setupVenue(),
+      standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
+    });
+
+    expect(bundle.aeatCert).toBeUndefined();
   });
 
   it("throws mirror.not_provisioned when the database carries no deployment stamp", async () => {

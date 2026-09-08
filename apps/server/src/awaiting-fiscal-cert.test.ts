@@ -89,6 +89,7 @@ function buildApp(tenantId: string, nodeId: string, awaitingCert: { current: boo
       readMode: () => "primary",
       readSingletonRole: () => "primary",
       readAwaitingFiscalCertificate: () => awaitingCert.current,
+      readFiscalCertificate: () => Promise.resolve("none"),
     },
     () => {},
   );

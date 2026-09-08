@@ -138,13 +138,21 @@ export interface MtlsServer {
 }
 
 /**
+ * How the mTLS server answers a request: a FIXED body (the handshake-only suites, which never
+ * inspect the request), or a function of the request body (the cert-distribution e2e, which routes
+ * the received SOAP envelope through `FakeAeat` to get a real AEAT-shaped `estado` back). A returned
+ * promise is awaited before the response is written.
+ */
+export type MtlsResponder = string | ((requestBody: string) => string | Promise<string>);
+
+/**
  * An HTTPS server that REQUIRES and VERIFIES a client certificate — `requestCert` alone would
  * accept an unauthenticated connection and prove nothing, so `rejectUnauthorized` is the half that
  * makes this a test of mTLS rather than of TLS.
  */
 export async function startMtlsServer(
   material: MtlsMaterial,
-  respondWith: string,
+  respondWith: MtlsResponder,
 ): Promise<MtlsServer> {
   let lastCn: string | null = null;
   let requestCount = 0;
@@ -162,8 +170,29 @@ export async function startMtlsServer(
     // single-valued CN (the only shape this fixture ever mints) is unwrapped from that array case.
     const cn = peer.subject?.CN;
     lastCn = Array.isArray(cn) ? (cn[0] ?? null) : (cn ?? null);
-    res.writeHead(200, { "Content-Type": "text/xml; charset=utf-8" });
-    res.end(respondWith);
+    // Buffer the request body so a responder function can dispatch on it (envío vs consulta). A
+    // fixed-string responder ignores it — the buffering costs nothing there and keeps one code path.
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    req.on("end", () => {
+      const body = Buffer.concat(chunks).toString("utf8");
+      // The responder is invoked INSIDE the `.then` callback, never eagerly as an argument to
+      // `Promise.resolve(...)`: a SYNCHRONOUS throw would otherwise escape before `.catch` was attached
+      // and crash the process (an uncaught exception, exit 7) instead of answering 500. Deferring the
+      // call routes a sync throw and an async rejection through the SAME `.catch`.
+      void Promise.resolve()
+        .then(() => (typeof respondWith === "function" ? respondWith(body) : respondWith))
+        .then((xml) => {
+          res.writeHead(200, { "Content-Type": "text/xml; charset=utf-8" });
+          res.end(xml);
+        })
+        .catch(() => {
+          // A responder that throws (synchronously or async) is a test-fixture bug; answer 500 so the
+          // client's submit fails loudly rather than hanging the socket open to the vitest timeout.
+          res.writeHead(500);
+          res.end();
+        });
+    });
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as AddressInfo;

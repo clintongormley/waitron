@@ -1,7 +1,7 @@
 import { createServer } from "node:net";
 import type { AddressInfo } from "node:net";
 import { cp, mkdtemp, rm } from "node:fs/promises";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -30,6 +30,7 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { ALL_MODULES } from "./modules.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 import { sealMirrorToken } from "./mirror-token.js";
+import { mintBreakGlassSecret } from "./break-glass.js";
 import { roleUrl } from "./testing/postgres.js";
 
 // Slice 2 Task 7 boot integration: the promote endpoint (`POST /management-api/promote`) is mounted on
@@ -375,6 +376,42 @@ describe("boot promote endpoint (real Postgres): mounted on both modes, exempt f
       expect(res.status).toBe(200);
       // The non-mirror `promoteRun`: an unfenced node is already-primary and never restarts.
       expect(await res.json()).toEqual({ alreadyPrimary: true, restarting: false });
+    } finally {
+      await server.close();
+    }
+  }, 60_000);
+
+  it("an unfenced PRIMARY given a break-glass secret is already-primary and is directed to /unlock (cert-distribution §3.1)", async () => {
+    // Same unfenced-primary state as above, but authorized via break-glass. An already-primary node has
+    // no point-of-no-return to fold a cert seal into, so the secret cannot unlock here — the endpoint
+    // must NOT silently drop it: it reports already-primary AND logs the operator toward Task 10's
+    // /management-api/fiscal-certificate/unlock endpoint.
+    await setSingletonRole(suite.admin, "primary");
+    await writeNodeMembership(suite.admin, selfDoc("serving-primary"));
+    const breakGlass = await mintBreakGlassSecret(suite.admin);
+    const port = await freePort();
+    const base = `http://127.0.0.1:${port}`;
+
+    const server = await bootTrading(port);
+    try {
+      await poll(async () => server.health.lastPassAt ?? undefined);
+
+      const res = await postPromote(base, { oldNodeNeutralised: true, breakGlass });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ alreadyPrimary: true, restarting: false });
+
+      // The skip line was logged, pointing the operator at the out-of-band unlock endpoint.
+      await delay(50);
+      const skipped = readFileSync(join(STATE_ROOT, "logs", "waitron.log"), "utf8")
+        .split("\n")
+        .filter((line) => line.length > 0)
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+        .filter((e) => e.event === "fiscal.certificate_unlock_skipped");
+      expect(skipped.length).toBeGreaterThanOrEqual(1);
+      expect(skipped.at(-1)).toMatchObject({
+        reason: "already_primary",
+        endpoint: "/management-api/fiscal-certificate/unlock",
+      });
     } finally {
       await server.close();
     }

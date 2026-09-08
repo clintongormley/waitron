@@ -4,9 +4,10 @@ import { PURPOSES, isPurpose, validatePayload } from "./purposes.js";
 import { capturedSync as captured } from "./testing/captured.js";
 
 describe("PURPOSES", () => {
-  it("declares the four purposes the host needs", () => {
+  it("declares the five purposes the host needs", () => {
     expect(Object.keys(PURPOSES).sort()).toEqual([
       "fiscal.aeat",
+      "fiscal.aeat.dormant",
       "membership.node_key",
       "payments.stripe",
       "sync.mirror_token",
@@ -33,6 +34,17 @@ describe("PURPOSES", () => {
     expect(() =>
       validatePayload("fiscal.aeat", { pfxBase64: "AAA=", passphrase: "s3cret" }),
     ).toThrow(/credentials.invalid_payload/);
+  });
+});
+
+describe("fiscal.aeat.dormant purpose", () => {
+  it("is a known purpose whose payload field is `envelope`", () => {
+    expect(isPurpose("fiscal.aeat.dormant")).toBe(true);
+    expect(PURPOSES["fiscal.aeat.dormant"]).toEqual(["envelope"]);
+  });
+  it("validatePayload accepts an envelope and rejects a payload missing it", () => {
+    expect(() => validatePayload("fiscal.aeat.dormant", { envelope: "abc" })).not.toThrow();
+    expect(() => validatePayload("fiscal.aeat.dormant", {})).toThrow();
   });
 });
 

@@ -144,6 +144,10 @@ export async function runRestore(deps: {
     migrationsRoot: isUnset(migrationsDir) ? DEFAULT_MIGRATIONS_ROOT : migrationsDir,
     modules: ALL_MODULES,
     environment,
+    // §4.2: the restore target's own vault key. If the artifact is "external" and this is unset,
+    // `validateArtifact` refuses (`restore.credentials_key_external`) — a cloud-node backup restored
+    // onto a node with no `WAITRON_CREDENTIALS_KEY` would leave an unopenable vault.
+    envCredentialsKey: deps.env.WAITRON_CREDENTIALS_KEY,
     log: createLogger(
       (line) => deps.out(line.trimEnd()),
       () => new Date(),

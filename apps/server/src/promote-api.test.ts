@@ -56,7 +56,10 @@ import { mountPromoteApi } from "./promote-api.js";
 const fakeDb = {} as Database;
 
 function appWith(
-  run: (a: { oldNodeNeutralised: boolean }) => Promise<PromoteRunResult> = vi.fn(async () => ({
+  run: (
+    a: { oldNodeNeutralised: boolean },
+    ctx: { breakGlass?: string },
+  ) => Promise<PromoteRunResult> = vi.fn(async () => ({
     alreadyPrimary: false,
     restarting: true,
   })),
@@ -90,7 +93,8 @@ describe("POST /management-api/promote (two-path auth over the promote closure)"
       password: "pw",
     });
     expect(res.status).toBe(200);
-    expect(run).toHaveBeenCalledWith({ oldNodeNeutralised: true });
+    // The admin-login path carries no break-glass secret, so `run` gets an empty ctx.
+    expect(run).toHaveBeenCalledWith({ oldNodeNeutralised: true }, {});
     expect(await res.json()).toEqual({ alreadyPrimary: false, restarting: true });
     // The admin-login path was taken: it authenticated, authorized node.promote, and ended the session.
     expect(loginManagerById).toHaveBeenCalled();
@@ -106,7 +110,9 @@ describe("POST /management-api/promote (two-path auth over the promote closure)"
     const { app, run } = appWith();
     const res = await post(app, { oldNodeNeutralised: true, breakGlass: GOOD_SECRET });
     expect(res.status).toBe(200);
-    expect(run).toHaveBeenCalledWith({ oldNodeNeutralised: true });
+    // The verified break-glass secret is threaded through to `run` as `ctx.breakGlass` (Task 9): the
+    // boot closure unwraps the dormant cert with it inside the promote's point-of-no-return.
+    expect(run).toHaveBeenCalledWith({ oldNodeNeutralised: true }, { breakGlass: GOOD_SECRET });
     // The break-glass path never touches the manager-login path.
     expect(loginManagerById).not.toHaveBeenCalled();
   });
@@ -146,8 +152,9 @@ describe("POST /management-api/promote (two-path auth over the promote closure)"
     const res = await post(app, { oldNodeNeutralised: false, personId: PERSON, password: "pw" });
     expect(res.status).toBe(400);
     expect((await res.json()).error.code).toBe("promotion.fence_not_attested");
-    // The endpoint passed the operator's attestation through verbatim (false → false).
-    expect(run).toHaveBeenCalledWith({ oldNodeNeutralised: false });
+    // The endpoint passed the operator's attestation through verbatim (false → false), with an empty
+    // ctx (the admin-login path carries no break-glass secret).
+    expect(run).toHaveBeenCalledWith({ oldNodeNeutralised: false }, {});
   });
 
   it("run's promotion.node_fenced maps to 409", async () => {

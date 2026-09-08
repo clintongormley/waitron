@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { isAppError } from "@waitron/shared";
+import { isAppError, tenantId as brandTenantId } from "@waitron/shared";
 import {
   captureError,
   readDeploymentMode,
@@ -22,7 +22,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { loadKeyRing, putCredential } from "@waitron/credentials";
+import { getCredential, loadKeyRing, putCredential } from "@waitron/credentials";
 import type { Endorsement, SignedMembershipDocument } from "@waitron/membership";
 // The same test-only entry point `packages/fiscal-verifactu`'s own drain suites use to seed a due
 // `envios` row (boot.test.ts's drain e2e reuses it identically) — no `exports` map restricts either
@@ -37,6 +37,7 @@ import { sealMirrorToken } from "./mirror-token.js";
 import { parseEnvFile } from "./env-file.js";
 import { roleUrl } from "./testing/postgres.js";
 import { mintMtlsMaterial } from "./testing/tls.js";
+import { readCertStatus, storeDormantCert, type AeatCertMaterial } from "./fiscal-cert.js";
 
 // The headline e2e for the promote action (promote runbook design §8): a booted LOCAL SECONDARY
 // (mode='primary', singleton_role='secondary') files NOTHING; an in-process promote flips
@@ -112,6 +113,16 @@ let appDatabaseUrl: string;
 // this suite seals is the one the in-process promote unseals to sign the minted membership document.
 const PROMOTE_RING = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+  WAITRON_CREDENTIALS_KEY_VERSION: "1",
+});
+
+// A ring with DIFFERENT key bytes but the SAME version (1) as PROMOTE_RING. A dormant row sealed under
+// it carries keyVersion 1, so `unwrapDormantCert`'s OUTER `tryGetCredential` selects PROMOTE_RING's v1
+// key (the wrong bytes), GCM authentication fails, and it throws `credentials.decrypt_failed` — an
+// outer vault-ring/system fault, distinct from a corrupt INNER break-glass envelope. Used to prove that
+// fault does not abort a break-glass promote.
+const WRONG_VAULT_RING = loadKeyRing({
+  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 
@@ -521,7 +532,7 @@ describe("promote (real Postgres): mirror → primary, in-process, restart-into-
       expect(server.promoteMirrorToPrimary).toBeDefined();
       expect(server.promoteLocalSecondaryToPrimary).toBeUndefined();
 
-      const result = await server.promoteMirrorToPrimary!({ oldNodeNeutralised: true });
+      const result = await server.promoteMirrorToPrimary!({ oldNodeNeutralised: true }, {});
       expect(result).toEqual({ alreadyPrimary: false, seriesId: seed.standardSeriesId });
 
       // The point-of-no-return committed: deployment flipped to (primary, primary).
@@ -540,6 +551,287 @@ describe("promote (real Postgres): mirror → primary, in-process, restart-into-
       expect(persisted.WAITRON_TILL_NODE_ID).toBe(seed.nodeId);
       expect(persisted.WAITRON_TILL_TENANT_ID).toBe(MIRROR_TENANT_ID);
       expect(persisted.WAITRON_ENV).toBe("production");
+    } finally {
+      await server.close();
+      killSpy.mockRestore();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+});
+
+// Task 9 — the break-glass certificate unlock at promotion (cert-distribution design §3.1). When the
+// operator promotes a standby WITH the break-glass secret, boot's mirror-promote closure unwraps the
+// DORMANT `fiscal.aeat.dormant` row (the ~128 MiB scrypt open, BEFORE the point-of-no-return) and, on
+// material, seals the live `fiscal.aeat` row INSIDE the PONR owner transaction — so "became primary"
+// and "holds the filing cert" commit together. A corrupt dormant (wrapped under a DIFFERENT secret)
+// must not block the promote: it is deleted and the promote proceeds with no live cert. Real Postgres
+// for the owner-role writes + the credentials round-trip (CLAUDE.md §4). A SEPARATE clone so the
+// mirror stamp + the (primary,primary) flip never leak into the suites above.
+const certSuite = useTemplateDb({ template: "manifest" });
+const GOOD_BREAK_GLASS = "correct-horse-battery-staple";
+// The cloud's own reserved identity is established ONCE (its reserved standard-series CODE is unique
+// per tenant, so re-seeding it would collide); each test resets the mutable deployment + membership +
+// cert state around it, so the three promotes stay order-independent on this one shared clone.
+let certSeed: { nodeId: string; standardSeriesId: string };
+
+/** Seals a dormant `fiscal.aeat.dormant` row for the mirror tenant, wrapped under `secret`, and returns
+ * the material so the caller can assert the live copy round-trips. */
+async function seedDormantCert(
+  admin: Database,
+  secret: string,
+  ring: typeof PROMOTE_RING = PROMOTE_RING,
+): Promise<AeatCertMaterial> {
+  const tls = mintMtlsMaterial();
+  const cert: AeatCertMaterial = {
+    pfxBase64: tls.clientPfx.toString("base64"),
+    passphrase: tls.clientPassphrase,
+    certKind: "representante",
+  };
+  await withTenant(admin, MIRROR_TENANT_ID, (tx) =>
+    storeDormantCert(tx, ring, MIRROR_TENANT_ID, cert, secret),
+  );
+  return cert;
+}
+
+/** Clears any live/dormant AEAT credential the previous test left on the shared clone's tenant, so each
+ * cert test starts from a known cert-status. Leaves the identity/mirror credentials boot needs. */
+async function clearAeatCredentials(admin: Database): Promise<void> {
+  await admin.execute(sql`
+    delete from tenant_credentials
+    where tenant_id = ${MIRROR_TENANT_ID} and purpose in ('fiscal.aeat', 'fiscal.aeat.dormant')`);
+}
+
+/** Puts the shared clone back to a fresh read-only-mirror starting point around the once-established
+ * identity: a held term-3 chart (outgoing primary serving, this node secondary — the promote bumps it
+ * with a plain overwrite so each run mints term 4 afresh), mode='mirror', and no AEAT credential. */
+async function resetToMirror(admin: Database, nodeId: string): Promise<void> {
+  const held: SignedMembershipDocument = {
+    body: {
+      term: 3,
+      nodes: [
+        { nodeId: MIRROR_ORIGIN_NODE_ID, contactUrl: "https://old", standing: "serving-primary" },
+        { nodeId, contactUrl: "", standing: "serving-secondary" },
+      ],
+    },
+    signerNodeId: MIRROR_ORIGIN_NODE_ID,
+    signature: "held-placeholder-sig",
+    endorsements: [],
+  };
+  await writeNodeMembership(admin, held);
+  await setDeploymentMode(admin, "mirror");
+  await clearAeatCredentials(admin);
+}
+
+/** The live/dormant/none status of the mirror tenant's AEAT cert, read via the superuser connection. */
+async function certStatus(admin: Database): Promise<"live" | "dormant" | "none"> {
+  return withTenant(admin, MIRROR_TENANT_ID, (tx) => readCertStatus(tx, MIRROR_TENANT_ID));
+}
+
+/** Reads and decrypts the sealed live `fiscal.aeat` cert under the box ring. */
+async function readLiveCert(admin: Database): Promise<Record<string, string>> {
+  return withTenant(admin, MIRROR_TENANT_ID, (tx) =>
+    getCredential(tx, PROMOTE_RING, {
+      tenantId: brandTenantId(MIRROR_TENANT_ID),
+      purpose: "fiscal.aeat",
+    }),
+  );
+}
+
+/** Parses the JSONL log the boot wrote under `<stateDir>/logs/waitron.log` into event records. */
+function readLogEvents(stateDir: string): Array<Record<string, unknown>> {
+  let content: string;
+  try {
+    content = readFileSync(join(stateDir, "logs", "waitron.log"), "utf8");
+  } catch {
+    return [];
+  }
+  return content
+    .split("\n")
+    .filter((line) => line.length > 0)
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+}
+
+/** Boots the certSuite clone as a read-only mirror on `nodeId`, writing its `modules.json` first. The
+ * caller supplies (and later removes) `stateDir` so `trading.env` + the log land somewhere isolated. */
+async function startCertMirror(
+  nodeId: string,
+  stateDir: string,
+): Promise<Awaited<ReturnType<typeof startServer>>> {
+  writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
+  const port = await freePort();
+  return startServer({
+    ...KEY_ENV,
+    ...TICK_ENV,
+    WAITRON_TILL_TENANT_ID: MIRROR_TENANT_ID,
+    WAITRON_TILL_TILL_ID: MIRROR_TILL_ID,
+    WAITRON_TILL_NODE_ID: nodeId,
+    WAITRON_TILL_SERIES_ID: MIRROR_DESIGNATED_SERIES_ID,
+    WAITRON_TILL_LOCATION_ID: MIRROR_LOCATION_ID,
+    DATABASE_URL: roleUrl(certSuite.pg.uri, "app_login", "app_pw"),
+    WAITRON_MIGRATIONS_DATABASE_URL: certSuite.pg.uri,
+    WAITRON_HTTP_PORT: String(port),
+    WAITRON_MIGRATIONS_DIR: migrationsRoot,
+    WAITRON_SYNC_DATABASE_URL: roleUrl(certSuite.pg.uri, "sync_applier", "ap"),
+    WAITRON_STATE_DIR: stateDir,
+  });
+}
+
+describe("promote (real Postgres): break-glass certificate unlock at promotion", () => {
+  // Establish the cloud's own dormant identity ONCE; each test resets the deployment/membership around it.
+  beforeAll(async () => {
+    certSeed = await seedMirrorIdentity(certSuite.admin);
+  }, 180_000);
+
+  it("unlocks the dormant cert into the live slot inside the PONR when the break-glass secret is given", async () => {
+    await resetToMirror(certSuite.admin, certSeed.nodeId);
+    const cert = await seedDormantCert(certSuite.admin, GOOD_BREAK_GLASS);
+    expect(await certStatus(certSuite.admin)).toBe("dormant");
+
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-cert-unlock-live-"));
+    const server = await startCertMirror(certSeed.nodeId, stateDir).catch(async (err: unknown) => {
+      await rm(stateDir, { recursive: true, force: true });
+      throw err;
+    });
+    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
+    try {
+      const result = await server.promoteMirrorToPrimary!(
+        { oldNodeNeutralised: true },
+        { breakGlass: GOOD_BREAK_GLASS },
+      );
+      expect(result).toEqual({ alreadyPrimary: false, seriesId: certSeed.standardSeriesId });
+
+      // The PONR committed AND the live cert was sealed in the same transaction.
+      expect(await readDeploymentMode(certSuite.admin)).toBe("primary");
+      expect(await readSingletonRole(certSuite.admin)).toBe("primary");
+      expect(await certStatus(certSuite.admin)).toBe("live");
+      expect(await readLiveCert(certSuite.admin)).toEqual({
+        pfxBase64: cert.pfxBase64,
+        passphrase: cert.passphrase,
+        certKind: cert.certKind,
+      });
+
+      // The success log line was emitted.
+      await delay(50);
+      const unlocked = readLogEvents(stateDir).filter(
+        (e) => e.event === "fiscal.certificate_unlocked",
+      );
+      expect(unlocked.length).toBeGreaterThanOrEqual(1);
+      expect(unlocked[0]!.tenantId).toBe(MIRROR_TENANT_ID);
+    } finally {
+      await server.close();
+      killSpy.mockRestore();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("deletes a corrupt dormant cert (wrong secret) and still promotes, leaving no live cert", async () => {
+    await resetToMirror(certSuite.admin, certSeed.nodeId);
+    // Sealed under a DIFFERENT secret than the promote presents — the envelope will not open.
+    await seedDormantCert(certSuite.admin, "some-other-secret");
+    expect(await certStatus(certSuite.admin)).toBe("dormant");
+
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-cert-unlock-corrupt-"));
+    const server = await startCertMirror(certSeed.nodeId, stateDir).catch(async (err: unknown) => {
+      await rm(stateDir, { recursive: true, force: true });
+      throw err;
+    });
+    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
+    try {
+      const result = await server.promoteMirrorToPrimary!(
+        { oldNodeNeutralised: true },
+        { breakGlass: GOOD_BREAK_GLASS },
+      );
+      // The promote still succeeds — a corrupt dormant never blocks failover.
+      expect(result).toEqual({ alreadyPrimary: false, seriesId: certSeed.standardSeriesId });
+      expect(await readSingletonRole(certSuite.admin)).toBe("primary");
+
+      // The dormant row was deleted and NO live cert sealed.
+      expect(await certStatus(certSuite.admin)).toBe("none");
+
+      // The failure log line was emitted.
+      await delay(50);
+      const failed = readLogEvents(stateDir).filter(
+        (e) => e.event === "fiscal.certificate_unlock_failed",
+      );
+      expect(failed.length).toBeGreaterThanOrEqual(1);
+      expect(failed[0]!.tenantId).toBe(MIRROR_TENANT_ID);
+    } finally {
+      await server.close();
+      killSpy.mockRestore();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("promotes and LEAVES the dormant row when the outer vault ring cannot open it (recoverable fault, not corrupt)", async () => {
+    await resetToMirror(certSuite.admin, certSeed.nodeId);
+    // Seal the dormant row's OUTER vault under a DIFFERENT ring than the node runs. The break-glass
+    // secret is CORRECT, but the credentials ring cannot open the row at all, so `unwrapDormantCert`'s
+    // outer `tryGetCredential` THROWS `credentials.decrypt_failed` — a vault/system fault, not a corrupt
+    // envelope. Nothing external may block a failover (CLAUDE.md §5), so the promote must still succeed.
+    await seedDormantCert(certSuite.admin, GOOD_BREAK_GLASS, WRONG_VAULT_RING);
+    expect(await certStatus(certSuite.admin)).toBe("dormant");
+
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-cert-unlock-vault-"));
+    const server = await startCertMirror(certSeed.nodeId, stateDir).catch(async (err: unknown) => {
+      await rm(stateDir, { recursive: true, force: true });
+      throw err;
+    });
+    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
+    try {
+      // The promote SUCCEEDS despite the undecryptable dormant row.
+      const result = await server.promoteMirrorToPrimary!(
+        { oldNodeNeutralised: true },
+        { breakGlass: GOOD_BREAK_GLASS },
+      );
+      expect(result).toEqual({ alreadyPrimary: false, seriesId: certSeed.standardSeriesId });
+      expect(await readSingletonRole(certSuite.admin)).toBe("primary");
+
+      // No live cert was sealed AND — unlike the corrupt-envelope case — the dormant row is LEFT IN
+      // PLACE for a later ring fix/rotation to recover, so status stays "dormant", never "none".
+      expect(await certStatus(certSuite.admin)).toBe("dormant");
+
+      // A DISTINCT failure was logged, marked a vault-ring fault rather than a corrupt cert.
+      await delay(50);
+      const failed = readLogEvents(stateDir).filter(
+        (e) => e.event === "fiscal.certificate_unlock_failed",
+      );
+      expect(failed.length).toBeGreaterThanOrEqual(1);
+      expect(failed[0]!.tenantId).toBe(MIRROR_TENANT_ID);
+      expect(failed[0]!.reason).toBe("vault_unreadable");
+    } finally {
+      await server.close();
+      killSpy.mockRestore();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("promotes with no live cert and no throw when there is no dormant row", async () => {
+    await resetToMirror(certSuite.admin, certSeed.nodeId);
+    expect(await certStatus(certSuite.admin)).toBe("none");
+
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-cert-unlock-absent-"));
+    const server = await startCertMirror(certSeed.nodeId, stateDir).catch(async (err: unknown) => {
+      await rm(stateDir, { recursive: true, force: true });
+      throw err;
+    });
+    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
+    try {
+      const result = await server.promoteMirrorToPrimary!(
+        { oldNodeNeutralised: true },
+        { breakGlass: GOOD_BREAK_GLASS },
+      );
+      expect(result).toEqual({ alreadyPrimary: false, seriesId: certSeed.standardSeriesId });
+      expect(await readSingletonRole(certSuite.admin)).toBe("primary");
+      expect(await certStatus(certSuite.admin)).toBe("none");
+
+      // Neither the success nor the failure line was emitted — an absent dormant is a silent no-op.
+      await delay(50);
+      const certEvents = readLogEvents(stateDir).filter(
+        (e) =>
+          e.event === "fiscal.certificate_unlocked" ||
+          e.event === "fiscal.certificate_unlock_failed",
+      );
+      expect(certEvents).toEqual([]);
     } finally {
       await server.close();
       killSpy.mockRestore();

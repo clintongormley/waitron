@@ -51,6 +51,7 @@ export type ManifestBuilder = (deps: {
   readonly modules: readonly WaitronModule[];
   readonly environment: DeploymentEnvironment;
   readonly now: Date;
+  readonly credentialsKey: "embedded" | "external";
 }) => Promise<BackupManifest>;
 
 export interface BackupSweepDeps {
@@ -72,6 +73,11 @@ export interface BackupSweepDeps {
   resolvers: Record<string, string>;
   /** State dir holding the RECOVERY_FILES secrets captured into `secrets/<path>` (state-secrets.ts). */
   stateDir: string;
+  /** Where this box holds its vault key (§4): `"embedded"` (on-prem — `secrets.env` on disk, packed
+   * into the artifact) or `"external"` (cloud — key only in `WAITRON_CREDENTIALS_KEY`, NEVER packed).
+   * Threaded into BOTH the manifest and `collectStateSecrets`, so the recorded value and the secrets
+   * actually packed agree on whether the vault key rides along. */
+  credentialsKey: "embedded" | "external";
   /** The libpq connection string pg_dump uses, with the same role and database as db. */
   databaseUrl: string;
   /** The operator-held passphrase the dump is encrypted under before it ever reaches a backend. */
@@ -131,8 +137,9 @@ export async function runOnce(deps: Omit<BackupSweepDeps, "intervalMs" | "sleep"
         modules: deps.modules,
         environment: deps.environment,
         now: stamp,
+        credentialsKey: deps.credentialsKey,
       }),
-      collectStateSecrets(deps.stateDir),
+      collectStateSecrets(deps.stateDir, { credentialsKey: deps.credentialsKey }),
       collectModuleNonDbState(deps.modules, deps.resolvers),
     ]);
 
