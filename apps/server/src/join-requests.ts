@@ -4,6 +4,8 @@ import { and, eq, lt, sql } from "drizzle-orm";
 import { type Transaction, devices, joinRequests } from "@waitron/db";
 import { hashSecret, verifySecret } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
+import type { FormFactor } from "@waitron/layouts";
+import { resolveDeviceBinding } from "./device.js";
 import type { TillConfig } from "./till-config.js";
 
 /** Both surfaces' pending joins live in one table; this is which one a row is for. */
@@ -235,4 +237,86 @@ export async function readJoinStatus(
     );
   if (accepted !== undefined && verifySecret(token, accepted.tokenHash)) return "approved";
   return "not_approved";
+}
+
+/** What {@link acceptDeviceJoinRequest} hands back. A wrong choice is a RESULT, never a throw — see
+ * that function's header for why the difference is the whole point of this task. */
+export type AcceptResult =
+  | { ok: true; deviceId: string; name: string; formFactor: FormFactor }
+  | { ok: false; reason: "mismatch" };
+
+/**
+ * Approve a device's ask-to-join.
+ *
+ * ONE transaction: the caller's `withTenant` covers the register auto-creation, the device insert and
+ * the request's deletion, so a device insert that throws rolls the register back and leaves no orphan
+ * (CLAUDE.md §3). The request's id becomes the device's id, which is what lets the joiner's cookie
+ * survive approval untouched.
+ *
+ * A WRONG CHOICE DENIES — AND THAT IS WHY THIS RETURNS RATHER THAN THROWS. `withTenant` IS the
+ * transaction (`packages/db/src/tenancy.ts:15`, `db.transaction((tx) => fn(tx))`), so an `AppError`
+ * thrown from here rolls the DELETE back with it and a wrong tap becomes an unlimited retry — the
+ * exact opposite of the property that makes one-in-three an acceptable guess rate (design §1.2). The
+ * caller commits this result and throws `device.join_mismatch` AFTER the transaction returns.
+ */
+export async function acceptDeviceJoinRequest(
+  tx: Transaction,
+  cfg: TillConfig,
+  id: string,
+  input: {
+    choice: string;
+    profileId: string;
+    stationId?: string | null;
+    registerId?: string | null;
+  },
+): Promise<AcceptResult> {
+  const row = await requirePending(tx, cfg, id);
+  if (row.kind !== "device") throw new AppError("join_request.not_found", {});
+
+  if (input.choice !== row.verificationNumber) {
+    await tx
+      .delete(joinRequests)
+      .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.id, id)));
+    return { ok: false, reason: "mismatch" };
+  }
+
+  const binding = await resolveDeviceBinding(tx, cfg, row.locationId, {
+    profileId: input.profileId,
+    name: row.label,
+    stationId: input.stationId,
+    registerId: input.registerId,
+  });
+
+  await tx.insert(devices).values({
+    id: row.id,
+    tenantId: cfg.tenantId,
+    locationId: row.locationId,
+    stationId: binding.stationId,
+    tillId: binding.tillId,
+    deviceProfileId: input.profileId,
+    label: row.label,
+    tokenHash: row.tokenHash,
+    active: true,
+  });
+  await tx
+    .delete(joinRequests)
+    .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.id, id)));
+
+  return { ok: true, deviceId: row.id, name: row.label, formFactor: binding.formFactor };
+}
+
+/** Refuse a request. Deleting the row is the whole of it — there is no denied state to carry, because
+ * both real tables now hold only approved rows and a joiner's recovery is to knock again. Returns the
+ * kind it deleted rather than taking one: on the shared deny route the kind is not known until the row
+ * is read, so a `kind` parameter would either be vacuous or force the route to read the row twice. */
+export async function denyJoinRequest(
+  tx: Transaction,
+  cfg: TillConfig,
+  id: string,
+): Promise<JoinRequestKind> {
+  const row = await requirePending(tx, cfg, id);
+  await tx
+    .delete(joinRequests)
+    .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.id, id)));
+  return row.kind;
 }

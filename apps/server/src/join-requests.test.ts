@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   JOIN_TTL_MS,
   PENDING_CAP,
+  acceptDeviceJoinRequest,
   challengeFor,
   createJoinRequest,
+  denyJoinRequest,
   listPendingJoinRequests,
   readJoinStatus,
 } from "./join-requests.js";
@@ -12,12 +14,29 @@ import {
 // and the sibling suite imports it from the subpath (`device-api.pg.test.ts:5-6`).
 import { asAppUser, withTenant } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import type { TillConfig } from "./till-config.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 
 // Real Postgres, not PGlite — these verbs run as `app_user` and the `join_requests` grants (SELECT,
 // INSERT, DELETE, no UPDATE) are part of what is being asserted; PGlite connects as a superuser, where
 // a missing grant passes and the run would be a false pass.
 const suite = useTemplateDb({ template: "manifest" });
+
+// A device_profiles row of the given form factor, seeded directly (superuser connection — this table's
+// grants are not what any test here is asserting). Copied from device-api.pg.test.ts:177-188 rather than
+// shared, the same call this file's sibling suites make (module state — the counter — resets per file).
+let profileCounter = 0;
+async function seedProfile(
+  cfg: TillConfig,
+  formFactor: "till" | "kds" | "phone-portrait" | "tablet-landscape",
+): Promise<string> {
+  profileCounter += 1;
+  const { rows } = await suite.admin.execute<{ id: string }>(sql`
+    insert into device_profiles (tenant_id, name, form_factor, capabilities)
+    values (${cfg.tenantId}, ${`Profile ${profileCounter}`}, ${formFactor}, '[]'::jsonb)
+    returning id`);
+  return rows[0]!.id;
+}
 
 describe("createJoinRequest", () => {
   it("mints a two-digit number, an id and a token, and leaves one pending row", async () => {
@@ -222,7 +241,8 @@ describe("readJoinStatus", () => {
       expect(status).toBe("not_approved");
     });
   });
-  // The `approved` case needs an accepted device and lands in Task 6, whose test asserts it.
+  // The `approved` case needs an accepted device — see acceptDeviceJoinRequest's own first test below,
+  // which asserts it via this same function.
 });
 
 describe("listPendingJoinRequests", () => {
@@ -287,8 +307,22 @@ describe("challengeFor", () => {
     });
   });
 
-  // The shuffle-position test (`denyJoinRequest` in a loop, to stay under PENDING_CAP) is held back to
-  // Task 6, which adds `denyJoinRequest` — see task-5-report.md.
+  it("shuffles the choice order — the real number is not always at the same index", async () => {
+    const venue = await setupVenue(suite.admin);
+    // One pending request at a time, denied before the next is made, to stay under PENDING_CAP while
+    // sampling enough shuffles that a fixed position (a broken Fisher-Yates) would show up reliably.
+    const positions = new Set<number>();
+    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      for (let i = 0; i < 30; i++) {
+        const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: `d${i}` });
+        const { choices } = await challengeFor(tx, venue.cfg, made.joinId);
+        positions.add(choices.indexOf(made.verificationNumber));
+        await denyJoinRequest(tx, venue.cfg, made.joinId);
+      }
+    });
+    expect(positions.size).toBeGreaterThan(1);
+  });
 
   it("throws join_request.not_found for an unknown id, and for another tenant's request", async () => {
     const venueA = await setupVenue(suite.admin);
@@ -308,6 +342,207 @@ describe("challengeFor", () => {
       await expect(challengeFor(tx, venueB.cfg, madeA.joinId)).rejects.toMatchObject({
         code: "join_request.not_found",
       });
+    });
+  });
+});
+
+describe("acceptDeviceJoinRequest", () => {
+  it("creates the device with the request's OWN id, so the joiner's cookie survives", async () => {
+    const venue = await setupVenue(suite.admin);
+    const profileId = await seedProfile(venue.cfg, "till");
+    const { made, accepted, status } = await withTenant(
+      suite.admin,
+      venue.cfg.tenantId,
+      async (tx) => {
+        await asAppUser(tx);
+        const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
+        const accepted = await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
+          choice: made.verificationNumber,
+          profileId,
+        });
+        return {
+          made,
+          accepted,
+          status: await readJoinStatus(tx, venue.cfg, made.joinId, made.token),
+        };
+      },
+    );
+    expect(accepted).toMatchObject({ ok: true, deviceId: made.joinId, formFactor: "till" });
+    expect(status).toBe("approved");
+  });
+
+  it("auto-creates the register for a till form factor, in the SAME transaction as the device", async () => {
+    const venue = await setupVenue(suite.admin);
+    const profileId = await seedProfile(venue.cfg, "till");
+    const label = "Bar till";
+    const accepted = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label });
+      return acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
+        choice: made.verificationNumber,
+        profileId,
+      });
+    });
+    if (!accepted.ok) throw new Error("expected accept to succeed");
+    const { rows } = await suite.admin.execute<{ id: string; till_id: string | null }>(sql`
+      select t.id, d.till_id from tills t
+      join devices d on d.till_id = t.id
+      where t.tenant_id = ${venue.cfg.tenantId} and t.name = ${label} and d.id = ${accepted.deviceId}
+    `);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.till_id).toBe(rows[0]!.id);
+  });
+
+  it("rolls the register back when the device insert fails", async () => {
+    const venue = await setupVenue(suite.admin);
+    const profileId = await seedProfile(venue.cfg, "till");
+    const made = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Blocked till" });
+    });
+    // Plant a devices row under the request's OWN id first: acceptDeviceJoinRequest reuses that id, so
+    // its device INSERT collides on the primary key AFTER resolveDeviceBinding has already
+    // auto-created the till-form-factor register — the write order the "one transaction" comment
+    // depends on. `device_binding_rule` demands a till_id for this profile's form factor, so the
+    // blocker borrows the venue's own provisioned register — any live till satisfies the trigger.
+    await suite.admin.execute(sql`
+      insert into devices (id, tenant_id, location_id, till_id, device_profile_id, label, token_hash, active)
+      values (${made.joinId}, ${venue.cfg.tenantId}, ${venue.cfg.locationId}, ${venue.cfg.tillId}, ${profileId}, 'blocker', 'x', true)
+    `);
+    await expect(
+      withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
+          choice: made.verificationNumber,
+          profileId,
+        });
+      }),
+    ).rejects.toThrow();
+    const { rows } = await suite.admin.execute<{ id: string }>(
+      sql`select id from tills where tenant_id = ${venue.cfg.tenantId} and name = 'Blocked till'`,
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it("DENIES on a wrong choice, and the deny SURVIVES THE TRANSACTION", async () => {
+    const venue = await setupVenue(suite.admin);
+    const profileId = await seedProfile(venue.cfg, "till");
+    // Two SEPARATE withTenant blocks on purpose. A single block that catches the rejection inside
+    // itself never commits or rolls anything back, so it would pass against code that throws from
+    // inside the transaction and loses the DELETE — the defect this test exists to catch.
+    const made = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return createJoinRequest(tx, venue.cfg, { kind: "device", label: "d" });
+    });
+    const wrong = made.verificationNumber === "00" ? "01" : "00";
+    const refused = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, { choice: wrong, profileId });
+    });
+    expect(refused).toEqual({ ok: false, reason: "mismatch" });
+    // Gone AFTER the transaction committed — this is what makes one-in-three an acceptable guess rate.
+    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await expect(
+        acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
+          choice: made.verificationNumber,
+          profileId,
+        }),
+      ).rejects.toMatchObject({ code: "join_request.not_found" });
+      expect(await readJoinStatus(tx, venue.cfg, made.joinId, made.token)).toBe("not_approved");
+    });
+  });
+
+  it("refuses a print_agent request — a device accept cannot turn an agent's ask into a device", async () => {
+    const venue = await setupVenue(suite.admin);
+    const profileId = await seedProfile(venue.cfg, "till");
+    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const made = await createJoinRequest(tx, venue.cfg, {
+        kind: "print_agent",
+        label: "Kitchen box",
+      });
+      await expect(
+        acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
+          choice: made.verificationNumber,
+          profileId,
+        }),
+      ).rejects.toMatchObject({ code: "join_request.not_found" });
+    });
+  });
+
+  it("refuses another tenant's request", async () => {
+    const venueA = await setupVenue(suite.admin);
+    const venueB = await setupVenue(suite.admin);
+    const profileIdB = await seedProfile(venueB.cfg, "till");
+    const madeA = await withTenant(suite.admin, venueA.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return createJoinRequest(tx, venueA.cfg, { kind: "device", label: "A's till" });
+    });
+    await withTenant(suite.admin, venueB.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await expect(
+        acceptDeviceJoinRequest(tx, venueB.cfg, madeA.joinId, {
+          choice: madeA.verificationNumber,
+          profileId: profileIdB,
+        }),
+      ).rejects.toMatchObject({ code: "join_request.not_found" });
+    });
+  });
+});
+
+describe("denyJoinRequest", () => {
+  it("deletes the request, and the joiner reads not_approved", async () => {
+    const venue = await setupVenue(suite.admin);
+    const made = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return createJoinRequest(tx, venue.cfg, { kind: "device", label: "d" });
+    });
+    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await denyJoinRequest(tx, venue.cfg, made.joinId);
+    });
+    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      expect(await readJoinStatus(tx, venue.cfg, made.joinId, made.token)).toBe("not_approved");
+    });
+  });
+
+  it("throws join_request.not_found for an unknown id or another tenant's", async () => {
+    const venueA = await setupVenue(suite.admin);
+    const venueB = await setupVenue(suite.admin);
+    const madeA = await withTenant(suite.admin, venueA.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return createJoinRequest(tx, venueA.cfg, { kind: "device", label: "A's till" });
+    });
+    await withTenant(suite.admin, venueA.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await expect(
+        denyJoinRequest(tx, venueA.cfg, "00000000-0000-4000-8000-000000000000"),
+      ).rejects.toMatchObject({ code: "join_request.not_found" });
+    });
+    await withTenant(suite.admin, venueB.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await expect(denyJoinRequest(tx, venueB.cfg, madeA.joinId)).rejects.toMatchObject({
+        code: "join_request.not_found",
+      });
+    });
+  });
+
+  it("returns the kind it deleted, so the shared route can authorize against it", async () => {
+    const venue = await setupVenue(suite.admin);
+    const madeDevice = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return createJoinRequest(tx, venue.cfg, { kind: "device", label: "d" });
+    });
+    const madeAgent = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return createJoinRequest(tx, venue.cfg, { kind: "print_agent", label: "a" });
+    });
+    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      expect(await denyJoinRequest(tx, venue.cfg, madeDevice.joinId)).toBe("device");
+      expect(await denyJoinRequest(tx, venue.cfg, madeAgent.joinId)).toBe("print_agent");
     });
   });
 });

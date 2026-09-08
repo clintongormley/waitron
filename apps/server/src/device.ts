@@ -389,12 +389,48 @@ export async function enrolDevice(
     throw new AppError("device.pairing_expired", {});
   }
 
+  const binding = await resolveDeviceBinding(tx, cfg, row.locationId, {
+    profileId: input.profileId,
+    name: input.name,
+    stationId: input.stationId,
+    registerId: input.registerId,
+  });
+
+  const token = randomBytes(32).toString("base64url");
+  const [device] = await tx
+    .insert(devices)
+    .values({
+      tenantId: cfg.tenantId,
+      locationId: row.locationId,
+      stationId: binding.stationId,
+      tillId: binding.tillId,
+      deviceProfileId: input.profileId,
+      label: input.name,
+      tokenHash: hashSecret(token),
+      active: true,
+    })
+    .returning({ id: devices.id });
+  return { deviceId: device!.id, name: input.name, formFactor: binding.formFactor, token };
+}
+
+/**
+ * Resolve which binding a device with this profile must carry, creating the register a counter till
+ * owns. Lifted out of the old `enrolDevice` unchanged — the rules did not change, only who calls them:
+ * accept now runs inside a `device.manage` management session rather than on an unauthenticated route,
+ * which matters because this WRITES (a `till` form factor inserts a `tills` row).
+ */
+export async function resolveDeviceBinding(
+  tx: Transaction,
+  cfg: TillConfig,
+  locationId: string,
+  input: { profileId: string; name: string; stationId?: string | null; registerId?: string | null },
+): Promise<{ stationId: string | null; tillId: string | null; formFactor: FormFactor }> {
   const profile = await getDeviceProfile(tx, cfg.tenantId, input.profileId);
-  // `profileId` is a CLIENT choice (the operator picks it from the verify catalogue), so a well-formed
-  // id that names no profile of this tenant — unknown, or one deleted between verify and enrol — is a
-  // CLIENT-recoverable 404, NOT a server fault: reuse `device_profile.not_found` (the device-profile
-  // store's own "that profile isn't here" code, empty params) so the enrol screen can tell the operator
-  // to re-pick, rather than the opaque 500 a `device.profile_missing` would have paged as.
+  // `profileId` is a CLIENT choice (the operator picks it from the verify catalogue, or the admin
+  // picks it in the accept dialog), so a well-formed id that names no profile of this tenant —
+  // unknown, or one deleted meanwhile — is a CLIENT-recoverable 404, NOT a server fault: reuse
+  // `device_profile.not_found` (the device-profile store's own "that profile isn't here" code, empty
+  // params) rather than the opaque 500 a `device.profile_missing` would have paged as.
   if (profile === undefined) throw new AppError("device_profile.not_found", {});
 
   // The station/register binding this device carries, derived from its profile's form factor — the
@@ -409,27 +445,12 @@ export async function enrolDevice(
       stationId = input.stationId;
       break;
     case "till":
-      tillId = await createRegister(tx, cfg, row.locationId, input.name);
+      tillId = await createRegister(tx, cfg, locationId, input.name);
       break;
     case "handheld":
       if (input.registerId == null) throw new AppError("device.register_required", {});
-      tillId = await requireLiveRegister(tx, cfg, row.locationId, input.registerId);
+      tillId = await requireLiveRegister(tx, cfg, locationId, input.registerId);
       break;
   }
-
-  const token = randomBytes(32).toString("base64url");
-  const [device] = await tx
-    .insert(devices)
-    .values({
-      tenantId: cfg.tenantId,
-      locationId: row.locationId,
-      stationId,
-      tillId,
-      deviceProfileId: input.profileId,
-      label: input.name,
-      tokenHash: hashSecret(token),
-      active: true,
-    })
-    .returning({ id: devices.id });
-  return { deviceId: device!.id, name: input.name, formFactor: profile.formFactor, token };
+  return { stationId, tillId, formFactor: profile.formFactor };
 }
