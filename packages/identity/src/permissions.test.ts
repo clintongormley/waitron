@@ -26,11 +26,7 @@ describe("roleHasPermission", () => {
     // ...SUPERVISOR spread would otherwise pass on the two specific assertions above while silently
     // losing sale.refund/discount/rectify. mirror.create is admin-only (hands out a data-access sync
     // token) and is asserted false for manager in its own test below.
-    const ADMIN_ONLY: ReadonlySet<Permission> = new Set([
-      "mirror.create",
-      "node.promote",
-      "fiscal.configure",
-    ]);
+    const ADMIN_ONLY: ReadonlySet<Permission> = new Set(["mirror.create", "node.promote"]);
     for (const p of PERMISSIONS) {
       expect(roleHasPermission("manager", p)).toBe(!ADMIN_ONLY.has(p));
     }
@@ -197,16 +193,6 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("manager", "mirror.create")).toBe(false);
     expect(roleHasPermission("supervisor", "mirror.create")).toBe(false);
     expect(roleHasPermission("staff", "mirror.create")).toBe(false);
-  });
-  it("grants fiscal.configure to admin only (cert-distribution design §3.3)", () => {
-    // Installing or replacing the venue's AEAT signing certificate on a primary is an operator
-    // control action, so admin-only — reached via ALL and NEVER placed in the SUPERVISOR/MANAGER
-    // sets, mirroring node.promote's and mirror.create's admin-only scope.
-    expect(PERMISSIONS).toContain("fiscal.configure");
-    expect(roleHasPermission("admin", "fiscal.configure")).toBe(true);
-    expect(roleHasPermission("manager", "fiscal.configure")).toBe(false);
-    expect(roleHasPermission("supervisor", "fiscal.configure")).toBe(false);
-    expect(roleHasPermission("staff", "fiscal.configure")).toBe(false);
   });
 });
 

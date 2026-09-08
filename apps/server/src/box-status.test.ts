@@ -8,7 +8,6 @@ const base: BoxStatusReaders = {
   time: async () => ({ synced: true, source: "timedatectl", warn: false }),
   cert: () => Promise.resolve({ notAfter: "2030-01-01T00:00:00.000Z", daysRemaining: 30 }),
   awaitingFiscalCertificate: () => false,
-  fiscalCertificate: async () => "live",
   chain: async () => ({ height: 7, lastAt: "2026-08-29T10:00:00.000Z" }),
   replicationLag: undefined,
   disposal: undefined,
@@ -27,7 +26,6 @@ describe("collectBoxStatus", () => {
       time: { synced: true, source: "timedatectl", warn: false },
       cert: { available: true, notAfter: "2030-01-01T00:00:00.000Z", daysRemaining: 30 },
       awaitingFiscalCertificate: false,
-      fiscalCertificate: "live",
       chain: { height: 7, lastAt: "2026-08-29T10:00:00.000Z" },
       replication: { configured: false },
       disposal: { applicable: false },
@@ -45,21 +43,6 @@ describe("collectBoxStatus", () => {
   it("surfaces awaitingFiscalCertificate from its reader (a promoted mirror with no fiscal.aeat cert)", async () => {
     const status = await collectBoxStatus({ ...base, awaitingFiscalCertificate: () => true });
     expect(status.awaitingFiscalCertificate).toBe(true);
-  });
-
-  it("surfaces fiscalCertificate live from its reader", async () => {
-    const status = await collectBoxStatus({ ...base, fiscalCertificate: async () => "live" });
-    expect(status.fiscalCertificate).toBe("live");
-  });
-
-  it("surfaces fiscalCertificate dormant from its reader (present your break-glass secret)", async () => {
-    const status = await collectBoxStatus({ ...base, fiscalCertificate: async () => "dormant" });
-    expect(status.fiscalCertificate).toBe("dormant");
-  });
-
-  it("surfaces fiscalCertificate none from its reader (install a certificate)", async () => {
-    const status = await collectBoxStatus({ ...base, fiscalCertificate: async () => "none" });
-    expect(status.fiscalCertificate).toBe("none");
   });
 
   it("reports cert unavailable when no cert reader is configured", async () => {

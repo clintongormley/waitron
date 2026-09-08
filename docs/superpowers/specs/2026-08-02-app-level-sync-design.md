@@ -485,14 +485,6 @@ certificate by unsealing the mirrored blob with the node-local key ring; a node 
 submit, by construction — which is why the submitter role and the key ring co-locate on the primary
 (#33 §9). No certificate ever travels *as a secret* over the sync channel.
 
-> **Superseded 2026-09-07 — see [`2026-09-07-fiscal-cert-distribution-design.md`](2026-09-07-fiscal-cert-distribution-design.md).**
-> The "ordinary replicated config data (watermark upsert)" model above no longer holds. `tenant_credentials`
-> was reclassified from `state` to `local` (it is enrolled on NO sync lane and is never replicated), so
-> the cert does not reach a mirror by replication at all. Instead adopt double-wraps the venue's
-> `fiscal.aeat` cert (vault ring + break-glass secret) into a DORMANT `fiscal.aeat.dormant` copy the
-> standby holds at rest, and promotion re-seals it live under the break-glass secret. This paragraph
-> records what was intended when written; the cert-distribution design is the current mechanism.
-
 **No double-submission across a move — defence in depth, not a new mechanism.**
 
 1. **The one-primary invariant is the primary guard** (#33 §8): the submitter is a singleton role;

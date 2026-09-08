@@ -76,12 +76,12 @@ async function setupTenant(): Promise<{ tenantId: string; managerId: string }> {
   return { tenantId: venue.tenantId, managerId };
 }
 
-/** Seed every `RECOVERY_FILES` path plus `secrets.env` (an on-prem/"embedded" box), or all but `omit`
- * — omitting one makes the route hit `recovery.state_incomplete`. */
+/** Seed every `RECOVERY_FILES` path, or all but `omit` — omitting one makes the route hit
+ * `recovery.state_incomplete`. */
 async function seedStateDir(omit?: string): Promise<string> {
   const dir = mkdtempSync(join(tmpdir(), "recovery-state-"));
   await mkdir(join(dir, "tls"), { recursive: true });
-  for (const rel of [...RECOVERY_FILES, "secrets.env"]) {
+  for (const rel of RECOVERY_FILES) {
     if (rel === omit) continue;
     await writeFile(join(dir, rel), `contents-of-${rel}\n`);
   }
@@ -105,13 +105,7 @@ function buildApp(tenantId: string, stateDir: string): Hono {
   );
   mountRecoveryBundleApi(
     app,
-    {
-      db: suite.admin,
-      cfg: { tenantId },
-      stateDir,
-      credentialsKey: "embedded",
-      now: () => new Date("2026-08-29T10:00:00Z"),
-    },
+    { db: suite.admin, cfg: { tenantId }, stateDir, now: () => new Date("2026-08-29T10:00:00Z") },
     () => {},
   );
   return app;
@@ -175,7 +169,7 @@ describe("POST /api/box/recovery-bundle (real postgres)", () => {
       /attachment; filename="waitron-recovery-/,
     );
     const files = decryptBundle(await res.text(), BUNDLE_PASS);
-    expect(Object.keys(files).sort()).toEqual([...RECOVERY_FILES, "secrets.env"].sort());
+    expect(Object.keys(files).sort()).toEqual([...RECOVERY_FILES].sort());
     expect(files["secrets.env"]).toBe("contents-of-secrets.env\n");
   });
 

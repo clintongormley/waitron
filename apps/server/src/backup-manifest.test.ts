@@ -13,14 +13,12 @@ describe("buildManifest", () => {
       modules: ALL_MODULES,
       environment: "preproduction",
       now: new Date("2026-09-05T00:00:00Z"),
-      credentialsKey: "embedded",
     });
 
     expect(manifest).toMatchObject({
       manifestVersion: 1,
       environment: "preproduction",
       createdAt: "2026-09-05T00:00:00.000Z",
-      credentialsKey: "embedded",
     });
     expect(Object.keys(manifest.modules)).toEqual(
       expect.arrayContaining(ALL_MODULES.map((m) => m.name)),

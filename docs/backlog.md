@@ -482,7 +482,16 @@ All three decisions are now taken.
    Whole-branch run-it seat (Codex) caught a build break from a concurrent `@waitron/server-kit`
    refactor the rebase surfaced, the setup UI dropping the secret, and an awaiting-cert flag that
    cleared on a no-work drain pass — all fixed before land.
-   **cert distribution to a promoted mirror — LANDED #279 (2026-09-08)**
+   **cert distribution to a promoted mirror — LANDED #279 (2026-09-08), REVERTED 2026-09-08 pending
+   re-integration on the native-replication adopt/promote flow.** #279 was built against the SYNCHRONOUS
+   adopt (`adoptVenue` inserts the tenant, break-glass secret in hand) and the old promote; the
+   outbox→native-replication swap (Track A step 4, PR #280) replaced adopt with an ASYNCHRONOUS native
+   initial COPY (the tenant row arrives minutes later, the reserved-identity establish moved to a
+   boot-time finish worker) — so #279's adopt-time dormant-cert seal has no tenant row to FK to, and the
+   one-time break-glass secret is gone by the finish worker. Owner decision (2026-09-08): land the swap
+   as the foundation, revert #279, and rebuild cert distribution on the new flow as a follow-up (design
+   question: how the dormant cert is protected when the seal must happen after the copy — the break-glass
+   secret is no longer available at that point). Spec + plan below are KEPT for the re-build.
    ([`2026-09-07-fiscal-cert-distribution-design.md`](superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md),
    plan [`2026-09-07-fiscal-cert-distribution.md`](superpowers/plans/2026-09-07-fiscal-cert-distribution.md)):
    the standby receives the certificate at adopt wrapped under the break-glass secret and sealed

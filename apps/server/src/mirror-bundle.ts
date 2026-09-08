@@ -29,7 +29,7 @@ import {
 } from "@waitron/db";
 import { enrolPeer } from "@waitron/sync";
 import { endorseKey, type Endorsement } from "@waitron/membership";
-import { tryGetCredential, type KeyRing } from "@waitron/credentials";
+import type { KeyRing } from "@waitron/credentials";
 import type { AdoptResult, AdoptVenueRows } from "@waitron/provisioning";
 import { enabledModules, serializeModuleConfig } from "@waitron/module";
 import { caCertPath } from "./box-secrets.js";
@@ -80,12 +80,6 @@ export interface MirrorBundle {
    * consumer until S7 wires the tunnel and Track B item 2 proves it.
    */
   wireguardPublicKey?: string;
-  /**
-   * The venue's AEAT cert, present only when the primary holds a `fiscal.aeat` credential. The
-   * mirror seals it dormant under its break-glass secret at adopt (cert-distribution design §2.1);
-   * it is never itself a filing node from this alone.
-   */
-  aeatCert?: { pfxBase64: string; passphrase: string; certKind: string };
 }
 
 /**
@@ -94,8 +88,7 @@ export interface MirrorBundle {
  * `app_user` holds the reads and writes each enabled module's `provisioning.standby.reserve`
  * needs (for fiscal, SELECT/INSERT/UPDATE on `contadores_instalacion`/`registro_sif`/`cadenas`,
  * `packages/fiscal-verifactu/drizzle/0001_fiscal_baseline_sql.sql`, and SELECT on
- * `invoice_series`), and SELECT on `tenant_credentials` (reading the venue's `fiscal.aeat` cert into
- * the bundle), so no broader connection is used (CLAUDE.md §3: never widen a grant). `ring`
+ * `invoice_series`), so no broader connection is used (CLAUDE.md §3: never widen a grant). `ring`
  * unseals the primary's identity PRIVATE key (`readNodeIdentityKey`, as `app_user`) to sign the
  * standby's endorsement; `standby` is the node the primary vouches for. `designated` are the five
  * ids the till was provisioned with (`config.till.*`); `stateDir` locates the box CA;
@@ -138,24 +131,6 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
       invoiceSeries: await tx.select().from(invoiceSeries),
     }),
   );
-
-  // The venue's AEAT cert, read generically — never through the fiscal regime, which this file
-  // never imports (CLAUDE.md §3). Absent for a venue with no `fiscal.aeat` row (a still-dormant
-  // standby, or a `fiscal-none` deployment).
-  const aeatRow = await withTenant(deps.appDb, deps.designated.tenantId, (tx) =>
-    tryGetCredential(tx, deps.ring, {
-      tenantId: brandTenantId(deps.designated.tenantId),
-      purpose: "fiscal.aeat",
-    }),
-  );
-  const aeatCert =
-    aeatRow === null
-      ? undefined
-      : {
-          pfxBase64: aeatRow.pfxBase64,
-          passphrase: aeatRow.passphrase,
-          certKind: aeatRow.certKind,
-        };
 
   const environment = await readDeploymentEnvironment(deps.appDb);
   if (environment === null) throw new AppError("mirror.not_provisioned", {});
@@ -227,6 +202,5 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
     reservedIdentity: { ...reserved, endorsement },
     moduleOverrides: serializeModuleConfig(moduleConfig),
     wireguardPublicKey: deps.wireguardPublicKey,
-    aeatCert,
   };
 }

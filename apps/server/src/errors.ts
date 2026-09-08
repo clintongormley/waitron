@@ -157,17 +157,6 @@ declare module "@waitron/shared" {
      */
     "server.mirror_bind_exposed": { host: string };
     /**
-     * Setup boot found a usable `WAITRON_CREDENTIALS_KEY` in the environment (a cloud node's
-     * platform-injected vault key) AND a DIFFERING key in `<stateDir>/secrets.env` — refuse rather
-     * than seal under one ring and read under the other, which would strand every credential sealed
-     * under whichever key we did not use. The env key wins; remove one. `server.*` — a fact about the
-     * PROCESS refusing to boot, not about a sale, payment or credential (a boot-config disagreement,
-     * the class `server.config_missing`/`server.mirror_bind_exposed` cover). No params: neither key
-     * may land in an error, the no-leak discipline the rest of this file's `server.*` codes keep.
-     * Never renamed once shipped.
-     */
-    "server.credentials_key_conflict": Record<string, never>;
-    /**
      * This host is configured for one environment and the database belongs to another. Thrown
      * before migrations run, so nothing is written.
      *
@@ -1519,12 +1508,6 @@ declare module "@waitron/shared" {
      * once shipped.
      */
     "mirror.bundle_fetch_failed": Record<string, never>;
-    /** `/management-api/fiscal-certificate/unlock` on a primary that holds no dormant cert copy. */
-    "fiscal.certificate_dormant_missing": { tenantId: string };
-    /** The break-glass secret verified but the dormant envelope would not open (corrupt / wrapped
-     * under a different secret). On /unlock a 4xx; on the promotion path a logged status. The corrupt
-     * dormant row is deleted so status falls to "none" (install by hand), never a retry loop. */
-    "fiscal.certificate_unlock_failed": { tenantId: string };
     /**
      * The venue's membership document could not be written because every read-mint-write round lost
      * its term race — a concurrent writer committed a term at least as high each time, so this mint
@@ -1710,8 +1693,5 @@ declare module "@waitron/shared" {
      * without learning any module's namespaces. A non-`AppError` throw is not wrapped. Never renamed
      * once shipped. */
     "restore.hook_failed": { module: string; code: string };
-    /** Restoring an artifact whose vault key is held externally (a cloud node) onto a node with no
-     * WAITRON_CREDENTIALS_KEY in the environment — the vault would be unopenable. Supply the key. */
-    "restore.credentials_key_external": Record<string, never>;
   }
 }

@@ -190,44 +190,4 @@ describe("ensureBoxSecrets", () => {
     // Proves it wasn't swallowed-and-regenerated: nothing was ever written for secrets.env.
     await expect(readFile(secretsFile, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });
-
-  it("takes the vault key from the environment (cloud node): writes the TLS files but NO secrets.env, and reports it external", async () => {
-    const d = await newDir();
-    // A cloud node's vault key is injected into the environment by the platform's secrets service. It
-    // must NEVER be written to disk, so a snapshot/dump/backup of the box yields no usable key (§4).
-    const files = await ensureBoxSecrets({
-      ...deps(d),
-      env: { WAITRON_CREDENTIALS_KEY: "K".repeat(43) + "=" },
-    });
-    expect(files.credentialsKey).toBe("external");
-    // The TLS quartet is still materialised — only the key file is withheld from disk.
-    expect(files.keyFile).toBe(join(d, "tls", "server.key"));
-    await expect(readFile(files.keyFile, "utf8")).resolves.toMatch(/-----BEGIN/);
-    await expect(readFile(files.caCertFile, "utf8")).resolves.toMatch(
-      /-----BEGIN CERTIFICATE-----/,
-    );
-    // No secrets.env on disk.
-    await expect(readFile(join(d, "secrets.env"), "utf8")).rejects.toMatchObject({
-      code: "ENOENT",
-    });
-  });
-
-  it("with no env key, mints secrets.env and reports it embedded (on-prem, unchanged)", async () => {
-    const d = await newDir();
-    // An empty value is unset (the operator's `VAR=` shape), so it still mints — the on-prem path.
-    const files = await ensureBoxSecrets({ ...deps(d), env: { WAITRON_CREDENTIALS_KEY: "" } });
-    expect(files.credentialsKey).toBe("embedded");
-    await expect(readFile(join(d, "secrets.env"), "utf8")).resolves.toMatch(
-      /^WAITRON_CREDENTIALS_KEY=/m,
-    );
-  });
-
-  it("with an absent env key, mints secrets.env and reports it embedded", async () => {
-    const d = await newDir();
-    const files = await ensureBoxSecrets({ ...deps(d), env: {} });
-    expect(files.credentialsKey).toBe("embedded");
-    await expect(readFile(join(d, "secrets.env"), "utf8")).resolves.toMatch(
-      /^WAITRON_CREDENTIALS_KEY=/m,
-    );
-  });
 });

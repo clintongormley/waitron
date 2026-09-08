@@ -91,14 +91,6 @@ export interface RestoreDeps {
    * returning node keeps its OWN identity, and a hook exists only to make an ASSUMED identity
    * trade-safe (spec §3.3). */
   readonly skipSecrets?: boolean;
-  /**
-   * The restore TARGET's `WAITRON_CREDENTIALS_KEY` (§4.2) — the raw env value, `isUnset`-checked here.
-   * When the artifact's manifest records `credentialsKey: "external"` (a cloud-node backup carrying NO
-   * vault key) and this is unset, `validateArtifact` refuses with `restore.credentials_key_external`
-   * rather than restore a vault nothing can open. Undefined ⇒ treated as unset (fail CLOSED — refuse
-   * an external artifact). Not consulted under `skipSecrets` (a returning node keeps its own key ring).
-   */
-  readonly envCredentialsKey?: string;
   readonly log: Logger;
 }
 
@@ -177,20 +169,6 @@ export async function validateArtifact(deps: RestoreDeps): Promise<ValidatedArti
     deps.modules.map((m) => [m.name, expectedSchemaVersion(m.migrations, deps.migrationsRoot)]),
   );
   checkRestoreCompatibility(manifest, { environment: deps.environment, expectedVersions });
-
-  // §4.2 — an "external"-key artifact (a cloud node's) carries NO `secrets.env`: its vault key lives
-  // only in the environment. Restoring it onto a target with no `WAITRON_CREDENTIALS_KEY` would leave
-  // every vault row unopenable, so refuse UP FRONT (beside the environment gate, before any write —
-  // R3 runs this before its irreversible wipe). Fail CLOSED: an unset/undefined env key refuses.
-  // Skipped under `skipSecrets` — a returning node keeps its own key ring, and cross-node re-encryption
-  // is the §4.3 fast-follow, not this gate's concern.
-  if (
-    !deps.skipSecrets &&
-    manifest.credentialsKey === "external" &&
-    isUnset(deps.envCredentialsKey)
-  ) {
-    throw new AppError("restore.credentials_key_external", {});
-  }
 
   // FAIL-VISIBLE — every entry must route somewhere, before ANY write. This orchestrator handles
   // exactly `manifest.json`, `db.dump`, `media/*` and `secrets/*`; an entry matching none of those

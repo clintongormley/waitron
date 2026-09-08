@@ -262,7 +262,6 @@ beforeAll(async () => {
         modules: ALL_MODULES,
         environment: "preproduction",
         now: new Date(),
-        credentialsKey: "embedded",
       });
       const core = ALL_MODULES.find((m) => m.name === "core")!;
       expect(manifest.modules.core).toBe(
