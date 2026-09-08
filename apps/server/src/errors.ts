@@ -1132,11 +1132,12 @@ declare module "@waitron/shared" {
      */
     "device.profile_missing": Record<string, never>;
     /**
-     * A knock arrived while pairing mode was SHUT (design §1.1). The window is the deliberate admin act
-     * that replaced the pairing code's secret, so this is the ordinary state, not an anomaly: the device
-     * shows "ask the manager to switch on pairing mode" and the operator has a real next step. NO params
-     * — nothing about the window is the joiner's business. Mapped to HTTP 403 by `device-api.ts`'s local
-     * STATUS map. Never renamed once shipped.
+     * NOT YET THROWN OR MAPPED — registered ahead of its route (a later task in the join-and-accept
+     * slice wires the knock endpoint). For when a knock arrives while pairing mode is SHUT (design
+     * §1.1): the window is the deliberate admin act that replaced the pairing code's secret, so this
+     * will be the ordinary state, not an anomaly — the device shows "ask the manager to switch on
+     * pairing mode" and the operator has a real next step. NO params — nothing about the window is the
+     * joiner's business. Intended for HTTP 403 once a route throws it. Never renamed once shipped.
      */
     "device.pairing_closed": Record<string, never>;
     /**
@@ -1146,8 +1147,11 @@ declare module "@waitron/shared" {
      */
     "device.join_full": Record<string, never>;
     /**
-     * Too many knocks in the limiter's window. The device twin of `agent.join_rate_limited`; replaces
-     * `device.pairing_rate_limited`, which went with the pairing code. HTTP 429.
+     * NOT YET THROWN OR MAPPED — registered ahead of its route. For too many knocks in the limiter's
+     * window once a later task wires one, the device twin of `agent.join_rate_limited`. Intended to
+     * replace `device.pairing_rate_limited` when the pairing code it throttles is retired; until then
+     * `device.pairing_rate_limited` is still the live code (`device-api.ts`'s enrol flood guard). HTTP
+     * 429 once a route throws it.
      */
     "device.join_rate_limited": Record<string, never>;
     /**

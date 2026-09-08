@@ -54,6 +54,47 @@ describe("createJoinRequest", () => {
     expect(second.verificationNumber).toBe("13");
   });
 
+  it("refuses a real number that is already someone else's DECOY (rule: real avoids issued decoys)", async () => {
+    const venue = await setupVenue(suite.admin);
+    // Seeded directly via the superuser connection, bypassing createJoinRequest entirely — decoys
+    // are deliberately non-injectable (production always draws them from randomInt), so this is the
+    // only way to pin one to a known value. The seeded row's own REAL number is 77, unrelated to 13:
+    // if it were 13 too, a broken "real avoids existing reals" rule would make this pass for the
+    // wrong reason.
+    await suite.admin.execute(sql`
+      insert into join_requests (tenant_id, location_id, kind, label, token_hash, verification_number, decoy_numbers)
+      values (${venue.cfg.tenantId}, ${venue.cfg.locationId}, 'device'::join_request_kind, 'seeded', 'x', '77', '{13,86}'::text[])
+    `);
+    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await expect(
+        createJoinRequest(tx, venue.cfg, { kind: "device", label: "wants 13", numbers: () => 13 }),
+      ).rejects.toMatchObject({ code: "device.join_full" });
+    });
+  });
+
+  it("refuses to mint the second DECOY once every other value is already someone's real number (rule: decoys avoid existing reals)", async () => {
+    const venue = await setupVenue(suite.admin);
+    // 98 of the 100 two-digit values are already reals, seeded under a DIFFERENT kind so the
+    // per-(tenant, kind) cap (10) never trips on them — pendingNumbers reads across BOTH kinds
+    // (design §1.2 rule 3), so they still count toward this request's forbidden set. "00" and "01"
+    // are the only two values left free.
+    await suite.admin.execute(sql`
+      insert into join_requests (tenant_id, location_id, kind, label, token_hash, verification_number, decoy_numbers)
+      select ${venue.cfg.tenantId}, ${venue.cfg.locationId}, 'print_agent'::join_request_kind,
+             'seed ' || n, 'x', lpad(n::text, 2, '0'), '{}'::text[]
+      from generate_series(2, 99) as n
+    `);
+    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      // Force the real pick onto "00", the first free value — "01" is then the ONLY value left for
+      // the two decoys, which is not enough: the second decoy can never be found.
+      await expect(
+        createJoinRequest(tx, venue.cfg, { kind: "device", label: "wants 00", numbers: () => 0 }),
+      ).rejects.toMatchObject({ code: "device.join_full" });
+    });
+  });
+
   it("refuses past the cap, per (tenant, kind)", async () => {
     const venue = await setupVenue(suite.admin);
     await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
