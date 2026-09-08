@@ -9,10 +9,11 @@ import {
   denyJoinRequest,
   listPendingJoinRequests,
   readJoinStatus,
+  type AcceptResult,
 } from "./join-requests.js";
 // `useTemplateDb` is NOT on the `@waitron/db` barrel — the exports map is enumerated (CLAUDE.md §3),
 // and the sibling suite imports it from the subpath (`device-api.pg.test.ts:5-6`).
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTenant, type Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import type { TillConfig } from "./till-config.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
@@ -422,6 +423,16 @@ describe("acceptDeviceJoinRequest", () => {
       sql`select id from tills where tenant_id = ${venue.cfg.tenantId} and name = 'Blocked till'`,
     );
     expect(rows).toHaveLength(0);
+    // The consuming delete rides the SAME transaction as the register and device inserts (accept's
+    // header comment) — a genuine retry must still find the request PENDING, not gone, once the
+    // blocker device row (a fixture artefact, not a real collision) is cleared.
+    await suite.admin.execute(
+      sql`delete from devices where tenant_id = ${venue.cfg.tenantId} and id = ${made.joinId}`,
+    );
+    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      expect(await readJoinStatus(tx, venue.cfg, made.joinId, made.token)).toBe("pending");
+    });
   });
 
   it("DENIES on a wrong choice, and the deny SURVIVES THE TRANSACTION", async () => {
@@ -488,6 +499,59 @@ describe("acceptDeviceJoinRequest", () => {
         }),
       ).rejects.toMatchObject({ code: "join_request.not_found" });
     });
+  });
+
+  it("two concurrent accepts of ONE request: exactly one wins, the loser gets join_request.not_found — never a raw devices_pkey 23505", async () => {
+    const venue = await setupVenue(suite.admin);
+    // A `kds` profile bound to an EXISTING station: resolveDeviceBinding only reads
+    // (requireLiveStation, a SELECT) rather than writing a named resource — a `till` profile's
+    // auto-created register would collide on ITS OWN name first (tills_tenant_location_name_key) and
+    // mask the race this test targets, since both racers would derive the same register name from
+    // the request's one label. This isolates the collision to the one write both racers actually
+    // contend for: the `devices` INSERT that reuses the request's id.
+    const profileId = await seedProfile(venue.cfg, "kds");
+    const made = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Racer" });
+    });
+
+    // Two REAL backends racing the SAME row — `suite.admin` alone cannot reproduce this (one
+    // connection serialises every query onto itself); `suite.pg.connect()` promises a fresh backend
+    // process per call, the idiom `kitchen-print.concurrency.test.ts` uses for the same reason.
+    const a = await suite.pg.connect();
+    const b = await suite.pg.connect();
+    try {
+      const attempt = (db: Database): Promise<AcceptResult> =>
+        withTenant(db, venue.cfg.tenantId, async (tx) => {
+          await asAppUser(tx);
+          return acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
+            choice: made.verificationNumber,
+            profileId,
+            stationId: venue.defaultStationId,
+          });
+        });
+
+      const outcomes = await Promise.allSettled([attempt(a), attempt(b)]);
+      const winner = outcomes.find(
+        (o): o is PromiseFulfilledResult<AcceptResult> => o.status === "fulfilled",
+      );
+      const loser = outcomes.find((o): o is PromiseRejectedResult => o.status === "rejected");
+      expect(winner).toBeDefined();
+      expect(loser).toBeDefined();
+      expect(winner!.value).toMatchObject({ ok: true });
+      // The Critical this test exists to catch: the loser must see the clean domain code, never the
+      // raw `devices_pkey` 23505 a plain-SELECT-then-INSERT race produces.
+      expect(loser!.reason).toMatchObject({ code: "join_request.not_found" });
+
+      const { rows } = await suite.admin.execute<{ n: number }>(sql`
+        select count(*)::int as n from devices
+        where tenant_id = ${venue.cfg.tenantId} and id = ${made.joinId}
+      `);
+      expect(rows[0]!.n).toBe(1);
+    } finally {
+      await a.close();
+      await b.close();
+    }
   });
 });
 

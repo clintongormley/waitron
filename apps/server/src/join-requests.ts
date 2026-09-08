@@ -248,16 +248,32 @@ export type AcceptResult =
 /**
  * Approve a device's ask-to-join.
  *
- * ONE transaction: the caller's `withTenant` covers the register auto-creation, the device insert and
- * the request's deletion, so a device insert that throws rolls the register back and leaves no orphan
- * (CLAUDE.md §3). The request's id becomes the device's id, which is what lets the joiner's cookie
- * survive approval untouched.
+ * SINGLE-USE IS STRUCTURAL, NOT ACCIDENTAL: the very first thing this does is a locking
+ * `DELETE … RETURNING`, the same `consumeChallenge` shape `enrolDevice`'s pairing-code redemption
+ * uses (device.ts) — CONSUME before deciding anything. Postgres serialises two concurrent deletes of
+ * the SAME row: the loser's DELETE blocks behind the winner's, and once the winner commits the row is
+ * gone, so the loser's DELETE matches zero rows and this throws `join_request.not_found` — which is
+ * also the semantically right answer, because by the time the loser got the lock the request really
+ * had already been decided. Without this, two racing callers can both pass a plain SELECT and both
+ * reach the device INSERT, which reuses the request's id as the device id — the loser would then fail
+ * on a raw `devices_pkey` 23505 instead of a clean domain code (a Critical review finding: two admins
+ * double-clicking Accept, or one admin with two tabs, must not reach a 500).
+ *
+ * The kind predicate rides the SAME delete, not a separate check: a `print_agent` row (or none, or
+ * another tenant's, or already decided) all return zero rows and fold into the one
+ * `join_request.not_found` — a device accept can never consume an agent's request.
+ *
+ * ONE transaction: the caller's `withTenant` covers the consuming delete, the register
+ * auto-creation and the device insert, so a LATER failure (an unknown profile, a station that does
+ * not exist, the register insert) rolls the consumption back too — the request survives for a
+ * genuine retry, only a wrong number or a successful accept ever makes the delete stick.
  *
  * A WRONG CHOICE DENIES — AND THAT IS WHY THIS RETURNS RATHER THAN THROWS. `withTenant` IS the
  * transaction (`packages/db/src/tenancy.ts:15`, `db.transaction((tx) => fn(tx))`), so an `AppError`
- * thrown from here rolls the DELETE back with it and a wrong tap becomes an unlimited retry — the
- * exact opposite of the property that makes one-in-three an acceptable guess rate (design §1.2). The
- * caller commits this result and throws `device.join_mismatch` AFTER the transaction returns.
+ * thrown from here rolls the (already-consumed) row back into existence and a wrong tap becomes an
+ * unlimited retry — the exact opposite of the property that makes one-in-three an acceptable guess
+ * rate (design §1.2). The caller commits this result and throws `device.join_mismatch` AFTER the
+ * transaction returns.
  */
 export async function acceptDeviceJoinRequest(
   tx: Transaction,
@@ -270,13 +286,29 @@ export async function acceptDeviceJoinRequest(
     registerId?: string | null;
   },
 ): Promise<AcceptResult> {
-  const row = await requirePending(tx, cfg, id);
-  if (row.kind !== "device") throw new AppError("join_request.not_found", {});
+  await sweepLapsed(tx, cfg);
+
+  const [row] = await tx
+    .delete(joinRequests)
+    .where(
+      and(
+        eq(joinRequests.tenantId, cfg.tenantId),
+        eq(joinRequests.id, id),
+        eq(joinRequests.kind, "device"),
+      ),
+    )
+    .returning({
+      id: joinRequests.id,
+      label: joinRequests.label,
+      verificationNumber: joinRequests.verificationNumber,
+      tokenHash: joinRequests.tokenHash,
+      locationId: joinRequests.locationId,
+    });
+  if (row === undefined) throw new AppError("join_request.not_found", {});
 
   if (input.choice !== row.verificationNumber) {
-    await tx
-      .delete(joinRequests)
-      .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.id, id)));
+    // Already consumed by the delete above — nothing further to do. Deleting again here would be
+    // redundant, not a second denial: single-use means this row cannot be read or raced again.
     return { ok: false, reason: "mismatch" };
   }
 
@@ -298,9 +330,6 @@ export async function acceptDeviceJoinRequest(
     tokenHash: row.tokenHash,
     active: true,
   });
-  await tx
-    .delete(joinRequests)
-    .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.id, id)));
 
   return { ok: true, deviceId: row.id, name: row.label, formFactor: binding.formFactor };
 }
