@@ -117,10 +117,18 @@ design-review section apply.
   `apps/server`'s config/boot wiring/backup-*/media/tls + certificate code, `packages/credentials`.
   Work: the two containers + volumes, the from-scratch primary and first-run modes 1–2, images into
   Postgres, backup destinations (mirror → S3 → Drive), the name-constrained CA + HTTP landing page,
-  the LAN-HTTPS spike (its desktop half; the phone rows are the owner's).
-- **Track H — hardware** (push steps 3 and 4). Owns `packages/printing`, the new print-agent app,
-  `packages/payments*`, the printer/payment routes in `apps/server`. Work: the standalone print agent,
-  USB + IP printers end to end, printer failover on prem, SumUp once its questions are answered.
+  the LAN-HTTPS spike (its desktop half; the phone rows are the owner's). Owed to Track H: the box's
+  compose runs the print-agent container beside the server with `WAITRON_SERVER_URL` set to the
+  server's service address, so the same-box agent joins with nothing typed (print-agent spec §2.2).
+- **Track H — hardware** (push steps 3 and 4). Owns `packages/printing`, `packages/print-agent` +
+  `apps/print-agent` (new), `packages/payments*`, the printer/payment routes in `apps/server`. Work, in
+  order: **1.** the print agent process — spec
+  [2026-09-08-print-agent-process-design.md](superpowers/specs/2026-09-08-print-agent-process-design.md)
+  (approved 2026-09-08; join-and-accept replaces the pairing code, a db-free package behind a `Host`
+  seam, a container host with a loopback setup page; plan next); **2.** the virtual PDF printer + a
+  `print_jobs` retention sweep (spec §7); **3.** un-pin IP printers from one agent (failover-printing
+  §4a); **4.** SumUp once its questions are answered. The manual receipt for 1 is the owner's HP
+  LaserJet at `192.168.20.56:9100` (TCP path only — not an ESC/POS device).
 - **Track R — replication & failover** (push step 6; the former Tracks A + B). Owns
   `packages/sync`, `packages/membership`, `packages/db`'s harness, `apps/server`'s promote / rejoin /
   box-* / membership code, `CLAUDE.md` §2–§5. Work: the on-prem mirror end to end, the cert-distribution
@@ -465,9 +473,12 @@ unchanged, so no new H2 receipt
 - **Whoever lands second rebases — only on a code-file overlap or a GitHub conflict.** A PR that is
   merely `BEHIND` lands as is with `gh pr merge --squash --admin` (CLAUDE.md §6). Module-owned
   migrations are regenerated on rebase per CLAUDE.md §3's recipe.
-- **Shared files:** `apps/server/src/boot.ts` (Track A's edits are done; B's worker refactor is free
-  to start), `CLAUDE.md` (A: §2–§4, B: §5, C: §3 — textual rebases), and this file (each track edits
-  its own items plus this list).
+- **Shared files:** `apps/server/src/boot.ts` (P: config/boot wiring; 1: device/session routes; R:
+  promote/rejoin; H: one dep at the `mountPrintApi` call), `CLAUDE.md` (R: §2–§5 — textual rebases),
+  `packages/db`'s core schema + migrations (H's print-agent slice regenerates one pair: `print_agents`
+  columns, `print_agent_pairing_codes` dropped — CLAUDE.md §3's recipe on rebase), the dashboard
+  printers screen (Track 1's app; H edits that one screen + its client/strings for Accept/Deny), and
+  this file (each track edits its own items plus this list).
 - **Comment thinning on touch only** (CLAUDE.md §1); no sweep in any track.
 - **Update this list as items land**, in the same PR.
 
@@ -887,7 +898,12 @@ Spec: [reporting-desglose-and-modelo303](superpowers/specs/2026-08-08-reporting-
 
 The printing subsystem is built and security-reviewed, with kitchen (KDS-4), counter-receipt +
 cash-drawer, and cash-drawer authorization consumers landed. Specs/plans under
-`docs/superpowers/{specs,plans}/2026-08-17-*` and the failover-printing design. **Remaining:**
+`docs/superpowers/{specs,plans}/2026-08-17-*` and the failover-printing design. **No agent PROCESS
+exists yet** — that is Track H item 1
+([2026-09-08-print-agent-process-design.md](superpowers/specs/2026-09-08-print-agent-process-design.md),
+approved 2026-09-08), which also replaces pairing-code enrolment with join-and-accept and moves the
+transports into a db-free `@waitron/print-agent`. Item 2 is the virtual PDF printer + `print_jobs`
+retention (nothing deletes a job today). **Remaining after those:**
 
 - **Cloud-poll transports** — Star CloudPRNT (`printing-cloud-poll-transport*`) and Epson Server Direct
   Print (`printing-epson-server-direct-print*`): a poll→fetch→ack endpoint group off the central outbox,
