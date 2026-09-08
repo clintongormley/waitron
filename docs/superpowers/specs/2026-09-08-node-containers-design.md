@@ -562,6 +562,53 @@ added to this file with a date. What the FAILING case prints is stated before ea
 (CLAUDE.md §1): e.g. a bridge-shaped SAN list shows `172.` in `openssl x509 -text`; the override
 working shows the LAN IP there and nothing else.
 
+**Run-it proof — executed 2026-09-09** (this Mac, Docker Desktop; the fixed image built off the
+branch HEAD; each stack on a throwaway compose project, the box's Postgres published on 55432 to
+clear the shared dev db on 5432). Every failing case was stated before its step.
+
+- **Live-path config check** (the defect this section's own §11 hid: a preproduction-only proof
+  cannot tell a live box's pass from its fail). A blank box booted with `WAITRON_ENV=production`
+  (which reaches `loadConfig` identically to the wizard's `trading.env` — `box-env.ts` merges both,
+  and the production RP guard runs in setup mode too) → `GET /setup-api/status` = 200,
+  `{"environment":"production"}`, zero `config_missing`, `server.listening {environment:production}`;
+  no fiscal chain minted (unprovisioned). Control, fresh volumes, identical bar the RP vars
+  (`WAITRON_MANAGEMENT_RP_ID=""`, `_ORIGIN=""`) → `server.config_missing` + `restart: unless-stopped`
+  loop, reproducing the Task-8 pre-fix behaviour. (A one-shot `docker run` with no state volume
+  against a reused, already-provisioned db instead threw `config_invalid` — a confounded reading, not
+  the faithful control; the fresh-volume compose run is.)
+- **Recovery proof** (§9.2/§9.3). Clean boot minted the leaf (`state/tls/server.{crt,key}`), served
+  setup over HTTPS, leaf SHA256 `F6:43…:27`. An unparseable bootstrap URL then forced fast crashes:
+  three `server.boot_failed` → `recovery.serving {failures:3}` → `recovery.listening {tls:true}`.
+  `GET /` = 200, `<title>Waitron did not start</title>` + a Retry form, served over the **same** leaf
+  `F6:43…:27` at the same URL; `recovery.json = {failures:3, level:"recovery"}`. With the fault
+  fixed, the retry button (`POST /recovery-api/retry`) reset the counter and a normal boot resumed
+  (`setup.mode_active`, `/setup-api/status` 200).
+- **Trading-mode TLS — bug found and fixed here.** The blank-box-to-selling run caught that a
+  provisioned box served PLAIN HTTP in trading mode: setup and recovery fall back to the box's minted
+  leaf, but `boot.ts`'s two trading `startListening` sites passed `config.tls` unchanged — set only by
+  an operator's `WAITRON_TLS_*`, which a box never sets — so trading served plain HTTP and a phone
+  that trusted the box CA got a TLS handshake error (`EPROTO`); the HTTPS healthcheck failed the same
+  way, marking the container `unhealthy`. HTTPS-in-all-modes is the intended contract (setup,
+  recovery and the healthcheck all assume it). Fix: both trading sites now
+  `config.tls ?? mintedBoxLeaf(config.stateDir)` (a shared helper in `box-secrets.ts`;
+  `node-entry.ts`'s `recoveryTlsFiles` delegates to it), operator TLS still winning. Verified in the
+  container: provision → restart → trading `https /health` = 200, plain HTTP on 443 → `ECONNRESET`,
+  container `healthy`, leaf `CN=waitron.local`. It stayed invisible because CI's smoke and every prior
+  proof only ever exercised a BLANK box in SETUP mode — the same blind-spot shape as Task 8's
+  production Critical.
+- **Blank-box-to-selling** (owner-run, phone, fixed image). Phone → `https://192.168.10.101`, trusted
+  the CA (SAN carried the LAN IP) → wizard provisioned a **demo** (= preproduction) venue → the box
+  restarted into trading **over HTTPS and came back** (the pre-fix hang gone) → dashboard `/manage`
+  login → minted a pairing code → enrolled the till → **recorded a sale**. Box DB: `sales` = 1
+  (€20.00, invoice #1, `verifactu`, `fiscal_state:recorded`, VAT 21%); `registros_facturacion` = 1
+  (`num_serie_factura 1/1`, `entorno preproduction`, `huella CD58CD8F…`). The first-admin password was
+  reset with `bin-break-glass.js` in the container (also proving that recovery tool). One observed
+  gap, backlogged: the handheld showed no menu until a manual refresh (a till-app catalogue-load
+  timing issue, not the box).
+
+Still owed (honest limit): the **host-network** 443 bind on real Linux — measured three ways here
+under Docker Desktop's bridge, but CI's `image` job is the standing host-network proof once it runs.
+
 ## 12. Out of scope, named
 
 The recovery spec (the immediate follow-on to this one): a degraded-but-trading mode and the

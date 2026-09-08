@@ -68,7 +68,15 @@ middle of a cold restore, so it is worth reading twice:
 - **`docker compose exec` IGNORES the entrypoint.** A command that needs the server RUNNING is just:
 
   ```bash
-  docker compose exec app node /app/bin-break-glass.js --email owner@example.com
+  # break-glass resets the first admin's dashboard password (the lockout IS the password). Its
+  # secrets come from the ENVIRONMENT, never argv (an argv element leaks into `ps`): the new password
+  # is WAITRON_BREAKGLASS_PASSWORD, and it needs the box's own DATABASE_URL + WAITRON_TILL_TENANT_ID,
+  # both in the state volume's trading.env. `--person <id>` only disambiguates a tenant with >1 admin;
+  # WAITRON_BREAKGLASS_PIN also resets the PIN.
+  docker compose exec app sh -c '
+    set -a; . /var/lib/waitron/state/trading.env; set +a
+    WAITRON_BREAKGLASS_PASSWORD="a-new-dashboard-password" node /app/bin-break-glass.js
+  '
   ```
 
 - **`docker compose run` APPENDS its arguments to the entrypoint.** The commands that need the
