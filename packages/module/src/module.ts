@@ -5,7 +5,7 @@ import type { LocationId, TenantId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import type { Logger } from "@waitron/server-kit";
 import type { MigrationSet } from "@waitron/migrations";
-import type { ClassifiedTable, EnrolledTable } from "@waitron/sync-enrolment";
+import type { ClassifiedTable } from "@waitron/sync-enrolment";
 import type { FiscalContribution } from "@waitron/fiscal";
 import type { ModuleProvisioning } from "./provisioning.js";
 import type { RestoreHook } from "./restore.js";
@@ -119,15 +119,10 @@ export interface WaitronModule {
   readonly migrations: MigrationSet;
 
   // Optional module capabilities are assembled by composition without importing domain packages here.
-  /** SP-2a: the tables this module enrols into @waitron/sync, declared BY the owning package. The
-   * first deferred seat to gain its real type; the composition root assembles every module's enrolment
-   * and injects it, so @waitron/sync imports no domain schema (spec §2/§5). */
-  readonly sync?: readonly EnrolledTable[];
   /** Swap S1: every table this module's migrations create, classified `ledger`/`state`/`local`
    * (swap spec §2.1). The composition root assembles every module's classification; the two
    * publication table-lists derive from it and the root completeness guard checks it covers each
-   * module's `CREATE TABLE`s exactly once. Additive to `sync` (the outbox enrolment) — that seat and
-   * `enrol()` stay until the outbox is deleted (chain step 4). */
+   * module's `CREATE TABLE`s exactly once. */
   readonly classification?: readonly ClassifiedTable[];
   readonly cards?: unknown; // SP-4
   /** SP-3b: the domain terms this module OWNS — legitimate inside its own package (derived from

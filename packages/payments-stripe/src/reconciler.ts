@@ -54,7 +54,8 @@ export interface StripeReconcilerOptions {
   /** How long the processor may legitimately take to report a settlement. Defaults to the neutral
    * layer's own seven days. */
   settlementLagMs?: number;
-  /** This node's origin id, forwarded into `reconcilePayments`'s deps for sync origin attribution. */
+  /** This node's origin id, forwarded into `reconcilePayments`'s deps and `reverseViaStripe` as the
+   * sweep's node identity (it once fed sync capture; capture is gone — swap S5). */
   nodeId: string;
 }
 
@@ -132,9 +133,8 @@ export class StripeReconciler implements PaymentReconciler {
       undefined,
       {
         tenantId,
-        // The sweep's own node id, so the refund's enrolled `payment_refunds`/`payments` writes capture
-        // a real origin instead of the all-zero sentinel (design §4d(B); sync origin attribution). The
-        // marker UPDATE in `reconcilePayments` already threads this via its own withTenant.
+        // The sweep's own node id — the reversal's node identity (it once fed sync capture; capture
+        // is gone — swap S5).
         nodeId: this.opts.nodeId,
         resolveProcessorRef: (externalRef) =>
           this.processorRef(account.report, externalRef, paymentRef),

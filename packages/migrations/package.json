@@ -33,7 +33,6 @@
     "@waitron/identity": "workspace:*",
     "@waitron/payments": "workspace:*",
     "@waitron/scheduler": "workspace:*",
-    "@waitron/sync": "workspace:*",
     "@waitron/workforce": "workspace:*",
     "@waitron/workforce-es": "workspace:*",
     "typescript": "^5.7.0",

@@ -323,19 +323,23 @@ REVOKE ALL ON "daily_close_chain" FROM app_user;
 --> statement-breakpoint
 GRANT SELECT, INSERT, UPDATE ON "daily_close_chain" TO app_user;
 --> statement-breakpoint
+-- These three enforce write-path business rules and stay ORIGIN-ONLY (the default tgenabled='O'): the
+-- replication apply worker skips them, which is intended — a replicated row already passed the rule on
+-- the node that wrote it, so re-checking it on apply would reject valid inbound state. (Contrast the
+-- reject_mutation append-only pairs, which are ENABLE ALWAYS so a corrupted copy is refused everywhere.)
 CREATE TRIGGER tenders_reject_post_settlement
   BEFORE INSERT ON tenders
-  FOR EACH ROW WHEN (current_setting('app.sync_apply', true) IS DISTINCT FROM 'on')
+  FOR EACH ROW
   EXECUTE FUNCTION tenders_reject_post_settlement();
 --> statement-breakpoint
 CREATE TRIGGER working_orders_enforce_transition
   BEFORE UPDATE ON working_orders
-  FOR EACH ROW WHEN (current_setting('app.sync_apply', true) IS DISTINCT FROM 'on')
+  FOR EACH ROW
   EXECUTE FUNCTION working_orders_enforce_transition();
 --> statement-breakpoint
 CREATE TRIGGER working_order_lines_require_open_parent
   BEFORE INSERT OR UPDATE OR DELETE ON working_order_lines
-  FOR EACH ROW WHEN (current_setting('app.sync_apply', true) IS DISTINCT FROM 'on')
+  FOR EACH ROW
   EXECUTE FUNCTION working_order_lines_require_open_parent();
 --> statement-breakpoint
 REVOKE ALL ON "ingredients" FROM app_user;

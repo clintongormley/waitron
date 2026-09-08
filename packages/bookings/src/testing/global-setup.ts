@@ -8,10 +8,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
  * Migrate the two templates the real-Postgres suites clone once, per file:
  *
  *  - `manifest` = the whole manifest in order: the schema, verb-CAS, privilege, routes and
- *    migration-split (has-bookings) suites. Bookings cannot migrate on top of `core` alone — its
- *    capture trigger EXECUTEs `sync_capture()`, which `sync` owns, and `sync` in turn enrols
- *    identity's / payments' tables — so the fixtures apply the full chain (core … sync … bookings),
- *    exactly as `@waitron/fiscal-verifactu` does.
+ *    migration-split (has-bookings) suites. Bookings FKs into `core`, so the fixtures apply the full
+ *    chain (core … bookings), exactly as `@waitron/fiscal-verifactu` does.
  *  - `core` = [core] alone: the migration-split proof that core carries no `bookings` relation.
  *
  * Docker is required before any worker starts; the real-PG suites cannot degrade to a skip (PGlite is

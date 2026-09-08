@@ -95,19 +95,14 @@ export function mountRecipeApi(app: Hono, deps: RecipeApiDeps, log: Logger): voi
   // RECIPE_WRITE_PERMISSION, then run `fn`. Every route funnels its DB work through here so the gate is
   // applied identically and in exactly one place — the catalogue §3 seam.
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-    withTenant(
-      deps.db,
-      deps.cfg.tenantId,
-      async (tx) => {
-        await asAppUser(tx);
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: RECIPE_WRITE_PERMISSION,
-        });
-        return fn(tx);
-      },
-      { nodeId: deps.cfg.nodeId },
-    );
+    withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await authorizeManager(tx, {
+        managementSessionId: sessionId,
+        permission: RECIPE_WRITE_PERMISSION,
+      });
+      return fn(tx);
+    });
 
   // ── List ingredients ───────────────────────────────────────────────────────────────────────────
   app.get("/management-api/ingredients", (c) =>

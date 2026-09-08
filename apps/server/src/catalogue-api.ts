@@ -298,7 +298,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       },
       // Sets app.node_id for this tx so sync_capture stamps origin_id (design §4d(B)). asAppUser's
       // SET ROLE does not reset the transaction-local GUC, so origin attribution survives the switch.
-      { nodeId: deps.cfg.nodeId },
     );
 
   // ── Catalogues ─────────────────────────────────────────────────────────────────────────────────

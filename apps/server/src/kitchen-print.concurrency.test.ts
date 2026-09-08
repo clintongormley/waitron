@@ -134,7 +134,6 @@ describe("print-on-fire concurrency — FOR SHARE on the mapping read", () => {
           .where(eq(workingOrderLines.workingOrderId, orderId));
         return { cocinaId: cocina.id, printerId, orderId, lineId: line!.id };
       },
-      { nodeId: cfg.nodeId },
     );
 
     const firedItems = [{ workingOrderLineId: lineId, stationId: cocinaId }];
@@ -144,31 +143,21 @@ describe("print-on-fire concurrency — FOR SHARE on the mapping read", () => {
     // then HOLD the transaction open — so the FOR SHARE lock is still held when B tries to deactivate.
     const readDone = gate();
     const releaseA = gate();
-    const firePromise = withTenant(
-      a,
-      tenantId,
-      async (txA) => {
-        await asAppUser(txA);
-        await enqueueKitchenTickets(txA, cfg, orderId, firedItems);
-        readDone.open(); // lock taken + job enqueued; tx deliberately NOT committed yet
-        await releaseA.passed;
-      },
-      { nodeId: cfg.nodeId },
-    );
+    const firePromise = withTenant(a, tenantId, async (txA) => {
+      await asAppUser(txA);
+      await enqueueKitchenTickets(txA, cfg, orderId, firedItems);
+      readDone.open(); // lock taken + job enqueued; tx deliberately NOT committed yet
+      await releaseA.passed;
+    });
     await readDone.passed; // A now holds FOR SHARE on the printer row
 
     // Connection B: deactivate the SAME printer. Its UPDATE needs a FOR NO KEY UPDATE row lock, which
     // conflicts with A's FOR SHARE, so it MUST block until A commits.
     let deactivateDone = false;
-    const deactivatePromise = withTenant(
-      b,
-      tenantId,
-      async (txB) => {
-        await asAppUser(txB);
-        await deactivatePrinter(txB, printCfg(cfg), printerId);
-      },
-      { nodeId: cfg.nodeId },
-    ).then(() => {
+    const deactivatePromise = withTenant(b, tenantId, async (txB) => {
+      await asAppUser(txB);
+      await deactivatePrinter(txB, printCfg(cfg), printerId);
+    }).then(() => {
       deactivateDone = true;
     });
 

@@ -471,60 +471,55 @@ export async function runRestoreHooks(args: {
   log: Logger;
 }): Promise<{ seriesId: string; reports: readonly string[] }> {
   const { node } = args;
-  return withTenant(
-    args.db,
-    node.tenantId,
-    async (tx) => {
-      const [known] = await tx
-        .select({ id: nodes.id })
-        .from(nodes)
-        .where(and(eq(nodes.tenantId, node.tenantId), eq(nodes.id, node.nodeId)))
-        .limit(1);
-      if (known === undefined) {
-        throw new AppError("restore.identity_unknown", {
-          tenantId: node.tenantId,
-          nodeId: node.nodeId,
-        });
-      }
-      const reports: string[] = [];
-      let replacement:
-        { module: string; series: readonly { code: string; purpose: string }[] } | undefined;
-      for (const m of args.modules) {
-        const hook = m.backup?.restore;
-        if (hook === undefined) continue;
-        let outcome;
-        try {
-          outcome = await hook(tx, node);
-        } catch (err) {
-          throw wrapHookError(m.name, err);
-        }
-        reports.push(`${m.name}: ${outcome.report}`);
-        args.log("info", "restore.hook.done", { module: m.name, report: outcome.report });
-        if (outcome.series !== undefined) {
-          if (replacement !== undefined) {
-            throw new AppError("restore.series_conflict", {
-              modules: `${replacement.module},${m.name}`,
-            });
-          }
-          replacement = { module: m.name, series: outcome.series };
-        }
-      }
-      // `core` owns `invoice_series`: a failure here with no module returning series is the node's own
-      // series contract failing, so that is the module named.
-      const owner = replacement?.module ?? "core";
+  return withTenant(args.db, node.tenantId, async (tx) => {
+    const [known] = await tx
+      .select({ id: nodes.id })
+      .from(nodes)
+      .where(and(eq(nodes.tenantId, node.tenantId), eq(nodes.id, node.nodeId)))
+      .limit(1);
+    if (known === undefined) {
+      throw new AppError("restore.identity_unknown", {
+        tenantId: node.tenantId,
+        nodeId: node.nodeId,
+      });
+    }
+    const reports: string[] = [];
+    let replacement:
+      { module: string; series: readonly { code: string; purpose: string }[] } | undefined;
+    for (const m of args.modules) {
+      const hook = m.backup?.restore;
+      if (hook === undefined) continue;
+      let outcome;
       try {
-        if (replacement !== undefined) {
-          await retireNodeSeriesTx(tx, node.tenantId, node.nodeId);
-          await insertNodeSeriesTx(tx, node.tenantId, node.nodeId, replacement.series);
-        }
-        const seriesId = await readStandardSeriesIdTx(tx, node.tenantId, node.nodeId);
-        return { seriesId, reports };
+        outcome = await hook(tx, node);
       } catch (err) {
-        throw wrapHookError(owner, err);
+        throw wrapHookError(m.name, err);
       }
-    },
-    { nodeId: node.nodeId },
-  );
+      reports.push(`${m.name}: ${outcome.report}`);
+      args.log("info", "restore.hook.done", { module: m.name, report: outcome.report });
+      if (outcome.series !== undefined) {
+        if (replacement !== undefined) {
+          throw new AppError("restore.series_conflict", {
+            modules: `${replacement.module},${m.name}`,
+          });
+        }
+        replacement = { module: m.name, series: outcome.series };
+      }
+    }
+    // `core` owns `invoice_series`: a failure here with no module returning series is the node's own
+    // series contract failing, so that is the module named.
+    const owner = replacement?.module ?? "core";
+    try {
+      if (replacement !== undefined) {
+        await retireNodeSeriesTx(tx, node.tenantId, node.nodeId);
+        await insertNodeSeriesTx(tx, node.tenantId, node.nodeId, replacement.series);
+      }
+      const seriesId = await readStandardSeriesIdTx(tx, node.tenantId, node.nodeId);
+      return { seriesId, reports };
+    } catch (err) {
+      throw wrapHookError(owner, err);
+    }
+  });
 }
 
 async function openPostgres(url: string): Promise<{ db: Database; close(): Promise<void> }> {

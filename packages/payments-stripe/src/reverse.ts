@@ -39,13 +39,10 @@ export interface ReverseViaStripeOptions {
    */
   tenantId: TenantId;
   /**
-   * The reversing node's origin id, threaded into both `withTenant` phases below so the enrolled
-   * `payment_refunds` INSERT and `payments` state UPDATE a reversal performs capture a real
-   * `sync_log.origin_id` rather than the all-zero sentinel — which the pull loop (keyed on
-   * `?originId=<peer>`) never replicates, so a refund would be lost on failover (design §4d(B); sync
-   * origin attribution). REQUIRED for the same reason `tenantId` is: every live caller has a node id
-   * in hand (the reconcile sweep and both interactive providers are per-node objects), and leaving it
-   * optional is exactly how the all-zero-origin gap this closes was reachable in the first place.
+   * The reversing node's origin id. Once carried the `app.node_id` GUC the sync capture triggers read;
+   * capture is gone (swap S5) and it is no longer threaded into `withTenant`, but the field stays on
+   * the shared options — every live caller (the reconcile sweep and both interactive providers) has a
+   * node id in hand and passes it, and it identifies the reversing node for the record path.
    */
   nodeId: string;
   /** Maps the payment's stored `external_ref` to the identifier the processor's refund API needs.
@@ -72,7 +69,7 @@ export interface ReverseViaStripeOptions {
  * real refund; SAME-reversal retry-safety (a persisted per-reversal id) is deferred, and reconcile
  * backstops Stripe-vs-local drift.
  *
- * Both database phases run through `withTenant` with the required tenant and node ids. */
+ * Both database phases run through `withTenant` with the required tenant id. */
 export async function reverseViaStripe(
   db: Database,
   client: StripeRefunder,
@@ -88,7 +85,6 @@ export async function reverseViaStripe(
    * parameters. No default: `tenantId` is required, so every caller passes this. */
   {
     tenantId,
-    nodeId,
     resolveProcessorRef = (externalRef) => Promise.resolve(externalRef),
   }: ReverseViaStripeOptions,
 ): Promise<PaymentResult> {
@@ -101,7 +97,7 @@ export async function reverseViaStripe(
   // : …`). It is gone with the option's optionality: it was the mechanism by which every
   // interactive-provider reversal failed closed under a real role.
   const inTransaction = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-    withTenant(db, tenantId, fn, { nodeId });
+    withTenant(db, tenantId, fn);
 
   const found = await inTransaction(async (tx) => {
     const f = await findPaymentByRef(tx, provider, ref);

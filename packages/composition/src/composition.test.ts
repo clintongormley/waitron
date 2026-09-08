@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { BOOKINGS_ENROLMENT } from "@waitron/bookings";
 import {
   FISCAL_PROVISIONING,
   FISCAL_RESTORE,
@@ -32,8 +31,8 @@ describe("ALL_MODULES backup contribution", () => {
     expect(core?.backup?.nonDbState).toEqual([{ kind: "content-addressed-dir", source: "media" }]);
   });
   it("a module may omit backup (open contribution set)", () => {
-    const sync = ALL_MODULES.find((m) => m.name === "sync");
-    expect(sync?.backup).toBeUndefined();
+    const identity = ALL_MODULES.find((m) => m.name === "identity");
+    expect(identity?.backup).toBeUndefined();
   });
 });
 
@@ -62,27 +61,16 @@ describe("ALL_MODULES provisioning and fiscal seats", () => {
   });
 });
 
-describe("ALL_MODULES bookings enrolment seat", () => {
-  it("bookings declares its state-class enrolment by reference and requires the sync module", () => {
-    const bookings = ALL_MODULES.find((m) => m.name === "bookings");
-    expect(bookings?.sync).toBe(BOOKINGS_ENROLMENT);
-    // The capture trigger calls sync_capture() (sync's SPI), so the descriptor names that edge —
-    // scripts/module-graph-honesty.test.ts cross-checks it against the trigger SQL.
-    expect(bookings?.requires?.modules?.sync).toBe("*");
-  });
-});
-
 describe("ALL_MODULES fiscal-none member", () => {
   it('fills the fiscal slot with the no-regime contribution (`id === "none"`)', () => {
     const none = ALL_MODULES.find((m) => m.name === "fiscal-none");
     expect(none?.fiscal?.id).toBe("none");
     expect(none?.tier).toBe("provision-only");
   });
-  it("declares no provisioning, vocabulary or sync — it owns nothing beyond the slot", () => {
+  it("declares no provisioning or vocabulary — it owns nothing beyond the slot", () => {
     const none = ALL_MODULES.find((m) => m.name === "fiscal-none");
     expect(none?.provisioning).toBeUndefined();
     expect(none?.vocabulary).toBeUndefined();
-    expect(none?.sync).toBeUndefined();
     expect(none?.backup).toBeUndefined();
   });
 });

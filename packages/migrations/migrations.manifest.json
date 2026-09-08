@@ -31,11 +31,6 @@
     "from": "../credentials/drizzle"
   },
   {
-    "name": "sync",
-    "table": "__drizzle_migrations_sync",
-    "from": "../sync/drizzle"
-  },
-  {
     "name": "fiscal-verifactu",
     "table": "__drizzle_migrations_fiscal",
     "from": "../fiscal-verifactu/drizzle"

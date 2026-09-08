@@ -66,7 +66,6 @@ export {
   tenders,
 } from "./schema/sales.js";
 export { saleVoids } from "./schema/sale-voids.js";
-export { CORE_ENROLMENT } from "./enrolment.js";
 export { CORE_CLASSIFICATION } from "./classification.js";
 export { drawerOpens } from "./schema/drawer-opens.js";
 export type { DrawerOpenReason } from "./schema/drawer-opens.js";
@@ -114,7 +113,7 @@ export {
 } from "./reserved-identity.js";
 export { allocateInvoiceNumber } from "./allocate-number.js";
 export { allocateOrderNumber } from "./allocate-order-number.js";
-export { withTenant, type TenantTxOptions } from "./tenancy.js";
+export { withTenant } from "./tenancy.js";
 export {
   isPgError,
   isUniqueViolation,

@@ -102,7 +102,6 @@ describe("applyInstance against a blank container", () => {
         "payments",
         "scheduler",
         "credentials",
-        "sync",
         "fiscal-verifactu",
         "fiscal-none",
         "bookings",

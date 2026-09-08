@@ -14,9 +14,12 @@ const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
 
 afterEach(async () => {
   await suite.db.transaction(async (tx) => {
-    // Fixture cleanup uses the sync gate to remove lines whose parent is already terminal.
-    // SET LOCAL restores the gate before the next case exercises the ordinary write path.
-    await tx.execute(sql`set local app.sync_apply = 'on'`);
+    // Fixture cleanup must remove lines whose parent is already terminal, which the origin-only
+    // `working_order_lines_require_open_parent` trigger would reject. `session_replication_role =
+    // 'replica'` skips origin-only ('O') triggers exactly as the replication apply path does (PGlite
+    // connections are superuser), leaving the ENABLE ALWAYS append-only guards intact; SET LOCAL
+    // restores the ordinary role before the next case exercises the real write path.
+    await tx.execute(sql`set local session_replication_role = 'replica'`);
     await tx.execute(sql`delete from working_order_lines`);
     await tx.execute(sql`delete from working_orders`);
     await tx.execute(sql`delete from option_group_items`);

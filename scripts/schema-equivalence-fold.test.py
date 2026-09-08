@@ -24,7 +24,7 @@ class FoldTests(unittest.TestCase):
     def test_folded_revokes_fail_with_the_original_statement(self):
         for role in ("sync_tailer", "sync_retention"):
             for privilege in ("SELECT", "UPDATE(last_seen_at)"):
-                statement = f"REVOKE {privilege} ON TABLE public.sync_peers FROM {role};"
+                statement = f"REVOKE {privilege} ON TABLE public.payments FROM {role};"
                 with self.subTest(statement=statement):
                     with self.assertRaises(ValueError) as raised:
                         list(fold([statement]))
@@ -34,24 +34,24 @@ class FoldTests(unittest.TestCase):
         for verb in ("TRUNCATE", "REFERENCES", "TRIGGER", "MAINTAIN"):
             with self.subTest(verb=verb):
                 with self.assertRaises(ValueError) as raised:
-                    list(fold([f"GRANT {verb} ON TABLE public.sync_log TO sync_tailer;"]))
+                    list(fold([f"GRANT {verb} ON TABLE public.payments TO sync_tailer;"]))
                 self.assertIn(verb, str(raised.exception))
-                self.assertIn("public.sync_log", str(raised.exception))
+                self.assertIn("public.payments", str(raised.exception))
 
     def test_observed_union_and_column_grants_stay_distinct(self):
         statements = [
-            "GRANT INSERT ON TABLE public.sync_peers TO app_user;",
-            "GRANT SELECT ON TABLE public.sync_peers TO sync_tailer;",
-            "GRANT SELECT,UPDATE ON TABLE public.sync_peers TO sync_retention;",
-            "GRANT UPDATE(last_seen_at) ON TABLE public.sync_peers TO sync_tailer;",
+            "GRANT INSERT ON TABLE public.payments TO app_user;",
+            "GRANT SELECT ON TABLE public.payments TO sync_tailer;",
+            "GRANT SELECT,UPDATE ON TABLE public.payments TO sync_retention;",
+            "GRANT UPDATE(last_seen_at) ON TABLE public.payments TO sync_tailer;",
         ]
         self.assertEqual(list(fold(statements)), [
-            "GRANT SELECT,INSERT,UPDATE ON TABLE public.sync_peers TO app_user;",
-            "GRANT UPDATE(last_seen_at) ON TABLE public.sync_peers TO app_user;",
+            "GRANT SELECT,INSERT,UPDATE ON TABLE public.payments TO app_user;",
+            "GRANT UPDATE(last_seen_at) ON TABLE public.payments TO app_user;",
         ])
 
     def test_app_user_revoke_remains_unchanged(self):
-        statement = "REVOKE ALL ON TABLE public.sync_log FROM app_user;"
+        statement = "REVOKE ALL ON TABLE public.payments FROM app_user;"
         self.assertEqual(list(fold([statement])), [statement])
 
 

@@ -354,16 +354,15 @@ describe("the tree's module graph is honest", () => {
   // Vacuous-pass anchor. A scan that silently matched nothing would leave `violations` empty and pass
   // — identical to every descriptor being honest. So pin that the discovery found the modules that
   // are not going away (a loose floor, not an exact count — CLAUDE.md §2) AND that the scan actually
-  // resolved the three known real cross-module edges SP-1c's review caught by hand.
+  // resolved a known real cross-module edge. The outbox's capture triggers (fiscal/bookings → sync via
+  // sync_capture) are gone (swap S5), so the surviving anchor is an ordinary FK edge; the SPI-edge
+  // mechanism stays exercised by the "detector itself" unit tests above.
   it("discovers the modules and finds the known real cross-module edges", () => {
-    for (const name of ["core", "identity", "payments", "sync", "workforce"]) {
+    for (const name of ["core", "identity", "payments", "workforce"]) {
       expect(modules).toContain(name);
     }
     expect(modules.length).toBeGreaterThanOrEqual(8);
-    expect(foundEdges.has("sync→identity")).toBe(true);
-    expect(foundEdges.has("sync→payments")).toBe(true);
     expect(foundEdges.has("workforce→identity")).toBe(true);
-    expect(foundEdges.has("fiscal-verifactu→sync")).toBe(true);
   });
 
   it("every FK/trigger edge in the SQL is named in the depending descriptor's requires", () => {

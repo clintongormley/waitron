@@ -23,9 +23,9 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  // These fixtures have no filed records; clear only their mutable identity and capture rows.
+  // These fixtures have no filed records; clear only their mutable identity rows. No capture triggers
+  // remain (the outbox is gone — swap S5), so these are plain deletes.
   await suite.db.transaction(async (tx) => {
-    await tx.execute(sql`set local app.sync_apply = 'on'`);
     for (const table of [
       "cadenas",
       "registro_sif",
@@ -33,7 +33,6 @@ afterEach(async () => {
       "nodes",
       "locations",
       "tenants",
-      "sync_log",
     ]) {
       await tx.execute(sql`delete from ${sql.identifier(table)}`);
     }

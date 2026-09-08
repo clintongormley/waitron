@@ -2,7 +2,7 @@
 // PGlite is a superuser holding every grant, so it cannot answer a privilege matrix. The whole-manifest
 // matrix in @waitron/fiscal-verifactu pins the same row from the other side; this suite proves the
 // MODULE's own set grants it correctly, applied over the whole manifest (the `manifest` template —
-// bookings' capture trigger EXECUTEs sync's `sync_capture()`, so it cannot migrate on core alone).
+// bookings FKs into core, so the fixtures apply the whole chain).
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";

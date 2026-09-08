@@ -178,7 +178,6 @@ export async function settleWebhook(
     },
     // Stamp `app.node_id` so the enrolled `payments` UPDATE captures this node as the origin — see
     // `WebhookDeps.nodeId`.
-    { nodeId: deps.nodeId },
   );
 }
 

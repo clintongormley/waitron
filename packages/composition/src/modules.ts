@@ -1,9 +1,8 @@
 import { CREDENTIALS_CLASSIFICATION } from "@waitron/credentials";
-import { CORE_CLASSIFICATION, CORE_ENROLMENT } from "@waitron/db";
+import { CORE_CLASSIFICATION } from "@waitron/db";
 import { FISCAL_NONE_SLOT } from "@waitron/fiscal-none";
 import {
   FISCAL_CLASSIFICATION,
-  FISCAL_ENROLMENT,
   FISCAL_PROVISIONING,
   FISCAL_RESTORE,
   FISCAL_SLOT,
@@ -11,16 +10,14 @@ import {
 } from "@waitron/fiscal-verifactu";
 import {
   BOOKINGS_CLASSIFICATION,
-  BOOKINGS_ENROLMENT,
   BOOKINGS_FLOOR_ANNOTATIONS,
   BOOKINGS_PERMISSIONS,
   BOOKINGS_ROUTES,
 } from "@waitron/bookings";
-import { IDENTITY_CLASSIFICATION, IDENTITY_ENROLMENT } from "@waitron/identity";
+import { IDENTITY_CLASSIFICATION } from "@waitron/identity";
 import type { WaitronModule } from "@waitron/module";
-import { PAYMENTS_CLASSIFICATION, PAYMENTS_ENROLMENT } from "@waitron/payments";
+import { PAYMENTS_CLASSIFICATION } from "@waitron/payments";
 import { SCHEDULER_CLASSIFICATION } from "@waitron/scheduler";
-import { SYNC_CLASSIFICATION } from "@waitron/sync";
 import { WORKFORCE_CLASSIFICATION } from "@waitron/workforce";
 import { WORKFORCE_ES_CLASSIFICATION, WORKFORCE_ES_VOCABULARY } from "@waitron/workforce-es";
 
@@ -36,10 +33,9 @@ import { WORKFORCE_ES_CLASSIFICATION, WORKFORCE_ES_VOCABULARY } from "@waitron/w
  *
  * Each `migrations` object carries the exact `{ name, table, from }` from
  * `packages/migrations/migrations.manifest.json`; `composition.test.ts` pins the two byte-for-byte
- * while both exist. `requires` names every cross-set edge the SQL creates — FK `REFERENCES`,
- * `CREATE TRIGGER … ON <table>` and the `sync_capture()` SPI call — which the root
- * `module-graph-honesty` guard cross-checks against the migrations. Populated seats today: `sync` on
- * every enrolling module (SP-2a/3a), `vocabulary` on the Spanish-by-design modules (SP-3b),
+ * while both exist. `requires` names every cross-set edge the SQL creates — FK `REFERENCES` and
+ * `CREATE TRIGGER … ON <table>` — which the root `module-graph-honesty` guard cross-checks against the
+ * migrations. Populated seats today: `vocabulary` on the Spanish-by-design modules (SP-3b),
  * `classification` on every table-owning module (swap S1 — `fiscal-none` owns no tables and has none),
  * `backup.nonDbState` on `core`, and `provisioning`, `fiscal` + `backup.restore` on `fiscal-verifactu`.
  * Two modules fill the `fiscal` slot — `fiscal-verifactu` and the no-regime `fiscal-none` — so exactly
@@ -52,7 +48,6 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     version: "0.0.0",
     tier: "mandatory",
     migrations: { name: "core", table: "__drizzle_migrations_db", from: "../db/drizzle" },
-    sync: CORE_ENROLMENT,
     classification: CORE_CLASSIFICATION,
     // The content-addressed media store is core's non-DB state; a backup must capture it
     // alongside the DB.
@@ -68,7 +63,6 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       table: "__drizzle_migrations_identity",
       from: "../identity/drizzle",
     },
-    sync: IDENTITY_ENROLMENT,
     classification: IDENTITY_CLASSIFICATION,
   },
   {
@@ -106,7 +100,6 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       table: "__drizzle_migrations_payments",
       from: "../payments/drizzle",
     },
-    sync: PAYMENTS_ENROLMENT,
     classification: PAYMENTS_CLASSIFICATION,
   },
   {
@@ -134,24 +127,15 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     classification: CREDENTIALS_CLASSIFICATION,
   },
   {
-    name: "sync",
-    version: "0.0.0",
-    tier: "toggleable",
-    requires: { core: "*", modules: { identity: "*", payments: "*" } },
-    migrations: { name: "sync", table: "__drizzle_migrations_sync", from: "../sync/drizzle" },
-    classification: SYNC_CLASSIFICATION,
-  },
-  {
     name: "fiscal-verifactu",
     version: "0.0.0",
     tier: "provision-only",
-    requires: { core: "*", modules: { sync: "*" } },
+    requires: { core: "*" },
     migrations: {
       name: "fiscal-verifactu",
       table: "__drizzle_migrations_fiscal",
       from: "../fiscal-verifactu/drizzle",
     },
-    sync: FISCAL_ENROLMENT,
     classification: FISCAL_CLASSIFICATION,
     vocabulary: FISCAL_VOCABULARY,
     provisioning: FISCAL_PROVISIONING,
@@ -175,22 +159,18 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     fiscal: FISCAL_NONE_SLOT,
   },
   {
-    // Bookings — the first UI-bearing AND first genuinely-toggleable enrolling module (SP1: server +
-    // data). Listed LAST at its FINAL post-`sync` position: it FKs into `core` and installs a
-    // `sync_capture()` trigger owned by `sync`, so it requires both; a core-then-sync dep still lands
-    // here under Kahn's input-order tie-break. `sync` carries the state-class enrolment (its one
-    // `bookings` capture trigger); `routes` the seven booking routes boot mounts generically. The
-    // descriptor is the only place bookings is named.
+    // Bookings — the first UI-bearing AND first genuinely-toggleable module (SP1: server + data). It
+    // FKs into `core`, so it requires it; `routes` are the seven booking routes boot mounts
+    // generically. The descriptor is the only place bookings is named.
     name: "bookings",
     version: "0.0.0",
     tier: "toggleable",
-    requires: { core: "*", modules: { sync: "*" } },
+    requires: { core: "*" },
     migrations: {
       name: "bookings",
       table: "__drizzle_migrations_bookings",
       from: "../bookings/drizzle",
     },
-    sync: BOOKINGS_ENROLMENT,
     classification: BOOKINGS_CLASSIFICATION,
     routes: BOOKINGS_ROUTES,
     permissions: BOOKINGS_PERMISSIONS,

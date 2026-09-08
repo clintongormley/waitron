@@ -119,7 +119,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       // Threads this node's id into `app.node_id` so the ONE enrolled write this helper wraps — the
       // `persons` UPDATE in `PUT /session/me/locale` — captures a real sync origin. Harmless for the
       // non-enrolled workforce writes (shifts/swaps/absences carry no capture trigger).
-      { nodeId: deps.cfg.nodeId },
     );
 
   // The public supported-locale list + the venue's default UI locale. Deliberately UNAUTHENTICATED

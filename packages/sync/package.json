@@ -17,7 +17,6 @@
   },
   "dependencies": {
     "@waitron/db": "workspace:*",
-    "@waitron/identity": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
     "drizzle-orm": "^0.45.2",

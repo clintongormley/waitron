@@ -65,8 +65,11 @@ statement. No such statement appears in the current OLD prefix dump; rewriting i
 the resulting privileges would not represent the final union. The edge checks run with
 `python3 scripts/schema-equivalence-fold.test.py`, including column REVOKEs and unmeasured verbs.
 
-For example, old `sync_log` grants of INSERT to `app_user`, SELECT to `sync_tailer`, and SELECT,DELETE
-to `sync_retention` compare as `GRANT SELECT,INSERT,DELETE ON TABLE public.sync_log TO app_user;`.
+(The `sync_*` outbox tables and the `sync_tailer`/`sync_retention` roles this section describes were
+deleted with the application outbox — swap S5, 2026-09-08; the fold mechanism and its edge tests remain,
+exercised over a surviving table.) For example, grants of INSERT to `app_user`, SELECT to `sync_tailer`,
+and SELECT,DELETE to `sync_retention` on a table compare as
+`GRANT SELECT,INSERT,DELETE ON TABLE public.payments TO app_user;`.
 If you remove DELETE from the baseline, the proof must print NOT EQUIVALENT and show that grant.
 Run the prefix proof with `SCHEMAEQ_MODULES=core,identity,workforce,workforce-es,payments,scheduler,credentials,sync`
 to exercise this fold before the later modules are baselined. Keep the direct NEW catalog ACL readback

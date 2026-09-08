@@ -4,7 +4,7 @@ import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
 /**
- * Migrate the whole manifest once: fiscal capture triggers depend on sync_capture().
+ * Migrate the whole manifest once: fiscal FKs into core, so it lands on the whole chain.
  * Suites clone the template per file. The shared LOGIN fixture inherits app_user and lets
  * drain.concurrency.test.ts exercise enumeration outside a transaction using the app grants.
  * Roles are cluster-wide, so setup creates the fixture once after core creates app_user.

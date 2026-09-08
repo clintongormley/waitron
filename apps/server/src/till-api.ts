@@ -646,15 +646,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // captured to `sync_log`, stamped with `app.node_id` as its origin. Thread this till's `nodeId` so
       // the write records a REAL origin — a bare 3-arg withTenant leaves it the all-zero uuid, which
       // `source.ts` never delivers and `retention.ts` never prunes (unbounded log growth).
-      await withTenant(
-        deps.db,
-        deps.cfg.tenantId,
-        async (tx) => {
-          await asAppUser(tx);
-          await setPersonLocale(tx, { tenantId: deps.cfg.tenantId, personId, locale });
-        },
-        { nodeId: deps.cfg.nodeId },
-      );
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await setPersonLocale(tx, { tenantId: deps.cfg.tenantId, personId, locale });
+      });
       return c.body(null, 204);
     }),
   );

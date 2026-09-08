@@ -1,5 +1,5 @@
--- Fiscal grants, enumeration and capture depend on the earlier core and sync baselines.
--- reject_mutation() is defined by core; sync_capture() is defined by sync.
+-- Fiscal grants and enumeration depend on the earlier core baseline.
+-- reject_mutation() is defined by core.
 
 REVOKE ALL ON "registros_facturacion" FROM app_user;
 --> statement-breakpoint
@@ -54,30 +54,6 @@ REVOKE ALL ON "acks" FROM app_user;
 GRANT SELECT, INSERT, UPDATE ON "acks" TO app_user;
 --> statement-breakpoint
 GRANT DELETE ON "acks" TO app_user;
---> statement-breakpoint
-CREATE TRIGGER registros_facturacion_capture AFTER INSERT ON registros_facturacion
-  FOR EACH ROW WHEN (current_setting('app.sync_apply', true) IS DISTINCT FROM 'on')
-  EXECUTE FUNCTION sync_capture();
---> statement-breakpoint
-CREATE TRIGGER registro_sif_capture AFTER INSERT OR UPDATE ON registro_sif
-  FOR EACH ROW WHEN (current_setting('app.sync_apply', true) IS DISTINCT FROM 'on')
-  EXECUTE FUNCTION sync_capture();
---> statement-breakpoint
-CREATE TRIGGER cadenas_capture AFTER INSERT OR UPDATE ON cadenas
-  FOR EACH ROW WHEN (current_setting('app.sync_apply', true) IS DISTINCT FROM 'on')
-  EXECUTE FUNCTION sync_capture();
---> statement-breakpoint
-CREATE TRIGGER envios_capture AFTER INSERT OR UPDATE ON envios
-  FOR EACH ROW WHEN (current_setting('app.sync_apply', true) IS DISTINCT FROM 'on')
-  EXECUTE FUNCTION sync_capture();
---> statement-breakpoint
-CREATE TRIGGER envio_flujo_capture AFTER INSERT OR UPDATE ON envio_flujo
-  FOR EACH ROW WHEN (current_setting('app.sync_apply', true) IS DISTINCT FROM 'on')
-  EXECUTE FUNCTION sync_capture();
---> statement-breakpoint
-CREATE TRIGGER acks_capture AFTER INSERT OR UPDATE OR DELETE ON acks
-  FOR EACH ROW WHEN (current_setting('app.sync_apply', true) IS DISTINCT FROM 'on')
-  EXECUTE FUNCTION sync_capture();
 --> statement-breakpoint
 
 -- Append-only records reject UPDATE, DELETE and TRUNCATE during replication too.

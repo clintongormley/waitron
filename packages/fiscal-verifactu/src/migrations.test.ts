@@ -51,14 +51,13 @@ async function journalCount(db: Database, table: string) {
 }
 
 describe("migration composition across packages", () => {
-  it("applies the full manifest (core → … → sync → fiscal) against an empty database", async () => {
+  it("applies the full manifest (core → … → fiscal) against an empty database", async () => {
     const db = pg.db;
 
     const names = await tableNames(db);
     // Core's tables and the module's tables coexist in one schema, created by independent migration
-    // sets. Fiscal is no longer applied on top of core alone: the capture triggers call
-    // sync's `sync_capture()`, so the whole manifest is migrated (sync before fiscal) — the
-    // production order (see ../test/migrations.ts).
+    // sets. The whole manifest is migrated in production order (see ../test/migrations.ts) so fiscal
+    // lands on top of its `core` dependency.
     expect(names).toContain("sales");
     expect(names).toContain("tills");
     expect(names).toContain("registros_facturacion");
