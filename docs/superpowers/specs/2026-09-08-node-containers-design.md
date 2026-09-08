@@ -198,8 +198,19 @@ start, in order:
    action is filtered away regardless. `WAITRON_ENV` is deliberately NOT consulted here: the
    database's own stamp is the authority (CLAUDE.md §5, one database per environment).
 
-   Then `replicationBootstrapStatements` if `waitron_repl` is absent (`assertReplicationReady`'s
-   probe decides). The generated passwords are written ONCE to `<state>/instance.env` (0600, via
+   Then the replication bootstrap, on ONE superuser connection to the TARGET database (its
+   schema-local statements land in whichever database the connection is on). Two questions, asked
+   separately: if `waitron_repl` does not exist at all, run the full
+   `replicationBootstrapStatements`; if it exists but this DATABASE lacks the migrator's default
+   SELECT for it (`readReplicationReadiness`'s `replicationHasDefaultSelect`), re-issue only
+   `replicationSchemaGrantStatements` — the full array would fail at `CREATE ROLE` on the surviving
+   role. A `waitron_repl` that exists WITHOUT `LOGIN REPLICATION` is refused
+   (`provisioning.role_unusable`), never `ALTER`ed: the tool did not create it and does not know its
+   password, the same rule `assertUsable` applies to the two instance roles. `readReplicationReadiness`'s
+   own `replicationRolePresent` is deliberately NOT the create-it gate — it is the conjunction of
+   existence and both attributes, so it reads "absent" for a role that exists, and `CREATE ROLE` then
+   returns `42710` on every start forever. The generated passwords are written ONCE, BEFORE those
+   statements run, to `<state>/instance.env` (0600, via
    `formatEnvFile`/`writeFileAtomic`) as `DATABASE_URL` (the `waitron_app` login),
    `WAITRON_MIGRATIONS_DATABASE_URL` (the migrator) and `WAITRON_REPLICATION_PASSWORD`, each
    pointing at `127.0.0.1:5432/waitron`; every later start reads them back and `planInstance` emits
@@ -207,13 +218,32 @@ start, in order:
    password — the CLI prints them for the same reason, and neither can recover a password it did
    not generate.
 
-   **Rejoin and restore agree with this by construction** (checked, not assumed):
-   `dropAndCreateDatabase` (`db-wipe.ts`, the R3 rejoin wipe) drops the database and RECREATES it
-   empty and migrator-owned, and roles are cluster-global, so a rejoined box presents
-   database-exists + roles-exist + nothing-inside — for which this step plans no actions at all and
-   `boot.ts` migrates as usual. It also closes a gap `db-wipe.ts`'s header records: a crash between
-   its drop and its create leaves the box dropped-not-created and "does not self-recover on re-run".
-   Under this entrypoint it does — the next start plans the one `create-database` and continues.
+   **A rejoin needs MORE than the instance plan, and this was measured rather than reasoned about.**
+   An earlier version of this paragraph claimed, under the words "checked, not assumed", that a
+   rejoined box "presents database-exists + roles-exist + nothing-inside — for which this step plans
+   no actions at all". The instance-plan half is right; the replication half was false, and a real
+   container disproved it: `ensureInstance` → `drop database … with (force)` → `ensureInstance` left
+   `replicationHasDefaultSelect: false` with **zero** `pg_default_acl` rows. `pg_authid` is
+   CLUSTER-SHARED while `pg_default_acl` and table grants are PER-DATABASE, so
+   `dropAndCreateDatabase` (`db-wipe.ts`, the R3 rejoin wipe) takes the two schema-local grants with
+   the database while `waitron_repl` itself survives — and a gate that asks only whether the role
+   exists skips the bootstrap and leaves the recreated database with no SELECT for it. Nothing fails
+   at boot; it surfaces at the next adopt as `provisioning.replication_not_ready`, or as a silently
+   empty initial COPY at a promotion. Hence the split above: the entrypoint DOES do work on a rejoin,
+   re-issuing `replicationSchemaGrantStatements` against the new database.
+
+   It also closes a gap `db-wipe.ts`'s header records: a crash between its drop and its create leaves
+   the box dropped-not-created and "does not self-recover on re-run". Under this entrypoint it does —
+   the next start plans the one `create-database` and continues.
+
+   > **Cross-track note — supersedes CLAUDE.md §3 for a containerised node.** §3's replication bullet
+   > states that "the replication role is a bootstrap the app provisioner only verifies… The app
+   > performs none of it — `assertReplicationReady` verifies it instead." This design deliberately
+   > moves that bootstrap INTO the container entrypoint, because the whole point of the image is that
+   > a blank box needs no operator step: there is no box-image author standing between the container
+   > and its first boot. `ensureInstance` therefore PERFORMS the bootstrap, and the contradiction is
+   > real, not apparent. It is recorded here rather than fixed: CLAUDE.md §2–§5 belongs to another
+   > track's session, so that edit needs coordinating with the track that owns it.
 
 3. **Load the env files** into the process environment: `instance.env`, then `secrets.env`, then
    `trading.env` — **a variable already present in the environment always wins over a file**.

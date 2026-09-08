@@ -971,6 +971,9 @@ Implement the four helpers the above names, reading `cli.ts`'s `withState` first
   `REPLICATION_ROLE`, open a connection to `targetUri` and run `replicationBootstrapStatements(password)`
   there, each `sql.raw` and autocommit. **Never log the statement or the password** — it carries the
   credential, the same rule `CREATE ROLE` follows (spec's `sqlStateOf` convention).
+  (What was PLANNED. As built it is three cases, not one, and the connection is the SUPERUSER's to
+  the target database rather than `targetUri`'s migrator role — see the spec's step 2 and the
+  fix-round sections of `task-4-report.md`.)
 
 - [ ] **Step 4: Run the tests**
 

@@ -294,4 +294,30 @@ describe("ensureInstance", () => {
     const rendered = `${String(error)} ${JSON.stringify(error)} ${(error as Error).stack ?? ""}`;
     expect(rendered).not.toContain(password);
   });
+
+  it("refuses a replication role that exists without its attributes, rather than looping", async () => {
+    // `readReplicationReadiness`'s `replicationRolePresent` is existence AND rolcanlogin AND
+    // rolreplication, so a role an operator made NOLOGIN reads "absent" through it — and the
+    // create-it branch then hits the surviving role with 42710 on EVERY start, forever. Existence
+    // and usability are separate questions; this pins that they are asked separately.
+    const admin = await createPostgresDb(bootstrapUrl);
+    try {
+      await admin.execute(sql.raw(`drop role if exists waitron_repl`));
+      await admin.execute(sql.raw(`create role waitron_repl nologin`));
+    } finally {
+      await admin.close();
+    }
+    await expect(
+      ensureInstance({
+        bootstrapUrl,
+        database: "waitron",
+        stateDir,
+        log: noopLog,
+        migrationsRoot: null,
+      }),
+    ).rejects.toMatchObject({
+      code: "provisioning.role_unusable",
+      params: { role: "waitron_repl", missing: ["LOGIN", "REPLICATION"] },
+    });
+  });
 });

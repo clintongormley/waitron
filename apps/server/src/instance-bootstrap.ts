@@ -69,6 +69,27 @@ async function roleExists(admin: Database, role: string): Promise<boolean> {
   return rows.rows[0]?.present === true;
 }
 
+/**
+ * `pg_roles` on the replication role: whether it exists AT ALL, and which of the two attributes the
+ * bootstrap creates it with are missing.
+ *
+ * Read separately from `readReplicationReadiness`, whose `replicationRolePresent` is the CONJUNCTION
+ * `rolname = 'waitron_repl' AND rolcanlogin AND rolreplication`. That single boolean cannot tell
+ * "absent, create it" from "present but wrong, refuse it", and treating the second as the first
+ * drives `CREATE ROLE` at a surviving role — a `42710` on every start, forever.
+ */
+async function replicationRoleFacts(db: Database): Promise<{ exists: boolean; missing: string[] }> {
+  const rows = await db.execute<{ rolcanlogin: boolean; rolreplication: boolean }>(
+    sql`select rolcanlogin, rolreplication from pg_roles where rolname = ${REPLICATION_ROLE}`,
+  );
+  const row = rows.rows[0];
+  if (row === undefined) return { exists: false, missing: [] };
+  const missing: string[] = [];
+  if (!row.rolcanlogin) missing.push("LOGIN");
+  if (!row.rolreplication) missing.push("REPLICATION");
+  return { exists: true, missing };
+}
+
 /** A password is recoverable only from the `create-role` action that generated it, or from a
  * previous run's `instance.env`. A role that already exists carries a password this process never
  * saw, and returning a guess would hand the server a URL that cannot authenticate. */
@@ -212,15 +233,32 @@ export async function ensureInstance(opts: {
     // earlier because on a first provision the database does not exist until `applyInstance` runs.
     const replication = await createPostgresDb(withDatabase(opts.bootstrapUrl, opts.database));
     try {
-      // `readReplicationReadiness` answers both questions in one read, and is the package's own
-      // probe — the app provisioner never performs the superuser bootstrap, only decides whether it
-      // has run.
+      // TWO reads, because they answer different questions. `readReplicationReadiness` is the
+      // package's own probe and owns the PER-DATABASE fact (`replicationHasDefaultSelect`); its
+      // `replicationRolePresent` is a CONJUNCTION of existence and two attributes, which is the
+      // wrong shape for deciding whether to CREATE the role — see `replicationRoleFacts`.
       const readiness = await readReplicationReadiness(replication);
+      const replRole = await replicationRoleFacts(replication);
+
+      // Refused, never ALTERed, and before anything is written or created. This tool did not make
+      // such a role, does not know its password, and silently granting REPLICATION to a login an
+      // operator deliberately made NOLOGIN is not its call — the rule `assertUsable`
+      // (instance-plan.ts) already applies to the two instance roles, and `provisioning.role_unusable`
+      // is its code. The refusal escalates through the entrypoint's failure counter to the recovery
+      // page carrying the role and the missing attributes, which is actionable; falling through to
+      // `CREATE ROLE` instead yields `42710` on every start and says nothing.
+      if (replRole.exists && replRole.missing.length > 0) {
+        throw new AppError("provisioning.role_unusable", {
+          role: REPLICATION_ROLE,
+          missing: replRole.missing,
+        });
+      }
+
       const savedReplication = saved.WAITRON_REPLICATION_PASSWORD;
       let replicationPassword: string;
       if (savedReplication !== undefined && savedReplication !== "") {
         replicationPassword = savedReplication;
-      } else if (readiness.replicationRolePresent) {
+      } else if (replRole.exists) {
         throw unrecoverable("WAITRON_REPLICATION_PASSWORD");
       } else {
         replicationPassword = generatePassword();
@@ -251,7 +289,7 @@ export async function ensureInstance(opts: {
         0o600,
       );
 
-      if (!readiness.replicationRolePresent) {
+      if (!replRole.exists) {
         await runReplicationStatements(
           replication,
           replicationBootstrapStatements(replicationPassword),
