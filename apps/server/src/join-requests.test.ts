@@ -1,6 +1,13 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { JOIN_TTL_MS, PENDING_CAP, createJoinRequest, readJoinStatus } from "./join-requests.js";
+import {
+  JOIN_TTL_MS,
+  PENDING_CAP,
+  challengeFor,
+  createJoinRequest,
+  listPendingJoinRequests,
+  readJoinStatus,
+} from "./join-requests.js";
 // `useTemplateDb` is NOT on the `@waitron/db` barrel — the exports map is enumerated (CLAUDE.md §3),
 // and the sibling suite imports it from the subpath (`device-api.pg.test.ts:5-6`).
 import { asAppUser, withTenant } from "@waitron/db";
@@ -216,4 +223,91 @@ describe("readJoinStatus", () => {
     });
   });
   // The `approved` case needs an accepted device and lands in Task 6, whose test asserts it.
+});
+
+describe("listPendingJoinRequests", () => {
+  it("returns pending rows of the asked-for kind and NEVER the number", async () => {
+    const venue = await setupVenue(suite.admin);
+    const rows = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
+      await createJoinRequest(tx, venue.cfg, { kind: "print_agent", label: "Box" });
+      return listPendingJoinRequests(tx, venue.cfg, "device");
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.label).toBe("Bar till");
+    // The whole point of the numeric match: the list cannot show the answer beside the question. The
+    // key set is what expresses that — a "no two digits anywhere" assertion would trip on the row's
+    // own UUID and ISO timestamp and could never pass.
+    expect(Object.keys(rows[0]!).sort()).toEqual(["createdAt", "id", "kind", "label"]);
+  });
+});
+
+describe("challengeFor", () => {
+  it("returns three choices, one of which is the request's own number", async () => {
+    const venue = await setupVenue(suite.admin);
+    const { made, choices } = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "d" });
+      return { made, choices: (await challengeFor(tx, venue.cfg, made.joinId)).choices };
+    });
+    expect(choices).toHaveLength(3);
+    expect(new Set(choices).size).toBe(3);
+    expect(choices).toContain(made.verificationNumber);
+    for (const c of choices) expect(c).toMatch(/^\d{2}$/);
+  });
+
+  it("returns the SAME three numbers on every call — a second call must teach nothing", async () => {
+    const venue = await setupVenue(suite.admin);
+    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "d" });
+      const first = await challengeFor(tx, venue.cfg, made.joinId);
+      const second = await challengeFor(tx, venue.cfg, made.joinId);
+      // Sets, not arrays: the order is shuffled per call, the MEMBERSHIP is fixed. Two re-rolled sets
+      // would intersect in exactly one value — the real one — handing the answer to any client with a
+      // management session.
+      expect(new Set(second.choices)).toEqual(new Set(first.choices));
+    });
+  });
+
+  it("never offers a decoy that is another pending request's real number, in EITHER kind", async () => {
+    const venue = await setupVenue(suite.admin);
+    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      // The agent request's REAL number is spoken for the moment it exists — createJoinRequest's own
+      // forbidden set (reals ∪ decoys, both kinds) is what keeps the device request's pick and decoys
+      // off it; challengeFor has no number source to rig, so this is proven by construction, not by
+      // forcing a collision attempt.
+      const agent = await createJoinRequest(tx, venue.cfg, { kind: "print_agent", label: "a" });
+      const device = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "d" });
+      const { choices } = await challengeFor(tx, venue.cfg, device.joinId);
+      expect(choices).toContain(device.verificationNumber);
+      expect(choices).not.toContain(agent.verificationNumber);
+    });
+  });
+
+  // The shuffle-position test (`denyJoinRequest` in a loop, to stay under PENDING_CAP) is held back to
+  // Task 6, which adds `denyJoinRequest` — see task-5-report.md.
+
+  it("throws join_request.not_found for an unknown id, and for another tenant's request", async () => {
+    const venueA = await setupVenue(suite.admin);
+    const venueB = await setupVenue(suite.admin);
+    const madeA = await withTenant(suite.admin, venueA.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return createJoinRequest(tx, venueA.cfg, { kind: "device", label: "A's till" });
+    });
+    await withTenant(suite.admin, venueA.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await expect(
+        challengeFor(tx, venueA.cfg, "00000000-0000-4000-8000-000000000000"),
+      ).rejects.toMatchObject({ code: "join_request.not_found" });
+    });
+    await withTenant(suite.admin, venueB.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await expect(challengeFor(tx, venueB.cfg, madeA.joinId)).rejects.toMatchObject({
+        code: "join_request.not_found",
+      });
+    });
+  });
 });

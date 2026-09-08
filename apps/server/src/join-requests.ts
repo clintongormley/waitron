@@ -130,6 +130,89 @@ export async function createJoinRequest(
  * join, and never re-issued. Denied, lapsed and never-existed all fold into `not_approved`: the
  * joiner's recovery is identical in every case.
  */
+/** The pending list the dashboard renders. The return type deliberately has NO number field: the list
+ * must never carry the answer beside the question (design §1.2 rule 1), and a type that cannot express
+ * it is a stronger guarantee than a `select` that happens not to ask for it. */
+export async function listPendingJoinRequests(
+  tx: Transaction,
+  cfg: TillConfig,
+  kind: JoinRequestKind,
+): Promise<{ id: string; kind: JoinRequestKind; label: string; createdAt: string }[]> {
+  await sweepLapsed(tx, cfg);
+  return tx
+    .select({
+      id: joinRequests.id,
+      kind: joinRequests.kind,
+      label: joinRequests.label,
+      createdAt: joinRequests.createdAt,
+    })
+    .from(joinRequests)
+    .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.kind, kind)))
+    .orderBy(joinRequests.createdAt);
+}
+
+/** Fetch one pending request, tenant-scoped, or throw. A globally-unique UUID is not the isolation
+ * boundary (CLAUDE.md §3): every by-id read still carries its own tenant predicate. */
+async function requirePending(
+  tx: Transaction,
+  cfg: TillConfig,
+  id: string,
+): Promise<{
+  id: string;
+  kind: JoinRequestKind;
+  label: string;
+  verificationNumber: string;
+  decoyNumbers: string[];
+  tokenHash: string;
+  locationId: string;
+}> {
+  await sweepLapsed(tx, cfg);
+  const [row] = await tx
+    .select({
+      id: joinRequests.id,
+      kind: joinRequests.kind,
+      label: joinRequests.label,
+      verificationNumber: joinRequests.verificationNumber,
+      decoyNumbers: joinRequests.decoyNumbers,
+      tokenHash: joinRequests.tokenHash,
+      locationId: joinRequests.locationId,
+    })
+    .from(joinRequests)
+    .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.id, id)));
+  if (row === undefined) throw new AppError("join_request.not_found", {});
+  return row;
+}
+
+/**
+ * The three numbers the admin picks from: this request's own, plus its two stored decoys.
+ *
+ * The server builds the set and does not say which is real — the dashboard receives three
+ * indistinguishable strings and posts back the one the admin tapped, so the check is server-side and
+ * the page cannot leak the answer. The person is what is being tested, not the browser.
+ *
+ * The membership is fixed at join time and READ here, never re-rolled: two independently-rolled calls
+ * would intersect in exactly one value — the real one — which hands the answer to any client with a
+ * management session (design §1.2 rule 2). Only the shuffle order varies per call.
+ */
+export async function challengeFor(
+  tx: Transaction,
+  cfg: TillConfig,
+  id: string,
+): Promise<{ choices: string[] }> {
+  const row = await requirePending(tx, cfg, id);
+  // The set was fixed at join and is READ here, never re-rolled — see the column's comment and
+  // design §1.2 rule 2. Only the ORDER varies per call.
+  const choices = [row.verificationNumber, ...row.decoyNumbers];
+
+  // Fisher-Yates over a cryptographic source: a predictable position would let a careless admin learn
+  // "the real one is always first" and stop comparing, which is the whole failure this guards against.
+  for (let i = choices.length - 1; i > 0; i--) {
+    const j = randomInt(0, i + 1);
+    [choices[i], choices[j]] = [choices[j]!, choices[i]!];
+  }
+  return { choices };
+}
+
 export async function readJoinStatus(
   tx: Transaction,
   cfg: TillConfig,
