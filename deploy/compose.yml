@@ -26,6 +26,14 @@ services:
       # Only for a profile where interface sniffing cannot see the LAN (a bridge/cloud compose, or
       # Docker Desktop, whose "host" network is the Linux VM's). Empty = sniff, the on-prem default.
       WAITRON_BOX_ADDRESSES: ${WAITRON_BOX_ADDRESSES:-}
+      # The passkey relying party, and the origin every till is handed (advertisedOrigin defaults to
+      # it). The image bakes waitron.local, which is right for an on-prem box and WRONG for any
+      # deployment reached at another name — config.ts requires both in production precisely so a
+      # live box cannot run with the wrong relying party. They are passed HERE because the image's
+      # own ENV beats trading.env (box-env.ts merges the process environment last), so .env is the
+      # only place an operator can override them.
+      WAITRON_MANAGEMENT_RP_ID: ${WAITRON_MANAGEMENT_RP_ID:-waitron.local}
+      WAITRON_MANAGEMENT_ORIGIN: ${WAITRON_MANAGEMENT_ORIGIN:-https://waitron.local}
       # Local backups are all three or none: a destination without a database URL and a recovery key
       # is refused at boot rather than shipped unencrypted, so an operator sets the trio in .env or
       # leaves it empty and no backup duty runs.

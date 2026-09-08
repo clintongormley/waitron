@@ -108,8 +108,15 @@ COPY --from=build --chown=waitron:waitron /src/apps/setup/dist/ /app/web/setup/
 # The two WAITRON_MANAGEMENT_* values are what a LIVE box needs to boot at all: the wizard's "live"
 # writes WAITRON_ENV=production into trading.env, and config.ts then REQUIRES both (they only have
 # dev defaults). Nothing else on a box sets them, so without these lines a restaurant that picks
-# live gets server.config_missing on every restart forever. They must equal boot.ts's BOX_HOSTNAME
-# and the origin built from it — deploy-image-config.test.ts is the guard that they cannot drift.
+# live gets server.config_missing on every boot until the entrypoint's counter reaches three and the
+# box serves the recovery page instead — it never trades again without an operator.
+#
+# These are the ON-PREM default, not a fixed fact: they are right only for a box reached at
+# waitron.local, so compose.yml passes both from the box's .env with these as the fallback (the
+# image's ENV beats trading.env, box-env.ts, so .env is the only override an operator has). They are
+# copies of boot.ts's BOX_HOSTNAME, pinned to it — along with compose's defaults and prepare.sh's
+# QR URL — by scripts/deploy-image-env.test.ts, which is what makes a change to one of the four
+# fail rather than ship a box whose certificate, QR and relying party disagree.
 ENV WAITRON_STATE_DIR=/var/lib/waitron/state \
   WAITRON_LOG_DIR=/var/lib/waitron/logs \
   WAITRON_MEDIA_DIR=/var/lib/waitron/media \

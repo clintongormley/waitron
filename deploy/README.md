@@ -102,6 +102,15 @@ whose `--network host` puts the container on the Linux VM's network (`192.168.65
 Mac's. Loopback addresses are refused, and a non-IPv4 entry fails the boot with
 `server.config_invalid`.
 
+**`WAITRON_MANAGEMENT_RP_ID` and `WAITRON_MANAGEMENT_ORIGIN`** are the passkey relying party and the
+origin every till is handed. The image bakes `waitron.local` and `https://waitron.local`, which is
+right for an on-prem box and wrong for anything reached at another name — a cloud node on this same
+image, say. **A box reached at any name other than `waitron.local` MUST set both in `.env`.** They
+have to be set there rather than in the box's own state, because the image's `ENV` wins over
+`trading.env` (`box-env.ts` merges the process environment last). Getting this wrong does not fail
+the boot: the box comes up, and then no passkey can ever be registered, because the browser checks
+the relying party against the name in the address bar and raises `SecurityError` at registration.
+
 `WAITRON_ENV` is deliberately NOT in this file. The wizard decides whether a box is a demo or a live
 one and writes that into the `state` volume, so "`production` must be typed out" keeps its one home:
 the wizard, not a file on the box.

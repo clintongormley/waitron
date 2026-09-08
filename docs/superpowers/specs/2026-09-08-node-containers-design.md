@@ -122,10 +122,23 @@ report carries both readings of each):
 - **`WAITRON_MANAGEMENT_RP_ID` / `WAITRON_MANAGEMENT_ORIGIN`.** The wizard's "live" writes
   `WAITRON_ENV=production` into `trading.env`, and `config.ts` then REQUIRES both — they carry dev
   defaults only. Nothing else on a box sets them, so without them a restaurant that picks live gets
-  `server.config_missing { variable: "WAITRON_MANAGEMENT_RP_ID" }` on every restart, for ever, with
-  `restart: unless-stopped` guaranteeing the loop. They are pinned equal to `boot.ts`'s
-  `BOX_HOSTNAME` by `apps/server/src/deploy-image-config.test.ts`, which loads the image's own
-  declared environment under `WAITRON_ENV=production`.
+  `server.config_missing { variable: "WAITRON_MANAGEMENT_RP_ID" }` on every boot until the
+  entrypoint's counter reaches `RECOVERY_AT = 3`, at which point the box serves the RECOVERY PAGE
+  (`{"failures":3,"level":"recovery","lastErrorCode":"server.config_missing"}`) and never trades
+  again without an operator. (An earlier draft of this bullet said it restarts "for ever, with
+  `restart: unless-stopped` guaranteeing the loop"; §9's escalation is what actually happens.)
+
+  They are the ON-PREM DEFAULT, not a fixed fact. `box-env.ts` merges the process environment LAST,
+  so the image's `ENV` beats `trading.env` and nothing on the box can override a baked value — which
+  would make a bridge/cloud node on this same image (§2, §11) boot happily at a real domain with
+  relying party `waitron.local`, where no passkey can ever be registered and every till is handed
+  `https://waitron.local` (`advertisedOrigin` defaults to `managementOrigin`). Before these lines
+  existed that deployment refused to boot and NAMED the variable. So `compose.yml` passes both from
+  the box's `.env` with the image's values as the `${VAR:-default}` fallback, and `.env.example` and
+  `deploy/README.md` both say a box reached at any name other than `waitron.local` must set them.
+  The image's, compose's and `prepare.sh`'s copies of the hostname are pinned to `boot.ts`'s
+  `BOX_HOSTNAME` by `scripts/deploy-image-env.test.ts`, which also loads the image's own declared
+  environment under `WAITRON_ENV=production`.
 - **`WAITRON_BACKUP_DIR` is NOT set** (it was listed here, and must not be). `loadBackupConfig` is
   fail-closed: a destination without `WAITRON_BACKUP_DATABASE_URL` and
   `WAITRON_BACKUP_RECOVERY_KEY` throws — `server.config_invalid {
@@ -487,7 +500,12 @@ not a correctness fix: the classifier is an allowlist of INERT paths, not of cod
 `deploy/**` already classifies as code today — measured, `classify(["deploy/Dockerfile"])` returns
 `{ code: true, reason: "deploy/Dockerfile is not documentation" }` and
 `scopeForPaths(["deploy/Dockerfile"])` returns `{ kind: "global" }`. A deploy change therefore runs
-MORE CI than a package change, not less; an entry would narrow it to the image job.
+MORE CI than a package change, not less; an entry would narrow it to the image job. That narrowing
+is only safe because the image guard lives in the ROOT project: measured, adding `"deploy/"` to
+`ROOT_SCOPE_PREFIXES` turns `scopeForPaths(["deploy/Dockerfile"])` into
+`{ kind: "root", packages: [] }`, which drops `@waitron/server` from scope — so the same guard in
+`apps/server` would stop running on exactly the change class it exists to catch. Whoever takes the
+optimisation must check that every guard over `deploy/` is still in the root project.
 
 **Updating a box:** `docker compose pull && docker compose up -d` — the compose pins `:main` until
 release tags exist. Unattended updates are the installer spec's question (a box we did not sell

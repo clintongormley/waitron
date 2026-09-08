@@ -236,11 +236,12 @@ export const DEFAULT_STATE_ROOT = fileURLToPath(new URL("state", import.meta.url
  * to avoid (spec §7/§8): the mDNS responder that ANSWERS for the name, the discovery/trust surface that
  * ADVERTISES it, and the self-signed leaf's SAN list (`ensureBoxSecrets`) that must COVER it.
  *
- * Exported for a fourth wiring that lives outside this process: the container image's
- * `WAITRON_MANAGEMENT_RP_ID` / `WAITRON_MANAGEMENT_ORIGIN`, which a live box requires and which
- * `deploy-image-config.test.ts` pins equal to this value.
+ * Three copies of this string live outside this process, where no import can reach them: the
+ * image's `WAITRON_MANAGEMENT_RP_ID` / `WAITRON_MANAGEMENT_ORIGIN`, compose's defaults for the
+ * same, and `prepare.sh`'s QR URL. `scripts/deploy-image-env.test.ts` reads this line as text and
+ * pins all three to it.
  */
-export const BOX_HOSTNAME = "waitron.local";
+const BOX_HOSTNAME = "waitron.local";
 
 /**
  * The upper bound on a single product-image upload (design §5e, 5 MiB). A settled constant rather

@@ -13,6 +13,8 @@ set -euo pipefail
 
 WAITRON_DIR="${WAITRON_DIR:-/opt/waitron}"
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# The URL in the QR the restaurant scans. A copy of boot.ts's BOX_HOSTNAME — pinned to it, with the
+# image's and compose's copies, by scripts/deploy-image-env.test.ts.
 BOX_URL="https://waitron.local"
 
 as_root() {
