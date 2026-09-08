@@ -1,6 +1,7 @@
 import { join, resolve } from "node:path";
 import { AppError } from "@waitron/shared";
 import { DEFAULTS } from "@waitron/scheduler";
+import { parseBoxAddresses } from "./box-reach.js";
 import { tryLoadTillConfig } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { isUnset } from "./env-value.js";
@@ -86,6 +87,15 @@ export interface ServerConfig {
    * the dev default lives beside the bundle and is gitignored, because it holds secrets.
    */
   stateDir: string;
+  /**
+   * The addresses this box advertises — the iPAddress SANs of its self-signed leaf, the IP-QR the
+   * trust page encodes, and the A records its mDNS responder answers with. Undefined means "read the
+   * host's interfaces" (`listBoxIpv4`), which is right for a box on the venue's own network and wrong
+   * for a container behind bridge networking, whose interface address no device on the LAN can reach.
+   * `WAITRON_BOX_ADDRESSES` supplies it as a comma-separated IPv4 list; an unset OR empty value falls
+   * back to the interfaces (the `VAR=`-means-unset rule, CLAUDE.md §3).
+   */
+  readonly boxAddresses?: string[];
   /**
    * Where the box writes its rotating structured logs — the directory `createRotatingFileSink` appends
    * `waitron.log` (+ rotated `.1`..`.N`) into, and `createLogReader` reads back for the diagnostics
@@ -665,6 +675,10 @@ export function loadConfig(
     // Same isUnset fallback + resolve-only-a-real-value shape mediaDir uses (CLAUDE.md §3): an unset
     // OR empty WAITRON_STATE_DIR takes `defaultStateRoot`, never `resolve("")` (which is cwd).
     stateDir: resolvedStateDir,
+    // The operator's override for the addresses the box advertises; undefined leaves every consumer
+    // on `listBoxIpv4`. Validated at load (`parseBoxAddresses`) so a typo fails boot rather than
+    // minting a certificate for an address that is not an address.
+    boxAddresses: parseBoxAddresses(env.WAITRON_BOX_ADDRESSES),
     // The rotating-log directory. Default is `join(stateDir, "logs")` — under whichever state root won
     // above (`resolvedStateDir`), so logs live beside the box's other persisted state. An unset OR empty
     // WAITRON_LOG_DIR takes that default via `isUnset`, never `resolve("")` / cwd (CLAUDE.md §3); an

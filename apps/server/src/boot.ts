@@ -480,6 +480,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // built below (the logger writes to `<stateDir>/logs` by default). A boot with invalid config still
   // escapes here (§8) before any logger, pool or listener exists.
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_MEDIA_ROOT, DEFAULT_STATE_ROOT);
+  // The addresses this box tells the LAN to reach it on — the leaf's iPAddress SANs, the discovery
+  // document's IP URLs (and the QR built from them) and the mDNS answers. One resolver for all three,
+  // so they can never disagree: the operator's `WAITRON_BOX_ADDRESSES` when set, else the host's own
+  // interfaces. A container behind bridge networking holds an address no device on the venue network
+  // can reach, so it needs the override; a box on the venue's own network does not.
+  const boxAddresses = (): string[] => config.boxAddresses ?? listBoxIpv4();
   // Fold every module's permission seat into identity's role ladder ONCE, before any surface that
   // gates on a management session is mounted below (in either mode). Pure and dependency-free (no DB,
   // no config), so it runs at the very top of boot; `registerModulePermissions` overwrites on a
@@ -676,7 +682,13 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // resources (the owner pool / key ring) — only config.
     mountDiscovery(
       app,
-      { stateDir: config.stateDir, hostname: BOX_HOSTNAME, port: config.httpPort, secure: true },
+      {
+        stateDir: config.stateDir,
+        hostname: BOX_HOSTNAME,
+        port: config.httpPort,
+        secure: true,
+        listIpv4: boxAddresses,
+      },
       log,
     );
     // Guarded so a throw anywhere in this branch (`ensureBoxSecrets` on EACCES/EROFS under the state
@@ -690,6 +702,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         stateDir: config.stateDir,
         hostnames: [BOX_HOSTNAME, "localhost"],
         now,
+        listIpv4: boxAddresses,
       });
       // Recover the vault key ring (slice 2b R5). `ensureBoxSecrets` above WROTE
       // `WAITRON_CREDENTIALS_KEY`(+`_VERSION`) into `<stateDir>/secrets.env` but never loaded it into
@@ -830,7 +843,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         // Both modes advertise; the responder is stopped in makeStartedServer's close() below. mDNS is
         // non-load-bearing (the box stays reachable by IP); a bind / no-multicast-route failure logs and
         // is swallowed inside the responder.
-        const mdns = startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: listBoxIpv4, log });
+        const mdns = startMdnsResponder({
+          hostname: BOX_HOSTNAME,
+          getAddresses: boxAddresses,
+          log,
+        });
         return makeStartedServer(
           server,
           health,
@@ -949,7 +966,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       log("error", "adoption.worker_rejected", { errorCode: codeOf(err) }),
     );
     const server = startListening(config, app, now, log);
-    const mdns = startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: listBoxIpv4, log });
+    const mdns = startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: boxAddresses, log });
     return makeStartedServer(
       server,
       health,
@@ -2035,7 +2052,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // Advertise waitron.local over mDNS LAST — after every throwing setup step in this branch AND once
   // `startListening` has bound the socket — so no boot-failure path can leak the UDP :5353 socket (an
   // earlier throw never started it). Both modes advertise; stopped in makeStartedServer's close() below.
-  const mdns = startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: listBoxIpv4, log });
+  const mdns = startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: boxAddresses, log });
   return makeStartedServer(
     server,
     health,

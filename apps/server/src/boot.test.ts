@@ -1,4 +1,5 @@
 // Real PostgreSQL checks startup through app_user connections and contending backends.
+import { X509Certificate } from "node:crypto";
 import { createServer } from "node:net";
 import type { AddressInfo } from "node:net";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -46,6 +47,7 @@ import {
   startServer,
   type StartedServer,
 } from "./boot.js";
+import { listBoxIpv4 } from "./box-reach.js";
 import { ALL_MODULES } from "./modules.js";
 import { DUTY_BUDGET_MS } from "./health.js";
 import { DRAIN_DUTY } from "./pass.js";
@@ -782,6 +784,40 @@ describe("startServer, against a real container as the deployment role", () => {
       await expect(fetch(`https://127.0.0.1:${port}/health`, afterClose.via)).rejects.toThrow();
     } finally {
       await afterClose.close();
+    }
+  }, 60_000);
+
+  // The only suite that observes boot's own wiring of the advertised addresses: `box-secrets.test.ts`
+  // injects its own `listIpv4` and never calls `startServer`, so it stays green if this wiring is
+  // deleted. Here the override has to travel env -> loadConfig -> the ensureBoxSecrets call for the
+  // leaf on disk to carry it, which is what a containerised box depends on.
+  it("setup mode mints the leaf for WAITRON_BOX_ADDRESSES, not for the interfaces", async () => {
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-box-addresses-"));
+    // TEST-NET-3 (RFC 5737) — documentation-only, so it can never be an address this host actually
+    // holds, which is what makes the negative assertion below meaningful.
+    const override = "203.0.113.7";
+    const server = await startServer({
+      DATABASE_URL: databaseUrl,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_STATE_DIR: stateDir,
+      WAITRON_ENV: "preproduction",
+      WAITRON_BOX_ADDRESSES: override,
+    });
+    try {
+      const leaf = new X509Certificate(await readFile(join(stateDir, "tls", "server.crt"), "utf8"));
+      const san = leaf.subjectAltName ?? "";
+      expect(san).toContain(override);
+      // 127.0.0.1 is added unconditionally by `ensureBoxSecrets` and is internal, so it is never in
+      // `listBoxIpv4()`; every address that IS must be absent, or boot resolved the interfaces
+      // despite the override.
+      for (const address of listBoxIpv4()) {
+        expect(san).not.toContain(address);
+      }
+    } finally {
+      await server.close();
+      await rm(stateDir, { recursive: true, force: true });
     }
   }, 60_000);
 

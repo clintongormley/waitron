@@ -1,14 +1,12 @@
 import { networkInterfaces } from "node:os";
+import { AppError } from "@waitron/shared";
+import "./errors.js";
 
 /**
  * Pure helpers describing how a device on the LAN reaches this box: its non-internal IPv4
  * addresses, the URLs built from them plus the `.local` hostname, and the single URL the IP-QR
  * encodes. The discovery API (slice 3) and boot wiring consume this; nothing here does I/O beyond
  * enumerating the interfaces, and even that is injectable so it never runs in a unit test.
- *
- * `listBoxIpv4` intentionally mirrors the private `defaultListIpv4` in `box-secrets.ts` (slice 2a's
- * cert-SAN source). The duplication is deliberate: 2a's module is a landed, tested slice, so it is
- * left untouched rather than widened to export this ~4-line reader.
  */
 
 export interface ReachInfo {
@@ -67,4 +65,32 @@ export function buildReachInfo(opts: BuildReachOptions): ReachInfo {
     ipUrls,
     qrTarget: ipUrls[0] ?? null,
   };
+}
+
+const IPV4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+
+/**
+ * The operator-supplied override for the addresses this box advertises — its certificate SANs, its
+ * IP-QR and its mDNS answers. Unset, the interfaces are enumerated instead (`listBoxIpv4`).
+ *
+ * It exists because a container does not necessarily sit on the venue's network: under bridge
+ * networking `listBoxIpv4` returns the container's own address, which is non-internal and
+ * unreachable, so the box would mint a certificate for and advertise an address no device can
+ * reach. Loopback is refused for the same reason it would be wrong to advertise.
+ */
+export function parseBoxAddresses(raw: string | undefined): string[] | undefined {
+  if (raw === undefined || raw.trim() === "") return undefined;
+  const entries = raw.split(",").map((entry) => entry.trim());
+  for (const entry of entries) {
+    const match = IPV4.exec(entry);
+    const octetsValid =
+      match !== null && match.slice(1).every((octet) => Number(octet) >= 0 && Number(octet) <= 255);
+    if (!octetsValid || entry.startsWith("127.")) {
+      throw new AppError("server.config_invalid", {
+        variable: "WAITRON_BOX_ADDRESSES",
+        reason: "box_addresses_invalid",
+      });
+    }
+  }
+  return entries;
 }

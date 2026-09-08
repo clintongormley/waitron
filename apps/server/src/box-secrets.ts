@@ -1,7 +1,7 @@
 import { mkdir, access } from "node:fs/promises";
-import { networkInterfaces } from "node:os";
 import { join } from "node:path";
 import { generateKeyRing, type GeneratedKeyRing } from "@waitron/provisioning";
+import { listBoxIpv4 } from "./box-reach.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { writeFileAtomic } from "./fs-atomic.js";
 import { formatEnvFile } from "./env-file.js";
@@ -40,7 +40,12 @@ export interface EnsureBoxSecretsDeps {
   // Injectables (all default to the real implementations):
   mint?: typeof mintSelfSignedServerCert;
   makeKeyRing?: () => GeneratedKeyRing; // default generateKeyRing
-  listIpv4?: () => string[]; // default: non-internal IPv4s from os
+  /**
+   * The addresses the leaf's iPAddress SANs cover beyond 127.0.0.1. Defaults to this host's
+   * non-internal IPv4s (`listBoxIpv4`); boot passes the operator override when one is configured,
+   * because a containerised box's own interface address is not the one devices dial.
+   */
+  listIpv4?: () => string[];
 }
 
 // ENOENT means genuinely absent, so callers proceed to mint. Any other error (EACCES/EIO/etc.) is
@@ -55,17 +60,6 @@ const exists = (p: string): Promise<boolean> =>
       throw err;
     },
   );
-
-/**
- * The box's own non-internal IPv4 addresses, so a setup client on the LAN can dial the leaf by IP.
- * `internal` drops loopback (127.0.0.1 is added unconditionally by the caller) and the `IPv4`
- * filter drops the IPv6 entries `networkInterfaces` returns for the same interface.
- */
-const defaultListIpv4 = (): string[] =>
-  Object.values(networkInterfaces())
-    .flat()
-    .filter((n): n is NonNullable<typeof n> => !!n && n.family === "IPv4" && !n.internal)
-    .map((n) => n.address);
 
 /**
  * Materialise the box's self-signed cert + secrets ONCE under `stateDir`, then reuse them on every
@@ -96,7 +90,7 @@ const defaultListIpv4 = (): string[] =>
 export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxTlsFiles> {
   const mint = deps.mint ?? mintSelfSignedServerCert;
   const makeKeyRing = deps.makeKeyRing ?? generateKeyRing;
-  const listIpv4 = deps.listIpv4 ?? defaultListIpv4;
+  const listIpv4 = deps.listIpv4 ?? listBoxIpv4;
 
   const tlsDir = join(deps.stateDir, "tls");
   // 0o700 so the dir holding the private material is owner-only too (defense in depth around the

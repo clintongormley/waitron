@@ -860,6 +860,20 @@ describe("loadConfig", () => {
     expect(config.dashboardAppDir).toBeUndefined();
     expect(config.setupAppDir).toBeUndefined();
   });
+
+  it("carries WAITRON_BOX_ADDRESSES through to config", () => {
+    const cfg = loadConfig(
+      { ...MIN_ENV, WAITRON_BOX_ADDRESSES: "192.168.1.10" },
+      ROOT,
+      MEDIA_ROOT,
+      STATE_ROOT,
+    );
+    expect(cfg.boxAddresses).toEqual(["192.168.1.10"]);
+  });
+
+  it("leaves boxAddresses undefined when the variable is unset", () => {
+    expect(loadConfig(MIN_ENV, ROOT, MEDIA_ROOT, STATE_ROOT).boxAddresses).toBeUndefined();
+  });
 });
 
 describe("deploymentEnvironment", () => {
