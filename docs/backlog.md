@@ -482,22 +482,30 @@ All three decisions are now taken.
    Whole-branch run-it seat (Codex) caught a build break from a concurrent `@waitron/server-kit`
    refactor the rebase surfaced, the setup UI dropping the secret, and an awaiting-cert flag that
    cleared on a no-work drain pass — all fixed before land.
-   **STILL OWED (this item's "then", NOT built — separate slices):** **cert distribution to a
-   promoted mirror** — DESIGNED 2026-09-07
+   **cert distribution to a promoted mirror — LANDED #279 (2026-09-08)**
    ([`2026-09-07-fiscal-cert-distribution-design.md`](superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md),
-   not yet built): the standby receives the certificate at adopt wrapped under the break-glass secret
-   and sealed DORMANT (`fiscal.aeat.dormant`), unwrapped into the live `fiscal.aeat` row on promotion
-   (or via a new `/management-api/fiscal-certificate/unlock`); a new install/replace endpoint doubles
-   as the missing renewal path; folded in the SAME slice, cloud nodes take the vault key from the
-   ENVIRONMENT (Waitron Cloud's secrets service) and their backups carry no key — so a snapshot,
-   dump or backup never yields a usable certificate, only a live-process compromise does. This is the
-   named dependency that unblocks **filing** on a promoted cloud; **re-admission** of a rejoined
-   wiped-and-restored box as the standby (R3 follow-up (b)) — **when built, it must DELETE the
-   re-admitted node's live `fiscal.aeat` row and hold only the dormant copy again** (cert-distribution
-   design §8); the **resume-at-restore marker** (R3 follow-up (a)); the
+   plan [`2026-09-07-fiscal-cert-distribution.md`](superpowers/plans/2026-09-07-fiscal-cert-distribution.md)):
+   the standby receives the certificate at adopt wrapped under the break-glass secret and sealed
+   DORMANT (`fiscal.aeat.dormant`), unwrapped into the live `fiscal.aeat` row **inside** the promotion
+   transaction (or via `/management-api/fiscal-certificate/unlock`); a new install/replace endpoint
+   (`POST /management-api/fiscal-certificate`, admin + `fiscal.configure`) is the missing renewal path
+   and the lost-break-glass fallback. Folded in: cloud nodes take the vault key from the ENVIRONMENT
+   (no `secrets.env` on disk) and their backups carry no key — a snapshot/dump/backup yields no usable
+   cert, only a live-process compromise does; `tenant_credentials` reclassified `state`→`local` so
+   replication never carries it; `fiscalCertificate: live|dormant|none` on box-status. An unlock
+   failure (corrupt inner envelope OR unreadable outer vault) withholds FILING, never SELLING — the
+   Codex run-it seat reproduced an outer-vault fault that had aborted the promote, now fixed.
+   **STILL OWED (separate slices):** **§4.3 restore-onto-cloud re-encrypt** (split fast-follow: restore
+   an on-prem backup onto a fresh cloud node, re-encrypting the vault to the env key — disaster path
+   only; `reencryptVault` with the two-v1-keys-can't-share-a-ring trap noted in the design §4.3);
+   **re-admission** of a rejoined wiped-and-restored box as the standby (R3 follow-up (b)) — **must
+   DELETE the re-admitted node's live `fiscal.aeat` row and hold only the dormant copy again**
+   (cert-distribution design §8); the **resume-at-restore marker** (R3 follow-up (a)); the
    **worker-lifecycle manager** (promote-action Slice 3 — would make mirror promotion in-process, no
-   restart); a friendly **dashboard promote UI**; and an **a11y test** for the new break-glass secret
-   panel.
+   restart); a friendly **dashboard promote UI**; and an **a11y test** for the break-glass secret
+   panel. Deferred minors (recorded, non-blocking): the `fiscal.certificate_dormant_stored` §5 log
+   event was dropped (adopt has no logger — re-add when one is threaded); a pre-existing
+   `boot.promote` corrupt-case test asserts the failure event but not `reason==="corrupt"`.
 4. **Cloud-only redundancy (MVP) — brainstorm** (a) one node on a managed/HA Postgres host vs (b) a
    second cloud node on the built mirror mechanism. (a) needs an inventory of what the server keeps
 4. **Cloud-only redundancy (MVP) — brainstorm** (a) one node on a managed/HA Postgres host vs (b) a
