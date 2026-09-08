@@ -4,6 +4,7 @@ import { Router } from "./router.js";
 
 const A = "http://a.test";
 const B = "http://b.test";
+const C = "http://c.test";
 
 function probeFrom(table: Record<string, Partial<NodeProbe> | "down">) {
   return vi.fn(async (url: string): Promise<Result<NodeProbe>> => {
@@ -144,16 +145,20 @@ describe("Router", () => {
     );
   });
 
-  it("tie-break: equal terms keep the earlier list entry (the configured address), never the incumbent `current`", async () => {
-    const router = new Router({
-      configuredUrl: A,
-      probe: probeFrom({
-        [A]: { acceptingSales: true, term: 5 },
-        [B]: { acceptingSales: true, term: 5 },
-      }),
-    });
+  it("tie-break: equal terms take the earlier list entry, moving OFF the incumbent to reach it", async () => {
+    const table: Record<string, Partial<NodeProbe> | "down"> = {
+      [A]: { acceptingSales: true, term: 3 },
+      [B]: { acceptingSales: true, term: 5 },
+    };
+    const router = new Router({ configuredUrl: A, probe: probeFrom(table) });
     router.merge([{ url: B }]);
-    await router.probe();
+    expect(await router.probe()).toEqual({ moved: true, anyAccepting: true });
+    expect(router.current).toBe(B);
+    // Now equalise the terms. `current` is B and the earlier list entry is A, so the two candidate
+    // rules disagree and the assertion discriminates: list order moves back to A, incumbent
+    // preference would stay on B. (The old shape started with A as BOTH, and passed either way.)
+    table[A] = { acceptingSales: true, term: 5 };
+    expect(await router.probe()).toEqual({ moved: true, anyAccepting: true });
     expect(router.current).toBe(A);
   });
 
@@ -181,5 +186,113 @@ describe("Router", () => {
     router.merge([{ url: B }]);
     await router.probe();
     expect(router.current).toBe(A);
+  });
+  it("establishes the environment only from the configured address: until it answers, nobody is followed", async () => {
+    const table: Record<string, Partial<NodeProbe> | "down"> = {
+      [A]: "down",
+      [B]: { acceptingSales: true, term: 5, environment: "production", nodeId: "b" },
+    };
+    const router = new Router({ configuredUrl: A, probe: probeFrom(table) });
+    router.merge([{ url: B }]);
+    // B answers `production` and accepts sales, but it is not the venue's address of record: it can
+    // neither fix the pin nor be followed.
+    expect(await router.probe()).toEqual({ moved: false, anyAccepting: false });
+    expect(router.environment).toBeUndefined();
+    expect(router.current).toBe(A);
+
+    table[A] = { acceptingSales: true, term: 1, environment: "preproduction", nodeId: "a" };
+    expect(await router.probe()).toEqual({ moved: false, anyAccepting: true });
+    expect(router.environment).toBe("preproduction");
+    expect(router.current).toBe(A);
+    expect(router.servers().map((s) => s.state)).toEqual(["primary", "standby"]);
+  });
+
+  it("applies each result to the url it was issued for: a server that replaced another mid-round stays unprobed", async () => {
+    let release = (): void => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const probe = vi.fn(async (url: string): Promise<Result<NodeProbe>> => {
+      if (url === B) await gate;
+      return {
+        ok: true,
+        value: {
+          nodeId: url === B ? "b" : "a",
+          term: url === B ? 9 : 1,
+          acceptingSales: true,
+          environment: "preproduction",
+        },
+      };
+    });
+    const router = new Router({ configuredUrl: A, environment: "preproduction", probe });
+    router.merge([{ url: B }]);
+    const round = router.probe();
+    router.merge([{ url: C }]); // B replaced by C while B's probe is still in flight
+    release();
+    expect(await round).toEqual({ moved: false, anyAccepting: true });
+    expect(router.servers()).toEqual([
+      { url: A, nodeId: "a", state: "primary", term: 1 },
+      { url: C, nodeId: undefined, state: "unknown", term: null },
+    ]);
+    expect(router.current).toBe(A);
+  });
+
+  it("discards a result for a server the list no longer holds", async () => {
+    let release = (): void => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const probe = vi.fn(async (url: string): Promise<Result<NodeProbe>> => {
+      if (url === B) await gate;
+      return {
+        ok: true,
+        value: {
+          nodeId: url === B ? "b" : "a",
+          term: url === B ? 9 : 1,
+          acceptingSales: true,
+          environment: "preproduction",
+        },
+      };
+    });
+    const router = new Router({ configuredUrl: A, environment: "preproduction", probe });
+    router.merge([{ url: B }]);
+    const round = router.probe();
+    router.merge([]); // the list shrinks to the configured address alone
+    release();
+    expect(await round).toEqual({ moved: false, anyAccepting: true });
+    expect(router.servers()).toEqual([{ url: A, nodeId: "a", state: "primary", term: 1 }]);
+    expect(router.current).toBe(A);
+  });
+
+  it("overlapping probe() calls share one in-flight round", async () => {
+    let release = (): void => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const probe = vi.fn(async (url: string): Promise<Result<NodeProbe>> => {
+      await gate;
+      return {
+        ok: true,
+        value: {
+          nodeId: url,
+          term: url === B ? 5 : 1,
+          acceptingSales: true,
+          environment: "preproduction",
+        },
+      };
+    });
+    const router = new Router({ configuredUrl: A, environment: "preproduction", probe });
+    router.merge([{ url: B }]);
+    const first = router.probe();
+    const second = router.probe();
+    release();
+    const [firstRound, secondRound] = await Promise.all([first, second]);
+    expect(probe).toHaveBeenCalledTimes(2); // two servers, ONE round — not two rounds of two
+    expect(firstRound).toEqual(secondRound);
+    expect(firstRound).toEqual({ moved: true, anyAccepting: true });
+    expect(router.current).toBe(B);
+    // The round is released once it settles, so a later call probes afresh.
+    await router.probe();
+    expect(probe).toHaveBeenCalledTimes(4);
   });
 });

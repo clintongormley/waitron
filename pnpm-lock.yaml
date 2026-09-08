@@ -1119,9 +1119,6 @@ importers:
       '@waitron/identity':
         specifier: workspace:*
         version: link:../identity
-      '@waitron/print-agent':
-        specifier: workspace:*
-        version: link:../print-agent
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
@@ -1138,6 +1135,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^3.0.0
         version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
+      '@waitron/print-agent':
+        specifier: workspace:*
+        version: link:../print-agent
       typescript:
         specifier: ^5.7.0
         version: 5.9.3

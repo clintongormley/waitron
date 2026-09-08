@@ -251,7 +251,7 @@ export async function runAgentOnce(deps: AgentRuntimeDeps): Promise<AgentRunResu
   //      isolation depends on each `transport.send` being BOUNDED: a black-hole printer (accepts the
   //      TCP connection but never drains, or a dropped SYN) would otherwise hang this loop for the OS
   //      TCP timeout (~1-2 min) and stall every later job behind it — which is why `NetworkTcpTransport`
-  //      arms a per-send timeout (transport.ts's `DEFAULT_TCP_TIMEOUT_MS`), turning a stalled printer
+  //      arms a per-send timeout (`DEFAULT_TCP_TIMEOUT_MS`, `@waitron/print-agent`), turning a stalled printer
   //      into a prompt `failed` bounded by that deadline rather than an unbounded stall. Both the claim
   //      above and each report below run in the SAME transaction here (local mode); the server path
   //      splits them across two HTTP requests, calling the identical `claimPrintJobs`/`reportPrintJob`
