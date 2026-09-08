@@ -10,7 +10,6 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Agent } from "undici";
 import {
-  asAppUser,
   captureError,
   createPostgresDb,
   readDeploymentEnvironment,
@@ -55,7 +54,7 @@ import { mintMtlsMaterial } from "./testing/tls.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { loadTillConfig } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
-import { enrolDevice, generatePairingCode } from "./device.js";
+import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEV_DEVICE_HEADER } from "./device-session.js";
 
 /**
@@ -2365,9 +2364,9 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
   // Two devices are enrolled (bound to two DIFFERENT tills) so the assertion proves the header
   // SELECTS a specific device rather than defaulting to whatever one device happens to exist:
   // `/api/device/me` returns device-2's id AND device-2's bound `tillId`, not device-1's. Enrolled
-  // via the genuine mint->redeem path (`generatePairingCode` + `enrolDevice`) on the app role under
-  // the tenant, exactly as `sale-till-source.receipt.test.ts` does — though the override path never
-  // checks the token, the real enrol path proves the wiring against a genuinely-provisioned device.
+  // via the genuine knock-then-accept path (`enrolDeviceForTest`) on the app role under the tenant,
+  // exactly as `sale-till-source.receipt.test.ts` does — though the override path never checks the
+  // token, the real enrol path proves the wiring against a genuinely-provisioned device.
   let deviceId1: string;
   let deviceId2: string;
   let till2: string;
@@ -2393,18 +2392,13 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
       // Since Task 7 a `till` device auto-creates its OWN register; binding a SPECIFIC existing register
       // is the sale-capable handheld leg (`registerId`). The dev-override read below only cares that the
       // device resolves to its own bound till, which a handheld carries.
-      const dev = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        const { rows } = await tx.execute<{ id: string }>(sql`
+      const { rows } = await suite.admin.execute<{ id: string }>(sql`
           insert into device_profiles (tenant_id, name, form_factor)
           values (${cfg.tenantId}, ${`Override device ${boundTillId}`}, 'phone-portrait') returning id`);
-        const { code } = await generatePairingCode(tx, cfg);
-        return enrolDevice(tx, cfg, {
-          code,
-          name: "SP-C dev override device",
-          profileId: rows[0]!.id,
-          registerId: boundTillId,
-        });
+      const dev = await enrolDeviceForTest(suite.admin, cfg, {
+        name: "SP-C dev override device",
+        profileId: rows[0]!.id,
+        registerId: boundTillId,
       });
       return dev.deviceId;
     };

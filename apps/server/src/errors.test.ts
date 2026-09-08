@@ -176,12 +176,13 @@ describe("the device error codes carry their declared params", () => {
     expect(error.params).toEqual({ deviceId });
   });
 
-  it("constructs device.pairing_rate_limited with no params (a blanket enrol-flood throttle)", () => {
-    // The real thrower is `enrol-rate-limit.ts`'s limiter, at the TOP of the enrol route (device-identity-1
-    // §8). No params — it is a blanket throttle, not a fact about the caller's code, and the pairing code
-    // is a bearer secret never echoed (the no-leak discipline pairing_invalid/pairing_expired follow).
-    const error = new AppError("device.pairing_rate_limited", {});
-    expect(error.code).toBe("device.pairing_rate_limited");
+  it("constructs device.join_rate_limited with no params (the knock endpoint's future throttle)", () => {
+    // NOT YET THROWN OR MAPPED — registered ahead of its route (errors.ts). This proves only
+    // registration and param shape, the same as every first `it` in this file (see the comment below).
+    // `device.pairing_rate_limited` is still the live enrol-flood throttle (enrol-rate-limit.test.ts,
+    // device-api.pg.test.ts) until the knock route replaces it.
+    const error = new AppError("device.join_rate_limited", {});
+    expect(error.code).toBe("device.join_rate_limited");
     expect(error.params).toEqual({});
   });
 });

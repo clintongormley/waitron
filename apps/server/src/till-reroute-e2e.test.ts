@@ -106,9 +106,10 @@ let migrationsRoot: string;
 
 /** Seed the venue's identity (tenant, location, both nodes, till, both series) plus a staff person on
  * PIN 5555 and the till device — all as the container superuser, on one clone. The device's `token_hash`
- * is the scrypt hash of `DEVICE_TOKEN` (`hashSecret`, the same function `enrolDevice` stores), so the
- * `waitron_device=<id>.<token>` cookie built above authenticates against this row on whichever node holds
- * it. Seeded identically on A and B — the "same device rows seeded directly" the design names. */
+ * is the scrypt hash of `DEVICE_TOKEN` (`hashSecret`, the same function `acceptDeviceJoinRequest`
+ * stores), so the `waitron_device=<id>.<token>` cookie built above authenticates against this row on
+ * whichever node holds it. Seeded identically on A and B — the "same device rows seeded directly" the
+ * design names. */
 async function seedVenue(admin: Database): Promise<void> {
   await admin.execute(sql`insert into tenants (id, country, tax_id, legal_name)
     values (${TENANT}, 'ES', '90444444A', 'Reroute E2E SL') on conflict do nothing`);

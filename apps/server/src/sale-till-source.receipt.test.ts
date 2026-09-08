@@ -30,7 +30,7 @@ import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
-import { enrolDevice, generatePairingCode } from "./device.js";
+import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
 
 /**
@@ -184,40 +184,30 @@ async function seedHandheldProfile(cfg: TillConfig): Promise<string> {
 }
 
 /** Enrol a REAL sale-capable device BOUND TO an existing register (`boundTillId`), and return the
- *  `waitron_device=<id>.<token>` cookie a booting device carries — the mint->redeem runs on the app role
- *  under the tenant (the production enrol path), so the scrypt hash verifies and `tryReadDevice` resolves
- *  a genuine binding. Since Task 7 a `till` device auto-creates its OWN register, so binding a SPECIFIC
- *  existing register is the handheld leg (`registerId`); the sale route resolves `till_id` from THIS
- *  device (`requireSaleTillId`) either way. */
+ *  `waitron_device=<id>.<token>` cookie a booting device carries — join-and-accept runs on the app role
+ *  under the tenant (the production accept path), so the scrypt hash verifies and `tryReadDevice`
+ *  resolves a genuine binding. Since Task 7 a `till` device auto-creates its OWN register, so binding a
+ *  SPECIFIC existing register is the handheld leg (`registerId`); the sale route resolves `till_id`
+ *  from THIS device (`requireSaleTillId`) either way. */
 async function enrolTillCookie(cfg: TillConfig, boundTillId: string): Promise<string> {
   const profileId = await seedHandheldProfile(cfg);
-  const dev = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
-    const { code } = await generatePairingCode(tx, cfg);
-    return enrolDevice(tx, cfg, {
-      code,
-      name: "Counter device",
-      profileId,
-      registerId: boundTillId,
-    });
+  const dev = await enrolDeviceForTest(suite.admin, cfg, {
+    name: "Counter device",
+    profileId,
+    registerId: boundTillId,
   });
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
 
 /** Enrol a REAL device bound to `boundTillId` and return its raw `deviceId` (not a cookie) — the id the
  *  SP-C dev-override header (`x-waitron-dev-device`) carries in place of the cookie. Same genuine
- *  mint->redeem enrol path as {@link enrolTillCookie}. */
+ *  join-and-accept enrol path as {@link enrolTillCookie}. */
 async function enrolTillDeviceId(cfg: TillConfig, boundTillId: string): Promise<string> {
   const profileId = await seedHandheldProfile(cfg);
-  const dev = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
-    const { code } = await generatePairingCode(tx, cfg);
-    return enrolDevice(tx, cfg, {
-      code,
-      name: "Dev-override device",
-      profileId,
-      registerId: boundTillId,
-    });
+  const dev = await enrolDeviceForTest(suite.admin, cfg, {
+    name: "Dev-override device",
+    profileId,
+    registerId: boundTillId,
   });
   return dev.deviceId;
 }

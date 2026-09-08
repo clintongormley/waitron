@@ -16,7 +16,7 @@ import {
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
-import { enrolDevice, generatePairingCode } from "./device.js";
+import { enrolDeviceForTest } from "./testing/enrol.js";
 import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
 import {
   DEV_DEVICE_HEADER,
@@ -78,8 +78,8 @@ async function setupStation(): Promise<{ cfg: TillConfig; stationId: string }> {
   return { cfg, stationId: st.id };
 }
 
-/** Enrol a REAL device via Task 3's `enrolDevice` — the only way to obtain a `${deviceId}.${token}`
- * whose scrypt hash actually verifies. Returns the plaintext token the enrol route would set in the
+/** Enrol a REAL device via join-and-accept — the only way to obtain a `${deviceId}.${token}` whose
+ * scrypt hash actually verifies. Returns the plaintext token the accept route would set in the
  * cookie, never at rest. */
 async function enrolDeviceFixture(): Promise<{
   cfg: TillConfig;
@@ -92,9 +92,10 @@ async function enrolDeviceFixture(): Promise<{
   // A device is DEFINED by its profile now (Task 7): a `kds` profile with NO capabilities — the
   // station-bound kitchen screen the old station-only mint produced, its capability set empty.
   const deviceProfileId = await seedDeviceProfile(cfg, "Pantalla profile", "kds", []);
-  const dev = await asApp(suite.admin, cfg, async (tx) => {
-    const { code } = await generatePairingCode(tx, cfg);
-    return enrolDevice(tx, cfg, { code, name: "Pantalla", profileId: deviceProfileId, stationId });
+  const dev = await enrolDeviceForTest(suite.admin, cfg, {
+    name: "Pantalla",
+    profileId: deviceProfileId,
+    stationId,
   });
   return { cfg, deviceId: dev.deviceId, token: dev.token, stationId, deviceProfileId };
 }
@@ -158,11 +159,11 @@ async function enrolTillDeviceFixture(): Promise<{
     ["integrated-card-payment", "open-cash-drawer"],
     canvasId,
   );
-  const dev = await asApp(suite.admin, cfg, async (tx) => {
-    const { code } = await generatePairingCode(tx, cfg);
-    return enrolDevice(tx, cfg, { code, name: "Counter till", profileId: deviceProfileId });
+  const dev = await enrolDeviceForTest(suite.admin, cfg, {
+    name: "Counter till",
+    profileId: deviceProfileId,
   });
-  // The hardware trio (cash drawer + reader) is bound LATER via the dashboard — `enrolDevice` leaves
+  // The hardware trio (cash drawer + reader) is bound LATER via the dashboard — accept leaves
   // those columns at their defaults — so set them here as the dashboard would, so the binding read below
   // surfaces them. Read back the auto-created register the till device rings against.
   const { rows } = await suite.admin.execute<{ till_id: string }>(sql`
@@ -254,14 +255,10 @@ async function enrolHandheldFixture(): Promise<{
     "phone-portrait",
     [],
   );
-  const dev = await asApp(suite.admin, cfg, async (tx) => {
-    const { code } = await generatePairingCode(tx, cfg);
-    return enrolDevice(tx, cfg, {
-      code,
-      name: "Waiter phone",
-      profileId: deviceProfileId,
-      registerId: cfg.tillId,
-    });
+  const dev = await enrolDeviceForTest(suite.admin, cfg, {
+    name: "Waiter phone",
+    profileId: deviceProfileId,
+    registerId: cfg.tillId,
   });
   return { cfg, deviceId: dev.deviceId, token: dev.token };
 }
@@ -312,14 +309,10 @@ async function enrolHandheldWithCanvasFixture(): Promise<{
   // The profile declares NO capabilities — the render/firewall source of truth after the Task 9 cutover.
   // A handheld (`phone-portrait`) binds an EXISTING register at enrol — the venue's own till (§16.4).
   const deviceProfileId = await seedDeviceProfile(cfg, "Waiter", "phone-portrait", [], canvasId);
-  const dev = await asApp(suite.admin, cfg, async (tx) => {
-    const { code } = await generatePairingCode(tx, cfg);
-    return enrolDevice(tx, cfg, {
-      code,
-      name: "Waiter phone",
-      profileId: deviceProfileId,
-      registerId: cfg.tillId,
-    });
+  const dev = await enrolDeviceForTest(suite.admin, cfg, {
+    name: "Waiter phone",
+    profileId: deviceProfileId,
+    registerId: cfg.tillId,
   });
   return { cfg, deviceId: dev.deviceId, token: dev.token };
 }
@@ -694,15 +687,16 @@ async function enrolDevDevices(): Promise<{
   // Device A — a `till` device (its profile auto-creates a register), whose cookie stands in for the
   // current identity.
   const tillProfileId = await seedDeviceProfile(cfg, "Till A profile", "till", []);
-  const devA = await asApp(suite.admin, cfg, async (tx) => {
-    const { code } = await generatePairingCode(tx, cfg);
-    return enrolDevice(tx, cfg, { code, name: "Till A", profileId: tillProfileId });
+  const devA = await enrolDeviceForTest(suite.admin, cfg, {
+    name: "Till A",
+    profileId: tillProfileId,
   });
   // Device B — a `kds` device bound to a station, the override target.
   const kdsProfileId = await seedDeviceProfile(cfg, "KDS B profile", "kds", []);
-  const devB = await asApp(suite.admin, cfg, async (tx) => {
-    const { code } = await generatePairingCode(tx, cfg);
-    return enrolDevice(tx, cfg, { code, name: "KDS B", profileId: kdsProfileId, stationId });
+  const devB = await enrolDeviceForTest(suite.admin, cfg, {
+    name: "KDS B",
+    profileId: kdsProfileId,
+    stationId,
   });
   return {
     cfg,
