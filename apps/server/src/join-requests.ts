@@ -186,6 +186,31 @@ async function requirePending(
 }
 
 /**
+ * The KIND of one pending request, or `undefined` when this tenant holds no such row.
+ *
+ * Deliberately not {@link requirePending}'s throw. The shared by-id routes (`join-api.ts`) take their
+ * permission from the row's kind, so they must read it BEFORE they authorize — and a caller holding
+ * neither permission has to be refused 403 whether or not the id is live, or the status code itself
+ * enumerates the venue's pending requests one guess at a time. That needs the miss as a VALUE the
+ * route can hold until after the gate, not as a control-flow exit taken before it.
+ *
+ * Tenant-scoped like every by-id read here (CLAUDE.md §3), and it sweeps first, so a lapsed row reads
+ * as absent exactly as it does to `requirePending` and the verbs that follow.
+ */
+export async function joinRequestKind(
+  tx: Transaction,
+  cfg: TillConfig,
+  id: string,
+): Promise<JoinRequestKind | undefined> {
+  await sweepLapsed(tx, cfg);
+  const [row] = await tx
+    .select({ kind: joinRequests.kind })
+    .from(joinRequests)
+    .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.id, id)));
+  return row?.kind;
+}
+
+/**
  * The three numbers the admin picks from: this request's own, plus its two stored decoys.
  *
  * The server builds the set and does not say which is real — the dashboard receives three

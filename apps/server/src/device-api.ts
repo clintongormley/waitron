@@ -105,12 +105,18 @@ const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
  *    403 — the ORDINARY state, not an anomaly), `device.join_full` (the tenant already holds the cap of
  *    pending device requests, 429) and `device.join_rate_limited` (the knock flood guard, 429 —
  *    `enrol-rate-limit.ts` throws it at the TOP of the knock handler, before any DB work).
- *  - The accept-time binding faults. They are thrown by `resolveDeviceBinding` on the ACCEPT route,
- *    which is `join-api.ts`'s — mapped here too so a code answered by both surfaces has one status
- *    everywhere: `device.station_required`, `device.register_required`, `device.register_name_taken`
- *    (the ONE 409 of the set), `device.binding_invalid`, `device_profile.not_found` and
- *    `station.not_found`. `device.join_mismatch` (a wrong number, 400) and `join_request.not_found`
- *    (404) are mapped for the same reason.
+ *  - The accept-time binding + join faults, which NO route on this surface throws (verified by grep:
+ *    it neither imports `resolveDeviceBinding` nor any join verb that raises them — its
+ *    `join-requests.js` import is `createJoinRequest`/`readJoinStatus` alone). They belong to the
+ *    ACCEPT route, which is `join-api.ts`'s, and are mapped here to the SAME statuses that file gives
+ *    them for the reason `device.till_required` below is: a code has one status wherever it is
+ *    answered, so a device route that later grows a binding write inherits it rather than the map's
+ *    400 default. `device.station_required`, `device.register_required`, `device.register_name_taken`
+ *    (the ONE 409 of the set), `device_profile.not_found`, `station.not_found`,
+ *    `device.join_mismatch` (a wrong number, 400) and `join_request.not_found` (404).
+ *    `device.binding_invalid` is the exception: this surface throws it too, from the
+ *    assign-device-profile and hardware routes' composite-FK 23503 translation, as well as reaching it
+ *    through accept's `requireLiveRegister`.
  *    `device.till_required` is not thrown here either (it is the SALE-path guard, device-session.ts) but
  *    is mapped to the SAME 400 till-api.ts gives it. `device.not_found` is this surface's own (the
  *    manager-facing revoke/reassign of an absent device id, 404).
