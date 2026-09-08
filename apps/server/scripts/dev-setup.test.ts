@@ -342,7 +342,7 @@ describe("devSetup against real Postgres", () => {
     expect(second.env.WAITRON_TILL_LOCATION_ID).toBe(first.env.WAITRON_TILL_LOCATION_ID);
   });
 
-  it("does not mint a pairing code — the fixed dev code enrols the till — but provisioning seeds the starter profiles", async () => {
+  it("provisioning seeds the starter profiles", async () => {
     // The en-GB demo gets localized starter profiles, with default capabilities and no canvas binding.
     const { rows: profiles } = await suite.admin.execute<{
       name: string;
@@ -361,11 +361,6 @@ describe("devSetup against real Postgres", () => {
       { name: "Handheld", canvas_id: null, capabilities: [] },
       { name: "Kitchen", canvas_id: null, capabilities: ["act-as-kds"] },
     ]);
-    const { rows } = await suite.admin.execute<{ n: number }>(
-      sql`select count(*)::int as n from device_pairing_codes
-          where tenant_id = ${first.env.WAITRON_TILL_TENANT_ID}`,
-    );
-    expect(rows[0]!.n).toBe(0);
   });
 
   it("refuses to provision a second venue when the .env no longer names the DB's venue", async () => {
@@ -383,7 +378,7 @@ describe("devSetup against real Postgres", () => {
   });
 
   it("enrols a till, handheld and kitchen display via the real enrol path", async () => {
-    // Each device came through `generatePairingCode` → `enrolDevice` (seedDemoDevices), NOT a direct
+    // Each device came through join-and-accept (`enrolDeviceForTest`, seedDemoDevices), NOT a direct
     // insert, so this pins the bindings that path produces: the till auto-created its own "Mostrador"
     // register, the handheld rings into that SAME register (no third till), and the kds is bound to
     // the provisioned "Cocina" station. toEqual, not toMatchObject (CLAUDE.md §4).
