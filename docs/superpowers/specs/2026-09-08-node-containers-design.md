@@ -106,10 +106,34 @@ their file (§10).
 
 Fixed environment in the image (never operator-set): `WAITRON_STATE_DIR=/var/lib/waitron/state`,
 `WAITRON_LOG_DIR=/var/lib/waitron/logs`, `WAITRON_MEDIA_DIR=/var/lib/waitron/media`,
-`WAITRON_BACKUP_DIR=/var/lib/waitron/backups`, `WAITRON_MIGRATIONS_DIR=/app/drizzle`,
-`WAITRON_{TILL,DASHBOARD,SETUP}_APP_DIR=/app/web/…`, `WAITRON_HTTP_PORT=443`. The server's own
-defaults for these are "beside the bundle", which is a read-only image layer — every writable
-path is a volume (§4).
+`WAITRON_MIGRATIONS_DIR=/app/drizzle`, `WAITRON_{TILL,DASHBOARD,SETUP}_APP_DIR=/app/web/…`,
+`WAITRON_HTTP_PORT=443`, `WAITRON_HTTP_HOST=0.0.0.0`, `WAITRON_MANAGEMENT_RP_ID=waitron.local` and
+`WAITRON_MANAGEMENT_ORIGIN=https://waitron.local`. The server's own defaults for these are "beside
+the bundle", which is a read-only image layer — every writable path is a volume (§4).
+
+Three of those are corrections made while building the image, each with a measurement (task 8's
+report carries both readings of each):
+
+- **`WAITRON_HTTP_HOST=0.0.0.0`.** `config.ts` defaults it to `127.0.0.1`, which is right for a dev
+  machine and serves nobody from a container. Without it the box comes up `healthy` — the
+  healthcheck probes the same loopback — while every request from outside is reset at the TLS
+  handshake. It is the one variable whose absence yields a container that reports healthy and
+  serves nobody.
+- **`WAITRON_MANAGEMENT_RP_ID` / `WAITRON_MANAGEMENT_ORIGIN`.** The wizard's "live" writes
+  `WAITRON_ENV=production` into `trading.env`, and `config.ts` then REQUIRES both — they carry dev
+  defaults only. Nothing else on a box sets them, so without them a restaurant that picks live gets
+  `server.config_missing { variable: "WAITRON_MANAGEMENT_RP_ID" }` on every restart, for ever, with
+  `restart: unless-stopped` guaranteeing the loop. They are pinned equal to `boot.ts`'s
+  `BOX_HOSTNAME` by `apps/server/src/deploy-image-config.test.ts`, which loads the image's own
+  declared environment under `WAITRON_ENV=production`.
+- **`WAITRON_BACKUP_DIR` is NOT set** (it was listed here, and must not be). `loadBackupConfig` is
+  fail-closed: a destination without `WAITRON_BACKUP_DATABASE_URL` and
+  `WAITRON_BACKUP_RECOVERY_KEY` throws — `server.config_invalid {
+  variable: "WAITRON_BACKUP_DATABASE_URL", reason: "required_with_backup_destination" }` fires
+  first — so baking the path alone would take a box down at its first boot into trading, right
+  after the wizard. The volume and its mount point stay; `compose.yml` passes the three together
+  from the box's `.env`. Consequence, recorded in `docs/backlog.md`: a prepared box takes no
+  backups until a human writes those three lines.
 
 Image size is not a goal of this spec; correctness of the boot is. A slimmer image is a later
 concern.
@@ -458,8 +482,12 @@ build` with GHA layer caching, then a compose smoke against fresh volumes in the
 push to `main` it also logs into GHCR with `GITHUB_TOKEN` and pushes
 `ghcr.io/<owner>/waitron:main`, `:sha-<short>` and, for a `v*` tag, `:<version>`; the manifest is
 `linux/amd64,linux/arm64` on pushes (QEMU for arm64, so a small ARM box works) and amd64-only on
-PRs (speed). `deploy/**` is added to `scripts/changed-scope.mjs`'s CODE paths, or the `changes`
-job would skip the image build for a Dockerfile change (CLAUDE.md §2).
+PRs (speed). A `deploy/**` entry in `scripts/changed-scope.mjs` would be an OPTIMISATION,
+not a correctness fix: the classifier is an allowlist of INERT paths, not of code paths, so
+`deploy/**` already classifies as code today — measured, `classify(["deploy/Dockerfile"])` returns
+`{ code: true, reason: "deploy/Dockerfile is not documentation" }` and
+`scopeForPaths(["deploy/Dockerfile"])` returns `{ kind: "global" }`. A deploy change therefore runs
+MORE CI than a package change, not less; an entry would narrow it to the image job.
 
 **Updating a box:** `docker compose pull && docker compose up -d` — the compose pins `:main` until
 release tags exist. Unattended updates are the installer spec's question (a box we did not sell

@@ -231,12 +231,16 @@ export const DEFAULT_MEDIA_ROOT = fileURLToPath(new URL("media", import.meta.url
 export const DEFAULT_STATE_ROOT = fileURLToPath(new URL("state", import.meta.url));
 
 /**
- * The box's canonical mDNS / self-hosted hostname. ONE source of truth so the three wirings that MUST
+ * The box's canonical mDNS / self-hosted hostname. ONE source of truth so the wirings that MUST
  * agree can never drift into a certificate-hostname mismatch — the exact failure the trust flow exists
  * to avoid (spec §7/§8): the mDNS responder that ANSWERS for the name, the discovery/trust surface that
  * ADVERTISES it, and the self-signed leaf's SAN list (`ensureBoxSecrets`) that must COVER it.
+ *
+ * Exported for a fourth wiring that lives outside this process: the container image's
+ * `WAITRON_MANAGEMENT_RP_ID` / `WAITRON_MANAGEMENT_ORIGIN`, which a live box requires and which
+ * `deploy-image-config.test.ts` pins equal to this value.
  */
-const BOX_HOSTNAME = "waitron.local";
+export const BOX_HOSTNAME = "waitron.local";
 
 /**
  * The upper bound on a single product-image upload (design §5e, 5 MiB). A settled constant rather

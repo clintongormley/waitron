@@ -34,6 +34,12 @@ the restaurant is: open it on your phone, and if it does not load, wait a minute
 Set `WAITRON_DIR` to install somewhere other than `/opt/waitron` (that is how the script is
 exercised on a developer machine without touching `/opt`).
 
+The compose project is named `waitron`. On a developer machine that is also running the repository's
+dev stack (`docker-compose.yml`, started by `wa-wt`, which sets `COMPOSE_PROJECT_NAME=waitron`) the
+two collide, and a `docker compose up` here would reconcile that running project instead. Pass
+`COMPOSE_PROJECT_NAME=waitron-<something>` when exercising this file on such a machine; on a box the
+collision cannot arise.
+
 ## Updating and operating
 
 ```bash

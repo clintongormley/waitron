@@ -23,6 +23,14 @@ as_root() {
   fi
 }
 
+# apt, never interactive. DEBIAN_FRONTEND is passed on the command rather than exported, because
+# sudo's default env_reset DISCARDS an exported one (measured in a debian:trixie container, with a
+# control) — and the path that goes through sudo is exactly the unattended one: a non-root user with
+# passwordless sudo, where needrestart is a known prompter.
+apt_get() {
+  as_root env DEBIAN_FRONTEND=noninteractive apt-get "$@"
+}
+
 # The banner is written twice: to this script's stdout for whoever ran it, and to the console when a
 # monitor happens to be attached. A headless box needs neither — the phone is the screen.
 say_ready() {
@@ -57,9 +65,8 @@ if ! docker compose version >/dev/null 2>&1; then
     echo "prepare.sh: /etc/os-release names no VERSION_CODENAME — install Docker Engine first" >&2
     exit 2
   fi
-  export DEBIAN_FRONTEND=noninteractive
-  as_root apt-get update
-  as_root apt-get install -y --no-install-recommends ca-certificates curl
+  apt_get update
+  apt_get install -y --no-install-recommends ca-certificates curl
   as_root install -m 0755 -d /etc/apt/keyrings
   as_root curl -fsSL "https://download.docker.com/linux/${docker_distro}/gpg" \
     -o /etc/apt/keyrings/docker.asc
@@ -67,15 +74,14 @@ if ! docker compose version >/dev/null 2>&1; then
   printf 'deb [arch=%s signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/%s %s stable\n' \
     "$(dpkg --print-architecture)" "$docker_distro" "$codename" |
     as_root tee /etc/apt/sources.list.d/docker.list >/dev/null
-  as_root apt-get update
-  as_root apt-get install -y \
-    docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  apt_get update
+  apt_get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 fi
 
 # The QR is the whole of the console instruction, so it is installed wherever apt exists — including
 # on a box that already had Docker and so skipped the block above.
 if ! command -v qrencode >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
-  DEBIAN_FRONTEND=noninteractive as_root apt-get install -y --no-install-recommends qrencode
+  apt_get install -y --no-install-recommends qrencode
 fi
 
 # 2. The daemon must come back on every boot of the box: Docker's restart policy is what restores
@@ -95,11 +101,20 @@ fi
 [ -f "$WAITRON_DIR/.env.example" ] || cp "$SOURCE_DIR/.env.example" "$WAITRON_DIR/.env.example"
 if [ ! -f "$WAITRON_DIR/.env" ]; then
   # Generated, never printed and never echoed back: it is the only secret a box holds before its
-  # first boot. Written under umask 077 in a subshell so the mask does not leak to the rest.
+  # first boot. Checked BEFORE the write, because a failed generator that still created the file
+  # would leave an empty password behind — and the guard above then skips regeneration for ever,
+  # which is the permanently-stuck box this whole block exists to avoid. Written under umask 077 in
+  # a subshell so the mask does not leak to the rest.
+  secret="$(openssl rand -hex 32 2>/dev/null || true)"
+  if [ -z "$secret" ]; then
+    echo "prepare.sh: could not generate POSTGRES_PASSWORD — is openssl installed?" >&2
+    exit 1
+  fi
   (
     umask 077
-    printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 32)" >"$WAITRON_DIR/.env"
+    printf 'POSTGRES_PASSWORD=%s\n' "$secret" >"$WAITRON_DIR/.env"
   )
+  unset secret
 fi
 
 # 4. Pull and start. `--ignore-pull-failures` so a locally built image (WAITRON_IMAGE=waitron:dev)

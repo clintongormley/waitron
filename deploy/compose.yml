@@ -42,6 +42,11 @@ services:
     # mounted only in setup mode. A probe on one alone would restart-loop the other mode forever.
     # Certificate verification is off because this is loopback against the box's own leaf; there is
     # no curl in a slim image, hence node -e.
+    #
+    # What it CANNOT see: it probes the container's own loopback, so a server bound to the wrong
+    # address reports healthy here while every real client is refused. That is not hypothetical —
+    # it is exactly how the first build of this image looked from outside, and it is why
+    # WAITRON_HTTP_HOST is fixed in the Dockerfile rather than left to config.ts's dev default.
     healthcheck:
       test:
         - CMD

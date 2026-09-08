@@ -73,9 +73,22 @@ RUN install -d -o waitron -g waitron -m 0700 /var/lib/waitron \
     /var/lib/waitron/media \
     /var/lib/waitron/backups
 
-# dist/package.json ({"type":"module"}) travels with the bundle, so /app declares its own module
-# system rather than inheriting one from a walk up the filesystem.
-COPY --from=build --chown=waitron:waitron /src/apps/server/dist/ /app/
+# Named file by file rather than copying the whole of dist/, because dist/ also holds the demo
+# scripts (record-one-sale.js and friends) — and record-one-sale.js writes a real sale through the
+# real Veri*Factu backend into an append-only, hash-chained table, under any WAITRON_ENV including
+# production. A production image has no business carrying it. dist/package.json ({"type":"module"})
+# travels with the bundle so /app declares its own module system rather than inheriting one from a
+# walk up the filesystem. deploy-image-config.test.ts pins this list against package.json's `bin`.
+COPY --from=build --chown=waitron:waitron \
+  /src/apps/server/dist/server.js \
+  /src/apps/server/dist/node-entry.js \
+  /src/apps/server/dist/bin-restore.js \
+  /src/apps/server/dist/bin-rejoin.js \
+  /src/apps/server/dist/bin-break-glass.js \
+  /src/apps/server/dist/bin-recovery.js \
+  /src/apps/server/dist/package.json \
+  /app/
+COPY --from=build --chown=waitron:waitron /src/apps/server/dist/drizzle/ /app/drizzle/
 COPY --from=build --chown=waitron:waitron /src/apps/till/dist/ /app/web/till/
 COPY --from=build --chown=waitron:waitron /src/apps/dashboard/dist/ /app/web/dashboard/
 COPY --from=build --chown=waitron:waitron /src/apps/setup/dist/ /app/web/setup/
@@ -91,6 +104,12 @@ COPY --from=build --chown=waitron:waitron /src/apps/setup/dist/ /app/web/setup/
 # container's own loopback is reachable by nothing. Measured on the first stack-up: with the
 # default, the published port accepts the TCP connection (docker-proxy) and then resets the TLS
 # handshake, while the in-container healthcheck passes — the two look nothing alike from outside.
+#
+# The two WAITRON_MANAGEMENT_* values are what a LIVE box needs to boot at all: the wizard's "live"
+# writes WAITRON_ENV=production into trading.env, and config.ts then REQUIRES both (they only have
+# dev defaults). Nothing else on a box sets them, so without these lines a restaurant that picks
+# live gets server.config_missing on every restart forever. They must equal boot.ts's BOX_HOSTNAME
+# and the origin built from it — deploy-image-config.test.ts is the guard that they cannot drift.
 ENV WAITRON_STATE_DIR=/var/lib/waitron/state \
   WAITRON_LOG_DIR=/var/lib/waitron/logs \
   WAITRON_MEDIA_DIR=/var/lib/waitron/media \
@@ -100,6 +119,8 @@ ENV WAITRON_STATE_DIR=/var/lib/waitron/state \
   WAITRON_SETUP_APP_DIR=/app/web/setup \
   WAITRON_HTTP_PORT=443 \
   WAITRON_HTTP_HOST=0.0.0.0 \
+  WAITRON_MANAGEMENT_RP_ID=waitron.local \
+  WAITRON_MANAGEMENT_ORIGIN=https://waitron.local \
   NODE_ENV=production
 
 USER waitron
