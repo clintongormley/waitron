@@ -12,7 +12,7 @@ import {
   readInstanceState,
   readReplicationReadiness,
   replicationBootstrapStatements,
-  replicationSchemaGrantStatements,
+  replicationRepairStatements,
   withDatabase,
   withRole,
   type InstanceAction,
@@ -295,13 +295,21 @@ export async function ensureInstance(opts: {
           replicationBootstrapStatements(replicationPassword),
         );
         opts.log("info", "instance.replication_bootstrapped", { role: REPLICATION_ROLE });
-      } else if (!readiness.replicationHasDefaultSelect) {
-        // The role survived but this DATABASE did not: `waitron_repl` lives in the shared
-        // `pg_authid` while `pg_default_acl` and the table grants go with a dropped database (the R3
-        // rejoin wipe). Re-issuing only the schema-local half is the whole repair — the full array
-        // would fail at `CREATE ROLE` on the surviving role — and without it a rejoined box reads
-        // ready at boot and fails later at adopt, or streams an empty initial COPY at promotion.
-        await runReplicationStatements(replication, replicationSchemaGrantStatements());
+      } else if (
+        !readiness.replicationHasDefaultSelect ||
+        !readiness.migratorCanCreateSubscription
+      ) {
+        // The role survived but a prerequisite did not, so re-run every non-`CREATE ROLE` statement
+        // (`replicationRepairStatements`, idempotent) — the full array would fail `42710` at
+        // `CREATE ROLE` on the surviving role. Two distinct losses reach here: the R3 rejoin wipe
+        // drops the database and takes its `pg_default_acl` and table grants (schema-local half),
+        // while `waitron_repl` lives on in the shared `pg_authid`; and the cluster-global membership
+        // can vanish on its own — an interrupted first bootstrap after `CREATE ROLE`, or a revoked
+        // grant — with the database untouched, so `replicationHasDefaultSelect` alone would miss it.
+        // Gated on BOTH readiness facts so a healthy boot re-runs nothing; without the repair a box
+        // reads ready at boot and fails later at adopt (`CREATE SUBSCRIPTION` denied) or streams an
+        // empty initial COPY at promotion.
+        await runReplicationStatements(replication, replicationRepairStatements());
         opts.log("info", "instance.replication_regranted", { role: REPLICATION_ROLE });
       }
       return urls;

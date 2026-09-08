@@ -9,6 +9,7 @@ export { INSTANCE_ROLES, INSTANCE_MIGRATOR_ROLE, readInstanceState } from "./ins
 export {
   REPLICATION_ROLE,
   replicationBootstrapStatements,
+  replicationRepairStatements,
   replicationSchemaGrantStatements,
 } from "./replication-bootstrap.js";
 export type { InstanceRole, InstanceState, InsideState, RoleFacts } from "./instance-state.js";

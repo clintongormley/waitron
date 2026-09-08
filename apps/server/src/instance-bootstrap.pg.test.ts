@@ -238,6 +238,44 @@ describe("ensureInstance", () => {
     }
   });
 
+  it("restores the migrator's pg_create_subscription when a surviving role lost it", async () => {
+    // The bootstrap's cluster-global half can go missing while `waitron_repl` survives: a first
+    // bootstrap interrupted after `CREATE ROLE` but before the membership grant, or a membership an
+    // operator revoked. A role-absence gate skips the whole array, and the dropped-default-SELECT
+    // repair re-issues only the schema-local half — so the migrator never regains
+    // `pg_create_subscription` and a later adopt/promotion cannot `CREATE SUBSCRIPTION`. Unlike the
+    // rejoin test above the DATABASE is untouched, so `replicationHasDefaultSelect` stays true and a
+    // repair gated on that fact alone would never fire.
+    const admin = await createPostgresDb(bootstrapUrl);
+    try {
+      await admin.execute(sql.raw(`revoke pg_create_subscription from waitron_migrator`));
+      const before = await admin.execute<{ member: boolean }>(
+        sql`select pg_has_role('waitron_migrator', 'pg_create_subscription', 'MEMBER') as member`,
+      );
+      expect(before.rows[0]?.member).toBe(false);
+    } finally {
+      await admin.close();
+    }
+
+    await ensureInstance({
+      bootstrapUrl,
+      database: "waitron",
+      stateDir,
+      log: noopLog,
+      migrationsRoot: null,
+    });
+
+    const check = await createPostgresDb(bootstrapUrl);
+    try {
+      const after = await check.execute<{ member: boolean }>(
+        sql`select pg_has_role('waitron_migrator', 'pg_create_subscription', 'MEMBER') as member`,
+      );
+      expect(after.rows[0]?.member).toBe(true);
+    } finally {
+      await check.close();
+    }
+  });
+
   it("withholds the statement and the password when the replication bootstrap fails", async () => {
     // The bootstrap's first statement embeds the generated password, and both Drizzle's wrapped
     // failure and PostgreSQL's own message quote the failing statement back verbatim — so a caller

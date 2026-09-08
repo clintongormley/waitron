@@ -28,6 +28,31 @@ export function replicationSchemaGrantStatements(): string[] {
   ];
 }
 
+/**
+ * Everything the bootstrap does EXCEPT `CREATE ROLE` — the migrator's `pg_create_subscription`
+ * grant, the schema-local SELECT pair (`replicationSchemaGrantStatements`), and the WAL bound (spec
+ * §6). Every statement here is idempotent (an absolute grant, a membership re-grant, and an
+ * `ALTER SYSTEM SET`), so it is exactly what re-runs on a SURVIVING role to restore any prerequisite
+ * that went missing while `waitron_repl` itself lived on in the shared `pg_authid`: an interrupted
+ * first bootstrap, a revoked membership, or the R3 rejoin wipe that discards the database's
+ * schema-local grants. The whole-array bootstrap cannot re-run there — its `CREATE ROLE` would fail
+ * `42710` on the surviving role — which is why this half is split out.
+ *
+ * Carries NO credential (the password lives only in `CREATE ROLE`), so it is safe to log and needs
+ * no withholding catch. Like the full array it MUST run over a superuser connection to the TARGET
+ * database: it mixes cluster-global statements (the membership grant, `ALTER SYSTEM`) with the
+ * schema-local pair, which land in whichever database the connection is on.
+ */
+export function replicationRepairStatements(): string[] {
+  const migrator = quoteIdent(INSTANCE_MIGRATOR_ROLE);
+  return [
+    `grant pg_create_subscription to ${migrator}`,
+    ...replicationSchemaGrantStatements(),
+    `alter system set max_slot_wal_keep_size = ${quoteLiteral("4GB")}`,
+    `select pg_reload_conf()`,
+  ];
+}
+
 /** The one superuser step native replication needs, as SQL for the box image / operator to run once
  * (the fixture's container-superuser stands in). It creates the replication login, grants the
  * migrator (`INSTANCE_ROLES[0]`, `waitron_migrator`) `pg_create_subscription`, gives `waitron_repl`
@@ -36,6 +61,9 @@ export function replicationSchemaGrantStatements(): string[] {
  * does NOT set `wal_level = logical` or `track_commit_timestamp = on`: both are `PGC_POSTMASTER` (a
  * RESTART), so they live in the box image's `postgresql.conf`; the readiness check verifies all
  * three regardless of who set them.
+ *
+ * `CREATE ROLE` plus `replicationRepairStatements` — every non-`CREATE-ROLE` statement lives in that
+ * repair half so a surviving role can restore them by construction, not a copy that could drift.
  *
  * Statement 0 embeds the replication PASSWORD. The whole array is SECRET: run it over a superuser
  * connection, never log it — as `instance-apply.ts` treats `CREATE ROLE`. That connection MUST be
@@ -46,12 +74,8 @@ export function replicationSchemaGrantStatements(): string[] {
  * cluster is caught rather than going green. */
 export function replicationBootstrapStatements(password: string): string[] {
   const repl = quoteIdent(REPLICATION_ROLE);
-  const migrator = quoteIdent(INSTANCE_MIGRATOR_ROLE);
   return [
     `create role ${repl} login replication password ${quoteLiteral(password)}`,
-    `grant pg_create_subscription to ${migrator}`,
-    ...replicationSchemaGrantStatements(),
-    `alter system set max_slot_wal_keep_size = ${quoteLiteral("4GB")}`,
-    `select pg_reload_conf()`,
+    ...replicationRepairStatements(),
   ];
 }
