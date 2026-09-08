@@ -4,11 +4,11 @@ This file answers **"what should I work on?"** It is state, not history: what is
 what is open, and the order to take it in. The git log, the PR threads, and the committed
 specs/plans in `docs/superpowers/` hold the detail — do not paste receipts back in here.
 
-> **Reshaped 2026-09-01.** The owner demo is done; the north star moved from "something to show" to
-> "a polished local product + the robustness that completes it". *Priorities* was rebuilt around two
-> parallel tracks (UI polish, infra robustness); the finished demo Phase-0/Phase-1 Tier-A/B/C narrative
-> was dropped (it is git history); and Track-1 status moved to its own tracker, `ui-review.md`. Detail
-> still lives under *Open threads*; a PR number is a locator, never a receipt paragraph.
+> **Pruned 2026-09-08** against the 2026-09-05 whole-project design review: every landed item is one
+> line with its PR number as a locator; the per-PR narrative (what each review seat caught, test
+> counts, yardstick rows) now lives only in the PR threads and `~/workspace/tools/process-log.md`.
+> The review's gitignored execution brief (`docs/handoffs/2026-09-05-design-review-cleanups.md`) was
+> deleted the same day — every item in it had landed or is listed here.
 
 **Companion documents, not duplicated here:**
 
@@ -38,1303 +38,468 @@ records, never-reused invoice numbers.
 ## Priorities
 
 **North star: a polished product that runs locally with an intuitive UI — plus the robustness that
-makes it a complete product** (owner decision, 2026-09-01). The owner demo is DONE; the goal is no
-longer "something to show" but (1) every screen correct and intuitive and (2) finishing
-primary/secondary failover, cloud failover, and sync. Two tracks run at once; everything else ranks
-beneath them.
+makes it a complete product** (owner decision, 2026-09-01). The owner demo is DONE; the goal is
+(1) every screen correct and intuitive and (2) finishing primary/secondary failover, cloud failover,
+and replication. Two tracks run at once; everything else ranks beneath them.
 
 - **Track 1 — UI/UX polish & correctness (foreground).** A systematic customer-journey walkthrough of
   every chunk of functionality: each area's current behaviour is shown to the owner, who corrects
   intuitiveness/correctness problems, and the fixes land. **[ui-review.md](ui-review.md) is the
-  authoritative tracker** — which areas are examined, which remain, and the corrections against each.
-- **Track 2 — robustness / infra (its own track).** Primary/secondary failover, cloud failover, sync
-  completion — unfinished, and what makes Waitron a complete product. Run it as a **separate
-  interactive session** (its own worktree), in parallel with Track 1, soundness-first — it does not
-  have to be unattended/background; the real question is ready-to-build vs gated. Gates + the
-  infra-session **start-here menu** are under *Open threads → SIF topology / Sync / Onboarding*.
-  **Never land anything touching the unrepairable fiscal core (H2) without owner sign-off** —
-  hash-chained records, never-reused invoice numbers.
+  authoritative tracker.**
+- **Track 2 — robustness / infra (its own track).** Primary/secondary failover, cloud failover,
+  replication — what makes Waitron a complete product. Run it as separate interactive sessions (own
+  worktrees), in parallel with Track 1, soundness-first. Since 2026-09-05 it is executed as the three
+  design-review tracks A/B/C below (Track B *is* this track's failover half). **Never land anything
+  touching the unrepairable fiscal core (H2) without owner sign-off.**
 
-**Sequencing — what unblocks what (2026-09-05).** Four sessions run at once: Track 1 (UI, the
-`ui-review.md` walkthrough) plus the three design-review tracks A/B/C (*Whole-project design review*
-below). Two structures are known to be out of date and must not be built on:
-
-1. **FORCE RLS + the multi-role set + the unsquashed migrations** (Track A item 3). Every new table
-   written before it lands gets policies, grants and an `*.rls.test.ts` that are deleted weeks
-   later, and migration numbers collide on every rebase (#165). **Rule: no new table anywhere —
-   core or module — until step 1 of Track A item 3 lands — LANDED #255; from here a new
-   table needs CLAUDE.md §3's classification line.** UI corrections are polish and need none; anything
-   that does is parked behind A3. Track A therefore goes first and fast: coverage split (an
-   afternoon) → prototype (a day) → A3 starts immediately; it is the long pole for everyone.
-   **2026-09-05:** the split LANDED (#239), the prototype has reported (item 2), item 4's spec is
-   approved, and item 3's spec — one chain that also deletes the outbox (owner: "all at once") — is
-   drafted; its step 1 LANDED (#255), lifting the no-new-table rule, step 2 LANDED (#271), step 3 LANDED
-   (#274, 2026-09-07); steps 4–5 pending owner review.
-2. **The module framework's UI seats** (cards, permissions, i18n arriving with a module) are
-   unproven until Track C's `fiscal-none` + bookings-as-a-module land. New product domains wait for
-   them and land as modules; polishing existing screens does not.
-
-Three **decisions** shape UI work and cost nothing to take now (docs-only brainstorms, build later):
-Route A vs B for the till reroute (it decides the till's auth model — **taken 2026-09-05**,
-[`2026-09-05-till-reroute-route-decision.md`](superpowers/specs/2026-09-05-till-reroute-route-decision.md));
-`tills` vs `devices` (device
-management and the till-enrol screen, [owner] — **taken 2026-09-05**, keep both: register = the
-drawer, device = the screen, [`2026-09-05-register-and-device-model-decision.md`](superpowers/specs/2026-09-05-register-and-device-model-decision.md)); and the relay choice (ours or off-the-shelf, which
-shapes the control plane — **taken 2026-09-05**, neither:
-[`2026-09-05-relay-decision.md`](superpowers/specs/2026-09-05-relay-decision.md)). **All three are Track B's first job** — its "decisions first" line below —
-taken before Track B builds anything; Track 1 and Track C consume them. **Track 1 therefore works areas 2–18 and, since 2026-09-05, area 19 (device management —
-decision (iii) taken; its build's no-migration half LANDED on feat/device-enrolment-login,
-2026-09-07 — see Track B item 7); area 1 (setup wizard — its
-provisioning paths move under Track B item 2) waits.** Everything else in the four tracks
-proceeds in parallel under the coordination rules in the design-review section (serialised pushes;
-whoever lands second rebases — only on a code-file overlap or a conflict; a PR that is merely `BEHIND`
-lands as is with `--admin`, CLAUDE.md §6).
+**Sequencing (refreshed 2026-09-08).** Four sessions run at once: Track 1 plus tracks A/B/C. The two
+structures that blocked new work are gone: Track A's RLS drop + migration squash landed (#255), so a
+new table anywhere needs only CLAUDE.md §3's classification line; and the module framework's UI seats
+are proven by `fiscal-none` (#262) and bookings SP1/SP2 (#270, #273), so a new product domain lands as
+a module now. The three docs-only decisions Track B had to take first — till-reroute route, register
+vs device, relay — are all taken (pointers under Track B). **Track 1 works areas 2–19; area 1 (setup
+wizard) waits on Track B item 2** (its provisioning paths belong there). Coordination rules for the
+parallel sessions are at the end of the design-review section.
 
 **MVP for go-live (owner decision 2026-09-05).** A primary server, on-prem OR in the cloud:
 
 - **On-prem primary + a redundant CLOUD server** for failover with human promotion. A second LOCAL
-  box is beyond the MVP (the earlier "two boxes + cloud" answer is the post-MVP target, not the
-  go-live bar). Internet-down: the primary keeps selling (CLAUDE.md §5) and the standby falls behind
-  until the link returns; box-down AND internet-down together means no failover — accepted for the
-  MVP.
+  box is beyond the MVP. Internet-down: the primary keeps selling (CLAUDE.md §5) and the standby
+  falls behind until the link returns; box-down AND internet-down together means no failover —
+  accepted for the MVP.
 - **Cloud-only primary + redundancy**, from either **(a)** a Postgres host that comes with redundancy
   (managed/HA Postgres — newly allowed; relaxes promotion-failover §7.2's "no managed-database
   dependency" for this mode only) or **(b)** a second cloud server on the built mirror + promotion
   mechanism (promotion-failover §7.4). (a) is infrastructure HA of ONE node and needs a design look
   at what the server keeps on local disk (env files, media, the box-secret vault) plus a singleton
-  lease so two app processes never both submit; (b) is the built path applied cloud-to-cloud, no
-  tunnel.
+  lease so two app processes never both submit; (b) is the built path applied cloud-to-cloud.
 
-What the MVP needs that is NOT built (Track B/C order, *Whole-project design review*): real relay
-hosting (the tunnel is proven only against a local stand-in), a per-tenant cloud instance
-provisioning path, the authenticated promotion endpoint, till reroute to the promoted cloud, a
-printing path when the primary is dead or the server is cloud-only (a poll-the-cloud printer or a
-local relay, distribution §5), and the control plane. **Residency: cloud instances are hosted in
-Spain (owner decision 2026-09-05)**, so asesor Q16 — an invoice-issuing SIF operating from abroad —
-does not arise for either cloud mode; the control plane's region is Spain by decision, not a
-per-tenant choice.
-
-**Prioritisation is by soundness, not the calendar** (2026-08-02): Waitron will be finished before the
-deli must trade, so 1-Jan-2027 ranks nothing above anything. Order by dependency, correctness, and
-de-risking the most-reused / most-uncertain foundations first.
+What the MVP needs that is NOT built (Track A step 5 + Track B, below): the box↔cloud WireGuard link
+on the LIVE path (today it exists only as a test fixture, #275), Waitron Cloud's per-tenant instance
+provisioning (a separate closed-source service, not this repo), fiscal-certificate distribution to a
+promoted node (landed #279, reverted #281, to be rebuilt on the native-replication adopt flow), a
+printing path when the primary is dead or the server is cloud-only (distribution §5), and the
+control plane. Landed: the authenticated promotion endpoint (#272) and till reroute S1–S6 (#265).
+**Residency: cloud instances are hosted in Spain (owner decision 2026-09-05)**, so asesor Q16 — an
+invoice-issuing SIF operating from abroad — does not arise for either cloud mode.
 
 **Run path (local; no hardware, cloud, or AEAT cert):** `pnpm dev:setup && pnpm dev` → till
 <http://localhost:5190>, dashboard <http://localhost:5191>, setup <http://localhost:5192>, server
 :8080. Enrol the till once per browser with pairing code **DEMO** (dev only). Till PIN **5555**;
-dashboard **owner@demo.waitron.local / dashPass123**. `dev:setup` seeds a
-believable demo restaurant: two menus (~44 products with per-dish images), a floor plan (3 zones / ~16
-tables), staff on PIN 5555, and ~28 days of back-dated preproduction sales — English by default,
-Spanish via `WAITRON_SEED_LOCALE=es-ES`. ~25 fleshed-out screens on one enforced design system.
+dashboard **owner@demo.waitron.local / dashPass123**. `dev:setup` seeds a believable demo
+restaurant: two menus (~44 products with per-dish images), a floor plan (3 zones / ~16 tables), staff
+on PIN 5555, and ~28 days of back-dated preproduction sales — English by default, Spanish via
+`WAITRON_SEED_LOCALE=es-ES`. From a worktree, start the stack with `wa-wt <name>` (CLAUDE.md §6).
 
 ### Whole-project design review (2026-09-05) — decisions taken; execution in three parallel tracks
 
 A base-to-tip review of the code and every Track-2 spec, with the owner answering the review's
-questions. Landed from it: CLAUDE.md §1 comment rule + §6 model-selection trial (#233), the
-rules-first CLAUDE.md rewrite (#235, 972 → 415 lines, stale facts fixed, four memory-only traps
-folded in), the model rule relocated to the shared global `~/.claude/CLAUDE.md` with only the
-waitron yardstick kept in-repo (#236), and the
-`/finish-branch` rewrite (run-it reviewer + convention reviewer; SDD's final whole-branch review
-dropped as a duplicate). **Same evening, revised for cost:** Fable only where the owner talks plus two
-fresh-context seats, Opus 5.1 for execution, Codex (`gpt-6-astra`, `.codex/config.toml`,
-`~/workspace/tools/codex-seat.sh`) for the implementer seat and the pre-PR diff review that replaces
-Copilot (LANDED #242). Copilot still auto-reviews every PR from a GitHub-side setting (not a repo
-workflow); on #242 it made two right wording calls and two false positives (it cannot see a symlink in
-the diff). Switched off 2026-09-06 (the `copilot_code_review` rule removed from the main ruleset; #243 landed
-with zero reviews, the proof). Seats settled the same day (#243): Astra takes plan-vs-spec review and run-it review; Fable keeps brainstorm/spec/plan,
-a new fiscal-spec review, and fix round five; Opus the driver and the two non-author reviewers.
-A three-way run-it reviewer probe on planted defects (Fable / Opus / Astra) found no
-Fable-only catch — `docs/superpowers/specs/2026-09-05-model-seats-experiment.md`. **Revised again
-2026-09-06 evening (owner decision, after Fable burnt a week's budget in a day):** the transcripts
-showed the spend was six Fable sessions that began as brainstorms and kept going into execution
-(250–650 turns each, three quarters of Fable's tokens), not the judgment seats. Claude and Codex are
-now separated: Opus 4.8 is the default and drives everything the owner reads; Fable is opt-in for
-the brainstorm and two short reads, and a hook denies subagent dispatches from a Fable session;
-dispatched seats run on Opus 5; Codex keeps exactly one seat, `/finish-branch`'s run-it reviewer.
-The four shared Claude/Codex skill wrappers and the profile machinery were removed, `/finish-branch`
-runs simplify's lenses and both reviewers as one parallel wave with a scoped re-read after the apply
-pass, the driver restarts from the SDD ledger instead of compacting, and "one browser-mode gate at
-a time" was retired (CLAUDE.md §2). The simplify-through-Codex item is closed by the separation.
-Rule text: `~/.claude/CLAUDE.md`, CLAUDE.md §6. **LANDED #251 and #252 (2026-09-06).** #252 (`fix/inert-root-config`): root config no
-code-gated job reads (`.codex/`, `.vscode/`, root `.gitignore`, `.editorconfig`) is inert, not a
-global run; its Codex seat falsified three of the change's own claims ("no gate reads" — Prettier
-reads two of them; the nested-`.gitignore` rationale; a twin in ci.yml), all fixed before land.
-**#254 LANDED too (2026-09-06):** `scripts/`, `.husky/` and `.github/` are ROOT scope (a
-root-only push runs the repo-level suite, lint and format — measured 417s → 23s on the branch's own
-push; CI's `changes` job skips the shards the same way), and the hook runs typecheck and the
-coverage run concurrently (measured on a five-package scope: 10s + 113s → 113s wall, i.e. the
-overlap buys the typecheck's duration; a global push's shape was not measured). Left behind: the
-classifier's fourth output line `root=` is emitted and read by no consumer (the hook routes on
-`scope=root`); the hook's concurrency records the typecheck's status under Husky's `sh -e`, which
-the run-it seat (Sol at medium, then the default) caught before land — 409s, 11 commands, 82% model
-time. The three-way comparison that followed on the same commit (Sol medium 409s / Astra medium
-323s / Sol low 203s; only the two medium seats found the defect) moved the seat's default to Astra
-at medium (#256; table in `~/workspace/tools/process-log.md`). The seat-speed trial (bounded run-it brief, medium effort, rebase before the review
-wave) and the per-PR process log live in `~/workspace/tools/process-log.md`. **Owner decisions recorded (they supersede older spec text where they
-conflict):**
+questions. Its process outcomes have all landed and live in the rule files, not here: CLAUDE.md §1's
+comment rule and the rules-first rewrite (#233, #235), the model-selection rule in the global
+`~/.claude/CLAUDE.md` with only the waitron yardstick in-repo (#236, settled 2026-09-06 after two
+cost revisions: Opus 4.8 drives, Fable is opt-in for brainstorms, dispatched seats run on Opus 5,
+Codex Astra holds `/finish-branch`'s run-it seat, Copilot is off — #242/#243/#251/#253/#256; the
+seat probe is `superpowers/specs/2026-09-05-model-seats-experiment.md`, the per-PR log
+`~/workspace/tools/process-log.md`), inert root config (#252) and root-scope CI/hook (#254).
 
-- **No database will ever hold two tenants** (a throwaway preproduction demo aside). The
-  multi-tenant SaaS goal is gone; a box is single-tenant, on-prem or cloud. Supersedes cloud-storage
-  §9's "one shared cloud database". **Confirmed and extended 2026-09-05 (owner decision): ONE TENANT
-  PER DATABASE everywhere, the cloud included.** A tenant is one taxpayer (`country` + `tax_id`, one
-  NIF; `packages/provisioning/src/tenant-id.ts` derives its id) holding all of its locations. The
-  cloud is a dedicated instance per tenant — the shape the built cloud mirror already has — as a warm
-  mirror today or as a primary (hosted in Spain, so Q16 does not arise); the shared multi-tenant cloud store
-  (cloud-storage §2/§9) is DROPPED, and with it the parked *multi-tenant transport* (whole-log reader
-  role). Density comes from many isolated instances per host, never from a shared database. The only
-  multi-tenant pieces are a small control plane (accounts, subscriptions, instances, WireGuard
-  credentials + public names, rollout — not yet designed) and the preproduction trial demo; the
-  stateless tunnel relay is gone (decision 2026-09-05, `2026-09-05-relay-decision.md`). Consequence
-  for recommendation 1 below: the last consumer of FORCE RLS is gone; the replication prototype was
-  the only remaining gate on dropping it — **cleared 2026-09-05** (Track A item 2).
-- **The deli gets two boxes + cloud failover on day one** and must survive internet-down, box-down
-  and printer-down. Redundancy is mandatory. **Active-active is SHELVED for the foreseeable future
-  (owner decision 2026-09-05): the deli runs warm standby + human promotion.** The owner's reason:
-  active-active would have to cover orders, kitchen progress and every other live-service surface,
-  not just selling. The same-day assessment found the operational half unbuilt — no join path that
-  produces a second *selling* box in a venue (the only join is the read-only cloud-mirror adopt), the
-  sync source mounted only on the singleton primary (`apps/server/src/boot.ts`, `mountSyncApi` gate)
-  so a selling secondary's rows would never leave the box, no till reroute, no open-tab handoff, and
-  `dining_tables` as a two-writer row — while the node-keyed fiscal half (own chain/series per node,
-  verbatim fiscal replication, one submitter) is built and is what warm standby reuses. This resolves
-  the sync design §12 / one-server-buy-list contradiction. Nothing is deleted for it: what exists
-  stays on `main` under the warm-standby build, and branch **`shelved/active-active`** (= `main` at
-  `c65d3cbe`, 2026-09-05) is the snapshot to return to. Dated pointers: sync design §12, server-as-SIF
-  §4 + §13, promotion-failover §8, distribution §3. **MVP narrowing (same day):** the go-live bar is
-  one on-prem box + a cloud standby, or cloud-only + redundancy (*Priorities → MVP for go-live*); the
-  second local box is post-MVP.
-- **Modules are core to the product** (opt-in domains, third-party modules later). Fiscal must be
-  swappable by jurisdiction (Veri\*Factu / TicketBAI / none). Two rules agreed: **new domains land
-  as modules from now**, and **no new table enters the core migration set without a stated reason**.
-- Comments carry invariants, not history (CLAUDE.md §1). Coverage bar is negotiable with a reason.
+**Owner decisions (they supersede older spec text where they conflict):**
 
-**Execution — three parallel sessions (owner decision 2026-09-05).** The owner accepted the
-remaining recommendations for execution and asked for them to run as three independent sessions,
-each in its own worktree (`worktree.py new`), split so that no two tracks edit the same files at the
-same time. Track B here *is* Priorities' Track 2. Each item is still its own brainstorm → spec →
-plan → PR; items marked **[owner]** never land unattended.
+- **ONE TENANT PER DATABASE everywhere, the cloud included.** A tenant is one taxpayer (`country` +
+  `tax_id`; `packages/provisioning/src/tenant-id.ts` derives its id) holding all of its locations.
+  The cloud is a dedicated instance per tenant (warm mirror today, or a primary, hosted in Spain);
+  the shared multi-tenant cloud store (cloud-storage §2/§9) and the parked multi-tenant transport are
+  DROPPED. Density comes from many isolated instances per host. The only multi-tenant pieces are a
+  small control plane (Track C item 4) and the preproduction trial demo. The stateless tunnel relay
+  is gone (`2026-09-05-relay-decision.md`). This removed the last consumer of FORCE RLS.
+- **Warm standby + human promotion; active-active is SHELVED for the foreseeable future.** The
+  owner's reason: active-active would have to cover orders, kitchen progress and every other
+  live-service surface, not just selling. Nothing was deleted for it: what exists stays on `main`
+  under the warm-standby build, and branch **`shelved/active-active`** (= `main` at `c65d3cbe`,
+  2026-09-05) is the snapshot to return to. Dated pointers: sync design §12, server-as-SIF §4 + §13,
+  promotion-failover §8, distribution §3. The go-live bar is *MVP for go-live* above.
+- **Modules are core to the product** (opt-in domains, third-party modules later); fiscal is
+  swappable by jurisdiction (Veri\*Factu / TicketBAI / none). CLAUDE.md §3 carries the two rules:
+  new domains land as modules; no new core table without a stated reason.
+- Comments carry invariants, not history (CLAUDE.md §1). The coverage bar is negotiable with a reason.
+
+**Execution — three parallel sessions**, each in its own worktree, split so no two tracks edit the
+same files at once. Each item is its own brainstorm → spec → plan → PR; items marked **[owner]**
+never land unattended.
 
 **Track A — data layer** (sequential; owns `packages/*/drizzle/`, `packages/db` tenancy + test
-harness, `packages/provisioning`, `packages/sync` role plumbing, every `*.rls.test.ts`, every
-`vitest.config.ts`, CLAUDE.md §2–§4):
+harness, `packages/provisioning`, `packages/sync`, every `vitest.config.ts`, CLAUDE.md §2–§4):
 
-1. **Coverage split — LANDED #239 (2026-09-05):** 98/98/98/95 kept on `verifactu`, `fiscal-verifactu`,
-   `core`, `db`, `sync`, `payments`; the 90/90/85/85 floor everywhere else (the four browser
-   packages' 95/95/90/88 was above the floor on every axis, so they took the floor).
-   The root project (the classifiers) keeps the high bar — a judgement call flagged at review.
-   `scripts/coverage-thresholds.test.ts` pins which package holds which bar; CLAUDE.md §2 updated.
-2. **Native logical replication prototype — DONE 2026-09-05: all of (a)–(d) PASS, (e) measured.**
-   Findings: [native-replication-post-rls-prototype-findings](superpowers/specs/2026-09-05-native-replication-post-rls-prototype-findings.md)
-   — real migrations applied as a non-superuser OWNER (`rolsuper = f`), RLS stripped, two
-   `postgres:18-alpine` nodes bidirectional with `origin = none`. Both 2026-08-02 gates (RLS refusing
-   the apply worker; the non-owner `SET ROLE`) are gone on that schema. **Decision rule applied: stop
-   adding outbox features; item 4 is next.** Nine findings the swap spec must carry, the two that
-   change code: `ENABLE ALWAYS` on the immutability triggers (the apply worker skips `tgenabled = O`
-   triggers and copied a corrupted publisher's UPDATE silently until it was set), and a bounded
-   `max_slot_wal_keep_size` (a dead standby otherwise fills the primary's disk — the one failure that
-   would stop sales). Also: `FOR ALL TABLES` is superuser-only, so each module publishes an explicit
-   table list; additive DDL is subscriber-first and the missing-column stall is loud and self-heals;
-   `time_entries.ingest_seq` does not replicate — DISCHARGED 2026-09-07 by the working-time per-node
-   rekey, which drops `ingest_seq` (its ordering role moved to the hashed `recorded_at`); one
-   superuser provisioning step for the `REPLICATION` role. **Cross-track (Track C):** module SP-2b's schema-version gate (LANDED #230) rests on
-   "deliberate rejection of native logical replication"; item 4's spec retires it (its §5).
-3. **Drop FORCE RLS + the multi-role set, squash the migrations, delete the outbox — STEP 1
-   LANDED #255 (2026-09-06), STEP 2 LANDED #271 (2026-09-07), STEP 3 LANDED #274 (2026-09-07), STEP 4
-   LANDED #280 (2026-09-08, the owner-signature PR); step 5 pending:**
-   [drop-rls-squash-and-outbox-deletion-design](superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md).
-   Owner decisions: all at once (item 4's swap slices are steps 2–5 of this chain, since nothing is
-   deployed); ONE owner signature, on step 4 (where fiscal rows first flow natively and `ENABLE
-   ALWAYS` first matters) — the other four steps land as ordinary PRs. The chain: (1) baselines
-   regenerated to the end state with the outbox tables kept as plain tables, RLS and the seven
-   helper roles gone, `withTenant` hollowed, the 122 `*.rls.test.ts` read then replaced by per-module
-   grant suites, CLAUDE.md §2–§4 rewritten — with a mechanical proof (old migrations vs new
-   baselines, `pg_dump --schema-only`, normalised diff EMPTY) attached; (2) classification contract +
-   guards + two-node fixture; (3) provisioning of publications/subscriptions + the WireGuard key;
-   (4) promotion/return on `pg_replication_slots` + the outbox deleted [owner]; (5) status, alarms,
-   the standby-first migration check, the link on the box image (with Track B item 2). The
-   working-time chain's per-node rekey sits between 2 and 4 — **LANDED #268 (2026-09-07):**
-   `workforce_chains`/`time_entries` rekeyed to (`tenant`, `node`, `location`), a hashed
-   per-chain-monotonic `recorded_at` replaced the non-replicating `ingest_seq`, cross-node correction
-   precedence is `(recorded_at, node_id, sequence_no)`, a cold-restored box continues its chain (no
-   reset, no hook), and a fork surfaces as the `multiple_unique_conflicts` drain stall the swap
-   already handles — so the S3/S4 prerequisite is discharged (swap design §4.4).
-
-   **Step 4 LANDED #280 (2026-09-08) — swap S4 + S5, the ONE owner signature (fiscal rows first flow
-   natively, `ENABLE ALWAYS` first matters):** promotion/return now run on `pg_replication_slots` and
-   the application outbox is deleted. Landed: the fence-LSN drain watermark
-   (`confirmed_flush_lsn >= deployment.fence_lsn && !active`, monotone where the raw
-   `>= pg_current_wal_lsn()` is not — Ruling C2, probe E); promotion narrows the promoted node's own
-   subscription to `ledger` (the primary's disabled BACK-subscription is DROPPED — probe D: it would
-   retain WAL and be `lost` when the drain needs it); `waitron-provision instance` now creates the
-   database `OWNER waitron_migrator` and migrates AS it via a `role=` session option (probe A — closes
-   the step-3 ownership gap; `provisioning.database_not_owned` guards it); adopt is subscribe-disabled →
-   a boot-time finish step gated on every `pg_subscription_rel` reaching `r` → enable (C6); `rejoin`
-   wipes via `DROP DATABASE … WITH (FORCE)` as the migrator-owner (no artifact, no slot drop — probe F
-   reclaims the inactive slot with the DB; the migrator→`waitron_repl` grant removed, Ruling I3) then
-   re-adopts in setup mode; a returned box reconciles membership (`GET /management-api/membership`)
-   before selling, replacing the deleted gossip (Ruling C7); `--accept-loss` narrowed to the drain
-   guards only. DELETED: the four `sync_*` tables, every module's capture triggers, the enrolment seat,
-   `app.node_id`, `sync-api.ts` + siblings, the pull/retention workers, the sync-token half of the
-   mirror bundle, the SP-2b/settings-conflict gates; the `sync.*` codes are deprecated, never renamed.
-   `tenant_credentials` reclassified `state → local` (derived fact 2 — the `membership.node_key` PK
-   would otherwise no-op the standby's identity establish). **Owner-signature evidence:** the
-   fiscal-fidelity suites (byte-identical native copy of `registros_facturacion`, the `ENABLE ALWAYS`
-   reject-mutation refusal, WAL-overflow, missing-column stall — Task 3) and the full two-node
-   fence→promote→return→drain→wipe→re-adopt arc + every-table copy matrix (Task 10) — read the PR and
-   their output at land. Dev stack made replication-ready (compose `wal_level=logical` +
-   `track_commit_timestamp`; `dev-setup` bootstraps the migrator-owned shape so `wa-wt reset` is the
-   live smoke). Plan: `superpowers/plans/2026-09-07-outbox-swap-s4-s5-promotion-and-deletion.md`.
-
-   **Step 5 (pending) — status, alarms and the operator surface for native replication (swap S6 + S7),
-   refreshed scope:**
-   - status-page numbers + alarms off `pg_stat_subscription` / `pg_stat_subscription_stats` (the
-     `confl_*` conflict columns, lag, `pg_replication_slots.wal_status`);
-   - the operator **SKIP runbook** for a stalled subscription (an `ENABLE ALWAYS` reject-mutation refusal,
-     or a `multiple_unique_conflicts` natural-key clash → `ALTER SUBSCRIPTION … SKIP (lsn …)` after a look);
-   - **orphaned-slot reclamation** on the cloud — the kept `waitron_repl`-authenticated
-     `dropReplicationSlot` verb (tested, no step-4 caller) reclaims a slot a retired/dead box left behind;
-   - a **management route for the post-drain disable** of the carrier's narrowed subscription (step 4
-     narrows + drains; the disable-once-drained is the operator action that closes the window);
-   - the **standby-first migration check** (a subscriber lagging a schema migration parks loudly until it
-     migrates) — replaces the deleted SP-2b park gate; the producer `schemaVersionsByModule` survives;
-   - **WireGuard on the box image** + `pg_hba` admitting `waitron_repl` only from the peer's WireGuard
-     address, and the SSH reverse-tunnel fallback;
-   - **`@waitron/tunnel` retirement** (with Track B item 2) now the link carries native replication +
-     remote access;
-   - the **vault-ring question**, reopened now that `tenant_credentials` is `local`: a blob sealed under
-     one node's ring cannot be opened under another's, so `fiscal.aeat`/`payments.stripe` do not travel to
-     a standby — Track B item 2's shared-ring design is what would let a promoted standby decrypt them.
-
-   **Step 3 LANDED #274 (2026-09-07) — swap S2, provisioning (capability + fixture only):** the native
-   logical-replication provisioning capability, none of it on the live path yet. `@waitron/sync` gained
-   `publications.ts`/`subscriptions.ts` (runtime-decoupled builders + creation; the conninfo carries the
-   `waitron_repl` password, so a create failure throws only `sync.subscription_failed { sqlState }`);
-   `@waitron/provisioning` gained `REPLICATION_ROLE` + `replicationBootstrapStatements` (the superuser
-   bootstrap SQL, run against the TARGET database) and `assertReplicationReady`/`provisioning.replication_not_ready`
-   (bootstrap-and-verify — the app provisioner stays superuser-free and verifies, incl. a per-database
-   `pg_default_acl` check that catches a bootstrap misapplied to the wrong database); `sqlStateOf` +
-   `quoteLiteral` homed in `@waitron/shared`; an additive `wireguardPublicKey` mirror-bundle field.
-   Proven on the two-node fixture: owner-created publications, a real A→B `state`-row copy, name-carried
-   environment isolation (`CREATE SUBSCRIPTION` WARNs not throws — measured, spec §2.4 corrected), and
-   §13.3 (`ALTER DEFAULT PRIVILEGES` covers a later table) by deletion. **Owed to step 4** (not S2): the
-   live adopt/promote/return flip, the fiscal-fidelity suites (byte-identity, `ENABLE ALWAYS` refusal,
-   WAL-overflow, column-stall), the §11 every-table copy matrix, and — flagged — the **ownership gap**:
-   `waitron-provision instance` may not leave `waitron_migrator` owning every table (`instance-apply.ts:172`
-   migrates as the admin), which native replication requires; step 4 must fix it (migrate as migrator, or
-   `REASSIGN OWNED`). Deferred Minors (none on any path): a test-helper node-shape consolidation, a
-   `createPublications` sequential-await (an illusory gain on one node-postgres connection), and an
-   `array[…]` `sql.raw` in a pg test. Plan: `superpowers/plans/2026-09-07-outbox-swap-s2-provisioning.md`.
-
-   **Step 2 LANDED #271 (2026-09-07):** the classification contract — `classify()`
-   (`@waitron/sync-enrolment`) adds `ledger`/`state`/`local` per-module `<MODULE>_CLASSIFICATION`
-   lists ALONGSIDE enrol's modes/lanes (enrol + outbox still run; deleted in step 4); every table
-   classified; the two root guards `scripts/classification-complete.test.ts` (classified exactly
-   once) and `scripts/append-only-enable-always.test.ts` (`reject_mutation` triggers `ENABLE
-   ALWAYS`); the publication lists derived from the classification; and the two-node
-   logical-replication fixture (`packages/db/src/testing/two-node.ts`). Two reconciliations against
-   swap §2.1: `canvases`→`state` (successor to the dropped `layout_profiles`); the four `sync_*`
-   outbox tables classified `local` (they still exist in S1 and the completeness guard needs an
-   entry — deleted with the outbox in step 4). Exports only; nothing consumed at runtime yet.
-   Rebased onto #270 (bookings extracted to `@waitron/bookings`): the `bookings` classification moved
-   core→its module (still `state`), and the completeness guard validated the result.
-
-   **Step 1 LANDED (#255).** Per-module baselines, FORCE RLS and the seven helper roles gone,
-   the `*.rls.test.ts` suites replaced by per-module grant suites and `privileges.test.ts`, and
-   CLAUDE.md §2–§4 rewritten. Proof: old migrations vs new baselines, `pg_dump --schema-only`,
-   normalised diff EMPTY. Measurements: real-PG test files 212 → 159; full-suite wall clock
-   352 s → 319 s. Post-squash follow-ups: (0) DONE — the mirror adopt path (`adoptFromPrimary`) now
-   shares the one-tenant guard (`assertNoForeignTenant`; a foreign tenant adopted into an occupied DB is
-   refused, `provisioning.foreign_tenant`), and `adopt.test.ts` clones a fresh mirror per test. #258
-   briefly renamed the guard/types/error onto the Spanish word `obligado`; reverted the next cycle — core
-   code is English-only, Spanish only in the verifactu/fiscal modules + translations. The pre-existing
-   `obligadoTenantId` became `deriveTenantId` in the same pass;
-   (1) `sales_assert_tenders_cover`'s "even though
-   the definer sees every row" clause (core baseline) is now false — kept byte-verbatim so the
-   equivalence proof stays EMPTY; thin it on the first change to that function; (2) `sync_peers`
-   carries a redundant `UPDATE (last_seen_at)` column grant beside its table-level `UPDATE` — drop at
-   the next sync grant change; (3) `scripts/schema-equivalence-fold.test.py` is a manual command run
-   by no gate.
-
-   The original brief, kept for the receipts it names:
-   (one PR chain; the largest change on
-   this list; gated on item 2 only because the answer changes what the sync layer must be). Keep
-   `tenant_id` columns + composite FKs, the owner-vs-`app_user` split (the append-only guarantee rests
-   on the app never owning the tables), and `withTenant` as the transaction primitive with its
-   `app.tenant_id` set_config hollowed out. Drop every `ENABLE/FORCE ROW LEVEL SECURITY` + `CREATE
-   POLICY`, `current_tenant_id()`, the per-tenant `sync_log` fencing (the whole reason
-   `sync_tailer`/`sync_retention` exist), the NOLOGIN function roles, the RLS-only halves of
-   `asAppUser`/`ProbeRole` and of `fiscal-verifactu`'s `inmutabilidad` suite, and the 115
-   `*.rls.test.ts` suites (read each first — privilege facts move to plain grant tests). Do it as a
-   **new baseline migration set per module** — this is the migration squash (111 files → per-module
-   baselines; the hand-written immutability triggers + grants carried verbatim). Re-examine what
-   `instance-plan.ts` refuses (superuser still yes: the triggers must not be bypassable). **Receipt
-   before merge:** on `postgres:18-alpine` as `app_user`, `UPDATE registros_facturacion` fails
-   (`42501`) and `INSERT` succeeds. Measure real-PG test-file count (190 today) + full-suite wall
-   clock before/after.
-4. **Outbox → native replication swap spec — APPROVED 2026-09-05; its slices are steps 2–5 of item 3's chain:**
+1. **Coverage split — LANDED #239.** 98/98/98/95 on six packages, the 90/90/85/85 floor elsewhere;
+   `scripts/coverage-thresholds.test.ts` pins which package holds which bar (CLAUDE.md §2).
+2. **Native logical replication prototype — DONE 2026-09-05.** Findings:
+   [native-replication-post-rls-prototype-findings](superpowers/specs/2026-09-05-native-replication-post-rls-prototype-findings.md).
+   Both 2026-08-02 gates (RLS refusing the apply worker; the non-owner `SET ROLE`) were ownership and
+   RLS questions, both gone. The two findings that changed code — `ENABLE ALWAYS` on the
+   append-only triggers and a bounded `max_slot_wal_keep_size` — landed with steps 1 and 4 below.
+3. **Drop FORCE RLS + the multi-role set, squash the migrations, delete the outbox — steps 1–4
+   LANDED; step 5 open.** Design:
+   [drop-rls-squash-and-outbox-deletion-design](superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md)
+   (one chain; item 4's swap slices are its steps 2–5; ONE owner signature, on step 4).
+   - **Step 1 LANDED #255:** per-module baselines, RLS and the seven helper roles gone, `withTenant`
+     hollowed to the transaction primitive, the `*.rls.test.ts` suites replaced by per-module grant
+     suites + `privileges.test.ts`, CLAUDE.md §2–§4 rewritten. Proof: old migrations vs new
+     baselines, `pg_dump --schema-only`, normalised diff EMPTY. Plan:
+     `superpowers/plans/2026-09-05-drop-rls-step1-baselines.md`. Follow-up (#258/#260): the mirror
+     adopt path shares the one-tenant guard (`assertNoForeignTenant`, `provisioning.foreign_tenant`).
+   - **Step 2 LANDED #271:** the `ledger`/`state`/`local` classification contract (`classify()`,
+     `@waitron/sync-enrolment`), the two root guards (`classification-complete`,
+     `append-only-enable-always`), publication lists derived from the classification, the two-node
+     fixture (`packages/db/src/testing/two-node.ts`). Plan:
+     `superpowers/plans/2026-09-07-outbox-swap-s1-classification.md`.
+   - **Working-time chain per-node rekey LANDED #268** (the S3/S4 prerequisite, swap §4.4):
+     `workforce_chains`/`time_entries` keyed to (`tenant`, `node`, `location`), a hashed
+     per-chain-monotonic `recorded_at` replacing the non-replicating `ingest_seq`, and a
+     cold-restored box CONTINUES its chain (no reset — CLAUDE.md §5). Design/plan:
+     `superpowers/{specs,plans}/2026-09-07-workforce-chain-per-node-rekey*.md`.
+   - **Step 3 LANDED #274:** the provisioning capability — `@waitron/sync`
+     `publications.ts`/`subscriptions.ts`, `@waitron/provisioning`'s `REPLICATION_ROLE` +
+     `replicationBootstrapStatements` + `assertReplicationReady`, `sqlStateOf`/`quoteLiteral` in
+     `@waitron/shared`, the `wireguardPublicKey` bundle field. Plan:
+     `superpowers/plans/2026-09-07-outbox-swap-s2-provisioning.md`.
+   - **Step 4 LANDED #280 (2026-09-08, the owner-signature PR):** promotion/return run on
+     `pg_replication_slots` with the fence-LSN drain watermark; the promoted node's own subscription
+     narrows to `ledger`; `waitron-provision instance` creates the database `OWNER waitron_migrator`
+     and migrates AS it (`provisioning.database_not_owned` guards it); adopt is
+     subscribe-disabled → boot-time finish → enable; `rejoin` wipes via `DROP DATABASE … WITH (FORCE)`
+     then re-adopts; a returned box reconciles membership via `GET /management-api/membership` before
+     selling; `tenant_credentials` is `local`. DELETED: the `sync_*` tables, every capture trigger,
+     the enrolment seat, `sync-api.ts` + siblings, the pull/retention workers, the SP-2b park gate;
+     `sync.*` codes deprecated, never renamed. The dev stack is replication-ready (`wa-wt reset` is
+     the live smoke, CLAUDE.md §6). Plan:
+     `superpowers/plans/2026-09-07-outbox-swap-s4-s5-promotion-and-deletion.md`.
+   - **Step 5 (OPEN) — status, alarms and the operator surface for native replication (swap S6 + S7):**
+     - status-page numbers + alarms off `pg_stat_subscription` / `pg_stat_subscription_stats` (the
+       `confl_*` columns, lag, `pg_replication_slots.wal_status`);
+     - the operator **SKIP runbook** for a stalled subscription (an `ENABLE ALWAYS` reject-mutation
+       refusal, or a `multiple_unique_conflicts` natural-key clash → `ALTER SUBSCRIPTION … SKIP`);
+     - **orphaned-slot reclamation** on the cloud — the kept `dropReplicationSlot` verb (tested, no
+       caller yet) reclaims a slot a retired/dead box left behind;
+     - a **management route for the post-drain disable** of the carrier's narrowed subscription;
+     - the **standby-first migration check** (a subscriber lagging a schema migration parks loudly
+       until it migrates) — replaces the deleted SP-2b park gate; `schemaVersionsByModule` survives;
+     - **WireGuard on the box image** + `pg_hba` admitting `waitron_repl` only from the peer's
+       WireGuard address, and the SSH reverse-tunnel fallback (with Track B item 2);
+     - **`@waitron/tunnel` retirement** (with Track B item 2) once the link carries replication;
+     - the **vault-ring question**: `tenant_credentials` is `local`, and a blob sealed under one node's
+       ring cannot be opened under another's, so `fiscal.aeat`/`payments.stripe` do not travel to a
+       standby — Track B item 2's shared-ring design is what would let a promoted standby decrypt them.
+   - **Left behind by the chain (open, none on the sale path):** `sales_assert_tenders_cover`'s "even
+     though the definer sees every row" clause is now false — kept byte-verbatim so the equivalence
+     proof stays EMPTY; thin it on the first change to that function. `scripts/schema-equivalence-fold.test.py`
+     is a manual command run by no gate. Step-3 minors: a test-helper node-shape consolidation, a
+     `createPublications` sequential-await, an `array[…]` `sql.raw` in a pg test.
+4. **Outbox → native replication swap design — APPROVED 2026-09-05; delivered as item 3's steps 2–5:**
    [outbox-to-native-replication-swap-design](superpowers/specs/2026-09-05-outbox-to-native-replication-swap-design.md).
    Owner decisions in it: full replacement (no hybrid); no third-party overlay (WireGuard box ↔ its
-   own cloud instance, SSH fallback — the same link Track B's relay decision retires the relay for); a
-   returned box drains its ledger back, never its settings, and is then wiped and re-adopted; live-
-   service rows are classed like settings (§4.3); and **the working-time chain is rekeyed per node**
-   like the fiscal chain (§4.4) — a prerequisite for S3/S4 and its own brainstorm + PR (workforce);
-   the labour advisor is asked only whether a location's exported record may show per-node chains.
-   Slices S0–S7 in §14; S0 (no `sync_*`, `ENABLE ALWAYS` on the append-only triggers,
-   `track_commit_timestamp`, `max_slot_wal_keep_size`) rides item 3's baseline. Owner reviewed 2026-09-05 (§4.3 and §4.4
-   confirmed); the plan is written per step of item 3's chain.
+   own cloud instance, SSH fallback); a returned box drains its ledger back, never its settings, and
+   is then wiped and re-adopted; live-service rows are classed like settings (§4.3); the working-time
+   chain is rekeyed per node like the fiscal chain (§4.4). The labour advisor is asked only whether a
+   location's exported record may show per-node chains.
 
 **Track B — failover** (sequential; = Priorities' Track 2; owns `apps/till`, `apps/server`'s boot /
-promote / till-session / read-only gate / box-* / rejoin, `packages/membership`, `packages/printing`,
-and the single config-conflict-gate trim in `packages/sync`):
+promote / till-session / read-only gate / box-* / rejoin, `packages/membership`, `packages/printing`):
 
-**Decisions first (docs-only brainstorms, before any build):** (i) Route A vs B (item 1's opening) —
-**TAKEN 2026-09-05**: rerouting lives in the till web app for every device kind; the device
-credential stays an httpOnly cookie and reaches every host as a tenant-domain cookie (paid tier) or a
-primary-issued one-time ticket (LAN-only second box, post-MVP); the native agent is built from the
-start for hardware only (printing first) and never carries browser traffic
+**Decisions (all TAKEN 2026-09-05, docs-only):** (i) **till-reroute route** — rerouting lives in the
+till web app for every device kind; the device credential stays an httpOnly cookie reaching every host
+as a tenant-domain cookie (paid tier) or a primary-issued one-time ticket (LAN-only second box,
+post-MVP); a native agent is built for hardware only (printing first)
 ([`2026-09-05-till-reroute-route-decision.md`](superpowers/specs/2026-09-05-till-reroute-route-decision.md));
-(ii) the relay choice — ours or off-the-shelf (item 2's opening, moved here from Track C) —
-**TAKEN 2026-09-05: no relay.** Replication rides the box↔own-cloud-instance WireGuard link (owner
-decision, Track A session); remote access is the instance forwarding the box's name down the link
-without terminating TLS; `@waitron/tunnel` + its wiring are retired with item 2's build
-([`2026-09-05-relay-decision.md`](superpowers/specs/2026-09-05-relay-decision.md)); (iii) `tills` vs `devices` — **TAKEN 2026-09-05: keep both.** Register (`tills`; UI
-"register"/"caja") = the drawer counted at close, device = the screen; several devices ring into one
-register; enrolling a till-kind device creates its register; `till_id`'s meaning is unchanged, so NO
-new H2 receipt ([`2026-09-05-register-and-device-model-decision.md`](superpowers/specs/2026-09-05-register-and-device-model-decision.md)).
-All three decisions are now taken.
+(ii) **no relay** — replication rides the box↔own-cloud-instance WireGuard link; remote access is the
+instance forwarding the box's name down the link without terminating TLS; `@waitron/tunnel` retires
+with item 2 ([`2026-09-05-relay-decision.md`](superpowers/specs/2026-09-05-relay-decision.md));
+(iii) **register and device, keep both** — register (`tills`; UI "register"/"caja") = the drawer
+counted at close, device = the screen; several devices ring into one register; `till_id`'s meaning is
+unchanged, so no new H2 receipt
+([`2026-09-05-register-and-device-model-decision.md`](superpowers/specs/2026-09-05-register-and-device-model-decision.md)).
 
-1. **Till reroute** — the first slice, because nothing server-side in the failover arc is usable
-   until a till can reach the second box. Route DECIDED 2026-09-05 (the decisions-first line above):
-   the auth model does not change — the device cookie stays httpOnly and gains a tenant-domain scope;
-   `devices`/`tills`/`device_profiles`/`canvases` must replicate first (config-class, no new table);
-   the promoted cloud serves tills on its public name; the app never talks to the local agent.
-   **S1 (server truth) LANDED #244 (2026-09-06). S2 (CORS + tenant-domain device cookie, plan Tasks
-   7–10) LANDED #257 (2026-09-06) — origin allow-list (single-flighted, evicted nodes excluded),
-   `hono/cors` on `/api/*` + `/media/*` for venue origins only, device cookie scoped to
-   `WAITRON_TENANT_DOMAIN`. OWED: plan Task 10's manual same-site cookie browser receipt (needs
-   `/etc/hosts` + mkcert + interactive Chrome; the `cookieDomainFor` logic is unit-proven, but S6's
-   e2e uses a node `fetch` which does NOT enforce SameSite, so it does NOT cover the browser path) —
-   run it manually or fold it into item 2's real-cloud proof before relying on cross-subdomain cookie
-   delivery in production. S3 (venue-wide till reads, plan Tasks 11–12) LANDED #259 (2026-09-07) — the
-   six till/KDS reads dropped the own-node filter (a promoted node inherits the venue's open tabs) and
-   each read carries its own `eq(tenantId, cfg.tenantId)` now that RLS is gone; the whole-branch run-it
-   seat reproduced a cross-tenant by-id leak (getHeldOrder/abandonHeldOrder keyed on the UUID alone),
-   fixed + a new CLAUDE.md §3 rule. S4 (the till `ServerRouter`, plan Tasks 13–16) LANDED #261
-   (2026-09-07) — `ServerRouter` probes `GET /api/node` on every venue server each round and points
-   `current` at the one accepting sales (highest term; stays put if none, no failure count),
-   `withServerTarget` retargets relative `/api/…` paths, `TillInfo` carries `nodeId`+`servers`, the
-   composition wires the router innermost with an inert `router?` on `till-app` (events are S5). The
-   whole-branch run-it seat (Codex, node probes) falsified two real defects fixed before land: the
-   default `localStorage` acquisition threw before first paint (now guarded), and overlapping
-   `probeNow()` rounds could undo a newer move (now coalesced onto one round — reachable once S5's
-   "check again" runs beside the interval); it also caught a stale plan comment claiming the
-   diagnostics trail logs a rerouted request's real URL (it logs only the masked pathname). S5 (till
-   behaviour, plan Tasks 17–20) LANDED #264 (2026-09-07) — on a `server-changed` the till drops the
-   operator, locks (`server.switched`) and re-boots against the new target with the working order kept
-   in memory; a network-level failure (`TypeError`/`AbortError`, never a server `{code}`) of a FISCAL
-   request shows `sale.unconfirmed`, scoped so a failure of the preliminary order save keeps the plain
-   `sale.error`/`place.error`; a lock-screen `role="status"` line (`On: <current>` + `<label>: <state>`
-   per server) with "Check again" → `probeNow()`, plus a shell-header waiting banner; the router now
-   dispatches `state-changed` only on a real change (one signature-gated `#emitStateChanged` shared by
-   `setServers` and the probe round). The whole-branch Codex run-it seat reproduced two correctness
-   defects fixed before land: `setServers` didn't sync the change-detection signature, so a
-   remove/re-add-then-same-probe could freeze the status display on `unknown`; and `sale.unconfirmed`
-   was shown for a preliminary save that never reached the fiscal request. Both S4 deferrals resolved:
-   `state-changed` change-detection landed; `TillServer.standing` KEPT deliberately (it is the
-   `GET /api/till.servers` wire type the server sends, not dead — the router deciding via
-   `acceptingSales` does not retire the field). S6 (the two-node e2e, plan Tasks 21–22) LANDED #265
-   (2026-09-07) — till reroute S1–S6 all landed: `apps/server/src/till-reroute-e2e.test.ts` boots A
-   (primary) and B (mirror) as two in-process `startServer` instances on two real-PG databases — one
-   venue, two nodes — and proves
-   across the pair the `/api/node` postures a till routes
-   on (A `acceptingSales:true`, B `:false`), the read-only gate refusing a login on the standby
-   (`node.read_only`, no device group mounted), the seeded device cookie authenticating on the selling
-   node, boot-captured `acceptingSales` staying false on a mirror flipped to primary in the DB until it
-   RESTARTS (the control where a live read and the captured one differ), and the promoted B inheriting
-   the venue's open tab tagged with the DEAD node's id via the §3.6 venue-wide read;
-   `apps/till/src/api/server-router.contract.test.ts` replays the SAME `/api/node` bodies (the shared
-   `apps/till/src/api/__fixtures__/node-probe.json`) through `ServerRouter`, so the two sides pin to one
-   contract. **STILL OWED — plan Task 10's same-site cookie browser receipt:** it needs interactive
-   Chrome + mkcert + `/etc/hosts` and the node-`fetch` e2e does NOT substitute for it (a node fetch does
-   not enforce SameSite); run it manually or fold it into item 2's real-cloud proof before relying on
-   cross-subdomain cookie delivery in production. Pointers:**
-   [`2026-09-05-till-reroute-design.md`](superpowers/specs/2026-09-05-till-reroute-design.md) — the
-   till FOLLOWS THE PRIMARY (probe every server, obey `acceptingSales`; no manual switch — owner
-   2026-09-05; a status line + "check again" instead), server list = the membership document's
-   `contactUrl`s (adopt now appends the joining node), PIN re-prompt on a move, `sale.unconfirmed` for
-   the request in flight, CORS + tenant-domain cookie, venue-wide till reads (absorbs R3a's two
-   deferrals), CLAUDE.md §5 rewrite. The `dining_tables` comment and config-conflict-gate cleanups
-   are dropped: both files die with the outbox (swap spec §7). Six slices; the run-it proof is item 2.
-   **Plan:** [`2026-09-05-till-reroute.md`](superpowers/plans/2026-09-05-till-reroute.md) (22 tasks,
-   one branch per slice: `feat/till-reroute-s1-server-truth` … `feat/till-reroute-s6-e2e`).
-   Two things S1 measured, both for item 3's re-admission design: (i) the chart APPENDS without
-   bound while `MAX_NODES = 8` (`packages/membership/src/verify.ts`) makes every verifier refuse a
-   longer document as `malformed` — and every wipe-and-re-adopt mints a FRESH nodeId while
-   `evictNode` only marks the old one, so roughly eight disaster-recovery re-adopts leave the venue
-   with a document no node will accept, with no self-heal; re-admission must retire the previous
-   entry rather than add a second. (ii) A post-setup change to `WAITRON_ADVERTISED_ORIGIN` is never
-   re-published — nothing refreshes this node's own entry at boot — so the chart keeps the stale
-   address forever, and a node that promotes while absent from the chart appends itself
-   address-less (`nextStandings`), which `routableServers` drops, so no till is told to dial it.
-2. **The cloud standby, end to end (MVP) — PARKED/BLOCKED (owner decisions 2026-09-07).** Both
-   original build-halves left this item: **(a) transport waits on Track A steps 2–4** — item 2 does
-   NOT build WireGuard/native replication, it consumes them once Track A lands them (verified
-   2026-09-07: both are docs-only, zero code; the live mirror transport is still
-   outbox-pull-over-HTTP-over-`@waitron/tunnel`; UPDATE 2026-09-08: WireGuard now has its first code —
-   a local two-host TEST-sim fixture, see (c) — though nothing wires it to the live path yet).
-   **(b) per-tenant cloud provisioning is NOT this
-   repo** — it belongs to **Waitron Cloud**, a separate closed-source commercial service (not
-   started): the customer signs up, Waitron Cloud spawns the instance + sets up WireGuard and hands
-   back a URL + credentials; this repo's only job is to *talk to* a provisioned instance. **(c) the
-   run-it proof will be a two-host LOCAL simulation** (repeatable, no real cloud) — its transport
-   primitive landed 2026-09-08 (#275):
-   `@waitron/db/testing/two-node-wireguard.ts` joins two Postgres nodes
-   over a real kernel-WireGuard tunnel (NET_ADMIN only, no privileged container), and `sync`'s
-   `replication-over-tunnel.pg.test` proves native logical replication copies A→B across it; the
-   standby e2e ON that primitive is still unbuilt. The software failover arc is already proven
-   in-process (till-reroute S6). **Do not restart until Track A
-   steps 2–4 land AND the Waitron↔Waitron-Cloud boundary contract is settled.** Original description,
-   kept for its receipts: the box↔cloud-instance WireGuard link (relay DECIDED
-   2026-09-05: none; `@waitron/tunnel`, `WAITRON_TUNNEL_*` and the tunnel-aware dispatcher are
-   deleted once the link carries replication, never before — the decisions-first line above), a
-   per-tenant cloud instance provisioning path (the instance also forwards the box's remote name
-   down the link without terminating TLS), then prove by RUNNING: on-prem primary → adopt →
-   mirror → human promotion → tills reroute to the promoted cloud → the venue sells and files. A
-   second LOCAL box is post-MVP; when it comes, the same adopt path over the LAN with no relay is the
-   candidate (wizard mode 4 wraps it).
-3. **Promotion runbook Slice 2 — the authenticated endpoint + break-glass + real admin connection:
-   LANDED #272 (2026-09-07).** `POST /management-api/promote` (mounted both modes, spec §6),
-   two-path auth (admin login `node.promote` OR an offline break-glass secret — scrypt verifier on
-   `deployment.break_glass_verifier`, minted at adopt, surfaced once in the setup UI, never
-   stored/logged), and `WAITRON_ADMIN_DATABASE_URL` (all three owner-write sites route through it,
-   fail-closed to migrations→app). A promoted cloud **sells + chains on its own reserved SIF but does
-   NOT file** until cert-distribution lands — surfaced as `awaitingFiscalCertificate` on box-status,
-   never silent (owner decision 2026-09-07: sell-now-file-later). Break-glass is authorization only —
-   the 2026-08-29 runbook §4 "unlock the key ring" job is retired (dated pointer added). Design:
-   [`2026-09-07-promote-endpoint-slice-2-design.md`](superpowers/specs/2026-09-07-promote-endpoint-slice-2-design.md);
-   plan: [`2026-09-07-promote-endpoint-slice-2.md`](superpowers/plans/2026-09-07-promote-endpoint-slice-2.md).
-   Whole-branch run-it seat (Codex) caught a build break from a concurrent `@waitron/server-kit`
-   refactor the rebase surfaced, the setup UI dropping the secret, and an awaiting-cert flag that
-   cleared on a no-work drain pass — all fixed before land.
-   **cert distribution to a promoted mirror — LANDED #279 (2026-09-08), REVERTED 2026-09-08 pending
-   re-integration on the native-replication adopt/promote flow.** #279 was built against the SYNCHRONOUS
-   adopt (`adoptVenue` inserts the tenant, break-glass secret in hand) and the old promote; the
-   outbox→native-replication swap (Track A step 4, PR #280) replaced adopt with an ASYNCHRONOUS native
-   initial COPY (the tenant row arrives minutes later, the reserved-identity establish moved to a
-   boot-time finish worker) — so #279's adopt-time dormant-cert seal has no tenant row to FK to, and the
-   one-time break-glass secret is gone by the finish worker. Owner decision (2026-09-08): land the swap
-   as the foundation, revert #279, and rebuild cert distribution on the new flow as a follow-up (design
-   question: how the dormant cert is protected when the seal must happen after the copy — the break-glass
-   secret is no longer available at that point). Spec + plan below are KEPT for the re-build.
-   ([`2026-09-07-fiscal-cert-distribution-design.md`](superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md),
-   plan [`2026-09-07-fiscal-cert-distribution.md`](superpowers/plans/2026-09-07-fiscal-cert-distribution.md)):
-   the standby receives the certificate at adopt wrapped under the break-glass secret and sealed
-   DORMANT (`fiscal.aeat.dormant`), unwrapped into the live `fiscal.aeat` row **inside** the promotion
-   transaction (or via `/management-api/fiscal-certificate/unlock`); a new install/replace endpoint
-   (`POST /management-api/fiscal-certificate`, admin + `fiscal.configure`) is the missing renewal path
-   and the lost-break-glass fallback. Folded in: cloud nodes take the vault key from the ENVIRONMENT
-   (no `secrets.env` on disk) and their backups carry no key — a snapshot/dump/backup yields no usable
-   cert, only a live-process compromise does; `tenant_credentials` reclassified `state`→`local` so
-   replication never carries it; `fiscalCertificate: live|dormant|none` on box-status. An unlock
-   failure (corrupt inner envelope OR unreadable outer vault) withholds FILING, never SELLING — the
-   Codex run-it seat reproduced an outer-vault fault that had aborted the promote, now fixed.
-   **STILL OWED (separate slices):** **§4.3 restore-onto-cloud re-encrypt** (split fast-follow: restore
-   an on-prem backup onto a fresh cloud node, re-encrypting the vault to the env key — disaster path
-   only; `reencryptVault` with the two-v1-keys-can't-share-a-ring trap noted in the design §4.3);
-   **re-admission** of a rejoined wiped-and-restored box as the standby (R3 follow-up (b)) — **must
-   DELETE the re-admitted node's live `fiscal.aeat` row and hold only the dormant copy again**
-   (cert-distribution design §8); the **resume-at-restore marker** (R3 follow-up (a)); the
-   **worker-lifecycle manager** (promote-action Slice 3 — would make mirror promotion in-process, no
-   restart); a friendly **dashboard promote UI**; and an **a11y test** for the break-glass secret
-   panel. Deferred minors (recorded, non-blocking): the `fiscal.certificate_dormant_stored` §5 log
-   event was dropped (adopt has no logger — re-add when one is threaded); a pre-existing
-   `boot.promote` corrupt-case test asserts the failure event but not `reason==="corrupt"`.
-4. **Cloud-only redundancy (MVP) — brainstorm** (a) one node on a managed/HA Postgres host vs (b) a
-   second cloud node on the built mirror mechanism. (a) needs an inventory of what the server keeps
-4. **Cloud-only redundancy (MVP) — brainstorm** (a) one node on a managed/HA Postgres host vs (b) a
+1. **Till reroute — S1–S6 ALL LANDED** (#244, #257, #259, #261, #264, #265; design
+   [`2026-09-05-till-reroute-design.md`](superpowers/specs/2026-09-05-till-reroute-design.md), plan
+   [`2026-09-05-till-reroute.md`](superpowers/plans/2026-09-05-till-reroute.md)). The till FOLLOWS
+   THE PRIMARY: `ServerRouter` probes `GET /api/node` on every venue server and points at the one
+   accepting sales (no manual switch; a status line + "check again"); on a move it drops the operator,
+   locks and re-boots against the new target keeping the working order in memory; a network-level
+   failure of a fiscal request shows `sale.unconfirmed`; CORS + a `WAITRON_TENANT_DOMAIN` device
+   cookie; till/KDS reads are venue-wide (a promoted node inherits the venue's open tabs), each read
+   scoping its own tenant (CLAUDE.md §3). The two-node e2e
+   (`apps/server/src/till-reroute-e2e.test.ts`) and the router contract test share one `/api/node`
+   fixture.
+   - **STILL OWED — plan Task 10's same-site cookie browser receipt.** The node-`fetch` e2e does NOT
+     enforce SameSite, so cross-subdomain cookie delivery is unit-proven only (`cookieDomainFor`).
+     Needs interactive Chrome + mkcert + `/etc/hosts`; run it manually or fold it into item 2's
+     two-host proof before relying on it in production.
+   - **Two membership-chart findings from S1, for the re-admission design (item 3's owed list):**
+     (i) the chart APPENDS without bound while `MAX_NODES = 8` (`packages/membership/src/verify.ts`)
+     makes every verifier refuse a longer document as `malformed`, and every wipe-and-re-adopt mints
+     a FRESH nodeId — roughly eight disaster-recovery re-adopts leave a document no node accepts, with
+     no self-heal; re-admission must retire the previous entry, not add one. (ii) A post-setup change
+     to `WAITRON_ADVERTISED_ORIGIN` is never re-published (nothing refreshes the node's own entry at
+     boot), and a node that promotes while absent from the chart appends itself address-less
+     (`nextStandings`), which `routableServers` drops — no till is told to dial it.
+2. **The cloud standby, end to end (MVP) — PARKED (owner decisions 2026-09-07).** (a) The transport
+   is Track A's: item 2 consumes native replication + the WireGuard link, it does not build them; the
+   link's first code is the two-host TEST fixture (#275: `@waitron/db/testing/two-node-wireguard.ts`
+   joins two Postgres nodes over a real kernel-WireGuard tunnel, NET_ADMIN only, and `sync`'s
+   `replication-over-tunnel.pg.test` proves a copy across it), nothing on the live path yet — that is
+   Track A step 5's box-image work, built together with this item. (b) **Per-tenant cloud
+   provisioning is NOT this repo** — it belongs to **Waitron Cloud**, a separate closed-source
+   service (not started): the customer signs up, Waitron Cloud spawns the instance + sets up WireGuard
+   and hands back a URL + credentials; this repo only *talks to* a provisioned instance. (c) The
+   run-it proof will be a two-host LOCAL simulation on the #275 fixture — the standby e2e on it is
+   unbuilt; the software arc is already proven in-process (till-reroute S6). **Do not restart until
+   the Waitron↔Waitron-Cloud boundary contract is settled.** The proof to run then: on-prem primary →
+   adopt → mirror → human promotion → tills reroute to the promoted cloud → the venue sells and files.
+   A second LOCAL box is post-MVP; the same adopt path over the LAN is the candidate (wizard mode 4).
+3. **Promotion Slice 2 — the authenticated endpoint — LANDED #272.** `POST /management-api/promote`
+   with two-path auth (admin `node.promote` OR an offline break-glass secret, scrypt-verified on
+   `deployment.break_glass_verifier`, minted at adopt, shown once in the setup UI) and
+   `WAITRON_ADMIN_DATABASE_URL` (fail-closed). A promoted cloud **sells + chains on its own reserved
+   SIF but does NOT file** until cert distribution lands — `awaitingFiscalCertificate` on box-status,
+   never silent (owner: sell-now-file-later). Break-glass is authorization only (the 2026-08-29 runbook
+   §4 key-ring job is retired). Design/plan: `superpowers/{specs,plans}/2026-09-07-promote-endpoint-slice-2*.md`.
+   - **Fiscal-certificate distribution — LANDED #279, REVERTED #281 (2026-09-08); REBUILD on the
+     native-replication adopt flow.** #279 sealed the dormant cert at the SYNCHRONOUS adopt (tenant row
+     in hand, break-glass secret in hand); #280 made adopt an ASYNCHRONOUS native initial COPY (the
+     tenant row arrives later; the reserved-identity establish moved to a boot-time finish worker), so
+     the seal has no tenant row to FK to and the one-time break-glass secret is gone by then. Owner
+     decision: land the swap as the foundation, rebuild this as a follow-up. **Open design question:**
+     how the dormant cert is protected when the seal must happen after the copy. Spec + plan KEPT:
+     [`2026-09-07-fiscal-cert-distribution-design.md`](superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md),
+     [`2026-09-07-fiscal-cert-distribution.md`](superpowers/plans/2026-09-07-fiscal-cert-distribution.md)
+     — dormant `fiscal.aeat.dormant` unwrapped inside the promotion transaction (or via
+     `/management-api/fiscal-certificate/unlock`); an install/replace endpoint as the renewal path and
+     lost-break-glass fallback; cloud nodes take the vault key from the ENVIRONMENT (no `secrets.env`)
+     so a backup yields no usable cert; `fiscalCertificate: live|dormant|none` on box-status; an unlock
+     failure withholds FILING, never SELLING.
+   - **STILL OWED after the rebuild (separate slices):** the **restore-onto-cloud re-encrypt** (design
+     §4.3: restore an on-prem backup onto a fresh cloud node, re-encrypting the vault to the env key —
+     `reencryptVault`, two v1 keys cannot share a ring); **re-admission** of a rejoined
+     wiped-and-restored box as the standby — must DELETE the re-admitted node's live `fiscal.aeat` row
+     and hold only the dormant copy (design §8), and retire its previous chart entry (item 1's finding
+     (i)); the **resume-at-restore marker** (a wiped-mid-restore box vs a never-provisioned one); the
+     **worker-lifecycle manager** (promote Slice 3 — in-process promotion, no restart; see item 6); a
+     **dashboard promote UI**; an **a11y test** for the break-glass panel. Minors: the
+     `fiscal.certificate_dormant_stored` log event was dropped (adopt has no logger); a `boot.promote`
+     corrupt-case test asserts the failure event but not `reason==="corrupt"`.
+4. **Cloud-only redundancy (MVP) — brainstorm.** (a) one node on a managed/HA Postgres host vs (b) a
    second cloud node on the built mirror mechanism. (a) needs an inventory of what the server keeps
    on local disk (`writeFileAtomic` env files, `mediaDir`, the box-secret vault, backup state) and a
    singleton lease so a restarted or relocated app process never runs a second submitter; (b) is
-   Track B item 2 without the tunnel. Pick per deployment; both may ship.
+   item 2 without the tunnel. Pick per deployment; both may ship.
 5. **Printer failover** (`2026-08-26-failover-printing-design.md`) — MVP-critical for cloud-only and
    for a promoted cloud standby (a cloud server cannot reach a LAN printer).
-6. **Node-role collapse** — derive ONE `NodeRole` at boot from the membership document (today spread
-   across `deployment.mode`, `singleton_role`, membership standing and the boot-captured `fenced`
-   flag) and pick one rule: every role change is a restart, or the worker-lifecycle manager Slice 3
-   keeps deferring — not both; a small worker registry replaces `startServer`'s hand-rolled
-   AbortController-per-worker (`boot.ts`, 1,665 lines). **After Track A item 3 lands** — both edit
-   `boot.ts`'s role-pool wiring.
-7. **Register/device model — DECIDED 2026-09-05** (SP-A.2 follow-up 2; keep both —
-   [`2026-09-05-register-and-device-model-decision.md`](superpowers/specs/2026-09-05-register-and-device-model-decision.md) §4). The build split: the
-   no-migration half (register create + auto-create at till enrol, handheld picker, register/device
-   wording, shift login keyed to the device's register) — **LANDED #269 (feat/device-enrolment-login,
-   2026-09-07;** design [`2026-09-07-device-enrolment-and-login-design.md`](superpowers/specs/2026-09-07-device-enrolment-and-login-design.md)). Shipped: the
-   device **profile** is now the single description of a device — `device_kind` is **gone** (both the
-   pgEnum and the column dropped); a device's kind derives from its profile's new `form_factor`
-   (`kindOfFormFactor`, `@waitron/layouts`). Enrolment was rebuilt (verify-key → describe-device), a
-   `till`-form-factor enrol **auto-creates its own register** named after the device, a venue-scoped
-   unique index on `tills(tenant_id, location_id, name)` makes a duplicate register name
-   unrepresentable (`device.register_name_taken`/`device.register_required`), and the shift session is
-   keyed to the device's register. One meaning per hardware-binding column still waits for Track A's
-   squash. No new H2 receipt: what an immutable record's `till_id` holds is unchanged.
+6. **Node-role collapse — UNBLOCKED (Track A's `boot.ts` edits are done).** Derive ONE `NodeRole` at
+   boot from the membership document (today spread across `deployment.mode`, `singleton_role`,
+   membership standing and the boot-captured `fenced` flag) and pick one rule: every role change is a
+   restart, or the worker-lifecycle manager (promote Slice 3) — not both; a small worker registry
+   replaces `startServer`'s hand-rolled AbortController-per-worker.
+7. **Register/device model — the no-migration half LANDED #269** (design
+   [`2026-09-07-device-enrolment-and-login-design.md`](superpowers/specs/2026-09-07-device-enrolment-and-login-design.md)):
+   the device **profile** is the single description of a device — `device_kind` is gone, a device's
+   kind derives from its profile's `form_factor`; a `till`-form-factor enrol auto-creates its own
+   register; `tills(tenant_id, location_id, name)` is unique per venue; the shift session is keyed to
+   the device's register; a per-(device, person) PIN throttle (`pin.throttled`).
    - *Follow-ups (pre-production edges, not blocking):* (a) the dev `?dev` chooser rows show
-     `label · kind`, not `name · profile · register`, because `GET /api/dev/devices` returns only
-     ids + kind — a small server-list widening if wanted. (b) **Owner copy decision:** the Spanish
-     form-factor label differs across two pickers — `canvas_editor.form_factor.till` = "TPV" vs
-     `device_profiles.form_factor.till` = "Caja registradora"; pick one. (c) `WAITRON_TILL_TILL_ID` /
-     provisioning still seeds a "Caja 1" register while a till enrol now auto-creates its own — the
-     dedupe deferred by the decision doc. (d) the hardware PATCH validates `card_provider` and
-     `card_reader_id` independently — the "reader id only for `stripe_terminal`" coherence rule lives
-     only in the dashboard UI, so a direct API call can persist an incoherent (non-secret, off the
-     fiscal path) row; move it server-side if it is a real invariant. (e) the device-management routes
-     build their `devices ⨝ device_profiles` read inline in the HTTP layer (repeated across
-     `device-api`/`device-session`); a `listDevices` store verb would restore the layer. Both are
-     whole-branch-review deferrals (#269), not blockers.
+     `label · kind`, not `name · profile · register` (`GET /api/dev/devices` returns only ids + kind);
+     (b) **owner copy decision:** the Spanish form-factor label differs across two pickers
+     (`canvas_editor.form_factor.till` = "TPV" vs `device_profiles.form_factor.till` = "Caja
+     registradora"); (c) `WAITRON_TILL_TILL_ID`/provisioning still seeds a "Caja 1" register while a
+     till enrol auto-creates its own — dedupe deferred by the decision doc; (d) the hardware PATCH
+     validates `card_provider` and `card_reader_id` independently — the "reader id only for
+     `stripe_terminal`" rule lives only in the dashboard UI; move it server-side if it is a real
+     invariant; (e) the device-management routes build their `devices ⨝ device_profiles` read inline
+     in the HTTP layer — a `listDevices` store verb would restore the layer.
 
 **Track C — product / modules** (sequential; owns `packages/fiscal*`, the module framework packages,
-`packages/composition` (the `ALL_MODULES` list), every NEW module package, `apps/dashboard` module
-screens, `apps/server/src/modules.ts` (the maps derived from that list), and the control-plane docs):
+`packages/composition`, every NEW module package, `apps/dashboard` module screens,
+`apps/server/src/modules.ts`, and the control-plane docs):
 
-1. **Finish fiscal as a module:** SP-3b vocabulary (landed #240), SP-3c gated-provisioning seam (landed #245),
-   SP-3d backup/restore hook (= BR-4) landed #248 (2026-09-06) — fiscal-as-a-module is complete; see
-   *Waitron module system*.
-2. **`fiscal-none` module — LANDED #262 (2026-09-07)** (spec
-   `2026-09-06-module-fiscal-none-design.md`). The no-op regime (`@waitron/fiscal-none`) fills the
-   fiscal slot with an empty runtime-duty (`drain`) seat and records nothing; provisioning selects the
-   fiscal module by territory (`GB-vat`→none, `ES-common`→verifactu) through one `venueFiscalSelection`
-   seam; `apps/server` now imports NO regime package and the seams `DEFERRED_RUNTIME_PASS` allowlist is
-   EMPTY (`scripts/module-seams.test.ts`). Proven by a real-PG e2e (a GB venue sells/voids/corrects/
-   substitutes and writes zero rows in `registros_facturacion`/`registro_sif`/`cadenas`/`envios`) and
-   the run-it reviewer's live-catalog check (RLS genuinely dropped post-#255). The two agreed CLAUDE.md
-   §3 rules (new domains land as modules; no new core table without a stated reason) landed with it.
-   Rebased twice (over #255 drop-RLS, then #260 obligado→English), whole-workspace green each time.
-   - **Left behind (deferred follow-ons, none on the sale path):** de-dup the `tls.ts` mTLS test
-     fixture — byte-copied into `@waitron/fiscal-verifactu/src/testing/` because `apps/server` can't
-     import the regime — into a neutral shared testing home; remove the now-inert
-     `VerifactuBackendOptions.resolveClient`/`skipRetryMs` (the sale-path backend no longer reads them,
-     so ~40 construction sites pass an inert resolver); the browser setup wizard still offers
-     `ES-common` only, so a GB/no-regime venue is CLI/test-provisionable but not yet wizard-reachable (a
-     territory picker is its own UI change); `server.*`/`setup.request_invalid` are now
-     declaration-merged into the regime package (§3 nuance, self-guarding, precedented). The Task-8
-     provision-only gate keeps a synthetic-module test for the `provision_only_disabled` branch (no
-     real non-fiscal provision-only module exists yet).
-   - **Follow-on: English-only generic guard — LANDED #266 (2026-09-07).** Owner
-     principle (2026-09-07): Spanish only in Spain-specific modules (verifactu, workforce-es,
-     reporting=modelo-303); core/generic code must be English — identifiers, strings AND comments.
-     The guard now SCANS comments (was stripping them), leaving quotations intact (`«…»` regulatory
-     quotes + comment-scoped `` `…` `` citations); `provisioning`/`tunnel`/`payments-stripe`/`ui`/
-     `migrations`/`fiscal-none` added to the scanned set, `reporting` removed (it IS the modelo-303
-     form). The re-measurement corrected the design's premises: the identifier leak in generic
-     production was ~1 line (`fiscal-modules.ts`'s `tax:"iva"`), NOT a 428-token sweep, and the fiscal
-     code already sits behind the `@waitron/fiscal` seat — so nothing waited on Track C; the body of
-     the work was the comment rewrites (several hundred, concentrated in core/db/workforce).
-     `fiscal-modules.ts` was NOT relocated to `@waitron/composition`
-     (module-seams forbids provisioning importing it) — instead the inert tax-model slot value
-     `iva`→`vat` (see item 7). Design + decisions:
-     `docs/superpowers/specs/2026-09-07-english-only-generic-english-design.md`. Remaining follow-on
-     (out of scope of the branch): make provisioning's tests regime-agnostic against `fiscal-none` and
-     drop the production-only test exemption (spec §6 step 5).
-3. **Bookings as the first UI-bearing module** (own package, own tables, own dashboard screen):
-   proves cards, permissions and i18n arriving with a module — fiscal never exercises them.
-   **Decomposed SP1 → SP2** (owner 2026-09-07, full end-to-end module):
-   - **SP1 — server + data extraction (LANDED #270, 2026-09-07).** `@waitron/bookings`: the tables
-     leave the core migration set into their own set (a clean leaf — nothing in core references them);
-     verbs + 7 routes move in behind a typed `routes` seat `boot.ts` mounts generically; a `permissions`
-     seat carries `booking.manage` out of `@waitron/identity` (identity keeps the role ladder); a
-     `floorAnnotations` seat carries the "Reserved HH:MM" concern out of core's `listTablesWithState`;
-     enrolled into sync as `state` (first genuinely-toggleable module — unblocks the deferred
-     enabled-set-aware pull, `boot.ts:556`); the request + cookie helpers lift to a new `@waitron/server-kit`.
-     Dashboard UNTOUCHED (same URLs). Bookings is a domain module → FLOOR coverage bar (like workforce),
-     NOT the six-package high bar. Spec:
-     [module-bookings-sp1-server-extraction](superpowers/specs/2026-09-07-module-bookings-sp1-server-extraction-design.md).
-     - **Security fix that rode along (found by the run-it seat, RUNNING a two-tenant probe):** the booking
-       verbs (`getBooking`/`advanceStatus`/`updateBooking`/`seatBooking`/`listBookings`) + `openTab` read/wrote
-       by id alone — a pre-existing cross-tenant leak (tenant B could read A's contact + cancel A's booking).
-       All now scope `cfg.tenantId` (§3, the till-reroute S3 class); real-PG regression tests added.
-     - **Deferred follow-ons (none on the sale path):** `createOpenOrder`'s `deliveryTableId` existence check
-       read `dining_tables` by id alone — SAME §3 read-leak class (fail-closed-on-WRITE via composite FK does
-       not close the read leak). **FIXED 2026-09-08 (#276)**:
-       the pre-check now scopes `eq(diningTables.tenantId, cfg.tenantId)`, so another tenant's real table id
-       reads as absent (clean `table.not_found`, not a raw 23503); real-PG two-tenant regression in
-       `tabs.pg.test.ts`. **§3 by-id read-leak FAMILY — FIXED 2026-09-08 (#278),** same class as the fixed
-       `getHeldOrder` leak. Three helpers now take
-       `cfg` (NOT a bare `tenantId` — two adjacent `string` params invited the very transposition this fights;
-       simplify lens) and scope by it: `lockOpenTabRow`/`lockOpenTab` (tab verbs `sendLines`/`recallLines`/
-       `addTabRound`/`voidTabLine`/`setLineCourse`/`markLineServed`/`unmarkLineServed`/`transferLines`/
-       `splitOffCheck`/`unjoinTable`) and `assertTabOpen` (`moveTab`/`joinTable`/`readTabLines`). Also scoped:
-       `mergeTabs`'s own reads + abandon and `moveTabLines`'s read (threaded `cfg`) — the run-it seat RAN a
-       probe showing tenant A merged AND abandoned B's tabs; `parkOrder`'s replay read; and ALL eleven
-       `payWorkingOrder`/collect/integrated by-id reads in `till-sale.ts` (the same lock+replay shape). Real-PG
-       cross-tenant regressions in `tabs.pg.test.ts` for the four families with an observable discriminator (a
-       tab verb via `lockOpenTab`; `moveTab` via `assertTabOpen`; `mergeTabs`; `parkOrder`'s replay, which had
-       RETURNED the other tenant's order number — the RED proof). The `payWorkingOrder`/collect reads are
-       scoped defensively: with the lock read scoped a foreign id never reaches the retrieved-order reader, and
-       downstream `readSettledTicket`/sales reads already scope by tenant, so there is no observable
-       final-state discriminator to probe. **Still open (SEPARATE classes, scope next):** (i) request-supplied
-       TABLE-id reads — `moveTab`/`joinTable`'s `toTableId`, `assertTableAvailable` — the deliveryTableId/openTab
-       shape (a table id from the request, not an order/tab id); (ii) `ticket_items` by-id reads/updates in
-       `bumpCourseReady`/`advanceTicketItem`/`advanceTicket` (still `_cfg`, unscoped — a KDS §3 class). **Floor perf —
-       FIXED 2026-09-08 (#277):** `floor.ts` memoizes its per-timezone
-       `Intl.DateTimeFormat` (was building two per poll); the per-poll `locations.time_zone` DB read is left
-       as-is (staleness out of scope). `CoreServices` is one shared interface every module receives whole — when a 2nd core verb is
-       needed (SP2+), prefer per-module narrow required-services interfaces. `floorAnnotations` is honestly
-       single-purpose (`{reservedTime}`) today — genuinely generalize only when a 2nd annotator appears.
-   - **SP2 — dashboard module-UI seat — LANDED (2026-09-07).** The general, reusable browser-module seat: a
-     module ships a `DashboardContribution` from a `./dashboard` browser sub-path (screen + nav + i18n +
-     permission gate); a browser-safe `@waitron/dashboard-modules` registry lists them (the browser mirror of
-     `ALL_MODULES`); `apps/dashboard` mounts them generically and names no module. New `@waitron/dashboard-kit`
-     holds the i18n + code-message registries + the shared request primitive lifted out of the app; `getMe` now
-     returns the user's effective `permissions` + the enabled `modules`, gating each module's nav/screen
-     (enabled ∩ permitted); `permissionsForRole` added to `@waitron/identity`. Bookings proved it —
-     screen/widget/client/strings moved out, app runtime names bookings nowhere (grep receipt), URLs
-     byte-identical (wire-pin). Guarded by `scripts/dashboard-browser-purity.test.ts` (a `./dashboard` graph
-     reaches no server code, proven by deletion) + a Vite-build backstop. Spec + plan:
-     `docs/superpowers/{specs,plans}/2026-09-07-module-bookings-sp2-dashboard-ui-seat*.md`.
-     - **Follow-ons SP2 unblocks (deferred):** migrate the other ~22 core dashboard screens onto the seat
-       incrementally; migrate core screens off the coarse `requiresManager` role gate onto permission ids now
-       that `getMe` carries the permission set. CI: bookings' browser vitest runs in the shared `test-light-a`
-       shard (Chromium in a light bin) — CONFIRMED green on #273 (`test-light-a` 3m1s); the dedicated dual-mode
-       shard stays the fallback only if that bin later hangs. **First hang observed 2026-09-08 (#277,
-       floor-perf):** `test-light-a` hung the full 6h GitHub max-timeout and was cancelled, then passed in
-       ~2min on a plain re-run — a shared-shard infra hang, not the diff (that PR's change runs in bookings'
-       NODE project, not the browser one). One data point; if it recurs, move bookings' browser tests to the
-       dedicated dual-mode shard.
-4. **Control plane brainstorm — NEW (owner-added 2026-09-05).** With one tenant per database and a
-   dedicated cloud instance per tenant, the only multi-tenant service Waitron will run is a small
-   control plane: accounts (a customer of ours, a concept the schema does not have — a tenant is a
-   taxpayer, and one customer may own several), subscriptions, instances (which box/VM serves which
-   tenant, its version; region is Spain by decision), a WireGuard keypair + endpoint per box and the
-   box's public names (no relay tokens — the relay is gone, decision 2026-09-05), and version
-   rollout per tenant. Density comes from many isolated instances per host, never a shared database.
-   Track B's relay decision is taken (2026-09-05, `2026-09-05-relay-decision.md` §3); still open
-   there and this brainstorm's to settle: one name or two for LAN-vs-remote reach.
-   Docs-only until designed; nothing here is on the sale path.
+1. **Fiscal as a module — COMPLETE** (SP-3a #238, SP-3b #240, SP-3c #245, SP-3d #248; see *Waitron
+   module system*).
+2. **`fiscal-none` module — LANDED #262** (spec `2026-09-06-module-fiscal-none-design.md`). The no-op
+   regime fills the fiscal slot with an empty runtime-duty seat and records nothing; provisioning
+   selects the fiscal module by territory (`GB-vat`→none, `ES-common`→verifactu) through one
+   `venueFiscalSelection` seam; `apps/server` imports NO regime package and `scripts/module-seams.test.ts`'s
+   `DEFERRED_RUNTIME_PASS` allowlist is EMPTY.
+   - *Left behind (none on the sale path):* de-dup the `tls.ts` mTLS test fixture (byte-copied into
+     `@waitron/fiscal-verifactu/src/testing/` because `apps/server` cannot import the regime) into a
+     neutral shared testing home; remove the inert `VerifactuBackendOptions.resolveClient`/`skipRetryMs`
+     (dozens of construction sites pass an inert resolver); the browser setup wizard offers `ES-common`
+     only, so a GB/no-regime venue is CLI/test-provisionable but not wizard-reachable (a territory picker
+     is its own UI change); the Task-8 provision-only gate keeps a synthetic-module test for the
+     `provision_only_disabled` branch (no real non-fiscal provision-only module exists).
+   - **English-only generic guard — LANDED #266.** Owner principle (2026-09-07): Spanish only in
+     Spain-specific modules (verifactu, workforce-es, reporting = modelo 303); core/generic code is
+     English — identifiers, strings AND comments. The guard scans comments (quotations intact);
+     `provisioning`/`tunnel`/`payments-stripe`/`ui`/`migrations`/`fiscal-none` are scanned, `reporting`
+     is not. The inert tax-model slot value went `iva`→`vat` (item 7). Design:
+     `superpowers/specs/2026-09-07-english-only-generic-english-design.md`. *Remaining follow-on:* make
+     provisioning's tests regime-agnostic against `fiscal-none` and drop the production-only test
+     exemption (spec §6 step 5).
+3. **Bookings as the first UI-bearing module — SP1 LANDED #270, SP2 LANDED #273.** SP1: `@waitron/bookings`
+   owns its tables (own migration set), verbs + routes behind a typed `routes` seat `boot.ts` mounts
+   generically, a `permissions` seat (`booking.manage`), a `floorAnnotations` seat, classification
+   `state`; request + cookie helpers lifted to `@waitron/server-kit`. Floor coverage bar (a domain
+   module, like workforce). SP2: the reusable dashboard module-UI seat — a module ships a
+   `DashboardContribution` from a `./dashboard` browser sub-path (screen + nav + i18n + permission
+   gate), `@waitron/dashboard-modules` is the browser twin of `ALL_MODULES`, `@waitron/dashboard-kit`
+   holds the i18n/code-message registries + request primitive, `getMe` returns effective `permissions`
+   + enabled `modules`; guarded by `scripts/dashboard-browser-purity.test.ts` + a Vite-build backstop.
+   Specs/plans: `superpowers/{specs,plans}/2026-09-07-module-bookings-sp{1,2}*.md`.
+   - **§3 by-id read-leak family — fixed in three PRs** (#270 the booking verbs + `openTab`; #276
+     `createOpenOrder`'s delivery-table pre-check; #278 `lockOpenTab`/`assertTabOpen`/`mergeTabs`/
+     `moveTabLines`/`parkOrder`'s replay/the eleven `till-sale.ts` reads — helpers now take `cfg`, not
+     a bare `tenantId`). **Still open, SEPARATE classes:** (i) request-supplied TABLE-id reads —
+     `moveTab`/`joinTable`'s `toTableId`, `assertTableAvailable`; (ii) `ticket_items` by-id
+     reads/updates in `bumpCourseReady`/`advanceTicketItem`/`advanceTicket` (still `_cfg`, unscoped —
+     the KDS §3 class).
+   - *Design notes for SP2+:* `CoreServices` is one shared interface every module receives whole — when
+     a second core verb is needed, prefer per-module narrow required-services interfaces;
+     `floorAnnotations` is single-purpose (`{reservedTime}`) — generalise only when a second annotator
+     appears. `floor.ts`'s per-poll `locations.time_zone` read is left as-is (#277 memoized the
+     formatter only).
+   - **Follow-ons SP2 unblocks:** migrate the other ~22 core dashboard screens onto the seat
+     incrementally; migrate core screens off the coarse `requiresManager` gate onto permission ids.
+   - **CI:** bookings' browser vitest runs in the shared `test-light-a` shard. One hang observed
+     (#277: the full 6h GitHub timeout, then ~2 min on re-run — a shared-shard infra hang, not the
+     diff). If it recurs, move bookings' browser tests to the dedicated dual-mode shard.
+4. **Control plane brainstorm (owner-added 2026-09-05).** With one tenant per database and a
+   dedicated cloud instance per tenant, the only multi-tenant service Waitron runs is a small control
+   plane: accounts (a customer of ours — one customer may own several taxpayers), subscriptions,
+   instances (which box/VM serves which tenant, its version; region Spain), a WireGuard keypair +
+   endpoint per box and the box's public names, version rollout per tenant. Still open from the relay
+   decision (§3): one name or two for LAN-vs-remote reach. Docs-only until designed.
 5. **Reconsider the backup container against off-the-shelf** (brainstorm, not a mandate): `WBA1` +
    `artifact-cipher.ts` (whole-dump in memory, restorable only by Waitron code — `pg_dump | age`,
-   tar). The tunnel/relay half of this question moved to Track B's "decisions first" line (taken
-   2026-09-05: no relay).
+   tar).
 6. **De-triplicate the three alta builders — [owner]** in `fiscal-verifactu/src/backend.ts`
-   (`recordSale` / `recordCorrection` / `recordSubstitution`; already under *Debt → Fiscal*): needs
-   the huella-invariance re-run across all three.
-7. **Tax-model system (NEW, owner 2026-09-07).** Today the `tax` slot in provisioning's
-   territory→module registry (`ES-common → {filing:"verifactu", tax:"vat"}`) is an INERT label
-   stamped into `nodes.tax_module` and copied verbatim during mirror adoption — but nothing BRANCHES
-   on it, calculates from it, or names a receipt from it (adoption copies the value; no logic depends
-   on which value it is). The owner's intended shape: the tax MODEL (VAT / GST — different calculation, different
-   receipt layout, inclusive-vs-exclusive pricing) is GENERIC and lives in `core` with helpers; the
-   fiscal module supplies the applicable RATES and the per-jurisdiction DISPLAY LABEL (`«IVA»` in
-   Spain, "VAT" in the UK — a locale property, NOT a model property: UK and ES are both the VAT
-   model). `verifactu` would just declare "model = VAT, rates = […], label = «IVA»". Prerequisite for
-   a non-ES venue that actually charges tax; `GB-vat` currently carries `tax:"none"` because no tax
-   module is wired for it yet. Surfaced while renaming `iva`→`vat` for the English-only guard
-   (`2026-09-07-english-only-generic-english-design.md` §4).
+   (`recordSale` / `recordCorrection` / `recordSubstitution`; also under *Debt → Fiscal*): needs the
+   huella-invariance re-run across all three.
+7. **Tax-model system (owner, 2026-09-07).** Today the `tax` slot in provisioning's territory→module
+   registry (`ES-common → {filing:"verifactu", tax:"vat"}`) is an INERT label stamped into
+   `nodes.tax_module` and copied at adoption — nothing branches on it. Intended shape: the tax MODEL
+   (VAT / GST — calculation, receipt layout, inclusive-vs-exclusive pricing) is GENERIC and lives in
+   `core` with helpers; the fiscal module supplies the applicable RATES and the per-jurisdiction
+   DISPLAY LABEL (`«IVA»` in Spain, "VAT" in the UK — a locale property; both are the VAT model).
+   Prerequisite for a non-ES venue that charges tax; `GB-vat` carries `tax:"none"` until then.
+   Surfaced in `2026-09-07-english-only-generic-english-design.md` §4.
 
-**Coordination rules for the three sessions** (each paid for already, CLAUDE.md §2/§4):
+**Coordination rules for the parallel sessions** (refreshed 2026-09-08; each paid for already):
 
-- **One Chromium gate at a time (CLAUDE.md §2) — not one push at a time.** Corrected 2026-09-05: an
-  earlier wording here serialised every push, which the evidence does not support. Both 2026-08-30
-  force-quits were overlapping BROWSER-MODE coverage runs on this 64 GB box (each of `packages/ui`,
-  `apps/till`, `apps/dashboard`, `apps/setup` launches a headless Chromium; a whole-workspace run
-  launches four beside testcontainers); the owner reports ordinary hooks have run in parallel without
-  trouble. A hook launches Chromium only when its scope reaches one of those four — a change to one
-  of them, or to what they import (`@waitron/shared`, `@waitron/catalogue`, `@waitron/diagnostics`,
-  `@waitron/layouts`, or every `vitest.config.ts`, as Track A item 1 does). Before such a push,
-  `pgrep -fl "chromium_headless_shell|Chromium"` must print nothing; any other push needs no wait.
-  Never run `pnpm -r test:coverage` beside anything. Real-PG suites racing on Docker ports show as
-  `EADDRINUSE` and pass on retry (CLAUDE.md §4) — a flake, not a reason to serialise.
-- **No new CORE migration in Tracks B/C until Track A's squash lands** (the module rule already
-  forbids it without a stated reason). Module-owned migrations (Track C) are regenerated on rebase
-  per CLAUDE.md §3's recipe; whoever lands second rebases — only when its files overlap in code or
-  GitHub reports a conflict. A PR that is merely `BEHIND` (docs landed on `main`, or code in files it did
-  not touch) lands as is with `gh pr merge --squash --admin` and re-runs nothing (CLAUDE.md §6, owner
-  decision 2026-09-05, first used on #240 and #241).
-- **Shared files:** `apps/server/src/boot.ts` (A deletes role pools; B refactors workers → B6 waits
-  for A3), `packages/sync`'s apply gate (A's roles vs B's one-case trim → B does it after A3 or takes
-  the rebase), `CLAUDE.md` (A: §2–§4, B: §5, C: §3 — textual rebases), and this file (each track
-  edits its own sections plus this list; conflicts are textual).
+- **Concurrency follows measured headroom, never a count** (CLAUDE.md §2, owner 2026-09-06). Before a
+  heavy run check free memory and the heaviest processes, then scale to what is free. The one shape
+  that caused the 2026-08-30 force-quits was several sessions' browser-mode runs beside a backgrounded
+  whole-workspace `pnpm -r test:coverage`. Real-PG suites racing on Docker ports show as `EADDRINUSE`
+  and pass on retry — a flake, not a reason to serialise.
+- **Whoever lands second rebases — only on a code-file overlap or a GitHub conflict.** A PR that is
+  merely `BEHIND` lands as is with `gh pr merge --squash --admin` (CLAUDE.md §6). Module-owned
+  migrations are regenerated on rebase per CLAUDE.md §3's recipe.
+- **Shared files:** `apps/server/src/boot.ts` (Track A's edits are done; B's worker refactor is free
+  to start), `CLAUDE.md` (A: §2–§4, B: §5, C: §3 — textual rebases), and this file (each track edits
+  its own items plus this list).
 - **Comment thinning on touch only** (CLAUDE.md §1); no sweep in any track.
 - **Update this list as items land**, in the same PR.
 
-### Layout designer & device profiles (NEW — owner-inserted 2026-09-02, spec approved)
+### Layout designer & device profiles (owner-inserted 2026-09-02) — BUILT; follow-ons open
 
-A visual, HA-Sections-style **layout designer** with reusable **layout profiles** (tabs → grid →
-cards), unification of **tills into the enrolled-device model** (a `till` device kind; hardware binds
-per-device; **fiscal SIF/chain stays on the node** — H2-gated, verify-by-container + owner sign-off),
-and a dev-only **per-tab device switcher**. Replaces the narrow per-tenant `till_layouts` (dropped,
-pre-production). The owner inserted this ahead of resuming Track-2 infra. Design:
-[layout-designer-and-device-profiles](superpowers/specs/2026-09-02-layout-designer-and-device-profiles-design.md).
+A visual, HA-Sections-style **canvas editor** with reusable canvases, tills unified into the
+enrolled-device model (the fiscal SIF/chain stays on the node — its H2 receipt was signed off at
+#199), and a dev-only per-tab device switcher. Design:
+[layout-designer-and-device-profiles](superpowers/specs/2026-09-02-layout-designer-and-device-profiles-design.md);
+the sub-project specs/plans sit beside it under `2026-09-0{2,3,4,5}-sp-*` and
+`2026-09-05-device-profile-design.md`.
 
-Decomposition + order **A → C → B** (each its own spec → plan). **A and C are landed; SP-B (grid
-editor + rendering) is the sole remaining sub-project of this track.**
+**Landed:** SP-A.1 data model #194 · SP-A.2 device unification + hardware #199 · SP-C dev device
+switcher #201 (a third `WAITRON_ENV=dev` value = preproduction + `config.devMode`; the
+`x-waitron-dev-device` override honoured only under `devMode`; `POST /api/device/reset` devMode-gated)
+· SP-B: B1 grid renderer #204, B2.1 tab shell #206, B2.2 heavy-screen wrap #207, B3.1 reassign
+plumbing #209, B3.2 profile→canvas rename + the canvas editor #213, B4 old widget model dropped +
+`tenant_receipts` #218 · editor polish: fresh-display KDS enrol #221, pointer drag/resize #222,
+representative card silhouettes #223 · device profile (`device_profiles`; device → profile → canvas;
+capabilities on the profile) #231 + its follow-on batch #234 · fixed dev pairing code `DEMO` #246 ·
+`device_kind` gone, kind derives from the profile's `form_factor` #269 (Track B item 7).
 
-- **SP-A.1 — profile & card data model — LANDED #194.** Pure `@waitron/layouts` logic: form factors +
-  12-card catalogue + capability flags, per-card contract registry (config/permission/capability/
-  visibility-states/spans; `SALE_CRITICAL_CARDS` derived), fail-closed `validateProfile` +
-  CSS-injection-safe `validateThemeOverride`, built-in default profiles, `profile.invalid`/`theme.invalid`
-  error families. No DB/API/rendering/device/fiscal (those are later slices). Plan:
-  [sp-a1-data-model](superpowers/plans/2026-09-02-layout-profiles-sp-a1-data-model.md).
-- **SP-A.2 — device unification & hardware — LANDED #199 (2026-09-03; owner signed off the H2 receipt).**
-  Shipped: `till` device kind, device→profile FK + static per-device hardware
-  bindings, enrolment extension (carries profile/`till_id`/hardware; `device.till_required`/
-  `device.binding_invalid`), management API for profiles + tenant theme, server-side capability enforcement
-  (`assertDeviceCapability` for pay/drawer; `assertNotHandheld` kept for place/reprint/collect/cancel),
-  theme storage, dashboard Add-device UI, `apps/till` till-enrol screen, `dev:setup` mints a till code
-  (#246, 2026-09-06: the mint is gone — in `WAITRON_ENV=dev` the fixed code `DEMO` enrols the counter till,
-  `apps/server/src/dev-pairing.ts`).
-  The fiscal cutover — a sale's `till_id` now resolves from the authenticated device — passed its §7/§16.4
-  container+mutation receipt (`till_id` inert to the huella; `nodeId`/series stay on the node; only
-  `sales.till_id` moved). SP-A.1 deferrals (a)-(d) all folded in.
-  - *SP-A.2 follow-ups (deferred, pre-production-only edges):*
-    1. **Location-consistency guard** — a sale-capable device's assigned register (`till_id`) should live
-       in the box's configured location; nothing enforces `device.till.location == cfg.locationId` today, so
-       a mis-provisioned device could stamp a fiscal record's operation-description with a different site.
-       Add a guard at enrol or first sale. Not reachable in dev; no crash.
-    2. **Register-identity redesign (own spec, H2).** Owner question 2026-09-03: should the durable `tills`
-       table be subsumed into the device/enrollment (the enrollment *is* the register), with a generated
-       register identifier stamped instead of a `tills.id`? `till_id` is confirmed fiscally informational
-       (chain/series keyed on the NODE, `series.ts:19`), BUT `tills` is referenced by ~7 tables + provisioning
-       + the sync/replication bundle, and changing what an immutable record's `till_id` holds needs a new H2
-       receipt — a real initiative, not a cleanup. Needs its own brainstorm + full fiscal trace; capture the
-       "a moved till is a new register" philosophy there. _Decided 2026-09-05: keep `tills` as the register;
-       the philosophy is rule 3 of [`2026-09-05-register-and-device-model-decision.md`](superpowers/specs/2026-09-05-register-and-device-model-decision.md)._
-       _No-migration build LANDED (feat/device-enrolment-login, 2026-09-07): a `till` enrol auto-creates its
-       register; `till_id` semantics unchanged, so still no new H2 receipt (Track B item 7)._
-- **SP-C — dev per-tab device switcher — LANDED #201 (2026-09-03).** Shipped: a third `WAITRON_ENV=dev`
-  value that maps to `environment=preproduction` for all fiscal/AEAT/Stripe/DB-stamp code (no migration,
-  fiscal enum untouched) and additionally sets a new `config.devMode`; a dev-override header
-  `x-waitron-dev-device: <deviceId>` honoured ONLY under `devMode` at the single chokepoint `tryReadDevice`
-  (no token check, RLS/`active`-scoped, header-wins-over-cookie, no cookie fallback); dev-only
-  `GET`/`POST /api/dev/devices` (list + mint-and-adopt) and `POST /api/device/reset`; the `?dev` chooser
-  (`apps/till`) with per-tab `sessionStorage` identity + a fetch-wrapper header injector; `dev:setup` now
-  emits `WAITRON_ENV=dev` (venue still stamped/behaves preproduction). Fail-closed (inert outside dev) is
-  pinned by config-unit + real-PG override + HTTP e2e (preproduction→401), and the fiscal boundary by a
-  sale-under-override receipt test (`sales.till_id` follows the overridden device; `nodeId`/series/huella
-  unchanged). **Security note:** a review pass caught that `POST /api/device/reset` as first written was an
-  unauthenticated, always-mounted, CSRF-able cookie-clear that could 401 a live till's sales (§5); it is
-  now **devMode-gated (404 in production)**, and the spec (§4.4) + plan (Task 3) carry dated corrections
-  superseding their original "mounted always" text. Design:
-  [sp-c-dev-device-switcher](superpowers/specs/2026-09-03-sp-c-dev-device-switcher-design.md); plan:
-  [sp-c plan](superpowers/plans/2026-09-03-sp-c-dev-device-switcher.md). No SP-C follow-ups deferred.
-- **SP-B — grid editor + rendering — B1 #204; B2 (#206+#207); B3 split into B3.1 (LANDED #209, 2026-09-04) + B3.2 (LANDED #213, 2026-09-04: Phase A profile→canvas rename + Phase B the canvas editor UI); B4 LANDED #218 (2026-09-04). SP-B B1–B4 build sequence complete. Editor-polish follow-on batch also LANDED (2026-09-05): fresh-display KDS enrol #221, pointer drag/move/resize #222, representative card silhouettes #223. Larger follow-ons still open below (visual theme editor, truly-real card renders, NFC pairing, community sharing; device profile LANDED #231).**
-  The HA-Sections editor UI plus making screens render from grid profiles (wrap the bespoke
-  floor/KDS/table-order screens as cards; phased). The schedule risk. Removes the old widget model
-  (`WIDGET_TYPES`/`validateLayout`/`till_layouts`) once rendering swaps over. Design:
-  [sp-b-grid-editor-and-rendering](superpowers/specs/2026-09-03-sp-b-grid-editor-and-rendering-design.md);
-  B1 plan: [sp-b1-grid-renderer-and-counter](superpowers/plans/2026-09-03-sp-b1-grid-renderer-and-counter.md).
-  Decisions (brainstorm 2026-09-03): **rendering-first slicing** — **B1** grid renderer + counter
-  renders from profile · **B2** wrap the four bespoke screens as full-span cards + tabs/drill-in nav
-  (**owner split into B2.1 + B2.2**, spec + two plans below) · **B3** dashboard grid editor (placeholder
-  tiles *for v1*; live renders a committed follow-on) + API client + reassign-profile route · **B4**
-  drop old widget model + rehome receipt into a new `tenant_receipts` table. **Fluid width only** (no
-  column reflow; orientation = form-factor). Not H2, but must preserve the sale path. SP-B2 design:
-  [sp-b2-till-tab-shell](superpowers/specs/2026-09-03-sp-b2-till-tab-shell-and-card-wrap-design.md);
-  B2.1 plan: [sp-b2-1-tab-shell](superpowers/plans/2026-09-03-sp-b2-1-tab-shell-and-light-card-wrap.md);
-  B2.2 plan: [sp-b2-2-heavy-screen-wrap](superpowers/plans/2026-09-04-sp-b2-2-heavy-screen-wrap.md).
-  - **B1 LANDED #204:** `GET /api/till` resolves a `ProfileDef` for every enrolled device (explicit →
-    else form-factor default via `deviceFormFactor`; cookieless unchanged); till-local `ProfileDef`
-    mirror + `till-card-grid` fluid renderer; the counter renders from its profile `counter` tab with
-    the region model kept as a fallback (removed in B4); `till-app` boots the counter into its profile.
-    Owner call: the default counter drops the prep-queue rail (SP-A's `DEFAULT_PROFILES.till` has no
-    prep-queue card) — **shipped as-is**; revisit default-profile content separately if wanted.
-  - **B2.1 LANDED #206 (2026-09-03):** the `till-tab-shell` (tab bar from `profile.tabs` + relocated
-    header chrome + a `drill` overlay slot) and a transient **drill-in nav stack** in `till-app` that
-    replaces the `screen`-enum for the authenticated operator surface **when a profile is present**;
-    the legacy `screen`-enum stays as a fallback (removed in B4). Every tab renders through
-    `till-card-grid`, which gained the three visibility axes — **capability→absent** (with a hard
-    `tender-pay` cash carve-out that always renders), **permission→locked** (`inert` dimmed cell; only
-    `table-layout-editor`/`till.configure`), and **`visibleWhen` fail-OPEN** for uncomputable state.
-    **expo** and **floor-plan** are wrapped as embedded full-span cards (an `embedded` prop suppresses
-    their own header/Back). The four B1-review follow-ups (a)-(d) are all folded in — note (d) is now
-    fail-**open** (was fail-closed). Not fiscal; the sale path was verified end-to-end through the
-    shell. Reachability kept profile-neutral (station/expo/schedule reachable as affordance drill-ins;
-    default-profile content + capability-driven reachability deferred to the B3 editor).
-  - **B2.2 LANDED #207 (2026-09-04):** the two **heavy** screens — **station** (kds-board) and
-    **table-order** — are wrapped as embedded cards (their own header/Back suppressed via the same
-    `embedded` seam expo/floor use; body-function controls — station's view-toggle, table-order's
-    drawer-handle — kept in an always-present actions bar). `till-card-grid` now renders `kds-board` →
-    `<till-station-screen embedded>` (device-mode/enrol props threaded) and `table-order` →
-    `<till-table-order-screen embedded>`; **only `notifications` still renders `nothing`**. The first
-    **reachable** `kds-board` capability→absent skip is un-skipped and proven by deletion. The profile
-    shell is **re-enabled for handheld + kds** (`#shellActive()` fence dropped): owner call 2026-09-04 —
-    **handheld = full shell header** (operator + Logout) with **no** Station/Expo/Schedule affordances;
-    **kds = kiosk** (a `tab-shell` `kiosk` flag suppresses the whole operator header). Handheld
-    table-order **mount duality**: opening a table switches to the **Order tab card** (a till keeps the
-    B2.1 open-table drill); the return to floor is the **Floor-tab tap**. Not fiscal; the sale path is
-    untouched (counter tab + `tender-pay` unchanged; table-order's embedded `tender-pay`/`pay-tab`
-    intact). Coverage held 95/95/90/88 (1201 till tests).
-  - **B2.2 review fixes (folded into #207):** two handheld post-transaction paths written when
-    handheld/kds were legacy-only were corrected — `#onNewSale` now lands on the device's **home tab**
-    (`profile.tabs[0]`, not a hardcoded `"counter"` a handheld has no tab for) and refreshes a stale
-    floor after a tab settlement; `#onLoggedIn`'s floor prefetch is guarded on `!#floorLoaded` so a
-    handheld login loads the floor once, not twice. A speculative dead `#onBackToFloor` branch (+ its
-    synthetic-event test) was removed in the simplify pass (the embedded card suppresses its Back, so
-    `back-to-floor` is only reachable from a till drill).
-  - **B2.2 deferrals (recorded, not blocking):** a handheld's **Order tab is directly tappable with no
-    active table**, showing an empty table-order surface — accepted as the authored-profile behaviour
-    (the owner authors `order` as a tab); revisit in the B3 editor if it wants a guard. A pre-existing
-    `till-floor-screen` doc comment that names `#goToScreen`'s face-set gate as the `back-to-counter`
-    guard is now slightly inaccurate for the shell path but **unreachable** (the embedded floor card
-    sets `canExitToCounter=false`) — left as-is (unedited file).
-  - **B2.1 deferrals (still recorded):** the boot-into-floor prefetch block in `#onLoggedIn` (the
-    `#inShell()` + `#tabNeedsFloorData(firstTab)` reload) is now guarded on `!#floorLoaded`, so it is
-    **still unreached by any shipped profile** — the handheld (phone) IS floor-first but its login loads
-    the floor via `#onShowFloor` first (setting the flag), and no non-handheld floor-first profile
-    exists yet; add a deletion-proof when the B3 editor lets the owner author one. The redundant "STILL
-    hides" held-orders test in `card-grid.test.ts` (harmless) remains.
-  - **B3 owner-split into B3.1 (plumbing) + B3.2 (editor), 2026-09-04.** The mechanical plumbing (route +
-    client + reassign control) front-loads value and de-risks the hard editor UI, mirroring the B2 split.
-    B3.1 plan: [sp-b3-1-reassign-plumbing](superpowers/plans/2026-09-04-sp-b3-1-reassign-plumbing.md).
-  - **B3.1 LANDED #209 (2026-09-04):** an owner can **reassign** an enrolled device to a different layout
-    profile — or clear it back to the form-factor default — from the dashboard Devices screen, without
-    re-enrolling. `POST /management-api/devices/:id/assign-profile` (gated `device.manage`, in
-    `device-api.ts` beside the sibling device routes — owner call, departing from §8's `PUT`/`till.configure`;
-    same roles). A bad/foreign profile → `device.binding_invalid` via the composite FK
-    `devices_layout_profile_fk` translated by `bindingFkField` (atomic, tenant-isolated — no read-then-write
-    race; Copilot-hardened from an initial `getProfile` pre-check). `GET /management-api/devices` now returns
-    `layoutProfileId`; the dashboard grows `reassignDevice` + a per-active-row profile `<select>`. The five
-    profile-CRUD endpoints (list/get/create/update/delete) already existed server-side (verified) — untouched;
-    the editor that calls them is B3.2. No migration / no new grant / not fiscal. B3.1's fuller value lands
-    with B3.2 (authored profiles to choose from).
-  - **B3.2 (LANDED #213, 2026-09-04):** the dashboard **canvas editor**, split into its
-    own Phase A + Phase B (owner call 2026-09-04, distinct from the B3.1/B3.2 split above). Design:
-    [sp-b3-2-canvas-editor-design](superpowers/specs/2026-09-04-sp-b3-2-canvas-editor-design.md); plans:
-    [sp-b3-2a-profile-to-canvas-rename](superpowers/plans/2026-09-04-sp-b3-2a-profile-to-canvas-rename.md),
-    [sp-b3-2b-canvas-editor](superpowers/plans/2026-09-04-sp-b3-2b-canvas-editor.md). Parent design §8 (now
-    carries a dated pointer to the rename).
-    - **Phase A — `profile` → `canvas` rename, LANDED #213 (behaviour-preserving).** Today's
-      "layout profile" is renamed **canvas**, reserving "profile" for a future, bigger device profile
-      (capabilities are staying on the canvas record **transitionally** — see the deferral below). Renamed:
-      table `layout_profiles`→`canvases` (RENAME migration, not drop/recreate — an FK-target constraint
-      can't be dropped); type `ProfileDef`→`CanvasDef`; error codes `profile.*`→`canvas.*`; the
-      `devices`/`device_pairing_codes` `layout_profile_id` column→`canvas_id`; routes
-      `/management-api/profiles[/:id]`→`/management-api/canvases[/:id]` and
-      `/management-api/devices/:id/assign-profile`→`/assign-canvas`; the till's `TillInfo.profile`/`/api/till`
-      `profile` key→`canvas`, including the SP-C dev-switcher's till-side mirror (`DevProfile`→`DevCanvas`,
-      not in the original task inventory, caught in review); the dashboard client type
-      `LayoutProfile`→`Canvas`. No behaviour change, no new grant, no new table. Whole-workspace
-      `pnpm test` green after the final task (30 packages / 10038 tests).
-    - **Phase B — the canvas editor UI, LANDED #213.** The management dashboard's
-      `dashboard-canvas-editor-screen` (nav `nav.canvases`): a **list mode** (create-from-default-per-form-factor,
-      duplicate, delete, with a per-row `<canvas-grid-preview>` thumbnail of the first tab) and an
-      **editor mode** (tab bar with add-tab/tab-settings, the placeholder-tile canvas, a card palette from
-      `CARD_CONTRACTS`, and a property panel per card/tab/canvas — colSpan/rowSpan steppers, per-card
-      config + `visibleWhen` toggles + permission/capability warnings, tab title/columns/last-tab-guarded
-      delete, canvas name/form-factor/capabilities). Client-side `validateCanvas` mirror (a DB-free
-      deep-import of the pure `@waitron/layouts` `card-contract`/`canvas` modules, drift-guarded) + a local
-      contract mirror keep the #70 bundle rule (the dashboard never runtime-imports `@waitron/layouts`;
-      `definition` crosses the client boundary as `unknown`, defensively parsed). +4 API-client methods
-      (`listCanvases`/`getCanvas`/`createCanvas`/`updateCanvas`/`deleteCanvas`). a11y-clean in both themes
-      (the tab bar is a plain button group with `aria-current`, **not** an ARIA `tablist` — `wt-button`
-      wraps a native button, so `role="tab"` on the host nests interactive controls; fixed in B8). Dashboard
-      `test:coverage` green (1285 tests, 95/95/90/88). This was the SP-B **schedule risk** (the
-      product-facing UI). Built tasks B1–B8; a11y + final gate = B8.
-    - **Deferred follow-ons from Phase B:**
-      - **Pointer drag / move / resize — LANDED #222 (2026-09-05).** Direct-manipulation drag-to-reorder
-        (Pointer Events, threshold + drop indicator, emits `move-card`) + corner-handle resize (snaps to
-        whole columns/rows, emits `resize-card`) on the editor tiles; the property-panel steppers + ↑/↓ stay
-        as the keyboard/a11y path. The preview stays a pure view emitting intents; the screen owns mutation.
-      - **Live card renders — LANDED #223 (2026-09-05, representative, NOT the real cards).** The real till
-        widgets can't be reused (they live in `apps/till`, need live POS stores + ~30 props, and importing
-        them or `@waitron/layouts` breaches the #70 bundle rule), so #223 ships dashboard-local static
-        *representative silhouettes* per card type (`card-preview.ts`: exhaustive switch, memoized) — a
-        recognizable shape per type, no data, decorative (`pointer-events:none`/`aria-hidden`) so the drag/
-        resize seam still works. **Still open — truly-real cards** would need a neutral browser-safe shared
-        card package both apps import (extracting the till widgets off their live stores/props): a separate,
-        larger initiative, not started.
-      - **Visual theme editor** (also listed under Follow-ons below).
-      - (Clone/duplicate already shipped in Phase B — no longer a follow-on.)
-    - **Deferred follow-on — device profile — LANDED #231 (2026-09-05).** The
-      **skeleton + capabilities** slice of the future bundle. A first-class **`device_profiles`** table
-      (`name` + a nullable `canvasId` FK + a validated `capabilities` jsonb array) with FORCE RLS +
-      tenant-isolation + the composite `(tenant_id, canvas_id) → canvases` FK; the device now carries a
-      **`device_profile_id`** and its old `canvas_id` was **dropped** (0110), so the binding is a single
-      chain **device → device profile → canvas** — a device with no profile falls back to the form-factor
-      default canvas and empty capabilities (fail-closed firewall). **Capabilities relocated off the
-      canvas onto the profile** (`CanvasDef` no longer carries a `capabilities` field; the `/api/till`
-      payload returns `capabilities` as a sibling of `canvas`). CRUD `/management-api/device-profiles`
-      routes + a dashboard device-profile editor screen + the devices screen assigning a profile;
-      enrolment/reassign thread `device_profile_id`; `dev:setup` seeds a default "Counter" profile and
-      stamps it on the till pairing code (#246, 2026-09-06: provisioning seeds the starter set and the fixed
-      dev code `DEMO` binds the till one at enrol, `apps/server/src/dev-pairing.ts`). Spec
-      [device-profile-design](superpowers/specs/2026-09-05-device-profile-design.md). **Still
-      per-device (NOT relocated):** till / station / hardware. **Still deferred:** area / order-routing /
-      printer-target aggregation. **Deferred follow-ons this slice leaves open** — the follow-on batch
-      LANDED #234 (2026-09-05) closed (b), (c) and (d); **(a) the
-      aggregated bundle is now the sole deferred item:**
-      - **(a) The aggregated bundle** — relocating till / station / hardware onto the profile and adding
-        area / order-routing / printer-target, the larger "profile" the SP-B rename reserved the word for.
-      - **(b) Tenant-facing default profiles — LANDED #234 (2026-09-05).** `provisionVenue` now
-        seeds every new tenant a starter device-profile set (find-or-create by name, locale-resolved
-        names, `canvasId: null` → the form-factor default canvas), authored by the seeded admin on the
-        caller's tenant-scoped tx; `DEFAULT_DEVICE_PROFILES` shared with the dev seed.
-      - **(c) The SP-C dev-switcher device-profile picker — LANDED #234 (2026-09-05).** The dev
-        role can switch which profile the current device carries from the in-app switcher; dev-minted
-        devices now carry a `deviceProfileId`.
-      - **(d) A clean 4xx on an in-use delete — LANDED #234 (2026-09-05).** Both stores now
-        translate the FK `ON DELETE RESTRICT` `23001` restrict_violation into a clean 409 —
-        `device_profile.in_use` (`device-profile-store.ts`) / `canvas.in_use` (`canvas-store.ts`) —
-        matched on the referencing constraint so an unrelated RESTRICT is never mislabelled.
-  - **B4 LANDED #218 (2026-09-04):** dropped the old widget model and rehomed the non-fiscal
-    receipt trim. **Removed:** `WIDGET_TYPES`/`WidgetInstance`/`LayoutDef`/`Region`/`WIDGET_CONFIG`/
-    `validateLayout`/`store.ts`/`DEFAULT_LAYOUT` from `@waitron/layouts`; the till's region render
-    (`#renderScreen`/`#layoutFor` and the legacy `screen`-enum fallback); the old dashboard widget
-    editor; the `layout` field of `GET /api/till`; the `layout.invalid` error code; the
-    `till_layouts` table (0105 DROP); the old `@waitron/layouts` widget exports and the
-    `/management-api/layout` routes. **Rehomed:** the non-fiscal receipt trim into a new
-    `tenant_receipts` table — **0103** create + **0104** custom RLS (FORCE ROW LEVEL SECURITY +
-    `tenant_receipts_tenant_isolation` policy + SELECT/INSERT/UPDATE grants to `app_user`) — behind a
-    `receipt-store` (`getReceipt`/`putReceipt`) and `GET /management-api/receipt` (the dashboard
-    receipt editor repointed at it). **Counter render:** `GET /api/till` now always resolves a canvas
-    for every request — including cookieless, which falls back to the `till` form-factor default —
-    so the counter renders from a canvas only; the sale-path invariant is preserved by guaranteeing a
-    canvas is present *before* the region fallback was removed. **Not fiscal** — `nodeId`/chain/series
-    untouched. (The one behaviour change surfaced is recorded as the deferred follow-on immediately
-    below.)
-  - **SP-B4 deferred follow-on — fresh-display KDS enrol flow — LANDED #221 (2026-09-05).** Fixed with the
-    enrol-overlay approach: the lock screen's *set up as kitchen display* affordance now opens a standalone
-    pairing-code enrol overlay (an `enrolling` state), symmetric with the till/handheld `setup` paths, and a
-    redeemed code re-boots so the `kds_station` cookie boots the display into the kiosk shell — post-enrol
-    routing stays in `#boot`, not the screen. The rule-of-three that this surfaced was collapsed too: the
-    two standalone enrol screens (`till-enrol-screen`, `till-handheld-enrol-screen`) became one
-    `till-device-enrol-screen` parameterised by `kind`, and `till-app`'s two `…Enrolling` booleans became one
-    `enrolling` enum (net −139 lines). The station screen's own device-mode enrol sub-view is now unreachable
-    via the app but left in place — a possible later cleanup.
-- **Follow-ons:** visual theme editor · NFC pairing runtime + payment routing (payments-gated on the
-  SumUp questions) · community profile sharing.
+**Open follow-ons:**
 
-### Waitron module system (NEW — 2026-09-04; architecture landed on main; framework + fiscal exemplar)
+- **The aggregated device-profile bundle** — relocating till / station / hardware onto the profile and
+  adding area / order-routing / printer-target: the larger "profile" the SP-B rename reserved the word
+  for.
+- **Truly-real card renders in the editor** — needs a neutral browser-safe shared card package both
+  apps import (extracting the till widgets off their live stores/props); #223's silhouettes are the
+  placeholder. A separate, larger initiative.
+- **Visual theme editor** · **NFC pairing runtime + payment routing** (payments-gated on the SumUp
+  questions) · **community canvas sharing**.
+- **Location-consistency guard** (SP-A.2 follow-up 1): nothing enforces that a sale-capable device's
+  register lives in the box's configured location, so a mis-provisioned device could stamp a fiscal
+  record's operation description with a different site. Add a guard at enrol or first sale.
+- **Recorded, not blocking:** a handheld's Order tab is directly tappable with no active table
+  (authored-profile behaviour; revisit if the editor wants a guard); the boot-into-floor prefetch in
+  `#onLoggedIn` is unreached by any shipped canvas — add a deletion-proof when the editor lets the owner
+  author a non-handheld floor-first canvas; the station screen's own device-mode enrol sub-view is
+  unreachable via the app but left in place; the default counter canvas has no prep-queue rail (owner
+  shipped as-is — revisit default content separately).
 
-Turn each domain into an optional, swappable **module** owning its own schema+migrations, sync enrolment,
-UI cards, vocabulary, theme, privileges and cronjobs, plugged into a generic core that imports nothing
-domain-specific (composition-root DI + an open registry set). Emerged from the H2 fiscal-sync work hitting
-the english-only guard: the generic sync layer *imports* domain schema, so the owner ruled to invert it —
-the generic mechanism knows nothing; each domain declares its own. Generalised across schema/sync/UI/
-vocabulary. **H2 fiscal-record sync is now SP-3 of this initiative**, not a standalone track. Architecture:
+### Waitron module system (2026-09-04) — framework + fiscal exemplar BUILT; follow-ons open
+
+Each domain is an optional, swappable **module** owning its own schema + migrations, replication
+classification, UI, vocabulary, theme, privileges and cronjobs, plugged into a generic core that
+imports nothing domain-specific (composition-root DI + an open registry set). Architecture:
 [module-system-architecture](superpowers/specs/2026-09-04-module-system-architecture-design.md).
+**Scope (owner):** framework + fiscal exemplar; extracting the other core-trapped domains
+(kitchen/catalogue/tables/…) and the runtime code-distribution mechanism (signed bundles across nodes)
+are designed seams, deferred. **Key decisions:** enablement = an on-box `modules.json` reconciled at
+boot (default-on; soft-disable keeps data); each node runs its OWN migrations (replication copies rows,
+not DDL), with the standby-first migration check (Track A step 5) as the schema-skew guard.
 
-**Scope (owner, 2026-09-04): framework + fiscal exemplar.** Prove the framework on fiscal (the swappability
-driver — country-selected: Spain → `fiscal-verifactu`). Extracting the other core-trapped domains
-(kitchen/catalogue/tables/…) into modules, and the runtime **code-distribution** mechanism (signed bundles
-across nodes; fiscal is its first future consumer), are **designed seams, deferred**.
+**Landed (each its own spec/plan under `2026-09-0{4,5,6}-module-sp*`):** SP-1a module contract +
+migration source #212 · SP-1b enablement + reconcile #215 · SP-1c versioned ordering #217 · SP-1d
+adopt-bootstrap of the enabled set #220 · SP-2a package-owned enrolment + the graph-honesty guard #227
+· SP-2b schema-version handshake #230 (its park machinery was deleted with the outbox in #280; the
+producer `schemaVersionsByModule` survives) · SP-3a fiscal-record lane #238 (its capture DDL deleted in
+#280 — fiscal rows now travel by classification with `ENABLE ALWAYS` reject-mutation triggers) · SP-3b
+vocabulary #240 · SP-3c gated provisioning + `@waitron/composition` #245 · SP-3d backup/restore hook
+(= BR-4) #248 · `fiscal-none` #262 · bookings SP1/SP2 #270/#273 (Track C).
 
-**Key model decisions** (in the architecture spec): enablement = an on-box desired-state module config file
-reconciled against the `deployment` stamp at boot; the module set is deployment-wide (bootstrapped at adopt,
-flowed down from the primary, applied on reboot); **soft-disable keeps data**; each node runs its OWN
-migrations (sync replicates rows, not DDL) with a **schema-version handshake** so a subscriber never applies
-rows newer than its migrated schema (owner chose this over DDL-over-sync).
+**Open:**
 
-**Decomposition (each its own spec → plan → PR):**
-
-- **SP-1a — module contract + migration source inversion — LANDED #212 (2026-09-04).** `@waitron/module`
-  (`WaitronModule` + `orderedMigrationSets`), `expected/appliedSchemaVersion` primitives, `ALL_MODULES`
-  (nine descriptors) in the composition root, boot deriving its migration list from `ALL_MODULES`
-  (behaviour-preserving; manifest kept as a live source for provisioning/dev/bundling, the two encodings held
-  equal by a pin). **Descriptors are centralized for SP-1a** (generic fields only); **package-ownership
-  begins in SP-2** (first domain content). Copilot caught two real ones no other layer did (a false
-  `name`==table-suffix claim; `drizzle-orm` had to become a production dep). Spec:
-  [sp-1a](superpowers/specs/2026-09-04-module-sp1a-contract-and-migration-source.md).
-- **SP-1b — enablement + reconcile — LANDED #215 (2026-09-04).** On-box `modules.json` (sparse override
-  map, **default-on**: a module is enabled unless explicitly `false`) → boot filters the **trading-mode**
-  migration list by the enabled set (setup still migrates all) + a drift log; `provisionVenue` **refuses**
-  venue provisioning when a `provision-only` module (fiscal) is disabled — step 0, before any DB write.
-  Key deviations from the architecture, both deliberate: actual state is **derived** from
-  `appliedSchemaVersion` (**no `deployment` column** — nothing to keep consistent), and the fiscal gate is
-  a **loud refusal**, not a working fiscal-less venue — `applyVenue` mandates a SIF (`venue-apply.ts`), so
-  that path is SP-3. _(2026-09-05, SP-3c: `applyVenue` mandates no SIF any more — it runs whatever
-  `provisioning.seed` the module list it is handed carries. The refusal itself is unchanged; a working
-  venue with no fiscal identity now needs `fiscal-none`, not SP-3.)_ The SP-1a migrate/seed
-  forward-warning is addressed by gating the seed (refusal) and
-  showing the migrate-path divergence benign (over-migration lands as soft-disable), source-unification
-  deferred to SP-3. Error code `module.mandatory_not_disableable` is tier-driven (names no module).
-  Behaviour-preserving by default. Copilot approved; both its comments (409 status mapping; drop an
-  unreceipted privilege claim) applied. **Deferred follow-ups:** (a) only the `provision-only` tier is
-  guarded — a **toggleable** module that is actually load-bearing (identity/sync/payments, still
-  statically wired) fails boot loudly if disabled, until the SP-2/SP-4 wiring inversion + core-extraction;
-  (b) the trading filter also runs in **mirror** mode, so **SP-1d** must keep a mirror's enabled set
-  consistent with its primary's; (c) **each module will own its own testing** — add `testing` to the
-  module contract at **SP-2** (owner steer 2026-09-04). Spec/plan:
-  [sp-1b](superpowers/specs/2026-09-04-module-sp1b-enablement-and-reconcile.md).
-- **SP-1c — versioned migration ordering — LANDED #217 (2026-09-04).** `orderedMigrationSets` rewritten from
-  `modules.map(...)` into a pure resolve-validate-and-order: it validates every declared `requires` edge
-  (semver-range compatibility via the newly-pinned `semver` dep, dependency presence, malformed-range
-  rejection), detects cycles, and returns the sets in a **stable topological order** (Kahn's algorithm, input
-  order as the tie-break — reproduces the manifest order, so SP-1a's pin still holds and now also proves the
-  sort). `requires` populated on the nine descriptors from the **verified** cross-set graph. Four new
-  `module.*` codes (`dependency_missing`/`dependency_cycle`/`incompatible_version`/`requires_invalid`).
-  Behaviour-preserving; schema-version gate **deferred** (owner call — topo order already guarantees
-  core-before-dependents within one boot; the cross-node gate is SP-2). The **dependency-presence** check is
-  the one part tripping today: SP-1b's `modules.json` can disable `identity` with `workforce` still on, which
-  SP-1c now refuses at boot (`module.dependency_missing`) before migrating — proven by a real-PG boot test.
-  **Key review find:** the first-pass graph was FK-only and missed `sync → {identity, payments}` — `sync`
-  attaches to those modules' tables via `CREATE TRIGGER … ON`, not FKs; fixed, and recorded as a durable
-  CLAUDE.md §3 lesson (grep both FK `REFERENCES` and `CREATE TRIGGER … ON` when deriving a module graph).
-  Copilot approved (5 minor doc/comment nits, all applied). **Deferred, surfaced not built:** (a) a
-  graph-honesty guard that scans the drizzle SQL and asserts each descriptor's `requires` names every FK/
-  trigger dependency — deferred to **SP-2** where descriptor package-ownership begins and the guard has a
-  natural home; until then §3's table is the receipt; (b) provisioning's migrate path still runs the linear
-  full `manifestSets()` (already a valid order) — must route through the resolver once it gains per-module
-  enablement; (c) folding `requires.core` into `requires.modules` to drop the special-case + `core: "*"`
-  boilerplate — declined here (changes the SP-1a owner-reviewed contract shape; `core` is deliberately the
-  special mandatory root), a candidate if the contract is revisited later. Spec/plan:
-  [sp-1c](superpowers/specs/2026-09-04-module-sp1c-versioned-ordering.md).
-- **SP-1d — cross-node config replication.** Adopt-bootstrap half **LANDED #220 (2026-09-05):** a
-  mirror inherits the primary's
-  enabled-module set at adopt — the primary's `modules.json` overrides ride the existing
-  mirror-bundle handshake (`MirrorBundle.moduleOverrides`, minted fresh at assemble time), and
-  `adoptFromPrimary` re-validates them against the mirror's own `ALL_MODULES` (fail-closed) and
-  writes the mirror's own `modules.json` before it first enters trading mode. New:
-  `serializeModuleConfig` (`@waitron/module`), `writeModuleConfig` (`apps/server`). No schema
-  change, no new error code, no DB row — SP-1b's on-box-file decision preserved; the bundle
-  carries a snapshot, not a live channel. Honest scope: on a fresh mirror this does **not** prevent
-  a migration wedge (setup already migrates every table); it makes the mirror's enabled **set**
-  equal the primary's, for honest reconcile drift today and SP-2's per-enabled-module pull
-  tomorrow. **Ongoing flow-down deferred**, with two receipts: (a) no config channel exists to
-  carry a later primary-side change — sync replicates tenant rows, `modules.json` is an on-box
-  file, and `deployment`/`mirror_config` are non-tenant singletons that can't ride the RLS lane;
-  (b) nothing is disableable today (eight effectively-core modules, fiscal always-on), so there is
-  no live case to prove flow-down against yet. Folds into **SP-2**'s scope, built alongside the
-  first genuinely-toggleable module. Spec:
-  [sp-1d](superpowers/specs/2026-09-04-module-sp1d-adopt-bootstrap-design.md).
-- **SP-2a — sync enrolment inversion + graph-honesty guard — LANDED #227 (2026-09-05).** SP-2 split
-  into two slices (owner decision 2026-09-05, SP-2b below). Every domain package declares its own sync **enrolment** via the new leaf
-  `@waitron/sync-enrolment` (`enrol()` derives each entry's table + column list off the owning
-  package's own Drizzle schema, so it cannot drift); `@waitron/sync` imports no domain schema and
-  drops `@waitron/payments` entirely, keeping `@waitron/identity` **only** for `peers.ts`'s scrypt
-  helper (a pre-existing #144 non-schema coupling, not enrolment). Package-owned enrolment lands for
-  core/identity/payments; `apps/server`'s composition root assembles the injected set and wires it
-  into the sync runtime. Picks up SP-1c's deferred graph-honesty guard
-  (`scripts/module-graph-honesty.test.ts`, matching `CREATE TRIGGER` and `CREATE CONSTRAINT TRIGGER`
-  against every package's `drizzle/*.sql`) plus a real-PG completeness pin (the assembled enrolment's
-  table set equals the tables actually carrying an installed `sync_capture` trigger).
-  Behaviour-preserving — same 22 tables, identical generated apply SQL. Spec:
-  [sp-2a](superpowers/specs/2026-09-05-module-sp2a-sync-inversion-design.md).
-  **Deferred follow-up (Option B, spec §2e):** `@waitron/sync` still depends on `@waitron/identity`
-  for `peers.ts`'s scrypt helpers (`hashSecret`/`verifySecret`, `secret-hash.ts` — a #144 non-schema
-  coupling). Relocating those to a leaf (`@waitron/shared`) would let `@waitron/sync` depend on **no**
-  domain package at all — a real improvement, but it touches `@waitron/identity`'s public surface and
-  every `hashSecret` consumer, so it was out of scope for this schema-inversion slice. Small,
-  unclaimed, do-anytime.
-- **SP-2b — schema-version handshake + park gate — LANDED #230 (2026-09-05).** _(Step-4 note: the
-  `/sync-api/hello` transport and the apply-time park machinery described here were DELETED with the
-  outbox in Track A item 3 step 4; the schema-version PRODUCER `schemaVersionsByModule` survives, and
-  the standby-first migration check that replaces the park gate is step 5. The rest of this entry is the
-  #230 mechanism as landed, kept for history.)_ `/sync-api/hello` gains
-  `moduleVersions: Record<string, number>`, a boot snapshot of each module's **applied** (not
-  shipped) schema version. A subscriber compares its own applied version per module and **parks**
-  (never applies, never drops) a row whose owning module the source has migrated ahead of it,
-  funnelled through the existing at-least-once `deferred`/park machinery (`apply.ts`) — the lane
-  cursor holds strictly below the parked seq and redelivers it once the subscriber reboots and
-  migrates; convergence is the rolling reboot. Module identity at apply time comes from a
-  `table → module` map (`MODULE_BY_TABLE`) built at the composition root and threaded into
-  `applyBatch` alongside the version maps — SP-2a's `EnrolledTable` type and its threading are
-  untouched. Closes the silent-corruption hazard: `jsonb_populate_record` drops a JSON key with no
-  matching column, so an unparked source-ahead row would look complete but lose data — proven by
-  deletion (remove the version check and an ahead-module's row applies with its new column silently
-  gone). No migration, no new error code (a `versionParked` counter + log line instead — the park is
-  a normal operational state, not an error), behaviour-preserving with no version skew (equal
-  versions never park; an older peer that omits `moduleVersions` gates nothing). Spec:
-  [sp-2b](superpowers/specs/2026-09-05-module-sp2b-schema-version-gate-design.md).
-  **Deferred, same ruling as the gate itself (spec §2/§7.1): the "pull only your enabled modules"
-  source filter.** Cursor-unsafe with today's single per-lane cursor — excluding a module's tables
-  source-side while the cursor still advances past the excluded rows would delete history a
-  subscriber can never recover if it later re-enables that module — and there is no live case
-  (nothing is genuinely toggleable, SP-1b/SP-1d). Built alongside the first genuinely-toggleable
-  module, designed against the enablement lifecycle then.
-- **SP-3 — fiscal as a module (= H2's fiscal-record lane)** + vocabulary + gated provisioning; swappable. The
-  standalone H2 spec/plan (branch `feat/h2-fiscal-record-sync`, never merged) are reference material for this.
-  SP-3 was split into **four slices** (owner decision 2026-09-05, during the SP-3a brainstorm), each its
-  own spec→plan→PR under the architecture-spec umbrella: **3a** sync lane, **3b** vocabulary, **3c**
-  gated-provisioning seam, **3d** backup/restore hook (= BR-4, folded into SP-3 by owner decision).
-  - **SP-3a — fiscal-record sync lane — LANDED #238 (2026-09-05).** _(Step-4 note: the capture DDL, the
-    `sync_capture()` SPI edge and the manifest reorder described here were DELETED in Track A item 3 step
-    4 — fiscal rows now flow via native logical replication, keyed by `node_id`, with `ENABLE ALWAYS`
-    reject-mutation triggers instead of the app-role apply; `graph-honesty` still derives the trigger
-    edge though no module creates one today. The rest is the #238 mechanism as landed, kept for history.)_
-    Enrols the six fiscal tables
-    (`registros_facturacion` insert-only + `registro_sif`/`cadenas`/`envios`/`envio_flujo`/`acks`
-    watermark-upsert) onto the sync ordered lane via a package-owned `FISCAL_ENROLMENT`
-    (`@waitron/sync-enrolment`); fiscal **owned its capture DDL** (`0014_fiscal_sync_capture.sql`, calling
-    sync's `sync_capture()` SPI — owner principle: fiscal independent, API-only), giving a `fiscal → sync`
-    module edge that **reordered the manifest so fiscal migrated last** and extended the graph-honesty
-    guard to detect the SPI edge. Fiscal rows apply **verbatim** on a mirror (no huella recompute;
-    immutability honoured — a stray mutation as the apply role is `42501` (grant), `WT001` only for a
-    bypassing superuser, verified on `postgres:18`); `contadores_instalacion` not enrolled; SP-2b
-    module-version park wired. Six real-PG proven-by-deletion gates in `apps/server`. Consequence: because
-    `0014` calls the sync SPI, fiscal's migrations no longer run standalone, so its PGlite harnesses migrate
-    the full manifest (a **dev-only** `@waitron/migrations` cycle; prod graph acyclic). Copilot's 5 findings
-    all applied. Spec:
-    [sp-3a](superpowers/specs/2026-09-05-module-sp3a-fiscal-record-lane-design.md); plan:
-    [sp-3a plan](superpowers/plans/2026-09-05-module-sp3a-fiscal-record-lane.md).
-    - *Deferred (surfaced by the whole-branch review, NOT done — do-anytime):* (a) the ~300-line two-clone
-      apply-harness duplication across the four `apps/server/src/fiscal-*.test.ts` suites → extract a
-      shared `useFiscalMirrorPair()` helper (kept per-suite for now to avoid a vacuous-pass risk in the
-      fiscal gates); (b) generalise the graph-honesty SPI detector from the `sync_capture`-specific match to
-      **all** trigger `EXECUTE FUNCTION` cross-module edges — would also catch the currently-undetected
-      `reject_mutation` (fiscal→core, workforce→core) edges, verified safe on today's tree; (c) micro-opts
-      (guard `stripSql` runs 6× per file; parallelise source/target seeds).
-    - *Flake stabilised, not just re-run (owner directive):* the CI `test-server` shard's documented
-      `boot.test.ts` 503-not-200 flake (a wall-clock `/health` readiness race) was root-caused and fixed
-      with condition-based-waiting (`fetchHealthOk` poll-until-200); ci.yml now uploads shard blobs on
-      failure so a future flake names its exact test. The sibling `mirror-e2e.test.ts` cursor flake it
-      predicted was later root-caused and FIXED the same way (see the entry immediately below). See
-      memory `test-server-e2e-timing-flakes`.
-
-    - **`test-server (1)` mirror CI timing flake — ROOT-CAUSED and FIXED (condition-based waiting).**
-      _(Step-4 note: `mirror-e2e.test.ts` — an outbox pull-through-the-tunnel test — was DELETED in Track
-      A item 3 step 4; this entry is the historical root-cause of a flake in a now-removed test.)_
-      The blob from the actual #260 failure (artifact `server-blob-1`, parsed with `flatted`) named the
-      real failure, which the earlier hypotheses in this entry got wrong: **3 failed tasks in
-      `mirror-e2e.test.ts`**, the headline "a mirror pulls the primary's sync_log through the tunnel"
-      test, `expected null not to be null` at `mirror-e2e.test.ts:405`. NOT an unhandled rejection, NOT
-      the sync worker, and the blob does NOT record zero failures — it records this assertion. The
-      `sync.pull_failed`/`sync.stream_stalled` storm and the `pg` "already executing a query" warning
-      are ambient noise from OTHER shard-1 files running concurrently (`maxForks: 4`), not the cause; the
-      ~90 s "gap" is the heavy `restore-fiscal-e2e`/`promote` suites running silently (execFile) after
-      the mirror test already failed. **Mechanism:** step 1 waits for `catalogueCount === 2`, but the
-      catalogue ROWS commit per-row (`apply.ts` `tryApplyRow`) while the lane cursor advances in a
-      SEPARATE, later transaction (`advanceCursor`, `apply.ts` §4) — so the cursor read at line 405 raced
-      `null` in that gap under CI contention (v8 coverage + 4 forks + the ambient storm widen the
-      window). (`apply.ts` §4 can also hold the cursor below a still-parked seq for whole pull cycles,
-      but this static two-catalogue fixture has no unresolved FK parent, so the window here is just the
-      per-row-vs-cursor commit split.) **Fix:** poll the ordered
-      cursor until it REACHES the source's (static) max seq — the true convergence signal, guarded by a
-      not-null/positive check on that max so the poll cannot pass vacuously — the same
-      condition-based-waiting shape as the `boot.test` 503 fix above.
-      Localised to `mirror-e2e.test.ts`; `adopt-e2e` waits on `catalogueCount` too but never asserts the
-      cursor, so it did not share the race. Memory: [[test-server-e2e-timing-flakes]].
-      *Separate latent finding (NOT this flake, do-anytime):* the `pg` "client.query() when the client
-      is already executing a query" deprecation warning comes from `report-api.ts`'s
-      `Promise.all([computeDailyClose(tx), computeTopSellers(tx), countOpenTables(tx)])` — three
-      concurrent queries on ONE `withTenant` transaction (also `daily-close` etc.). pg@8 queues them
-      (serial, correct results, no speedup); it BREAKS in pg@9. Replace the `Promise.all` on a single
-      `tx` with sequential awaits (or one combined query) when pg@9 lands.
-  - **SP-3b — module-owned vocabulary — LANDED #240 (2026-09-05).** Fiscal's and workforce-es's Spanish
-    terms live in `FISCAL_VOCABULARY` / `WORKFORCE_ES_VOCABULARY`, declared on each descriptor's
-    `vocabulary` seat; `packages/db/src/english-only.ts` keeps a 23-word base list and `findSpanish(source,
-    words)` takes its set; `@waitron/module` owns `packageDirOf` / `vocabularyOwners` / `forbiddenVocabulary`
-    (moved there by the simplify pass — no cycle in that direction, and `module-graph-honesty` reads the
-    same derivation); the root suite assembles the forbidden set, pins the derived owners, asserts base ∩
-    modules = ∅, and runs a per-owner positive control that excludes the declaration file (the whole-branch
-    review proved by mutation that it had been satisfied by `vocabulary.ts` itself). `EXEMPT_PACKAGES`
-    deleted; `GENERIC_PACKAGES` stays explicit (measured: a scan-everything flip would hit `provisioning` 155
-    times — a separate decision). No runtime change; the union was measured equal to the old list (135).
-    Copilot: approval recommended, 0 comments. Spec (with the simplify-pass implementation notes):
-    [sp-3b](superpowers/specs/2026-09-05-module-sp3b-vocabulary-design.md); plan (superseded in part):
-    [sp-3b plan](superpowers/plans/2026-09-05-module-sp3b-vocabulary.md).
-    - *Left as ruled, not gaps:* six comments saying a package "is EXEMPT from the english-only guard"
-      state an effect that still holds by derivation; `estado`/`tipo` stay in the base list although fiscal
-      columns spell them (documented in the base list's doc). *Candidate, declined this time:*
-      `test.isolate: false` in the root vitest config — importing `ALL_MODULES` costs each root suite that
-      does it ~0.7 s (measured), paid twice because files do not share a module registry.
-    - *For SP-3c's brainstorm:* the seam is wider than `provisioning → registerSif`. The composition root
-      also calls `@waitron/fiscal-verifactu` directly in `reserved-identity.ts` (`writeReservedSif`),
-      `mirror-bundle.ts` (`reserveInstallationNumber`, `deriveReservedSeriesCodes`), `provision-till.ts`
-      (`registerSif`), `boot.ts` (`drain`) and `till-backend.ts` (`VerifactuBackend`). `fiscal-none` cannot
-      land until each is behind a module seat, so SP-3c decides which it covers and which `fiscal-none` does.
-      _(2026-09-05, SP-3c: four of the five are behind seats — `reserved-identity.ts` and
-      `mirror-bundle.ts` through `provisioning.standby`, `provision-till.ts` through `provisioning.seed`,
-      `till-backend.ts` through the `fiscal` slot. `boot.ts`'s `drain` is the one deferred to
-      `fiscal-none`, allowlisted with its reason in `scripts/module-seams.test.ts`.)_
-  - **SP-3c — module-owned gated provisioning — LANDED #245 (2026-09-06).** The
-    fiscal regime is reached through two typed descriptor seats: `provisioning` (`seed.summary`/`run` per
-    node; `standby.reserve`/`establish` for a mirror's dormant identity) and `fiscal` (`id` +
-    `makeBackend`, selected by `@waitron/module`'s `fiscalSlot`, which refuses zero candidates, two, or a
-    node stamped for another regime). `ALL_MODULES` moved into a new `@waitron/composition` package;
-    `FiscalBackend` gained an `id`, so `sales.fiscal_backend` is the backend's own id rather than a
-    hardcoded `"verifactu"` at each sale/correction/substitution site, and `packages/core`'s
-    caller-supplied `fiscalBackend` input is gone. `@waitron/provisioning` is now a generic runner —
-    `planVenue(request, modules)` emits one `seed-module` action per seeding module, last and in list
-    order, and `applyVenue` runs them inside its ONE transaction (a throwing seed rolls the venue back);
-    it declares no regime package under `dependencies` (both stay devDependencies, for the e2e's real
-    backend). `provisionNode`/`register-till`, the standby reservation and establishment, and the host's
-    `makeFiscalBackend` all go through the seats; `WAITRON_ID_SISTEMA` and its validator moved into
-    `packages/fiscal-verifactu`, retiring `provisioning.id_sistema_invalid`.
-    **Allocation decision (owner, 2026-09-05):** this slice takes the whole provisioning family plus the
-    backend slot; the RUNTIME fiscal pass — `boot.ts`'s `drain`, `aeat-transport.ts`,
-    `aeat-credential.ts`, the wizard's cert gate and `FiscalBackend.reconcile` — is deferred to
-    `fiscal-none`, where an implementation with no transport makes that seat's shape obvious rather than
-    guessed (spec §12). `scripts/module-seams.test.ts` (root project, reads text) pins the boundary and
-    allowlists the deferred files WITH their reason, so the deferral is a ratchet: `fiscal-none` shrinks
-    the list, nothing grows it. _(2026-09-07: discharged by fiscal-none — `boot.ts`'s `drain`,
-    `aeat-transport.ts`, `aeat-credential.ts`, the wizard's cert gate and `FiscalBackend.reconcile` are
-    all behind seats now; `apps/server` is regime-free and the `DEFERRED_RUNTIME_PASS` allowlist is
-    empty.)_ Spec:
-    [sp-3c](superpowers/specs/2026-09-05-module-sp3c-gated-provisioning-design.md); plan:
-    [sp-3c plan](superpowers/plans/2026-09-05-module-sp3c-gated-provisioning.md).
-    - *Left behind, not gaps (recorded at land):* (a) **a `provisionTestVenue(db, overrides)` helper
-      for `apps/server`'s tests** — sixty-odd suites repeat the same 30-line venue request +
-      `applyVenue(planVenue(…, ALL_MODULES), { db, modules: ALL_MODULES })` pair; this slice edited every
-      one by hand and the next `planVenue`/`applyVenue` signature change repeats the sweep (both
-      whole-branch reviews flagged it; a small PR of its own, `apps/server/src/testing/` is the home).
-      (b) `tenant.not_found` (`apps/server/src/errors.ts`) has no production thrower — its last moved into
-      the fiscal seed; kept as the file's naming reference and a test-used code; keep or remove is an owner
-      call. (c) `mirror-bundle.ts`'s `r.series ?? []` branch is un-exercised (no module omits `series`) and
-      un-injectable (`assembleMirrorBundle` reads `ALL_MODULES` internally) — not v8-ignored, because no
-      "unreachable" sentence would be true. (d) `packages/verifactu` still states the software-id cap as a
-      bare `2` inside `validate` and exports no constant; `ID_SISTEMA_MAX_LENGTH` now lives once in
-      `packages/fiscal-verifactu/src/registro-sif.ts` — export the cap from `packages/verifactu` when
-      either is next touched. (e) The provisioning seed opens `withTenant` without `{ nodeId }`
-      (`packages/provisioning/src/venue-apply.ts`), so its captured fiscal rows carry the all-zero origin;
-      same class as the SP-3d review's Major 1. Fix with the first standby that adopts from a freshly
-      provisioned primary. **Yardstick data (built under the seat rule in force when the branch started
-      — Opus implementers, Fable reviewers — before the 2026-09-06 Codex rule):** fix rounds before land:
-      Task 4 ×3 (wire-input validation and its doc wording), Tasks 6 and 9 ×1 each, one simplify wave (13
-      items), one whole-branch fix wave (23 findings across two reviewers); false claims found at
-      whole-branch review: 5 falsified by the run-it reviewer (untested `fiscal_backend` on two paths, deep
-      imports invisible to the seams guard, an over-claiming composition header, a bare `TypeError` on a
-      keyless bundle, an "unreachable" that a misconfigured env reaches) plus the convention reviewer's
-      "every write path" and "no caller can" absolutes — all fixed on the branch. Copilot: off.
-  - **SP-3d — LANDED #248 (2026-09-06).** Fiscal backup/restore contribution (= BR-4): for a node
-    that was filing, the module `backup.restore` hook floors the installation counter by the clock,
-    mints a fresh chain and derives disjoint series codes (one base per (code, purpose); a base already
-    claimed by another purpose falls back to the original code). The restore orchestrator normalises
-    and de-duplicates archive entries, refuses an incomplete identity before the set-aside, retires the
-    old series, opens the replacements (a batch naming one code twice is a coded `series.code_collision`),
-    and writes `trading.env` last, after every other secret;
-    [design](superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md). **Left behind
-    (each stated in the code or spec, none on the sale path):** (a) two restores of one artifact in the
-    same wall-clock second, or on a clock behind the prior restore, compute the same floor — spec §3.5
-    accepts it, `registro_sif_instalacion_uq` refuses only numbers still in the database; (b) the
-    restore is a stopped-server procedure — overlapping a live SIF registration deadlocks (`40P01`,
-    measured: counter-then-SIF vs SIF-then-counter); revisit locking before the hook ever runs on a
-    live database; (c) only the last `trading.env.replaced` is kept; (d) `wrapHookError` drops the
-    inner error (no `cause`, no log line) — an operator sees module + code only; (e)
-    `apps/server/src/restore.test.ts` shares one PGlite across its describes and its one SIF-registering
-    test leaves the SIF live — a second registrant would be order-coupled; (f) `readStandardSeriesIdTx`
-    now filters by tenant while `readNodeEndorsement` documents the opposite choice, undocumented
-    divergence; (g) `insertNodeSeriesTx`'s held-code check is SELECT-then-INSERT — fine for the
-    sequential restore, no concurrency guarantee; (h) the real-PG e2e reports green without Docker,
-    with only the LOUD skip line as evidence (sibling shape). The promote-Slice-4 operator surface is
-    still open (*Promotion & failover*). **Yardstick data (built under the 2026-09-06 seat rule —
-    Codex implementer and fix rounds, Opus per-task and convention reviewers, Astra run-it reviewer;
-    driver Fable, not Opus as the rule says):** fix rounds before land: Tasks 1–3 clean, Tasks 4, 5, 6
-    and 7 ×1 each (all Codex resumes; no Claude fix round on any task); one simplify wave (6 applied,
-    2 skipped); one whole-branch fix wave (3 code defects reproduced by the run-it reviewer — a
-    standard/rectificative pair collapsing to one derived code, an archive alias overwriting the
-    rewritten identity, `trading.env` published before a later secret failed — plus 2 falsified doc
-    claims and ~15 sibling/claim minors across the two reviewers), scoped re-review clean with three
-    text residuals applied by the controller; false claims found at whole-branch review: 3 falsified by
-    experiment ("superuser/BYPASSRLS required to recreate FORCE-RLS objects" — an owner role restored,
-    migrated and retired; "installation numbers are never reused" — same-second restores minted the
-    same number; "the CLI preserves the advertised origin" — it is process env, never in
-    `trading.env`) plus one correction born false (the derivation docstring's `series.code_collision`
-    backstop, blind to the standby path and to cross-node collisions) — all fixed on the branch.
-    Whole-workspace coverage ran on the host, serially: Chromium cannot launch inside the Codex
-    sandbox (CLAUDE.md §2). Copilot: off.
-- **SP-4 — module UI surface** (card-registry inversion + self-sourcing cards + fiscal's cards) — **after
-  B3.2** (shares `@waitron/layouts` / `apps/till` card-grid).
-
-With SP-1a + SP-1b + SP-1c landed, SP-1d's adopt-bootstrap half landed (#220), SP-2a landed (#227),
-and **SP-2b landed (#230)** — **SP-2 (the full sync inversion + schema-version gate) is complete.** SP-2a
-unblocked SP-3 (H2's fiscal-record lane rides SP-2a's sync inversion) and delivered SP-1c's deferred
-graph-honesty guard; SP-2b closes the cross-node schema-skew hazard the rolling-reboot convergence
-model depends on. **Ongoing flow-down and the enabled-set pull filter both stay deferred** (same
-receipt each time: nothing is genuinely toggleable yet, so there is no live case to build either
-against) — both are built alongside the first genuinely-toggleable module. **SP-3a (fiscal-record sync
-lane) LANDED #238 (2026-09-05)** — H2's fiscal-record lane is delivered. **SP-3b (vocabulary) LANDED
-#240 (2026-09-05)** and **SP-3c (gated-provisioning seam) LANDED #245
-(2026-09-06)** and **SP-3d (backup-restore hook = BR-4) LANDED #248 (2026-09-06)** — **SP-3 (fiscal as a
-module) is complete.** `fiscal-none` (Track C item 2) follows SP-3c: it fills the same two seats and designs the
-runtime-duty seat SP-3c deferred. **SP-4** waits for B3.2.
+- **SP-4 — module UI surface on the TILL** (card-registry inversion + self-sourcing cards + fiscal's
+  cards): unblocked now B3.2 has landed; the dashboard half is done by bookings SP2.
+- **Ongoing flow-down of `modules.json`** from a primary to its standby has no channel (the file is
+  on-box; only the adopt-time snapshot flows, #220). Bookings (#270) is the first genuinely
+  toggleable module, so the live case to design against now exists. The old "pull only your enabled
+  modules" source filter is moot — native replication copies by classification.
+- **SP-1b (a):** a toggleable module that is actually load-bearing (identity/payments, still statically
+  wired) fails boot loudly if disabled, until the wiring inversion + core extraction.
+- **SP-1c (b):** provisioning's migrate path still runs the linear full `manifestSets()` — route it
+  through the resolver once it gains per-module enablement. (c) folding `requires.core` into
+  `requires.modules` was declined (`core` is deliberately the mandatory root).
+- **Graph-honesty guard:** its SPI-edge detector matches `EXECUTE FUNCTION sync_capture` specifically
+  (`scripts/module-graph-honesty.test.ts` header), and that function no longer exists — generalise it
+  to every cross-module `EXECUTE FUNCTION` edge (which would also cover `reject_mutation`) or delete
+  the SPI branch. CLAUDE.md §3 records that no module creates a cross-set trigger today.
+- **SP-3a (a):** the ~300-line two-clone apply-harness duplication across the `apps/server/src/fiscal-*.test.ts`
+  suites → a shared `useFiscalMirrorPair()` helper (kept per-suite so far to avoid a vacuous pass).
+- **SP-3c left-behinds:** (a) a `provisionTestVenue(db, overrides)` helper for `apps/server`'s tests
+  (sixty-odd suites repeat the same venue request + `applyVenue(planVenue(…))` pair; its own small PR,
+  `apps/server/src/testing/` is the home); (b) `tenant.not_found` has no production thrower — keep or
+  remove is an owner call; (c) `mirror-bundle.ts`'s `r.series ?? []` branch is un-exercised and
+  un-injectable; (d) `packages/verifactu` states the software-id cap as a bare `2` while
+  `ID_SISTEMA_MAX_LENGTH` lives in `fiscal-verifactu/src/registro-sif.ts` — export the cap from
+  `packages/verifactu` when either is next touched.
+- **SP-3d left-behinds (each stated in code or spec):** (a) two restores of one artifact in the same
+  second, or on a clock behind the prior restore, compute the same floor (spec §3.5 accepts it); (b)
+  the restore is a stopped-server procedure — overlapping a live SIF registration deadlocks (`40P01`);
+  revisit locking before the hook runs on a live database; (c) only the last `trading.env.replaced` is
+  kept; (d) `wrapHookError` drops the inner error; (e) `restore.test.ts` shares one PGlite across its
+  describes and leaves a SIF live; (f) `readStandardSeriesIdTx` filters by tenant while
+  `readNodeEndorsement` documents the opposite; (g) `insertNodeSeriesTx`'s held-code check is
+  SELECT-then-INSERT; (h) the real-PG e2e reports green without Docker with only a loud skip line.
+- **Closed 2026-09-08 (measured):** SP-2a's Option B — `@waitron/sync` depends on no domain package
+  now (`peers.ts` and the scrypt coupling went with the outbox).
 
 ### Product work still open (beneath the two tracks)
 
@@ -1367,7 +532,7 @@ sub-projects and their state are in *What's built*; the open detail is under *Op
   real-time push; station-kind threshold defaults; an unbumped-since-fire neglect metric; a shared
   flash helper.
 
-**Pricing adjustments (NEW — owner-added 2026-09-03):** two related, unbuilt capabilities on the
+**Pricing adjustments (owner-added 2026-09-03):** two related, unbuilt capabilities on the
 ordering/sale flow, both gated on the already-anticipated **discount permission** (the "discount gate"
 noted under *What's built → Identity* remaining — decide the authorised-role rule and whether a
 reason/reason-code is captured):
@@ -1383,11 +548,11 @@ reason/reason-code is captured):
   source — *The advisor gap*), so a reduction/discount must reach the line **before** `computeHuella`,
   not as an after-the-fact adjustment. H2-adjacent — specced with the owner, not landed unattended.
 
-**Bookings (SP14):** Bookings-1 landed (#180, #182); future, each greenfield — public/online/QR
-booking, availability / double-booking prevention, reminders (SMS/email), a customer/CRM entity,
-recurring bookings, a calendar grid, deposits.
+**Bookings (SP14):** Bookings-1 landed (#180, #182) and is now the `@waitron/bookings` module (#270,
+#273); future, each greenfield — public/online/QR booking, availability / double-booking prevention,
+reminders (SMS/email), a customer/CRM entity, recurring bookings, a calendar grid, deposits.
 
-**Wages / labour cost (SP16, NEW — owner-added 2026-09-04):** a **wage-computation engine** that turns
+**Wages / labour cost (SP16, owner-added 2026-09-04):** a **wage-computation engine** that turns
 the hours a person actually worked (the built *registro de jornada*, #47) and the hours they are
 scheduled to work (built D2 scheduling) into money owed, and shows the owner **accrued-so-far vs
 still-pending** for a pay period. This is a *build* item and is **distinct from the deferred D3 payroll
@@ -1427,35 +592,32 @@ for the projected remainder.
   2026-08-29). Greenfield + external API.
 - **Definable roles with selectable privileges** — roles are a fixed 4-value enum + a code-defined
   permission map (`packages/identity/src/permissions.ts`); data-driven RBAC + a role-editor is a large
-  backend change.
+  backend change. (Bookings SP2's `getMe` permission set is the first step off the coarse role gate.)
 - **Payment-provider config UI** (Stripe / SumUp / …) — none today (provider is env-stamped, sealed via
   the credentials CLI); also gated on the SumUp offline question (*Debt → SumUp*).
 - **AEAT cert / Veri*Factu management UI** — first-run only today (`apps/setup` cert screen);
-  `cert-expiry.ts` monitors but there is no view/rotate/renew surface.
-- **Hardware config profiles per device kind** — no profile abstraction exists.
+  `cert-expiry.ts` monitors but there is no view/rotate/renew surface. The cert-distribution rebuild
+  (Track B item 3) adds the install/replace endpoint this UI would call.
 
 ### Parked (real, but beneath the two tracks)
 
 - **Engage a fiscal advisor** — a parallel *human* task (long lead time), not a build; worth starting,
   blocks nothing. See *The advisor gap*.
-- **Sync completion beyond the landed lanes** (Track 2) — fiscal-lane / hash-chain sync (H2, **now SP-3
-  of the module system** above), cloud-mirror C-remainder (multi-tenant transport DROPPED 2026-09-05 —
-  one tenant per database). See *Open threads → Sync*.
 - **Reporting *fiscal* remainder** — modelo-303 filing boxes (rectificativas 40/41, prorrata 44,
   intra-community 32–39) + two pre-filing caveats: AEAT filing completeness (asesor-gated), not an owner
   takings view. See *Open threads → Reporting*.
 - **Printing cloud-poll transports + expo device kind** — subsystem, KDS, receipt + cash-drawer built;
   the rest is post-polish. See *Open threads → Printing*.
-- **Cloud trial on-ramp** — gated on Waitron-cloud infra that does not exist yet. See *Open threads →
-  Onboarding*.
+- **Cloud trial on-ramp** — gated on Waitron Cloud (the per-tenant instance fleet + control plane),
+  which does not exist yet. See *Open threads → Onboarding*.
 - **Guided onboarding wizard (four setup modes)** — a non-technical first-run chooser (demo /
   pre-production / production-from-pre-production / add-a-node) + per-mode wizards, wrapping the existing
   dev/demo/provisioning/adopt paths, plus Square/CSV migration as a step. See *Open threads →
   Onboarding*.
 - **Recipes → stock → procurement (depth)** — recipe-authoring built; plate costing / stock depletion /
   suppliers/POs is product depth. See *Open threads → Recipes*.
-- **Distribution / deployment / failover remainder** (Track 2) — appliance image, on-device agent,
-  reroute, SIF promotion/fencing + till-side failover. See *Open threads → SIF topology*.
+- **Distribution / deployment remainder** — appliance image, on-device agent, the cloud standby's
+  live link (Track A step 5 / Track B item 2). See *Open threads → Onboarding* and *SIF topology*.
 
 **Later / smaller:** SumUp card provider (gated, *Debt*) · wage-computation engine (build,
 convenio-gated — *Wages / labour cost* above) · D3 payroll export (integrate-not-build) ·
@@ -1468,9 +630,9 @@ read-back/audit view + station kind; definable kitchen statuses). See *Open thre
 [cloud-services inventory](superpowers/specs/2026-08-29-cloud-services-inventory.md) catalogues the
 paid cloud offering we build *towards* (local-first-core + cloud) and the decision rules for cloud vs.
 the open-source ELv2 core (online-only-by-nature **or** bulk-cost economics; everything else is core).
-No Waitron-cloud infra exists yet (gates the cloud trial + sync); on-prem work is built toward the
-inventory (single-writer-per-row for sync, "make the box reachable" as one capability). Review into
-real slices when cloud work starts.
+Since 2026-09-05 the hosting shape is a dedicated instance per tenant provisioned by Waitron Cloud (a
+separate service); on-prem work is built toward the inventory. Review into real slices when cloud
+work starts.
 
 ---
 
@@ -1483,34 +645,33 @@ partial scope; the detail for a live thread is under *Open threads*.
 | --- | --- | --- | --- |
 | 1 | Design system | `@waitron/ui` token layer + primitives (`--wt-*`) | — |
 | 2 | Sales spine | Immutable hash-chained sales, per-tenant series, catalogue, tenant model | — |
-| 3 | Fiscal layer | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first | F3 asesor/XSD confirmations (Debt) |
+| 3 | Fiscal layer | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first; fiscal is a module (`fiscal-verifactu`, `fiscal-none`) | F3 asesor/XSD confirmations (Debt); cert distribution to a promoted node (Track B item 3) |
 | 4 | Payment layer | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook | SumUp provider; webhook `recordSale` hand-off; reconcile remediation UI |
-| 5 | Identity | persons/sessions, PIN, `authorize()`, roles/permissions, passkeys, email login, config sync flow-down to a read-only secondary (#195) | mid-shift-suspension enforce, discount gate, till-refund enforce; encrypt `totp_secret` at rest (**now a hard dep of the TOTP-enrollment slice** — #195 replicates it, see *Onboarding*) — *PIN-attempt throttle CLOSED (feat/device-enrolment-login: `@waitron/identity` per-(device,person) throttle, `pin.throttled`)* |
+| 5 | Identity | persons/sessions, PIN (+ per-device throttle #269), `authorize()`, roles/permissions, passkeys, email login; `persons` + `webauthn_credentials` are `state` (replicate to a standby) | mid-shift-suspension enforce, discount gate, till-refund enforce; encrypt `totp_secret` at rest (a hard dep of the TOTP-enrollment slice — the column replicates) |
 | 6 | Locations | provision-a-sellable-venue (`waitron-provision venue`) | multiple locations, edit/deactivate; then location-scope the by-id verb family (Debt) |
-| 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, layout/receipt editors, receipt/drawer printing, cash-drawer authorization — operable end to end | — |
+| 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, canvas/receipt editors, receipt/drawer printing, cash-drawer authorization — operable end to end | — |
 | 8 | Reporting | daily close, frozen *cierre Z*, VAT summary, modelo 303 output+input VAT + DR303 file/download, purchase-invoice UI; dashboard sales screen + business-overview home (#167) | fiscal filing remainder parked |
-| 9 | Deployment | distribution & client-topology design (#86); onboarding slices 1–4 complete | cloud trial + agent/appliance/reroute parked (slices 5–7) |
-| 10 | Tabs / table service | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer, till action-flow wiring (#174), TS-5 split-bill (#178, #181) | core COMPLETE (TS-1..TS-5); owner-added extensions parked (*Open threads → Table-service*) |
+| 9 | Deployment | distribution & client-topology design (#86); onboarding slices 1–4; till reroute S1–S6; promotion endpoint (#272) | cloud standby live link + Waitron Cloud boundary (Track B item 2); agent/appliance parked |
+| 10 | Tabs / table service | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer, till action-flow wiring (#174), TS-5 split-bill (#178, #181) | core COMPLETE; owner-added extensions parked (*Open threads → Table-service*) |
 | 11 | Floor plan | FP-1 live floor + FP-2 spatial canvas/editor | — |
-| 12 | KDS / devices | KDS-1 stations/routing/tickets, KDS-2 courses/fire, KDS-3 expo, KDS-4 kitchen printing, order-timing alerts (#185); device identity-1 (enrol/revoke); handheld + till device kinds (#173, #176) | routing audit view; expo device kind; device-scoped fire/collect routes (*Open threads → KDS / Table-service*) |
+| 12 | KDS / devices | KDS-1 stations/routing/tickets, KDS-2 courses/fire, KDS-3 expo, KDS-4 kitchen printing, order-timing alerts (#185); device identity + profiles (#199, #231, #269) | routing audit view; expo device kind; device-scoped fire/collect routes (*Open threads → KDS / Table-service*) |
 | 13 | Tips | attribution stored (`tenders.tip_amount`) — but UI collection ONLY on the integrated-card idle screen | tip-collection UI for cash / manual card / handheld (none today, *Debt*); payroll export (integrate-not-build) |
-| 14 | Bookings | Bookings-1 (#180, #182) — staff-entered reservations + seat-opens-a-tab + floor badge + dashboard day-list | public/online/QR, availability, reminders, CRM, recurring, calendar grid, deposits (Future) |
+| 14 | Bookings | Bookings-1 (#180, #182), now the `@waitron/bookings` module (#270, #273) | public/online/QR, availability, reminders, CRM, recurring, calendar grid, deposits (Future) |
 | 15 | Online ordering | — | not started (Later phase) |
-| 16 | Workforce | *registro de jornada*, D2 scheduling, roster authoring + approvals, staff request path + portal | **wage-computation engine** (per-person pay rules, accrued-vs-pending — build, convenio-gated; *Priorities → Wages / labour cost*); D3 payroll export (integrate-not-build) |
+| 16 | Workforce | *registro de jornada* (chain per node since #268), D2 scheduling, roster authoring + approvals, staff request path + portal | **wage-computation engine** (per-person pay rules, accrued-vs-pending — build, convenio-gated; *Wages / labour cost*); D3 payroll export (integrate-not-build) |
 | 17 | Accounting export | — | not started (core subset; extends Reporting) |
-| 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen-inheritance, recipe-authoring UI, product images, location↔menu membership UI (#177), ordering modifiers / option groups (#184), per-option + dish-line quantity (#186), modifier↔allergen overlays (#187), dietary classification (contains-meat/fish, veg/vegan, halal/kosher; #190), order-line customisation (kitchen-only line note + meat doneness) | **counter/walk-up kitchen fire (#193 follow-up) — NEXT**; menu draft/publish + schedule (#8); customer-facing menu surface parked; post-fire tab-line note/doneness edit parked; nested sub-recipes / plate costing / stock depletion parked |
+| 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen-inheritance, recipe-authoring UI, product images, location↔menu membership UI (#177), ordering modifiers / option groups (#184), per-option + dish-line quantity (#186), modifier↔allergen overlays (#187), dietary classification (#190), order-line customisation (kitchen-only line note + meat doneness) | **counter/walk-up kitchen fire (#193 follow-up) — NEXT**; menu draft/publish + schedule (#8); customer-facing menu surface parked; post-fire tab-line note/doneness edit parked; nested sub-recipes / plate costing / stock depletion parked |
 | 19 | Opening hours & channel sync | — | not started (Google Business Profile / Maps) |
 | 20 | Procurement & inventory | received purchase invoices (`@waitron/purchasing`, feeds modelo 303) | suppliers/POs/goods-in/stock/3-way reconcile/reorder (parked); AI forecast deferred |
 
-**Cross-cutting infra:** sync/replication (native Postgres logical replication since Track A item 3
-step 4 — the application outbox, its HTTP transport, per-peer `sync_peers` auth and retention sweep are
-deleted) · SIF topology (`#33`, `node_id` re-key) · device identity-1 · printing
-subsystem (`@waitron/printing` — agents/outbox/`usb`+`network_tcp` transports/ESC/POS/Impresoras
-dashboard) · CI/test infra (scoped CI, pre-push hook, shared-container test rollout, job-sharding) ·
+**Cross-cutting infra:** replication (native Postgres logical replication since #280 — the
+application outbox, its HTTP transport, per-peer auth and retention sweep are deleted) · membership +
+promotion + rejoin (the whole arc, *Open threads → Replication, membership & failover*) · backup &
+restore (BR-1..BR-4) · SIF topology (`#33`, `node_id` re-key) · module system · printing subsystem
+(`@waitron/printing` — agents/outbox/`usb`+`network_tcp` transports/ESC/POS/Impresoras dashboard) ·
+CI/test infra (scoped CI, pre-push hook, shared-container test rollout, job-sharding, root scope) ·
 localisation (per-user `persons.locale`, live language switch, venue-default derivation) · logging &
-diagnostics foundation (Slice 1 #192 — durable rotating logs, request-id correlation, `debug`
-verbosity + manager diagnostic-mode viewer, `@waitron/diagnostics` client trail + crash capture;
-Slices 2–3 in *Open threads*).
+diagnostics foundation (Slice 1 #192).
 
 ---
 
@@ -1533,8 +694,8 @@ three gated `/management-api/diagnostics` endpoints, boot wiring. Client: new ze
 instrumented fetch) wired into till + dashboard, plus a manager-only live-log viewer screen. Redaction
 holds end-to-end; nothing blocks a sale.
 
-**Slice 2 — one-touch bug report (NEXT).** `bug_reports` table (tenant-scoped: FORCE RLS + isolation
-policy + grants; run `pnpm --filter @waitron/fiscal-verifactu test inmutabilidad` after adding it), a
+**Slice 2 — one-touch bug report (NEXT).** `bug_reports` table (tenant-scoped, classified `local`
+— a report never needs to replicate — with its grants in its module's set, CLAUDE.md §3), a
 capture endpoint that **freezes** a self-contained bundle (client trail `snapshot()` +
 `LogReader.byRequestIds()` + environment), a `wt-report-dialog` + "Report a problem" trigger in the
 till and dashboard chrome, and a copy-pastable GitHub-ready markdown serialiser.
@@ -1552,463 +713,90 @@ transitions) and automated GitHub-issue creation (needs a stored token in `@wait
   trail (Slice 1 logs only `#selectScreen` sidebar clicks).
 - Roll the trail + report button out to `apps/setup`.
 
-### Sync completion (SUPERSEDED 2026-09-05 by the outbox→native-replication swap — Track A item 3)
+### Replication, membership & failover (state)
 
-> **SUPERSEDED 2026-09-05, deleted in Track A item 3 step 4 (2026-09-08).** The mechanism this whole
-> section describes — an **application-level** outbox (`sync_log` + a generic capture trigger, applied
-> as the app role under `withTenant`) — was REVERSED for **native Postgres logical replication**. The
-> outbox tables, the HTTP-pull transport, per-peer `sync_peers` auth, the retention sweep, the pull/apply
-> loop and `waitron-sync-evict` are all deleted; `@waitron/tunnel` is retired with Track B item 2. Read
-> Track A item 3 (steps 2–5) and item 4 (the swap spec) for what replaced it; the landed-PR records
-> below are kept as history of the mechanism that was removed, not a description of what runs today.
->
-> The one thing that CARRIED FORWARD: the cloud-mirror peer identity/auth (A, #144), the WireGuard
-> outbound tunnel (B, #150), and the mirror-mode server + operator flow (C2a/C2b) — the LINK and the
-> adoption flow survive; only the replication mechanism riding them changed from the app outbox to
-> native subscriptions.
+**Mechanism (since #280, Track A item 3 step 4):** native Postgres logical replication. Every module
+classifies its tables `ledger` / `state` / `local` (CLAUDE.md §3); the table owner
+(`waitron_migrator`) creates the `_ledger`/`_state` publications; a standby subscribes over the
+box↔cloud link; promotion and return run on `pg_replication_slots` with the fence-LSN drain
+watermark; settings are primary-wins by construction (a returned box's `state` publication is never
+subscribed during the drain window). The application outbox, its HTTP transport, the config-conflict
+gate and the drain/disposal guard are deleted; the 2026-08 sync/cloud-mirror specs record what was
+true when written. What CARRIED FORWARD from the cloud-mirror work: the peer identity/auth model
+(#144), the outbound link (`@waitron/tunnel`, #150 — retired once the WireGuard link carries
+replication, Track A step 5), the mirror-mode server + operator flow (C2a/C2b).
 
-Historical (the mechanism below is deleted): cross-replication WAS application-level (an outbox —
-`sync_log` + a generic capture trigger). Built and later deleted: commercial-lane outbox, symmetric
-HTTP-pull transport + per-peer `sync_peers` auth (#144), payments fast lane, retention sweep +
-`waitron-sync-evict`; the `dining_tables` FK-closure enrolment (C1, #153). Designs + findings under
-`docs/superpowers/specs/2026-08-{02,27,28,29}-*sync*` and `*cloud-mirror*` record what was true when
-written.
+**Membership + promotion + rejoin — the arc is COMPLETE** (spec
+[membership-and-rejoin-wire-protocol](superpowers/specs/2026-09-02-membership-and-rejoin-wire-protocol-design.md);
+[reserved-standby-identity-and-promotion](superpowers/specs/2026-09-03-reserved-standby-identity-and-promotion-design.md);
+[membership-promotion-r3-cloud-promotion](superpowers/specs/2026-09-04-membership-promotion-r3-cloud-promotion-design.md);
+[membership-rejoin-r3-wipe-and-restore](superpowers/specs/2026-09-05-membership-rejoin-r3-wipe-and-restore-design.md);
+plans beside them): the signed self-verifying document #197 · storage #198 · distribution #202
+(the gossip carrier is deleted; a returned box now reconciles via `GET /management-api/membership`
+at boot) · setup/adopt trust establishment #203 · promotion R1 term-0 seed + local-secondary mint
+#205, R2 dormant identity reserved at adopt #208, R3a own nodeId from join #210, R3b in-process cloud
+promotion (term-guarded, PONR in one owner tx, `trading.env` persisted before the PONR) #211 ·
+`assertNotFenced` on both promote paths #225 · rejoin R1 fence-on-rejoin #214, R2 drain-as-source #219
+(replaced by the fence-LSN watermark), retire/evict #224, wipe-and-restore #237 · conflict surface
+#229 (deleted; primary-wins by construction) · the authenticated promote endpoint #272 · till reroute
+S1–S6 (Track B item 1). A standby holds its full dormant identity from JOIN (own nodeId + membership
+keypair + reserved installation number + disjoint series); promotion never mints a chain.
 
-**Track 2 infra-session — start-here menu (mapped 2026-09-01; SUPERSEDED 2026-09-05 — Track B's
-ordered list under *Priorities → Whole-project design review* is the menu now; the notes below are
-the state each landed slice left behind).** The infra track runs as its own
-interactive session, so "needs supervision" is not a disqualifier — the real question is ready-to-build
-vs gated on an unbuilt foundation or an external dependency:
+**Open residuals (each its own slice; the first three are Track B item 3's owed list):**
 
-- **Ready to build now:** *none queued.* **Kitchen-sync enrolment LANDED #196** (the FK-closure design
-  pass + build; see *Remaining* below for what shipped). Identity-config flow-down also **LANDED #195**:
-  `persons` + `webauthn_credentials` now flow down the ordered lane (see *What's built → Identity* and
-  the two follow-ups under *Onboarding*). With Slices 1 (#197), 2 (storage, #198), 3 (distribution,
-  #202) and **4 (setup/adopt, #203) shipped**, membership adoption is now **LIVE** (boot reads a real
-  trust set from `nodes.public_key`; the Slice-3 empty-seam no-op is gone). **Slice 5 (promotion
-  integration) was reframed by the owner on 2026-09-03 into the reserved standby identity & membership
-  promotion arc** (spec:
-  [reserved-standby-identity-and-promotion](superpowers/specs/2026-09-03-reserved-standby-identity-and-promotion-design.md)):
-  a standby gets its full **dormant identity at join** (own nodeId + membership keypair + reserved
-  installation número + disjoint series), activated on promotion with no connectivity needed; the primary
-  is the sole allocator; dormancy falls out of node-keying (no new schema). Decomposed **R1 → R2 → R3**,
-  with **H2** (fiscal-record sync to mirrors) sequenced, not gated. **R1 (document lifecycle — seed the
-  term-0 document at setup + mint the next document on local-secondary promotion) LANDED #205** (plan:
-  [membership-promotion-r1-document-lifecycle](superpowers/plans/2026-09-03-membership-promotion-r1-document-lifecycle.md)):
-  `buildNextMembershipDocument`/`nextStandings` (pure, `@waitron/membership`),
-  `writeNodeMembershipTx`/`setSingletonRoleTx` (`@waitron/db`), `seedTermZeroMembership` +
-  `mintNextMembershipDocument` (`apps/server`), and `promoteLocalSecondaryToPrimary` minting the next
-  document with the singleton flip + document write in ONE owner transaction. **R2 (reserve the cloud's
-  dormant identity at adopt) LANDED #208** (plan:
-  [membership-promotion-r2-reserved-identity](superpowers/plans/2026-09-04-membership-promotion-r2-reserved-identity.md)):
-  the adopt handshake now round-trips the standby's generated nodeId + Ed25519 public key to the primary,
-  which (sole allocator) mints a reserved installation número, derives disjoint series
-  (`deriveReservedSeriesCodes` = `<primaryCode>-<número>`), and endorses the key; the cloud persists a
-  **dormant** identity in one owner tx — own `nodes` row (new nullable `nodes.endorsement jsonb`, migration
-  0099), reserved `registro_sif` with the primary's number + fresh empty `cadenas` head, reserved
-  `invoice_series`, sealed private key — all inert (`config.till.nodeId` unchanged, mirror still read-only).
-  New fiscal primitives `reserveInstallationNumber`/`writeReservedSif` (single-writer preserved);
-  idempotent establish (spec §8, `membership.node_key` sentinel). **Two owner-review decisions:** disjoint
-  series code scheme (AEAT error 3000 is the sole cross-node backstop); endorsement on `nodes.endorsement`
-  not the vault. **R3 reframed on the owner's call (2026-09-04): the cloud takes its OWN id from JOIN, not at
-  promotion** — split into **R3a → R3b** (design refined:
-  [membership-promotion-r3-cloud-promotion](superpowers/specs/2026-09-04-membership-promotion-r3-cloud-promotion-design.md)).
-  **R3a (split identity at join) LANDED #210** (plan:
-  [membership-promotion-r3a-split-identity](superpowers/plans/2026-09-04-membership-promotion-r3a-split-identity.md)):
-  a cloud mirror now runs under its OWN nodeId from adopt (never impersonating the primary's) — `config.till.nodeId`
-  = own id, peer token enrolled for it, the primary's id persisted as new `mirror_config.origin_node_id` (custom
-  migration 0100) and used as the pull origin, the boot "subscriber==origin" assumption retired (the sync protocol
-  was already `(subscriber,origin,lane)`-split). Mirror stays read-only. Owner-steered report fix: reports resolve a
-  `dataNodeId` (origin on a mirror), and the **overview is now venue-wide** (loosened the READ type
-  `DailyCloseInput.nodeId` to optional; the fiscal WRITE `recordDailyClose` keeps a required node — verified a
-  per-SIF close can't go venue-wide). **R3b (cloud promotion) LANDED #211** (2026-09-04; plan:
-  [membership-promotion-r3b-cloud-promotion](superpowers/plans/2026-09-04-membership-promotion-r3b-cloud-promotion.md)):
-  a read-only mirror promotes to primary IN-PROCESS on the identity it already holds (restart-into-primary) —
-  a mode/role flip (`mode→primary` BEFORE `singleton→primary`, respecting `deployment_role_valid_ck`) + the
-  endorsed **term-guarded** promotion document + the corrected `config.till.seriesId` (the cloud's OWN reserved
-  standard series via `readStandardSeriesId`, was the primary's inert one). **The R3 sharp edge is closed:** the
-  document write goes through `persistNodeMembershipIfNewerTx` INSIDE the PONR owner transaction, and a
-  non-strictly-newer term aborts the whole transaction (`promotion.membership_superseded`), so the flip never
-  commits against a superseded chart. **No SIF activation / re-mint** — the reserved `registro_sif` is already
-  live (`revocado_en IS NULL`), so `currentSif` returns it as the live selling chain and the primary-only workers
-  start once the box reboots `mode=primary`. New db primitives `persistNodeMembershipIfNewerTx` /
-  `setDeploymentModeTx` / `readStandardSeriesId` (fail-loud on >1 standard series); new codes
-  `promotion.membership_superseded`, `series.no_standard_for_node`. **Owner decision (2026-09-04): the corrected
-  `trading.env` is persisted BEFORE the PONR** (inert on a still-read-only mirror), closing the PROCESS-crash
-  window a persist-after-PONR left. **New carry-in — power-loss durability:** `writeFileAtomic` does NOT fsync
-  (atomic visibility only, `fs-atomic.ts`) while the PONR is a durable pg commit, so a power cut between the
-  pre-PONR env write and the commit could reboot the box `mode=primary` still carrying the primary's series;
-  benign in R3b (nothing sells against a promoted cloud until till-reroute), close it by fsync-ing the env write
-  (cross-cutting — adopt/provision share `writeFileAtomic`, cross-platform fsync care needed) or resolving the
-  series at boot. **H2 (fiscal-record sync to mirrors)** independent. **Carry-ins (unchanged):** the primary
-  burns an installation número per bundle-**fetch** (spec §7 gaps-permitted, admin-authed); the idempotency
-  guard assumes provision/adopt are mutually exclusive per box (true today). **Two new deferrals from R3a:** (i) **till-side read routing —
-  READ-ROUTING HALF RESOLVED by till-reroute S3 (venue-wide till reads, this branch):** the till/KDS reads
-  (`listHeldOrders`/`listStationQueue`/`listExpoQueue` and the by-id `getHeldOrder`/`updateHeldOrder`/`abandonHeldOrder` family) are now
-  VENUE-WIDE — scoped to the tenant, never the OWN node id (till-reroute §3.6), so a promoted node serves the open tabs it inherited
-  instead of returning empty. That replaces the originally-planned "route these through the display-data node first" with the opposite
-  approach (drop the node filter, keep the tenant one). **STILL OPEN (selling-gate half):** selling MUST gate on REBOOT COMPLETION
-  (the corrected series in effect), not on the PONR commit, since a promoted-not-yet-rebooted box briefly opens writes in-process under
-  the stale series (see R3b's power-loss carry-in above); S3 does not address this. (ii) **richer daily close** — a single close run by the primary across all tills, grouped by till + a venue
-  total (its own slice; fiscal nuance: cash-up is per-till drawer, VAT is per-NIF). Slice 6 (rejoin) and Slice 7 (conflict surface) follow the arc. **Owner directive
-  (2026-09-03): stop deferring work because it touches fiscal code** — H2 / reserved-SIF / promotion are
-  in the build sequence now, no longer "owner-gated / never land unattended" (correctness rigor on the
-  §5 unrecoverable invariants + owner review-at-land are unchanged; only the scheduling gate is lifted).
-- **Membership & rejoin wire-protocol — Slice 1 (document foundation) LANDED #197** (design landed
-  2026-09-02, owner-review still pending). Spec:
-  [membership-and-rejoin-wire-protocol](superpowers/specs/2026-09-02-membership-and-rejoin-wire-protocol-design.md);
-  Slice-1 plan: [document-foundation](superpowers/plans/2026-09-02-membership-slice-1-document-foundation.md).
-  Resolves promotion-failover §9 item 1. **#197 shipped `@waitron/membership`** (pure leaf, deps
-  `@waitron/shared` only, 64 tests / 100% cov): the signed, self-verifying membership document — canonical
-  serialization, Ed25519 sign/verify, endorsement-chain trust rooted at setup, `verifyMembershipDocument`
-  (strict-shape — a verified document IS exactly its signed content, spec §3), `acceptMembershipDocument`
-  (the authentic + strictly-newer fence; demote-never-promote). `MAX_ENDORSEMENTS`/`MAX_NODES` = 8.
-  **Slice 2 (storage) LANDED #198** (plan:
-  [membership-slice-2-storage](superpowers/plans/2026-09-03-membership-slice-2-storage.md)): the
-  `node_membership` whole-DB singleton (`id=1`, `term bigint`, `document jsonb`, `updated_at` — no
-  `tenant_id`/RLS, mirrors `mirror_config`; migration `0096_node_membership.sql`, renumbered from 0088 on
-  rebase over #199's 0088–0095) + `readNodeMembership`/`writeNodeMembership` accessors on `@waitron/db`
-  (type-only dep on `@waitron/membership`). Owner decisions: `GRANT SELECT` to `app_user` only, owner-role
-  writes; plain-upsert dumb setter (accept fence stays in `@waitron/membership`); `term` reconciled by
-  deriving the column from `document.body.term` on write. **Slices remaining, each its own plan:**
-  (3) **distribution** over `/sync-api/hello` + local adoption **LANDED #202** (plan:
-  [membership-slice-3-distribution](superpowers/plans/2026-09-03-membership-slice-3-distribution.md));
-  (4) **setup/adopt** trust establishment **LANDED #203**; (5) **promotion
-  integration** — local-secondary mint **LANDED (R1 #205)**, reserved-SIF-at-adopt **LANDED (R2 #208)**,
-  split-identity-at-join **LANDED (R3a #210)**, cloud promotion **LANDED (R3b #211)** — Slice 5 COMPLETE
-  (see the membership arc above; residuals: power-loss durability + till-reroute);
-  (6) **rejoin — drain-then-restore** — **R1 (fence-on-rejoin) LANDED #214** (2026-09-04);
-  **R2 (drain-as-source + disposal guard) LANDED #219** (2026-09-05); **R3 split** (2026-09-05) into
-  **retire/evict (decommission) LANDED #224** (2026-09-05, no restore) and **wipe-and-restore
-  (rejoin-as-secondary) LANDED #237** (2026-09-05; fiscal-adjacent, owner-signed-off at land); (7) **conflict
-  surface** (config down-only + ops conflict log) **LANDED #229** (2026-09-05). Slice 6 rejoin arc
-  COMPLETE (fence R1 / drain R2 / retire-evict / conflict-surface / wipe-and-restore R3).
-  **Slice 6 R1 (fence-on-rejoin) LANDED #214** (2026-09-04): a returned/superseded node that holds or
-  adopts a membership document marking it **sell-only/evicted** now boots **FENCED**. Two mechanisms
-  cooperate: a **demote-only** `singleton_role → secondary` reconciliation at boot (owner-pool write,
-  `deployment_role_valid_ck` permits `(primary, secondary)` per 0071) suppresses the singleton duties
-  (submitter/reconciler/config-writer go quiet once `isSingletonPrimary` is false), and the
-  **read-only gate — generalized from mirror-only to a boolean predicate** — blocks *all* write verbs
-  on a fenced node (a superset of the §7 config-write class). A superseding doc arriving via gossip
-  **while running** triggers **restart-into-fenced**. The decision is **membership-standing-driven,
-  not axis-driven** — deliberately, because `mode=mirror` hard-requires `mirror_config` and
-  `role=secondary` is an active-selling local secondary, so neither axis alone means "fenced". New
-  app helpers `isFenced` / `shouldFenceRestart` (`apps/server`); pure `standingOf` /
-  `isFencedStanding` in `@waitron/membership`. **No migration** (no schema change; `inmutabilidad` /
-  FORCE-RLS / `english-only` unaffected — all standings are already English). **Carry-forwards:**
-  - **R2 (drain-as-source + disposal guard) LANDED #219** (2026-09-05). _(Step-4 note: this entire
-    outbox-based drain — the `/sync-api/log` own-origin source, the `/sync-api/cursor` exemption, the
-    `sync_cursor` disposal guard `readDrainProgress`, and `SYNC_LANES` — was DELETED in Track A item 3
-    step 4 and REPLACED by the native fence-LSN watermark: the carrier's own subscription drains the
-    returned box, and "drained" is `confirmed_flush_lsn >= deployment.fence_lsn && !active` on
-    `pg_replication_slots`, read by box-status/rejoin. Kept for history.)_ A fenced (`sell-only`) node now serves an
-    **own-origin drain source** — `mountSyncApi` gained `ownOriginOnly`, which forces `originId=self`
-    on `/sync-api/log`, so the current primary (the **carrier**) drains `originId=<returned>` with the
-    existing pull loop (no carrier-side code; the two boxes are static mutual peers). The read-only
-    gate gained a single-route **`POST /sync-api/cursor` exemption** (the carrier's cursor report — the
-    disposal guard's only input; writes `sync_cursor`, no tenant_id/RLS), so a future mutating
-    `/sync-api/` route is not auto-exempted — it hits the fence and fails loud (403). A fenced node stays
-    fully fenced otherwise
-    (`isSingletonPrimary` false — submitter/reconciler/config-writer + retention off; write verbs still
-    403). Producer-side **disposal guard** `readDrainProgress` (`@waitron/sync`): own-origin high-water
-    `seq` per lane vs the carrier's reported `sync_cursor` (subscriber=carrier, origin=self, lane),
-    ANDed across lanes (lane-agnostic via new `SYNC_LANES`); `drained` iff the carrier caught up on
-    every own-carrying lane. Carrier = the `serving-primary` in the held doc (`servingPrimaryNodeId`,
-    `@waitron/membership`). Surfaced on **box-status `disposal`** (applicable only when fenced).
-    **No migration** (serves/reads existing `sync_log`/`sync_cursor`/`node_membership`); the node stays
-    **`sell-only`** — R2 mints no document. **Cloud-as-carrier is out of scope** (relay-vs-sink open
-    item, parent §9).
-  - **Retire/evict — the decommission path — LANDED #224** (2026-09-05). A box leaving for good: drain
-    (R2 ✓) → **self-evict** → physical disposal, no restore. A fully-drained fenced (`sell-only`) node
-    mints a `sell-only`→`evicted` membership document signed with its **OWN** identity key (a
-    self-demotion — safe under wire-protocol §5; the departing node's key is in every former peer's trust
-    set, so the carrier verifies + adopts it via the existing `/sync-api/hello` gossip, no carrier-side
-    code) and persists it term-guarded. App pool only (`evicted` flips no deployment axis). New
-    `evictNode` producer in `@waitron/membership` (the counterpart to `nextStandings`); `retireSelf` +
-    `POST /api/box/retire` (management-authenticated, let through the read-only gate on a fenced node by a
-    single named exemption, mirror-gated off) in `apps/server`. Ordered guards:
-    idempotent-evicted → `not_fenced` → `no_carrier` → `carrier_changed` → `not_drained` → mint → persist;
-    term-guarded persist → `node.retire_superseded` on a gossip-adopt race. **No migration.** The two
-    R2-review facts held: (i) gates on the disposal guard's `drained` **boolean**, never on comparing
-    `carrierAppliedSeq >= ownTailSeq` (MAX vs MIN, legitimately differ while `drained:true`); (ii)
-    `node.retire_no_carrier` (fenced, undrainable) is distinct from `node.retire_not_fenced` (N/A,
-    serving). **`node.retire_carrier_changed` guard (I1, whole-branch review):** a fenced node does NOT
-    restart on a carrier change, so `retireSelf` re-derives the current carrier from the fresh held chart
-    and refuses when it differs from the boot-captured carrier the drain reader keys on — never evicts a
-    node whose tail reached only a *stale* survivor (fiscal-unrecoverable). **Carrier-side reaction to
-    `evicted` (stop pulling) is out of scope** — the carrier learns via gossip and the box is then
-    disposed (its pull just goes unreachable).
-  - **R3 (wipe-and-restore, spec §6 step 4) — the rejoin-as-secondary path — LANDED #237**
-    (2026-09-05; fiscal-adjacent, owner-signed-off at land). Design:
-    [membership-rejoin-r3-wipe-and-restore](superpowers/specs/2026-09-05-membership-rejoin-r3-wipe-and-restore-design.md).
-    Drain (R2 ✓, reusing R2's lane-agnostic disposal guard, `readDrainProgress`) → discard the diverged
-    DB → restore the current primary's baseline → reboot FENCED (sell-only), streaming the primary's
-    log as a clean subscriber; re-admission to `serving-secondary` is a separate, deferred slice (no
-    self-promotion — demote-never-promote). New operator CLI `waitron-rejoin`
-    (`rejoin-command.ts`/`bin-rejoin.ts`) drives `rejoinAsSecondary`
-    (`apps/server/src/rejoin.ts`, guard ladder `not_fenced`/`no_carrier`/`not_drained`) through
-    `dropAndCreateDatabase` (DROP+CREATE wipe, `db-wipe.ts`), then BR-3's `restoreFromArtifact`
-    (DB+media, new `skipSecrets` flag keeps the rejoining node's OWN identity), then reboot fenced (R1
-    #214). Same producer as before (`pg-dump.ts`/`backup-sweep.ts`, `row_security=off`, so the
-    `sync_log`-in-backup half is satisfied). **Fiscal safety rides the drain guarantee, unchanged:** the
-    disposal guard measures the enrolled `sync_log` tail only — the per-node fiscal chain
-    (`registros_facturacion`) is deliberately NOT in `sync_log` today, so this same lane-agnostic guard
-    auto-covers the fiscal chain with no R3 change once H2/SP-3 enrols it onto a lane. A real-PG e2e
-    found + fixed a wiped-but-not-restored DR bug: `restoreFromArtifact` assumed its staging/media/state
-    roots already existed; a rejoin left the DB wiped with nothing restored into it. Fixed by having
-    restore create those roots itself before its guard runs. The whole-branch review then hardened the
-    pre-wipe guard ladder to refuse before the irreversible wipe for a wrong recovery key / incompatible
-    artifact (validate-before-wipe), a `DATABASE_URL` vs `WAITRON_RESTORE_DATABASE_URL` target mismatch,
-    and a stale-carrier two-read window (read `node_membership` once); Copilot round closed
-    (0700 restore dirs, pool-close-on-refusal).
-    - **R3 follow-ups (deferred, owner-flagged):** (a) **automatic resume-at-restore** — a mid-flow
-      failure AFTER the wipe still needs operator recovery (data is safe: drained tail on the carrier +
-      the backup artifact); self-recovery needs a persisted wiped-state marker to tell a wiped-mid-restore
-      box from a never-provisioned one — an owner design call, not built. R3 only PREVENTS the preventable
-      pre-wipe failures. (b) **re-admission `sell-only → serving-secondary`** — the un-fence that makes the
-      rejoined box sell again; a separate primary-minted slice (no self-promotion — demote-never-promote).
-      (c) tiny: `restore.ts`'s "Exposed for R3" comments on the composable steps now describe a path R3
-      didn't take (it uses `validateArtifact`/`writeValidated`) — harmless, thin when next touched.
-  - **Slice 7 (conflict surface) LANDED #229** (2026-09-05). _(Step-4 note: the app-level config-conflict
-    apply gate, the `sync_config_conflicts` ops table and the `sync_tailer` reader were DELETED in Track A
-    item 3 step 4. Native replication makes settings primary-wins by CONSTRUCTION — a returned box's
-    `state` publication is never subscribed during the drain window (only its `ledger`), so config rows
-    never travel back; `sync.config_conflict_rejected` is a deprecated code. Post-drain conflict counting
-    via `pg_stat_subscription_stats` is a step-5 alarm. Kept for history.)_ Primary-wins for config-class rows: on the
-    carrier draining a returned/fenced node, a config-class row whose `originId` is not the current
-    serving-primary is REJECTED (not applied — the primary's config stands) and RECORDED to the new
-    append-only ops table `sync_config_conflicts` (whole-DB, NO tenant_id/RLS — `sync_cursor` precedent;
-    SELECT to the NOLOGIN `sync_tailer` only, INSERT to app_user, so app_user never reads a cross-tenant
-    `row_image`). Built on the post-#227 **inverted** enrolment model: config-class is a per-table
-    `EnrolledTable.configClass` set in each package's own `enrol()` (exactly the 10 pure-config tables;
-    `dining_tables` excluded as mixed config/runtime), and the apply gate reads it off the injected
-    dispatch entry. The gate reads a **live** serving-primary (per-batch getter updated in
-    `adoptMembership`), so a promotion without a restart does not leave it stale. Surfaced as a count on
-    box-status (via the `sync_tailer` pool). Note the branch was reset + reworked onto the inverted model
-    after #227 (SP-2a) landed mid-build. **Documented residuals** (bounded, fail-safe, deferred to the
-    interactive-merge/ops path, spec §7/§9): (i) a runtime child FK-referencing a fence-window config
-    parent parks on 23503 → that origin's drain stalls → retire refuses (child never dropped, no fiscal
-    data loss); (ii) a clean primary→primary handover with config still pending in the old primary's
-    outbox rejects those rows after gossip flips the serving-primary (recorded, not lost); (iii) the
-    conflict count is cumulative/unclearable until the ops-resolve path lands; (iv) a duplicate conflict
-    row can be recorded on a crash+redelivery (append-only log, tolerable); (v) no index on
-    `sync_config_conflicts` (a `count(*)` needs none). **The interactive per-field merge + an ops-resolve
-    (clear/review) surface are the natural follow-on** (§9 item 2).
-  - **Bounded residual (accepted, spec §8.4):** on the first boot after returning, the node runs as
-    its **stale-held-doc primary** until the pull delivers the superseding doc and restarts it (≈ one
-    pull interval). Deliberately **not** boot-into-read-only-until-confirmed — that would black out a
-    genuinely isolated returning node with no reachable peer (§5.1).
-  - **Bounded one-tick restart window (accepted, honesty note — not a defect):** the runtime
-    adopt→restart path leaves a bounded **one-tick** window — the node persists the fencing document,
-    then a next-tick `SIGTERM` reboots it into the fenced posture, so one more fiscal pass could file on
-    the now-known-superseded chain before the reboot lands. This is inherent to restart-based fencing —
-    the same mechanism R3b promotion uses — and is consistent with spec §8.4; the node is **fully fenced
-    on reboot**.
-  - **The `evicted` producer landed with retire/evict (#224):** `evictNode` (`@waitron/membership`)
-    mints the `sell-only`→`evicted` edit, self-signed by the departing node at retire time. `nextStandings`
-    (the promotion producer) still never emits `evicted` — deliberately; it demotes the outgoing primary
-    to `sell-only`, and eviction is the separate decommission producer.
-  - **Carry-forward for the promotion-runbook / promote-action slice (fiscal, flagged at R1 land by a
-    finish-branch reviewer):** R1 reconciles a fenced node to `(mode='primary', singleton_role='secondary')`
-    — the SAME axis pair as a healthy "local secondary" — so `promoteLocalSecondaryToPrimary` (which today
-    checks only `mode!=='mirror'` and `singletonRole!=='primary'`, `promote.ts`) cannot tell a fenced node
-    from a promotable one. Invoked against a fenced node it would `nextStandings(self→serving-primary)`,
-    self-sign a new doc, and flip `singleton_role` back to `primary` **live** (no restart) — resuming the
-    fiscal duties while the HTTP read-only gate stays shut only because `fenced` is a boot-captured closure
-    — the "two submitters under one NIF" the design exists to prevent. **Unreachable today** (that promote
-    is in-process/test-only with no endpoint, and the design gates it behind `FenceAttestation`/`assertFenced`
-    + the still-open promotion runbook, wire-protocol §5/§9). **The fence-check part LANDED #225**
-    (2026-09-05): both `promoteLocalSecondaryToPrimary` and `promoteMirrorToPrimary` now call
-    `assertNotFenced(held, nodeId)` (consulting `isFenced`/`standingOf`) before the point-of-no-return,
-    refusing `promotion.node_fenced` — defense-in-depth landed ahead of the promote endpoint (Slice 2). What
-    REMAINS of this carry-forward: the promotion runbook / authenticated endpoint itself. Same shape as the
-    wide reviewer's note that a fenced node adopting an *un-fencing* doc persists it without re-promoting in
-    place — R1 never produces such a doc (re-admission is wipe-and-restore), so the in-place transition is out
-    of scope until the R3 eviction/re-admission producers exist.
-  **Slice 3 (distribution) LANDED #202** (2026-09-03): _(Step-4 note: `/sync-api/hello` and the pull-worker
-  gossip that carried the membership document are DELETED in Track A item 3 step 4; membership now
-  distributes via a returned box's boot-time `GET /management-api/membership` reconciliation before it
-  sells — Ruling C7. The mechanism below is #202 as landed, kept for history.)_ `/sync-api/hello` served
-  `{ nodeId, environment, membership }` (the held signed document or `null`); the pull worker threaded that
-  field out of the handshake it already makes each tick and handed it to an injected **best-effort**
-  `adoptMembership` callback (same contract as `reportCursor`, so `@waitron/sync` stays transport-only, no
-  membership/db dep); `apps/server/membership-adopt.ts` verifies authenticity then persists via the new
-  typed
-  `persistNodeMembershipIfNewer` accessor on `@waitron/db` (a term-guarded `onConflictDoUpdate({setWhere})`,
-  the atomic monotonic backstop for the two-lane race — a **sibling** to the still-dumb
-  `writeNodeMembership`); migration `0097_node_membership_write_grant.sql` adds the #198-deferred
-  `GRANT INSERT, UPDATE` (no DELETE). Boot wires adoption with an **inert empty trust-set seam** (`{}`), so
-  production adoption is a no-op (every doc `untrusted_signer`) **until Slice 4 fills the trust set** — the
-  mechanism is proven live only via a fixture-trust-set e2e. **Follow-ups from #202 (carry into Slice 4+):**
-  (a) the **#198 write-grant deferral is now resolved** (0097 grants app_user INSERT/UPDATE). (b) `adoptMembership`
-  makes the **atomic persist the sole authority on "strictly newer"** — it reports `accepted` iff the guarded
-  upsert changed the row (a Copilot-caught TOCTOU: the earlier read-then-accept could report a document
-  adopted that a concurrent higher term had already superseded); it no longer pre-reads the term (an
-  efficiency finding, resolved by the same change). (c) `acceptMembershipDocument` (the read-based Slice-1
-  fence) is **no longer used by the adoption path** — it remains the general-purpose fence for
-  non-persisting callers (e.g. a till deciding routing, Slice 5+); when a persisting caller needs the
-  two-part test, the atomic guard is the race-safe way to enforce the "newer" half. (d) boot's thin
-  `adoptMembership` wrapper closure is **not directly unit-tested** (boot tests use unreachable peers so the
-  drain throws before the callback fires; the module it calls is 100% covered + e2e-proven) — a candidate
-  boot-wiring assertion for a later slice.
-  **Slice 4 (setup/adopt) LANDED #203** (2026-09-03): each node gets an Ed25519 identity at setup, so boot
-  reads the trust set LIVE (`readMembershipTrustSet(localSyncDb, till.tenantId)`) — the Slice-3 empty seam
-  is gone and adoption is no longer inert. Shipped: `nodes.public_key` nullable trust-anchor column
-  (generated migration `0098`; `app_user` gains nothing — the read rides the pre-existing table-level
-  SELECT, writes stay owner-role); `@waitron/db` accessors `setNodePublicKey` / `setNodePublicKeyTx`
-  (tx-taking core) / `readMembershipTrustSet` (→ `TrustSet`, skips keyless nodes); the `membership.node_key`
-  credentials vault purpose (private key sealed under the box key, `sync.mirror_token` pattern);
-  `apps/server/src/node-identity.ts` — `establishNodeIdentity` generates a keypair and seals the private
-  key + stamps the public key in **ONE transaction** (they are one logical change), `readNodeIdentityKey`
-  the Slice-5 signer's entry point (exercised now by a sign/verify pairing proof); wired into
-  `/setup-api/provision` (deps-gated) + boot. **Adopt needed no code change** — the cloud mirror inherits
-  the primary's key through the node row `adoptVenue` already replicates (value-asserting `adopt.rls`
-  proof). **Owner decisions:** trust anchors ONLY — the **endorsement chain is DEFERRED** (no consumer
-  until promotion; the cloud mirror runs as the primary's nodeId, never signs, seals no key); public keys
-  on `nodes.public_key`; private key in the credentials vault. **Follow-ups from #203 (carry into Slice 5+):**
-  (a) a provision failure AFTER `provision()` mints the tenant/chain is **unrecoverable** → re-image (the
-  existing `sealAeat`-window class, widened by one step; recovery is the cold-recovery/re-image posture).
-  (b) **Slice 5 must guard `establishNodeIdentity` to run once per node** before any document is signed —
-  a re-establish mints a fresh keypair and would orphan a previously-signed document. (c) the membership
-  private key is **decryptable by the `app_user` pool** (same as `sync.mirror_token`/`fiscal.aeat`) —
-  Slice 5's threat model should state it. (d) finish-phase review made the seal+stamp atomic (was an
-  incidental two-transaction split) and caught a §1 false claim in that fix's own comment ("app_user holds
-  neither" is false for `tenant_credentials` — it holds full DML there per `0001`); both corrected. Not
-  applied: a shared `seedLocation` test helper (the inline location-insert is the repo's convention across
-  ~90 test files — a separate repo-wide cleanup, not this slice).
-  **Follow-ups recorded from #197:** two efficiency micro-opts were consciously skipped in
-  `resolveSignerKey` (re-verify-across-passes; same-endorser key re-parse) — constant-bounded by
-  `MAX_ENDORSEMENTS`, revisit only if the cap grows; the break-glass-rooted (option B)
-  signing hardening stays deferred with break-glass.
-- **Reserved-SIF staging — DONE via R2 (#208).** The reservation of the standby's installation number +
-  disjoint series now happens at cloud **adopt** (not a separate staging step), keyed to the standby's own
-  dormant nodeId. What remains is **R3** activating it (switch the runtime node id, activate the SIF, start
-  the primary-only workers on promotion) + the C2a promote action — see the membership arc above.
-- **Hard-gated (leave until the gate clears):** break-glass secret mint (DONE — promote Slice 2, #272); the **restore
-  consumer** (backup regime BR-3 — clears R3 rejoin + promote Slice 4; BR-1 producer/encryption LANDED
-  #226); real cloud hosting/relay (cloud-mirror follow-ups, the T1 relay — _2026-09-05: no relay; the
-  box's WireGuard link to its own cloud instance, `2026-09-05-relay-decision.md`_ — **MVP-critical since
-  2026-09-05, Track B item 2**); the go-native decision
-  (on-device agent); and the **owner-gated fiscal H2** hash-chain sync lane — never landed without
-  owner sign-off.
+- **Re-admission `sell-only → serving-secondary`** — the primary-minted un-fence that makes a rejoined
+  box sell again (no self-promotion — demote-never-promote). Must retire the node's previous chart
+  entry (the `MAX_NODES = 8` growth, Track B item 1 finding (i)) and delete its live `fiscal.aeat`
+  row (cert-distribution design §8). A fenced node adopting an un-fencing document today persists it
+  without re-promoting in place — fine while no producer emits one.
+- **Resume-at-restore marker** — a mid-flow failure AFTER the wipe still needs operator recovery
+  (data is safe: drained tail on the carrier + the backup artifact); self-recovery needs a persisted
+  wiped-state marker to tell a wiped-mid-restore box from a never-provisioned one.
+- **Worker-lifecycle manager** (promote Slice 3) — in-process promotion without the restart; Track B
+  item 6 decides restart-always vs manager.
+- **Power-loss durability + the selling gate.** `writeFileAtomic` does NOT fsync (`fs-atomic.ts`)
+  while the PONR is a durable pg commit, so a power cut between the pre-PONR env write and the commit
+  could reboot a box `mode=primary` still carrying the primary's series. Close it by fsync-ing the env
+  write (adopt/provision share the helper) or resolving the series at boot — and selling must gate on
+  REBOOT COMPLETION (the corrected series in effect), not the PONR commit.
+- **Chart hygiene** (Track B item 1 finding (ii)): re-publish the node's own entry at boot so a
+  changed `WAITRON_ADVERTISED_ORIGIN` reaches the chart; a promoting node absent from the chart must
+  not append itself address-less.
+- **Richer daily close** — one close run by the primary across all tills, grouped by till + a venue
+  total (cash-up is per-till drawer, VAT is per-NIF; `recordDailyClose` keeps a required node).
+- **Mirror fidelity** — `adoptVenue` nulled `locations.catalogue_id` + `tills.receipt_printer_id`
+  under the outbox adopt; re-check what the native initial COPY (#280) leaves before building
+  anything. **First-contact trust bootstrap** for an untrusted-network primary — gated on real hosting.
+- **Carry-ins, accepted or to state in a threat model:** the primary burns an installation número per
+  bundle-FETCH (gaps permitted, admin-authed); provision and adopt are assumed mutually exclusive per
+  box; `establishNodeIdentity` must run once per node before any document is signed (a re-establish
+  orphans signed documents); the membership private key is decryptable by the `app_user` pool (same
+  as `fiscal.aeat`); a provision failure AFTER `provision()` mints the tenant/chain is unrecoverable
+  → re-image; on the first boot after returning, a node runs as its stale-held-doc primary until the
+  membership reconciliation restarts it (bounded, §8.4); restart-based fencing leaves a one-tick
+  window in which one more fiscal pass could file on the superseded chain.
 
-### Backup & restore regime (BR-1 #226 + BR-2 #228 + BR-3 #232 + BR-4 = SP-3d #248 — ALL LANDED)
+### Backup & restore regime — BR-1..BR-4 ALL LANDED; carry-forwards open
 
-A generic core backup/restore service (storage-media plugins + module hooks), decomposed BR-1..BR-4.
-Design: [backup-restore-regime](superpowers/specs/2026-09-04-backup-restore-regime-design.md); BR-1 plan:
-[br-1](superpowers/plans/2026-09-05-backup-restore-br1-storage-fanout-encryption.md).
+Design: [backup-restore-regime](superpowers/specs/2026-09-04-backup-restore-regime-design.md); the
+restore hook: [SP-3d design](superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md).
+**Landed:** BR-1 storage abstraction + fan-out + AES-256-GCM artifact encryption under the operator
+recovery key `WAITRON_BACKUP_RECOVERY_KEY` #226 · BR-2 the single encrypted archive (manifest + dump +
+media + secrets) and the module `backup` contribution #228 · BR-3 the restore consumer (compatibility
+gate, entry-name path-traversal guard, `pg_restore` into a fresh DB, module hooks) #232 · BR-4 = SP-3d
+(a filing node's restore mints a fresh chain + disjoint series, identity written last) #248. Rejoin
+(#237) composes `validateArtifact` + `writeValidated` around its wipe and keeps its own identity.
+The promote-Slice-4 **operator surface** for a cold restore (connection rebinding, advertised origin,
+an authenticated entry — SP-3d spec §2) is still open.
 
-- **BR-1 — storage abstraction + fan-out + encryption — LANDED #226 (2026-09-05).** Grew the single-dir
-  `pg_dump` backup into a pluggable, multi-destination, **encrypted** backup: `StorageBackend` +
-  `LocalFsBackend` (atomic `put` via `writeFileAtomic`); an artifact cipher (AES-256-GCM over the dump,
-  operator recovery key `WAITRON_BACKUP_RECOVERY_KEY` — never the box key, so a backup survives box
-  destruction; version-selected **frozen** `KDF_BY_VERSION` + GCM-AAD-authenticated header, self-describing
-  so a future scrypt hardening never strands old artifacts); a destinations list (rejecting duplicate
-  ids/dirs, fail-closed); a fan-out orchestrator (dump→encrypt **once**→put to every destination in
-  parallel, best-effort per destination→prune each; staging under `<stateDir>/backup-staging`, 0600);
-  per-destination freshness on `GET /api/box/status`. No restore, no module contributions.
-  - *BR-1 deferrals (named, not gaps):* abort-aware **per-destination timeout** (v1 is `LocalFsBackend`-only;
-    a hanging destination isn't abandoned mid-tick — same between-ticks abort model as the sibling
-    tunnel and backup-sweep workers; lands with the first network s3/sftp backend) · stale-`.tmp` sweep
-    (bounded, cosmetic) · **path-traversal containment guard on `StorageBackend` key** — unreachable in v1
-    (keys generated internally), **must land with BR-3's first manifest-driven `get(key)`**.
-- **BR-2 — manifest + module `backup` contribution — LANDED #228 (2026-09-05).** A backup is now a single
-  encrypted **archive** `waitron-<ts>.backup.enc` = `encryptArtifact(packArchive([manifest.json, db.dump,
-  media/…, secrets/…]))`. Shipped: the `backup` contribution kind on `WaitronModule` (`{ nonDbState?,
-  restore? }`, open-set; `core` declares the content-addressed media store); `packArchive`/`unpackArchive`
-  (bounds-checked container); `buildManifest` (module→migrated-schema-version + environment, via a shared
-  `schemaVersionsByModule` also used by boot's drift probe, read over the **privileged** backup pool);
-  `collectModuleNonDbState`; the orchestrator collects manifest+secrets+media **before** the dump
-  (fail-fast, no wasted dump) and encrypts once. Rebased cleanly onto **SP-2** (`core` carries both `sync`
-  and `backup`). `restore` stays a seat (BR-3/BR-4).
-
-  > **2026-09-06 (SP-3d):** The restore contribution is now a typed transaction hook, populated by
-  > the fiscal module (landed #248, 2026-09-06); see the [SP-3d
-  > design](superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md) §4.
-
-  - *BR-2 carry-forwards:* **BR-3 must add path-traversal guards on archive entry NAMES at unpack-to-disk
-    time** (like `unpackBundleToDir`/`state-secrets.ts`), plus BR-1's deferred `StorageBackend`-key guard.
-    Deferred edges (note-only): a working-backup boot success-path integration test; scope the flat
-    `resolvers` map by module when a 2nd `nonDbState` module lands; `packArchive` pack-time `entries.length`
-    bound.
-- **BR-3 — the restore consumer — LANDED #232 (2026-09-05).** (Superseded; see the SP-3d note below.)
-  `decrypt` → `unpackArchive` → **compatibility
-  gate** (env + module schema-version vs the restoring binary) → **entry-name path-traversal guard**
-  (lexical + realpath, shared with `unpackBundleToDir`, all entries before any write) → `pg_restore`
-  (`--no-owner`, password via `PGPASSWORD` env not argv) into a fresh DB → restore media/secrets → invoke
-  module restore hooks (empty v1). Composable steps (`restoreDatabase`/`restoreMedia`/`restoreSecrets`/
-  `invokeRestoreHooks`) + full `restoreFromArtifact` + a `restore` CLI verb. **Fiscal-safe by construction:**
-  restores the ledger **verbatim**, mints **no** chain, makes the box **no** trade-readier — a real
-  in-container fiscal receipt proves a `registros_facturacion` row restores AND stays immutable (post-restore
-  UPDATE rejected, `WT001`). A review-caught **Critical** (a failed `pg_restore` leaked the admin password to
-  the terminal) was closed at the root + two sanitizing layers. **Owner-flagged at land (PR #232) for the
-  fiscal-adjacency.** **Clears the R3-rejoin `pg_restore` gate + promote-Slice-4.**
-  - *BR-3 carry-forwards:* **R3-rejoin composes** `restoreDatabase`+`restoreMedia` (skipping secrets to keep
-    its own identity) then re-fences (R1 #214). Deferred: a DROP-DATABASE/wipe primitive (v1 targets a
-    pre-created fresh DB); a manifest-shape coded refusal (fails safe under GCM auth today); generalizing
-    entry routing off declared source ids (a fail-visible `restore.unexpected_entry` reject is in; full
-    generalization when a 2nd non-DB `nonDbState` source lands).
-
-  > **2026-09-06 (SP-3d):** The BR-3 description above records its shipped behaviour. Cold restore
-  > now migrates, runs hooks and settles fresh series in one transaction, then writes the identity
-  > last. Rejoin uses `validateArtifact` + `writeValidated` around its wipe, migrates, and skips
-  > identity replacement and hooks. `invokeRestoreHooks` has been replaced by `runRestoreHooks`; see
-  > the [SP-3d design](superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md) §5.
-
-- **BR-4 = SP-3d — LANDED #248 (2026-09-06).** For a node that was filing, the fiscal
-  `backup.restore` hook mints a fresh chain and derives disjoint series codes; the restore orchestrator
-  opens those series and writes the identity last. Promote-Slice-4 still needs its operator surface;
-  what the merge left behind is listed on the module-system SP-3d row. See that row and
-  [design](superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md).
-
-**Remaining, each its own design pass:**
-
-- **Cloud-mirror follow-ups (deferred).** _2026-09-05: the B items below retire with `@waitron/tunnel`
-  (`2026-09-05-relay-decision.md`); do not build them._ From B (spec §11, within the semi-trusted-relay threat model,
-  each self-healing or fail-closed today): the box→relay control-frame splice race; a max pre-`go`
-  frame-length guard; ignore-`go`-before-`ack`; a registration/handshake timeout; a `tunnelHttpClient`
-  disposal seam for C's long-running subscriber; SNI-based multi-box routing — all owed to the real T1
-  relay/client. From C2a: the promote **action** + starting the primary-only workers on promotion
-  (gated on reserved-SIF staging — see *SIF topology*). From C2b: **mirror fidelity** — `adoptVenue`
-  nulls `locations.catalogue_id` + `tills.receipt_printer_id` (correct today; restoring them needs
-  config replication); and the **first-contact trust bootstrap** for an untrusted-network primary (gated
-  on real hosting). Plan:
-  [cloud-mirror-hardening](superpowers/plans/2026-08-29-cloud-mirror-hardening-followups.md).
-- ~~**Multi-tenant transport** — a whole-log reader role.~~ **DROPPED 2026-09-05** (one tenant per
-  database, cloud included — *Whole-project design review*): a source never serves more than one
-  tenant's log.
-- **Fiscal-lane / hash-chain sync (H2) → now SP-3 of the module system** (see the module-system section
-  above). Enrol the six fiscal tables — `registros_facturacion` insert-only + `registro_sif`/`cadenas`/
-  `envios`/`envio_flujo`/`acks` — onto the ordered lane; verbatim, immutability honoured on the subscriber;
-  transport-agnostic. The standalone H2 spec/plan live on branch `feat/h2-fiscal-record-sync` (never merged)
-  as reference material; SP-3 delivers it as the fiscal module's own sync enrolment, riding SP-2's inversion.
-- **Disposal guard: durability ≠ convergence — CLOSED by Track A item 3 step 4.** _(The app-level
-  disposal guard is deleted; "drained" is now the native fence-LSN watermark read on the CARRIER's own
-  slot — the node that carries the partition forward, so a tail that reached only a passive sink no
-  longer counts as safe; and Ruling C7's boot-time membership reconciliation closes the convergence gap
-  for a returned box. The open question below is resolved by construction.)_ The failover
-  disposal guard (promotion-failover §5.1) retires a node "once its owned partition has fully replicated to
-  at least one surviving node (peer *or* cloud)." That counts a tail that reached **only the passive cloud
-  sink** as safe to dispose — durable, but **not converged**: the cloud is a sink not a relay, so a
-  surviving/promoted *local* primary never receives it. Candidate tightening: require **the node that
-  carries the partition forward** (current primary for a secondary/mirror; promoted successor for a
-  primary) to have drained the tail, not merely *some* survivor. Facet of the relay-vs-sink (§9 item 3) +
-  convergence-gap (item 4) questions; belongs with the disposal-guard / promote-action tooling. H2
-  unaffected — it only makes the fiscal `sync_log.seq` measurable. Dated note recorded at
-  promotion-failover §5.1.
-- **Kitchen-sync enrolment — LANDED #196.** _(Step-4 note: the ordered lane and per-table enrolment were
-  DELETED in Track A item 3 step 4; every table is now copied by native logical replication unless its
-  module classifies it `local`, so this FK-closure reasoning is historical — the KDS tables are `state`
-  and travel by classification, not enrolment.)_ Enrolled the KDS FK closure onto the ordered lane. The
-  closure turned out to be **three** tables, not the two named here: `kitchen_stations`, `kitchen_courses`
-  (forced in by the KDS-2 course FKs) and `ticket_items`. Hard gate closed — enrolled
-  `categories`/`products`/`working_order_lines` carry `station_id`/`course_id` FKs into the kitchen config
-  tables, so a routed-menu row would have `23503`-parked and stalled the ordered lane (the C1 shape).
-  Same Group-D shape as C1 (no watermark, no delete; `ticket_items` removal rides the
-  `working_order_lines` `ON DELETE CASCADE`, reproduced on the subscriber); no new grants; no FK cycle
-  (`ticket_items` is an FK leaf). Spec:
-  [kitchen-enrolment](superpowers/specs/2026-09-02-sync-kitchen-enrolment-design.md). The `dining_tables`
-  HARD GATE remains closed by C1 (#153).
+**Carry-forwards (named, not gaps):** an abort-aware **per-destination timeout** (lands with the first
+network s3/sftp backend); a stale-`.tmp` sweep; confirm the **`StorageBackend` key path-traversal
+guard** landed with BR-3's manifest-driven `get(key)` (BR-3 guards entry NAMES; the key guard was a
+BR-1 deferral); a working-backup boot success-path integration test; scope the flat `resolvers` map
+by module when a second `nonDbState` module lands; a `packArchive` pack-time entries bound; a
+manifest-shape coded refusal (fails safe under GCM auth today); generalising archive entry routing
+off declared source ids when a second non-DB source lands. The SP-3d left-behinds are on the module
+system's list.
 
 ### Reporting fiscal remainder (parked)
 
@@ -2041,16 +829,15 @@ cash-drawer, and cash-drawer authorization consumers landed. Specs/plans under
 - **Failover printing** ([design](superpowers/specs/2026-08-26-failover-printing-design.md)) — the
   lease/reclaim for stuck jobs LANDED (#138). Follow-ons: un-pin an IP printer from its single `agent_id`
   (any LAN agent serves; distinct-agents race test + location-scoped-authz review); agents share the
-  till's `[local → cloud]` failover list (no outbox replication needed); **a till hosts a print agent**
-  (the majority single-box venue's box-death path — high importance, but needs an on-device agent → a
-  native app → **parked behind the go-native decision**); at-least-once delivery + active failure
-  escalation at the till/KDS (Slice-B).
+  till's `[local → cloud]` failover list; **a till hosts a print agent** (the majority single-box
+  venue's box-death path — high importance, but needs an on-device agent → a native app → **parked
+  behind the go-native decision**); at-least-once delivery + active failure escalation at the till/KDS
+  (Slice-B). MVP-critical for a cloud primary or a promoted cloud standby (Track B item 5).
 - **KDS-4 follow-ups:** **device-mode reprint** (a `POST /api/device/orders/:id/reprint` behind
-  `requireDevice`, scoped to the device's bound station — the kitchen station most likely to hit a paper
-  jam is exactly a device-mode display); **mirrored station-side read** (spec §5's read-only "printers
-  serving this station" view — the backing route exists, only a `DashboardApi.listStationPrinters` + UI
-  line are missing); **reprint timestamp** (reprint stamps the reprint wall-clock, not the original
-  `ticket_items.fired_at`, so a reprint header reads a fresh time — thread `fired_at` through).
+  `requireDevice`, scoped to the device's bound station); **mirrored station-side read** (spec §5's
+  read-only "printers serving this station" view — the backing route exists, only a
+  `DashboardApi.listStationPrinters` + UI line are missing); **reprint timestamp** (reprint stamps the
+  reprint wall-clock, not the original `ticket_items.fired_at` — thread `fired_at` through).
 - **Counter-receipt deferred niceties:** the per-till printer picker isn't location-filtered; the
   print-mode toggle is set-only (no read-back route).
 - **Cash-drawer:** the `drawer_open_policy` toggle is set-only — a read-back route is a reasonable
@@ -2069,7 +856,7 @@ station selects are set-only — the most useful to close, a demo-config frictio
 `type`/`kind`** (bar/kitchen/grill/pass is name-only convention); **single-target only** (no fan-out,
 no per-modifier/per-time rules).
 
-**Order timings — LANDED** (Tier B #9, #185). Deferred follow-ups listed under *Phase 1 → Tier B #9*.
+**Order timings — LANDED** (Tier B #9, #185). Deferred follow-ups under *Product work → Ordering*.
 
 **Status config.** Table/service statuses — BUILT (TS-2, full CRUD). Kitchen statuses — PARTIAL:
 `bump_mode` (line/ticket) + `fire_control` (waiter/kitchen) are configurable fixed enums; a
@@ -2101,7 +888,7 @@ owner decisions 2026-09-01):**
   blank row itself remains — needs a `parent_line_id`/`product_id`-aware tab-lines render (nest the
   modifier under its parent, or skip it).
 
-### Onboarding, cloud trial & distribution/failover (Phase 0 4b/4c COMPLETE; rest parked)
+### Onboarding, cloud trial & distribution (Phase 0 4b/4c COMPLETE; rest parked)
 
 Distribution & client-topology design landed (#86,
 [spec](superpowers/specs/2026-08-15-distribution-and-client-topology-design.md)): cloud-hosted is a
@@ -2111,7 +898,7 @@ Onboarding free-tier slices 1–4 are complete (#137–#166); spec
 venue-only (R1) — the full `instance` role-split is deferred to the appliance image (*Debt →
 Provisioning/build*).
 
-**Guided onboarding wizard — four setup modes (NEW — owner-added 2026-09-04).** Onboarding today is a
+**Guided onboarding wizard — four setup modes (owner-added 2026-09-04).** Onboarding today is a
 developer path (`pnpm dev:setup`, env vars, the provisioning CLIs); the owner wants a **simple first-run
 chooser** so a non-technical installer is never overwhelmed and never "runs away". On installing a new
 node, present a small menu of **four intents**, then a dedicated wizard that guides each one to
@@ -2129,62 +916,51 @@ completion:
    per environment — a pre-production DB is _never promoted_.** Its `invoice_series` / hash-chain must
    **not** carry over (pre-prod sales would leave a permanent hole in the production series, which is
    exactly what Veri\*Factu detects, and a chain cannot be migrated). So this wizard copies
-   **configuration only** — catalogue/menus, floor plan, staff, devices, layout profiles, hardware
+   **configuration only** — catalogue/menus, floor plan, staff, devices, canvases, hardware
    bindings, printer/payment config — into a **fresh production DB with a brand-new fiscal chain +
    series**. Needs a defined config **export/import** surface (what copies vs. what is minted fresh);
    H2-adjacent, so specced with the owner, never landed unattended.
 4. **Add a node to an existing system** — a second box joins an already-running venue. Maps to the
-   **membership adopt** arc (cloud-mirror adopt / reserved-standby identity R2 #208 → R3, the membership
-   slices under *Sync*) plus the reroute/failover work (Track 2). Largely a wizard over infra already
-   being built.
+   **membership adopt** arc (the standby's dormant identity at join, *Replication, membership &
+   failover*) plus till reroute (landed). Largely a wizard over infra already built; a second LOCAL box
+   is post-MVP.
 
 Plus **data migration from common systems (e.g. Square)** to lower the switching cost for an owner
 leaving another POS — this is the existing *Square (and generic CSV) menu import* item
 (*Priorities → Tier C*; a one-off import is NOT the cheap seed path, spike 2026-08-29), which the wizard
-would surface as an optional step inside modes 2/3.
+would surface as an optional step inside modes 2/3. The territory picker `fiscal-none` needs (a
+GB/no-regime venue is not wizard-reachable today) belongs in modes 2/3 too.
 
 **Scope to brainstorm when picked up:** the first-run chooser UI (`apps/setup`), the four wizard flows,
 the config export/import surface for mode 3 (and its fresh-chain guarantee), how each mode sets
 `WAITRON_ENV` / `devMode` / provisioning, and where the Square/CSV importer slots in. Modes 1–2 are
 mostly a UX wrapper over built paths; modes 3–4 carry the real new work.
 
-**Cold-restore follow-up (from 4b-iii):** closed by SP-3d #248 (2026-09-06); [fresh chain and disjoint series](superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md).
-
-**Load-bearing constraints for the firmware slices (5–7, parked — AP-mode / OS image / paid real-cert):**
+**Constraints for the firmware slices (5–7, parked — AP-mode / OS image / paid real-cert):**
 
 - **A setup box's `/health` returns 503 by design** (no duty loop → not trading-healthy); a
   liveness/supervisor probe must gate on **`/setup-api/status`** (200), or it restart-loops an
   unprovisioned box.
 - **The per-device "is the CA trusted?" check is deferred to a browser-behaviour spike** — spec §17/§18's
-  "untrusted-CA origins block SW/PWA/WebAuthn until trusted" is load-bearing and unverified; the trust
+  "untrusted-CA origins block SW/PWA/WebAuthn until trusted" is decisive and unverified; the trust
   page instructs + offers the download/QR but does not assert trust state.
+- **The box image carries the replication cluster settings and the WireGuard link** (Track A step 5):
+  `wal_level=logical`, `track_commit_timestamp=on`, `max_slot_wal_keep_size`, the `waitron_repl`
+  bootstrap, `pg_hba` admitting it only from the peer's WireGuard address.
 
 **Parked beneath the two tracks (distribution / failover):**
 
 - **Cloud trial on-ramp** — same-origin PWA pointed at a cloud instance; preproduction, shared demo
-  tenant. Gated on Waitron-cloud infra that does not exist yet — which, since 2026-09-05, means a
-  per-tenant instance fleet plus the control plane (*Whole-project design review → Track C item 4*),
-  not a shared multi-tenant store.
-- **Identity-config flow-down — LANDED #195.** `persons` + `webauthn_credentials` now flow down the
-  ordered lane (Group-E no-watermark upsert, capture triggers in `0007_sync_identity_capture.sql`,
-  origin `nodeId` threaded through every identity-config writer incl. the till + me-api locale routes);
-  `sessions`/`management_sessions`/`webauthn_challenges` stay out (proven by deletion). A secondary can
-  now authenticate the venue's people on failover; re-establishment is still **PIN-re-prompt v1** (a
-  portable signed token is a later slice). PR marked needs-owner-review (replicates credential hashes)
-  and landed on owner sign-off. **Two follow-ups the merge left open:**
-  - **`totp_secret` at-rest encryption is now a hard dependency of the TOTP-enrollment slice** (SP5,
-    *Debt*): flow-down means the (currently-always-NULL) plaintext `totp_secret` would replicate to a
-    second box the moment anything writes it — so the enrollment slice **must** land AES-256-GCM at-rest
-    encryption *before* it writes the column. This slice is safe only while the column stays unwritten.
-  - **The onboarding seed-admin `persons` row captures under the all-zero origin — MOOT since Track A
-    item 3 step 4.** _(The `sync_log` capture and its origin stamping are deleted; a standby takes the
-    admin `persons` row via the native initial COPY of the `state` publication, so there is no origin to
-    stamp and nothing to fix. The pure-sync-reconstruction concern is gone with the outbox.)_
+  tenant. Gated on Waitron Cloud (a per-tenant instance fleet plus the control plane, Track C item 4).
+- **Identity on a standby:** `persons` + `webauthn_credentials` are `state`, so a standby can
+  authenticate the venue's people on failover; re-establishment is still **PIN-re-prompt v1** (a
+  portable signed token is a later slice). **`totp_secret` at-rest encryption is a hard dependency of
+  the TOTP-enrollment slice** (SP5, *Debt*): the (always-NULL today) plaintext column would replicate
+  the moment anything writes it, so the enrollment slice must land AES-256-GCM at-rest encryption
+  *before* it writes the column.
 - **On-device agent** (own spec/spike) — the enabler for a till to host a print agent (a single-box
   venue's only box-death printing path); **requires a native app**, so **parked behind the go-native
   decision**.
-- **The reroute** — the till reaches the serving box and fails over to the promoted standby (warm
-  standby since 2026-09-05; selling is no longer active-active) behind a stable local origin.
 
 *Minor debt (from #143):* two QR libraries coexist — `qrcode` (`apps/server`) vs `apps/till`'s
 fiscal-pinned `qrcode-generator` — unify into `packages/shared` later; and a generalized top-level boot
@@ -2223,44 +999,32 @@ never landed unattended:**
 ### SIF topology follow-ups (from #33)
 
 The [server-as-SIF + failover design](superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md)
-decided the topology; §14 defers the buildable pieces. The
+decided the topology. The
 [promotion, failover & node-lifecycle design](superpowers/specs/2026-08-29-promotion-failover-and-node-lifecycle-design.md)
-is the first pass over that ground (node role-resolution, physical + membership fencing, per-tab
-ownership/failover, disposal, AEAT `consultar` recovery, cloud-failover sizing); its §9 lists seven
-still-open items. The [promotion runbook design](superpowers/specs/2026-08-29-promotion-runbook-design.md)
-(APPROVED) is what a human's "make this primary" executes across four targets. The
-`deployment.singleton_role` foundation (#158) + Slice 1 (local secondary → primary, in-process, #160) +
-the re-gating of the singleton duties onto `isSingletonPrimary` (#168) are landed.
+is the first pass over that ground; its §9 lists the then-open items, most now closed by the
+membership arc (dated pointers in the spec). The [promotion runbook design](superpowers/specs/2026-08-29-promotion-runbook-design.md)
+(APPROVED) is what a human's "make this primary" executes. Landed: `deployment.singleton_role` (#158),
+promote Slice 1 local secondary → primary (#160), the singleton duties re-gated on `isSingletonPrimary`
+(#168), Slice 2 the authenticated endpoint (#272).
 
-- **Promote-action remaining slices** (plan:
-  `docs/superpowers/plans/2026-08-29-promote-action-slice-1-local-secondary.md`), each gated on an
-  unbuilt foundation: **Slice 2 — LANDED #272 (2026-09-07)**: the authenticated endpoint + break-glass
-  auth (mint + scrypt verify) + the real runtime admin connection (`WAITRON_ADMIN_DATABASE_URL`,
-  fail-closed); a promoted cloud sells-but-does-not-file until cert-distribution (Track B item 3
-  above). **Slice 3** — the worker-lifecycle manager that starts the
-  primary-only workers on an in-process promotion, removing Slice 2's restart (gated on reserved-SIF
-  staging — DONE via R2 #208); mirror→primary itself landed via the membership R3b arc + Slice 2's
-  endpoint; **Slice 4** — cold
-  restore (mechanism landed with SP-3d #248; remaining: the operator surface, §2 of the
-  [SP-3d spec](superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md): connection rebinding,
-  advertised origin, an authenticated entry); **Slice 5** — rejoin-as-secondary + the conflict watcher (gated
-  on the membership wire-protocol).
-- **Split-brain** — largely worked through by the 2026-08-29 spec (server-level fencing §3.5, per-tab
-  single-writer ownership §8, bounded worst case §8.4). Remaining seams: the promoted-node side while
-  partitioned (§9.4) and cloud-relay-vs-sink (§9.3). Spans selling, the fiscal chain, payments
-  (`resolvePending`) and printing — **examine in detail, not scoped to printing** (owner, 2026-08-26).
+- **Promote-action remaining slices:** **Slice 3** — the worker-lifecycle manager (in-process
+  promotion without the restart; Track B item 6 decides whether it is built at all); **Slice 4** — the
+  cold-restore operator surface (mechanism landed with SP-3d #248; remaining per its spec §2:
+  connection rebinding, advertised origin, an authenticated entry); **Slice 5** — re-admission of a
+  rejoined box (*Replication, membership & failover*).
+- **Split-brain** — worked through by the 2026-08-29 spec (server-level fencing §3.5, bounded worst
+  case §8.4) and the fence-LSN drain (#280); the cloud is now a subscriber and drain carrier, not a
+  sink. Remaining seam: the promoted-node side while partitioned (§9.4). Spans selling, the fiscal
+  chain, payments (`resolvePending`) and printing — **examine in detail, not scoped to printing**
+  (owner, 2026-08-26).
 - **The submitter as a relocatable role** — one venue submitter, certificate resolved from wherever it
-  runs.
+  runs: this is the cert-distribution rebuild (Track B item 3).
 - **Till UX for the timed-out card case** (retry / alternative tender / wait).
-- **`CLAUDE.md` §5's "nothing blocks a sale" invariant must be rewritten** — but *in the change that
-  implements server-as-SIF*, not before (the current code still honours the old wording).
 - The reconcile remediation UI and the orphan-drift hold (both under *Debt*) back the design's
   double-charge-across-failover path (§10).
-- **New asesor question:** a cloud server that *issues* invoices operates the SIF from a cloud location —
-  a stronger form of the §8a hosting question (see *The advisor gap*).
 - **Odd job:** consolidate the duplicated `boot.*.test.ts` helpers
   (`withCapturedStdout`/`waitForEvent`/`freePort`/`poll`/`seedIdentity`) into a shared
-  `apps/server/src/testing/` module.
+  `apps/server/src/testing/` module (the same home as SP-3c's `provisionTestVenue` helper).
 
 ---
 
@@ -2277,8 +1041,8 @@ is a sync root, not a shared system of record) and #33 (server-as-SIF). Several 
 **Waitron hosts the client's fiscal system**, which the cloud design abandoned; re-read every question
 against *both* designs, drop/rewrite what they invalidated, and add the replacements — three ROF (RD
 1619/2012) hosting questions in
-[cloud-storage-model §8a](superpowers/specs/2026-07-31-cloud-storage-model-design.md), plus the new
-"cloud server issuing invoices operates the SIF abroad" question — *before* paying for answers.
+[cloud-storage-model §8a](superpowers/specs/2026-07-31-cloud-storage-model-design.md) — *before*
+paying for answers.
 
 > **2026-09-05 — Q16 closed by decision, not by the asesor.** Cloud instances are hosted in Spain, so
 > an invoice-issuing SIF never operates from abroad and the question does not arise for the MVP's
@@ -2294,6 +1058,9 @@ against *both* designs, drop/rewrite what they invalidated, and add the replacem
 | Q5(a) (one series per till) | #33 reshaped it — a series belongs to the server-SIF; two concurrent SIFs need **disjoint** series | needs advisor |
 | **Q14 (precuenta → amendment log)** | a printed pre-bill may oblige an amendment log | **Open** — no primary text names the restaurant *precuenta* (findings §8); the interpretive hinge |
 
+**New for the labour advisor (swap design §4.4):** whether a location's exported working-time record
+may show per-node chains (the chain is keyed per node since #268).
+
 **Non-fiscal duty surfaced by Q13:** a tip collected through the card terminal is business income
 (*ingreso* for Sociedades, *rendimiento del trabajo* with retención) — an accounting/payroll matter
 (tracks 13 + 16, integrate-not-build), not the factura or the huella.
@@ -2307,12 +1074,12 @@ layout is the one build dependency** (it fixes the D3 export format, so D3 stays
 
 **Data protection (RGPD/GDPR) is a third track — never scoped end-to-end.** Waitron stores personal
 data (customers via loyalty/receipts, staff via `persons` + registro de jornada, and the cloud
-mirror replicates it off-box), yet no one has mapped our obligations as a whole. Pieces exist in
+standby replicates it off-box), yet no one has mapped our obligations as a whole. Pieces exist in
 isolation — the biometric-clock-in DPIA (workforce plan §2.4, AEPD 2023 guidance; biometrics off by
 default), and data export/portability flagged as a GDPR duty in
 [cloud-services-inventory](superpowers/specs/2026-08-29-cloud-services-inventory.md) — but nothing
 answers the whole-system question. **The task is to scope it before engaging a DPO/lawyer:**
-(1) build a data map (what personal data, where — box vs cloud mirror, how long retained);
+(1) build a data map (what personal data, where — box vs cloud standby, how long retained);
 (2) settle the **controller vs processor** split — is Waitron an *encargado del tratamiento* for the
 venue's data, and does that need a DPA (the *encargo de tratamiento a efectos del RGPD* question
 already sitting in [asesor-questions §RGPD](compliance/asesor-questions.md)); (3) the venue-facing
@@ -2325,20 +1092,23 @@ it wants doing before go-live rather than after.
 
 ## Debt and odd jobs
 
-- **Two stale lock-order claims in `apps/server/src/working-order.ts`** (found by the 2026-09-05
-  model-seats probe, verified against main): the `unjoinTable` docstring (~line 2656) says it
-  "MATCHES the sale/settle path and mergeTabs" — true today, but a twin to keep in step; and the
-  `mergeTabs` docstring (~line 2170) says the `dining_tables` lock "seq-scans" because `tab_id` is
-  unindexed — `EXPLAIN` as `app_user` shows `LockRows → Sort → Bitmap Heap Scan` on the tenant
-  index, so the mechanism claim is false (the conclusion, identical order for both backends, is not
-  re-proven either way). Thin both on next touch (§1: state what is measured).
-
 Deferred follow-ups from finished work. None blocks anything; each makes later work cheaper. Per-slice
 UX/perf nits live in the PR threads and git history; what remains here is cross-cutting or
 genuinely-decision-bearing.
 
 **Cross-cutting engineering:**
 
+- **Two stale lock-order claims in `apps/server/src/working-order.ts`** (found by the 2026-09-05
+  model-seats probe, verified against main): the `unjoinTable` docstring says it "MATCHES the
+  sale/settle path and mergeTabs" — true today, but a twin to keep in step; and the `mergeTabs`
+  docstring says the `dining_tables` lock "seq-scans" because `tab_id` is unindexed — `EXPLAIN` as
+  `app_user` shows `LockRows → Sort → Bitmap Heap Scan` on the tenant index, so the mechanism claim is
+  false (the conclusion, identical order for both backends, is not re-proven either way). Thin both on
+  next touch (§1: state what is measured).
+- **`report-api.ts` runs three concurrent queries on ONE `withTenant` transaction**
+  (`Promise.all([computeDailyClose(tx), computeTopSellers(tx), countOpenTables(tx)])`, also
+  `daily-close`). pg@8 queues them (serial, correct, no speedup, a deprecation warning); it BREAKS in
+  pg@9. Replace with sequential awaits or one combined query before pg@9 lands.
 - **Handheld live updates (SSE/WebSocket).** Deferred from the order-only handheld slice (#173, owner,
   2026-08-30). The app is pull-only today (refetch after each round/serve/fire + manual refresh), so two
   waiters on the same table see stale data until a refetch (the server still guards append-only rounds +
@@ -2346,11 +1116,10 @@ genuinely-decision-bearing.
   KDS-status-to-handheld updates. Sizable new subsystem, out of step with the pull-only architecture;
   specced separately when it matters.
 - **Configurable per-device layout / face-set editor.** Deferred from the same slice. The handheld ships
-  a fixed phone face-set as a declarative constant (`HANDHELD_FACES`) keyed by device kind; the owner
-  wants this configurable long-term. Additive (pre-production): persist a face-set per device (or kind)
-  with a fallback to the constant (the `getLayout`-returns-defaults precedent), add a dashboard editor
-  mirroring the layout editor, and — the heavier, separable half — make the **table-order screen itself**
-  layout-driven the way the counter screen already is.
+  a fixed phone face-set as a declarative constant (`HANDHELD_FACES`); the owner wants this configurable
+  long-term. Additive (pre-production): persist a face-set per device profile with a fallback to the
+  constant, add a dashboard editor mirroring the canvas editor, and — the heavier, separable half — make
+  the **table-order screen itself** canvas-driven the way the counter screen already is.
 - **Tip-collection UI + empty-tab pay-error clarity (till/handheld).** Two payment-UX gaps surfaced
   landing #189. (1) **No tip field for cash, manual card, or the handheld** (row 13): a tip can be stored
   per tender (`tenders.tip_amount`) but the only surface that COLLECTS one is the integrated-Stripe-reader
@@ -2377,26 +1146,20 @@ genuinely-decision-bearing.
   language derivation** (`PROVINCE_DEFAULT_LOCALE` is empty, so a Cataluña venue shows Spanish not
   Catalan — lands with the first regional catalogue; `locations.province` is the hook); the **venue
   default is derive-only, not admin-editable** yet; and the **dashboard's `es-ES` module default**
-  (`apps/dashboard/src/i18n/t.ts:7` + `#venueLocale`) still needs the same flip the till got in #170
+  (`apps/dashboard/src/i18n/t.ts` + `#venueLocale`) still needs the same flip the till got in #170
   (check whether the dashboard money formatter has the same "doesn't follow the UI locale" bug).
-- **till-api's bare `c.req.json()` sites still 500 on a malformed body.** #145 converted the 51 `?? {}`
+- **till-api's bare `c.req.json()` sites still 500 on a malformed body.** #145 converted the `?? {}`
   sites across ten route files to the shared `readJsonBody` helper. **Left:** till-api's ~19 **bare**
   `await c.req.json<T>()` sites (no `?? {}`), on the sale/pay critical path — each needs per-route
   validation tracing before adopting the helper. The till **PIN-login** (`POST /api/session`) is the twin
   of the management login #145 hardened (a `null`/malformed body → opaque 500 instead of a clean 401).
-  `setup-api` uses a different-contract defensive form and is correctly left as-is (`sync-api` was
-  deleted in Track A item 3 step 4).
+  `setup-api` uses a different-contract defensive form and is correctly left as-is.
 - **Encrypt `totp_secret` at rest** (SP5). Stored plaintext today and `app_user` holds SELECT on
   `persons`, so a `persons` leak exposes every enrolled second factor. Latent (nothing writes it yet).
   The enrollment slice must encrypt via the credentials vault (AES-256-GCM), decrypting on the box before
   `verifyTotp` (keeps the offline-verifiable property).
-- **No PIN-attempt throttle at the identity layer.** `verifyPersonCredential` has no lockout /
-  rate-limit, so an authenticated operator can retry a 4-digit PIN. **Pre-existing** (the same posture the
-  till login already carries; the cash-drawer supervisor override just adds a second caller). Mitigated
-  today by scrypt's per-attempt cost + `sameSite:"Strict"` cookies. A per-person attempt lockout at the
-  identity layer would harden login and the override together.
 - **Location-scope the by-id verb family together** (SP6). `getHeldOrder`/`updateHeldOrder`/
-  `abandonHeldOrder` and `updateTable`/`deactivateTable`/`openTab` address by (tenant-via-RLS) + id; only
+  `abandonHeldOrder` and `updateTable`/`deactivateTable`/`openTab` address by tenant + id; only
   *list* verbs scope by location. Unreachable today (single-location tenants); when multi-location lands,
   move the whole family at once.
 - **Hoist the receipt's ported money/date/label formatters into `packages/shared`** (from #154).
@@ -2412,7 +1175,7 @@ genuinely-decision-bearing.
   in `packages/fiscal-verifactu/src/backend.ts` repeat the same alta head + tail. Unrepairable-record
   builders (CLAUDE.md §5), so a de-dup needs its own review + a huella-invariance re-run across all three.
   Safe seam: a helper taking the assembled `Omit<AltaInput,"Encadenamiento">` + a `buildDesglose`; also
-  folds in the `fechaFromStoredDay` algebra and `recordSubstitution`'s N+1 loop.
+  folds in the `fechaFromStoredDay` algebra and `recordSubstitution`'s N+1 loop. (Track C item 6.)
 - **Concurrent-corrective race in `settleSale` is untranslated.** If a rectificativa commits between the
   opening read and the `sale_settlements` INSERT, the coverage trigger raises a raw `P0001` that
   `settleSale` does not map to a `sale.*` code. Fail-closed and unreachable in the headless slice (needs
@@ -2423,41 +1186,35 @@ genuinely-decision-bearing.
 
 **Provisioning / build:**
 
-- **The `tenant` command is unplanned** and its design carries a defect: the idempotency check "look up
-  `tenants` by NIF" cannot work (RLS hides a tenant from a connection that hasn't said which tenant it
-  is). Attempt the insert and catch the unique-violation instead.
+- **The `tenant` command is unplanned.** Its idempotency check should attempt the insert and catch the
+  unique-violation rather than look up `tenants` by NIF first (a read-then-write is the race, and with
+  one tenant per database the guard is really `assertNoForeignTenant`).
 - **Credential READ path doesn't `validatePayload`.** `getCredential`/`tryGetCredential`
   (`packages/credentials/src/store.ts`) run the shape guard but not `validatePayload`, so a row sealed
   under an older `PURPOSES` field-list returns a missing field as `undefined` rather than being rejected —
   a fail-loudly-vs-keep-serving call to settle before the first consumer relies on it. Plus four carried
   from [#11]: password redaction in `applyInstance` is listed-not-structural; `bin.ts`'s `ask()` is
   coverage-excluded logic; `ApplyDeps` and the action list are two sources of truth for the database name.
-- **Collapse the per-module drizzle migration chains into per-module baselines** (pre-production cleanup,
-  not now). Migrations are per-module (8 sets); the debt is chain *length* (much of it dev churn). Not a
-  `drizzle-kit generate` one-liner — the valuable migrations are hand-written custom SQL (FORCE RLS,
-  policies, GRANTs, immutability triggers) that Drizzle does not emit.
 - **Onboarding slice-2a follow-ups** (from #141, none blocking): **(a)** the box's self-signed CA has no
   `nameConstraints`/`pathLen` — add `nameConstraints` limiting it to `waitron.local` + the box IPs;
   **(b)** `apps/server/src/self-signed-cert.ts` and the test-only `testing/tls.ts` both define
-  near-identical `CertExtension` + `certificate()` node-forge builders (already drifted) — extract the
-  shared builder into one internal module (its own PR — touches the mtls fixture); **(c)** the leaf's
-  validity window is stamped from `now` with 1 day back-slack, so a box that mints its cert **before NTP
-  sync** (no RTC) persists a wrong window and there is no renewal in 2a — ties to the time-health check +
-  cert renewal (slice 3/4).
+  near-identical `CertExtension` + `certificate()` node-forge builders (already drifted; and the fiscal
+  module now carries a third byte-copy, Track C item 2) — extract the shared builder into one internal
+  module (its own PR — touches the mtls fixture); **(c)** the leaf's validity window is stamped from
+  `now` with 1 day back-slack, so a box that mints its cert **before NTP sync** (no RTC) persists a
+  wrong window and there is no renewal in 2a — ties to the time-health check + cert renewal (slice 3/4).
 - **Onboarding slice-2b follow-ups** (from #142, none blocking): **(d)** a DB-level advisory lock (keyed
   on `tenantId`, spanning guard→stamp→`applyVenue`) would make `provisionVenue` safe regardless of caller
   (defence-in-depth over today's in-process latch); **(e)** a `sealAeat`/`persistTrading` I/O failure
   *after* `provisionVenue` succeeds wedges the box (tenant minted, no `trading.env`) — add a recovery path
   (detect "DB provisioned but no `trading.env`" and offer re-derive+restart, and/or make the wedge loud);
-  **(f)** the **trading-branch** `closePools` (`boot.ts`) still closes its pools (`db`, the replication
-  owner pool `replicationDb`, and `backupDb` — the deleted outbox's `syncDb`/`retentionDb` are gone since
-  Track A item 3 step 4) sequentially (a throw from the first skips the rest — extract one
-  `closeAll(pools)`); **(g) R1
-  owner-connection:** 2b runs provisioning over `config.migrationsDatabaseUrl`, correct only because
-  dev's superuser owns the tables — on a real role-split appliance the setup-mode owner connection must be
-  the DB-owner role (wire with the deferred appliance instance role-split), and a wizard-only box persists
-  that connection as `trading.env`'s `DATABASE_URL`, so it runs its trading life on the owner role (not
-  least-priv `app_user`) until that retrofit.
+  **(f)** the **trading-branch** `closePools` (`boot.ts`) closes its pools (`db`, `replicationDb`,
+  `backupDb`) sequentially — a throw from the first skips the rest — extract one `closeAll(pools)`;
+  **(g) R1 owner-connection:** 2b runs provisioning over `config.migrationsDatabaseUrl`, correct only
+  because dev's superuser owns the tables — on a real role-split appliance the setup-mode owner
+  connection must be the migrator role (`withRole(uri, waitron_migrator)`, CLAUDE.md §3), and a
+  wizard-only box persists that connection as `trading.env`'s `DATABASE_URL`, so it runs its trading
+  life on the owner role (not least-priv `app_user`) until that retrofit.
 
 **Payments:**
 
@@ -2471,7 +1228,7 @@ genuinely-decision-bearing.
 
 - **Four unverified questions, one design-invalidating**
   ([sumup provider spec](superpowers/specs/2026-07-30-sumup-card-present-provider-design.md) §7), wanted
-  **before** the SumUp provider is built. The load-bearing one: **does the reader still work
+  **before** the SumUp provider is built. The decisive one: **does the reader still work
   standalone/offline once paired to SumUp's cloud?** If not, the deli-hardware outage path (assumes a card
   can be taken when the internet is down) must be rewritten. The other three: may we *supply* the
   idempotency key; are reader webhooks signed like online ones; does `void` map onto the refund endpoint.
@@ -2490,28 +1247,19 @@ genuinely-decision-bearing.
 
 **CI / test infra:**
 
-- **`test-heavy` and `test-server` are sharded THREE WAYS** (LANDED #216). They were the two
-  critical-path jobs — 374s (`packages/db`) and 341s (`apps/server`) on the unfiltered `main` run
-  33890775789 — and, being single packages, could only be split by sharding their test FILES with
-  vitest `--shard=i/N` (a matrix job), each shard emitting a partial-coverage `blob`, with a paired
-  `test-heavy-merge` / `test-server-merge` job merging the blobs (`vitest --merge-reports`) and
-  enforcing the package's thresholds on the total. The `test:shard` / `test:merge` package scripts
-  carry the mechanism; `scripts/ci-workflow.test.mjs` pins the matrix↔denominator↔merge wiring AND the
-  script shapes. **Measured on PR #216's run 33908208779:** test-heavy 374s → shards 136/220/89s +
-  merge 24s ≈ **244s**; test-server 341s → shards 139/131/131s + merge 35s ≈ **174s**. The merge tax
-  is much cheaper on the CI runner (24s/35s) than the ~80s laptop figure. **The real limit is
-  IMBALANCE, not the merge:** vitest `--shard` splits by FILE COUNT, not duration, so test-heavy came
-  out 89/136/220s — one shard drew the slow files — and there is no duration-based split. Bumping the
-  matrix (`shard: [1..N]` AND the `--shard=i/N` denominator, together) can't fix imbalance and must keep
-  N at or below the package's test-file count, or an empty shard exits 1 ("No test files found") even
-  with thresholds suppressed.
-- **Job-sharding — remaining lever.** With db/server sharded, the next critical-path candidate is
-  `mutation-verifactu` (~218s, one free 4-vCPU runner); split it if a run shows it dominating. Rebalance
-  the `LIGHT_A/B_PACKAGES` bins (`scripts/changed-scope.mjs`) when a run shows one light shard dominating.
+- **`test-heavy` and `test-server` are sharded three ways** (#216; mechanism in CLAUDE.md §2). Vitest
+  `--shard` splits by FILE COUNT, not duration, so imbalance is the real limit; bumping the matrix means
+  changing `shard: [1..N]` AND the `--shard=i/N` denominator together, with N at or below the package's
+  test-file count (an empty shard exits 1).
+- **Job-sharding — remaining lever.** The next critical-path candidate is `mutation-verifactu`
+  (~218s, one free 4-vCPU runner); split it if a run shows it dominating. Rebalance the
+  `LIGHT_A/B_PACKAGES` bins (`scripts/changed-scope.mjs`) when a run shows one light shard dominating —
+  and watch `test-light-a` for a second hang (Track C item 3).
 - **The pre-push hook's shell is largely untested** (the deletion guard + range computation are backed
   only by running the real hook); **`test-light` reports `success` without naming what it ran** (make the
   job name its selected packages); **`packages/ui` can hang the `test-ui` shard** (unconfirmed cause — if
-  it recurs, per-test timeout + Playwright trace).
+  it recurs, per-test timeout + Playwright trace). The classifier's fourth output line `root=` is emitted
+  and read by no consumer (the hook routes on `scope=root`).
 
 **Printing subsystem (robustness follow-ups, each spec-silent, none blocks):**
 
@@ -2527,7 +1275,7 @@ genuinely-decision-bearing.
   closed period).
 - **`waitron-provision instance` migrates on every run**, which against a trading shop can lock tables —
   should it be gated (flag / refusal / louder confirmation)? Blast radius is one shop under the
-  per-venue-database cloud design.
+  one-tenant-per-database design.
 - **The €0 comped-sale settles at the settlement instant, not backdated to `issued_at`.** Till-UX
   question (is a comp ever finalised long after the invoice printed, in invoice-first mode?).
 - **No UI path to REMOVE a person's email** (Tier A #2 follow-up). The Users form's Save-email is disabled
@@ -2551,9 +1299,8 @@ budget, so a package whose suites open many backends caps at `maxForks: 4`. `pac
 reason-(b) reference, `packages/payments` the reason-(a) one — but both carry the HIGH coverage bar, so
 a new package that copies either config must set the `90/90/85/85` floor (CLAUDE.md §2), or
 `scripts/coverage-thresholds.test.ts` fails it in the ungated `lint` job. Plan:
-`docs/superpowers/plans/2026-08-19-shared-test-container.md`.
-
----
+`docs/superpowers/plans/2026-08-19-shared-test-container.md`. A two-node replication suite uses
+`packages/db/src/testing/two-node.ts`, or `two-node-wireguard.ts` when the link itself is under test.
 
 **Dev stack from a worktree.** `wa-wt <worktree-name>` / `wa-wt reset [name]` — the rule is in
 CLAUDE.md §6; detail in [ui-review.md](ui-review.md) → _Running the stack from a worktree_.
@@ -2568,4 +1315,4 @@ Update it in the change that makes it stale (CLAUDE.md §7). In particular:
   file. A merge deletes the branch the in-flight rows named, so refresh them then.
 - When a question is closed on primary source, say so and stop calling it blocked.
 - Delete finished items. If an entry is growing proof-of-work (test counts, grep receipts, "proven by
-  deletion"), that belongs in the PR, not here.
+  deletion", what a review seat caught), that belongs in the PR thread and the process log, not here.
