@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import type { PrintTransport } from "./printers.js";
-import type { PrinterTarget, Transport } from "./transport.js";
+import type { PrintTransport, PrinterTarget, Transport } from "@waitron/print-agent";
 
 /**
  * The agent runtime (design §3c) — ONE pull → push → report batch. A deployable agent loop calls this

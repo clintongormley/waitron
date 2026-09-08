@@ -26,13 +26,9 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import {
-  createPrinter,
-  deactivatePrinter,
-  NetworkTcpTransport,
-  UsbTransport,
-} from "@waitron/printing";
+import { createPrinter, deactivatePrinter } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
+import { NetworkTcpTransport, UsbTransport } from "@waitron/print-agent";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,

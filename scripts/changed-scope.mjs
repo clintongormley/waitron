@@ -305,6 +305,7 @@ export const LIGHT_B_PACKAGES = [
   "@waitron/workforce-es",
   "@waitron/layouts",
   "@waitron/printing",
+  "@waitron/print-agent",
   "@waitron/verifactu",
   "@waitron/bench-pglite",
   "@waitron/diagnostics",

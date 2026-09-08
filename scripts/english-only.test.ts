@@ -94,6 +94,7 @@ describe("configuration", () => {
       "recipes",
       "purchasing",
       "printing",
+      "print-agent",
       "diagnostics",
       "sync-enrolment",
       "composition",

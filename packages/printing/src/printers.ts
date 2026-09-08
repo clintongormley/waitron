@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { isPgError, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import type { PrintTransport } from "@waitron/print-agent";
 
 /** The pg SQLSTATEs the printer writes may raise once the app-layer required-field pre-check passes,
  * so a driver error becomes a friendly domain code instead of an opaque 500. `23514` is the
@@ -53,8 +54,8 @@ export interface PrintConfig {
   locationId: string;
 }
 
-/** How a printer is reached — the `print_transport` pgEnum (packages/db schema/printers.ts). */
-export type PrintTransport = "usb" | "network_tcp" | "cloud_poll";
+/** How a printer is reached — the `print_transport` pgEnum; the union lives in `@waitron/print-agent`. */
+export type { PrintTransport } from "@waitron/print-agent";
 
 /**
  * The minimal shape `createPrinter` accepts (printing subsystem, §2b). The connection fields are all

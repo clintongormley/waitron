@@ -8,8 +8,8 @@ import { esc } from "./escpos.js";
 import { MAX_DELIVERY_ATTEMPTS, runAgentOnce } from "./runtime.js";
 import { createPrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
-import { FakeSink } from "./transport.js";
-import type { PrinterTarget, Transport } from "./transport.js";
+import { FakeSink } from "@waitron/print-agent";
+import type { PrinterTarget, Transport } from "@waitron/print-agent";
 import type { PrintConfig } from "./printers.js";
 
 // PGlite is the right target for the runtime's LOGIC — the happy pull→push→report path, per-printer

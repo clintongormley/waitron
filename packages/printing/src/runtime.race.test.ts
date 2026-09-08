@@ -7,8 +7,8 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { runAgentOnce } from "./runtime.js";
 import { createPrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
-import { FakeSink } from "./transport.js";
-import type { PrinterTarget, Transport } from "./transport.js";
+import { FakeSink } from "@waitron/print-agent";
+import type { PrinterTarget, Transport } from "@waitron/print-agent";
 import type { PrintConfig } from "./printers.js";
 
 // Real Postgres (a `core` template clone), NOT PGlite: the "two agents don't double-print" guarantee
