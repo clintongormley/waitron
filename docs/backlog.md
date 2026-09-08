@@ -37,51 +37,80 @@ records, never-reused invoice numbers.
 
 ## Priorities
 
-**North star: a polished product that runs locally with an intuitive UI — plus the robustness that
-makes it a complete product** (owner decision, 2026-09-01). The owner demo is DONE; the goal is
-(1) every screen correct and intuitive and (2) finishing primary/secondary failover, cloud failover,
-and replication. Two tracks run at once; everything else ranks beneath them.
+**North star (owner decision 2026-09-08): an end-to-end working ON-PREM venue — a blank box to
+selling, printing, paying and closing — then a warm mirror it can fail over to.** Waitron Cloud is
+a separate closed-source project for later; nothing is built for it now, but every decision must
+keep a node usable in the cloud unchanged (the rules below). This supersedes the 2026-09-05 "MVP for
+go-live" options: go-live is an on-prem primary plus an on-prem mirror; a cloud mirror is the same
+mechanism reached over WireGuard, when Waitron Cloud exists.
 
-- **Track 1 — UI/UX polish & correctness (foreground).** A systematic customer-journey walkthrough of
-  every chunk of functionality: each area's current behaviour is shown to the owner, who corrects
-  intuitiveness/correctness problems, and the fixes land. **[ui-review.md](ui-review.md) is the
-  authoritative tracker.**
-- **Track 2 — robustness / infra (its own track).** Primary/secondary failover, cloud failover,
-  replication — what makes Waitron a complete product. Run it as separate interactive sessions (own
-  worktrees), in parallel with Track 1, soundness-first. Since 2026-09-05 it is executed as the three
-  design-review tracks A/B/C below (Track B *is* this track's failover half). **Never land anything
-  touching the unrepairable fiscal core (H2) without owner sign-off.**
+**The shape we build for:**
 
-**Sequencing (refreshed 2026-09-08).** Four sessions run at once: Track 1 plus tracks A/B/C. The two
-structures that blocked new work are gone: Track A's RLS drop + migration squash landed (#255), so a
-new table anywhere needs only CLAUDE.md §3's classification line; and the module framework's UI seats
-are proven by `fiscal-none` (#262) and bookings SP1/SP2 (#270, #273), so a new product domain lands as
-a module now. The three docs-only decisions Track B had to take first — till-reroute route, register
-vs device, relay — are all taken (pointers under Track B). **Track 1 works areas 2–19; area 1 (setup
-wizard) waits on Track B item 2** (its provisioning paths belong there). Coordination rules for the
-parallel sessions are at the end of the design-review section.
+- **One tenant per node.** One primary, one or more warm mirrors, human promotion. A node belongs to
+  one taxpayer; no database ever holds two.
+- **A mirror is on prem or in the cloud and is reached the same way** — URL + credentials over the
+  same replication link. The only difference is that a cloud mirror is reached over WireGuard, so
+  two containers on one machine joined by WireGuard IS the cloud test.
+- **A node is two containers, app + Postgres**, with named volumes for state, logs and backups. The
+  cloud scales by many containers per server, never by multi-tenancy.
+- **Product images live in Postgres and are served from it** (owner, 2026-09-08). Replication,
+  backup, restore and a cloud move are then one mechanism; there is no image volume and nothing to
+  sync to a mirror. DB load is not a concern at venue scale: the URL is content-addressed and served
+  `immutable`, so each device fetches each image ONCE until its bytes change (a till's first boot is
+  ~44 small reads; a busy service issues none), and the server keeps a small in-memory cache in
+  front. Postgres stays the only source of truth, so a disk cache can be added later without a
+  design change if it is ever needed.
+- **Backups leave the primary.** Destinations in build order: the mirror (the primary pushes each
+  encrypted archive to every mirror), an S3-compatible bucket, Google Drive (owner, 2026-09-08). All
+  three hang off the existing `StorageBackend` seat (BR-1).
 
-**MVP for go-live (owner decision 2026-09-05).** A primary server, on-prem OR in the cloud:
+**Cloud-compatibility rules** — a change that breaks one is a design question, never a default:
 
-- **On-prem primary + a redundant CLOUD server** for failover with human promotion. A second LOCAL
-  box is beyond the MVP. Internet-down: the primary keeps selling (CLAUDE.md §5) and the standby
-  falls behind until the link returns; box-down AND internet-down together means no failover —
-  accepted for the MVP.
-- **Cloud-only primary + redundancy**, from either **(a)** a Postgres host that comes with redundancy
-  (managed/HA Postgres — newly allowed; relaxes promotion-failover §7.2's "no managed-database
-  dependency" for this mode only) or **(b)** a second cloud server on the built mirror + promotion
-  mechanism (promotion-failover §7.4). (a) is infrastructure HA of ONE node and needs a design look
-  at what the server keeps on local disk (env files, media, the box-secret vault) plus a singleton
-  lease so two app processes never both submit; (b) is the built path applied cloud-to-cloud.
+1. Peers are reached by URL + credentials only. No LAN discovery, no shared-subnet assumption.
+2. Adopt, promote, rejoin and backup are ONE code path wherever the node sits.
+3. Every two-node test runs twice: over the plain LAN and over the WireGuard fixture
+   (`@waitron/db/testing/two-node-wireguard.ts`, #275).
+4. Everything a node keeps outside Postgres is a named volume, and every secret can come from the
+   environment as well as a file.
+5. The print agent is its own process on the venue's LAN, dialling OUT to the primary by URL. It
+   never assumes the primary is local — it is the one piece that must stay on prem when the primary
+   is in the cloud.
 
-What the MVP needs that is NOT built (Track A step 5 + Track B, below): the box↔cloud WireGuard link
-on the LIVE path (today it exists only as a test fixture, #275), Waitron Cloud's per-tenant instance
-provisioning (a separate closed-source service, not this repo), fiscal-certificate distribution to a
-promoted node (landed #279, reverted #281, to be rebuilt on the native-replication adopt flow), a
-printing path when the primary is dead or the server is cloud-only (distribution §5), and the
-control plane. Landed: the authenticated promotion endpoint (#272) and till reroute S1–S6 (#265).
-**Residency: cloud instances are hosted in Spain (owner decision 2026-09-05)**, so asesor Q16 — an
-invoice-issuing SIF operating from abroad — does not arise for either cloud mode.
+**The on-prem push, in order** (each step its own brainstorm → spec → plan → PR; fiscal-adjacent
+steps take owner sign-off at land):
+
+1. **A node as containers, and a from-scratch primary.** No Dockerfile exists today. Build the two
+   containers + compose + volumes, the first-run chooser's modes 1–2 (*Onboarding*, the four-mode
+   wizard), and backup off the primary (mirror → S3 → Drive; only `LocalFsBackend` exists).
+2. **Device onboarding and the three displays** — till, handheld and KDS working, kiosk optional
+   (owner 2026-09-08; most waiters use their own phones). Includes the LAN-HTTPS spike + the
+   installable-till build
+   ([2026-09-08-lan-https-install-and-name-constraints-spike.md](superpowers/specs/2026-09-08-lan-https-install-and-name-constraints-spike.md):
+   web manifest, a name-constrained CA, the trust flow from the till's own origin, the wake lock —
+   and the measurement that a name-constrained root actually constrains on Android and iOS), plus
+   the register/device follow-ups (Track B item 7).
+3. **The printer agent process, then USB and IP printers end to end.** The server side (enrolment,
+   auth, outbox, transports) exists; no agent PROCESS does. Standalone, containerised, follows the
+   primary like the till. Printer failover in its on-prem form rides on it.
+4. **Payments: card readers.** Stripe Terminal is built. SumUp is built only after its four questions
+   are answered — the draft to send is
+   [research/2026-09-08-sumup-questions.md](research/2026-09-08-sumup-questions.md).
+5. **The in-app walkthrough** — tables, sales, kitchen, bookings, tips, shifts: mostly built;
+   [ui-review.md](ui-review.md) is the tracker. Plus the counter kitchen fire and the pricing
+   adjustments under *Product work still open*.
+6. **The on-prem mirror, shortly after the single box works:** adopt, promote, the
+   fiscal-certificate distribution rebuild, rejoin and re-admission, replication status + alarms
+   (Track A step 5's on-prem half), the two-node end-to-end proof over LAN and over WireGuard.
+
+**Back burner — cloud (docs only, no build):** Waitron Cloud itself, the control plane (Track C
+item 4), cloud-only redundancy (Track B item 4), the cloud trial on-ramp, WireGuard on the box
+image and `@waitron/tunnel`'s retirement (Track A step 5's cloud half), the cloud-standby e2e
+(Track B item 2), the tax-model system (Track C item 7 — no non-Spanish venue is in scope).
+
+**Prioritisation is by soundness, not the calendar** (2026-08-02): Waitron will be finished before the
+deli must trade, so 1-Jan-2027 ranks nothing above anything. Order by dependency, correctness, and
+de-risking the most-reused / most-uncertain foundations first. **Residency:** cloud instances will be
+hosted in Spain (owner decision 2026-09-05), so asesor Q16 does not arise.
 
 **Run path (local; no hardware, cloud, or AEAT cert):** `pnpm dev:setup && pnpm dev` → till
 <http://localhost:5190>, dashboard <http://localhost:5191>, setup <http://localhost:5192>, server
@@ -92,6 +121,10 @@ on PIN 5555, and ~28 days of back-dated preproduction sales — English by defau
 `WAITRON_SEED_LOCALE=es-ES`. From a worktree, start the stack with `wa-wt <name>` (CLAUDE.md §6).
 
 ### Whole-project design review (2026-09-05) — decisions taken; execution in three parallel tracks
+
+> **Reprioritised 2026-09-08.** The on-prem push above is the order of work. The three tracks below
+> keep their file ownership and their open items; cloud-only items are marked **BACK BURNER** and
+> are not built until Waitron Cloud starts.
 
 A base-to-tip review of the code and every Track-2 spec, with the owner answering the review's
 questions. Its process outcomes have all landed and live in the rule files, not here: CLAUDE.md §1's
@@ -172,7 +205,9 @@ harness, `packages/provisioning`, `packages/sync`, every `vitest.config.ts`, CLA
      `sync.*` codes deprecated, never renamed. The dev stack is replication-ready (`wa-wt reset` is
      the live smoke, CLAUDE.md §6). Plan:
      `superpowers/plans/2026-09-07-outbox-swap-s4-s5-promotion-and-deletion.md`.
-   - **Step 5 (OPEN) — status, alarms and the operator surface for native replication (swap S6 + S7):**
+   - **Step 5 (OPEN) — status, alarms and the operator surface for native replication (swap S6 + S7).**
+     The first five bullets are the on-prem half (push step 6); the last three are the cloud half —
+     **BACK BURNER**, except that the WireGuard test fixture stays in every two-node suite (rule 3):
      - status-page numbers + alarms off `pg_stat_subscription` / `pg_stat_subscription_stats` (the
        `confl_*` columns, lag, `pg_replication_slots.wal_status`);
      - the operator **SKIP runbook** for a stalled subscription (an `ENABLE ALWAYS` reject-mutation
@@ -240,7 +275,7 @@ unchanged, so no new H2 receipt
      to `WAITRON_ADVERTISED_ORIGIN` is never re-published (nothing refreshes the node's own entry at
      boot), and a node that promotes while absent from the chart appends itself address-less
      (`nextStandings`), which `routableServers` drops — no till is told to dial it.
-2. **The cloud standby, end to end (MVP) — PARKED (owner decisions 2026-09-07).** (a) The transport
+2. **The cloud standby, end to end — BACK BURNER (owner 2026-09-08; parked since 2026-09-07).** Its on-prem twin — a LAN mirror, proven over LAN and over the WireGuard fixture — is push step 6. (a) The transport
    is Track A's: item 2 consumes native replication + the WireGuard link, it does not build them; the
    link's first code is the two-host TEST fixture (#275: `@waitron/db/testing/two-node-wireguard.ts`
    joins two Postgres nodes over a real kernel-WireGuard tunnel, NET_ADMIN only, and `sync`'s
@@ -285,13 +320,14 @@ unchanged, so no new H2 receipt
      **dashboard promote UI**; an **a11y test** for the break-glass panel. Minors: the
      `fiscal.certificate_dormant_stored` log event was dropped (adopt has no logger); a `boot.promote`
      corrupt-case test asserts the failure event but not `reason==="corrupt"`.
-4. **Cloud-only redundancy (MVP) — brainstorm.** (a) one node on a managed/HA Postgres host vs (b) a
+4. **Cloud-only redundancy — BACK BURNER (brainstorm when Waitron Cloud starts).** (a) one node on a managed/HA Postgres host vs (b) a
    second cloud node on the built mirror mechanism. (a) needs an inventory of what the server keeps
    on local disk (`writeFileAtomic` env files, `mediaDir`, the box-secret vault, backup state) and a
    singleton lease so a restarted or relocated app process never runs a second submitter; (b) is
    item 2 without the tunnel. Pick per deployment; both may ship.
-5. **Printer failover** (`2026-08-26-failover-printing-design.md`) — MVP-critical for cloud-only and
-   for a promoted cloud standby (a cloud server cannot reach a LAN printer).
+5. **Printer failover** (`2026-08-26-failover-printing-design.md`) — in its on-prem form it is the
+   standalone print agent following the primary (push step 3); the cloud-primary case is the same
+   agent, which is why it must stay on the LAN (rule 5).
 6. **Node-role collapse — UNBLOCKED (Track A's `boot.ts` edits are done).** Derive ONE `NodeRole` at
    boot from the membership document (today spread across `deployment.mode`, `singleton_role`,
    membership standing and the boot-captured `fenced` flag) and pick one rule: every role change is a
@@ -367,7 +403,7 @@ unchanged, so no new H2 receipt
    - **CI:** bookings' browser vitest runs in the shared `test-light-a` shard. One hang observed
      (#277: the full 6h GitHub timeout, then ~2 min on re-run — a shared-shard infra hang, not the
      diff). If it recurs, move bookings' browser tests to the dedicated dual-mode shard.
-4. **Control plane brainstorm (owner-added 2026-09-05).** With one tenant per database and a
+4. **Control plane brainstorm — BACK BURNER (Waitron Cloud).** With one tenant per database and a
    dedicated cloud instance per tenant, the only multi-tenant service Waitron runs is a small control
    plane: accounts (a customer of ours — one customer may own several taxpayers), subscriptions,
    instances (which box/VM serves which tenant, its version; region Spain), a WireGuard keypair +
@@ -379,7 +415,7 @@ unchanged, so no new H2 receipt
 6. **De-triplicate the three alta builders — [owner]** in `fiscal-verifactu/src/backend.ts`
    (`recordSale` / `recordCorrection` / `recordSubstitution`; also under *Debt → Fiscal*): needs the
    huella-invariance re-run across all three.
-7. **Tax-model system (owner, 2026-09-07).** Today the `tax` slot in provisioning's territory→module
+7. **Tax-model system — BACK BURNER (no non-Spanish venue in scope; owner 2026-09-07).** Today the `tax` slot in provisioning's territory→module
    registry (`ES-common → {filing:"verifactu", tax:"vat"}`) is an INERT label stamped into
    `nodes.tax_module` and copied at adoption — nothing branches on it. Intended shape: the tax MODEL
    (VAT / GST — calculation, receipt layout, inclusive-vs-exclusive pricing) is GENERIC and lives in
