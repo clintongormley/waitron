@@ -1,7 +1,7 @@
 # LAN HTTPS: installable handheld + name-constrained CA — spike and build definition
 
 **Date:** 2026-09-08
-**Status:** Defined, not run. Owner asked for the two open items in
+**Status:** Desktop half RUN and PASSED 2026-09-08 (§6); phone rows still owed (the owner's, on real devices). Owner asked for the two open items in
 [2026-09-08-handheld-app-store-and-kiosk-findings.md](2026-09-08-handheld-app-store-and-kiosk-findings.md)
 §2–§3 to be nailed down. This note turns them into one measured spike and one small build, each
 with its failing case stated up front (CLAUDE.md §1). The onboarding design
@@ -122,13 +122,49 @@ the private CA with the guided page above stays the default. The box keeps its p
 `waitron.local` leaf as the offline fallback either way. The later cloud broker replaces only where
 the DNS-01 answer comes from, so the decision is cloud-compatible.
 
+## 6. Desktop spike results — RUN 2026-09-08 (all three engines honour the constraint)
+
+Run on this macOS machine. Root minted per §2 (constrained to `waitron.local` + the three private
+IP ranges, **not** the box's own address), one leaf for `waitron.local` (+ a `192.168.1.10` SAN)
+that must be accepted, one control leaf for `example.com` that must be refused. The root was added
+to the login keychain as an SSL anchor for the test and **removed afterwards** (confirmed absent;
+Leaf A stopped verifying once the anchor was gone — the negative control).
+
+| Engine (what uses it) | Leaf A `waitron.local` | Leaf B `example.com` (control) | Reason given for B |
+| --- | --- | --- | --- |
+| OpenSSL 3.6.3 `verify` (well-formedness) | OK | **REFUSED** | `permitted subtree violation` (error 47) |
+| macOS SecTrust — `security verify-cert -p ssl` (**Safari, WebKit, iOS**) | verification successful | **REFUSED** | `CSSMERR_TP_INVALID_CERTIFICATE` |
+| Chrome 152 (its own verifier) | page LOADED | **BLOCKED** | net log: `name constraint` |
+
+**Decision rule (§2) on the desktop rows: PASSED.** A user-installed, name-constrained root is
+honoured on macOS by both the system evaluator (so Safari and, via the shared Security framework,
+iOS Safari — high confidence, not a device measurement) and by Chrome's independent verifier. The
+control leaf is refused by all three, and Chrome names the reason as a name-constraint violation.
+The build in §3 can constrain the box CA to `waitron.local` + the private ranges with confidence.
+
+**Still owed — the owner's phone rows** (Android Chrome and iOS Safari on the shop WiFi): confirm
+the same accept/refuse split on-device, and the install UX (iOS "enable full trust"; Android's
+"network may be monitored" notice). The macOS SecTrust pass raises confidence for iOS but does not
+replace the on-device check.
+
+**Click-through detection (§3) — NOT measurable headlessly; correction to the plan.** Headless
+Chrome offers no "proceed anyway" on a cert error, so the interactive click-through and the
+service-worker-registration probe could not be exercised here. More important, an untrusted HTTPS
+origin shows the **browser's own full-page interstitial before any of our JavaScript runs**, so the
+HTTPS page cannot itself present install instructions to a user who has not already trusted the
+root. Consequence for the build: **the instructions must live on the plain-HTTP `waitron.local`
+page** (which always loads), and the HTTPS-side detector is only a nice-to-have for users who have
+clicked through — measure whether `navigator.serviceWorker.register()` throws in that state on a
+real device, but do not depend on it. The `http://waitron.local` landing page (§3, never redirects)
+is therefore the load-bearing surface, exactly as the owner specified.
+
 ## 5. Provenance
 
 | Claim | Source / status |
 | --- | --- |
 | Chrome install criteria: manifest fields + HTTPS | <https://web.dev/articles/install-criteria> (read for the findings note, 2026-09-08) |
 | Screen Wake Lock needs a secure context; iOS Safari 16.4+ | <https://caniuse.com/wake-lock> |
-| Chrome and Safari honour `nameConstraints` on a user-installed root | **belief — the spike measures it** |
+| Chrome and Safari honour `nameConstraints` on a user-installed root | **MEASURED true on macOS 2026-09-08 (§6): Chrome 152 + SecTrust both refuse the control leaf** |
 | No service worker is required for Chrome install | belief from the same install-criteria page; the spike's "Install appears" row confirms |
-| Service-worker registration fails with `SecurityError` on a click-through (untrusted) HTTPS origin | **belief — the spike measures it** |
+| Service-worker registration fails with `SecurityError` on a click-through (untrusted) HTTPS origin | **belief — not measurable headlessly (§6); a real-device row** |
 | HSTS disables the interstitial click-through | belief (documented Chrome/Safari behaviour); the spike confirms the box sends no HSTS |
