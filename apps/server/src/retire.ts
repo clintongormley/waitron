@@ -8,7 +8,7 @@ import {
   standingOf,
   type SignedMembershipDocument,
 } from "@waitron/membership";
-import type { DrainProgress } from "@waitron/sync";
+import { isDrained, type SlotDrain } from "@waitron/sync";
 import type { KeyRing } from "@waitron/credentials";
 import { mintNextMembershipDocument } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
@@ -27,18 +27,23 @@ export interface RetireDeps {
   /** THIS (departing) node — the node that becomes `evicted`, and the document's `signerNodeId`. */
   readonly nodeId: string;
   /**
-   * The disposal/drain-progress reader (the same drain the box-status `disposal` surface
-   * reports), or `undefined` when the held document names no carrier. `undefined` on a fenced
-   * node means "fenced, no carrier" → refuse `node.retire_no_carrier`. The caller (boot/Task 3)
-   * wraps `readDrainProgress` on the sync pool under `withTenant`, exactly as box-status's
-   * `readDisposal` does; retire never touches that pool itself.
+   * The native slot-drain reader (the same slot the box-status `disposal` surface reads,
+   * `readSlotDrain(replicationDb, subscriptionName(env, carrierNodeId))`), or `undefined` when the
+   * held document names no carrier. `undefined` on a fenced node means "fenced, no carrier" → refuse
+   * `node.retire_no_carrier`. The caller (boot) binds it on the migrator/owner pool — a non-superuser
+   * reads `pg_replication_slots` unmasked (probe B); retire never opens that pool itself.
    */
-  readonly readDrainProgress: (() => Promise<DrainProgress>) | undefined;
-  /** The carrier node id the injected `readDrainProgress` reader keys its cursor lookup on — captured at
+  readonly readSlotDrain: (() => Promise<SlotDrain>) | undefined;
+  /** The fence-LSN watermark this node recorded when it entered its read-only fence (Ruling C2), read
+   *  from `deployment.fence_lsn` at boot, or `null` for a dead/never-fenced box (refused fail-safe as
+   *  `node.retire_not_drained`, never evicted against an unprovable drain). The drain guard is
+   *  `isDrained(d, fenceLsn) && !d.active` — both halves monotone (spec §4.1). */
+  readonly fenceLsn: string | null;
+  /** The carrier node id the injected `readSlotDrain` reader keys its slot lookup on — captured at
    *  BOOT (`servingPrimaryNodeId` of the held doc at boot). retireSelf re-derives the CURRENT carrier
    *  from the fresh held chart and refuses (`node.retire_carrier_changed`) if it differs, because a
    *  fenced node does not restart on a carrier change so the reader would otherwise measure drain against
-   *  a stale carrier. `undefined` exactly when `readDrainProgress` is `undefined` (both boot-derived from
+   *  a stale carrier. `undefined` exactly when `readSlotDrain` is `undefined` (both boot-derived from
    *  the same carrier). */
   readonly carrierNodeId: string | undefined;
   readonly log: Logger;
@@ -61,11 +66,12 @@ export interface RetireResult {
  * ABORT-BEFORE-WRITE (promote's discipline): every gate throws BEFORE any write, and the document is
  * built and signed in memory BEFORE the persist, so a refusal or a signing failure leaves the node
  * exactly as it was. The ordered guards are idempotent-evicted → not_fenced → no_carrier →
- * carrier_changed → not_drained → mint → persist. The gate ORDER is what keeps decommission design fact
- * (ii)'s states distinct — an already-evicted no-op, a serving/absent node (`not_fenced`), a fenced node
- * with no carrier (`no_carrier`), a fenced node whose carrier CHANGED since boot so its drain reader is
- * stale (`carrier_changed`), and a fenced node still shipping rows (`not_drained`) are distinct
- * outcomes, checked in that order. The departing node signs with its OWN directly-trusted identity key
+ * carrier_changed → carrier_attached → not_drained → mint → persist. The gate ORDER is what keeps
+ * decommission design fact (ii)'s states distinct — an already-evicted no-op, a serving/absent node
+ * (`not_fenced`), a fenced node with no carrier (`no_carrier`), a fenced node whose carrier CHANGED
+ * since boot so its drain reader is stale (`carrier_changed`), a fenced node whose carrier has not yet
+ * detached its slot (`carrier_attached`), and a fenced node still shipping rows (`not_drained`) are
+ * distinct outcomes, checked in that order. The departing node signs with its OWN directly-trusted key
  * (`endorsements: []`) — its key is in every former peer's trust set from setup/adopt, so an
  * endorsement chain is unnecessary, exactly as R1's local promote does. Idempotent: an already-evicted
  * node returns before consulting the drain guard or minting, so a re-run never bumps the term.
@@ -89,11 +95,11 @@ export async function retireSelf(deps: RetireDeps): Promise<RetireResult> {
   }
 
   // 5. No carrier: fenced, but no serving-primary is available to carry the tail forward, so the drain
-  // cannot be confirmed. Signalled by an `undefined` drain-progress reader OR an `undefined` boot carrier
+  // cannot be confirmed. Signalled by an `undefined` slot-drain reader OR an `undefined` boot carrier
   // id. Boot derives both from the same condition, so in practice they are undefined together; guarding
   // BOTH here refuses fail-safe on a caller that passes one without the other, and — the point — narrows
   // `deps.carrierNodeId` to a string for step 5b so the carrier-change guard needs no non-null assertion.
-  if (deps.readDrainProgress === undefined || deps.carrierNodeId === undefined) {
+  if (deps.readSlotDrain === undefined || deps.carrierNodeId === undefined) {
     throw new AppError("node.retire_no_carrier", {});
   }
 
@@ -110,11 +116,22 @@ export async function retireSelf(deps: RetireDeps): Promise<RetireResult> {
     });
   }
 
-  // 6. Not drained: gate on the disposal guard's `drained` BOOLEAN only, never a seq comparison (the
-  // MAX/MIN legitimately differ while drained — see RetireDeps.readDrainProgress / readDrainProgress).
-  const progress = await deps.readDrainProgress();
-  if (!progress.drained) {
-    throw new AppError("node.retire_not_drained", {});
+  // 6. The fence-LSN drain guard (Ruling C2, spec §4.1), two monotone halves checked in order:
+  //   (a) carrier still ATTACHED — the slot is `active`, so the carrier has not disabled its
+  //       subscription and the drain window is open. Refuse `node.retire_carrier_attached`.
+  //   (b) NOT drained — the slot is detached but `confirmed_flush_lsn < fence_lsn` (or the fence LSN is
+  //       unset: a dead/never-fenced box cannot prove its drain). Refuse `node.retire_not_drained` with
+  //       the operator's drain diagnostics. `isDrained` needs a non-null fence LSN; a null one is not
+  //       drained by construction (fail-safe — never evict against an unprovable tail, CLAUDE.md §5).
+  const drain = await deps.readSlotDrain();
+  if (drain.active) {
+    throw new AppError("node.retire_carrier_attached", {});
+  }
+  if (deps.fenceLsn === null || !isDrained(drain, deps.fenceLsn)) {
+    throw new AppError("node.retire_not_drained", {
+      retainedBytes: drain.retainedBytes === null ? null : drain.retainedBytes.toString(),
+      walStatus: drain.walStatus,
+    });
   }
 
   // 7. Mint the eviction BEFORE any write (abort-before-write): read this node's signing key and

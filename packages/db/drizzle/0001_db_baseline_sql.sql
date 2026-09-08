@@ -534,6 +534,16 @@ ALTER TABLE "deployment" ADD CONSTRAINT "deployment_singleton_role_ck" CHECK ("d
 --> statement-breakpoint
 ALTER TABLE "deployment" ADD CONSTRAINT "deployment_role_valid_ck" CHECK (NOT ("deployment"."mode" = 'mirror' AND "deployment"."singleton_role" = 'primary'));
 --> statement-breakpoint
+-- The fence-LSN watermark (swap S4, Ruling C2): the WAL position a node records when it enters its
+-- read-only fence, so the drain guard reads `confirmed_flush_lsn >= fence_lsn` (monotone) instead of
+-- comparing against pg_current_wal_lsn(), which decays once the carrier disables its subscription.
+-- Nullable — a node that never fenced (and every primary) holds NULL, the operator's --accept-loss
+-- case. No new grant: the table-wide `GRANT SELECT ON "deployment" TO app_user` above covers the read;
+-- the write is owner-only (app_user holds no UPDATE on deployment). Added in the baseline (not in the
+-- drizzle schema barrel; see src/schema/deployment.ts's header) since the deployment DB is recreated
+-- on every dev reset — this is an additive nullable column on an empty deployment, not a data migration.
+ALTER TABLE "deployment" ADD COLUMN "fence_lsn" pg_lsn;
+--> statement-breakpoint
 CREATE TABLE "mirror_config" (
 	"id" integer PRIMARY KEY NOT NULL DEFAULT 1,
 	"relay_url" text NOT NULL,

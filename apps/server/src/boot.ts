@@ -2,12 +2,15 @@ import { fileURLToPath } from "node:url";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { serve } from "@hono/node-server";
+import { sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import {
   createPostgresDb,
   readDeploymentAxes,
+  readFenceLsn,
   readNodeMembership,
-  setSingletonRole,
+  setFenceLsnTx,
+  setSingletonRoleTx,
   readMirrorConfig,
   type Database,
 } from "@waitron/db";
@@ -123,7 +126,16 @@ import { readOnlyGate } from "./read-only-gate.js";
 import { isFenced } from "./membership-fence.js";
 import { ensureMirrorViewer, mirrorSession } from "./mirror-session.js";
 import { assertMirrorBindSafe } from "./mirror-bind-guard.js";
-import type { DrainProgress } from "@waitron/sync";
+import {
+  isDrained,
+  listSlots,
+  publicationName,
+  readSlotDrain,
+  readSubscriptionStatus,
+  setSubscriptionPublications,
+  subscriptionName,
+  type SlotDrain,
+} from "@waitron/sync";
 import { servingPrimaryNodeId } from "@waitron/membership";
 import { runTunnelClient } from "@waitron/tunnel";
 import { readFilingModule, readOrderFlow } from "./till-config.js";
@@ -998,7 +1010,20 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     try {
       const ownerDb = await createPostgresDb(config.adminDatabaseUrl);
       try {
-        await setSingletonRole(ownerDb, "secondary");
+        // Demote the singleton axis AND capture the fence-LSN watermark in ONE owner transaction
+        // (CLAUDE.md §3, Ruling C2): the moment this node enters its read-only fence it records
+        // `pg_current_wal_lsn()` in `deployment.fence_lsn`, so the carrier's drain is measured against a
+        // monotone watermark, not against pg_current_wal_lsn() (which decays after the carrier disables
+        // its subscription, probe E). Idempotent: `fence_lsn = pg_current_wal_lsn()` re-runs harmlessly
+        // on a second fenced boot (a slightly later LSN, still ≤ every already-shipped row's LSN because
+        // this boot writes no sale). Owner-role — app_user holds no UPDATE on deployment.
+        await ownerDb.transaction(async (tx) => {
+          await setSingletonRoleTx(tx, "secondary");
+          const wal = await tx.execute<{ lsn: string }>(
+            sql`select pg_current_wal_lsn()::text as lsn`,
+          );
+          await setFenceLsnTx(tx, wal.rows[0]!.lsn);
+        });
       } finally {
         await ownerDb.close();
       }
@@ -1548,16 +1573,22 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   }
 
   // The carrier that would drain this node's fenced tail (`servingPrimaryNodeId` of the held chart),
-  // captured at boot. Kept for the retire/box-status consumers; Task 7 rewrites how it is USED.
+  // captured at boot. The carrier's publisher-side slot on THIS node is named by the CARRIER (the
+  // subscriber that drains it, C1), so the fenced node finds it by the carrier's id.
   const carrierNodeId = heldMembership === null ? undefined : servingPrimaryNodeId(heldMembership);
-  // STOPGAP (Task 7 rewrites this reader and its three consumers over the native fence-LSN/slot drain,
-  // swap spec §4). The outbox drain reader is gone with the sync block, and the fence-LSN watermark
-  // reader (`confirmed_flush_lsn >= fence_lsn && !active`, Ruling C2) is Task 7's. Until then no
-  // fenced-drain progress is reported: box-status shows `disposal.applicable:false` and retire refuses
-  // `node.retire_no_carrier`. `undefined` keeps all three consumers compiling and fail-safe (never a
-  // false `drained:true`). The IIFE keeps the type the union (not narrowed to `undefined`), so the
-  // `readDisposal` consumer's callable branch still type-checks against Task 7's future reader.
-  const readFenceSlotDrain = ((): (() => Promise<DrainProgress>) | undefined => undefined)();
+  // The fence-LSN watermark this node recorded when it entered its read-only fence (Ruling C2), read
+  // ONCE at boot — `null` on a serving node (never fenced) or a dead box. The drain guard is
+  // `isDrained(slot, fenceLsn) && !slot.active`.
+  const fenceLsn = await readFenceLsn(db);
+  // The native slot-drain reader (swap S4): the carrier's slot on THIS node is named by the carrier
+  // (C1), read on the migrator/owner pool (`replicationDb`) — a non-superuser reads pg_replication_slots
+  // unmasked (probe B). `undefined` when the held chart names no carrier, exactly as retire/box-status
+  // expect (fenced-with-no-carrier → refuse fail-safe). The disposal cell folds in `isDrained` here so
+  // box-status stays pure of the fence LSN.
+  const readFenceSlotDrain: (() => Promise<SlotDrain>) | undefined =
+    carrierNodeId === undefined
+      ? undefined
+      : () => readSlotDrain(replicationDb, subscriptionName(config.environment, carrierNodeId));
   mountBoxStatusApi(
     app,
     {
@@ -1567,21 +1598,33 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       health,
       now,
       tlsCertPath: config.tls?.certFile,
-      // STOPGAP: the native slot-lag reader is Task 7's box-status rewrite. Off until then.
-      readReplicationLag: undefined,
-      // Expose freshness only when the backup worker started successfully. This reports
-      // the effective worker state, including a failed probe, rather than configuration alone.
-      // The disposal reader carries the retiring node id when its fence is active.
+      // Native replication (swap S4): a PRIMARY is a publisher and lists its peers' slots; a MIRROR is a
+      // subscriber and reports its own subscription (incl. the narrowed publications, I6). Exactly one is
+      // wired, off the boot-captured mode. Both read the migrator/owner pool (`replicationDb`).
+      readReplicationSlots: isMirror ? undefined : () => listSlots(replicationDb),
+      readReplicationSubscription: isMirror
+        ? () =>
+            readSubscriptionStatus(replicationDb, subscriptionName(config.environment, till.nodeId))
+        : undefined,
+      // The disposal cell: the carrier's slot drain folded with `isDrained` against the fence LSN and the
+      // `!active` half — present only on a fenced node with a known carrier (`readFenceSlotDrain` set).
       readDisposal:
         readFenceSlotDrain !== undefined && carrierNodeId !== undefined
-          ? async () => ({ carrierNodeId, ...(await readFenceSlotDrain()) })
+          ? async () => {
+              const d = await readFenceSlotDrain();
+              return {
+                carrierNodeId,
+                drained: fenceLsn !== null && isDrained(d, fenceLsn) && !d.active,
+                active: d.active,
+                walStatus: d.walStatus,
+                retainedBytes: d.retainedBytes,
+              };
+            }
           : undefined,
       readBackup:
         backupWorker !== undefined
           ? () => readBackupStatus(backupBackends, backupConfig!.staleAfterMs, now())
           : undefined,
-      // STOPGAP: the config-conflict count read the outbox apply pool; Task 7 rewires box-status.
-      readConfigConflicts: undefined,
       // Report the effective mode the box is actually serving as — the same holder the read-only gate
       // and mirror-session middlewares read — so the status matches what the box enforces and tracks a
       // live promotion the same way, rather than issuing a fresh DB read of its own.
@@ -1598,9 +1641,8 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // The self-eviction endpoint (retire/evict R3): a fully-drained fenced node retires itself. Mounted
   // UNCONDITIONALLY (a real management endpoint) — `retireSelf`'s ordered guards make it safe on any
   // node: a serving node refuses `node.retire_not_fenced`, and a fenced node with no carrier refuses
-  // `node.retire_no_carrier` (signalled by `readDrainProgress === undefined`). It consumes the SAME
-  // stopgap `readFenceSlotDrain` box-status's `disposal` surface uses; Task 7 rewrites both over the
-  // native fence-LSN/slot drain, so the two views cannot desync.
+  // `node.retire_no_carrier` (signalled by `readSlotDrain === undefined`). It consumes the SAME native
+  // slot-drain reader + fence LSN box-status's `disposal` surface uses, so the two views cannot desync.
   mountBoxRetireApi(
     app,
     {
@@ -1608,8 +1650,9 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       ring,
       tenantId: till.tenantId,
       nodeId: till.nodeId,
-      readDrainProgress: readFenceSlotDrain,
-      // The boot carrier the drain reader keys on. retireSelf re-derives the current carrier from the
+      readSlotDrain: readFenceSlotDrain,
+      fenceLsn,
+      // The boot carrier the slot reader keys on. retireSelf re-derives the current carrier from the
       // fresh held chart and refuses `node.retire_carrier_changed` if it changed (I1).
       carrierNodeId,
     },
@@ -1770,6 +1813,18 @@ export async function startServer(env: Record<string, string | undefined>): Prom
             };
             await writeTradingEnv(config.stateDir, next);
           },
+          // Narrow the promoted node's OWN subscription to the ledger publication AFTER the PONR (spec
+          // §4.2 step 3), so the drain window re-copies no state. The subscription is named by THIS
+          // node's own id (C1) and runs on the migrator pool `replicationDb` (which owns the
+          // subscription, I6 — NOT `deps.ownerDb`/`config.adminDatabaseUrl`, which may not). A failure
+          // is logged `promotion.narrow_failed` and not rethrown (the node is already primary); boot's
+          // `ensureReplicationShape` re-narrows on the next boot.
+          narrowSubscription: () =>
+            setSubscriptionPublications(
+              replicationDb,
+              subscriptionName(config.environment, till.nodeId),
+              [publicationName(config.environment, "ledger")],
+            ),
         },
         attestation,
       );

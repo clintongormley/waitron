@@ -1,173 +1,88 @@
-// Real PostgreSQL exercises manager authorization queries after SET ROLE app_user.
-import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPassword, hashPin } from "@waitron/identity";
-import { applyVenue, planVenue } from "@waitron/provisioning";
-import type { DrainProgress } from "@waitron/sync";
-import { createHealthState } from "./health.js";
-import { mountBoxStatusApi } from "./box-status.js";
-import { mountManagementApi } from "./management-api.js";
-import { ALL_MODULES } from "./modules.js";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createPostgresDb, type Database } from "@waitron/db";
+import { startLogicalPostgresContainer } from "@waitron/db/testing/postgres.js";
+import type { StartedContainer } from "@waitron/db/testing/postgres.js";
+import { isDrained, readSlotDrain, subscriptionName } from "@waitron/sync";
+import { collectBoxStatus, type BoxStatusReaders, type DisposalStatus } from "./box-status.js";
 
-// Exercise the disposal-summary response through PostgreSQL-backed manager authorization.
-// The disposal reader is stubbed; packages/sync tests its real queries.
-const LOCALE = "es-ES";
-const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the seeded manager's dashboard password.
-// Dashboard sign-in resolves the person by EMAIL, so the seeded manager carries a login email
-// (per-tenant unique — persons_tenant_email_uq).
-const MANAGER_EMAIL = "manager@x.com";
+// The swap S4 disposal cell proven against a REAL logical slot. `drained` is `isDrained(slot, fenceLsn)`,
+// computed by the boot-wired reader; box-status maps it onto the wire. Before the slot advances past the
+// fence LSN the cell reads `drained:false`; after `pg_replication_slot_advance` it reads `drained:true`.
+// `startLogicalPostgresContainer` — PGlite has no slots (CLAUDE.md §4).
+const CARRIER_NODE_ID = "55555555-5555-4555-8555-555555555555";
+const SLOT = subscriptionName("preproduction", CARRIER_NODE_ID);
 
-const suite = useTemplateDb({ template: "manifest" });
-
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so the provisioned venue needs its own NIF — the same per-suite counter the sibling suites use.
-let nifCounter = 0;
-function nextNif(): string {
-  nifCounter += 1;
-  return `${String(73_000_000 + nifCounter).padStart(8, "0")}K`;
+function baseReaders(disposal: (() => Promise<DisposalStatus>) | undefined): BoxStatusReaders {
+  return {
+    mode: async () => "primary",
+    singletonRole: async () => "secondary",
+    environment: "preproduction",
+    time: async () => ({ synced: true, source: "timedatectl", warn: false }),
+    cert: undefined,
+    awaitingFiscalCertificate: () => false,
+    chain: async () => ({ height: 0, lastAt: null }),
+    replicationSlots: undefined,
+    replicationSubscription: undefined,
+    disposal,
+    backup: undefined,
+    duties: () => ({}),
+  };
 }
 
-/** Provision a venue as owner and seed the people and sessions this route fixture needs. */
-async function setupTenant(): Promise<{ tenantId: string; nodeId: string; managerId: string }> {
-  const venue = await applyVenue(
-    planVenue(
-      {
-        country: "ES",
-        taxId: nextNif(),
-        legalName: "Deli Test SL",
-        location: {
-          name: "Sala principal",
-          fiscalTerritory: "ES-common",
-          invoiceLocales: [LOCALE],
-          operationDescription: "Venta en establecimiento",
-          addressLine1: "Calle Mayor 1",
-          addressLine2: null,
-          postalCode: "28013",
-          city: "Madrid",
-          province: "Madrid",
-          timeZone: "Europe/Madrid",
-          dayCutover: "05:00",
-        },
-        tillName: "Caja 1",
-        seriesCode: "A",
-        rectificativeSeriesCode: "R",
-        admin: {
-          displayName: "Administradora",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
-        },
-      },
-      ALL_MODULES,
-    ),
-    { db: suite.admin, modules: ALL_MODULES },
-  );
-
-  const managerId = await withTenant(suite.admin, venue.tenantId, async (tx) => {
-    await asAppUser(tx);
-    const manager = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
-      returning id`);
-    return manager.rows[0]!.id;
-  });
-  return { tenantId: venue.tenantId, nodeId: venue.nodeId, managerId };
+// The boot-wired disposal reader: read the carrier's slot on this node and fold in `isDrained` against
+// the fence LSN, exactly as boot.ts assembles `readDisposal`.
+function disposalReader(db: Database, fenceLsn: string): () => Promise<DisposalStatus> {
+  return async () => {
+    const d = await readSlotDrain(db, SLOT);
+    return {
+      carrierNodeId: CARRIER_NODE_ID,
+      drained: isDrained(d, fenceLsn) && !d.active,
+      active: d.active,
+      walStatus: d.walStatus,
+      retainedBytes: d.retainedBytes,
+    };
+  };
 }
 
-/**
- * A Hono app carrying the management API (for its login route) plus the box-status route under test.
- * `readDisposal` is threaded from the caller so each case can wire a stub reader or leave it absent.
- * Both surfaces share the owner db + tenant, so a cookie minted on one resolves on the other.
- */
-function buildApp(
-  tenantId: string,
-  nodeId: string,
-  now: Date,
-  readDisposal: (() => Promise<{ carrierNodeId: string } & DrainProgress>) | undefined,
-): Hono {
-  const app = new Hono();
-  mountManagementApi(
-    app,
-    {
-      db: suite.admin,
-      cfg: { tenantId, nodeId },
-      secureCookies: false,
-      rpId: "localhost",
-      origin: "http://localhost",
-    },
-    () => {},
-  );
-  mountBoxStatusApi(
-    app,
-    {
-      db: suite.admin,
-      cfg: { tenantId, nodeId },
-      environment: "preproduction",
-      health: createHealthState(now),
-      now: () => now,
-      tlsCertPath: undefined,
-      readReplicationLag: undefined,
-      readBackup: undefined,
-      readDisposal,
-      readConfigConflicts: undefined,
-      readMode: () => "primary",
-      readSingletonRole: () => "primary",
-      readAwaitingFiscalCertificate: () => false,
-    },
-    () => {},
-  );
-  return app;
-}
-
-/** Log in over HTTP by `email`, returning just the `waitron_management_session=…` cookie pair. */
-async function login(app: Hono, email: string): Promise<string> {
-  const res = await app.request("/management-api/session", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email, password: PASSWORD }),
-  });
-  expect(res.status).toBe(200);
-  return res.headers.get("set-cookie")!.split(";")[0];
-}
-
-describe("GET /api/box/status disposal state (real postgres)", () => {
-  let tenantId: string;
-  let nodeId: string;
+describe("box-status disposal cell over a real logical slot", () => {
+  let container: StartedContainer | undefined;
+  let db: Database | undefined;
+  let fence: string;
 
   beforeAll(async () => {
-    const t = await setupTenant();
-    tenantId = t.tenantId;
-    nodeId = t.nodeId;
+    container = await startLogicalPostgresContainer();
+    db = await createPostgresDb(container.uri);
+    await db.execute(sql`select pg_create_logical_replication_slot(${SLOT}, 'pgoutput')`);
+    await db.execute(sql.raw(`create table disposal_probe (x int)`));
+    await db.execute(sql.raw(`insert into disposal_probe select generate_series(1, 5000)`));
+    fence = (await db.execute<{ lsn: string }>(sql`select pg_current_wal_lsn()::text as lsn`))
+      .rows[0]!.lsn;
+  }, 120_000);
+
+  afterAll(async () => {
+    if (db !== undefined) await db.close();
+    if (container !== undefined) await container.stop();
   });
 
-  it("surfaces the carrier + drain verdict when a readDisposal is wired (bigint → string)", async () => {
-    const app = buildApp(tenantId, nodeId, new Date("2026-08-29T10:00:00Z"), async () => ({
-      carrierNodeId: "carrier",
-      drained: false,
-      ownTailSeq: 100n,
-      carrierAppliedSeq: 40n,
-    }));
-    const cookie = await login(app, MANAGER_EMAIL);
-    const res = await app.request("/api/box/status", { headers: { cookie } });
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.disposal).toEqual({
+  it("reports drained:false while confirmed_flush lags the fence LSN", async () => {
+    const status = await collectBoxStatus(baseReaders(disposalReader(db!, fence)));
+    expect(status.disposal).toMatchObject({
       applicable: true,
-      carrierNodeId: "carrier",
+      carrierNodeId: CARRIER_NODE_ID,
       drained: false,
-      ownTailSeq: "100",
-      carrierAppliedSeq: "40",
+      active: false,
     });
   });
 
-  it("reports applicable:false when no readDisposal is wired (a serving, unfenced node)", async () => {
-    const app = buildApp(tenantId, nodeId, new Date("2026-08-29T10:00:00Z"), undefined);
-    const cookie = await login(app, MANAGER_EMAIL);
-    const res = await app.request("/api/box/status", { headers: { cookie } });
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.disposal).toEqual({ applicable: false });
+  it("reports drained:true once the slot advances past the fence LSN", async () => {
+    await db!.execute(sql`select pg_replication_slot_advance(${SLOT}, ${fence}::pg_lsn)`);
+    const status = await collectBoxStatus(baseReaders(disposalReader(db!, fence)));
+    expect(status.disposal).toMatchObject({
+      applicable: true,
+      carrierNodeId: CARRIER_NODE_ID,
+      drained: true,
+      active: false,
+    });
   });
 });

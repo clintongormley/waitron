@@ -1338,6 +1338,17 @@ declare module "@waitron/shared" {
      */
     "promotion.break_glass_invalid": Record<string, never>;
     /**
+     * A mirror→primary promote reached its point-of-no-return and committed, but the follow-on
+     * subscription NARROW (spec §4.2 step 3 — narrow the promoted node's own subscription to the ledger
+     * publication so the drain window re-copies no state) FAILED. LOG-ONLY, never thrown-and-caught out
+     * of the promote: the node is ALREADY the primary, so a narrow failure must NOT undo the promotion —
+     * boot's `ensureReplicationShape` re-narrows on the next boot (the self-heal). `code` is the
+     * `codeOf`-classified failure (a `sync.*` SQLSTATE code, never a raw driver message that could carry
+     * the subscription conninfo password). `promotion.*` names the DOMAIN CONCEPT, never the throwing
+     * package — the rule `promotion.fence_not_attested` gives. Never renamed once shipped.
+     */
+    "promotion.narrow_failed": { code: string };
+    /**
      * `retireSelf` (retire/evict R3) was invoked on a node that is NOT fenced — a node with a
      * `serving-primary`/`serving-secondary` standing in the held chart, a node ABSENT from the chart,
      * or a node holding no membership document at all. Only a fenced (`sell-only`) node leaves for
@@ -1379,17 +1390,31 @@ declare module "@waitron/shared" {
       currentCarrierNodeId: string | null;
     };
     /**
-     * `retireSelf` found the node fenced with a carrier, but the drain guard reports the carrier has
-     * NOT confirmed this node's fenced WAL tail. Refused until the drain completes — a node must not
+     * `retireSelf` found the node fenced with a carrier, but the carrier's subscription slot on this
+     * node is still `active` — the carrier has NOT yet disabled its subscription, so the drain window
+     * is not closed and this node's tail may still be advancing. Refused until the carrier detaches
+     * (the `!active` half of the fence-LSN drain guard, Ruling C2 / spec §4.2 step 4). DISTINCT from
+     * `node.retire_not_drained` (the slot is inactive but has not flushed past the fence LSN): a live
+     * carrier is a different state from a lagging one, and folding them would lose the diagnosis. No
+     * params — the refusal names no row (`node.read_only`'s no-leak discipline). `node.*`, not
+     * `server.*`: a fact about this node's state in the topology. Never renamed once shipped.
+     */
+    "node.retire_carrier_attached": Record<string, never>;
+    /**
+     * `retireSelf` found the node fenced with a detached (inactive) carrier slot, but the carrier's
+     * `confirmed_flush_lsn` has NOT yet passed the fence LSN this node recorded — its own-origin WAL
+     * tail is not fully applied on the carrier. Refused until the drain completes — a node must not
      * leave the chart while rows it originated are still un-shipped, or they would be lost with it. The
      * gate is the fence-LSN watermark (Ruling C2, spec §4.1): `confirmed_flush_lsn >= fence_lsn`
-     * (recorded when the box entered its read-only fence) AND the carrier's subscription slot is no
-     * longer `active` — both monotone, so a fenced box that keeps writing session WAL cannot decay the
-     * compare. Task 7 wires the reader; this task ships the stopgap. `node.*`, not `server.*`: a fact about this node's state
-     * in the topology (`node.read_only`'s rule). No params — the refusal names no row (`node.read_only`'s
-     * no-leak discipline). Never renamed once shipped.
+     * (recorded when the box entered its read-only fence) AND the carrier's subscription slot no longer
+     * `active` — both monotone, so a fenced box that keeps writing session WAL cannot decay the compare.
+     * `retainedBytes` (the slot's un-drained WAL, `pg_wal_lsn_diff(current, restart_lsn)`, `null` when
+     * the slot is absent) and `walStatus` (`reserved`/`extended`/`lost`/null) are the operator's drain
+     * diagnostics — neither a secret, both catalog facts already visible to any role (probe B). `node.*`,
+     * not `server.*`: a fact about this node's state in the topology (`node.read_only`'s rule). Never
+     * renamed once shipped.
      */
-    "node.retire_not_drained": Record<string, never>;
+    "node.retire_not_drained": { retainedBytes: string | null; walStatus: string | null };
     /**
      * `retireSelf` minted a `sell-only → evicted` document at term N+1 over the held term N, but a
      * concurrent gossip-adopt had already landed a document at term ≥ N+1 by the time the term-guarded
@@ -1424,14 +1449,26 @@ declare module "@waitron/shared" {
      */
     "rejoin.no_carrier": Record<string, never>;
     /**
-     * `rejoinAsSecondary` found the node fenced with a carrier, but the drain guard reports the carrier
-     * has NOT confirmed this node's fenced WAL tail. Refused BEFORE the wipe — a node must not be wiped
-     * while rows it originated are still un-shipped, or they would be lost with the wipe (CLAUDE.md §5
-     * unrecoverable-invariant). The gate is the fence-LSN watermark (Ruling C2, spec §4.1):
-     * `confirmed_flush_lsn >= fence_lsn` AND the carrier's subscription slot no longer `active`, both
-     * monotone — the same rule `node.retire_not_drained` gives. Task 7 wires the reader.
-     * `rejoin.*`, not `server.*`: a fact about this node's state in the topology. No params — the refusal
-     * names no row (`node.read_only`'s no-leak discipline). Never renamed once shipped.
+     * `rejoinAsSecondary` found the node fenced with a carrier, but the carrier's subscription slot on
+     * this node is still `active` — the carrier has NOT yet disabled its subscription, so the drain
+     * window is not closed. Refused BEFORE the IRREVERSIBLE wipe (the `!active` half of the fence-LSN
+     * drain guard, Ruling C2 / spec §4.2 step 4). DISTINCT from `rejoin.not_drained` (the slot is
+     * inactive but has not flushed past the fence LSN): a live carrier is a different state from a
+     * lagging one. `rejoin.*`, not `server.*`: a fact about this node's state in the topology. No params
+     * — the refusal names no row (`node.read_only`'s no-leak discipline). Never renamed once shipped.
+     */
+    "rejoin.carrier_attached": Record<string, never>;
+    /**
+     * `rejoinAsSecondary` found the node fenced with a detached (inactive) carrier slot, but the
+     * carrier's `confirmed_flush_lsn` has NOT yet passed the fence LSN this node recorded. Refused
+     * BEFORE the IRREVERSIBLE wipe — a node must not be wiped while rows it originated are still
+     * un-shipped, or they would be lost with the wipe (CLAUDE.md §5 unrecoverable-invariant). The gate
+     * is the fence-LSN watermark (Ruling C2, spec §4.1): `confirmed_flush_lsn >= fence_lsn` AND the
+     * carrier's subscription slot no longer `active`, both monotone — the same rule
+     * `node.retire_not_drained` gives. A dead box (no fence LSN) cannot prove its drain and takes the
+     * operator's `--accept-loss` path instead. `rejoin.*`, not `server.*`: a fact about this node's
+     * state in the topology. No params — the refusal names no row (`node.read_only`'s no-leak
+     * discipline). Never renamed once shipped.
      */
     "rejoin.not_drained": Record<string, never>;
     /**

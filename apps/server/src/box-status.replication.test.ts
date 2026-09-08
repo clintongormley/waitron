@@ -1,167 +1,92 @@
-// Real PostgreSQL exercises authorization and replication reads after SET ROLE app_user.
-import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPassword, hashPin } from "@waitron/identity";
-import { applyVenue, planVenue } from "@waitron/provisioning";
-import { lagFor } from "@waitron/sync";
-import { createHealthState } from "./health.js";
-import { mountBoxStatusApi } from "./box-status.js";
-import { mountManagementApi } from "./management-api.js";
-import { ALL_MODULES } from "./modules.js";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createPostgresDb, type Database } from "@waitron/db";
+import { startLogicalPostgresContainer } from "@waitron/db/testing/postgres.js";
+import type { StartedContainer } from "@waitron/db/testing/postgres.js";
+import { listSlots, readSubscriptionStatus, subscriptionName } from "@waitron/sync";
+import { collectBoxStatus, type BoxStatusReaders } from "./box-status.js";
 
-// Exercise the box-status route with PostgreSQL-backed authorization and the real lagFor reader.
-// The owner seeds sync_log and sync_cursor for the requested origin.
-const LOCALE = "es-ES";
-const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the seeded manager's dashboard password.
-// Dashboard sign-in resolves the person by EMAIL, so the seeded manager carries a login email
-// (per-tenant unique — persons_tenant_email_uq).
-const MANAGER_EMAIL = "manager@x.com";
+// The swap S4 replication cell proven against a REAL logical node. A PRIMARY is a publisher and lists its
+// peers' slots (`listSlots`); a MIRROR is a subscriber (`readSubscriptionStatus`). The unit suite
+// (box-status.test.ts) proves the cell MAPPING over canned reader output; this proves the readers are
+// honest against actual `pg_replication_slots`. `startLogicalPostgresContainer` — PGlite has no slots
+// (CLAUDE.md §4).
+const PEER_NODE_ID = "44444444-4444-4444-8444-444444444444";
+const SLOT = subscriptionName("preproduction", PEER_NODE_ID);
 
-// One producing origin, and two subscribers: s1 has applied 3 of the origin's 10 captured rows
-// (lag 7), s2 is caught up (lag 0). `lagFor` returns worst-first, so the summary's `worstLagSeq` is
-// s1's 7 and `subscribers` is 2.
-const ORIGIN = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-
-const suite = useTemplateDb({ template: "manifest" });
-
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so the provisioned venue needs its own NIF — the same per-suite counter the sibling suites use.
-let nifCounter = 0;
-function nextNif(): string {
-  nifCounter += 1;
-  return `${String(73_000_000 + nifCounter).padStart(8, "0")}K`;
+function baseReaders(over: Partial<BoxStatusReaders>): BoxStatusReaders {
+  return {
+    mode: async () => "primary",
+    singletonRole: async () => "primary",
+    environment: "preproduction",
+    time: async () => ({ synced: true, source: "timedatectl", warn: false }),
+    cert: undefined,
+    awaitingFiscalCertificate: () => false,
+    chain: async () => ({ height: 0, lastAt: null }),
+    replicationSlots: undefined,
+    replicationSubscription: undefined,
+    disposal: undefined,
+    backup: undefined,
+    duties: () => ({}),
+    ...over,
+  };
 }
 
-/** Provision a venue as owner and seed the people and sessions this route fixture needs. */
-async function setupTenant(): Promise<{ tenantId: string; nodeId: string; managerId: string }> {
-  const venue = await applyVenue(
-    planVenue(
-      {
-        country: "ES",
-        taxId: nextNif(),
-        legalName: "Deli Test SL",
-        location: {
-          name: "Sala principal",
-          fiscalTerritory: "ES-common",
-          invoiceLocales: [LOCALE],
-          operationDescription: "Venta en establecimiento",
-          addressLine1: "Calle Mayor 1",
-          addressLine2: null,
-          postalCode: "28013",
-          city: "Madrid",
-          province: "Madrid",
-          timeZone: "Europe/Madrid",
-          dayCutover: "05:00",
-        },
-        tillName: "Caja 1",
-        seriesCode: "A",
-        rectificativeSeriesCode: "R",
-        admin: {
-          displayName: "Administradora",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
-        },
-      },
-      ALL_MODULES,
-    ),
-    { db: suite.admin, modules: ALL_MODULES },
-  );
-
-  const managerId = await withTenant(suite.admin, venue.tenantId, async (tx) => {
-    await asAppUser(tx);
-    const manager = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
-      returning id`);
-    return manager.rows[0]!.id;
-  });
-  return { tenantId: venue.tenantId, nodeId: venue.nodeId, managerId };
-}
-
-/** Seed origin sequence 10 and peer cursors at 3 and 10, producing lag 7 and 0. */
-async function seedReplication(tenantId: string): Promise<void> {
-  await suite.admin.execute(
-    sql`insert into sync_log (seq, origin_id, table_name, op, tenant_id, row_image)
-        overriding system value
-        values (10, ${ORIGIN}::uuid, 'products', 'insert', ${tenantId}::uuid, '{}'::jsonb)`,
-  );
-  await suite.admin.execute(
-    sql`insert into sync_cursor (subscriber_id, origin_id, last_applied_seq, alive, lane) values
-          ('s1', ${ORIGIN}::uuid, 3, true, 'ordered'),
-          ('s2', ${ORIGIN}::uuid, 10, true, 'ordered')`,
-  );
-}
-
-/**
- * A Hono app carrying the management API (for its login route) plus the box-status route under test,
- * wired with a REAL `readReplicationLag` over `suite.admin` — the seam Task 6 fills in boot.ts. Both
- * surfaces share the owner db + tenant, so a cookie minted on one resolves on the other.
- */
-function buildApp(tenantId: string, nodeId: string, now: Date): Hono {
-  const app = new Hono();
-  mountManagementApi(
-    app,
-    {
-      db: suite.admin,
-      cfg: { tenantId, nodeId },
-      secureCookies: false,
-      rpId: "localhost",
-      origin: "http://localhost",
-    },
-    () => {},
-  );
-  mountBoxStatusApi(
-    app,
-    {
-      db: suite.admin,
-      cfg: { tenantId, nodeId },
-      environment: "preproduction",
-      health: createHealthState(now),
-      now: () => now,
-      tlsCertPath: undefined,
-      readReplicationLag: () => lagFor(suite.admin),
-      readDisposal: undefined,
-      readBackup: undefined,
-      readConfigConflicts: undefined,
-      readMode: () => "primary",
-      readSingletonRole: () => "primary",
-      readAwaitingFiscalCertificate: () => false,
-    },
-    () => {},
-  );
-  return app;
-}
-
-/** Log in over HTTP by `email`, returning just the `waitron_management_session=…` cookie pair. */
-async function login(app: Hono, email: string): Promise<string> {
-  const res = await app.request("/management-api/session", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email, password: PASSWORD }),
-  });
-  expect(res.status).toBe(200);
-  return res.headers.get("set-cookie")!.split(";")[0];
-}
-
-describe("GET /api/box/status replication summary (real postgres)", () => {
-  let app: Hono;
-  let managerCookie: string;
+describe("box-status replication cell over a real logical slot", () => {
+  let container: StartedContainer | undefined;
+  let db: Database | undefined;
 
   beforeAll(async () => {
-    const { tenantId, nodeId } = await setupTenant();
-    await seedReplication(tenantId);
-    app = buildApp(tenantId, nodeId, new Date("2026-08-29T10:00:00Z"));
-    managerCookie = await login(app, MANAGER_EMAIL);
+    container = await startLogicalPostgresContainer();
+    db = await createPostgresDb(container.uri);
+  }, 120_000);
+
+  afterAll(async () => {
+    if (db !== undefined) await db.close();
+    if (container !== undefined) await container.stop();
   });
 
-  it("summarises replication worst-first when sync is configured", async () => {
-    const res = await app.request("/api/box/status", { headers: { cookie: managerCookie } });
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.singletonRole).toBe("primary");
-    expect(body.replication).toEqual({ configured: true, worstLagSeq: "7", subscribers: 2 });
+  it("reports a primary with no slots as a publisher with an empty slot list", async () => {
+    const status = await collectBoxStatus(baseReaders({ replicationSlots: () => listSlots(db!) }));
+    expect(status.replication).toEqual({ configured: true, role: "publisher", slots: [] });
+  });
+
+  it("lists a seeded slot as an inactive publisher slot", async () => {
+    await db!.execute(sql`select pg_create_logical_replication_slot(${SLOT}, 'pgoutput')`);
+    const status = await collectBoxStatus(baseReaders({ replicationSlots: () => listSlots(db!) }));
+    expect(status.replication).toMatchObject({ configured: true, role: "publisher" });
+    const rep = status.replication as {
+      configured: true;
+      role: "publisher";
+      slots: { peer: string; active: boolean }[];
+    };
+    const slot = rep.slots.find((s) => s.peer === SLOT);
+    expect(slot).toBeDefined();
+    expect(slot!.active).toBe(false); // a manual slot has no consumer
+    await db!.execute(sql`select pg_drop_replication_slot(${SLOT})`); // clean up for suite isolation
+  });
+
+  it("reports a MIRROR's subscription as a subscriber cell (absent subscription → not enabled)", async () => {
+    // A mirror reader over `readSubscriptionStatus`; with no subscription created the reader still returns
+    // an `exists:false` shape, which maps to a subscriber cell reporting disabled/zero — proving the
+    // subscriber branch and the `publications` passthrough wire up (I6).
+    const status = await collectBoxStatus(
+      baseReaders({
+        mode: async () => "mirror",
+        replicationSubscription: () =>
+          readSubscriptionStatus(db!, subscriptionName("preproduction", PEER_NODE_ID)),
+      }),
+    );
+    expect(status.replication).toEqual({
+      configured: true,
+      role: "subscriber",
+      enabled: false,
+      workerUp: false,
+      tablesReady: 0,
+      tablesTotal: 0,
+      applyErrorCount: 0,
+      syncErrorCount: 0,
+      publications: [],
+    });
   });
 });

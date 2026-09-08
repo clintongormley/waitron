@@ -9,10 +9,10 @@ const base: BoxStatusReaders = {
   cert: () => Promise.resolve({ notAfter: "2030-01-01T00:00:00.000Z", daysRemaining: 30 }),
   awaitingFiscalCertificate: () => false,
   chain: async () => ({ height: 7, lastAt: "2026-08-29T10:00:00.000Z" }),
-  replicationLag: undefined,
+  replicationSlots: undefined,
+  replicationSubscription: undefined,
   disposal: undefined,
   backup: undefined,
-  configConflicts: async () => ({ count: 0 }),
   duties: () => ({ "fiscal.drain": { stale: false } }),
 };
 
@@ -30,7 +30,6 @@ describe("collectBoxStatus", () => {
       replication: { configured: false },
       disposal: { applicable: false },
       backup: { configured: false },
-      configConflicts: { configured: true, count: 0 },
       duties: { "fiscal.drain": { stale: false } },
     });
   });
@@ -58,29 +57,87 @@ describe("collectBoxStatus", () => {
     expect(status.cert).toEqual({ available: false });
   });
 
-  it("summarises replication lag worst-first when a lag reader is present", async () => {
+  it("lists a PRIMARY's peer slots (publisher cell, bigint retainedBytes → string)", async () => {
     const status = await collectBoxStatus({
       ...base,
-      replicationLag: async () => [
-        { subscriberId: "s1", originId: "o1", lag: 42n, alive: true },
-        { subscriberId: "s2", originId: "o1", lag: 3n, alive: true },
+      replicationSlots: async () => [
+        {
+          slotName: "waitron_preproduction_sub_aa",
+          active: true,
+          walStatus: "reserved",
+          retainedBytes: 4096n,
+        },
+        {
+          slotName: "waitron_preproduction_sub_bb",
+          active: false,
+          walStatus: "lost",
+          retainedBytes: null,
+        },
       ],
     });
-    expect(status.replication).toEqual({ configured: true, worstLagSeq: "42", subscribers: 2 });
+    expect(status.replication).toEqual({
+      configured: true,
+      role: "publisher",
+      slots: [
+        {
+          peer: "waitron_preproduction_sub_aa",
+          active: true,
+          walStatus: "reserved",
+          retainedBytes: "4096",
+        },
+        {
+          peer: "waitron_preproduction_sub_bb",
+          active: false,
+          walStatus: "lost",
+          retainedBytes: "0",
+        },
+      ],
+    });
   });
 
-  it("reports zero worst-lag when the lag reader returns no subscribers", async () => {
-    const status = await collectBoxStatus({ ...base, replicationLag: async () => [] });
-    expect(status.replication).toEqual({ configured: true, worstLagSeq: "0", subscribers: 0 });
+  it("reports an empty publisher slot list as configured with no slots", async () => {
+    const status = await collectBoxStatus({ ...base, replicationSlots: async () => [] });
+    expect(status.replication).toEqual({ configured: true, role: "publisher", slots: [] });
   });
 
-  it("propagates a replicationLag reader fault (fail-loud, no configured:false fallback)", async () => {
+  it("reports a MIRROR's subscription (subscriber cell, incl. the narrowed publications, I6)", async () => {
+    const status = await collectBoxStatus({
+      ...base,
+      replicationSlots: undefined,
+      replicationSubscription: async () => ({
+        name: "waitron_preproduction_sub_cc",
+        exists: true,
+        enabled: true,
+        publications: ["waitron_preproduction_ledger"],
+        workerUp: true,
+        receivedLsn: "0/1600000",
+        latestEndLsn: "0/1600000",
+        applyErrorCount: 0,
+        syncErrorCount: 1,
+        tablesTotal: 10,
+        tablesReady: 9,
+      }),
+    });
+    expect(status.replication).toEqual({
+      configured: true,
+      role: "subscriber",
+      enabled: true,
+      workerUp: true,
+      tablesReady: 9,
+      tablesTotal: 10,
+      applyErrorCount: 0,
+      syncErrorCount: 1,
+      publications: ["waitron_preproduction_ledger"],
+    });
+  });
+
+  it("propagates a replicationSlots reader fault (fail-loud, no configured:false fallback)", async () => {
     await expect(
       collectBoxStatus({
         ...base,
-        replicationLag: () => Promise.reject(new Error("lag read failed")),
+        replicationSlots: () => Promise.reject(new Error("slot read failed")),
       }),
-    ).rejects.toThrow("lag read failed");
+    ).rejects.toThrow("slot read failed");
   });
 
   it("passes a per-destination backup summary through from its reader", async () => {
@@ -118,41 +175,45 @@ describe("collectBoxStatus", () => {
     expect(status.disposal).toEqual({ applicable: false });
   });
 
-  it("surfaces the carrier + drain verdict when a disposal reader is present (bigint → string)", async () => {
+  it("surfaces the carrier + native slot-drain verdict when a disposal reader is present", async () => {
     const status = await collectBoxStatus({
       ...base,
       disposal: async () => ({
         carrierNodeId: "carrier",
         drained: false,
-        ownTailSeq: 100n,
-        carrierAppliedSeq: 40n,
+        active: true,
+        walStatus: "reserved",
+        retainedBytes: 8192n,
       }),
     });
     expect(status.disposal).toEqual({
       applicable: true,
       carrierNodeId: "carrier",
       drained: false,
-      ownTailSeq: "100",
-      carrierAppliedSeq: "40",
+      active: true,
+      walStatus: "reserved",
+      retainedBytes: "8192", // bigint → string
     });
   });
 
-  it("passes a null seq through as null (not the string 'null')", async () => {
+  it("passes a null retainedBytes through as null (an absent slot, not the string 'null')", async () => {
     const status = await collectBoxStatus({
       ...base,
       disposal: async () => ({
         carrierNodeId: "carrier",
         drained: true,
-        ownTailSeq: null,
-        carrierAppliedSeq: null,
+        active: false,
+        walStatus: null,
+        retainedBytes: null,
       }),
     });
     expect(status.disposal).toEqual({
       applicable: true,
       carrierNodeId: "carrier",
       drained: true,
-      ownTailSeq: null,
-      carrierAppliedSeq: null,
+      active: false,
+      walStatus: null,
+      retainedBytes: null,
     });
   });
 
@@ -163,24 +224,5 @@ describe("collectBoxStatus", () => {
         backup: () => Promise.reject(new Error("backup dir read failed")),
       }),
     ).rejects.toThrow("backup dir read failed");
-  });
-
-  it("surfaces the config-conflict count when a reader is present", async () => {
-    const status = await collectBoxStatus({ ...base, configConflicts: async () => ({ count: 4 }) });
-    expect(status.configConflicts).toEqual({ configured: true, count: 4 });
-  });
-
-  it("reports configConflicts N-A when no reader is configured (sync module off)", async () => {
-    const status = await collectBoxStatus({ ...base, configConflicts: undefined });
-    expect(status.configConflicts).toEqual({ configured: false });
-  });
-
-  it("propagates a configConflicts reader fault (fail-loud, no configured:false fallback)", async () => {
-    await expect(
-      collectBoxStatus({
-        ...base,
-        configConflicts: () => Promise.reject(new Error("conflict count read failed")),
-      }),
-    ).rejects.toThrow("conflict count read failed");
   });
 });
