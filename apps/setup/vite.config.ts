@@ -1,6 +1,10 @@
+import { fileURLToPath } from "node:url";
+
 import { defineConfig } from "vite";
 
 export default defineConfig({
+  // Shared brand assets — see the till config for the full rationale.
+  publicDir: fileURLToPath(new URL("../../packages/ui/brand/public", import.meta.url)),
   // Setup mode serves the wizard at the origin ROOT (`mountSpa` with basePath ""), unlike the
   // dashboard's `/manage/` — so `base` stays the default `/`.
   base: "/",

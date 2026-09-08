@@ -1,6 +1,16 @@
+import { fileURLToPath } from "node:url";
+
 import { defineConfig } from "vite";
 
 export default defineConfig({
+  // Favicons and app icons are served from the ONE brand directory in packages/ui, so a redrawn
+  // mark cannot go stale in two apps. A relative filesystem path deliberately, and not the
+  // `import.meta.resolve("@waitron/migrations/…")` shape the copy-migrations scripts use to reach
+  // a sibling package's asset: `publicDir` wants a directory, and `@waitron/ui` has no `exports`
+  // map to add a seat to — adding one would have to enumerate every
+  // `@waitron/ui/src/components/*.js` the apps already deep-import. `scripts/brand-icons.test.ts`
+  // reads this line as text and fails if it stops naming that directory.
+  publicDir: fileURLToPath(new URL("../../packages/ui/brand/public", import.meta.url)),
   server: {
     port: 5190,
     // Fail loudly if 5190 is taken instead of silently bumping to the next free port: a bump would

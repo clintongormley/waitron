@@ -12,8 +12,9 @@ import { defineConfig } from "vitest/config";
 //   cross-checks every module descriptor's `requires` against the FK/trigger edges its
 //   `packages/*/drizzle` SQL creates against other modules' tables, module-seams reads every
 //   non-test source file under `packages/provisioning/src` and `apps/server/src` for a `from
-//   "<regime package>"` prefix, and coverage-thresholds pins
-//   which package holds which coverage bar;
+//   "<regime package>"` prefix, coverage-thresholds pins
+//   which package holds which coverage bar, and brand-icons pins each app's `index.html` icon
+//   links and `vite.config.ts` publicDir against the one brand directory in `packages/ui`;
 //   `scripts/check-signoff.test.mjs`, which covers the sign-off predicate both gates share and
 //   runs licence.yml's `dco` step extracted from the workflow file.
 //
