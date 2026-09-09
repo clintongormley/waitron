@@ -318,6 +318,10 @@ Every value is validated once, at boot, with a structured `server.config_invalid
 `server.config_missing` error naming the variable and (for an invalid value) a reason code — never
 the value itself, since an operator's mistyped input could be a secret pasted into the wrong place.
 
+Preproduction fiscal submission is off by default. A dedicated integration target can set
+`WAITRON_FISCAL_TEST_SUBMISSIONS=enabled`; a Demo or Prepare installation still refuses to drain even
+with that switch present. Production always runs the fiscal drain.
+
 ### The four `WAITRON_CREDENTIALS_KEY*` variables, in full
 
 These are **not** parsed by this package's own `config.ts` — `src/boot.ts` passes the env it was

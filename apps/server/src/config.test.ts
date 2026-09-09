@@ -78,6 +78,7 @@ describe("loadConfig", () => {
       // off. `devMode` is `true` only for the literal WAITRON_ENV=dev.
       devMode: false,
       onboardingIntent: undefined,
+      fiscalTestSubmissions: false,
       httpPort: 8080,
       // The plain-HTTP trust/landing listener defaults to port 80 (Task 3); `0` disables it.
       landingPort: 80,
@@ -1029,6 +1030,36 @@ describe("WAITRON_ONBOARDING_INTENT", () => {
       variable: "WAITRON_ONBOARDING_INTENT",
       reason: "not_an_onboarding_intent",
     });
+  });
+});
+
+describe("WAITRON_FISCAL_TEST_SUBMISSIONS", () => {
+  it("is disabled by default and enabled only by the explicit 'enabled' value", () => {
+    expect(loadConfig(MIN_ENV, ROOT, MEDIA_ROOT, STATE_ROOT).fiscalTestSubmissions).toBe(false);
+    expect(
+      loadConfig(
+        { ...MIN_ENV, WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled" },
+        ROOT,
+        MEDIA_ROOT,
+        STATE_ROOT,
+      ).fiscalTestSubmissions,
+    ).toBe(true);
+  });
+
+  it("rejects an ambiguous value", () => {
+    expect(() =>
+      loadConfig(
+        { ...MIN_ENV, WAITRON_FISCAL_TEST_SUBMISSIONS: "true" },
+        ROOT,
+        MEDIA_ROOT,
+        STATE_ROOT,
+      ),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "server.config_invalid",
+        params: { variable: "WAITRON_FISCAL_TEST_SUBMISSIONS", reason: "not_enabled" },
+      }),
+    );
   });
 });
 

@@ -53,6 +53,8 @@ export interface ServerConfig {
   devMode: boolean;
   /** Why this fresh primary was created. Undefined during setup, and on mirrors or older state. */
   onboardingIntent: OnboardingIntent | undefined;
+  /** Explicitly enables preproduction submissions on a dedicated integration-test target. */
+  fiscalTestSubmissions: boolean;
   httpPort: number;
   /**
    * The plain-HTTP trust/landing listener's port (default 80); `0` disables it. A SECOND listener,
@@ -614,6 +616,18 @@ function onboardingIntent(
   return raw;
 }
 
+function fiscalTestSubmissions(env: Env): boolean {
+  const raw = env.WAITRON_FISCAL_TEST_SUBMISSIONS;
+  if (isUnset(raw)) return false;
+  if (raw !== "enabled") {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_FISCAL_TEST_SUBMISSIONS",
+      reason: "not_enabled",
+    });
+  }
+  return true;
+}
+
 export function loadConfig(
   env: Env,
   defaultMigrationsRoot: string,
@@ -750,6 +764,7 @@ export function loadConfig(
     environment,
     devMode: isDevMode(env),
     onboardingIntent: onboardingIntent(env, environment),
+    fiscalTestSubmissions: fiscalTestSubmissions(env),
     httpPort,
     // The plain-HTTP landing listener's port (default 80, `0` = disabled). Its OWN bounded parser
     // (not `positiveInt`), because `0` is a valid value here and `positiveInt` rejects it.

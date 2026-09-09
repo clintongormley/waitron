@@ -111,6 +111,7 @@ import { assertBuiltApp, mountSpa } from "./spa-api.js";
 import { mountSetup } from "./setup-api.js";
 import { provisionVenue, venueModuleConfig } from "./provision.js";
 import { seedInstalledDemo } from "./demo-seed.js";
+import { runFiscalDrain } from "./onboarding-policy.js";
 import { adoptFromPrimary } from "./adopt.js";
 import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -2152,14 +2153,19 @@ export async function startServer(
             // against the database at boot, and the regime's `entorno` guard refuses any due registro
             // whose own `entorno` disagrees or is unrecorded. `boot.ts` names no regime package.
             drain: (at2) =>
-              enabledFiscal.drain(
-                {
-                  db,
-                  ring,
-                  environment: config.environment,
-                  skipRetryMs: config.skipRetryMs,
-                  log,
-                },
+              runFiscalDrain(
+                config,
+                (at3) =>
+                  enabledFiscal.drain(
+                    {
+                      db,
+                      ring,
+                      environment: config.environment,
+                      skipRetryMs: config.skipRetryMs,
+                      log,
+                    },
+                    at3,
+                  ),
                 at2,
               ),
             // Enumerated per pass, not at boot: a tenant provisioned while the host runs is served
