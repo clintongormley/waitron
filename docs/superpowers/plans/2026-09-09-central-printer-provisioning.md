@@ -17,31 +17,37 @@
 - **Error codes name the DOMAIN CONCEPT, never the package**, and are never renamed once shipped (CLAUDE.md §3). New code lives in `packages/printing/src/errors.ts`.
 - **A by-id read still needs its own tenant predicate** — one-tenant-per-DB is not the query's isolation boundary (CLAUDE.md §3). Every new query carries `tenant_id = cfg.tenantId`.
 - **`@waitron/print-agent` is db-free** — no `@waitron/db`/`@waitron/printing` import; the dependency runs the other way. Enforced by the `import-x/no-restricted-paths` zone in `eslint.config.js`.
+- **Trace every consumer before changing a field** (CLAUDE.md §1/§3). Before dropping `agent_id`/`usb_path`, `grep -rn "agent_id\|usbPath\|usb_path\|agentId" packages apps` and update or note every reader (schema doc comments, `runtime.ts` `ClaimedJob`, the pull-reply mapping, the dashboard client types, any e2e/boot suite pinning the pull-reply body with `toEqual`).
+- **A name-filtered pass hides broken wire-body suites** (CLAUDE.md §2). The GET→POST pull change and the `usbPath→localKey` reply change will break any `toEqual`-pinned wire-body/e2e test — run the affected package UNFILTERED before believing green.
 - **Coverage:** `@waitron/print-agent`, `apps/print-agent`, `packages/printing` at 90/90/85/85; `packages/db` at 98/98/98/95.
 - **Migration regeneration hazard (CLAUDE.md §2 / backlog):** `pnpm --filter @waitron/db db:generate` may propose `DROP TABLE "bookings" CASCADE` (a stale snapshot artifact). Inspect every generated SQL file and delete any DROP the change did not intend before staging.
 - **Prove a guard by deletion**, and confirm a negative control fails for the reason you expect (CLAUDE.md §4).
-- **Per-task verify:** the changed package's `pnpm --filter <pkg> test:coverage` + `lint` + `typecheck` + `format:check`; run `pnpm typecheck` (whole workspace) once when a shared type changes. Real-PG suites need `TESTCONTAINERS_RYUK_DISABLED=true`; run `pnpm reap` if a prior run was interrupted.
+- **Per-task verify:** the changed package's `pnpm --filter <pkg> test:coverage` + `lint` + `typecheck` + `format:check`. Real-PG suites need `TESTCONTAINERS_RYUK_DISABLED=true`; run `pnpm reap` if a prior run was interrupted.
+
+## Sequencing note — the shared-type interlock (read before executing)
+
+Tasks 2–5 are **one interlocking shared-type change**. Task 2 edits the exported types of `@waitron/print-agent` (`PrintTransport`, `PrinterTarget`, `Host`, `WireJob`, `pullJobs`) and Task 4 changes `claimPrintJobs`'s signature — and `@waitron/printing`, `apps/server` and `apps/print-agent` all depend on `@waitron/print-agent`, while `apps/server` depends on `@waitron/printing`. So:
+
+- **The whole-workspace `pnpm typecheck` does NOT pass between Tasks 2 and 5.** Adding `bluetooth` to `PrintTransport` breaks `printers.ts`'s `REQUIRED_FIELDS` record until Task 3; renaming `PrinterTarget.usbPath → devicePath` breaks `runtime.ts` until Task 4; the new `Host` methods break `apps/print-agent` until its stubs (added in Task 2) and real impls (Task 6); the 4-arg `claimPrintJobs` breaks the server call until Task 4's stopgap. **Assert whole-workspace `pnpm typecheck` green only at the END of Task 5**, not after Tasks 2/3/4. Within the block, run each package's own tests where that package compiles, and commit per task.
+- **Compile-keeping stubs/stopgaps** are called out in the tasks: Task 2 adds stub `Host` methods to `apps/print-agent` (real impls in Task 6) and updates this package's own fakes; Task 4 adds a one-line server call-site stopgap so `apps/server` keeps compiling until Task 5 supplies the real inventory.
+- **The `Host` seam here intentionally supersedes spec §7's sketch** (recorded decision): the spec sketched `visibleKeys()`/`resolve(target)`/`ResolvedSink`; the plan ships `visibleDevices()` (carries make/model for the discovered list), `resolve(job): PrinterTarget`, and `scan(kinds?)`. Coherent and slightly richer; noted so a spec reader is not surprised.
+
+Tasks 1, 6, 7, 8 are outside the interlock (1 is pure DB; 6/7/8 consume the settled contract) and each ends green on its own.
 
 ---
 
 ## File Structure
 
 **Modify:**
-- `packages/db/src/schema/printers.ts` — drop `agentId`/`usbPath`; add `localKey`; add `bluetooth` enum value; add partial-unique constraint marker.
+- `packages/db/src/schema/printers.ts` — drop `agentId`/`usbPath`; add `localKey`; add `bluetooth` enum value.
 - `packages/db/src/schema/print-jobs.ts` — add `claimedBy`.
-- `packages/db/drizzle/*` — regenerated core migration + a `--custom` twin (CHECK rewrite, `(tenant_id, printer_id)` FK kept, new `(tenant_id, claimed_by)` FK, partial UNIQUE on `local_key`, grants).
-- `packages/db/src/schema/printing.test.ts` (or the existing printer/print-job schema tests) — CHECK per transport, FKs, partial unique.
-- `packages/printing/src/printers.ts` — `CreatePrinterInput`/`UpdatePrinterInput`/`PrinterRow`, `REQUIRED_FIELDS`, `createPrinter`/`updatePrinter`/`listPrinters`, `translatePrinterWriteError`.
-- `packages/printing/src/errors.ts` — add `printer.already_registered`; update `printer.invalid_config` doc.
-- `packages/printing/src/runtime.ts` — `claimPrintJobs` (eligibility + `claimed_by` + RETURNING `local_key`), `ClaimedJob`, `reportPrintJob` (by `claimed_by`), `runAgentOnce` target.
-- `packages/print-agent/src/transport.ts` — `PrintTransport += "bluetooth"`; `PrinterTarget.usbPath → devicePath`; `usb`/`bluetooth` adapters; `RoutingTransport`.
-- `packages/print-agent/src/host.ts` — `Host` gains `visibleDevices`/`scan`/`resolve`/`pair`; new `VisibleDevice`/`DiscoveredDevice`/`PairResult` types.
-- `packages/print-agent/src/client.ts` — `WireJob.usbPath → localKey`; `PullReply.discoveryUntil`; `pullJobs` becomes POST carrying inventory.
-- `packages/print-agent/src/agent.ts` — report inventory each tick; scan within the window; `resolve` before `send`.
-- `apps/server/src/print-api.ts` — create/patch bodies (`localKey`), pull→POST with inventory + in-memory discovered store + `discoveryUntil` reply, two new management routes, STATUS map (`printer.already_registered` 409).
-- `apps/print-agent/src/*` — the real container `Host` implementations (USB sysfs scan/resolve, network mDNS/sweep scan, Bluetooth inquiry/pair/resolve) + the setup-page Bluetooth section; `Dockerfile`/compose access.
-- `apps/dashboard/src/screens/printers-screen.ts` + `apps/dashboard/src/api/client.ts` — transport-aware create flow, discovered-printers list, discover button, drop the agent dropdown/column, new client methods.
-- `apps/server/src/print-api.e2e` (the existing end-to-end suite in `apps/server`) — register + pull-with-inventory + bytes-land + revoke.
+- `packages/db/drizzle/*` — regenerated core migration + a `--custom` twin (CHECK rewrite, explicit FK drop, `(tenant_id, claimed_by)` FK, partial UNIQUE, grants).
+- `packages/print-agent/src/{transport,host,client,agent}.ts` — the shared contract (Task 2).
+- `packages/printing/src/{printers,errors,runtime}.ts` — write-path (Task 3) + claim/report (Task 4).
+- `apps/server/src/print-api.ts` — create/patch bodies, POST pull + inventory, discovery window, discovered list, STATUS map.
+- `apps/print-agent/src/*` — stub Host methods (Task 2) then real Linux impls + setup-page Bluetooth (Task 6); Dockerfile/compose access.
+- `apps/dashboard/src/screens/printers-screen.ts` + `apps/dashboard/src/api/client.ts` — transport-aware flow, discovered list.
+- the `apps/server` end-to-end print suite (Task 8).
 
 **Create:** none (no new tables, no new packages).
 
@@ -50,26 +56,23 @@
 ## Task 1: Schema + migration — derive-not-store shape
 
 **Files:**
-- Modify: `packages/db/src/schema/printers.ts:12` (enum), `:35-76` (columns/constraints)
-- Modify: `packages/db/src/schema/print-jobs.ts:40-79`
+- Modify: `packages/db/src/schema/printers.ts:12,35-76`, `packages/db/src/schema/print-jobs.ts:40-79`
 - Create/Modify: `packages/db/drizzle/*` (regenerated pair)
-- Test: `packages/db/src/schema/printing.test.ts` (extend the existing printer/print-job schema suite — real PG via `describeEachTarget` for the CHECK/FK/unique)
+- Test: `packages/db/src/schema/printing.test.ts` (extend; real PG via `describeEachTarget` for the CHECK/FK/unique)
 
 **Interfaces:**
-- Produces: `printers.local_key` (text, null for network_tcp/cloud_poll); `print_transport` enum value `bluetooth`; `print_jobs.claimed_by` (uuid, null); partial UNIQUE `printers_local_key_key` on `(tenant_id, location_id, local_key) WHERE local_key IS NOT NULL`; the `(tenant_id, claimed_by) → print_agents(tenant_id, id)` composite FK.
-- Consumes: nothing.
+- Produces: `printers.local_key` (text, null for network_tcp/cloud_poll); `print_transport` value `bluetooth`; `print_jobs.claimed_by` (uuid, null); partial UNIQUE `printers_local_key_key` on `(tenant_id, location_id, local_key) WHERE local_key IS NOT NULL`; the `(tenant_id, claimed_by) → print_agents(tenant_id, id)` composite FK.
 
-- [ ] **Step 1: Write the failing schema tests.** In the printer/print-job schema suite, add real-PG cases:
+- [ ] **Step 1: Trace consumers.** `grep -rn "agent_id\|usbPath\|usb_path\|agentId" packages apps` and list every reader touched by dropping `printers.agent_id`/`usb_path` (schema doc comments, `runtime.ts` `ClaimedJob.usb_path`, `print-api.ts:330` reply map, `printers.ts` write-path, `apps/dashboard/src/api/client.ts` types, any `toEqual`-pinned wire-body test). These are handled in Tasks 2–7; this step is to confirm the set before editing.
+
+- [ ] **Step 2: Write the failing schema tests** (real PG):
 
 ```ts
-// usb/bluetooth require local_key; network_tcp requires host; cloud_poll requires poll_id.
 it("rejects a usb printer with no local_key (CHECK 23514)", async () => {
   await expect(insertPrinter({ transport: "usb", localKey: null })).rejects.toMatchObject({ code: "23514" });
 });
-it("accepts a usb printer keyed on a serial", async () => {
+it("accepts usb keyed on a serial and bluetooth keyed on a MAC", async () => {
   await expect(insertPrinter({ transport: "usb", localKey: "SN-ABC123" })).resolves.toBeDefined();
-});
-it("accepts a bluetooth printer keyed on a MAC", async () => {
   await expect(insertPrinter({ transport: "bluetooth", localKey: "AA:BB:CC:DD:EE:FF" })).resolves.toBeDefined();
 });
 it("rejects a network_tcp printer with no host (CHECK 23514)", async () => {
@@ -79,43 +82,44 @@ it("rejects a second registration of the same (location, local_key) (UNIQUE 2350
   await insertPrinter({ transport: "usb", localKey: "SN-DUP" });
   await expect(insertPrinter({ transport: "usb", localKey: "SN-DUP" })).rejects.toMatchObject({ code: "23505" });
 });
-it("allows two printers with NULL local_key in one location (partial index)", async () => {
+it("allows two NULL-local_key printers in one location (partial index)", async () => {
   await insertPrinter({ transport: "network_tcp", host: "10.0.0.1" });
   await expect(insertPrinter({ transport: "network_tcp", host: "10.0.0.2" })).resolves.toBeDefined();
 });
-it("rejects claimed_by naming an agent in another tenant (composite FK 23503)", async () => { /* insert job with foreign claimed_by → 23503 */ });
+it("rejects claimed_by naming an agent in another tenant (composite FK 23503)", async () => { /* insert a print_jobs row with a foreign claimed_by → 23503 */ });
+it("verifies the old (tenant_id, agent_id) FK is gone", async () => { /* query pg_constraint: no constraint referencing printers.agent_id remains */ });
 ```
 
-Match the existing suite's helpers (`describeEachTarget`, the printer insert helper); if none exists, insert via `db.insert(printers)` with `tenantId`/`locationId` from the harness fixtures.
+- [ ] **Step 3: Run to verify they fail** — `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/db test -- printing` → FAIL.
 
-- [ ] **Step 2: Run to verify they fail** — `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/db test -- printing` → FAIL (columns/constraints not yet changed).
-
-- [ ] **Step 3: Edit the schema.** In `printers.ts`:
+- [ ] **Step 4: Edit the schema.** In `printers.ts`:
 
 ```ts
 export const printTransport = pgEnum("print_transport", ["usb", "network_tcp", "bluetooth", "cloud_poll"]);
-// …in the table: REMOVE agentId and usbPath. ADD:
+// In the table: REMOVE agentId and usbPath. ADD:
 localKey: text("local_key"), // usb: device serial; bluetooth: MAC. NULL for network_tcp/cloud_poll.
-// …keep host, port, pollId, pollTokenHash, ticketScope, active.
-// The transport-required-field CHECK, the partial UNIQUE, and the (tenant_id, printer_id) FK stay
-// hand-written in the --custom migration (a bare column carries no FK; a partial index is not a schema
-// primitive here). Update the table doc comment: no agent_id; local_key is the stable device id.
+// Keep host, port, pollId, pollTokenHash, ticketScope, active. Update the table doc: no agent_id; local_key
+// is the stable device id; the CHECK, the partial UNIQUE, and the (tenant_id, printer_id) FK on print_jobs
+// stay hand-written in the --custom migration.
 ```
 
-In `print-jobs.ts` add after `printerId`:
+In `print-jobs.ts`, after `printerId`:
 
 ```ts
-// The agent currently holding this job (set on claim, cleared/overwritten by a lease reclaim). Bare
-// column: the tenant-consistent (tenant_id, claimed_by) → print_agents composite FK is hand-written in
-// the --custom migration (MATCH SIMPLE skips it on NULL). Authorises the report — only the claimer
-// reports its own job (runtime.ts). NULL while queued and after the job leaves `printing`.
+// The agent currently holding this job (set on claim, overwritten by a lease reclaim). Bare column: the
+// tenant-consistent (tenant_id, claimed_by) → print_agents composite FK is hand-written in the --custom
+// migration (MATCH SIMPLE skips it on NULL). Authorises the report — only the claimer reports its own job
+// (runtime.ts). NULL while queued and after the job leaves `printing`.
 claimedBy: uuid("claimed_by"),
 ```
 
-- [ ] **Step 4: Regenerate the migration pair.** Follow CLAUDE.md §3's recipe. `pnpm --filter @waitron/db db:generate --name central_printer_provisioning` for the enum value + column add/drop, then `db:generate:custom --name central_printer_provisioning_sql` for the hand-written DDL. In the custom SQL:
+- [ ] **Step 5: Regenerate the migration pair** (CLAUDE.md §3 recipe). `pnpm --filter @waitron/db db:generate --name central_printer_provisioning` for the enum value + column add/drop, then `db:generate:custom --name central_printer_provisioning_sql` for the hand-written DDL:
 
 ```sql
--- Rewrite printers_transport_fields_ck: usb/bluetooth need local_key; network_tcp needs host; cloud_poll needs poll_id.
+-- The old (tenant_id, agent_id) → print_agents FK and the old printers_transport_fields_ck were
+-- hand-written (not generated), so db:generate will NOT emit a DROP for them. Drop them EXPLICITLY —
+-- do not rely on DROP COLUMN cascading to a composite constraint (verify by reading pg_constraint back).
+ALTER TABLE printers DROP CONSTRAINT IF EXISTS printers_agent_id_fk;
 ALTER TABLE printers DROP CONSTRAINT IF EXISTS printers_transport_fields_ck;
 ALTER TABLE printers ADD CONSTRAINT printers_transport_fields_ck CHECK (
   (transport = 'usb'         AND local_key IS NOT NULL) OR
@@ -123,42 +127,116 @@ ALTER TABLE printers ADD CONSTRAINT printers_transport_fields_ck CHECK (
   (transport = 'network_tcp' AND host      IS NOT NULL) OR
   (transport = 'cloud_poll'  AND poll_id   IS NOT NULL)
 );
--- Partial UNIQUE: one registered printer per physical device per venue.
 CREATE UNIQUE INDEX printers_local_key_key ON printers (tenant_id, location_id, local_key) WHERE local_key IS NOT NULL;
--- Keep the (tenant_id, printer_id) FK from print_jobs; ADD the claimer FK.
 ALTER TABLE print_jobs ADD CONSTRAINT print_jobs_claimed_by_fk
   FOREIGN KEY (tenant_id, claimed_by) REFERENCES print_agents (tenant_id, id) MATCH SIMPLE;
--- The (tenant_id, agent_id) → print_agents FK on printers is GONE (agent_id dropped); ensure the
--- generated migration drops that constraint too.
--- Grants: app_user keeps its existing printers/print_jobs privileges; local_key/claimed_by inherit the
--- table grants. Confirm no new GRANT is needed by reading privileges.test.ts (never widen to pass).
+-- Grants: app_user keeps its printers/print_jobs privileges; local_key/claimed_by inherit the table
+-- grants. Confirm by reading privileges.test.ts — NEVER widen a grant to make a test pass.
 ```
 
-**Heed the bookings-DROP hazard:** open every generated SQL file; delete any `DROP TABLE`/unrelated statement the change did not intend.
+(Use the real generated constraint names — confirm `printers_agent_id_fk` against the baseline SQL; substitute the actual name.) **Heed the bookings-DROP hazard:** open every generated file and delete any unintended DROP.
 
-- [ ] **Step 5: Run schema + guard tests** — `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/db test:coverage`, then the root guards: `pnpm --filter @waitron/root test -- classification-complete append-only-enable-always` (no table added/removed → classification unchanged; run it to prove so). Also `pnpm --filter @waitron/db test -- privileges` (grants unchanged). Expected: PASS.
+- [ ] **Step 6: Run schema + guards** — `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/db test:coverage`; then the root guards `classification-complete`, `append-only-enable-always` (no table added/removed — run to prove classification unchanged) and `pnpm --filter @waitron/db test -- privileges`. Expected: PASS.
 
-- [ ] **Step 6: Commit** — `git add packages/db && git commit -s -m "feat(db): printers keyed on local_key, jobs record claimed_by (central printer provisioning)"`
+- [ ] **Step 7: Commit** — `git commit -s -m "feat(db): printers keyed on local_key, jobs record claimed_by (central printer provisioning)"`
 
 ---
 
-## Task 2: printing write-path — create/update/list by local_key
+## Task 2: `@waitron/print-agent` — the shared contract (transport, seam, wire, loop)
+
+> Interlock task — see the Sequencing note. Do NOT assert whole-workspace typecheck here; it goes green in Task 5.
 
 **Files:**
-- Modify: `packages/printing/src/printers.ts:31-44,67-92,105-140,151-175,186-276`
-- Modify: `packages/printing/src/errors.ts:20-37`
-- Test: `packages/printing/src/printers.test.ts` (the existing write-path suite)
+- Modify: `packages/print-agent/src/transport.ts:15-35,96-139`, `host.ts:8-52`, `client.ts:8-76,188-232,278-286`, `agent.ts:98-126,129-255`
+- Modify: `apps/print-agent/src/<host>.ts` — add **stub** `Host` methods (real impls in Task 6)
+- Test: `packages/print-agent/src/{transport,client,agent}.test.ts`
+
+**Interfaces (Produces):**
+- `type PrintTransport = "usb" | "network_tcp" | "bluetooth" | "cloud_poll"`
+- `type TransportKind = "usb" | "network_tcp" | "bluetooth"` (discoverable transports; excludes cloud_poll)
+- `interface PrinterTarget { id; transport: PrintTransport; host: string | null; port: number | null; devicePath: string | null }`
+- `interface VisibleDevice { transport: "usb" | "bluetooth"; localKey: string; make?: string; model?: string }`
+- `interface DiscoveredDevice { transport: PrintTransport; localKey?: string; host?: string; port?: number; make?: string; model?: string; name?: string }`
+- `interface PairResult { ok: boolean; localKey?: string; error?: string }`
+- `Host` gains `visibleDevices(): Promise<VisibleDevice[]>`, `scan(kinds?: TransportKind[]): Promise<DiscoveredDevice[]>`, `resolve(job: WireJob): Promise<PrinterTarget>`, `pair(mac: string): Promise<PairResult>`
+- `WireJob { …; localKey: string | null }` (replaces `usbPath`); `PullReply { …; discoveryUntil: number | null }`
+- `pullJobs(url, token, inventory: { visible: VisibleDevice[]; scanned: DiscoveredDevice[] }): Promise<Result<PullReply>>`
+
+- [ ] **Step 1: transport.ts — failing test then change.**
+
+```ts
+it("routes a bluetooth job to a device-path write", async () => {
+  const file = tmpFile();
+  const t = new RoutingTransport({ network_tcp: new FakeSink(), usb: new UsbTransport(), bluetooth: new UsbTransport() });
+  await t.send({ id: "p", transport: "bluetooth", host: null, port: null, devicePath: file }, esc().line("x").bytes());
+  expect(readFileSync(file)).toEqual(Buffer.from(esc().line("x").bytes()));
+});
+```
+
+Change: `PrintTransport += "bluetooth"`; add `TransportKind`; `PrinterTarget.usbPath → devicePath` (update `UsbTransport.send` to write `printer.devicePath`, rename guard/message); add `bluetooth` to `TransportAdapters` + a `case "bluetooth"` in `RoutingTransport` (a device-path writer; a distinct `BluetoothTransport` class is acceptable and preferred so its error text is its own). `cloud_poll` still rejects.
+
+- [ ] **Step 2: client.ts — failing test then change.**
+
+```ts
+it("posts the inventory and parses discoveryUntil + localKey", async () => {
+  const fetch = fakeFetch({ nodeId: "n", servers: [], jobs: [{ id: "j", printerId: "p", transport: "usb", localKey: "SN-1", payload: "AA==" }], discoveryUntil: 123 });
+  const r = await createClient({ fetch }).pullJobs("http://s", "tok", { visible: [{ transport: "usb", localKey: "SN-1" }], scanned: [] });
+  expect(r.ok && r.value.jobs[0].localKey).toBe("SN-1");
+  expect(r.ok && r.value.discoveryUntil).toBe(123);
+  expect(fakeFetch.lastInit.method).toBe("POST");
+});
+```
+
+Change: `WireJob.usbPath → localKey` (parse `e.localKey`); `PullReply` gains `discoveryUntil: number | null` (`typeof b.discoveryUntil === "number" ? b.discoveryUntil : null`); `pullJobs` takes `inventory` and uses `method: "POST"`, `content-type: application/json`, `body: JSON.stringify(inventory)`.
+
+- [ ] **Step 3: host.ts — add the seam types + methods** (interface only). Add `VisibleDevice`, `DiscoveredDevice`, `PairResult`, `TransportKind` (re-export from transport.ts), and the four methods to `Host`. Add a one-line note that this supersedes spec §7's sketch.
+
+- [ ] **Step 4: agent.ts — failing loop tests then change.** Extend the fake host in `agent.test.ts` with the four methods:
+
+```ts
+it("reports visible devices on every pull", async () => { /* host.visibleDevices → [{usb,SN-1}]; assert client.pullJobs body.visible carries it */ });
+it("scans only within a discovery window", async () => {
+  // reply1 discoveryUntil = now+10s → NEXT tick calls host.scan and includes scanned in the pull body;
+  // reply2 discoveryUntil = null → host.scan NOT called.
+});
+it("resolves a usb job before sending", async () => {
+  // host.resolve(job) → { transport:'usb', devicePath:'/tmp/x', host:null, port:null }; assert transport.send got that target.
+});
+it("marks a job failed when resolve throws (device gone)", async () => {
+  // host.resolve rejects → push reports failed, loop continues.
+});
+```
+
+Change in `agent.ts`:
+- `tick()` gathers `const visible = await host.visibleDevices();`; a cross-tick `discoveryUntil` (from the previous reply) drives `const scanned = host.now() < discoveryUntil ? await host.scan() : []`; pass `{ visible, scanned }` to `client.pullJobs(current, token, …)`.
+- Store `pulled.value.discoveryUntil ?? 0` into the cross-tick variable.
+- `push(job, …)`: `const target = await host.resolve(job);` inside the try, then `await host.transport.send(target, job.payload)`. A throwing `resolve` falls into the existing catch → `failed`.
+
+- [ ] **Step 5: Stub the container host** in `apps/print-agent` so it still satisfies `Host`: `visibleDevices()` → `[]`, `scan()` → `[]`, `pair()` → `{ ok: false, error: "not implemented on this host yet" }`, `resolve(job)` → passthrough (`{ id: job.printerId, transport: job.transport, host: job.host, port: job.port, devicePath: job.localKey }`). Task 6 replaces these. Add a `// TODO(Task 6): real Linux implementation` note pointing at this plan.
+
+- [ ] **Step 6: Run** — `pnpm --filter @waitron/print-agent test:coverage` → PASS; `pnpm --filter @waitron/print-agent typecheck` + the app's typecheck (both compile now, via the stubs). Do NOT run whole-workspace typecheck (it fails until Task 5 — Sequencing note).
+
+- [ ] **Step 7: Commit** — `git commit -s -m "feat(print-agent): bluetooth transport, device seam (visibleDevices/scan/resolve/pair), inventory-carrying pull"`
+
+---
+
+## Task 3: printing write-path — create/update/list by local_key
+
+> Interlock task. Consuming Task 2's `PrintTransport` (now with `bluetooth`) fixes `REQUIRED_FIELDS`'s exhaustiveness.
+
+**Files:**
+- Modify: `packages/printing/src/printers.ts:31-44,67-92,105-140,151-175,186-276`, `errors.ts:20-37`
+- Test: `packages/printing/src/printers.test.ts`
 
 **Interfaces:**
-- Consumes: Task 1's `printers.local_key`, the partial UNIQUE, `bluetooth` enum.
-- Produces: `CreatePrinterInput { name, transport, host?, port?, localKey?, pollId? }`; `UpdatePrinterInput` (same fields, connection fields + `localKey` nullable); `PrinterRow { id, name, transport, host, port, localKey, pollId, ticketScope, active }`; error `printer.already_registered { localKey }`.
+- Consumes: Task 1 schema; Task 2 `PrintTransport`.
+- Produces: `CreatePrinterInput { name, transport, host?, port?, localKey?, pollId? }`; `UpdatePrinterInput` (fields, connection + `localKey` nullable); `PrinterRow { id, name, transport, host, port, localKey, pollId, ticketScope, active }`; error `printer.already_registered { localKey }`.
 
-- [ ] **Step 1: Write failing unit tests** (PGlite is fine — logic + error mapping, no grants):
+- [ ] **Step 1: Failing unit tests** (PGlite — logic + mapping):
 
 ```ts
 it("creates a usb printer from a serial", async () => {
-  const { id } = await createPrinter(tx, cfg, { name: "Cocina", transport: "usb", localKey: "SN-1" });
-  expect(id).toBeDefined();
+  expect((await createPrinter(tx, cfg, { name: "Cocina", transport: "usb", localKey: "SN-1" })).id).toBeDefined();
 });
 it("rejects a usb printer with no local_key before any write", async () => {
   await expect(createPrinter(tx, cfg, { name: "X", transport: "usb" }))
@@ -182,7 +260,7 @@ it("lists printers with local_key, no agentId field", async () => {
 
 - [ ] **Step 2: Run to verify fail** — `pnpm --filter @waitron/printing test -- printers` → FAIL.
 
-- [ ] **Step 3: Edit `errors.ts`** — add the code and update the doc comment:
+- [ ] **Step 3: Edit `errors.ts`** — add the code, update the doc:
 
 ```ts
 /** A create/register whose stable device key (USB serial / Bluetooth MAC) already names a printer in
@@ -193,50 +271,45 @@ it("lists printers with local_key, no agentId field", async () => {
 // (usb/bluetooth), poll_id (cloud_poll); no transport requires agent_id.
 ```
 
-- [ ] **Step 4: Edit `printers.ts`.** Drop `agentId`/`usbPath` from `CreatePrinterInput`, `UpdatePrinterInput`, `PrinterRow`; add `localKey`. New `REQUIRED_FIELDS`:
+- [ ] **Step 4: Edit `printers.ts`.** Drop `agentId`/`usbPath` from `CreatePrinterInput`/`UpdatePrinterInput`/`PrinterRow`; add `localKey`. New `REQUIRED_FIELDS`:
 
 ```ts
 const REQUIRED_FIELDS: Record<PrintTransport, readonly (keyof CreatePrinterInput)[]> = {
-  usb: ["localKey"],
-  bluetooth: ["localKey"],
-  network_tcp: ["host"],
-  cloud_poll: ["pollId"],
+  usb: ["localKey"], bluetooth: ["localKey"], network_tcp: ["host"], cloud_poll: ["pollId"],
 };
 ```
 
-`createPrinter`/`updatePrinter`: write `localKey: input.localKey` instead of `agentId`/`usbPath`; `listPrinters` selects `localKey: printers.localKey`. Rewrite `translatePrinterWriteError` — the agent FK is gone, add the unique mapping:
+`createPrinter`/`updatePrinter` write `localKey`; `listPrinters` selects `localKey: printers.localKey`. Rewrite `translatePrinterWriteError` (the agent FK is gone):
 
 ```ts
 const UNIQUE_VIOLATION = "23505";
 function translatePrinterWriteError(error: unknown, localKey: string | undefined): never {
-  if (localKey !== undefined && isPgError(error, UNIQUE_VIOLATION)) {
-    throw new AppError("printer.already_registered", { localKey });
-  }
-  if (isPgError(error, CHECK_VIOLATION)) {
-    throw new AppError("printer.invalid_config", { reason: "transport_fields" });
-  }
+  if (localKey !== undefined && isPgError(error, UNIQUE_VIOLATION)) throw new AppError("printer.already_registered", { localKey });
+  if (isPgError(error, CHECK_VIOLATION)) throw new AppError("printer.invalid_config", { reason: "transport_fields" });
   throw error;
 }
-// callers pass input.localKey / patch.localKey ?? undefined instead of agentId.
+// callers pass input.localKey / patch.localKey ?? undefined.
 ```
 
-- [ ] **Step 5: Run tests** — `pnpm --filter @waitron/printing test:coverage` → PASS.
+- [ ] **Step 5: Run** — `pnpm --filter @waitron/printing test:coverage` → PASS (this package compiles; `runtime.ts` still references old `PrinterTarget.usbPath` — Task 4 fixes it, so a whole-package typecheck of printing may still fail on runtime.ts; that is expected and resolved next task).
 
 - [ ] **Step 6: Commit** — `git commit -s -m "feat(printing): create/update printers by local_key; printer.already_registered"`
 
 ---
 
-## Task 3: runtime — derived eligibility, claimed_by, distinct-agents race
+## Task 4: runtime — derived eligibility, claimed_by, distinct-agents race
+
+> Interlock task. Fixes `runtime.ts` against Task 2's `PrinterTarget.devicePath` and adds the server call-site stopgap so `apps/server` keeps compiling.
 
 **Files:**
-- Modify: `packages/printing/src/runtime.ts:82-90,139-182,214-239,261-268`
-- Test: `packages/printing/src/runtime.eligibility.test.ts` (new), `packages/printing/src/runtime.race.test.ts` (add distinct-agents case)
+- Modify: `packages/printing/src/runtime.ts:82-90,139-182,214-239,261-268`; a one-line stopgap in `apps/server/src/print-api.ts:314`
+- Test: `packages/printing/src/runtime.eligibility.test.ts` (new), `runtime.race.test.ts` (add distinct-agents)
 
 **Interfaces:**
-- Consumes: Task 1 schema; Task 2 `createPrinter`.
-- Produces: `claimPrintJobs(tx, cfg, agentId, ctx: { locationId: string; visibleKeys: string[] }): Promise<ClaimedJob[]>` where `ClaimedJob` replaces `usb_path` with `local_key`; `reportPrintJob` unchanged signature, authorised by `claimed_by`.
+- Consumes: Task 1 schema; Task 2 `PrinterTarget`; Task 3 `createPrinter`.
+- Produces: `claimPrintJobs(tx, cfg, agentId, ctx: { locationId: string; visibleKeys: string[] }): Promise<ClaimedJob[]>`; `ClaimedJob` replaces `usb_path` with `local_key`; `reportPrintJob` (same signature) authorised by `claimed_by`.
 
-- [ ] **Step 1: Write failing eligibility tests** (real PG — the eligibility + `skip locked`; PGlite serialises so a race is a false pass, CLAUDE.md §4):
+- [ ] **Step 1: Failing eligibility tests** (real PG — eligibility + skip-locked; PGlite serialises → a race is a false pass, CLAUDE.md §4):
 
 ```ts
 it("claims a network_tcp job for any agent in the venue", async () => {
@@ -261,19 +334,19 @@ it("stamps claimed_by and lets only the claimer report", async () => {
 });
 ```
 
-Delete the `p.location_id = ${ctx.locationId}` conjunct and confirm the usb test's negative control (empty `visibleKeys`) still passes for the right reason (a claim scoped by keys, not location).
+Prove the venue conjunct by deleting `p.location_id = ${ctx.locationId}` and confirm the usb negative control (empty `visibleKeys`) fails for the right reason (scoped by keys, not location).
 
-- [ ] **Step 2: Run to verify fail** — `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/printing test -- eligibility` → FAIL (signature/behaviour).
+- [ ] **Step 2: Run to verify fail** — `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/printing test -- eligibility` → FAIL.
 
-- [ ] **Step 3: Edit `claimPrintJobs`.** Signature gains `ctx`; the scope conjunct and the RETURNING change; the UPDATE stamps `claimed_by`:
+- [ ] **Step 3: Edit `claimPrintJobs`:**
 
 ```ts
 export type ClaimedJob = { id: string; printer_id: string; payload: Buffer; transport: PrintTransport; host: string | null; port: number | null; local_key: string | null; };
 
 export async function claimPrintJobs(tx, cfg, agentId, ctx: { locationId: string; visibleKeys: string[] }) {
-  // Eligibility (design §3): network_tcp → any agent in the venue; usb/bluetooth → an agent reporting
-  // the key. Empty visibleKeys ⇒ the usb/bt branch matches nothing (an `in ()` degenerates — the
-  // drain.ts hazard), so guard it with `false`.
+  // Empty visibleKeys ⇒ the usb/bt branch matches nothing (`in ()` degenerates — the drain.ts hazard,
+  // runtime.ts:168-171), so guard with `false`. `in ${array}` is the proven-correct expansion (NOT
+  // `= any(…)`/`in (${ids})`).
   const usbBt = ctx.visibleKeys.length > 0
     ? sql`(p.transport in ('usb','bluetooth') and p.local_key in ${ctx.visibleKeys})`
     : sql`false`;
@@ -299,168 +372,103 @@ export async function claimPrintJobs(tx, cfg, agentId, ctx: { locationId: string
 }
 ```
 
-Update the header comment: the join is no longer the authorization scope (eligibility is derived); `claimed_by` records the holder.
+Update the header comment: the join is no longer the authorization scope (eligibility is derived from venue + visible keys — spec §3); `claimed_by` records the holder and a lease reclaim overwrites it.
 
-- [ ] **Step 4: Edit `reportPrintJob`** — scope by `claimed_by`, drop the printers join:
+- [ ] **Step 4: Edit `reportPrintJob`** — scope by `claimed_by`, drop the printers join (printers are never hard-deleted, so nothing is lost); keep the tenant + `status='printing'` idempotency guards:
 
 ```ts
 const result = await tx.execute<{ id: string }>(sql`
   update print_jobs set ${setClause}
-  where print_jobs.tenant_id = ${cfg.tenantId}
-    and print_jobs.id = ${jobId}
-    and print_jobs.status = 'printing'
-    and print_jobs.claimed_by = ${agentId}
+  where print_jobs.tenant_id = ${cfg.tenantId} and print_jobs.id = ${jobId}
+    and print_jobs.status = 'printing' and print_jobs.claimed_by = ${agentId}
   returning print_jobs.id`);
 ```
 
-- [ ] **Step 5: Edit `runAgentOnce`** — the local-mode target uses `local_key`. Since local mode has no live device map, treat `local_key` as the device path for the fake/local case:
+Update the header: the authorization scope is now `claimed_by` (proven by deletion).
+
+- [ ] **Step 5: Edit `runAgentOnce`** — local-mode target uses `local_key` as the device path (local mode + FakeSink ignores `devicePath`; real resolution is the host's job, Task 6):
 
 ```ts
 const target: PrinterTarget = { id: job.printer_id, transport: job.transport, host: job.host, port: job.port, devicePath: job.local_key };
 ```
 
-(Local mode + FakeSink ignores `devicePath`; the real resolution is the agent host's job — Task 4/6.) Pass `ctx` through `AgentRuntimeDeps` (add `locationId` + `visibleKeys`); default `visibleKeys: []` in local-mode callers.
+Add `locationId` + `visibleKeys` to `AgentRuntimeDeps` and pass them into `claimPrintJobs`; local-mode callers default `visibleKeys: []`.
 
-- [ ] **Step 6: Add the distinct-agents race test** in `runtime.race.test.ts` (real PG): two `agentId`s, one `network_tcp` printer, N queued jobs; run both agents' `claimPrintJobs` concurrently in separate transactions; assert the union of claimed ids has no duplicate and totals N. Prove the lock by deleting `for update of j skip locked` → a duplicate claim appears.
-
-- [ ] **Step 7: Run** — `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/printing test:coverage` → PASS. Then `pnpm typecheck` (ClaimedJob/PrinterTarget are shared).
-
-- [ ] **Step 8: Commit** — `git commit -s -m "feat(printing): derive claim eligibility from venue + visible keys; report by claimed_by; distinct-agents race test"`
-
----
-
-## Task 4: print-agent package — new transport, seam, wire, loop
-
-**Files:**
-- Modify: `packages/print-agent/src/transport.ts:15-35,96-139`
-- Modify: `packages/print-agent/src/host.ts:8-52`
-- Modify: `packages/print-agent/src/client.ts:8-76,188-232,278-286`
-- Modify: `packages/print-agent/src/agent.ts:98-126,129-255`
-- Test: `packages/print-agent/src/transport.test.ts`, `client.test.ts`, `agent.test.ts` (existing suites)
-
-**Interfaces:**
-- Consumes: Task 3's wire shape (`local_key`), the discovery-window reply (Task 5).
-- Produces (the db-free contract the app host in Task 6 and the server in Task 5 implement against):
-  - `type PrintTransport = "usb" | "network_tcp" | "bluetooth" | "cloud_poll"`
-  - `interface PrinterTarget { id; transport; host; port; devicePath: string | null }`
-  - `interface VisibleDevice { transport: "usb" | "bluetooth"; localKey: string; make?: string; model?: string }`
-  - `interface DiscoveredDevice { transport: PrintTransport; localKey?: string; host?: string; port?: number; make?: string; model?: string; name?: string }`
-  - `interface PairResult { ok: boolean; localKey?: string; error?: string }`
-  - `Host` gains `visibleDevices(): Promise<VisibleDevice[]>`, `scan(): Promise<DiscoveredDevice[]>`, `resolve(job: WireJob): Promise<PrinterTarget>`, `pair(mac: string): Promise<PairResult>`
-  - `WireJob { …; localKey: string | null }` (was `usbPath`); `PullReply { …; discoveryUntil: number | null }`
-  - `pullJobs(url, token, inventory: { visible: VisibleDevice[]; scanned: DiscoveredDevice[] }): Promise<Result<PullReply>>`
-
-- [ ] **Step 1: transport.ts — failing test then change.** Add a bluetooth-target test and a device-path USB test:
+- [ ] **Step 6: Server call-site stopgap.** In `apps/server/src/print-api.ts:314`, change the call to keep the workspace compiling until Task 5:
 
 ```ts
-it("routes a bluetooth job to a device-path write", async () => {
-  const file = tmpFile();
-  const t = new RoutingTransport({ network_tcp: new FakeSink(), usb: new UsbTransport(), bluetooth: new UsbTransport() });
-  await t.send({ id: "p", transport: "bluetooth", host: null, port: null, devicePath: file }, esc().line("x").bytes());
-  expect(readFileSync(file)).toEqual(Buffer.from(esc().line("x").bytes()));
-});
+// STOPGAP (Task 4): pass the agent's venue + an empty visible-key set so the tree compiles; Task 5
+// replaces [] with the inventory the agent posts, enabling USB/BT claims. IP claims work already.
+return claimPrintJobs(tx, deps.cfg, agentId, { locationId: deps.cfg.locationId, visibleKeys: [] });
 ```
 
-Then: `PrintTransport += "bluetooth"`; `PrinterTarget.usbPath → devicePath`; `UsbTransport.send` writes to `printer.devicePath` (rename the guard/message); add a `bluetooth` slot to `TransportAdapters` and a `case "bluetooth"` to `RoutingTransport` (dispatch to the bluetooth adapter — a `UsbTransport`-shaped device-path writer is acceptable for MVP; a distinct `BluetoothTransport` class with its own error text is cleaner and is what Task 6 may specialise). Keep `cloud_poll` rejecting.
+- [ ] **Step 7: Add the distinct-agents race test** (real PG) in `runtime.race.test.ts`: two `agentId`s, one `network_tcp` printer, N queued jobs; run both agents' `claimPrintJobs` concurrently in separate transactions; assert the union of claimed ids has no duplicate and totals N. Prove the lock by deleting `for update of j skip locked` → a duplicate appears.
 
-- [ ] **Step 2: client.ts — failing test then change.** Test that `pullJobs` POSTs the inventory and parses `discoveryUntil` + `localKey`:
+- [ ] **Step 8: Run** — `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/printing test:coverage` → PASS. Whole-workspace `pnpm typecheck` still fails on `apps/server`'s pull-reply map (`usb_path` → not yet `local_key`) — expected, fixed in Task 5.
 
-```ts
-it("posts the inventory and parses discoveryUntil + localKey", async () => {
-  const fetch = fakeFetch({ nodeId: "n", servers: [], jobs: [{ id: "j", printerId: "p", transport: "usb", localKey: "SN-1", payload: "AA==" }], discoveryUntil: 123 });
-  const r = await createClient({ fetch }).pullJobs("http://s", "tok", { visible: [{ transport: "usb", localKey: "SN-1" }], scanned: [] });
-  expect(r.ok && r.value.jobs[0].localKey).toBe("SN-1");
-  expect(r.ok && r.value.discoveryUntil).toBe(123);
-  expect(fakeFetch.lastInit.method).toBe("POST"); // inventory carried in the body
-});
-```
-
-Then: `WireJob.usbPath → localKey` (parse `e.localKey`); `PullReply` gains `discoveryUntil: number | null` (parse `typeof b.discoveryUntil === "number" ? … : null`); `pullJobs` takes `inventory` and switches to `method: "POST"` with `body: JSON.stringify(inventory)` and `content-type: application/json`.
-
-- [ ] **Step 3: host.ts — add the seam types + methods** (interface only; no test — it is a type). Add `VisibleDevice`, `DiscoveredDevice`, `PairResult`, and the four methods to `Host`.
-
-- [ ] **Step 4: agent.ts — failing loop tests then change.** Add to `agent.test.ts` a fake host exposing `visibleDevices`/`scan`/`resolve`/`pair`:
-
-```ts
-it("reports visible devices on every pull", async () => { /* fake host.visibleDevices → [{usb,SN-1}]; assert client.pullJobs got it */ });
-it("scans only within a discovery window", async () => {
-  // reply1 discoveryUntil = now+10s → next tick calls host.scan and includes scanned in the pull body
-  // reply2 discoveryUntil = null → host.scan NOT called
-});
-it("resolves a usb job before sending", async () => {
-  // host.resolve(job) → { transport:'usb', devicePath:'/tmp/x' }; assert transport.send got that target
-});
-it("marks a job failed when resolve throws (device gone)", async () => {
-  // host.resolve rejects → push reports failed, loop continues
-});
-```
-
-Then in `agent.ts`:
-- `tick()` gathers `const visible = await host.visibleDevices();` and, when `windowOpen` (a cross-tick `discoveryUntil` from the last reply, compared to `host.now()`), `const scanned = await host.scan()` else `[]`; pass `{ visible, scanned }` to `client.pullJobs(current, token, …)`.
-- Store `discoveryUntil` from `pulled.value.discoveryUntil` into a cross-tick variable so the *next* tick scans.
-- `push(job, …)`: `const target = await host.resolve(job);` inside the try, then `await host.transport.send(target, job.payload)`. A throwing `resolve` lands in the existing catch → `failed`.
-
-- [ ] **Step 5: Run** — `pnpm --filter @waitron/print-agent test:coverage` → PASS; `pnpm typecheck`.
-
-- [ ] **Step 6: Commit** — `git commit -s -m "feat(print-agent): bluetooth transport, device seam (visibleDevices/scan/resolve/pair), inventory-carrying pull"`
+- [ ] **Step 9: Commit** — `git commit -s -m "feat(printing): derive claim eligibility from venue + visible keys; report by claimed_by; distinct-agents race test"`
 
 ---
 
 ## Task 5: server routes — inventory pull, discovery window, discovered list
 
+> Interlock task — the LAST of the block. Assert whole-workspace `pnpm typecheck` green at the end of this task.
+
 **Files:**
-- Modify: `apps/server/src/print-api.ts:135-152,303-335,408-432,444-480` + add two routes + in-memory stores in `mountPrintApi`
+- Modify: `apps/server/src/print-api.ts:135-152,303-335,408-432,444-480` + two new routes + in-memory stores in `mountPrintApi`
 - Test: `apps/server/src/print-api.test.ts` (PGlite), `apps/server/src/print-api.pg.test.ts` (real PG grants)
 
 **Interfaces:**
-- Consumes: Task 2 verbs, Task 3 `claimPrintJobs(…, ctx)`, Task 4 wire shapes.
+- Consumes: Task 3 verbs, Task 4 `claimPrintJobs(…, ctx)`, Task 2 wire shapes.
 - Produces: `POST /print-api/agent/jobs` (was GET) reading `{ visible, scanned }`; reply `{ nodeId, servers, jobs:[{…, localKey}], discoveryUntil }`; `POST /management-api/printer-discovery/start` → `{ discoveryUntil }`; `GET /management-api/discovered-printers` → `[{ agentId, agentName, transport, localKey?, host?, port?, make?, model?, name?, alreadyRegistered }]`.
 
-- [ ] **Step 1: Write failing route tests:**
+- [ ] **Step 1: Failing route tests:**
 
 ```ts
-it("POST /print-api/agent/jobs carries the inventory and claims by key", async () => { /* register usb printer SN-1; enqueue; pull with visible:[{usb,SN-1}] → 1 job carrying localKey; pull with visible:[] → 0 jobs */ });
-it("returns discoveryUntil after a discovery window is opened", async () => { /* POST printer-discovery/start (manage session) → discoveryUntil; the agent pull reply carries it */ });
-it("GET /management-api/discovered-printers lists reported devices, marking registered ones", async () => { /* agent pull reports visible SN-1 + SN-2; register SN-1; discovered list shows SN-2 alreadyRegistered:false, SN-1 alreadyRegistered:true */ });
-it("POST /management-api/printers with a duplicate local_key → 409 printer.already_registered", async () => { /* … */ });
-it("create rejects agentId/usbPath fields (ignored) and requires localKey for usb", async () => { /* usb with no localKey → 422 */ });
+it("POST /print-api/agent/jobs carries the inventory and claims by key", async () => { /* register usb printer SN-1; enqueue; pull visible:[{usb,SN-1}] → 1 job carrying localKey; pull visible:[] → 0 */ });
+it("returns discoveryUntil after a discovery window is opened", async () => { /* POST printer-discovery/start (manage) → discoveryUntil; agent pull reply carries it */ });
+it("GET /management-api/discovered-printers lists reported devices, marking registered ones", async () => { /* agent pull reports SN-1 + SN-2; register SN-1; list shows SN-1 alreadyRegistered:true, SN-2 false */ });
+it("POST /management-api/printers with a duplicate local_key → 409", async () => { /* … */ });
+it("create requires localKey for usb (422) and ignores agentId/usbPath", async () => { /* … */ });
 ```
 
 - [ ] **Step 2: Run to verify fail** — `pnpm --filter @waitron/server test -- print-api` → FAIL.
 
-- [ ] **Step 3: Add in-memory stores + STATUS.** In `mountPrintApi`, closure-scoped:
+- [ ] **Step 3: In-memory stores + STATUS.** In `mountPrintApi`, closure-scoped:
 
 ```ts
-// Transient venue state (design §6): the discovered inventory and the discovery window live in memory —
-// no table (owner, 2026-09-09). Rebuilt by agent polls within a couple of seconds of a restart.
+// Transient venue state (spec §6): the discovered inventory + the discovery window live in memory — no
+// table (owner, 2026-09-09). Agent polls rebuild them within ~2s of a restart.
 interface DiscoveredEntry { agentId: string; transport: string; localKey?: string; host?: string; port?: number; make?: string; model?: string; name?: string; lastSeenAt: number; }
 const discovered = new Map<string, DiscoveredEntry>(); // key: `${agentId}:${transport}:${localKey ?? host+":"+port}`
 let discoveryUntil = 0; // epoch ms; 0 = closed
 const DISCOVERY_WINDOW_MS = 3 * 60_000;
-const DISCOVERED_TTL_MS = 15_000; // prune entries older than a few missed polls
+const DISCOVERED_TTL_MS = 15_000;
 ```
 
-Add `"printer.already_registered": 409` to `STATUS`.
+Add `"printer.already_registered": 409` to `STATUS` (§9). Import `isNotNull` from `drizzle-orm`.
 
-- [ ] **Step 4: Rewrite the pull as POST.** `app.post("/print-api/agent/jobs", …)`: after `requireAgent`, read `readJsonBody<{ visible?: unknown; scanned?: unknown }>`, validate to `VisibleDevice[]`/`DiscoveredDevice[]` (shape-screen, ignore malformed entries), upsert them into `discovered` (stamp `lastSeenAt = Date.now()`), derive `const visibleKeys = visible.filter(v => v.transport==='usb'||v.transport==='bluetooth').map(v => v.localKey)`, then:
+- [ ] **Step 4: Rewrite the pull as POST.** `app.post("/print-api/agent/jobs", …)`: after `requireAgent`, `readJsonBody<{ visible?: unknown; scanned?: unknown }>`, shape-screen to `VisibleDevice[]`/`DiscoveredDevice[]` (drop malformed entries), upsert into `discovered` (stamp `lastSeenAt = Date.now()`), `const visibleKeys = visible.filter(v => v.transport === "usb" || v.transport === "bluetooth").map(v => v.localKey)`, then:
 
 ```ts
 const claimed = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
   await asAppUser(tx);
   return claimPrintJobs(tx, deps.cfg, agentId, { locationId: deps.cfg.locationId, visibleKeys });
 });
-// reply: jobs map usb_path → localKey; add discoveryUntil (0 → null)
+const held = await deps.readMembership();
 return c.json({ nodeId: deps.cfg.nodeId, servers: routableServers(held),
   jobs: claimed.map(j => ({ id: j.id, printerId: j.printer_id, transport: j.transport, host: j.host, port: j.port, localKey: j.local_key, payload: Buffer.from(j.payload).toString("base64") })),
   discoveryUntil: discoveryUntil > Date.now() ? discoveryUntil : null });
 ```
 
-- [ ] **Step 5: Add the two management routes.**
+Note: `deps.cfg.locationId` is this server's location, which equals the agent's location under one-location-per-DB. A future multi-location tenant reads the agent's own `print_agents.location_id` instead — leave a `// TODO(multi-location)` comment.
+
+- [ ] **Step 5: Two management routes.**
 
 ```ts
 app.post("/management-api/printer-discovery/start", (c) => run(c, log, async () => {
   const sessionId = requireManagementSession(c);
-  await gated(sessionId, async () => {}); // authorise printer.manage (no DB work)
+  await gated(sessionId, async () => {}); // authorises printer.manage (a session DB read); no printer/job work
   discoveryUntil = Date.now() + DISCOVERY_WINDOW_MS;
   return c.json({ discoveryUntil });
 }));
@@ -469,21 +477,23 @@ app.get("/management-api/discovered-printers", (c) => run(c, log, async () => {
   const sessionId = requireManagementSession(c);
   const now = Date.now();
   for (const [k, e] of discovered) if (now - e.lastSeenAt > DISCOVERED_TTL_MS) discovered.delete(k);
-  const [registered, agents] = await gated(sessionId, async (tx) => [
-    await tx.select({ localKey: printers.localKey }).from(printers).where(and(eq(printers.tenantId, deps.cfg.tenantId), isNotNull(printers.localKey))),
-    await tx.select({ id: printAgents.id, name: printAgents.name }).from(printAgents),
-  ]);
+  const { registered, agents } = await gated(sessionId, async (tx) => ({
+    registered: await tx.select({ localKey: printers.localKey }).from(printers)
+      .where(and(eq(printers.tenantId, deps.cfg.tenantId), isNotNull(printers.localKey))),
+    agents: await tx.select({ id: printAgents.id, name: printAgents.name }).from(printAgents)
+      .where(eq(printAgents.tenantId, deps.cfg.tenantId)), // tenant predicate — CLAUDE.md §3
+  }));
   const names = new Map(agents.map(a => [a.id, a.name]));
   const keys = new Set(registered.map(r => r.localKey));
-  return c.json([...discovered.values()].map(e => ({ agentId: e.agentId, agentName: names.get(e.agentId) ?? null, transport: e.transport, localKey: e.localKey, host: e.host, port: e.port, make: e.make, model: e.model, name: e.name, alreadyRegistered: e.localKey !== undefined && keys.has(e.localKey) })));
+  return c.json([...discovered.values()].map(e => ({ agentId: e.agentId, agentName: names.get(e.agentId) ?? null,
+    transport: e.transport, localKey: e.localKey, host: e.host, port: e.port, make: e.make, model: e.model, name: e.name,
+    alreadyRegistered: e.localKey !== undefined && keys.has(e.localKey) })));
 }));
 ```
 
-(Import `isNotNull` from `drizzle-orm`.)
+- [ ] **Step 6: create/patch bodies.** In `POST /management-api/printers`: remove the `agentId`/`usbPath` reads, add `const localKey = optionalString(body.localKey, "localKey"); if (localKey !== undefined) input.localKey = localKey;`. In `PATCH`: remove `agentId`/`usbPath`, add `const localKey = nullableOptionalString(body.localKey, "localKey"); if (localKey !== undefined) patch.localKey = localKey;`. Remove the now-unused `optionalUuid`/`nullableOptionalUuid` if grep shows no other user.
 
-- [ ] **Step 6: Update create/patch bodies.** In `POST /management-api/printers`: remove the `agentId`/`usbPath` reads, add `const localKey = optionalString(body.localKey, "localKey"); if (localKey !== undefined) input.localKey = localKey;`. In `PATCH`: remove `agentId`/`usbPath`, add `const localKey = nullableOptionalString(body.localKey, "localKey"); if (localKey !== undefined) patch.localKey = localKey;`. Remove the now-unused `nullableOptionalUuid`/`optionalUuid` if nothing else uses them (grep first).
-
-- [ ] **Step 7: Run** — `pnpm --filter @waitron/server test:coverage -- print-api` (PGlite) then the real-PG grants suite; run the package UNFILTERED before believing green (CLAUDE.md §2 — boot/e2e suites pin wire bodies). Expected: PASS.
+- [ ] **Step 7: Run** — `pnpm --filter @waitron/server test:coverage -- print-api` then the real-PG grants suite; then the package **UNFILTERED** (`pnpm --filter @waitron/server test:coverage`) to catch any `toEqual`-pinned wire-body/boot suite the GET→POST + `localKey` change broke. Finally **whole-workspace `pnpm typecheck` → PASS** (the interlock closes here). Expected: PASS.
 
 - [ ] **Step 8: Commit** — `git commit -s -m "feat(server): inventory-carrying pull, discovery window + discovered-printers, create/patch by localKey"`
 
@@ -492,17 +502,14 @@ app.get("/management-api/discovered-printers", (c) => run(c, log, async () => {
 ## Task 6: apps/print-agent — real container Host + Bluetooth setup page
 
 **Files:**
-- Modify: `apps/print-agent/src/*` (the container `Host` implementation, the setup page)
-- Modify: `apps/print-agent/Dockerfile` + Track P compose note (device/network/DBus access)
-- Test: `apps/print-agent/src/*.test.ts` (fixture-based unit tests) + a manual hardware receipt
+- Modify: `apps/print-agent/src/*` (replace Task 2's stubs), the setup page, `Dockerfile` + Track P compose note
+- Test: `apps/print-agent/src/*.test.ts` (fixture-based) + a manual hardware receipt
 
-**Interfaces:**
-- Consumes: Task 4's `Host` contract (`visibleDevices`/`scan`/`resolve`/`pair`, `PrinterTarget.devicePath`).
-- Produces: the concrete Linux host; no new exported types.
+**Interfaces:** Consumes Task 2's `Host` contract. Produces the concrete Linux host; no new exported types.
 
-> The exact OS calls are confirmed on the arriving USB/Bluetooth printer (2026-09-10, spec §7). TDD what is hardware-independent (parsing) against fixtures; gate the live paths behind a manual receipt. Do NOT assert an unverified OS behaviour in a comment (CLAUDE.md §1) — state the experiment.
+> Exact OS calls are confirmed on the arriving USB/Bluetooth printer (2026-09-10, spec §7). TDD what is hardware-independent (parsing) against fixtures; gate live paths behind a manual receipt. Do NOT assert an unverified OS behaviour in a comment (CLAUDE.md §1) — state the experiment.
 
-- [ ] **Step 1: USB `visibleDevices`/`resolve` against sysfs fixtures.** Write a parser `readUsbPrinters(sysfsRoot): VisibleDevice & { devicePath }` that walks `<root>/class/usbmisc` or `<root>/bus/usb/devices/*/serial` correlating a `usblp`/`/dev/usb/lpN` node to its parent device `serial`. Test it against a checked-in fixture tree (a `tmpdir` mimicking sysfs) — no hardware:
+- [ ] **Step 1: USB `visibleDevices`/`resolve` against sysfs fixtures.** Write an internal `readUsbPrinters(sysfsRoot): (VisibleDevice & { devicePath: string })[]` that walks sysfs correlating a `usblp`/`/dev/usb/lpN` node to its parent device `serial`/`manufacturer`/`product`. Test against a checked-in tmpdir fixture (no hardware):
 
 ```ts
 it("reads serial + device path from a sysfs fixture", async () => {
@@ -511,49 +518,46 @@ it("reads serial + device path from a sysfs fixture", async () => {
 });
 ```
 
-`Host.visibleDevices` returns the usb list (+ paired BT from Step 3); `Host.resolve(job)` for usb/bluetooth looks the `localKey` up in a fresh `visibleDevices()` and returns `{ …, devicePath }`, throwing `new Error("device <key> not attached")` if absent; for network_tcp it passes `host`/`port` through with `devicePath: null`.
+`Host.visibleDevices()` returns the usb list (mapped to `VisibleDevice`, dropping `devicePath`) plus paired BT (Step 3). `Host.resolve(job)` for usb/bluetooth looks `job.localKey` up via the **internal** `readUsbPrinters`/paired-BT list (which retains `devicePath`), returning `{ id, transport, host: null, port: null, devicePath }`, and throws `new Error("device <key> not attached")` if absent; for `network_tcp` it passes `host`/`port` through with `devicePath: null`. (Do NOT call the public `visibleDevices()` — it has no `devicePath`.)
 
-- [ ] **Step 2: Network `scan` against captured responses.** Implement an mDNS query for `_pdl-datastream._tcp` and a bounded 9100 sweep behind `scan()`; unit-test the *response parser* against a captured mDNS packet / a fake socket (parsing only, host-safe). The live multicast path is exercised only under host networking (Step 5) and the hardware receipt.
+- [ ] **Step 2: Network `scan` against captured responses.** Implement mDNS `_pdl-datastream._tcp` + a bounded 9100 sweep behind `scan(["network_tcp"])`; unit-test the response parser against a captured packet/fake socket (host-safe). Live multicast is exercised under host networking (Step 5) + the receipt.
 
-- [ ] **Step 3: Bluetooth `scan`/`pair`/paired-list.** Implement over BlueZ (DBus): `scan()` runs an inquiry and returns `{ transport: "bluetooth", localKey: mac, name }`; `pair(mac)` triggers the bond and returns `PairResult`; paired devices feed `visibleDevices`. Unit-test the DBus-reply decoding against fixtures; the live radio is the hardware receipt. If containerised BlueZ proves infeasible, record the finding and the packaging fix in the spec's §7 — the seam is unchanged.
+- [ ] **Step 3: Bluetooth `scan`/`pair`/paired-list.** Over BlueZ (DBus): `scan(["bluetooth"])` runs an inquiry → `{ transport:"bluetooth", localKey: mac, name }`; `pair(mac)` bonds → `PairResult`; paired devices feed `visibleDevices`/`resolve`. Unit-test the DBus-reply decoding against fixtures; live radio is the receipt. If containerised BlueZ proves infeasible, record the finding + the packaging fix in spec §7 — the seam is unchanged.
 
-- [ ] **Step 4: Setup-page Bluetooth section.** Add to the Hono setup page a **Bluetooth** panel: a **Scan** button (`host.scan(['bluetooth'])`), a list of found devices, and a **Pair** button per device (`host.pair(mac)`), showing the result. Test with `app.request` (no listener), fake host. Keep it LAN, secret-free (as #289).
+- [ ] **Step 4: Setup-page Bluetooth section.** Add a **Bluetooth** panel to the Hono setup page: **Scan** (`host.scan(["bluetooth"])`), a found-devices list, a per-device **Pair** (`host.pair(mac)`) showing the result. Test with `app.request` + a fake host. LAN, secret-free (as #289).
 
-- [ ] **Step 5: Container access.** In the `Dockerfile`/compose: mount broader USB (`/dev/bus/usb` + the sysfs it needs), host networking (or a documented macvlan) for mDNS, and the BlueZ DBus socket for Bluetooth — each with a one-line comment on why. Track P wires the same into the box compose beside the server (spec §2.2 owed item).
+- [ ] **Step 5: Container access.** In `Dockerfile`/compose: broader USB (`/dev/bus/usb` + sysfs), host networking (or a documented macvlan) for mDNS, the BlueZ DBus socket for Bluetooth — each with a one-line why. Track P wires the same beside the server (spec §2.2 owed item).
 
-- [ ] **Step 6: Hardware receipt (2026-09-10).** With the real printer: (a) does it enumerate printer-class (`/dev/usb/lpN` appears) or vendor-specific? record it; (b) one USB test-print end to end; (c) pair over Bluetooth and one BT test-print; (d) confirm mDNS discovery finds the HP over the LAN. Record outcomes in the spec §7/§12 and here. Adjust `resolve`/`scan` to what the hardware actually presents.
+- [ ] **Step 6: Hardware receipt (2026-09-10).** With the real printer: (a) printer-class (`/dev/usb/lpN`) vs vendor-specific — record it; (b) one USB test-print end to end; (c) Bluetooth pair + one BT test-print; (d) mDNS finds the HP over the LAN. Record in spec §7/§12 and here; adjust `resolve`/`scan` to what the hardware presents.
 
-- [ ] **Step 7: Run + commit** — `pnpm --filter @waitron/print-agent-app test:coverage` (use the app's real filter name); `git commit -s -m "feat(print-agent-app): Linux USB/network/Bluetooth host + setup-page pairing"`.
+- [ ] **Step 7: Run + commit** — `pnpm --filter <apps/print-agent's package name> test:coverage`; `git commit -s -m "feat(print-agent-app): Linux USB/network/Bluetooth host + setup-page pairing"`.
 
 ---
 
 ## Task 7: dashboard — transport-aware create flow + discovered list
 
 **Files:**
-- Modify: `apps/dashboard/src/screens/printers-screen.ts` (create form `:1089-1174`, submit `:576-597`, state `:263-269`, transports `:61-67`, per-row `:907-1022`)
-- Modify: `apps/dashboard/src/api/client.ts` (printer methods + two new)
+- Modify: `apps/dashboard/src/screens/printers-screen.ts` (create form `:1089-1174`, submit `:576-597`, state `:263-269`, transports `:61-67`, per-row `:907-1022`), `apps/dashboard/src/api/client.ts`
 - Test: `apps/dashboard/src/screens/printers-screen.test.ts` (browser mode)
 
-**Interfaces:**
-- Consumes: Task 5 routes.
-- Produces: client methods `createPrinter({ name, transport, host?, port?, localKey? })`, `startPrinterDiscovery(): Promise<{ discoveryUntil }>`, `listDiscoveredPrinters(): Promise<DiscoveredPrinter[]>`.
+**Interfaces:** Consumes Task 5 routes. Produces client methods `createPrinter({ name, transport, host?, port?, localKey? })`, `startPrinterDiscovery(): Promise<{ discoveryUntil }>`, `listDiscoveredPrinters(): Promise<DiscoveredPrinter[]>`.
 
-- [ ] **Step 1: Failing component tests** (browser mode — check headroom first, CLAUDE.md §2/§4):
+- [ ] **Step 1: Failing component tests** (browser mode — check memory headroom first, CLAUDE.md §2/§4):
 
 ```ts
-it("adds an IP printer with name + host + port, no agent picker", async () => { /* fill, submit, assert client.createPrinter called with {transport:'network_tcp', host, port} and NO agentId */ });
-it("registers a discovered USB printer by picking it and naming it", async () => { /* stub listDiscoveredPrinters → [{transport:'usb', localKey:'SN-1', make, agentName, alreadyRegistered:false}]; click Register; enter name; assert createPrinter({transport:'usb', localKey:'SN-1', name}) */ });
-it("shows already-registered discovered devices as registered", async () => { /* alreadyRegistered:true row has no Register action */ });
-it("Scan opens a discovery window", async () => { /* click Scan → client.startPrinterDiscovery called */ });
+it("adds an IP printer with name + host + port, no agent picker", async () => { /* fill, submit, assert createPrinter called with {transport:'network_tcp', host, port} and NO agentId */ });
+it("registers a discovered USB printer by picking it and naming it", async () => { /* stub listDiscoveredPrinters → [{transport:'usb', localKey:'SN-1', make, agentName, alreadyRegistered:false}]; Register → name → createPrinter({transport:'usb', localKey:'SN-1', name}) */ });
+it("shows already-registered discovered devices as registered (no Register action)", async () => { /* alreadyRegistered:true row */ });
+it("Scan opens a discovery window", async () => { /* click Scan → startPrinterDiscovery called */ });
 ```
 
-- [ ] **Step 2: Run to verify fail** — the dashboard browser suite → FAIL.
+- [ ] **Step 2: Run to verify fail** — dashboard browser suite → FAIL.
 
-- [ ] **Step 3: Add client methods** in `api/client.ts` mirroring the existing `createPrinter`/`listPrinters` fetch shape: `startPrinterDiscovery` → `POST /management-api/printer-discovery/start`; `listDiscoveredPrinters` → `GET /management-api/discovered-printers`; drop `agentId`/`usbPath` from the printer create/patch payloads, add `localKey`.
+- [ ] **Step 3: Client methods** in `api/client.ts` mirroring the existing `createPrinter`/`listPrinters` fetch shape: `startPrinterDiscovery` → `POST /management-api/printer-discovery/start`; `listDiscoveredPrinters` → `GET /management-api/discovered-printers`; drop `agentId`/`usbPath` from the printer create/patch payloads, add `localKey`.
 
-- [ ] **Step 4: Rewrite the create section.** Remove the **agent `<select>`** (`:1120-1130`) and its ref/reconcile (`:276-303`) and the `usbPath` field. Split the form by transport (`TRANSPORTS = ["network_tcp", "usb", "bluetooth"]`):
-  - `network_tcp`: name + host + port, plus a **Scan** button that calls `startPrinterDiscovery` and lists discovered `network_tcp` results to pre-fill host/port.
-  - `usb`/`bluetooth`: a **discovered-printers list** (from `listDiscoveredPrinters`, filtered to the transport) with a **Register** button per unregistered row that prompts for a name and calls `createPrinter({ transport, localKey, name })`.
+- [ ] **Step 4: Rewrite the create section.** Remove the agent `<select>` (`:1120-1130`), its ref/reconcile (`:276-303`), and the `usbPath` field. Split by transport (`TRANSPORTS = ["network_tcp", "usb", "bluetooth"]`):
+  - `network_tcp`: name + host + port, plus a **Scan** button (`startPrinterDiscovery`) listing discovered `network_tcp` results to pre-fill host/port.
+  - `usb`/`bluetooth`: a **discovered-printers list** (`listDiscoveredPrinters`, filtered to the transport) with a per-unregistered-row **Register** button that prompts for a name → `createPrinter({ transport, localKey, name })`.
   - `bluetooth`: a one-line note — "Pair the printer first on the box's setup page (`http://<box>:9110`)."
   In the per-row display (`:907-1022`) drop the agent column; optionally show "last seen on <agentName>" from the discovered list.
 
@@ -563,26 +567,26 @@ it("Scan opens a discovery window", async () => { /* click Scan → client.start
 
 ## Task 8: end-to-end + dev + security review
 
-**Files:**
-- Modify: the `apps/server` end-to-end print suite; `apps/server/scripts/dev-setup.ts` (optional dev seed)
-- Test: the e2e suite
+**Files:** the `apps/server` end-to-end print suite; `apps/server/scripts/dev-setup.ts` (optional dev seed)
 
-- [ ] **Step 1: End-to-end (real `mountPrintApi` on PGlite, agent `runOnce` with `fetch` → the Hono app).** Failing test: register an IP printer + a USB printer (via `createPrinter`), the agent joins + is accepted, `enqueuePrintJob` on each; the agent pulls **carrying a fake inventory** that includes the USB serial; the bytes land on a loopback TCP listener (IP) and a fake device sink (USB); both jobs `done`. Then revoke → the loop reports `unauthorized` and claims nothing. Wire the agent's fake `Host.resolve` to map the USB serial to the fake sink and `visibleDevices` to report it.
+- [ ] **Step 1: End-to-end** (real `mountPrintApi` on PGlite, agent `runOnce` with `fetch` → the Hono app). Failing test: register an IP printer + a USB printer (via `createPrinter`), the agent joins + is accepted, `enqueuePrintJob` on each; the agent pulls **carrying a fake inventory** including the USB serial; bytes land on a loopback TCP listener (IP) and a fake device sink (USB); both jobs `done`; then revoke → the loop reports `unauthorized` and claims nothing. Wire the fake `Host.resolve` to map the USB serial to the fake sink and `visibleDevices` to report it.
 
-- [ ] **Step 2: Run** — `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server test:coverage` unfiltered → PASS.
+- [ ] **Step 2: Run** — `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server test:coverage` UNFILTERED → PASS.
 
-- [ ] **Step 3: Optional dev seed** — if useful, seed one `network_tcp` printer pointing at a dev sink in `dev-setup.ts` so `wa-wt reset` shows a printer; skip if it complicates the boot. Commit only if added.
+- [ ] **Step 3: Optional dev seed** — if useful, seed one `network_tcp` printer at a dev sink in `dev-setup.ts` so `wa-wt reset` shows a printer; skip if it complicates boot. Commit only if added.
 
-- [ ] **Step 4: Security review.** Run the mandated `security-review` on the diff (the authz boundary moved to venue/visible-keys + `claimed_by`). Confirm by RUNNING, not reading: a two-tenant / cross-agent probe as `app_user` (rolsuper=f) that a foreign agent cannot claim or report another venue's jobs, and that a USB job is only claimable by an agent reporting the key. Record the experiment.
+- [ ] **Step 4: Security review.** Run the mandated `security-review` on the diff (the authz boundary moved to venue/visible-keys + `claimed_by`). Confirm by RUNNING, not reading: a two-tenant / cross-agent probe as `app_user` (rolsuper=f) — a foreign agent cannot claim or report another venue's jobs, and a USB job is only claimable by an agent reporting the key. Record the experiment.
 
-- [ ] **Step 5: Full gate + commit** — `pnpm lint && pnpm typecheck && pnpm format:check && pnpm test` (the pre-push scoped gate covers the rest). `git commit -s -m "test(printing): end-to-end register→pull-with-inventory→deliver; revoke halts"`.
+- [ ] **Step 5: Full gate + commit** — `pnpm lint && pnpm typecheck && pnpm format:check && pnpm test`. `git commit -s -m "test(printing): end-to-end register→pull-with-inventory→deliver; revoke halts"`.
 
 ---
 
 ## Self-Review
 
-**Spec coverage:** §2(a) derive-not-store → Tasks 1,3,5,7. §2(b) USB discovery + serial key → Tasks 1,2,4,5,6,7. §2(c) IP discoverable, host:port key → Tasks 4(scan),5(discovered),6(mDNS),7(Scan button). §2(d) Bluetooth transport + box-local pairing → Tasks 1(enum),4(transport),6(pair + setup page),7. §2(e) windowed discovery → Tasks 4(loop),5(window),7(Scan). §2(f) no drivers → inherent (raw ESC/POS device-path/TCP write, Task 4/6); page printers out of scope (not built). §2(g) in-memory stores, drop-recreate → Tasks 5,1. §3 eligibility SQL → Task 3. §4 schema → Task 1. §5 claim/report + race → Task 3. §6 discovery split (always-on presence vs windowed scan) → Tasks 4,5,6. §7 Host seam + feasibility → Tasks 4,6. §8 loop/wire → Task 4. §9 routes → Task 5. §10 dashboard → Task 7. §11 security → Task 8. §12 tests → every task's test steps + Task 6 receipts + Task 8 review. §13 follow-ups (MAC-keyed IP, per-claim token) deliberately not built. No spec section is without a task.
+**Spec coverage:** §2(a) derive-not-store → Tasks 1,4,5,7. §2(b) USB discovery + serial key → Tasks 1,2,3,5,6,7. §2(c) IP discoverable, host:port key → Tasks 2(scan),5(discovered),6(mDNS),7(Scan). §2(d) Bluetooth transport + box-local pairing → Tasks 1(enum),2(transport),6(pair+setup page),7. §2(e) windowed discovery → Tasks 2(loop),5(window),7. §2(f) no drivers → inherent (raw ESC/POS device-path/TCP write); page printers out of scope. §2(g) in-memory stores, drop-recreate → Tasks 5,1. §3 eligibility → Task 4. §4 schema → Task 1. §5 claim/report + race → Task 4. §6 discovery split → Tasks 2,5,6. §7 seam → Tasks 2,6 (with the recorded §7-supersession note). §8 loop/wire → Task 2. §9 routes → Task 5. §10 dashboard → Task 7. §11 security → Task 8. §12 tests → every task + Task 6 receipts + Task 8 review. §13 follow-ups (MAC-keyed IP, per-claim token) deliberately unbuilt.
 
-**Placeholder scan:** Task 6's OS-specific code is intentionally fixture-tested + hardware-receipt-gated (the spec commits to confirming on 2026-09-10), not a placeholder — the seam contract and the fixture tests are concrete; only the live-radio/live-multicast assertions wait on hardware, as the spec requires. No "TBD"/"add validation"/"similar to Task N" anywhere.
+**Sequencing (the review's B1/B2):** the shared-type interlock is now explicit — Task 2 lands the `@waitron/print-agent` contract first (with `apps/print-agent` stubs + fake updates keeping compile), Task 3 fixes `REQUIRED_FIELDS` exhaustiveness, Task 4 fixes `runtime.ts` against `devicePath` and stopgaps the server call, Task 5 closes the loop and is the single point where whole-workspace `pnpm typecheck` is asserted green. No task references a type its predecessors have not produced.
 
-**Type consistency:** `PrinterTarget.devicePath` (Task 4) is used by Task 3's `runAgentOnce` and Task 6's `resolve`. `ClaimedJob.local_key` (Task 3) → the pull maps it to `WireJob.localKey` (Task 4) → the server reply field `localKey` (Task 5). `claimPrintJobs(…, ctx: { locationId, visibleKeys })` (Task 3) is called with exactly that shape in Task 5. `VisibleDevice`/`DiscoveredDevice` (Task 4) are produced by Task 6's host and consumed by Task 5's pull/discovered routes. `printer.already_registered { localKey }` (Task 2) is mapped to 409 in Task 5. Consistent throughout.
+**Placeholder scan:** Task 6's OS code is fixture-tested + hardware-receipt-gated (spec commits to 2026-09-10), not a placeholder — seam contract and fixture tests are concrete; only live-radio/live-multicast assertions wait on hardware. No "TBD"/"add validation"/"similar to Task N".
+
+**Type consistency:** `PrintTransport`(+bluetooth)/`TransportKind`/`PrinterTarget.devicePath`/`VisibleDevice`/`DiscoveredDevice`/`PairResult`/`WireJob.localKey`/`PullReply.discoveryUntil`/`pullJobs(…, inventory)` (Task 2) are consumed with matching shapes by Task 4 (`ClaimedJob.local_key`, `runAgentOnce` target), Task 5 (reply `localKey`/`discoveryUntil`, `claimPrintJobs(…, ctx)`), Task 6 (`resolve` via internal `readUsbPrinters`, `scan(kinds?)`). `scan` is `scan(kinds?: TransportKind[])` everywhere (Task 2 defn, Task 4 loop `host.scan()`, Task 6 `host.scan(["bluetooth"])`). `printer.already_registered { localKey }` (Task 3) → 409 (Task 5). Consistent.
