@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./done-screen.js";
-import type { SetupDoneScreen } from "./done-screen.js";
+import { BACKUP_SETUP_URL, type SetupDoneScreen } from "./done-screen.js";
 import type { SetupApi } from "../api/client.js";
 
 const q = (el: SetupDoneScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
@@ -84,5 +84,22 @@ describe("setup-done-screen", () => {
     await vi.waitFor(() => expect(q(el, "[data-test=reload]")).not.toBeNull());
     q(el, "[data-test=reload]")!.click();
     expect(reload).toHaveBeenCalledOnce();
+  });
+
+  // First-run nudge (Task 8): a freshly-provisioned box has no backups yet, so the done screen points
+  // the operator at the dashboard's backup setup — unless the box is a disposable demo, where a
+  // missing backup is not worth interrupting the operator over.
+  it("shows a 'no backups yet' nudge with a link to backup setup", async () => {
+    const el = await mountDone(() => new Promise(() => {}), { devMode: false });
+    const nudge = q(el, "[data-test=backup-nudge]");
+    expect(nudge).not.toBeNull();
+    const link = nudge!.querySelector("a");
+    expect(link).not.toBeNull();
+    expect(new URL(link!.href).pathname).toBe(BACKUP_SETUP_URL);
+  });
+
+  it("suppresses the nudge in demo mode", async () => {
+    const el = await mountDone(() => new Promise(() => {}), { devMode: true });
+    expect(q(el, "[data-test=backup-nudge]")).toBeNull();
   });
 });
