@@ -1,8 +1,31 @@
 import { fileURLToPath } from "node:url";
 
-import { defineConfig } from "vite";
+import { defineConfig, type PluginOption } from "vite";
+
+import { buildManifest } from "./src/manifest.js";
+
+// The till's manifest is a build asset, not a `publicDir` file: `publicDir` is the SHARED brand
+// directory in packages/ui, so a till-specific manifest cannot live there without leaking into the
+// dashboard. Emit it into the bundle for prod (mountSpa serves `.webmanifest` as
+// application/manifest+json) and serve the same bytes in dev over Vite's middleware.
+function webManifest(): PluginOption {
+  const json = JSON.stringify(buildManifest(), null, 2);
+  return {
+    name: "waitron-webmanifest",
+    generateBundle() {
+      this.emitFile({ type: "asset", fileName: "manifest.webmanifest", source: json });
+    },
+    configureServer(server) {
+      server.middlewares.use("/manifest.webmanifest", (_req, res) => {
+        res.setHeader("Content-Type", "application/manifest+json");
+        res.end(json);
+      });
+    },
+  };
+}
 
 export default defineConfig({
+  plugins: [webManifest()],
   // Favicons and app icons are served from the ONE brand directory in packages/ui, so a redrawn
   // mark cannot go stale in two apps. A relative filesystem path deliberately, and not the
   // `import.meta.resolve("@waitron/migrations/…")` shape the copy-migrations scripts use to reach
