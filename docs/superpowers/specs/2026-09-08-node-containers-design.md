@@ -283,7 +283,9 @@ start, in order:
    > track's session, so that edit needs coordinating with the track that owns it.
 
 3. **Load the env files** into the process environment: `instance.env`, then `secrets.env`, then
-   `trading.env` — **a variable already present in the environment always wins over a file**.
+   `trading.env` — **a NON-EMPTY variable in the environment wins over a file** (refined
+   2026-09-09: an empty base value, as compose's `${VAR:-}` renders, no longer masks a file value —
+   `backup-recovery-key-wizard-design.md` §3.2, Blocker 1).
    That is cloud rule 4's cheap half: a cloud profile can inject `WAITRON_CREDENTIALS_KEY` from the
    environment without touching this file. (The other half — `ensureBoxSecrets` honouring an
    env-provided key instead of minting one in setup mode — is the cloud profile's, not built here.)
@@ -532,9 +534,11 @@ bootstrap in the middle of a cold restore:
 
 **Unit + real Postgres (`apps/server`, `describeEachTarget` where the harness fits):**
 
-- `node-entry.test.ts`: the env-merge order — environment beats file, file order
-  `instance` < `secrets` < `trading` — proven by deleting the rule and watching the test fail; the
-  bootstrap URL is absent from the environment handed to `runServer`.
+- `box-env.test.ts`: the env-merge order — a NON-EMPTY environment value beats a file, file order
+  `instance` < `secrets` < `trading` < `backup` — proven by deleting the rule and watching the test
+  fail (an empty base value no longer masks a file value, refined 2026-09-09 —
+  `backup-recovery-key-wizard-design.md` §3.2). `node-entry.test.ts` proves the bootstrap URL is
+  absent from the environment handed to `runServer`.
 - `node-entry.pg.test.ts` (Testcontainers, superuser): a blank cluster → one run creates the
   database, both roles, the replication role and `instance.env`; a SECOND run plans zero actions
   and leaves `instance.env` byte-identical; `DROP DATABASE waitron WITH (FORCE)` then a run →

@@ -36,9 +36,23 @@ describe("loadBoxEnv", () => {
     expect((await loadBoxEnv({}, dir)).DATABASE_URL).toBe("postgres://from-trading");
   });
 
-  it("THE ENVIRONMENT BEATS EVERY FILE", async () => {
+  it("THE ENVIRONMENT BEATS EVERY FILE — when non-empty", async () => {
     const dir = await boxWith({ "secrets.env": "WAITRON_CREDENTIALS_KEY=from-file\n" });
     const env = await loadBoxEnv({ WAITRON_CREDENTIALS_KEY: "from-env" }, dir);
     expect(env.WAITRON_CREDENTIALS_KEY).toBe("from-env");
+  });
+
+  it("an empty base value does not mask a file value (compose ${VAR:-} case)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "boxenv-"));
+    await writeFile(join(dir, "backup.env"), "WAITRON_BACKUP_DIR=/mnt/usb\n");
+    const merged = await loadBoxEnv({ WAITRON_BACKUP_DIR: "" }, dir);
+    expect(merged.WAITRON_BACKUP_DIR).toBe("/mnt/usb");
+  });
+
+  it("a non-empty base value still wins over the file", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "boxenv-"));
+    await writeFile(join(dir, "backup.env"), "WAITRON_BACKUP_DIR=/mnt/usb\n");
+    const merged = await loadBoxEnv({ WAITRON_BACKUP_DIR: "/mnt/env" }, dir);
+    expect(merged.WAITRON_BACKUP_DIR).toBe("/mnt/env");
   });
 });
