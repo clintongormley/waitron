@@ -200,20 +200,25 @@ design-review section apply.
   `export type … from` for one symbol, where a single `export type { PrintTransport }` would keep the
   doc comment attached in editor hover.
   **2.** the virtual PDF printer + a
-  `print_jobs` retention sweep (spec §7); **3.** **central printer provisioning redesign** (owner
-  decisions 2026-09-09; design next, spec to be written) — subsumes the bare "un-pin IP printers"
-  (failover-printing §4a). Decided: **(a) IP printers** are LOCATION-scoped with NO agent choice — any
-  agent at the location serves them (claim-lock hands each job to whichever grabs it first),
-  automatic assignment + failover; the reclaim race the lease comment flags is accepted at-least-once
-  for MVP, a per-claim token hardens it later. **(b) USB printers** are DISCOVERY-driven — the agent
-  reports the USB printers attached to its box, the operator registers a chosen SUBSET centrally
-  (discovery ≠ exposure) with a name/location, keyed on the printer's USB **serial** (survives
-  reboot/replug; the agent maps serial→`/dev/usb/lpN` at print time) rather than a raw device path.
-  **(c) Bluetooth printers** slot in LATER as a third local transport (MAC-keyed, plus a box-local
-  pairing step) — the discovery/registration framework is built transport-agnostic so BT drops in;
-  PARKED on whether a concrete BT printer is needed at launch (open question to the owner). This
-  changes the printers-screen create flow and adds an agent USB-discovery capability + a
-  discovered-devices store; the current manual create form (agent dropdown) is what it replaces.
+  `print_jobs` retention sweep (spec §7); **3.** **central printer provisioning redesign** — **spec
+  written 2026-09-09**,
+  [2026-09-09-central-printer-provisioning-design.md](superpowers/specs/2026-09-09-central-printer-provisioning-design.md);
+  **plan next.** Subsumes the bare "un-pin IP printers" (failover-printing §4a). The brainstorm
+  extended the recorded owner decisions: **the serving agent is DERIVED from live capability, never
+  stored** (`printers.agent_id` removed for EVERY transport, not just IP) — IP served by any box in
+  the venue, USB/Bluetooth by the box currently reporting the device's stable key; printers keyed on
+  `local_key` (USB **serial** / BT **MAC**, survives reboot/replug), the agent resolves key→device
+  path/channel at print time; the report is authorised by a new `print_jobs.claimed_by`. **All three
+  local transports are discoverable** (IP via mDNS + a 9100 sweep, pre-filling manual host:port entry —
+  MAC-keyed IP deferred), and **active discovery runs only inside a dashboard-opened window** (cheap
+  presence-of-registered-devices stays always-on for serving); the discovered inventory + window are
+  IN-MEMORY on the server (no new tables). **Bluetooth is IN SCOPE now** (was parked) as a third live
+  transport with box-local pairing on the agent setup page. No printer drivers (raw ESC/POS; page
+  printers out of scope → the PDF path). At-least-once reclaim accepted for MVP (per-claim token
+  later). Security-review item (the authz boundary moves to venue/visible-keys). Real-hardware receipts
+  (USB + BT) booked for 2026-09-10 on the arriving printer; they settle the §7 container-access /
+  enumeration unknowns. Replaces the manual create form (agent dropdown) with a transport-aware flow +
+  a discovered-printers list.
   **4.** SumUp once its questions are answered. The manual receipt for 1 is the owner's HP
   LaserJet at `192.168.20.56:9100` (TCP path only — not an ESC/POS device).
 - **Track R — replication & failover** (push step 6; the former Tracks A + B). Owns
