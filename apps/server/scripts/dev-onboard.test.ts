@@ -102,6 +102,27 @@ describe("devOnboard against real Postgres", () => {
     expect(Object.keys(written).some((k) => k.startsWith("WAITRON_TILL_"))).toBe(false);
   });
 
+  it("uses the production-shaped migrator and replication roles", async () => {
+    const owners = await suite.admin.execute<{ owner: string }>(sql`
+      select r.rolname as owner
+      from pg_class c join pg_roles r on r.oid = c.relowner
+      where c.relname = 'tenants'
+    `);
+    expect(owners.rows).toEqual([{ owner: "waitron_migrator" }]);
+
+    const roles = await suite.admin.execute<{
+      name: string;
+      replication: boolean;
+    }>(sql`
+      select rolname as name, rolreplication as replication
+      from pg_roles where rolname in ('waitron_migrator', 'waitron_repl') order by rolname
+    `);
+    expect(roles.rows).toEqual([
+      { name: "waitron_migrator", replication: false },
+      { name: "waitron_repl", replication: true },
+    ]);
+  });
+
   it("writes a .env that loadConfig accepts as a SETUP-MODE config (config.till undefined)", () => {
     const written = parseEnvFile(readFileSync(envPath, "utf8"));
     // loadConfig resolves the whole server config. Placeholder roots: loadConfig only uses them as

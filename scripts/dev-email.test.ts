@@ -28,6 +28,12 @@ describe("development account email", () => {
     expect(manifest.scripts[script]).toContain("docker compose up -d --wait db mailpit");
   });
 
+  it("can reset directly to a fresh onboarding target", () => {
+    expect(manifest.scripts["dev:reset:onboard"]).toBe(
+      "docker compose down -v && docker compose up -d --wait db mailpit && pnpm --filter @waitron/server dev:onboard",
+    );
+  });
+
   it("starts Mailpit with the shared database, never from the worktree-specific app process", () => {
     expect(compose).toContain("    depends_on:\n      - mailpit");
     expect(manifest.scripts.dev).not.toContain("docker compose");

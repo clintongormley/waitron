@@ -542,7 +542,7 @@ async function writeFiscalModulesJson(
  * the migrator role and the `waitron_repl` bootstrap are each guarded on the role's absence, so a
  * re-run is a no-op.
  */
-async function ensureDevReplicationShape(
+export async function ensureDevReplicationShape(
   superuserUrl: string,
   log: (line: string) => void,
 ): Promise<void> {

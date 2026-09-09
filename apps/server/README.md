@@ -352,7 +352,8 @@ SMTP. Sign in as a manager and open **Configuration → Test inbox** to read a m
 account link. The inbox is served through Waitron's authenticated API; Mailpit's own ports bind to
 the box loopback only.
 
-`pnpm dev:setup`, `pnpm dev:reset`, `pnpm dev:onboard`, and the `wa-wt` worktree launcher also start
+`pnpm dev:setup`, `pnpm dev:reset`, `pnpm dev:onboard`, `pnpm dev:reset:onboard`, and the `wa-wt`
+worktree launcher also start
 Mailpit with the shared development database. During local development you can inspect its own UI at
 `http://127.0.0.1:8025`.
 

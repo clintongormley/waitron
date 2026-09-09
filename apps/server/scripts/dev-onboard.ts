@@ -23,6 +23,8 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 // two scripts' behaviour from drifting.
 import {
   DEV_DATABASE_URL,
+  devMigrationsUrl,
+  ensureDevReplicationShape,
   inspectVenues,
   renderEnvFileLines,
   waitForPostgres,
@@ -98,12 +100,12 @@ export async function devOnboard(opts: DevOnboardOptions): Promise<DevOnboardRes
     );
   }
 
-  // Migrate the full manifest from source — the exact call `dev-setup` makes (dev-setup.ts's
-  // `applyMigrations(databaseUrl, migrationOptionsFor(manifestSets(), null))`): the same sets the
-  // server migrates at boot, `null` being the from-source root resolved to each package's own
-  // `drizzle` dir. Then STOP — no venue is provisioned.
-  log("dev-onboard: migrating…");
-  await applyMigrations(databaseUrl, migrationOptionsFor(manifestSets(), null));
+  // Build the same migrator + replication roles as the seeded development target, then migrate the
+  // full manifest AS that migrator. This gives the onboarding database the table ownership and
+  // default privileges the installed provisioner creates. Then STOP — no venue is provisioned.
+  await ensureDevReplicationShape(databaseUrl, log);
+  log("dev-onboard: migrating as waitron_migrator…");
+  await applyMigrations(devMigrationsUrl(databaseUrl), migrationOptionsFor(manifestSets(), null));
 
   // `databaseUrl` also becomes the OWNER connection `POST /setup-api/provision` runs `applyVenue`
   // over once the box boots (`.env.example`'s ONBOARDING/OWNER CONNECTION notes) — `applyVenue`

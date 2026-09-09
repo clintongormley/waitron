@@ -575,15 +575,16 @@ push that carried no TypeScript. `/land-branch` runs `pnpm install` right after 
 run it yourself after any other pull. The hook skips a push that only deletes refs (all-zero local
 sha) and fails closed when stdin is empty.
 
-**The dev stack from a worktree is started with `wa-wt <worktree-name>`** (`~/workspace/tools`),
+**The dev stack from a worktree is started with `wa-wt demo <worktree-name>` or
+`wa-wt onboarding <worktree-name>`** (`~/workspace/tools`),
 never with a bare `pnpm dev*`. The dev Postgres is ONE compose service shared by every checkout, and
 `apps/server/.env` describes that DATABASE (venue ids, credentials key) — gitignored and absent from
 a fresh worktree. Compose names its project after the directory, so an unqualified
 `docker compose up` from a worktree starts a SECOND `db` with an empty volume on the same port.
-`wa-wt` brings the shared db up under `COMPOSE_PROJECT_NAME=waitron`, copies the newest sibling
-`.env` into a worktree that has none, and follows the log. `wa-wt reset [name]` is the only "start
-over": it wipes the volume, reseeds from that checkout's code and copies the new `.env` to every
-checkout. Cost: a
+`wa-wt` brings the shared db up under `COMPOSE_PROJECT_NAME=waitron`, copies only the current target's
+`.env`, and follows the log. Changing target wipes the application volume while keeping the shared
+development CA. `wa-wt reset demo [name]` and `wa-wt reset onboarding [name]` rebuild the selected
+target and copy its new `.env` to every checkout. Cost: a
 round trip each on 2026-09-05 and 2026-09-06 while the two rules were manual. Detail:
 `docs/ui-review.md` → _Running the stack from a worktree_.
 
@@ -591,10 +592,10 @@ Since swap step 4 the compose `db` service passes `wal_level=logical` + `track_c
 (restart-required cluster settings) plus `max_slot_wal_keep_size=4GB` on its `command:`, so a dev box
 is publishable/subscribable exactly as the box image's `postgresql.conf` makes it. `dev-setup` then
 bootstraps the migrator-owned, replication-ready shape (`waitron_migrator` owns every table, the
-`waitron_repl` bootstrap runs) so a `wa-wt reset` boot exercises the real replication provisioning —
+`waitron_repl` bootstrap runs) so a `wa-wt reset demo` boot exercises the real replication provisioning —
 that boot IS the live smoke that the unit suite (`apps/server/scripts/dev-setup.test.ts`) cannot cover
 (`CREATE PUBLICATION` runs only at boot). A dev DB provisioned before this change is refused; run
-`wa-wt reset`.
+`wa-wt reset demo`.
 
 ---
 
