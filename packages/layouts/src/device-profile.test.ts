@@ -43,13 +43,26 @@ describe("validateCapabilities", () => {
 });
 
 describe("validateInactivityTimeout", () => {
-  it("returns a non-negative integer unchanged for a non-kds form factor", () => {
+  it("returns a positive integer unchanged for a non-kds form factor", () => {
     expect(validateInactivityTimeout(300, "phone-portrait")).toBe(300);
-    expect(validateInactivityTimeout(0, "till")).toBe(0);
+    expect(validateInactivityTimeout(1, "till")).toBe(1);
   });
 
   it("passes null through as null (never log out)", () => {
     expect(validateInactivityTimeout(null, "till")).toBeNull();
+  });
+
+  it("rejects 0 — NULL is the 'never' sentinel, so a zero timeout is not a valid value", () => {
+    // 0 would mean "log out immediately" once Task 7 wires auto-logout, making a device unusable;
+    // "never" is expressed as NULL, not 0. Same error shape as the negative case.
+    try {
+      validateInactivityTimeout(0, "till");
+      throw new Error("should have thrown");
+    } catch (e) {
+      expect(e).toBeInstanceOf(AppError);
+      expect((e as AppError).code).toBe("device_profile.invalid");
+      expect((e as AppError).params).toEqual({ reason: "bad_inactivity_timeout" });
+    }
   });
 
   it("FORCES null for a kds profile regardless of the value (a display is not a logged-in operator)", () => {

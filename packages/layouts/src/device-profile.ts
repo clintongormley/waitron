@@ -25,9 +25,11 @@ export function validateCapabilities(input: unknown): CapabilityFlag[] {
 /**
  * Fail-closed validation of a profile's auto-logout idle timeout (seconds). NULL means "never log
  * out". A `kds` profile is FORCED to NULL — a kitchen display is not a logged-in operator, so it is
- * exempt from auto-logout regardless of what a caller passes. A non-null value must be a non-negative
- * integer; anything else throws `device_profile.invalid` {reason: "bad_inactivity_timeout"}, the same
- * gate `validateCapabilities` uses. Returns the value to store.
+ * exempt from auto-logout regardless of what a caller passes. A non-null value must be a POSITIVE
+ * integer; NULL is already the "never log out" sentinel, so 0 (any value < 1, or a non-integer)
+ * throws `device_profile.invalid` {reason: "bad_inactivity_timeout"} — 0 would mean "log out
+ * immediately", which Task 7's auto-logout would turn into an unusable device. Returns the value to
+ * store.
  */
 export function validateInactivityTimeout(
   value: number | null,
@@ -35,7 +37,7 @@ export function validateInactivityTimeout(
 ): number | null {
   if (formFactor === "kds") return null;
   if (value === null) return null;
-  if (!Number.isInteger(value) || value < 0) {
+  if (!Number.isInteger(value) || value < 1) {
     throw new AppError("device_profile.invalid", { reason: "bad_inactivity_timeout" });
   }
   return value;
