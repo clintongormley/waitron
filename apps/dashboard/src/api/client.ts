@@ -1840,6 +1840,21 @@ export class DashboardApi {
     );
   }
 
+  /** `POST /management-api/print-agent-join-requests/:id/accept` — approve a print agent's ask with the
+   * number the admin tapped (an empty 204). The body is just `{ choice }` — an agent binds nothing, so
+   * there is no profile or station to resolve.
+   *
+   * A WRONG `choice` is terminal: the server DELETED the request before answering `device.join_mismatch`
+   * (the surface-neutral code, shared with the device accept), so the caller refreshes rather than
+   * offering a second attempt. */
+  acceptPrintAgentJoinRequest(id: string, input: { choice: string }): Promise<void> {
+    return this.#request<void>(
+      `/management-api/print-agent-join-requests/${id}/accept`,
+      "POST",
+      input,
+    );
+  }
+
   /** `GET /management-api/canvases` — this tenant's canvases (`till.configure`-gated server-side;
    * every role that reaches the Devices screen holds it). The server answers `{ canvases: [...] }`; this
    * unwraps to the array. Each canvas's `definition` is the opaque layout JSON — typed `unknown` here
@@ -1975,25 +1990,19 @@ export class DashboardApi {
   }
 
   // ── Printing (print agents + printers + jobs) ────────────────────────────────────────────────────
-  // The nine verbs the Impresoras screen drives, all printer.manage-gated server-side (the print-api.ts
-  // management routes). Agents: `listAgents` reads the enrolled agents (newest first); `createAgentCode`
-  // mints a single-use pairing code returned ONCE (201, never re-fetchable); `revokeAgent` deactivates an
-  // agent (204). Printers: `listPrinters`/`createPrinter`/`updatePrinter`/`deactivatePrinter` are the
-  // config CRUD (create returns the minted id at 201; patch/deactivate answer an empty 204). `listRecentJobs`
-  // is the status read; `testPrint` enqueues a known diagnostic payload (202). Paths/bodies against
-  // apps/server/src/print-api.ts.
+  // The verbs the Impresoras screen drives, all printer.manage-gated server-side (the print-api.ts
+  // management routes). Agents: `listAgents` reads the enrolled agents (newest first); `revokeAgent`
+  // deactivates an agent (204). A print agent JOINS through the shared join-and-accept mechanism above
+  // (`joinRequests("print_agent")` / `joinChallenge` / `denyJoinRequest` / `acceptPrintAgentJoinRequest`),
+  // not a pairing code. Printers: `listPrinters`/`createPrinter`/`updatePrinter`/`deactivatePrinter` are
+  // the config CRUD (create returns the minted id at 201; patch/deactivate answer an empty 204).
+  // `listRecentJobs` is the status read; `testPrint` enqueues a known diagnostic payload (202).
+  // Paths/bodies against apps/server/src/print-api.ts.
 
   /** `GET /management-api/print-agents` — this tenant's enrolled print agents, newest-enrolled first
    * (the server's order). Each carries its active flag and last-seen time; the token hash never leaves. */
   listAgents(): Promise<PrintAgentRow[]> {
     return this.#request<PrintAgentRow[]>("/management-api/print-agents", "GET");
-  }
-
-  /** `POST /management-api/print-agents/codes` — mint a single-use agent pairing code, returning the
-   * plaintext code ONCE (201). The code is never re-readable (like a device pairing code / passkey
-   * challenge handle). */
-  createAgentCode(label: string): Promise<{ code: string }> {
-    return this.#request<{ code: string }>("/management-api/print-agents/codes", "POST", { label });
   }
 
   /** `POST /management-api/print-agents/:id/revoke` — revoke a print agent (flip `active = false`,
