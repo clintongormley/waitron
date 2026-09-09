@@ -187,4 +187,62 @@ describe("SessionActivity", () => {
     await Promise.resolve();
     expect(wl.request).toHaveBeenCalledTimes(2);
   });
+
+  it("releases a wake lock whose request resolves AFTER stop() — no strand (C3)", async () => {
+    // The request is in flight when stop()/logout happens; it resolves afterwards. The late sentinel
+    // must be released, not stored — a stored one would keep the screen awake with no way to give it
+    // back. Before the fix release was called 0 times (the sentinel was stranded).
+    let resolveRequest!: (s: unknown) => void;
+    const sentinel = { released: false, release: vi.fn(async () => {}) };
+    const request = vi.fn(() => new Promise((r) => (resolveRequest = r as (s: unknown) => void)));
+    const sa = new SessionActivity({
+      wakeLock: { request } as never,
+      now: () => 0,
+      setTimer: () => 0,
+      clearTimer: () => {},
+    });
+    sa.configure({ loggedIn: true, kind: "handheld", timeoutSeconds: null, onIdle: () => {} });
+    const started = sa.start(); // request now pending
+    await sa.stop(); // stop BEFORE the request resolves
+    resolveRequest(sentinel); // the in-flight request resolves late
+    await started;
+    await Promise.resolve();
+    expect(sentinel.release).toHaveBeenCalledTimes(1);
+  });
+
+  it("serializes overlapping acquisitions to a single retained sentinel (C3)", async () => {
+    // Two requests in flight at once (e.g. reacquire racing an earlier acquire): the superseded one is
+    // released, the current one retained, so stop() later has exactly one live sentinel to give back —
+    // never a stranded one. Before the fix the second overwrote the first's reference (1 unreleased).
+    const resolvers: Array<(s: unknown) => void> = [];
+    const sentinels = [
+      { released: false, release: vi.fn(async () => {}) },
+      { released: false, release: vi.fn(async () => {}) },
+    ];
+    const request = vi.fn(() => new Promise((r) => resolvers.push(r as (s: unknown) => void)));
+    const sa = new SessionActivity({
+      wakeLock: { request } as never,
+      now: () => 0,
+      setTimer: () => 0,
+      clearTimer: () => {},
+    });
+    sa.configure({ loggedIn: true, kind: "handheld", timeoutSeconds: null, onIdle: () => {} });
+    const started = sa.start(); // request #1 in flight
+    sa.reacquire(); // request #2 in flight (#sentinel still undefined, so it proceeds)
+    await Promise.resolve();
+    expect(request).toHaveBeenCalledTimes(2);
+    // Resolve the SUPERSEDED request #1 first — it must release its sentinel, not store it.
+    resolvers[0]!(sentinels[0]);
+    await started;
+    await Promise.resolve();
+    // Resolve the CURRENT request #2 — it is retained.
+    resolvers[1]!(sentinels[1]);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(sentinels[0].release).toHaveBeenCalledTimes(1); // superseded → released
+    expect(sentinels[1].release).not.toHaveBeenCalled(); // current → held
+    // The single retained sentinel is the one stop() gives back — no strand.
+    await sa.stop();
+    expect(sentinels[1].release).toHaveBeenCalledTimes(1);
+  });
 });

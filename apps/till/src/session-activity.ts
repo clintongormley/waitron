@@ -69,6 +69,12 @@ export class SessionActivity {
   #active = false;
   #sentinel: WakeLockSentinelLike | undefined;
   #timer: number | undefined;
+  /** Monotonic token that invalidates an in-flight `wakeLock.request(...)` (C3). A request can resolve
+   * AFTER a `stop()`/logout or after a newer acquisition superseded it; storing that late sentinel would
+   * strand the screen awake (no reference is ever released). Bumped whenever a new acquire starts or a
+   * release happens, so an acquire whose captured token no longer matches releases its sentinel instead
+   * of storing it. Serializes overlapping acquisitions to exactly one retained sentinel. */
+  #wakeGeneration = 0;
   /** The clock time by which, absent an interaction, the idle logout must fire. Read by {@link #onTimer}
    * so a timer that fires early (or after an interaction pushed the deadline out) re-arms for the
    * remainder rather than logging out too soon. */
@@ -142,16 +148,37 @@ export class SessionActivity {
     if (this.#wakeLock === undefined) return; // feature absent — clean no-op
     // Already holding a live lock (the browser releases it on hide, flipping `released`).
     if (this.#sentinel !== undefined && !this.#sentinel.released) return;
+    // Capture a fresh token AFTER the early return above, so this acquisition supersedes any older one
+    // still in flight (that one will see the mismatch and release its now-orphan sentinel).
+    const generation = ++this.#wakeGeneration;
+    let sentinel: WakeLockSentinelLike;
     try {
-      this.#sentinel = await this.#wakeLock.request("screen");
+      sentinel = await this.#wakeLock.request("screen");
     } catch {
       // A screen wake lock is best-effort: the request rejects on a hidden tab or where the policy
-      // forbids it. Never fatal — the sale path does not depend on the screen staying awake.
-      this.#sentinel = undefined;
+      // forbids it. Never fatal — the sale path does not depend on the screen staying awake. Only clear
+      // our reference when no newer acquisition has run since (else we'd clobber its live sentinel).
+      if (generation === this.#wakeGeneration) this.#sentinel = undefined;
+      return;
     }
+    // The request may have resolved AFTER a stop()/logout (lock no longer wanted) or after a newer
+    // acquire superseded this one (token bumped). Either way, release this sentinel now rather than
+    // store it — storing it would leave the screen awake with no reference to give it back (C3).
+    if (generation !== this.#wakeGeneration || !this.#shouldHoldWakeLock()) {
+      try {
+        if (!sentinel.released) await sentinel.release();
+      } catch {
+        // Best-effort — a release that throws still strands no reference we track.
+      }
+      return;
+    }
+    this.#sentinel = sentinel;
   }
 
   async #release(): Promise<void> {
+    // Bump the token so any acquire in flight becomes an orphan it must release itself (C3): otherwise
+    // a request that resolves after this release would store its sentinel and re-strand the screen.
+    this.#wakeGeneration++;
     const sentinel = this.#sentinel;
     this.#sentinel = undefined;
     if (sentinel !== undefined && !sentinel.released) {
