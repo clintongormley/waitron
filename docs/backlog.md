@@ -520,12 +520,12 @@ unchanged, so no new H2 receipt
      (`packages/db/src/testing/cluster-mutex.ts`, one live cluster machine-wide). Open edges: (f)
      `apps/server`'s `replication-arc` isolation was reverted because vitest `projects` are
      incompatible with `--shard` — it relies on the mutex + retry; if it flakes on CI's `test-server`,
-     it needs a `--shard`-compatible isolation. (g) **In progress, `test-load` (2026-09-09):**
-     give Sync and Bookings dedicated CI jobs, cap the remaining bins and local package runs,
-     serialize Bookings' Node/browser projects, restore fiscal-verifactu's effective outer fork
-     cap (the #286 project move started 17 workers locally), and enforce outer deadlines. The supplied CI logs
-     leave Bookings browser files unfinished while Sync completes; local runs also reproduced Sync/fiscal migration stalls. A standalone query probe traced
-     those to dual Docker network interfaces; the fixtures now use one network and unique peer names. [Evidence and verification](superpowers/specs/2026-09-09-test-load-design.md). (h) A hung real-PG suite LEAKS its
+     it needs a `--shard`-compatible isolation. (g) **LANDED #291:** dedicated Sync/Bookings CI jobs,
+     package concurrency caps, ordered Bookings projects, the effective fiscal worker cap,
+     outer deadlines, and one-network PostgreSQL fixtures with unique peer names.
+     [Evidence and verification](superpowers/specs/2026-09-09-test-load-design.md).
+     Bookings' intermittent browser freeze remains unconfirmed locally; follow-up is under
+     *Debt → CI / test infra*. (h) A hung real-PG suite LEAKS its
      running cluster containers (Ryuk off), starving the next run; `pnpm reap` only removes labelled
      containers older than 2h, so a fresh leak survives — inspect creation times, ownership and attached volumes, then remove only your own
      confirmed leftovers before re-validating. (i) `staff-screen.test.ts` (dashboard, browser mode) flaked once on CI
@@ -583,10 +583,9 @@ unchanged, so no new H2 receipt
      formatter only).
    - **Follow-ons SP2 unblocks:** migrate the other ~22 core dashboard screens onto the seat
      incrementally; migrate core screens off the coarse `requiresManager` gate onto permission ids.
-   - **CI (2026-09-09, `test-load` in progress):** repeated hangs left Bookings browser files
-     unfinished after its database files passed. The branch gives Bookings a dedicated job,
-     serializes Node/browser projects and browser files, and adds an outer job deadline.
-     [Evidence and verification](superpowers/specs/2026-09-09-test-load-design.md).
+   - **CI isolation LANDED #291:** Bookings has a dedicated job, ordered Node/browser projects,
+     serialized browser files and an outer deadline. Remaining investigation is under
+     *Debt → CI / test infra*.
 4. **Control plane brainstorm — BACK BURNER (Waitron Cloud).** With one tenant per database and a
    dedicated cloud instance per tenant, the only multi-tenant service Waitron runs is a small control
    plane: accounts (a customer of ours — one customer may own several taxpayers), subscriptions,
@@ -1523,8 +1522,12 @@ genuinely-decision-bearing.
   test-file count (an empty shard exits 1).
 - **Job-sharding — remaining lever.** The next critical-path candidate is `mutation-verifactu`
   (~218s, one free 4-vCPU runner); split it if a run shows it dominating. Rebalance the
-  `LIGHT_A/B_PACKAGES` bins (`scripts/changed-scope.mjs`) when a run shows one light shard dominating —
-  the recurring Bookings hangs are addressed by the dedicated job in `test-load` (Track C item 3).
+  `LIGHT_A/B_PACKAGES` bins (`scripts/changed-scope.mjs`) when a run shows one light shard dominating.
+- **Bookings browser-freeze cause remains open after #291.** The dedicated job, serialization and
+  outer deadline landed, and PR CI passed, but the intermittent freeze was not reproduced locally.
+  Track R should inspect subsequent `test-bookings` runs; on recurrence, retain the unfinished-file
+  logs and capture a browser trace before retrying. The reproduced PostgreSQL network stall and
+  the browser freeze are separate investigations.
 - **The pre-push hook's shell is largely untested** (the deletion guard + range computation are backed
   only by running the real hook); **`test-light` reports `success` without naming what it ran** (make the
   job name its selected packages); **`packages/ui` can hang the `test-ui` shard** (unconfirmed cause — if
