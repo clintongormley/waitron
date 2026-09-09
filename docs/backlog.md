@@ -91,20 +91,23 @@ steps take owner sign-off at land):
    `image-smoke.yml` also driven by a nightly + on-request `image-nightly.yml`.
    Proven end to end on 2026-09-09: a blank box → phone setup → provision → trading over HTTPS
    → enrolled till → a recorded preproduction sale (design §11). **Still open under this step:** the
-   first-run chooser's modes 1–2 (*Onboarding*, the four-mode wizard) and backup off the primary
-   (mirror → S3 → Drive; only `LocalFsBackend` exists).
-   **A prepared box takes NO backups until a human edits `/opt/waitron/.env`.** The image
-   deliberately does not set `WAITRON_BACKUP_DIR` (node-containers design §3.1): `loadBackupConfig`
-   is fail-closed, so a destination without `WAITRON_BACKUP_RECOVERY_KEY` throws at boot — baking
-   the path alone would kill a box on its first restart into trading, right after the wizard.
-   (`WAITRON_BACKUP_DATABASE_URL` is now OPTIONAL — the box derives the backup read connection from
-   its own owner connection when it is unset, BR-1 Task 2 2026-09-09.) So the dir and recovery key
-   are `.env`-only, and NOTHING in
-   the plug-in-and-open-your-phone flow asks for it. That matters because the recorded posture is
-   COLD RECOVERY — restore from backup plus a fresh chain is what gets a venue trading again — and a
-   box with backups off has nothing to restore. The natural fix is the wizard: mint the recovery key
-   there and SHOW it, because a silently generated recovery key is not a recovery key. Until then a
-   box is one disk failure from having no way back.
+   first-run chooser's modes 1–2 (*Onboarding*, the four-mode wizard — a separate, wider surface than
+   the backup wizard below), and OFF-BOX backup destinations (mirror → S3 → Drive; only
+   `LocalFsBackend` exists).
+   **The backup + recovery-key wizard LANDED (#295, 2026-09-09).** An authenticated dashboard screen
+   turns backups on for a local-fs destination, mints a strong recovery key and SHOWS it (copy +
+   download, gated on a "saved it" tick — a silently generated key is not a recovery key), sets the
+   schedule (days + time, or a box-chosen quiet slot after `day_cutover`) and dual count+age
+   retention, and re-views or rotates the key; a first-run nudge on the setup done-screen points a
+   fresh operator at it (suppressed for a demo box). Config hot-reloads through a `BackupSupervisor`
+   (no box restart), persists to a `backup.env` box-env file (never a per-hardware DB URL — the box
+   derives the backup read connection from its own owner connection when
+   `WAITRON_BACKUP_DATABASE_URL` is unset), and the archive now also captures `backup.env` +
+   `modules.json` so a restore keeps the settings and the enabled-module set. The image still ships
+   with backups OFF (deliberate, node-containers §3.1: `loadBackupConfig` is fail-closed) — the
+   operator turns them on through the wizard rather than hand-editing `/opt/waitron/.env`.
+   **Still owed:** the off-box backends (S3/Drive/mirror) and the whole-state-volume capture slice
+   (both under _Backup & restore regime_ below).
 
 2. **Device onboarding and the three displays** — till, handheld and KDS working, kiosk optional
    (owner 2026-09-08; most waiters use their own phones). **Installable-till build + LAN-HTTPS
@@ -1016,7 +1019,7 @@ keypair + reserved installation number + disjoint series); promotion never mints
   membership reconciliation restarts it (bounded, §8.4); restart-based fencing leaves a one-tick
   window in which one more fiscal pass could file on the superseded chain.
 
-### Backup & restore regime — BR-1..BR-4 ALL LANDED; carry-forwards open
+### Backup & restore regime — BR-1..BR-4 + the wizard LANDED; carry-forwards open
 
 Design: [backup-restore-regime](superpowers/specs/2026-09-04-backup-restore-regime-design.md); the
 restore hook: [SP-3d design](superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md).
@@ -1029,6 +1032,31 @@ gate, entry-name path-traversal guard, `pg_restore` into a fresh DB, module hook
 The promote-Slice-4 **operator surface** for a cold restore (connection rebinding, advertised origin,
 an authenticated entry — SP-3d spec §2) is still open.
 
+**The wizard LANDED (#295, 2026-09-09).** Design/plan:
+[backup-recovery-key-wizard](superpowers/specs/2026-09-09-backup-recovery-key-wizard-design.md) /
+[plan](superpowers/plans/2026-09-09-backup-recovery-key-wizard.md). A `BackupSupervisor` owns the
+duty lifecycle so config hot-reloads (no box restart); an authenticated dashboard screen turns
+backups on (local-fs), mints + SHOWS the recovery key (copy/download + saved-it gate), sets a
+wall-clock schedule (days + time or a box-chosen slot after `day_cutover`) and dual count+age
+retention, and re-views/rotates the key; a first-run nudge on the setup done-screen (suppressed for a
+demo box). `WAITRON_BACKUP_DATABASE_URL` is now OPTIONAL (derived from the box owner connection);
+`box-env` treats an empty base value as absent (compose passes the vars as `${VAR:-}`); the archive
+also captures `backup.env` + `modules.json`. The finish-branch run-it seat caught five real defects
+before land (incomplete apply/rotate status, an uncontained clock read killing the worker, a DST
+week-skip, env-injection via the destination field, an unsound mtime-based archive-key signal).
+
+**Spun out of the wizard — whole-state-volume capture (its own §5-reviewed slice, not yet done):**
+today the archive captures a curated list — the fatal `RECOVERY_FILES` plus the optional `backup.env`
++ `modules.json` the wizard added. The deeper change: capture the whole state directory EXCEPT an
+explicit exclusion set (`backup-staging/`, `restore-staging/`, `logs/`, the per-hardware
+`instance.env` + `recovery.json`), with a **completeness guard** that fails when a new top-level state
+entry is neither captured nor excluded (a curated list goes stale — `modules.json` was a live example
+of exactly that gap), and restore-apply per-hardware rules. Touches BR-2, BR-3 and the recovery
+bundle. Also owed from the wizard: the ongoing "backups off / stale" reminder belongs in the
+**notifications centre** (not built) — the wizard only makes the state reportable; and when a nightly
+report job exists, the box-chosen backup should fire after it (today it anchors on `day_cutover` +
+margin only).
+
 **Carry-forwards (named, not gaps):** an abort-aware **per-destination timeout** (lands with the first
 network s3/sftp backend); a stale-`.tmp` sweep; confirm the **`StorageBackend` key path-traversal
 guard** landed with BR-3's manifest-driven `get(key)` (BR-3 guards entry NAMES; the key guard was a
@@ -1036,7 +1064,11 @@ BR-1 deferral); a working-backup boot success-path integration test; scope the f
 by module when a second `nonDbState` module lands; a `packArchive` pack-time entries bound; a
 manifest-shape coded refusal (fails safe under GCM auth today); generalising archive entry routing
 off declared source ids when a second non-DB source lands. The SP-3d left-behinds are on the module
-system's list.
+system's list. **From #295's finish-branch review (deferred minors):** no boot-level e2e drives a
+successful dump through the real `resolveVenueClock`; the `apply`/`rotate` unauth 401 test covers only
+the read routes; a malformed non-JSON body falls to the boundary's 400 default untested; the download
+filename uses a client-side FNV fingerprint that differs from the status view's server sha256 (cosmetic
+label).
 
 ### Reporting fiscal remainder (parked)
 
