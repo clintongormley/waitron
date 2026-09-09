@@ -27,9 +27,10 @@ export interface TrustPageInput {
 
 /**
  * The self-contained trust page — a deliberately short inline string, NOT a built front end, matching
- * `setup-api.ts`'s placeholder style: this page is served while the box is unprovisioned and must
- * render with no external asset. It shows how to reach the box, how to obtain and trust its
- * certificate, and (when a LAN address exists) an inline SVG QR to open it on a phone.
+ * `setup-api.ts`'s placeholder style: it is served on BOTH onboarding origins (the HTTPS discovery API
+ * and the plain-HTTP landing listener) in EVERY boot mode — setup, adoption-pending and trading — via
+ * the landing listener, and must render with no external asset. It shows how to reach the box, how to
+ * obtain and trust its certificate, and (when a LAN address exists) an inline SVG QR to open it on a phone.
  *
  * `qrSvg` and the per-OS copy are static/server-derived, so they are embedded directly; the reach
  * URLs come from config and the box's own interfaces (never request input), so no escaping is needed.

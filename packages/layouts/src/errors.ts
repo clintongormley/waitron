@@ -108,7 +108,9 @@ declare module "@waitron/shared" {
     //                      tenant): `device-profile-store.ts` translates the driver's 23503 so a bad
     //                      reference returns a clean 4xx, never a raw 500.
     //   bad_inactivity_timeout — the auto-logout idle timeout failed validateInactivityTimeout
-    //                      (device-profile.ts): a non-null value that was not a non-negative integer.
+    //                      (device-profile.ts): a non-null value that is not a positive integer (not an
+    //                      integer >= 1). 0 is rejected — null already means "never log out", so 0 would
+    //                      mean "log out immediately", an unusable device.
     // A `reason` enum PARALLEL to `canvas.invalid`'s discriminator; NEVER echoes the offending value
     // (§1) — the enum names WHICH field went wrong, not what the caller supplied.
     "device_profile.invalid": {
