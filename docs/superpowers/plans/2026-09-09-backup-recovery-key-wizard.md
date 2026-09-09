@@ -975,6 +975,10 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
 mountBackupApi(app, { supervisor: backupSupervisor, db, cfg: { tenantId: till.tenantId }, stateDir: config.stateDir }, log);
 ```
 
+- [ ] **Step 8b: Harden `supervisor.stop()` vs a route-triggered `reload()` (Task 4 review carry)**
+
+Until this task, `reload()` ran only once (boot, before `stop()` was wired into shutdown). Now `apply`/`rotate` call `reload()` on a live box, so a shutdown `stop()` can interleave with an in-flight `reload()` at an await point — and `stop()` currently bypasses the `#reloading` latch, so it could tear down a half-built duty that `reload()` then re-assigns, leaving a sweep running after `stop()` returned. In `backup-supervisor.ts`, give `stop()` a `#stopped` flag that `reload()` checks after each `await` (bail out + teardown if stopped), OR have `stop()` await an in-flight `reload()` before tearing down. Add a real-PG test: a `stop()` racing a `reload()` leaves NO running worker and NO open pool.
+
 - [ ] **Step 9: Run — passes**
 
 Run: `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server test:coverage`
