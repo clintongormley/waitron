@@ -514,18 +514,21 @@ unchanged, so no new H2 receipt
      in the HTTP layer — a `listDevices` store verb would restore the layer.
    - *Test-infra follow-ups (from #286, the two-node cluster flake this slice's push surfaced):* the
      heavy two-node replication suites (`replication-fidelity`, `replication-subscribe`,
-     `replication-over-tunnel`, `replication-arc`) oversubscribed Docker under the full local run and
-     hung 300s. Fixed #286: a boot retry + bounded timeouts (`two-node.ts`), a `groupOrder` isolation
+     `replication-over-tunnel`, `replication-arc`) hung for 300s under the full local run.
+     #286 added a boot retry + bounded timeouts (`two-node.ts`), a `groupOrder` isolation
      project for `fiscal-verifactu`'s two-node file, and a cross-process cluster mutex
      (`packages/db/src/testing/cluster-mutex.ts`, one live cluster machine-wide). Open edges: (f)
      `apps/server`'s `replication-arc` isolation was reverted because vitest `projects` are
      incompatible with `--shard` — it relies on the mutex + retry; if it flakes on CI's `test-server`,
-     it needs a `--shard`-compatible isolation. (g) `test-light-a` runs `sync`'s two two-node suites
-     with a dozen packages on one 4-vCPU runner (the shape that forced `fiscal-verifactu` to its own
-     shard); if it flakes on CI, move `sync` to its own shard. (h) A hung real-PG suite LEAKS its
+     it needs a `--shard`-compatible isolation. (g) **In progress, `test-load` (2026-09-09):**
+     give Sync and Bookings dedicated CI jobs, cap the remaining bins and local package runs,
+     serialize Bookings' Node/browser projects, restore fiscal-verifactu's effective outer fork
+     cap (the #286 project move started 17 workers locally), and enforce outer deadlines. The supplied CI logs
+     leave Bookings browser files unfinished while Sync completes; local runs also reproduced Sync/fiscal migration stalls. A standalone query probe traced
+     those to dual Docker network interfaces; the fixtures now use one network and unique peer names. [Evidence and verification](superpowers/specs/2026-09-09-test-load-design.md). (h) A hung real-PG suite LEAKS its
      running cluster containers (Ryuk off), starving the next run; `pnpm reap` only removes labelled
-     containers older than 2h, so a fresh leak survives — force-clean `org.testcontainers` leftovers
-     before re-validating. (i) `staff-screen.test.ts` (dashboard, browser mode) flaked once on CI
+     containers older than 2h, so a fresh leak survives — inspect creation times, ownership and attached volumes, then remove only your own
+     confirmed leftovers before re-validating. (i) `staff-screen.test.ts` (dashboard, browser mode) flaked once on CI
      with `vi.mock("@simplewebauthn/browser")` not applying (`mockClear is not a function` across the
      whole suite); passed on re-run and locally. If recurrent, it is a vitest browser-mode
      module-mock-hoisting issue to fix, not re-run.
@@ -580,9 +583,10 @@ unchanged, so no new H2 receipt
      formatter only).
    - **Follow-ons SP2 unblocks:** migrate the other ~22 core dashboard screens onto the seat
      incrementally; migrate core screens off the coarse `requiresManager` gate onto permission ids.
-   - **CI:** bookings' browser vitest runs in the shared `test-light-a` shard. One hang observed
-     (#277: the full 6h GitHub timeout, then ~2 min on re-run — a shared-shard infra hang, not the
-     diff). If it recurs, move bookings' browser tests to the dedicated dual-mode shard.
+   - **CI (2026-09-09, `test-load` in progress):** repeated hangs left Bookings browser files
+     unfinished after its database files passed. The branch gives Bookings a dedicated job,
+     serializes Node/browser projects and browser files, and adds an outer job deadline.
+     [Evidence and verification](superpowers/specs/2026-09-09-test-load-design.md).
 4. **Control plane brainstorm — BACK BURNER (Waitron Cloud).** With one tenant per database and a
    dedicated cloud instance per tenant, the only multi-tenant service Waitron runs is a small control
    plane: accounts (a customer of ours — one customer may own several taxpayers), subscriptions,
@@ -1520,7 +1524,7 @@ genuinely-decision-bearing.
 - **Job-sharding — remaining lever.** The next critical-path candidate is `mutation-verifactu`
   (~218s, one free 4-vCPU runner); split it if a run shows it dominating. Rebalance the
   `LIGHT_A/B_PACKAGES` bins (`scripts/changed-scope.mjs`) when a run shows one light shard dominating —
-  and watch `test-light-a` for a second hang (Track C item 3).
+  the recurring Bookings hangs are addressed by the dedicated job in `test-load` (Track C item 3).
 - **The pre-push hook's shell is largely untested** (the deletion guard + range computation are backed
   only by running the real hook); **`test-light` reports `success` without naming what it ran** (make the
   job name its selected packages); **`packages/ui` can hang the `test-ui` shard** (unconfirmed cause — if

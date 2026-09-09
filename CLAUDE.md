@@ -80,7 +80,12 @@ wide margin.
 pnpm lint && pnpm typecheck && pnpm format:check && pnpm test
 ```
 
-That is the shallow, whole-workspace check. The pre-push hook (`.husky/pre-push`) is deeper but
+That is the shallow, whole-workspace check. Root `test` / `test:coverage` and the pre-push
+coverage phase cap package concurrency at two and enforce a 20-minute process deadline
+(`scripts/run-with-deadline.mjs`). CI test jobs have a 15-minute job deadline; each light bin
+also caps package concurrency at two. Direct package commands retain their Vitest timers.
+
+The pre-push hook (`.husky/pre-push`) is deeper but
 narrower: `pnpm reap`, `pnpm install --frozen-lockfile`, `format:check`, then `typecheck` and
 `test:coverage` over the CHANGED packages and their dependents (resolved by
 `scripts/changed-packages.mjs`, the same script CI's `changes` job uses). A push that touches only
@@ -106,7 +111,8 @@ Traps, each of which cost a round trip:
   `pnpm --filter <pkg> test:coverage`. There is no single `test` job: `.github/workflows/ci.yml` runs
   `test-heavy` (`packages/db`) and `test-server` (`apps/server`) as three-way file shards each with a
   `-merge` job that enforces the thresholds on the merged blob (#216), plus `test-fiscal-verifactu`,
-  the browser shards (`test-ui`, `test-till`, `test-dashboard`, `test-setup`) and `test-light-a` /
+  dedicated `test-bookings` and `test-sync` jobs, the browser shards (`test-ui`, `test-till`,
+  `test-dashboard`, `test-setup`) and `test-light-a` /
   `test-light-b` for everything else (bins in `scripts/changed-scope.mjs`). Vitest `--shard` splits
   by FILE COUNT, so shard imbalance is the real limit, and `N` must never exceed a package's test-file
   count.
@@ -337,20 +343,30 @@ unfiltered `main` run, not a wrong hook.
   concurrency; `describeEachTarget`
   (`packages/db/src/testing/harness.ts`) runs a suite against both. Pick the lighter one when the
   heavier one's justification does not apply, and say why in a comment.
-- **`TESTCONTAINERS_RYUK_DISABLED=true` is required locally**, or container suites hang until the
-  `hookTimeout`. **A recurrent real-PG flake is a defect to investigate, never a "timing flake" to
-  re-run.** The full LOCAL run oversubscribes Docker's container-boot throughput in a way CI never
-  does — the hook runs `pnpm -r test:coverage` over every changed package and its dependents WITH a
-  concurrent whole-workspace `tsc` and the browser suites, while CI shards each package onto its own
-  runner. Under that contention a starved boot must recover, not hang: the two-node cluster fixture
-  (`packages/db/src/testing/two-node.ts`) boots its two nodes in parallel and RETRIES a failed
-  attempt behind a bounded `withStartupTimeout`/`connectionTimeoutMillis`, so a transient stall
-  recovers in a calmer window instead of hanging the whole `hookTimeout`. Root-caused by experiment,
-  not assumed: each two-node suite passes in 8–22 s alone and four clusters boot concurrently in 4.5 s,
-  but before the retry a LATE two-node `beforeAll` under the full run hung the full 300 s (measured on
-  `replication-subscribe` and `replication-fidelity`); an `EADDRINUSE` on `freePort` is the same
-  oversubscription. If a suite still stalls the whole local run, cut the local concurrency and reduce
-  the contention — do not re-run and hope.
+- **Locate the unfinished package before diagnosing a silent shard as PostgreSQL contention.**
+  Four inspected `test-light-a` hangs left only Bookings' browser files unfinished while Sync and
+  every database file completed; two jobs ran for about six hours. A Vitest test timer does not
+  bound a browser whose event loop has stopped. Preserve the job log and use an outer process/job
+  deadline, not a retry as proof of repair. Evidence and limits:
+  `docs/superpowers/specs/2026-09-09-test-load-design.md`.
+- **Vitest 3's fork limit belongs on the outer config, even with projects.** Its shared pool
+  reads `vitest.config.poolOptions`; per-project `singleFork` is a separate scheduling choice.
+  Moving `maxForks: 4` inside fiscal-verifactu's project in #286 started 17 workers on the local
+  host, observed during a Sync migration stall. `scripts/fiscal-test-budget.test.ts` pins the
+  corrected location; the test-load design records the live process and database probes.
+- **Networked PostgreSQL fixtures use one Docker network and unique container names for DNS.**
+  Testcontainers 12's `withNetworkAliases()` also attaches the default bridge. On this Docker
+  Desktop host that produced interfaces with MTUs 65535 and 1500: a 1,400-byte query passed,
+  a 1,600-byte query stalled, and removing the unused bridge made queries up to 100 KB pass.
+  Use `networkedPostgresContainer` (`packages/db/src/testing/postgres.ts`); its real-Docker guard
+  checks one interface, name resolution and a large query. WireGuard peers use `node.networkHost`.
+  Evidence: `docs/superpowers/specs/2026-09-09-test-load-design.md`.
+- **`TESTCONTAINERS_RYUK_DISABLED=true` is required locally. A recurrent real-PG stall needs a
+  retained log and a live database snapshot.** The #286 boot retry and cluster mutex did not
+  eliminate the later migration stall; its PostgreSQL backend was waiting for client input,
+  with no blocking backend. Reducing concurrency alone did not fix the dual-network defect above.
+  Keep the boot bounds and the package/worker caps, but locate the stalled operation before
+  assigning its cause to resource contention.
 - **With Ryuk off, INTERRUPTED runs leak containers** (a clean vitest exit self-reaps via
   `globalTeardown`). The bloat (once: 173 volumes, 23 GB) starves PGlite `beforeAll`s and the
   `freePort` race, while an isolated re-run passes and proves nothing. `pnpm reap`

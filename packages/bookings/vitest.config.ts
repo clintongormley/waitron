@@ -1,25 +1,16 @@
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
 
-// TWO projects, ONE merged coverage report at the floor bar.
-//
-// The bookings package is a server/data module (real-Postgres + PGlite suites) AND, since SP2, ships a
-// browser-safe `./dashboard` sub-path (Lit widgets tested in real headless Chromium). Those two suites
-// cannot share a config: the Node project's Postgres `globalSetup` boots containers for every worker,
-// which a pure-browser test must not trigger, and the browser project needs `@vitest/browser` +
-// Playwright, which the Node suites must not carry. So each is its own project, scoped by path, and
-// `test:coverage` (a single `vitest run --coverage`) runs both and merges them against the one
-// threshold block below.
+// Separate Node and browser projects share one coverage report. Run Node first so Chromium
+// does not compete with this package's PostgreSQL/PGlite work, and bound browser concurrency.
 export default defineConfig({
   test: {
     projects: [
       {
-        // The existing Node / Postgres project — unchanged config, scoped to everything EXCEPT the
-        // browser sub-path.
         test: {
           name: "node",
+          sequence: { groupOrder: 0 },
           globals: true,
-          // Shared globalSetup migrates the container templates once for the real-Postgres suites
-          // (schema, verbs, routes, privileges, migration-split). It runs before every worker.
+          // Migrate the shared templates once before this project's workers start.
           globalSetup: ["./src/testing/global-setup.ts"],
           include: ["src/**/*.test.ts"],
           exclude: [...configDefaults.exclude, "**/.stryker-tmp/**", "src/dashboard/**"],
@@ -39,6 +30,7 @@ export default defineConfig({
         // globalSetup (a browser test must never boot Docker). Scoped to the `./dashboard` sub-path.
         test: {
           name: "browser",
+          sequence: { groupOrder: 1 },
           globals: true,
           include: ["src/dashboard/**/*.test.ts"],
           exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
@@ -46,6 +38,7 @@ export default defineConfig({
             enabled: true,
             provider: "playwright",
             headless: true,
+            fileParallelism: false,
             instances: [{ browser: "chromium" }],
           },
         },

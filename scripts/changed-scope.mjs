@@ -264,45 +264,24 @@ export const OWN_SHARD_PACKAGES = [
   SETUP_PACKAGE,
   SERVER_PACKAGE,
   FISCAL_VERIFACTU_PACKAGE,
+  "@waitron/bookings",
+  "@waitron/sync",
 ];
 
 /**
- * The two halves of the "everything else" shard — every member NOT in OWN_SHARD_PACKAGES — run as
- * test-light-a and test-light-b on separate runners in parallel. Together with OWN_SHARD_PACKAGES
- * they PARTITION every workspace member: each non-own-shard member appears in exactly one of these
- * two lists.
- *
- * Why two shards rather than one: test-light was CPU-bound, and its wall-clock floor is
- * total-work ÷ the runner's cores, NOT the size of its biggest package. On the free public-repo
- * 4-vCPU runner its ~1340s of v8-coverage work floored it near 390s. Two free 4-vCPU runners give 8
- * effective cores for $0 — larger runners are billed per-minute even on a public repo — so halving
- * the work across them roughly halves the floor.
- *
- * BALANCED BY MEASURED DURATION, and REBALANCED once the first split proved the naive balance wrong.
- * Per-package time is contention-dependent: on run 32425078097 the first cut put fiscal-verifactu
- * (maxForks:4) alongside the other heavies in bin A, which oversubscribed that runner — bin A ran
- * 270s against bin B's 127s. Two fixes followed: fiscal-verifactu moved to its own shard
- * (FISCAL_VERIFACTU_PACKAGE above), and the remaining twenty were rebalanced on that run's
- * dedicated-shard durations, where the single-fork packages had shown their true uncontended times
- * (payments 71s, identity 74s, credentials 47s — roughly half their contended figures). With the one
- * maxForks:4 package isolated, no light package dominates a bin, and the rebalanced run 32434702530
- * measured the result: test-light-a 152s, test-light-b 131s. These are wall-clock seconds that drift
- * as suites grow — rebalance when a later run shows one shard dominating. The partition tests police
- * the COVERAGE (every package once), never the balance.
- *
- * A NEW package must be added to exactly one of these lists. Forget, and it lands in NEITHER bin's
- * exclusion set, so both shards select it and `scripts/ci-workflow.test.mjs`'s "nothing runs twice"
- * assertion fails — loudly, on the pull request, not silently.
+ * The remaining workspace members partition into two bins. Each CI bin runs at most two
+ * package processes; browser and replication workloads have dedicated runners above.
+ * The workflow subtracts the other bin and OWN_SHARD_PACKAGES from pnpm's resolved scope.
+ * ci-workflow.test.mjs runs those filters against the real workspace and checks that every
+ * test package is selected exactly once. Add each new package to one bin or its own shard.
  */
 export const LIGHT_A_PACKAGES = [
-  "@waitron/bookings",
   "@waitron/core",
   "@waitron/payments",
   "@waitron/provisioning",
   "@waitron/reporting",
   "@waitron/scheduler",
   "@waitron/purchasing",
-  "@waitron/sync",
   "@waitron/membership",
   "@waitron/module",
   "@waitron/tunnel",
@@ -411,6 +390,8 @@ export const SCOPE_GATES = [
   { output: "setup", covers: membership(SETUP_PACKAGE) },
   { output: "server", covers: membership(SERVER_PACKAGE) },
   { output: "fiscal_verifactu", covers: membership(FISCAL_VERIFACTU_PACKAGE) },
+  { output: "bookings", covers: membership("@waitron/bookings") },
+  { output: "sync", covers: membership("@waitron/sync") },
   { output: "light_a", covers: lightGate(LIGHT_A_PACKAGES) },
   { output: "light_b", covers: lightGate(LIGHT_B_PACKAGES) },
   { output: "verifactu", covers: membership("@waitron/verifactu") },

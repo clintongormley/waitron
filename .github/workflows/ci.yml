@@ -108,6 +108,8 @@ jobs:
       setup: ${{ steps.gates.outputs.setup }}
       server: ${{ steps.gates.outputs.server }}
       fiscal_verifactu: ${{ steps.gates.outputs.fiscal_verifactu }}
+      bookings: ${{ steps.gates.outputs.bookings }}
+      sync: ${{ steps.gates.outputs.sync }}
       light_a: ${{ steps.gates.outputs.light_a }}
       light_b: ${{ steps.gates.outputs.light_b }}
       verifactu: ${{ steps.gates.outputs.verifactu }}
@@ -559,6 +561,7 @@ jobs:
   # failure cancelling its siblings. scripts/ci-workflow.test.mjs pins the matrix size against the
   # `--shard=i/N` denominator and the merge job against its shards, so the two cannot drift.
   test-heavy:
+    timeout-minutes: 15
     needs: changes
     # Gated on `heavy`, not on the scope filter. Two inclusion filters are OR-ed rather than
     # intersected, so adding `--filter "@waitron/db"` to the scope's own filters would run this suite on
@@ -629,6 +632,7 @@ jobs:
   # download and the merge. It gates on the SAME `heavy` output as its shards, so it skips exactly when
   # they do. See test-heavy above for why `ci` must name both this job and the matrix it depends on.
   test-heavy-merge:
+    timeout-minutes: 15
     needs: [changes, test-heavy]
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true'
     runs-on: ubuntu-latest
@@ -675,6 +679,7 @@ jobs:
   # useTemplateDb, so REQUIRE_DOCKER makes a runner without Docker fail loudly instead of skipping those
   # suites. `test-server-merge` below is the coverage gate.
   test-server:
+    timeout-minutes: 15
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true'
     runs-on: ubuntu-latest
@@ -729,6 +734,7 @@ jobs:
   # on the TOTAL. No tests, no container — `vitest --merge-reports` replays from the blobs. It gates on
   # the SAME `server` output as its shards. `ci` names both this job and the test-server matrix.
   test-server-merge:
+    timeout-minutes: 15
     needs: [changes, test-server]
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true'
     runs-on: ubuntu-latest
@@ -770,6 +776,7 @@ jobs:
   # @waitron/db's shared container. NOT the mutation-verifactu job — that is the separate
   # packages/verifactu.
   test-fiscal-verifactu:
+    timeout-minutes: 15
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true'
     runs-on: ubuntu-latest
@@ -802,7 +809,7 @@ jobs:
             | node scripts/changed-packages.mjs runnable test:coverage
           pnpm --filter "@waitron/fiscal-verifactu" test:coverage
 
-  # packages/ui alone, and the only job in this file that needs a browser.
+  # packages/ui alone, with its own browser runner.
   #
   # It was part of test-light until 2026-08-01, when that shard HUNG on it twice — the receipts, and
   # what they do and do not establish, are on UI_PACKAGE in scripts/changed-scope.mjs. In short:
@@ -820,6 +827,7 @@ jobs:
   # harness, its suites and its README) and in the two workflows that set it, and `packages/ui`'s
   # only runtime dependency is `lit`.
   test-ui:
+    timeout-minutes: 15
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.ui == 'true'
     runs-on: ubuntu-latest
@@ -895,6 +903,7 @@ jobs:
   # No REQUIRE_DOCKER and no TESTCONTAINERS_RYUK_DISABLED, exactly as test-ui: apps/till drives
   # Chromium through Playwright and touches no database.
   test-till:
+    timeout-minutes: 15
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true'
     runs-on: ubuntu-latest
@@ -950,6 +959,7 @@ jobs:
   # No REQUIRE_DOCKER and no TESTCONTAINERS_RYUK_DISABLED, exactly as test-ui and test-till:
   # apps/dashboard drives Chromium through Playwright and touches no database.
   test-dashboard:
+    timeout-minutes: 15
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true'
     runs-on: ubuntu-latest
@@ -1005,6 +1015,7 @@ jobs:
   # No REQUIRE_DOCKER and no TESTCONTAINERS_RYUK_DISABLED, exactly as test-ui/till/dashboard:
   # apps/setup drives Chromium through Playwright and touches no database.
   test-setup:
+    timeout-minutes: 15
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.setup == 'true'
     runs-on: ubuntu-latest
@@ -1048,47 +1059,92 @@ jobs:
             | node scripts/changed-packages.mjs runnable test:coverage
           pnpm --filter "@waitron/setup" test:coverage
 
-  # The "everything else" packages, split into two balanced halves run on separate free 4-vCPU
-  # runners IN PARALLEL — test-light-a and test-light-b. --no-sort removes the dependency ordering,
-  # which earns nothing for tests: every member resolves to ./src/*.ts and no test imports a
-  # sibling's dist/, so nothing here consumes a build artefact. (`build` DOES need the ordering —
-  # this flag is on the test invocation only.)
-  #
-  # WHY TWO. test-light was CPU-bound, and its wall-clock floor is total-work ÷ the runner's cores,
-  # NOT the size of its biggest package. On one free 4-vCPU runner its ~1340s of v8-coverage work
-  # floored it near 390s, and splitting apps/server out (test-server) barely moved it — on PR #126's
-  # run 32421460693 test-light was still 391s with apps/server already gone. Two free 4-vCPU runners
-  # give 8 effective cores for $0 (larger runners are billed per-minute even on a public repo), so
-  # halving the work across them roughly halves the floor. Membership and the balance rationale live
-  # on LIGHT_A_PACKAGES / LIGHT_B_PACKAGES in scripts/changed-scope.mjs.
-  #
-  # NO PLAYWRIGHT STEPS in either: the browser packages (ui/till/dashboard) each have their own
-  # shard, so nothing here launches Chromium.
-  #
-  # EACH SHARD SUBTRACTS ITS BIN'S COMPLEMENT — every package in OWN_SHARD_PACKAGES plus every
-  # package in the OTHER bin — rather than including its own bin. Subtraction is what INTERSECTS with
-  # the scope on a pull request: `--filter "...$pkg"` per changed package selects the scope, then
-  # `--filter "!<pkg>"` per complement package pares it down to this bin's share of it. An include
-  # list would UNION instead, running the whole bin for a one-package PR. Measured that subtraction
-  # subtracts rather than OR-s on 2026-08-05: `--filter "...@waitron/db"` gives 17 packages and
-  # adding `--filter "!@waitron/db"` gives the same 17 minus db. On a GLOBAL scope (main, an
-  # unattributable path, a diff we could not work out) the `...$pkg` includes are empty, so the
-  # complement subtraction alone selects the bin — the fail-CLOSED direction.
-  #
-  # scripts/ci-workflow.test.mjs asserts each shard's `!` filters equal OWN_SHARD_PACKAGES ∪ the
-  # other bin AND that the shards partition every test package exactly once, both against the real
-  # `pnpm ls` — so a bin-list edit here that disagrees with changed-scope.mjs cannot land silently.
-  #
-  # The guard runs BEFORE the tests so it fails in a second rather than after the suite: pnpm reports
-  # both "No projects matched the filters" and `None of the selected packages has a "test:coverage"
-  # script` on stdout with exit 0 (measured 2026-08-01, pnpm 9.15.0), so without it a shard can
-  # report success having run nothing. Read off run 30653487133, from when this was a single `light`
-  # gated on `code` alone: it was that run's longest job at 48s and printed exactly that message — a
-  # runner and a `pnpm install` for zero test execution, reported as success.
-  #
-  # REQUIRE_DOCKER + TESTCONTAINERS_RYUK_DISABLED as the old single shard set them: both bins hold
-  # real-Postgres packages that clone from @waitron/db's shared container.
+  # Bookings owns both a browser project and a database project. Its own runner keeps
+  # Chromium out of the database bins and gives failures a package-specific job result.
+  test-bookings:
+    timeout-minutes: 15
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.bookings == 'true'
+    runs-on: ubuntu-latest
+    env:
+      REQUIRE_DOCKER: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Resolve installed Playwright version
+        id: playwright-version
+        run: echo "version=$(pnpm --filter @waitron/bookings exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - run: pnpm --filter @waitron/bookings exec playwright install chromium
+
+      - name: Run the bookings shard
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+          DEBUG: "vitest:browser:pool"
+        run: |
+          set -euo pipefail
+          pnpm --filter "@waitron/bookings" ls --depth -1 --json \
+            | node scripts/changed-packages.mjs runnable test:coverage
+          pnpm --filter "@waitron/bookings" test:coverage
+
+  # Sync boots real replication peers and a WireGuard tunnel; give that setup its own runner.
+  test-sync:
+    timeout-minutes: 15
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.sync == 'true'
+    runs-on: ubuntu-latest
+    env:
+      REQUIRE_DOCKER: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Run the sync shard
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+        run: |
+          set -euo pipefail
+          pnpm --filter "@waitron/sync" ls --depth -1 --json \
+            | node scripts/changed-packages.mjs runnable test:coverage
+          pnpm --filter "@waitron/sync" test:coverage
+
+  # The remaining packages partition into two bins, with at most two package runners per bin.
+  # Each subtracts OWN_SHARD_PACKAGES and the opposite bin from the changed scope;
+  # inclusion would union the whole bin into a scoped run. The runnable guard rejects
+  # empty selections, and ci-workflow.test.mjs checks the actual pnpm partition.
   test-light-a:
+    timeout-minutes: 15
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.light_a == 'true'
     runs-on: ubuntu-latest
@@ -1109,27 +1165,6 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-
-      # @waitron/bookings runs in THIS bin (LIGHT_A_PACKAGES) and, since bookings SP2, ships a
-      # browser-safe `./dashboard` sub-path whose Lit tests run in real headless Chromium (a second
-      # Vitest project alongside its Node/Postgres suites — see packages/bookings/vitest.config.ts). Its
-      # `test:coverage` therefore needs Playwright's Chromium, which a plain light shard does not carry.
-      # Install it exactly as test-ui does (version-detect → cache → `install chromium`, no `--with-deps`
-      # — the ubuntu-latest image ships Chromium's shared libs; see the test-ui step for the receipt).
-      # bookings is the only browser package in either light bin, so only this shard needs it. The step
-      # runs whenever light-a has work, not only when bookings is in scope — the cache makes a
-      # bookings-absent run a near-instant binary check.
-      - name: Resolve installed Playwright version
-        id: playwright-version
-        run: echo "version=$(pnpm --filter @waitron/bookings exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-
-      - run: pnpm --filter @waitron/bookings exec playwright install chromium
 
       - name: Run the light-a shard
         env:
@@ -1154,6 +1189,8 @@ jobs:
           set -- "$@" --filter "!@waitron/setup"
           set -- "$@" --filter "!@waitron/server"
           set -- "$@" --filter "!@waitron/fiscal-verifactu"
+          set -- "$@" --filter "!@waitron/bookings"
+          set -- "$@" --filter "!@waitron/sync"
           # LIGHT_B_PACKAGES — the other bin, subtracted so what remains is bin A.
           set -- "$@" --filter "!@waitron/dashboard-kit"
           set -- "$@" --filter "!@waitron/payments-stripe"
@@ -1176,13 +1213,11 @@ jobs:
 
           pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm "$@" --no-sort test:coverage
+          pnpm "$@" --no-sort --workspace-concurrency=2 test:coverage
 
-  # The mirror of test-light-a: the other balanced half. See test-light-a's comment for the full
-  # rationale (why two shards, why each subtracts its bin's complement rather than including its own
-  # bin, and the guard). This shard subtracts OWN_SHARD_PACKAGES ∪ LIGHT_A_PACKAGES so what remains
-  # is bin B.
+  # The second bin subtracts OWN_SHARD_PACKAGES and LIGHT_A_PACKAGES.
   test-light-b:
+    timeout-minutes: 15
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.light_b == 'true'
     runs-on: ubuntu-latest
@@ -1225,15 +1260,15 @@ jobs:
           set -- "$@" --filter "!@waitron/setup"
           set -- "$@" --filter "!@waitron/server"
           set -- "$@" --filter "!@waitron/fiscal-verifactu"
-          # LIGHT_A_PACKAGES — the other bin, subtracted so what remains is bin B.
           set -- "$@" --filter "!@waitron/bookings"
+          set -- "$@" --filter "!@waitron/sync"
+          # LIGHT_A_PACKAGES — the other bin, subtracted so what remains is bin B.
           set -- "$@" --filter "!@waitron/core"
           set -- "$@" --filter "!@waitron/payments"
           set -- "$@" --filter "!@waitron/provisioning"
           set -- "$@" --filter "!@waitron/reporting"
           set -- "$@" --filter "!@waitron/scheduler"
           set -- "$@" --filter "!@waitron/purchasing"
-          set -- "$@" --filter "!@waitron/sync"
           set -- "$@" --filter "!@waitron/membership"
           set -- "$@" --filter "!@waitron/module"
           set -- "$@" --filter "!@waitron/tunnel"
@@ -1245,7 +1280,7 @@ jobs:
 
           pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm "$@" --no-sort test:coverage
+          pnpm "$@" --no-sort --workspace-concurrency=2 test:coverage
 
   # Mutation testing for packages/verifactu only. Unlike packages/ui — whose
   # mutation run is weekly in mutation.yml because each mutant reruns the full
@@ -1355,6 +1390,8 @@ jobs:
       - test-till
       - test-dashboard
       - test-setup
+      - test-bookings
+      - test-sync
       - test-light-a
       - test-light-b
       - mutation-verifactu
